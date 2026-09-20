@@ -2204,7 +2204,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
     levels: {}
     status: not-implemented
-    notes: 'Feasibility verified 2026-09-20 on a live transcript: message.usage carries
-      input/cache_creation/cache_read/output tokens, and isSidechain plus parentUuid
-      separate subagent turns. OpenCode and Hermes stay V1 estimates per d4 (follow-up
-      issue owed).'
+    notes: 'Feasibility verified 2026-09-20 and CORRECTED by the phase-1 capture: message.usage
+      carries input/cache_creation/cache_read/output (plus more keys a parser must project
+      away). Attribution is NOT isSidechain+parentUuid in one stream — the orchestrator
+      stream is isSidechain:false throughout and each subagent has its own subagents/agent-<agentId>.jsonl,
+      correlated by its companion .meta.json toolUseId. sessionId is the orchestrator''s
+      and cwd is the launch dir, so neither identifies a unit. OpenCode and Hermes stay
+      V1 estimates per d4 (follow-up issue owed).'

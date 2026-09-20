@@ -320,6 +320,23 @@ def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
     return ordered
 
 
+def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
+    """The ONE writer — `fr journal add`, `fr journal resolve`, and any test
+    fixture built through `fr.test_support.build_plan_journal` all land here,
+    so none of them can disagree about separators, the file header, or the
+    serialized shape. A test fixture built by calling this (rather than
+    formatting Markdown by hand) is a CAPTURE of the real serializer's
+    output, not a guess that can drift from it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    block = serialize_entry(entry)
+    if path.exists():
+        prior = path.read_text()
+        sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
+        path.write_text(prior + sep + block)
+    else:
+        path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
 def _handoff_line(entry: JournalEntry) -> str:
     """One-line collapse of an entry: id, kind, state, title, phase."""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""

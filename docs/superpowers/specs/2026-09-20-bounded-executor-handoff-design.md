@@ -281,12 +281,40 @@ session, sums `message.usage` over the records belonging to a dispatched
 `cache_creation_input_tokens`, `cache_read_input_tokens` and `output_tokens`
 into the existing `PhaseAccounting` for that unit.
 
-- **Attribution:** subagent turns carry `isSidechain: true`; a dispatch is
-  attributed by walking `parentUuid` back to the `Agent` tool_use that started
-  it. Because fr-goal dispatches phase executors **serially** (§5, and the
-  single-writer contract), a simpler fallback is available and is what ships if
-  parent-walking proves unreliable: attribute sidechain records by timestamp
-  window between the unit's dispatch and its `resolve`.
+- **Attribution — corrected by phase 1's capture, which is what phase 1 is
+  for.** This section originally said subagent turns carry `isSidechain: true`
+  in the orchestrator's stream and a dispatch is attributed by walking
+  `parentUuid` back to the `Agent` tool_use. **That is wrong**, and the
+  captured fixture disproves it. The real shape:
+
+  ```
+  ~/.claude/projects/<cwd-slug>/
+      <session-id>.jsonl                      # orchestrator: isSidechain false throughout
+      <session-id>/subagents/
+          agent-<agentId>.jsonl               # subagent: isSidechain true throughout
+          agent-<agentId>.meta.json           # carries toolUseId, agentType, model
+  ```
+
+  The two streams are **separate files**. Attribution is file-to-file: the
+  subagent file's companion `agent-<agentId>.meta.json` carries the `toolUseId`
+  of the `Agent` tool_use in the orchestrator stream that dispatched it. Three
+  further corrections, each pinned by a test: `parentUuid` inside a subagent
+  file chains only that subagent's own turns and starts at `null`; `sessionId`
+  is the *orchestrator's*, so attribution cannot key on it (the subagent's own
+  identity is `agentId`, absent from orchestrator records); and `cwd` stays
+  pinned to the harness's launch directory even when the agent worked entirely
+  inside a worktree, so it cannot identify a phase either.
+
+  The timestamp-window fallback is retained as a *fallback only* — serial
+  dispatch makes it unambiguous — but it is no longer needed as the primary
+  mechanism, because `toolUseId` is an exact key.
+
+  Two smaller shape facts the capture added: `message.usage` carries more than
+  the four named keys (`cache_creation`, `output_tokens_details`,
+  `server_tool_use`, `service_tier`, `inference_geo`, `speed`, sometimes
+  `iterations`), so a parser must **project** onto the four rather than assume
+  the object's shape; and a session file interleaves many record types with no
+  usage at all, so a parser must select on `type == "assistant"` first.
 - **Shape:** `PhaseAccounting` gains four optional, defaulted int fields. Per
   `.claude/rules/artifact-versioning.md` this **is** a shape change — `RunState`
   is `extra="forbid"`, and a released `fr` reading a cursor carrying the new keys

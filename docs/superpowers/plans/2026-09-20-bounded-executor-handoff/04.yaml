@@ -14,14 +14,21 @@ tasks:
   title: Telemetry reader — red, green, refactor
   steps:
   - id: P4.T1.S1
-    text: "RED: tests/unit/test_run_telemetry.py against the phase-1 fixture.\n(a) `fr.run.telemetry.read_claude_code(transcript_path)`\
-      \ returns per-record\n    usage totals with the four keys summed;\n(b) records with isSidechain\
-      \ true are separable from orchestrator records;\n(c) attribution of a sidechain run to a dispatched\
-      \ (phase, member) unit by\n    timestamp window between dispatch and resolve — the fallback the\
-      \ spec\n    names, chosen because fr-goal dispatches phase executors SERIALLY, so a\n    window\
-      \ is unambiguous;\n(d) a missing transcript, an unreadable one, and a unit with no attributable\n\
-      \    records each return \"no measurement\" WITHOUT raising, and the caller can\n    tell that apart\
-      \ from a measured zero.\nRun; confirm red (module absent)."
+    text: "RED: tests/unit/test_run_telemetry.py against the phase-1 fixtures.\n**Read tests/fixtures/transcripts/claude-code-session.NOTE.md\
+      \ first** — phase 1\ndisproved this spec section's original attribution design, and the corrected\n\
+      shape is TWO files, not one stream:\n  claude-code-session.jsonl        orchestrator, isSidechain\
+      \ false throughout\n  claude-code-subagent.jsonl       one subagent, isSidechain true throughout\n\
+      \  claude-code-subagent.meta.json   carries toolUseId / agentType / model\n(a) `fr.run.telemetry.read_claude_code(path)`\
+      \ sums message.usage over\n    `type == \"assistant\"` records only, PROJECTING onto the four named\
+      \ keys —\n    the real usage object carries more, and non-assistant records carry none;\n(b) a dispatch\
+      \ is attributed by matching the subagent metadata's `toolUseId`\n    to the `Agent` tool_use id\
+      \ in the orchestrator stream. Do NOT filter one\n    file on isSidechain: that finds nothing on\
+      \ a real transcript, and a test\n    that passes by doing so is the defect class this plan exists\
+      \ to fix;\n(c) neither `sessionId` (it is the orchestrator's) nor `cwd` (it is the launch\n    directory,\
+      \ not the worktree) may be used to identify a unit — assert both,\n    so a later shortcut fails\
+      \ here;\n(d) a missing transcript, an unreadable one, and a unit with no attributable\n    records\
+      \ each return \"no measurement\" WITHOUT raising, distinguishable from\n    a measured zero.\nRun;\
+      \ confirm red (module absent)."
   - id: P4.T1.S2
     text: 'RED: extend tests/unit/test_run_state.py — PhaseAccounting accepts the four
 

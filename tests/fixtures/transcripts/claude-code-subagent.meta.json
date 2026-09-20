@@ -1,0 +1,9 @@
+{
+  "agentType": "super-fr:fr-phase-executor",
+  "description": "Implement plan phase 1",
+  "toolUseId": "toolu_014ynBvFpxdbG1PXwxASc1Cu",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true,
+  "model": "sonnet"
+}

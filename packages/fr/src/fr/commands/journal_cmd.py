@@ -24,6 +24,7 @@ from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
+    append_journal_entry,
     journal_path,
     open_finding_ids,
     parse_journal,
@@ -125,20 +126,7 @@ def add(
             "`--resolves` must name a finding that exists"
         )
         raise typer.Exit(2)
-    _append_entry(path, slug, entry)
-
-
-def _append_entry(path: Path, slug: str, entry: JournalEntry) -> None:
-    """The ONE writer — `add` and `resolve` both land here, so the two cannot
-    disagree about separators, the file header, or the serialized shape."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    block = serialize_entry(entry)
-    if path.exists():
-        prior = path.read_text()
-        sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
-        path.write_text(prior + sep + block)
-    else:
-        path.write_text(f"# Journal: {slug}\n\n{block}")
+    append_journal_entry(path, slug, entry)
 
 
 RESOLUTION_STATES = ("fixed", "refuted")
@@ -232,7 +220,7 @@ def resolve(
         state=state,  # type: ignore[arg-type]
         resolves=entry_id,
     )
-    _append_entry(path, slug, record)
+    append_journal_entry(path, slug, record)
     typer.echo(f"{entry_id} → {state} (record {record.id})")
 
 
