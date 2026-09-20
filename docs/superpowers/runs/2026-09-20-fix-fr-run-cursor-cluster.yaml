@@ -3,7 +3,7 @@ run: 2026-09-20-fix-fr-run-cursor-cluster
 workflow: fr-goal@1
 branch: fix/fr-run-cursor-cluster
 started: '2026-09-20T10:55:02+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -27,8 +27,8 @@ steps:
 
       '
   implement:
-    state: running
-    at: '2026-09-20T16:49:45+00:00'
+    state: done
+    at: '2026-09-20T17:13:02+00:00'
     items:
       phase/1/implement-phase: done
       phase/1/review-phase: done
@@ -41,7 +41,8 @@ steps:
       phase/5/implement-phase: done
       phase/7: manual
       phase/5/review-phase: done
-      phase/6/implement-phase: running
+      phase/6/implement-phase: done
+      phase/6/review-phase: done
     members:
     - implement-phase
     - review-phase
