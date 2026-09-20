@@ -109,17 +109,27 @@ state:
         matching the file''s existing _workflow_issues/_skeleton_issues/_refactor_issues
         shape; one pass, two distinct messages (POSITION and DEPENDENCY). 15 passed.'
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:00:45+00:00'
+      note: 'Swept all 5 live plan folders: ZERO issues from the new rule (this plan
+        included). Two plans exit 1 on the pre-existing skeleton gate — identical
+        count with _manual_placement_issues stubbed out, so not mine. 80 archived
+        plans: those that parse under fr 4.8.0 are clean too.'
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:05:32+00:00'
+      note: 'Full suite: 3 failed, 3317 passed, 80 skipped — exactly the three host-specific
+        pre-existing failures from p1-f2 and nothing else. ZERO inline-constructed
+        test plans needed fixing; every manual construction in the suite enumerated
+        in journal p4-d1, including the one non-compliant shape (test_render_deps.py:323)
+        that never reaches self_review and was deliberately left alone.'
     P4.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T16:06:00+00:00'
+      note: 'Gates: ruff format (361 unchanged), ruff check all passed, mypy clean
+        over 138 files in the four src trees, pytest 3 failed/3317 passed/80 skipped
+        (the three known host-specific ones). Row plan-manual-phase-trailing: not-implemented
+        → ci; fr acceptance check exits 0, 129 rows OK.'
   completion:
     at: null
     note: null

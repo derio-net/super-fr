@@ -262,3 +262,42 @@ Read the diff, not the report. (1) The hook change is a FALL-THROUGH, not a wide
 ### x3 · discovery · PRE-EXISTING: the hooks label Claude Code 'claude', but fr's closed harness vocabulary says 'claude-code' (phase 3)
 
 fr.harness.HARNESSES is ('claude-code','opencode','hermes','codex','copilot-cli') and ~/.config/fr/models.yaml keys on 'claude-code', but fr-session-bind.sh and fr-worktree-create.sh both pass '--harness claude', which is not a member. SessionBinding.harness is a free str with no validation, and grep shows the value is only ever WRITTEN (sessions.py:57, into the index JSON) — nothing reads it for behaviour — so nothing is broken today. NOT introduced by phase 3, and deliberately NOT fixed here: it predates this PR and is outside the four issues. Recorded because phase 3's new SKILL.md tells operators to pass --harness themselves for the first time, so an operator reading parity.yaml or fr models would reasonably type 'claude-code' while the hook types 'claude', and the same session would be labelled two ways. Cheap follow-up (one word in two hooks) if the label is ever made load-bearing.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-red created=2026-09-20T18:04:55 phase=4 -->
+### p4-red · discovery · RED for phase 4: both error cases fail today, both PASS cases pass vacuously (phase 4)
+
+P4.T1.S1: `uv run pytest tests/unit/test_plan_ops.py -q --no-cov -k manual` → 2 failed, 3 passed. The middle-manual case failed with 'AssertionError: []' (self_review raised nothing at all), and the front-load case failed on its own precondition assert ('unticked front-load must error first'). The two trailing-block PASS cases were green before any code existed, which is the point: the rule must not disturb the shape every plan in the corpus already has.
+
+P4.T2.S1: `uv run pytest tests/unit/test_plan_ops.py -q --no-cov -k depends` → 1 failed ('AssertionError: []') for '1,2,3 agentic with phase 2 depends_on [4], 4 trailing manual'. That is the spec's own argument made mechanical: the position rule is SILENT on this plan, because the shape is valid and only the dependency is not. The manual-depends-on-agentic test passed vacuously and stays as a regression pin on the direction that must remain legal.
+
+All four plans are built inline via fr.plan_ops.create, not copied from a fixture folder — no fixture has these shapes, and spec 1.4 measured that that is true of the whole on-disk corpus.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-d1 created=2026-09-20T18:05:08 phase=4 -->
+### p4-d1 · discovery · The suite needed ZERO inline-plan fixes — measured, and here is what was checked (phase 4)
+
+Spec 4 budgeted for tests that build a Plan inline and construct a non-trailing manual phase. The full suite after the rule landed is 3 failed / 3317 passed / 80 skipped — the same three host-specific failures p1-f2 already recorded, and nothing else. So the budget was not spent. That is a claim worth showing the working for, since 'no fixes needed' is also what a rule that never fires looks like:
+
+Every inline manual-phase construction in the suite, and why each is compliant:
+- tests/unit/test_v2_plan_ops.py:583 (_purity_plan) — phase 2 manual, last of two. Trailing.
+- tests/unit/test_v2_plan_ops.py:657,691 — _purity_plan(phase1_tag='manual'): BOTH phases manual, so the whole plan is one trailing block (the maximal-suffix walk returns {1,2}).
+- tests/unit/test_v2_plan_ops.py:722 — PhaseSpec(number=0, ...) is rejected by create() before any review runs.
+- tests/unit/test_v2_plan_ops.py:1111 — a one-phase manual plan. Trailing.
+- tests/unit/test_v2_plan_ops.py:1271 — _refactor_plan(tag='manual'), one phase. Trailing.
+- tests/integration/test_v2_full_lifecycle.py:125 — one manual phase. Trailing.
+- tests/unit/test_render_deps.py:323 — the ONE genuinely non-compliant shape in the suite: a hand-built PhaseDoc making phase 2 manual with depends_on=(1,) inside the multi-phase fixture, agentic phases after it. It never reaches self_review — the test exercises fr.render's dependency rendering — so the rule does not fire and the test needed no change. Left exactly as it was: weakening the rule so an unrelated render test keeps its shape would be the failure mode this repo keeps naming, and rewriting a render fixture to satisfy an authoring gate it never calls would be ceremony.
+
+The rule firing was verified positively instead, by the four inline plans in tests/unit/test_plan_ops.py, not by the absence of failures elsewhere.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-d2 created=2026-09-20T18:05:24 phase=4 -->
+### p4-d2 · discovery · What phase 5 inherits: _trailing_manual_block, and the one question the depends_on rule leaves open (phase 4)
+
+SIGNATURE, for the implement preflight (spec 3.D.2 point 2):
+
+    from fr.plan_ops import _trailing_manual_block
+    _trailing_manual_block(plan: Plan) -> set[int]
+
+Returns the phase NUMBERS of the maximal suffix of tag: manual phases, walking from the highest number backwards and stopping at the first agentic phase. '1a, 2m, 3a, 4m' returns {4}, not {2,4}. No manual phases returns set(); an all-manual plan returns every number. It is pure and offline: no gh, no filesystem beyond the already-parsed Plan, and it does NOT consult completion — the 'or already complete' half of the rule is the caller's, via fr.render.plan_locally_complete(phase). Pinned by three direct tests in tests/unit/test_plan_ops.py so phase 5 can rely on the semantics, not just the name.
+
+The authoring gate itself is _manual_placement_issues(plan) -> list[ReviewIssue], a sibling of _workflow_issues/_skeleton_issues, called from self_review. Phase 5 may reuse it wholesale for the preflight (spec 3.D.2 says 'same message'), or call _trailing_manual_block directly if it needs the set rather than the issues.
+
+ONE OPEN QUESTION, recorded rather than silently resolved. The depends_on half is unconditional: an agentic phase naming a manual phase in depends_on is an error regardless of whether that manual phase is already complete. That is the plan's wording ('whatever its position') implemented literally. It has a corner: the front-loaded shape '1 manual (ticked), 2 agentic' is VALID by the position rule once ticked, but would error forever if phase 2 also declared depends_on: [1]. No plan in the corpus does — there are ZERO agentic→manual dependencies across all 5 live and all parseable archived plans, so today it costs nothing. If phase 5's preflight or a real fr-goal front-load run ever meets that combination, the fix is to give the dependency check the same 'or already complete' exemption the position check has, not to drop it.

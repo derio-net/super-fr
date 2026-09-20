@@ -2201,12 +2201,13 @@ rows:
       at authoring, not discovered mid-run.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.D.1/3.D.2. Rule: no manual phase may be OUTSTANDING when an agentic
-      phase after it runs — trailing block OR already plan_locally_complete, depends_on
-      checked alongside position. severity=error in fr.plan_ops.self_review, which fr-goal
-      runs as its plan-review cli step, so it fails before phase 1 dispatches.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_ops.py
+    status: ci
+    notes: severity=error in self_review, which fr-goal runs as its plan-review cli
+      step, so a mis-shaped plan fails before phase 1 dispatches. depends_on checked
+      alongside position.
   - id: run-manual-phase-never-dispatched
     capability: Run state
     acceptance: A manual phase is never offered to an agent, and the cursor still shows
