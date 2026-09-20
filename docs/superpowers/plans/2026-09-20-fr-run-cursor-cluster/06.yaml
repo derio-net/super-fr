@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 6
+  title: The published explainer stops lagging the code, and the version moves
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  - 5
+  tracking_issue: null
+  tier: standard
+tasks:
+- number: 1
+  title: Update `01-fr-goal.md` for what actually changed
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      VERIFY THE RENDERER FIRST, before editing a word. From `/` (never inside the worktree), run
+      the `--isolated --no-project` incantation from `.claude/rules/explainers-currency.md` over the
+      UNMODIFIED `docs/explainers/01-fr-goal.md` and confirm the output is byte-identical to the
+      committed `01-fr-goal.html` (`cmp`). This is not ceremony: that check has found a silent
+      pygments/codehilite divergence twice. If it diverges, stop and diagnose before editing.
+  - id: P6.T1.S2
+    text: |-
+      Edit `docs/explainers/01-fr-goal.md` in the worktree for three changes a reader would now be
+      misled about: (a) the five-commands paragraph (~line 213) gains `advance` refusing a step that
+      is already running and `--redispatch`; (b) the manual-phase section (~line 372) states the
+      trailing-or-complete rule and that a manual phase is never dispatched; (c) the front-loading
+      decision diagram (~line 385) reflects that front-loading remains legal precisely because the
+      operator ticks the phase before implementation resumes. Match the existing voice — second
+      person, unhurried, explaining why.
+  - id: P6.T1.S3
+    text: |-
+      Regenerate `docs/explainers/01-fr-goal.html` with the same verified command from `/`, and
+      `git diff --stat` it: the page diff must contain ONLY the paragraphs written in S2. Never
+      hand-edit the HTML. Run `uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov`.
+- number: 2
+  title: Bump the version and run every gate one last time
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` — minor, not patch: this PR adds
+      two CLI flags (`fr run advance --redispatch`, `fr run start --session/--harness`) and a
+      mandatory new refusal, which AGENTS.md classifies as a user-visible workflow addition. Commit
+      the changed manifests and `uv.lock` together; never hand-edit a version-bearing file.
+  - id: P6.T2.S2
+    text: |-
+      Full gate sweep, exactly as CI runs it: `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest` (the full form, so `cov-fail-under=75` is exercised),
+      `uv run --no-project python scripts/bump-version.py --check`,
+      `uv run fr acceptance check`, `uv run fr harness parity --check`,
+      `uv run fr validate artifacts`, and `uv run python scripts/sync-opencode.py --check`.
+      Paste each command's verdict into the phase journal — spec 5 is post-merge, so this sweep is
+      the only pre-merge evidence there is.
+  - id: P6.T2.S3
+    text: |-
+      REFACTOR PASS over the whole diff: re-read every file this plan touched and remove anything
+      that duplicates what another phase already did (the shared `_resolve_hint`, the shared
+      `_trailing_manual_block`, the two refusal renderers). Record
+      `no-refactor-because: P6.T2` with a reason if nothing is left to do.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

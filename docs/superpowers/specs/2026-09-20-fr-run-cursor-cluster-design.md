@@ -308,7 +308,9 @@ the `_existing_run_for_workflow` bug.
 
 ## Implementation Plans
 
-- `docs/superpowers/plans/2026-09-20-fr-run-cursor-cluster/`
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-20-fr-run-cursor-cluster | `derio-net/super-fr` | `2026-09-20-fr-run-cursor-cluster` | — |
 
 ## References
 

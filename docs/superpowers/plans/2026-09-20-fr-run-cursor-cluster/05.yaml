@@ -1,0 +1,112 @@
+schema_version: 2
+phase:
+  number: 5
+  title: The run model never offers a manual phase, and never hides one (#496)
+  tag: agentic
+  depends_on:
+  - 1
+  - 4
+  tracking_issue: null
+  tier: hard
+  acceptance:
+  - run-manual-phase-never-dispatched
+tasks:
+- number: 1
+  title: '`for_each: phase` enumerates agentic phases only, and records the rest'
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED. In `tests/unit/test_run_cli.py`, add `test_a_manual_phase_is_never_dispatched`: a plan of
+      3 agentic phases + a trailing manual phase 4. Advance through every member and assert (a) no
+      brief is ever built for `phase/4`, (b) the group's items carry `phase/4: manual`, (c) group
+      completion says `6 members done` and names phase 4 as trailing manual, (d) `fr run status`
+      prints the `phase/4: manual` line. Confirm it fails today (a brief IS built).
+  - id: P5.T1.S2
+    text: |-
+      GREEN. Give `fr.run.adopt` a tag-aware sibling of `plan_phase_numbers` —
+      `plan_phase_tags(repo_root, plan_rel) -> dict[int, str]` — and use it in `_group_phases` to
+      return agentic phase numbers only, plus the manual set. `_expected_group_items` shrinks
+      accordingly; `_advance_group` writes `items["phase/<n>"] = "manual"` for each manual phase
+      and names them in the completion line. No schema change: `items` values are already free-form
+      strings (spec 3.D.3).
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR. Make `plan_phase_numbers` delegate to `plan_phase_tags` so there is ONE plan-reading
+      path, and confirm no caller still derives "which phases exist" independently
+      (`grep -rn plan_phase_numbers packages/`).
+- number: 2
+  title: Adoption, the member refusal and the preflight all agree
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED. Three tests. (a) adopt a plan with a trailing manual phase and assert its items carry
+      `phase/<n>: manual`, so a resumed run does not disagree with a started one (spec 3.D.3).
+      (b) resolving a manual member prints a message naming `tag: manual` and the plan/PR as the
+      real record, not the bare "not a phase member" list. (c) a plan self-review never saw
+      (adopted) with `1 agentic, 2 manual unticked, 3 agentic` is refused at group start with exit
+      2, before any unit is dispatched.
+  - id: P5.T2.S2
+    text: |-
+      GREEN. Implement all three: `fr.run.adopt.build_run_state` writes the same `manual` markers;
+      `_resolve_member` branches on "this key names a manual phase" before its generic
+      not-a-member error; `_advance_group` runs the preflight ONCE at group start, importing phase
+      4's `_trailing_manual_block` so the two enforcement points share one definition of trailing.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR. Re-read `_advance_group` top to bottom — it now carries the running-check (phase 2),
+      the manual filter and the preflight. Extract whatever has made it hard to follow, or record
+      `no-refactor-because: P5.T2` with a reason. Re-run `uv run pytest tests/unit/test_run_cli.py
+      tests/unit/test_run_adopt.py -q --no-cov`.
+- number: 3
+  title: Full gates and the row
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      ruff format, ruff check, mypy over all four package src trees, and the FULL
+      `uv run pytest -q --no-cov`. Also run `uv run fr validate artifacts` — this phase touched the
+      run model's writers, and that command is the diagnostic for exactly the state it could break.
+  - id: P5.T3.S2
+    text: |-
+      `uv run fr acceptance set-status --id run-manual-phase-never-dispatched --status ci
+       --level unit=super-fr:tests/unit/test_run_cli.py
+       --level unit=super-fr:tests/unit/test_run_adopt.py
+       --notes "No brief is built for a manual phase on any path; the cursor records phase/<n>:
+       manual so a deliberate omission stays visible; advance and adopt write it identically."`
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
