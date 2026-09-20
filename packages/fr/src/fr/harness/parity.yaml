@@ -93,7 +93,7 @@ surfaces:
   - id: fr-session-bind
     kind: hook
     script: fr-session-bind.sh
-    summary: Binds a harness session id to the isolation workspace it is using.
+    summary: Binds a harness session id to the isolation workspace it is using, on `fr isolation up|exec` and on `fr run start`.
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: absent}

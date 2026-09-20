@@ -204,3 +204,13 @@ Trap noted and avoided: click's usage error is ALSO exit 2, so a test asserting 
 Discovery worth carrying: `_repo` builds a real linked worktree carrying a `.fr-isolation` MARKER, which is what `ensure_run_workspace` reads — but `sessions.attach` reads a DIFFERENT artifact, the isolation STATE file at `<common .git>/fr/isolation/<branch>.json`, which only `fr isolation up` writes. A test that only has the marker gets `IsolationError` from attach, i.e. the warning path. New helper `_isolation_state_for(repo, branch)` writes that state; `state_path` resolves through `_git_common_dir`, so repo_root=the worktree and repo_root=the base clone key to the same file, exactly as spec 3.C.1 says.
 
 `FR_SESSIONS_DIR` is set to tmp in both tests so the per-session index under ~/.cache/fr/sessions is never touched by the suite.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-red-t2 created=2026-09-20T17:37:33 phase=3 -->
+### p3-red-t2 · discovery · RED for P3.T2: the hook logs nothing for 'fr run start', and the two negatives pass vacuously until it does (phase 3)
+
+`uv run pytest tests/unit/test_hooks_session_bind.py -q --no-cov` → `1 failed, 16 passed`. The positive case:
+
+    assert [] == ['isolation a...rness claude']
+    Right contains one more item: 'isolation attach --session sess-1 --repo <tmp>/repo --branch feat/x --harness claude'
+
+Said plainly, because it matters for judging the test's worth: the two NEGATIVE cases I added in the same step (`echo fr run start --branch a`, `fr run advance r1`) pass in the RED run for the wrong reason — the hook matches no `fr run` spelling at all yet, so everything is a no-op. They only become meaningful once GREEN lands, which is why they are asserted again after it. `echo fr run start` is the start-anchoring guard the plan asks for explicitly; `fr run advance r1` is the extra one — `advance` creates no workspace, so binding on it would attribute a session to a workspace it may not be in.

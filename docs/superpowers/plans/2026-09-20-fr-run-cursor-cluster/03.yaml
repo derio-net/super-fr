@@ -101,17 +101,25 @@ state:
         a comment at the call site saying why the order is load-bearing. tests/unit/test_run_cli.py:
         144 passed.'
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:37:38+00:00'
+      note: Positive case fails (stub logged []); journal p3-red-t2 records that the
+        two negatives pass vacuously until GREEN.
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:38:30+00:00'
+      note: 'Verb extraction falls through to a second start-anchored sed mapping
+        ''fr run start'' -> up, reusing the attach branch and --branch regex unchanged.
+        17 passed. The ''echo fr run start'' negative proven to have teeth: an unanchored
+        copy of the same regex binds on it (logged ''isolation attach ... --branch
+        a'').'
     P3.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:38:53+00:00'
+      note: 'parity.yaml: only the fr-session-bind row''s summary changed (now names
+        fr run start alongside fr isolation); every state: untouched, opencode/hermes
+        stay absent. ''fr harness parity --check'' -> declared matrix agrees with
+        the registration files; tripwire 9 passed.'
     P3.T3.S1:
       state: ' '
       ticked_at: null

@@ -6,6 +6,7 @@
 #
 # Matches, start-anchored (only a LEADING `fr …`, mirroring the guard):
 #   fr isolation up|exec [--branch <b>] … → attach --session --repo [--branch]
+#   fr run start <shape> --branch <b> …    → attach (same branch; #500)
 #   fr isolation down …                    → detach --session
 # A leading `cd <dir> &&|;` folds into --repo — same shape the guard strips
 # (#421). Subagent input (agent_id present) never rebinds the parent session.
@@ -38,6 +39,15 @@ if [ -n "$cd_target" ]; then
 fi
 
 verb=$(printf '%s' "$first" | sed -nE 's/^[[:space:]]*fr[[:space:]]+isolation[[:space:]]+(up|exec|down)([[:space:]]|$).*/\1/p')
+# `fr run start` ENTERS isolation itself (spec 2026-09-20 §3.C.2), so it creates
+# exactly the workspace this hook exists to attribute — but it could never match
+# the regex above, which is why every fr-goal workspace reported sessions=none
+# (#500). Mapped to `up` so it reuses the attach branch and the --branch regex
+# below unchanged. Start-anchored like everything else here: `echo fr run start`
+# must not bind. Only `start`; `advance`/`resolve` create no workspace.
+if [ -z "$verb" ]; then
+  verb=$(printf '%s' "$first" | sed -nE 's/^[[:space:]]*fr[[:space:]]+run[[:space:]]+start([[:space:]]|$).*/up/p')
+fi
 [ -n "$verb" ] || exit 0
 
 branch=$(printf '%s' "$first" | sed -nE 's/.*--branch(=|[[:space:]]+)("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:]]+)).*/\3\4\5/p')
