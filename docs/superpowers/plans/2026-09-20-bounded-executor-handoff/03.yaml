@@ -1,0 +1,99 @@
+schema_version: 2
+phase:
+  number: 3
+  title: No accidental global entries — `--phase N` or `--global`, never neither
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - handoff-entries-always-tagged
+tasks:
+- number: 1
+  title: The explicit choice — red, green, refactor
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED in tests/unit/test_journal_cmd.py:
+      (a) `fr journal add --scope plan --slug s --kind discovery --title t` with
+          NEITHER --phase NOR --global exits 2, and the message names the
+          consequence (an untagged entry renders in full in every handoff, at
+          every phase) — assert on the consequence wording, not just the exit code;
+      (b) `--global` succeeds and writes an entry with no phase tag;
+      (c) `--phase 3` succeeds and tags it;
+      (d) `--phase 3 --global` together exits 2 (contradictory);
+      (e) `--scope spec` and `--scope debug` are UNAFFECTED — neither flag
+          required, no behaviour change (they have no phases).
+      Run; confirm (a) and (d) fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add `--global` to `fr journal add` in
+      packages/fr/src/fr/commands/journal_cmd.py and enforce the pairing for
+      `--scope plan` only. Follow the repo's error house style (the message names
+      what is wrong and what to do). Run the tests; green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR + check every shipped caller.
+      Refactor if the flag handling duplicated validation already present for other
+      options; otherwise record `no-refactor-because: P3.T1` (--phase 3).
+      Then grep the plugin and mirror trees for `journal add --scope plan` and list
+      every caller that would now exit 2 without the next task's prose fix. Report
+      what you found BEFORE changing it -- the next task fixes it, and the point of
+      this step is that the blast radius is known first.
+      Then run ruff format, ruff check, mypy and the full pytest suite.
+- number: 2
+  title: The prose that caused it — five copies, one source
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      The root cause is the contract's own example. In
+      plugins/super-fr/agents/fr-phase-executor.md the line reads
+      `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
+      with no --phase. Add `--phase N` there, and make the no-refactor instruction
+      in the same file (and in the fr-execute skill) name `--phase N` explicitly.
+      Canonical files only — then run `scripts/sync-opencode.py` (no flag writes)
+      and commit the regenerated .opencode mirrors. NEVER hand-edit a mirror.
+  - id: P3.T2.S2
+    text: |-
+      Verify the mirrors regenerated: `uv run python scripts/sync-opencode.py --check`
+      exits 0, and `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py -q` is green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: the prose is the artifact here, so the cleanup is editorial.
+      Re-read the five changed copies as a whole: the canonical agent, the fr-execute
+      skill, and the four regenerated mirrors. Check the `--phase N` addition reads as
+      part of the sentence rather than bolted on, and that no line exceeded the cap
+      (the harness-parity run hit exactly this). If nothing needs changing, record
+      `no-refactor-because: P3.T2` (--phase 3).
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T13:43:56+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T13:43:57+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T13:43:57+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T13:43:58+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T13:43:58+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T13:43:58+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T13:45:15+00:00'
+    note: null
+    observed_prs: []

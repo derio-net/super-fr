@@ -66,3 +66,24 @@ own test that sets `COLUMNS=40` explicitly, and that test still overrides this.
 @pytest.fixture(autouse=True)
 def _wide_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLUMNS", WIDE_TERMINAL_COLUMNS)
+
+
+@pytest.fixture(autouse=True)
+def _transcript_root_off_the_operators_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Point `fr.run.telemetry` at an empty tmp root for the whole suite.
+
+    V2 telemetry reads the harness's own transcripts, which on a developer
+    machine live under `~/.claude/projects` — and this suite frequently runs
+    INSIDE a Claude Code session, whose `CLAUDE_CODE_SESSION_ID` is therefore
+    set in `os.environ` and inherited by every `CliRunner` invocation. Without
+    this, a `fr run resolve` test would read the operator's real transcripts,
+    and the result would depend on their machine's session history rather than
+    on the code under test.
+
+    `FR_TRANSCRIPT_ROOT` is the module's own documented override, so this uses
+    the escape hatch it ships. `tests/unit/test_run_telemetry.py` and the
+    measured-status tests set it to a root they built themselves.
+    """
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "no-transcripts-here"))

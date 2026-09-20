@@ -1386,7 +1386,7 @@ def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
                         f"phase {n} task {task_id} has no refactor step and no "
                         f"no-refactor-because justification — add a refactor step "
                         f"or record one: `fr journal add --scope plan "
-                        f"--slug {plan.meta.plan} --kind discovery "
+                        f"--slug {plan.meta.plan} --kind discovery --phase {n} "
                         f"--title 'no-refactor-because {task_id}' --body <reason>`."
                     ),
                 )

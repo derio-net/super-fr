@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 run: 2026-09-20-fix-opencode-tier-model-reaches-dispatch
 workflow: fr-goal@1
 branch: fix/opencode-tier-model-reaches-dispatch

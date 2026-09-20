@@ -2252,6 +2252,262 @@ def test_status_reports_snapshots_and_a_total(tmp_path: Path) -> None:
     assert "est" in result.output
 
 
+# --- V2 measured tokens: resolve records them, status never blurs them with
+# --- an estimate (spec §5.C, phase 4) -------------------------------------
+
+_USAGE = {
+    "input_tokens": 1,
+    "cache_creation_input_tokens": 1000,
+    "cache_read_input_tokens": 20000,
+    "output_tokens": 50,
+}
+"""Per ASSISTANT record; the captured subagent fixture has two of them, so a
+correct reader doubles each figure."""
+
+
+def _invoke_measurable(repo: Path, shipped: Path, argv: list[str], root: Path, session_id: str):
+    """`_invoke` plus the two env keys a Claude Code tool call always carries.
+
+    `FR_TRANSCRIPT_ROOT` points at a session tree the test built from the
+    CAPTURED fixtures — never at `~/.claude/projects` (the suite's autouse
+    fixture in `conftest.py` keeps it off the operator's machine by default).
+    """
+    env = {
+        **os.environ,
+        "VK_REPO_ROOT": str(repo),
+        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_TRANSCRIPT_ROOT": str(root),
+        "CLAUDECODE": "1",
+        "CLAUDE_CODE_SESSION_ID": session_id,
+    }
+    return runner_cli.invoke(app, argv, env=env)
+
+
+def _transcript_stamp(at: str) -> str:
+    """The cursor writes `+00:00` at second precision; a transcript writes the
+    captured `...Z` form with milliseconds. Same instant, harness spelling."""
+    return at.replace("+00:00", ".000Z")
+
+
+def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) -> None:
+    """End to end: advance dispatches (and stamps the window's start), the
+    harness writes its transcript, resolve reads it back into the SAME
+    accounting record the V1 sizes live in."""
+    from tests.unit.transcript_sessions import dispatched_at
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    at = load_run_state(repo, "r1").accounting["phase/1/code"].at
+    assert at is not None
+    root = tmp_path / "projects"
+    dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
+
+    result = _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+        root,
+        "sess-1",
+    )
+
+    assert result.exit_code == 0, result.output
+    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    assert snap.input_tokens == 2
+    assert snap.cache_creation_input_tokens == 2000
+    assert snap.cache_read_input_tokens == 40000
+    assert snap.output_tokens == 100
+    assert snap.measured_tokens == 2 + 2000 + 40000 + 100
+    # the V1 sizes are untouched — this is one record, not two
+    assert snap.journal_entries == 2
+    assert snap.handoff_chars > 0
+
+
+def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) -> None:
+    """Degradation is never a zero: an unmeasurable unit keeps `None` in all
+    four fields, which is what `status` reports as an absence."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+        tmp_path / "no-such-transcript-root",
+        "sess-1",
+    )
+
+    assert result.exit_code == 0, result.output
+    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    assert snap.measured_tokens is None
+    assert snap.input_tokens is None
+    assert snap.handoff_chars > 0, "the V1 estimate survives the missing measurement"
+
+
+_TWO_UNIT_RUN = """\
+run: r9
+workflow: grouped@1
+branch: b
+started: '2026-09-20T09:00:00+00:00'
+cursor: implement
+steps:
+  implement:
+    state: running
+    items:
+      phase/1/code: done
+      phase/2/code: running
+accounting:
+  phase/1/code:
+    at: '2026-09-20T09:00:01+00:00'
+    journal_entries: 2
+    journal_lines: 40
+    handoff_chars: 900
+    spec_bytes: 200
+    plan_bytes: 300
+    input_tokens: 1
+    cache_creation_input_tokens: 1000
+    cache_read_input_tokens: 20000
+    output_tokens: 50
+  phase/2/code:
+    at: '2026-09-20T09:30:01+00:00'
+    journal_entries: 3
+    journal_lines: 60
+    handoff_chars: 1300
+    spec_bytes: 200
+    plan_bytes: 300
+"""
+
+
+def _write_run(repo: Path, text: str, run_id: str = "r9") -> Path:
+    path = repo / "docs" / "superpowers" / "runs" / f"{run_id}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def _flat(result) -> str:
+    """Rich soft-wraps to the terminal width, so a raw-output assertion can
+    pass at one width and fail at another. Normalising whitespace is what
+    makes these assertions about the TEXT rather than about the terminal."""
+    return " ".join(result.output.split())
+
+
+def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_run(repo, _TWO_UNIT_RUN)
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    # the measured unit: the four figures, named as measured
+    assert (
+        "measured: 21051 tok billed across the dispatch's turns "
+        "(in 1, cache-create 1000, cache-read 20000, out 50)" in flat
+    )
+    # the estimated unit: still an estimate, and SAID to be one
+    assert "not measured: no transcript figure for this unit" in flat
+    assert "tok est" in flat
+    # and each belongs to the right unit — ordering ties figure to key without
+    # depending on where rich decided to wrap
+    band = flat.split("accounting (context sizes")[-1]
+    assert (
+        band.index("phase/1/code")
+        < band.index("measured: 21051 tok")
+        < band.index("phase/2/code")
+        < band.index("not measured:")
+    )
+    assert "measured total: 21051 tok over 1 of 2 dispatched units" in flat
+
+
+def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> None:
+    """The failure this wording exists to prevent: estimates rendered as if
+    they were measurements, with nothing on screen saying which they are."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    unmeasured = "\n".join(line for line in _TWO_UNIT_RUN.splitlines() if "_tokens:" not in line)
+    _write_run(repo, unmeasured + "\n")
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    assert "measured total: none" in flat
+    assert "no transcript figure for any of the 2 dispatched units" in flat
+    assert "tok est" in flat
+    assert "measured: 21051" not in flat
+
+
+def test_status_renders_a_measured_zero_as_a_measurement(tmp_path: Path) -> None:
+    """A unit that genuinely spent nothing is measured. Rendering it as "not
+    measured" would be the same lie in the other direction."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    zeroed = _TWO_UNIT_RUN
+    for key, value in (
+        ("input_tokens: 1", "input_tokens: 0"),
+        ("cache_creation_input_tokens: 1000", "cache_creation_input_tokens: 0"),
+        ("cache_read_input_tokens: 20000", "cache_read_input_tokens: 0"),
+        ("output_tokens: 50", "output_tokens: 0"),
+    ):
+        zeroed = zeroed.replace(key, value)
+    _write_run(repo, zeroed)
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    assert (
+        "measured: 0 tok billed across the dispatch's turns "
+        "(in 0, cache-create 0, cache-read 0, out 0)" in flat
+    )
+    assert "measured total: 0 tok over 1 of 2 dispatched units" in flat
+
+
+def test_status_says_a_measured_figure_came_from_a_transcript(tmp_path: Path) -> None:
+    """A number with no provenance is the thing this phase exists to avoid.
+
+    Named for what it checks. It was previously called
+    `test_status_names_the_harness_whose_transcript_it_read`, which the body
+    could not deliver: `_with_measurement` keeps only the four figures, so the
+    cursor has no record of WHICH harness produced them and the rendering
+    cannot name one. A test whose name asserts more than its body is the exact
+    defect this repo keeps finding; renaming is the honest fix, and carrying
+    provenance into the cursor is the follow-up (v1 stores figures; which agent
+    produced them stays recoverable from the transcript).
+    """
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_run(repo, _TWO_UNIT_RUN)
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    assert "cumulative harness accounting" in flat
+
+
+def test_status_says_the_measured_figure_is_not_the_estimate(tmp_path: Path) -> None:
+    """The two numbers are labeled differently AND are different quantities.
+
+    The estimate is one dispatch's assembled context; the measurement is
+    cumulative billing across every turn of that dispatch, dominated by
+    cache re-reads. On a real unit of the run that built this they differed by
+    ~1,426x, which reads as a broken estimator unless the line says what it
+    counts.
+    """
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_run(repo, _TWO_UNIT_RUN)
+
+    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
+
+    assert "billed across the dispatch's turns" in flat
+    assert "NOT comparable to the one-dispatch" in flat
+
+
 # --- write-claim: one writer at a time (phase 5, contract runtime) ---
 
 

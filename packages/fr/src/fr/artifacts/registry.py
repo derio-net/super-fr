@@ -349,12 +349,17 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ArtifactKind(
             name="run",
             # 2: `StepRecord.answered_by` — gate provenance (spec
-            # `2026-09-18-harness-parity-matrix-design` §3.D.2). `RunState` is
-            # `extra="forbid"`, so a cursor carrying the new key raises for an
-            # fr that predates it; the migration is
-            # `fr.artifacts.run_provenance`, and `RunState.schema_version`
-            # exists so the stamp it writes stays readable.
-            current_version=2,
+            # `2026-09-18-harness-parity-matrix-design` §3.D.2), migration
+            # `fr.artifacts.run_provenance`.
+            # 3: `PhaseAccounting`'s four measured token fields — V2 telemetry
+            # (spec `2026-09-20-bounded-executor-handoff-design` §5.C),
+            # migration `fr.artifacts.run_telemetry`.
+            # Both are shape changes for the same reason: `RunState` is
+            # `extra="forbid"`, so a cursor carrying the new keys RAISES for an
+            # fr that predates them rather than ignoring them, whatever
+            # "optional and defaulted" suggests. `RunState.schema_version`
+            # exists so the stamp a migration writes stays readable.
+            current_version=3,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

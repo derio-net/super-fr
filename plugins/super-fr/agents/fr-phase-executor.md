@@ -33,7 +33,7 @@ dispatch, so this should be unreachable; super-fr#420.)
 - the **spec** path;
 - the **journal handoff** — the curated current state for this phase, composed by
   `fr journal handoff --scope plan --slug <plan-slug> --phase N` (open findings and
-  relevant decisions/discoveries in full, unrelated fixed history collapsed) — which
+  relevant decisions/discoveries in full, closed findings and unrelated context collapsed to a line each) — which
   stands in for the orchestrator's conversation history you do not inherit. The raw
   `fr journal render` is the escape hatch, not the default: if the handoff is missing
   anything you need to implement the phase, STOP and say so — do not guess (the
@@ -44,15 +44,18 @@ dispatch, so this should be unreachable; super-fr#420.)
 1. Read the phase scope, the spec, and the journal handoff.
 2. Implement the phase **TDD** via `superpowers:test-driven-development` /
    `fr-execute`: red → green → refactor per task, one task at a time — or record
-   `no-refactor-because: P<n>.T<m>` in the plan journal when there is nothing to
-   clean. Run every command through `fr isolation exec -- …` against the shared
-   workspace.
+   `no-refactor-because: P<n>.T<m>` in the plan journal, tagged `--phase N`, when
+   there is nothing to clean. Run every command through `fr isolation exec -- …`
+   against the shared workspace.
 3. Tick steps and complete the phase with `fr plan edit` exactly as `fr-execute`
    prescribes. **Never open a PR** — the orchestrator owns delivery.
 4. Append what you learned to the plan journal as you go:
-   `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
-   (findings carry `--state open|fixed|refuted`). This is the durable record
-   the orchestrator reviews and the PR body is derived from.
+   `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding --phase N …`
+   (findings carry `--state open|fixed|refuted`; use `--global` instead of
+   `--phase N` only for an entry that genuinely applies to every phase — one of
+   the two is required, since an untagged entry renders in full in every
+   handoff, at every phase). This is the durable record the orchestrator
+   reviews and the PR body is derived from.
 
 ## Contract — the worktree has exactly one writer
 
@@ -68,6 +71,12 @@ dispatch, so this should be unreachable; super-fr#420.)
   of the real thing, taken once — never built from a guess alongside the parser.
 - **The return value is the only reporting channel.** Report the structured result
   back; do not also send it as a message (super-fr#461).
+- **Context discipline.** Do not re-derive from the code what the handoff already
+  states; read the narrowest thing that answers the question (`grep`/`sed -n` over
+  a range, not the whole file), and do not re-read a file you have already read
+  this session unless you changed it; never paste verbatim tool output into the
+  return — cache reads accumulate as context size summed over turns, so an
+  executor's own re-reads dominate its cost.
 
 ## What you return
 
