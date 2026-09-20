@@ -2629,6 +2629,56 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     assert record.outcome is None
 
 
+def test_advance_records_the_harness_it_detected_to_resolve_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record must name the harness its `model` binding came from.
+
+    `_resolved_model` already calls `detect_harness` — a tier resolves to a
+    model only *for a harness* — and then discarded it, so a record could
+    carry `model: claude-opus-5` with `harness: null` while fr knew perfectly
+    well which harness picked that model at that moment (finding f8). An
+    orchestrator-run step is never claimed, so nothing would ever fill it in
+    afterwards either.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+    _write_repo_models(repo, "claude-code:\n  hard: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"][0]
+    assert record.model == "claude-opus-5"
+    assert record.harness == "claude-code", "the model's own harness must be recorded with it"
+
+
+def test_advance_records_no_harness_when_detection_is_inconclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is guessed — an undetectable harness stays absent, the same
+    rule an unbound tier follows (spec §4.A)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    for key in ("FR_HARNESS", "CLAUDECODE", "CLAUDE_PLUGIN_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("fr.commands.run_cmd.detect_harness", lambda _env: None)
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["implement"].dispatch["phase/1/code"][0]
+    assert record.harness is None
+    assert record.model is None
+
+
 def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2934,14 +2984,19 @@ def test_claim_omitted_harness_uses_detect_harness(tmp_path: Path) -> None:
 def test_claim_records_no_harness_when_detection_returns_none(tmp_path: Path) -> None:
     """No invented `"unknown"` member (review finding r4) — an undetectable
     harness leaves the field absent, exactly like an unbound tier leaves
-    `model` absent."""
+    `model` absent.
+
+    `advance` runs undetectable too, not just `claim`: since finding f8 the
+    record is BORN with the harness `advance` detected, so leaving `advance`
+    on the ambient environment would have this test assert against a field
+    `claim` never touched."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
     _invoke(
         repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
     )
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {})
 
     result = _invoke_as_harness(
         repo,
@@ -4008,14 +4063,20 @@ def test_status_renders_held_by_the_orchestrator(tmp_path: Path) -> None:
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
     _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
-    _invoke(repo, shipped, ["run", "advance", "r1"])  # brainstorm: agent_type None
+    # FR_HARNESS pinned so the descriptor is deterministic: since finding f8
+    # the record carries the harness `advance` detected, and this process IS a
+    # Claude Code session, so the ambient environment would otherwise decide
+    # what this assertion sees.
+    _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "claude-code"}
+    )  # brainstorm: agent_type None
 
     result = _invoke(repo, shipped, ["run", "status", "r1"])
 
     assert result.exit_code == 0, result.output
-    assert re.search(r"^ {6}held by the orchestrator since \S+$", result.output, re.MULTILINE), (
-        result.output
-    )
+    assert re.search(
+        r"^ {6}held by the orchestrator \(claude-code\) since \S+$", result.output, re.MULTILINE
+    ), result.output
 
 
 def test_status_shows_every_record_of_a_unit_oldest_first(tmp_path: Path) -> None:

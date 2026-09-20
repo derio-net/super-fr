@@ -728,22 +728,25 @@ def _dispatch_tier(repo_root: Path, state: RunState, tier: str | None, phase_n: 
     return _phase_header_tier(repo_root, state, phase_n)
 
 
-def _resolved_model(repo_root: Path, tier: str | None) -> str | None:
-    """The model bound to `tier` for this machine's detected harness, via
-    `fr.models.resolve` — repo config overriding user config, the same rule
-    `fr models resolve` itself uses. `None` when there is no tier, no
-    detected harness, or no binding for the pair: an unresolved tier leaves
-    `model` absent rather than guessed (spec §4.A / P2.T1.S2).
+def _resolved_model(repo_root: Path, harness: str | None, tier: str | None) -> str | None:
+    """The model bound to `tier` for `harness`, via `fr.models.resolve` —
+    repo config overriding user config, the same rule `fr models resolve`
+    itself uses. `None` when there is no tier, no harness, or no binding for
+    the pair: an unresolved tier leaves `model` absent rather than guessed
+    (spec §4.A / P2.T1.S2).
+
+    `harness` is PASSED IN rather than detected here (finding f8). A tier
+    resolves to a model only *for a harness*, so the two belong to the same
+    record — detecting it privately meant `_open_dispatch` could store a
+    model without naming the harness that chose it, which an orchestrator-run
+    step (never claimed) would never get filled in afterwards.
 
     `PHASE_TIER_SENTINEL` is refused here as well as resolved upstream in
     `_dispatch_tier`. Callers with no phase in hand — a flat `kind: agent`
     step — have nothing to resolve it against, and without this guard a
     models.yaml that happened to carry a `from_phase:` key would bind it,
     turning a sentinel into a model name by coincidence."""
-    if tier is None or tier == PHASE_TIER_SENTINEL:
-        return None
-    harness = detect_harness(os.environ)
-    if harness is None:
+    if tier is None or tier == PHASE_TIER_SENTINEL or harness is None:
         return None
     from fr.commands.models_cmd import REPO_MODELS_REL
     from fr.models import default_models_path, load_models
@@ -775,11 +778,17 @@ def _open_dispatch(
     record = state.steps[step_id]
     dispatch = dict(record.dispatch or {})
     attempts = list(dispatch.get(key, []))
+    # Detected ONCE and both recorded and used (finding f8): the harness is
+    # what turns a tier into a model, so a record that carries the model
+    # without naming it is not self-describing — and an orchestrator-run
+    # step, which nothing ever claims, would never have it filled in later.
+    harness = detect_harness(os.environ)
     attempts.append(
         DispatchRecord(
             dispatched=_now(),
             agent_type=agent_type,
-            model=_resolved_model(repo_root, tier),
+            harness=harness,
+            model=_resolved_model(repo_root, harness, tier),
         )
     )
     dispatch[key] = attempts

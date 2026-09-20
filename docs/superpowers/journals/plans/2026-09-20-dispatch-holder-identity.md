@@ -330,3 +330,8 @@ illustration:
     orchestrator-run step never reports an `agent` for itself, so counting it would make
     every ordinary fr-goal run report permanent "unclaimed" debt on spec-review/review-phase/
     deliver. Pinned by test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaimed.
+
+<!-- fr:journal kind=finding scope=plan id=f8 created=2026-09-20T16:01:26 phase=5 state=fixed -->
+### f8 · finding [fixed] · advance detected the harness to resolve the model, then threw it away (phase 5)
+
+Seen in the live status output phase 5 produced: 'the orchestrator (claude-opus-5)' — a model with no harness beside it. _resolved_model called detect_harness(os.environ) privately to pick the binding and discarded the result, so a record could carry model=claude-opus-5 with harness=null while fr knew at that exact moment which harness chose it. A tier does not resolve to a model in the abstract; it resolves for a harness, so the two belong to the same record. Worse for an orchestrator-run step (agent_type None): nothing ever claims one, so nothing would fill the harness in later — permanently half-described. FIXED: _open_dispatch detects once, records it, and PASSES it to _resolved_model, which no longer detects anything itself; the recorded harness is therefore by construction the one that chose the recorded model. Two tests. Two existing tests needed their fixtures corrected rather than their assertions weakened: both had been pinning the absence this fixes, and both ran advance on the ambient environment — which in this process is a Claude Code session, so they were asserting against whatever the machine happened to be. They now declare their harness explicitly (one undetectable, one pinned via FR_HARNESS), which is what they always meant.
