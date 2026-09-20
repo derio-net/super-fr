@@ -1,0 +1,183 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The detector — imperative-head dispatch verbs with an agent-shaped object,
+    at error severity
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - goal-agentic-dispatch-purity
+  - goal-dispatch-lint-precision
+tasks:
+- number: 1
+  title: True positives and true negatives, red to green
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_v2_plan_ops.py, beside the existing #252
+      tests (`test_self_review_errors_on_manual_verb_in_agentic_step` and
+      friends, ~line 675 — grep for them and mirror their tmp_path plan
+      builder exactly), add a parametrized TRUE-POSITIVE test over these
+      six shapes, each of which must produce exactly one `error` ReviewIssue
+      (fenced deliberately — these are literal test data, and an unfenced
+      copy would make THIS step trip the very gate it specifies, which is
+      the fence rule of spec §4.A doing its job):
+      ```
+      "Dispatch `blog-craft:post-researcher` per post"   (the #428 case, verbatim)
+      "Dispatch the cold-reader agent over the draft"
+      "Dispatch one `general-purpose` subagent per file"
+      "Spawn a subagent to gather evidence"
+      "Delegate to the code-reviewer agent"
+      "RED: write the test. Then dispatch `blog-craft:post-researcher` to gather evidence."
+      ```
+      and a parametrized TRUE-NEGATIVE test over these five REAL super-fr
+      step shapes, each of which must produce NO issue:
+      ```
+      "GREEN: implement fr_dispatch.tick() so it dispatches phases to the runner"
+      "Add a test asserting `fr apply --yes` refuses to dispatch an unreachable plan"
+      "RED: assert the dispatch brief names the fr-phase-executor agent"
+      "Dispatch phase 3 to the vk runner via fr apply"
+      "Write docs describing how Claude Code dispatches the fr-phase-executor"
+      ```
+      Note the sixth positive: the verb follows a sentence boundary AND a
+      connective ("Then dispatch"), which a naive head-anchor misses — it is
+      in the list because the brainstorm probe missed it. Fails: no detector.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/plan_ops.py, beside `_MANUAL_VERB_RES`,
+      add the dispatch-capability gate. Three module constants and one
+      helper, then wire it into the existing per-agentic-phase loop in
+      `self_review` (the same loop that runs the #252 step scan, so the
+      agentic-only and `state == "x"` exemptions come for free — keep them):
+        _DISPATCH_VERB     dispatch|delegate to|spawn|hand off to|fan out to,
+                           with inflections
+        _AGENT_OBJECT      agent|subagent|sub-agent|executor|researcher|
+                           reviewer|reader (plural-tolerant), OR a backticked
+                           `plugin:name`, OR a bare plugin:name whose name
+                           contains one of those words
+        _RE_DISPATCH_HEAD  (start of text | after [.;:!?\n]) + optional
+                           connective (then|and|next|finally|also) +
+                           _DISPATCH_VERB + up to ~60 same-sentence chars +
+                           _AGENT_OBJECT, IGNORECASE
+        _RE_DISPATCH_MECHANISM   subagent_type | Task tool | Agent tool |
+                           "use the <X> agent"
+      and `_strip_fenced_code(text)` which removes ```…``` blocks ONLY.
+      Inline backticks MUST survive: the backticked agent name is the object,
+      and stripping them turns the #428 case into "Dispatch   per post" and
+      blinds the detector (spec §4.A). Comment that, and comment WHY the head
+      anchor exists: it separates instructing the executor to dispatch from
+      describing dispatch, which is what all 237 measured false positives
+      were doing.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR + quality gate: the #252 scan and this one now walk the same
+      `phase.tasks -> task.steps` nest with the same `state == "x"`
+      exemption — lift that walk into one private generator
+      (`_pending_agentic_steps(phase)`) and have both detectors consume it,
+      so a future exemption change cannot apply to one gate and not the
+      other. Then `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest tests/unit/test_v2_plan_ops.py -q --no-cov`.
+- number: 2
+  title: Exemptions and the corpus regression
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: three more tests in tests/unit/test_v2_plan_ops.py, mirroring the
+      #252 exemption tests by name: (a) the #428 dispatch step inside a
+      `[manual]` phase yields NO issue — this is decision d3, the manual
+      phase IS the escape route, so the test carries a comment saying so;
+      (b) the same step ticked `x` in an agentic phase yields NO issue
+      (mirrors `test_self_review_manual_verb_exempts_completed_steps`);
+      (c) a dispatch verb inside a fenced ``` block yields NO issue while
+      the same step's inline-backticked agent reference still errors.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: make them pass (most should already, from P2.T1.S2 — fix the
+      detector where they do not; do NOT weaken a test to fit the code).
+      Then add the corpus regression to
+      tests/unit/test_dispatch_lint_corpus.py: run the detector over
+      `agentic_steps()` and assert ZERO hits, with the failure message
+      printing the offending plan slug, step id and matched text so a future
+      widening is diagnosable from the CI log alone. This pins the
+      brainstorm's 1419-step / 0-hit measurement.
+      `uv run pytest tests/unit/test_dispatch_lint_corpus.py tests/unit/test_v2_plan_ops.py -q --no-cov`.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR + quality gate: ruff format, ruff check, mypy over the four
+      src roots, then the FULL suite `uv run pytest -q --no-cov` — the
+      detector now runs inside every self-review the test suite performs, so
+      a false positive anywhere else in the repo surfaces here and nowhere
+      later.
+- number: 3
+  title: The CLI verdict names both escapes
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: add a test asserting the end-to-end CLI contract — build a plan
+      folder whose agentic phase carries a dispatch step, invoke
+      `fr plan self-review <dir>` through the same runner the neighbouring
+      CLI tests use (grep tests/unit for the existing self-review CLI test
+      and mirror it), and assert exit code 1 AND that the message contains
+      all four load-bearing tokens: "no Agent tool", "task: deny",
+      "[manual] phase", and "#428".
+  - id: P2.T3.S2
+    text: |-
+      GREEN: make the message carry them. Shape (spec §4.A):
+      "phase {n} (agentic) step {id} tells the phase executor to dispatch a
+      subagent (matched {matched!r}) — fr-phase-executor has no Agent tool
+      (OpenCode: task: deny) and cannot dispatch anything, so this step is
+      unexecutable by construction (#428). Name the OUTCOME instead
+      (\"gather file:line-cited evidence following <protocol>\"), or move the
+      dispatch into a [manual] phase."
+      Quote the matched text, not the raw pattern — an author reading
+      `(?:dispatch|delegate to|...)` learns nothing about their own step.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + quality gate: ruff format, ruff check, mypy, and
+      `uv run pytest -q --no-cov`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -312,6 +312,6 @@ prose; nothing deploys):
 
 ## Implementation Plans
 
-| Plan | Repo | Status |
-|---|---|---|
-| _(created by `fr plan create`)_ | super-fr | — |
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-20-agentic-dispatch-verb-lint | `derio-net/super-fr` | `2026-09-20-agentic-dispatch-verb-lint` | — |

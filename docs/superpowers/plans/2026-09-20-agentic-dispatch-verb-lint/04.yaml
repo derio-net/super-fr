@@ -1,0 +1,133 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Release surfaces — acceptance flips, minor bump, explainer, full gate
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - goal-agentic-dispatch-purity
+  - goal-dispatch-lint-precision
+  - goal-executor-refuses-tick
+tasks:
+- number: 1
+  title: Flip the three acceptance rows with their evidence
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      `uv run fr acceptance set-status` (never a hand-edit — .claude/rules/
+      acceptance-matrix.md) for each row, each with --notes saying why it
+      moved and --level refs to the tests that now exist:
+        goal-agentic-dispatch-purity  --status ci
+          --level unit=super-fr:tests/unit/test_v2_plan_ops.py
+        goal-dispatch-lint-precision  --status ci
+          --level unit=super-fr:tests/unit/test_dispatch_lint_corpus.py
+        goal-executor-refuses-tick    --status skipped
+          --level unit=super-fr:tests/unit/test_skill_tokens.py
+      The third stays `skipped` on purpose: the prose token is verified, the
+      runtime behaviour is agent-side and not unit-testable — say exactly
+      that in its notes, so the debt is legible rather than overclaimed.
+      Then `uv run fr acceptance check` (it also fails on stale committed
+      reports, so this covers the three regenerated renderings).
+- number: 2
+  title: Minor version bump and the explainer that must not lag it
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` — minor, not
+      patch: packages/fr/src/** and plugins/super-fr/** both change and the
+      change is a new mandatory gate, which AGENTS.md classes as a
+      user-visible workflow addition. Commit the changed manifests together
+      with uv.lock, and confirm with
+      `uv run --no-project python scripts/bump-version.py --check`.
+  - id: P4.T2.S2
+    text: |-
+      A minor bump triggers .claude/rules/explainers-currency.md. FIRST prove
+      the renderer is honest: from `/` (NOT the worktree) re-render the
+      UNMODIFIED docs/explainers/01-fr-goal.md and confirm the output is
+      byte-identical to the committed 01-fr-goal.html —
+      `B=~/.claude/plugins/marketplaces/derio-net--blog-craft;
+       uv run --isolated --no-project --with markdown --with pyyaml python
+       "$B/tools/render_explainer.py" <abs path>/docs/explainers/01-fr-goal.md
+       --style broadsheet --embed-fonts -o /tmp/probe.html` then `diff`.
+      Both `--isolated` and running from `/` are load-bearing: either one
+      missing lets a global pygments flip codehilite on and rewrite every
+      code block (the rule documents this being found twice). If the diff is
+      non-empty, STOP and report — do not edit prose over a renderer you have
+      not verified.
+  - id: P4.T2.S3
+    text: |-
+      Add ONE sibling sentence to docs/explainers/01-fr-goal.md where it
+      already lists what self-review errors on — "defects such as dependency
+      cycles and manual work hidden inside an agentic phase" (~line 364) —
+      extending it to dispatch work the phase executor has no tool to
+      perform, in that page's voice (second person, unhurried, explains WHY
+      the mechanism exists, written for a reader who has never seen this
+      repo). Then regenerate 01-fr-goal.html with the exact verified command
+      from P4.T2.S2 and commit BOTH files. Never hand-edit the .html.
+      Confirm the page diff contains only the sentence you wrote.
+  - id: P4.T2.S4
+    text: |-
+      REFACTOR + quality gate: `uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov`
+      plus a re-read of the new sentence in rendered context.
+- number: 3
+  title: The whole gate, as CI will run it
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      `uv run ruff format packages/ tests/`;
+      `uv run ruff check packages/ tests/`;
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`;
+      `uv run pytest` (FULL, not --no-cov: CI gates cov-fail-under=75);
+      `uv run fr validate artifacts`;
+      `uv run fr acceptance check`;
+      `uv run fr harness parity --check`;
+      `uv run python scripts/sync-opencode.py --check`;
+      `uv run --no-project python scripts/bump-version.py --check`.
+      Paste the real output of each into the phase completion note — a claim
+      of green that nobody can read is the failure class this plan exists to
+      close.
+  - id: P4.T3.S2
+    text: |-
+      Finally, dogfood the gate on this very plan:
+      `uv run fr plan self-review docs/superpowers/plans/2026-09-20-agentic-dispatch-verb-lint`.
+      It must pass. If the new detector fires on this plan's OWN step text —
+      which describes dispatch verbs at length — that is a real false
+      positive and the detector is wrong, not the plan: fix the detector and
+      re-run every test. (The head anchor should hold: this plan's steps say
+      "flagging dispatch verbs", never "Dispatch `<agent>`".)
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
