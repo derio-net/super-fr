@@ -30,6 +30,7 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.types import PHASE_TIERS
 
 
 class StepSpec(TypedDict):
@@ -113,13 +114,31 @@ class PhaseSpec:
     # Walking-skeleton marker — emitted only when set (same byte-stability
     # rule as `acceptance`).
     skeleton: bool = False
-    # Harness-neutral complexity hint (`PhaseHeader.tier`) that fr-goal §5
-    # resolves to a model via `fr models resolve`. Emitted only when set, same
-    # byte-stability rule as the two above. Its absence here is why
-    # `fr plan create --phases-file` accepted a `tier:` and silently dropped
-    # it, leaving every scaffolded plan untiered and every dispatch made from
-    # one able to record only `model: null`.
-    tier: str | None = None
+    # Harness-neutral complexity hint (2026-07-22 fr-goal-subagent-execution
+    # spec §B.2) — emitted only when set (same byte-stability rule as
+    # `acceptance`/`skeleton`). Validated against `fr.types.PHASE_TIERS` in
+    # `create()`'s pre-flight loop, not left to `PhaseHeader`'s Literal at the
+    # post-write re-parse (#133: that would strand a half-built folder).
+    tier: Literal["mechanical", "standard", "hard"] | None = None
+
+
+def _preflight_phase_error(ps: PhaseSpec) -> str | None:
+    """The first pre-flight validation error for `ps`, or None.
+
+    Each check here mirrors a `PhaseHeader` schema gate that would otherwise
+    only reject at `create()`'s post-write re-parse, stranding a half-built
+    plan folder (#133). One function per phase keeps `create()`'s loop a
+    single readable rule ("for each phase, raise the first pre-flight
+    error") instead of a growing set of inline `if`s.
+    """
+    if ps.number < 1:
+        return f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
+    if ps.tier is not None and ps.tier not in PHASE_TIERS:
+        return (
+            f"phase {ps.number} ({ps.title!r}): tier {ps.tier!r} is not valid, "
+            f"must be one of {list(PHASE_TIERS)}"
+        )
+    return None
 
 
 def create(
@@ -156,14 +175,14 @@ def create(
     # filesystem. A spec missing its '## Implementation Plans' section must
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
-    # `fr apply` validates the diff before `--yes` touches GitHub.
-    # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
-    # would only reject at the post-write re-parse, stranding the folder.
+    # `fr apply` validates the diff before `--yes` touches GitHub. Same
+    # doctrine for phase numbering and tier below: their schema gates
+    # (PhaseHeader's `ge=1` and `Literal`) would only reject at the post-write
+    # re-parse, stranding the folder (#434 spec-review finding for tier).
     for ps in phases:
-        if ps.number < 1:
-            raise PlanEditError(
-                f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
-            )
+        error = _preflight_phase_error(ps)
+        if error is not None:
+            raise PlanEditError(error)
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
@@ -296,25 +315,13 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
         "depends_on": list(ps.depends_on),
         "tracking_issue": None,
     }
+    # Optional header fields are emitted only when set, so plans written
+    # before each field existed stay byte-stable and parse on older readers.
     if ps.acceptance:
-        # Omitted when empty so pre-acceptance plans stay byte-stable.
         phase_header["acceptance"] = list(ps.acceptance)
     if ps.skeleton:
-        # Omitted when unset so pre-marker plans stay byte-stable.
         phase_header["skeleton"] = True
     if ps.tier is not None:
-        # Validated here rather than left to `fr.parser.parse`: `PhaseHeader.
-        # tier` is a closed Literal, so an unknown tier would scaffold a plan
-        # that cannot be read back — a create that reports success and leaves
-        # an unparseable artifact. The vocabulary is derived from the Literal
-        # (`phase_tiers()`), never re-listed.
-        from fr.types import phase_tiers
-
-        if ps.tier not in phase_tiers():
-            raise PlanEditError(
-                f"phase {ps.number}: unknown tier {ps.tier!r} — "
-                f"must be one of {', '.join(phase_tiers())}"
-            )
         phase_header["tier"] = ps.tier
     return {
         "schema_version": 2,
@@ -984,6 +991,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # agentic phase is the delivery-infrastructure smoke.
     issues.extend(_skeleton_issues(plan))
 
+    # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
+    # fr_version floor probe for `tier`, and the untiered-agentic-phase nudge.
+    issues.extend(_tier_issues(plan))
+
     # Refactor-or-justify gate (fr-goal methodology restoration): every
     # multi-step task ends red → green → refactor, or records why not.
     issues.extend(_refactor_issues(plan))
@@ -1138,23 +1149,37 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     # the version gate there and die on a raw "extra field" pydantic error
     # (#352 review). Probe: does the constraint admit any pre-3.7.0 version?
     if linked and plan.meta.fr_version:
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("3.6.99", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            f"phases link acceptance rows but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
-                            f"floor it at '>=3.7.0,<4.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.6.99",
+            message=(
+                f"phases link acceptance rows but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
+                f"floor it at '>=3.7.0,<4.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
+
+
+def _version_floor_issue(
+    fr_version: str, *, probe_version: str, message: str
+) -> ReviewIssue | None:
+    """Shared shape behind the `acceptance:`/`tier:` (and, in principle, any
+    future field's) version-floor probes: does `fr_version` admit
+    `probe_version` (the highest pre-feature release)? If so, a `warn` issue
+    carrying `message`; otherwise `None`. A malformed constraint is left to
+    the parser, which already fails loud elsewhere — swallow silently here
+    rather than duplicate a worse-worded error."""
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+    try:
+        if SpecifierSet(fr_version).contains(probe_version, prereleases=True):
+            return ReviewIssue(severity="warn", message=message)
+    except InvalidSpecifier:
+        pass  # the parser already fails loud on malformed constraints
+    return None
 
 
 def _has_cycle(graph: dict[int, set[int]], start: int) -> bool:
@@ -1222,25 +1247,21 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
             )
         )
     if marked and plan.meta.fr_version:
-        # Same floor probe as `acceptance:` (#352 review): a plan that marks a
+        # Same floor probe as `acceptance:` (#352 review) and `tier:` — and it
+        # says so, so it goes through the same helper. A plan that marks a
         # skeleton while its fr_version admits a pre-marker fr passes here and
         # dies on a raw "extra field" pydantic error over there.
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("4.1.1", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            "a phase marks the skeleton but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
-                            "floor it at '>=4.2.0,<5.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="4.1.1",
+            message=(
+                "a phase marks the skeleton but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
+                "floor it at '>=4.2.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
 
 
@@ -1278,6 +1299,52 @@ def _skeleton_overridden(plan: Plan) -> bool:
         return False
     want = f"skeleton-override-{plan.meta.plan}"
     return any(e.kind == "decision" and e.id == want for e in entries)
+
+
+def _tier_issues(plan: Plan) -> list[ReviewIssue]:
+    """`tier` gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2):
+
+    1. Floor probe — same shape as `_acceptance_link_issues`'/`_skeleton_issues`'
+       3.7.0/4.1.1 probes: `tier` is a 3.12.0 schema field on the closed-world
+       `PhaseHeader`, so a plan using it while `fr_version` admits an older fr
+       would pass the version gate and die on a raw "extra field" pydantic
+       error over there.
+    2. Untiered-agentic-phase warning — #498's fail-visibly doctrine moved to
+       plan time: an agentic phase with no `tier` is dispatched untiered,
+       silently inheriting the session model, which was previously
+       indistinguishable from working tiering at every observable point.
+       Manual phases are never dispatched to a model, so a missing tier there
+       is not a gap.
+    """
+    out: list[ReviewIssue] = []
+    tiered = any(ph.phase.tier is not None for ph in plan.phases)
+    if tiered and plan.meta.fr_version:
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.11.99",
+            message=(
+                f"phases carry a tier but fr_version {plan.meta.fr_version!r} "
+                f"admits a pre-tier fr — floor it at '>=3.12.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
+
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic" or ph.phase.tier is not None:
+            continue
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"phase {ph.phase.number} is agentic but declares no tier — "
+                    f"it will be dispatched untiered, inheriting the session's "
+                    f"model. Add `tier` to the phase header, one of "
+                    f"{list(PHASE_TIERS)}."
+                ),
+            )
+        )
+    return out
 
 
 def _refactor_issues(plan: Plan) -> list[ReviewIssue]:

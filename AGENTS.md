@@ -146,13 +146,15 @@ and a CI tripwire will catch drift anyway:
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
   the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
   `test_tripwire_opencode_instructions_sync.py` fail on drift.
-- **There are TWO mirror generators, and one canonical edit drifts both.**
-  `scripts/sync-hermes.py` writes `.hermes/skills/fr/<name>/SKILL.md` and
-  `.hermes/SOUL.d/super-fr-rules.md`, guarded by
-  `test_tripwire_hermes_skills_sync.py`. Run **both** scripts after touching a
-  canonical skill/rule. Running only `sync-opencode.py` leaves a green targeted
-  tripwire run and a red full suite, which is how the Hermes mirror drifted in
-  gh-503 phase 6.
+- Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
+  `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
+  one — `scripts/sync-hermes.py` is the second sync, guarded by
+  `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
+  only `sync-opencode.py` leaves that tripwire red, which is how it was found
+  (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
+  touched no Hermes file) — and again, independently, in gh#503 phase 6, where
+  the symptom was a GREEN targeted tripwire run and a red full suite. Two
+  sessions hit the same trap a day apart; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

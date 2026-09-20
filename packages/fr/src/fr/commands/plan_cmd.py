@@ -142,10 +142,10 @@ def create_cmd(
 
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
+          acceptance ([row-ids], acceptance-matrix rows this phase advances),
           skeleton (bool, walking-skeleton marker for the first agentic phase),
-          tier (mechanical|standard|hard — the hint fr-goal resolves to a
-            model via `fr models resolve`; omitted leaves the phase untiered),
-          acceptance: [row-id, ...],
+          tier (mechanical|standard|hard, harness-neutral dispatch complexity
+            hint; agentic phases should set one, see fr-plan),
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
