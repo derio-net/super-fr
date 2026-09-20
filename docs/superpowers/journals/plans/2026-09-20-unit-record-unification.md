@@ -459,3 +459,34 @@ The whole phase-5 surface, for phases 6 and 7.
 **Mutants killed** (each printed whether it applied — the check that cannot fail is the one this branch keeps catching): gate made a no-op → 3 fail, incl. the integration walk; `reviews_phase` bypassed → 2 fail; drift by shape → 23 fail; `check` never reporting the debt → 3 fail.
 
 **Gates:** full suite 3833 passed / 80 skipped, ruff, mypy (4 trees), `fr acceptance check` 170 rows OK, `fr validate artifacts` 48 valid, `fr harness parity --check`, `sync-opencode --check`, `bump-version --check`. No version bump, no SKILL.md edit (phase 7 owns it, at its 120-line cap).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-live-on-this-run created=2026-09-21T01:12:29 phase=5 -->
+### p5-live-on-this-run · discovery · The gate and the debt, live on THIS run's own cursor: four pre-gate reviews reported, exit 0, nothing written (phase 5) (phase 5)
+
+**Spec §4.I, observed on the cursor that is dispatching this phase** — `docs/superpowers/runs/2026-09-20-unit-record-unification-r2.yaml`, not a fixture. Read-only: the cursor's SHA-256 was identical before and after, and nothing was written.
+
+```
+$ uv run fr run check 2026-09-20-unit-record-unification-r2
+2026-09-20-unit-record-unification-r2: cursor=implement (running)
+implement: phase/5/implement-phase is open — HELD BY agent ad79e98ba1f9deaa1 (claude-code, claude-opus-5) since 2026-09-20T22:46:16+00:00
+implement: phase/1/review-phase is done, unevidenced (predates the evidence gate)
+implement: phase/2/review-phase is done, unevidenced (predates the evidence gate)
+implement: phase/3/review-phase is done, unevidenced (predates the evidence gate)
+implement: phase/4/review-phase is done, unevidenced (predates the evidence gate)
+exit 0
+```
+
+Four reviews resolved before the gate existed, all reported, none retroactively failed, exit code **0** — the whole of "an obligation cannot be enforced backwards in time" in one command. The holder line above them is unchanged, so the debt lines are additive and did not displace anything.
+
+**And reviews still to come in this same run DO need evidence** (§4.I, second half), including this phase's own. Real `kind=review` entries exist for phases 1-4 (`rev-p1` … `rev-p4`); phase 5 has none yet, so the orchestrator must write it first. The exact pair:
+
+```
+uv run fr journal add --scope plan --slug 2026-09-20-unit-record-unification \
+  --kind review --phase 5 --id rev-p5 --title "phase 5 review" \
+  --body "<findings raised, by id; or 'no findings'>"
+
+uv run fr run resolve 2026-09-20-unit-record-unification-r2 \
+  --step review-phase --item phase/5 --state done --evidence review=rev-p5
+```
+
+Without `--evidence` that resolve now exits 2 and names the flag. That is intended, not a regression, and this run was deliberately NOT special-cased.
