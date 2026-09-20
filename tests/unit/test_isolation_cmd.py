@@ -56,6 +56,24 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return r
 
 
+def _push_origin(repo: Path) -> None:
+    """Add a real bare origin (fresh, next to `repo`) and push its current
+    HEAD to `main`. NOT part of the `repo` fixture itself: several tests here
+    (the plan-repo validator-wrapper ones) deliberately commit MORE content to
+    local HEAD after the fixture runs and rely on `up()`'s cold-start base
+    resolution seeing that local-only commit — giving the fixture an origin
+    up front would fetch a STALE origin/main and silently cut the new branch
+    from before their commit (#322's own documented behavior), which is not
+    what those tests are about. Callers that need a real origin (the
+    phase-2 unlanded-content guard fetches origin/<default> on every
+    force=False down()) call this themselves, once their repo content is
+    final."""
+    origin = repo.parent / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
+
+
 @pytest.fixture()
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
@@ -72,6 +90,7 @@ def fake_run(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_up_exec_status_down_happy_path(repo: Path, fake_run: list) -> None:
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "vk-iso/t"])
     assert res.exit_code == 0, res.output
     assert "worktree" in res.output
@@ -555,6 +574,7 @@ def test_down_resolves_single_workspace_when_no_branch(repo: Path, fake_run: lis
     # even when a real workspace for the cwd existed). Mirrors exec/restart.
     from fr.isolation.types import list_states
 
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
     res = runner.invoke(app, ["isolation", "down", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
@@ -585,6 +605,7 @@ def test_down_clears_sentinel_when_last_workspace_removed(
     # the Bash gate stops reporting 'fr pipeline active'. The guard's own clear
     # never fires here — it exits early when `down` runs from the worktree cwd
     # (the prescribed workflow), so the Python command must clear eagerly.
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
     assert (sdir / "sess.json").exists()
@@ -598,6 +619,7 @@ def test_down_keeps_sentinel_when_other_workspaces_remain(
 ) -> None:
     # #399: tearing down ONE of several workspaces must NOT clear the sentinel —
     # the pipeline is still active for the survivors.
+    _push_origin(repo)  # force=False down() below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
@@ -778,6 +800,7 @@ def test_down_all_tears_down_and_clears_sentinels(
     # #341 Task 2A: `down --all` tears down every workspace and drops the
     # pipeline sentinel(s) — the explicit escape from the orphaned-sentinel
     # deadlock. gh returns MERGED here, so no open-PR safety kicks in.
+    _push_origin(repo)  # the live reap below needs a real origin to fetch
     sdir = _sentinel(tmp_path, repo, monkeypatch)
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
@@ -816,6 +839,76 @@ def test_down_all_keeps_open_pr_without_force(
     res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--force"])
     assert res.exit_code == 0, res.output
     assert list_states(repo.resolve()) == [], "--force tears down the open-PR workspace"
+
+
+def test_down_all_reports_each_kept_workspaces_actual_reason(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #467 phase 3 (spec §3.7): the open-PR check is NOT the only reason `down`
+    # can refuse anymore — the reap-hazard guard refuses too. `down --all` must
+    # keep BOTH kinds of refusal and state each workspace's ACTUAL reason,
+    # never hardcode "open PR" for a hazard refusal.
+    _push_origin(repo)  # the hazard guard's content check needs a real origin
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        if argv[0] == "gh" and argv[1] == "pr" and argv[2] == "view":
+            branch = argv[3]
+            if branch == "feat/openpr":
+                return subprocess.CompletedProcess(argv, 0, stdout='{"state": "OPEN", "url": "u"}')
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="no pr found")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(isolation_cmd, "_runner", run)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/openpr"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/dirty"])
+    from fr.isolation.types import list_states
+
+    dirty_state = next(s for s in list_states(repo.resolve()) if s.branch == "feat/dirty")
+    (dirty_state.worktree / "uncommitted.txt").write_text("scratch\n")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 0, res.output
+    branches = {s.branch for s in list_states(repo.resolve())}
+    assert branches == {"feat/openpr", "feat/dirty"}, "both refusals kept both workspaces"
+    assert "feat/openpr" in res.output and "PR" in res.output
+    assert "feat/dirty" in res.output and "uncommitted" in res.output
+    # Phase-3 review f6: each reason gets its OWN lines. A hazard refusal is
+    # multi-line by design, so inlining reasons into the summary put a "; "
+    # separator mid-sentence and pushed the sentinel count to the tail of a
+    # paragraph. The summary line must stay a summary.
+    first = res.output.splitlines()[0]
+    assert first.endswith("sentinel(s) cleared."), first
+    assert "uncommitted.txt" not in first
+    assert "  kept feat/dirty:" in res.output
+    assert "  kept feat/openpr:" in res.output
+
+
+def test_down_single_hazard_refusal_keeps_bindings_and_sentinel(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A refusal from the (new, non-open-PR) reap-hazard guard must behave
+    # exactly like the open-PR refusal already did: exit non-zero with the
+    # hazard's own message, and leave sessions attached / the sentinel intact
+    # (isolation_cmd.py:459's comment — "a refused down keeps its bindings").
+    _push_origin(repo)
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/dirty"])
+    from fr.isolation.types import list_states
+
+    state = list_states(repo.resolve())[0]
+    (state.worktree / "uncommitted.txt").write_text("scratch\n")
+
+    res = runner.invoke(
+        app,
+        ["isolation", "down", "--repo", str(repo), "--branch", "feat/dirty", "--session", "sess"],
+    )
+    assert res.exit_code == 2
+    assert "uncommitted" in res.output
+    assert (sdir / "sess.json").exists(), "sentinel/binding kept on a refused down"
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/dirty"]
 
 
 def _docker_run(container: str = "cid running"):

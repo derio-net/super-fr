@@ -17,6 +17,7 @@ from fr.journal.model import (
     JournalKind,
     JournalParseError,
     JournalScope,
+    append_journal_entry,
     archived_journal_path,
     journal_path,
     parse_journal,
@@ -26,6 +27,7 @@ from fr.journal.model import (
 )
 
 __all__ = [
+    "append_journal_entry",
     "JOURNALS_REL",
     "JournalEntry",
     "JournalKind",

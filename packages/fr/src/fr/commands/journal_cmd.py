@@ -24,6 +24,7 @@ from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
+    append_journal_entry,
     journal_path,
     open_finding_ids,
     parse_journal,
@@ -68,7 +69,15 @@ def add(
     kind: str = typer.Option(..., "--kind", help="Entry kind (see spec §A)."),
     title: str = typer.Option(..., "--title", help="One-line entry title."),
     body: str = typer.Option("", "--body", help="Entry body (Markdown)."),
-    phase: int | None = typer.Option(None, "--phase", help="Phase number, if any."),
+    phase: int | None = typer.Option(
+        None, "--phase", help="Phase number (--scope plan: required unless --global)."
+    ),
+    is_global: bool = typer.Option(
+        False,
+        "--global",
+        help="--scope plan only: this entry genuinely applies to every phase — "
+        "the explicit escape from tagging one with --phase.",
+    ),
     state: str | None = typer.Option(None, "--state", help="finding only: fixed | refuted | open."),
     entry_id: str | None = typer.Option(
         None, "--id", help="Stable id; re-adding the same id is idempotent."
@@ -82,6 +91,35 @@ def add(
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
+    # spec §5.A2: an untagged plan-scope entry hits `compose_handoff`'s
+    # `e.phase is None` branch and renders in full at EVERY phase forever —
+    # measured cost: 16 untagged discoveries / 13,281 chars at phase 6 of a
+    # real journal. Spec and debug journals have no phases and are untouched.
+    # Checked OUTSIDE the plan guard: on spec/debug `--global` used to be a
+    # silent no-op, so `--phase 3 --global` on a spec journal wrote a
+    # phase-3-tagged entry while the operator had asked for a global one.
+    # Refusing a plan-only flag where it cannot apply beats honouring neither.
+    if is_global and scope != "plan":
+        err_console.print(
+            "[red]--global applies to --scope plan only[/red] — spec and debug "
+            "journals have no phases, so every entry in them is already global"
+        )
+        raise typer.Exit(2)
+    if scope == "plan":
+        if phase is None and not is_global:
+            err_console.print(
+                "[red]--scope plan needs --phase N or --global[/red] — an untagged "
+                "entry renders in full in every handoff, at every phase; pass "
+                "--phase N for a phase-scoped entry, or --global for one that "
+                "genuinely applies everywhere"
+            )
+            raise typer.Exit(2)
+        if phase is not None and is_global:
+            err_console.print(
+                "[red]--phase and --global are contradictory[/red] — an entry is "
+                "either scoped to one phase or explicitly global, not both"
+            )
+            raise typer.Exit(2)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -125,20 +163,7 @@ def add(
             "`--resolves` must name a finding that exists"
         )
         raise typer.Exit(2)
-    _append_entry(path, slug, entry)
-
-
-def _append_entry(path: Path, slug: str, entry: JournalEntry) -> None:
-    """The ONE writer — `add` and `resolve` both land here, so the two cannot
-    disagree about separators, the file header, or the serialized shape."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    block = serialize_entry(entry)
-    if path.exists():
-        prior = path.read_text()
-        sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
-        path.write_text(prior + sep + block)
-    else:
-        path.write_text(f"# Journal: {slug}\n\n{block}")
+    append_journal_entry(path, slug, entry)
 
 
 RESOLUTION_STATES = ("fixed", "refuted")
@@ -199,7 +224,7 @@ def resolve(
     if state not in RESOLUTION_STATES:
         err_console.print(
             f"[red]--state must be one of {' | '.join(RESOLUTION_STATES)} (got {state!r})[/red] "
-            "— re-open a finding with `fr journal add --resolves <id> --state open`"
+            "— re-open a finding with `fr journal add --resolves <id> --state open --phase N`"
         )
         raise typer.Exit(2)
     try:
@@ -232,7 +257,7 @@ def resolve(
         state=state,  # type: ignore[arg-type]
         resolves=entry_id,
     )
-    _append_entry(path, slug, record)
+    append_journal_entry(path, slug, record)
     typer.echo(f"{entry_id} → {state} (record {record.id})")
 
 

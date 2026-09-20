@@ -1,4 +1,4 @@
-"""The `run` kind's 2 → 3 migration: the dispatch-holder record (spec
+"""The `run` kind's 3 → 4 migration: the dispatch-holder record (spec
 `2026-09-20-dispatch-holder-identity-design.md` §4.A/§4.D).
 
 `StepRecord` gained `dispatch`, and `RunState` is `extra="forbid"`, so a
@@ -11,12 +11,12 @@ package `__init__` imports — a migration nobody imports never runs.
 **It rewrites no body, and that is the whole design** — same as the 1→2
 migration in `fr.artifacts.run_provenance`, which this module is modelled on
 line-for-line. The new field is optional and defaults to absent, which is
-exactly what every v1 and v2 cursor already means ("no dispatch recorded for
+exactly what every v1, v2 and v3 cursor already means ("no dispatch recorded for
 this step"), so there is nothing to translate; the runner writes the stamp
 itself once `fn` returns. What is left for `fn` is the one decision a
 stamp-only migration can still get wrong: stamping a file it cannot actually
 read. A run cursor is git-tracked and hand-editable, and a truncated or
-half-merged one that gets stamped `3` is *worse* than one left below — it now
+half-merged one that gets stamped `4` is *worse* than one left below — it now
 claims a shape it does not have, and the migration will never look at it
 again. So `fn` parses first and refuses, which the runner records as that one
 artifact's failure (invariant 3): every other cursor still migrates, the bad
@@ -53,7 +53,7 @@ def refuse_unreadable_cursor(path: Path) -> None:
         parse_run_state(path.read_text())
     except (RunStateError, OSError) as e:
         raise UnreadableRunCursorError(
-            f"{path}: not a readable run cursor, so fr will not stamp it as version 3 "
+            f"{path}: not a readable run cursor, so fr will not stamp it as version 4 "
             f"({e}). Fix the file by hand — it is left on its current version and will "
             f"be retried."
         ) from e
@@ -61,8 +61,8 @@ def refuse_unreadable_cursor(path: Path) -> None:
 
 RUN_DISPATCH_HOLDER_MIGRATION = SchemaMigration(
     kind="run",
-    from_version=2,
-    to_version=3,
+    from_version=3,
+    to_version=4,
     fn=refuse_unreadable_cursor,
     description="run cursor: add the dispatch-holder record (`dispatch`) — stamp only, no "
     "body change",

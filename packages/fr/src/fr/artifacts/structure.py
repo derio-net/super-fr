@@ -199,9 +199,23 @@ def validate_journal(path: Path) -> list[str]:
 
 
 def validate_run(path: Path) -> list[str]:
-    """`RunState`, plus the one cross-reference it does not encode: the cursor
-    must name a step the run actually records."""
-    from fr.run.model import RunState
+    """`RunState`, plus the cross-references the model does not encode.
+
+    Three of them, each a relationship between fields rather than a field, so
+    the schema cannot see any of them:
+
+    1. the cursor must name a step the run actually records;
+    2. a measurement is **atomic** — `fr.run.telemetry` writes all four token
+       fields or none, so a snapshot carrying only some is a partial sum that
+       reads like a whole one. The model cannot say this: every field is
+       independently optional, which is exactly what lets a pre-telemetry
+       cursor parse;
+    3. a cursor carrying measured tokens must DECLARE at least the version
+       those fields appeared in. v3 content under a v2 stamp is the one state
+       nothing else would catch — no migration would revisit the file, and any
+       fr that believed the stamp would raise on the keys.
+    """
+    from fr.run.model import MEASURED_TOKEN_FIELDS, MEASURED_TOKENS_SCHEMA_VERSION, RunState
 
     data, problems = _load_mapping(path)
     if problems or data is None:
@@ -215,6 +229,24 @@ def validate_run(path: Path) -> list[str]:
         known = ", ".join(state.steps) or "none"
         problems.append(
             f"`cursor` names `{state.cursor}`, which is not a recorded step (recorded: {known})"
+        )
+    measured_anywhere = False
+    for key, snap in (state.accounting or {}).items():
+        missing = [name for name, value in snap.measured_fields().items() if value is None]
+        if len(missing) == len(MEASURED_TOKEN_FIELDS):
+            continue  # no measurement at all — the ordinary, honest state
+        measured_anywhere = True
+        if missing:
+            problems.append(
+                f"`accounting.{key}` records a PARTIAL measurement: "
+                f"{', '.join(missing)} missing. A measurement is all four fields or none — "
+                "three of four sums to a number that reads like a whole one"
+            )
+    if measured_anywhere and state.schema_version < MEASURED_TOKENS_SCHEMA_VERSION:
+        problems.append(
+            f"`accounting` carries measured tokens but `schema_version` is "
+            f"{state.schema_version}; those fields appeared in version "
+            f"{MEASURED_TOKENS_SCHEMA_VERSION}, so this file declares a shape it does not have"
         )
     problems.extend(_run_dispatch_problems(state))
     return problems

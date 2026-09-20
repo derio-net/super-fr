@@ -61,7 +61,7 @@ take the PR out of draft.
    yet `Complete`, stop and report.
 
 2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
-   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal.
+   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal — `fr journal add --scope plan` requires `--phase N` or `--global`, so tag it explicitly. **Context discipline:** don't re-derive from the code what the handoff already states, read the narrowest thing that answers the question, and never paste verbatim tool output into your return — cache reads accumulate as context size summed over turns, so your own re-reads dominate the cost (super-fr#464).
 
 3. **Tick steps as you complete them:**
    ```bash

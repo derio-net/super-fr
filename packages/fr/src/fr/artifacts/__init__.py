@@ -43,6 +43,7 @@ from fr.artifacts.runner import (
 # here — one that nobody imports silently never runs.
 from fr.artifacts import fr_version as _fr_version  # noqa: F401  (isort: skip)
 from fr.artifacts import run_provenance as _run_provenance  # noqa: F401  (isort: skip)
+from fr.artifacts import run_telemetry as _run_telemetry  # noqa: F401  (isort: skip)
 from fr.artifacts import run_dispatch_holder as _run_dispatch_holder  # noqa: F401  (isort: skip)
 
 __all__ = [

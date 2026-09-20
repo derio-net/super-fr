@@ -254,16 +254,52 @@ class StepRecord(BaseModel):
     """
 
 
-class PhaseAccounting(BaseModel):
-    """V1 context accounting (fr-goal methodology restoration): what a
-    dispatched `(phase, member)` unit is about to re-read.
+MEASURED_TOKEN_FIELDS: tuple[str, ...] = (
+    "input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "output_tokens",
+)
+"""The four V2 figures `fr.run.telemetry` writes into `PhaseAccounting`.
 
-    Sizes, not tokens — no harness offers a token API, so V1 measures the
-    context fr itself assembles (journal, composed handoff, spec + plan
+Named once, here, so the model, the structure validator and the renderer agree
+on what "a measurement" consists of. A measurement is ATOMIC — all four or
+none — which is why the validator can call a partially-filled snapshot a
+structural problem rather than quietly summing three."""
+
+MEASURED_TOKENS_SCHEMA_VERSION = 3
+"""The `run` artifact version these fields FIRST appear in.
+
+Not a second declaration of the kind's `current_version` — that lives in
+`fr.artifacts.registry` and only there, and may move past this. This says
+which version a cursor must declare before it is allowed to carry measured
+tokens, so `validate_run` can report the one state that would otherwise go
+unnoticed: v3 content under a v2 stamp, which no migration would ever revisit
+and which raises in any fr that believes the stamp."""
+
+
+class PhaseAccounting(BaseModel):
+    """Context accounting for one dispatched `(phase, member)` unit — what it
+    is about to re-read (V1), and what it actually cost (V2).
+
+    **V1 — sizes, not tokens.** No harness offers a token API, so V1 measures
+    the context fr itself assembles (journal, composed handoff, spec + plan
     bytes) and `fr run status` renders token figures explicitly labeled as
     estimates. Keyed like `items` (`phase/<n>` flat, `phase/<n>/<member>`
     grouped). Additive and optional: pre-accounting runs parse with
     `accounting=None`, same versioning argument as `items`/`members`.
+
+    **V2 — measured tokens** (spec §5.C). The four fields below are read from
+    the harness's own transcript by `fr.run.telemetry` when the unit resolves.
+    Unlike the V1 sizes they default to `None`, not `0`, and that distinction
+    is the point: `None` means *no measurement was possible* (no transcript,
+    an unreadable one, an unattributable unit) while `0` is a real, measured
+    zero. `fr run status` never renders the two the same way.
+
+    Adding them is a SHAPE change under `.claude/rules/artifact-versioning.md`
+    — this model is `extra="forbid"`, so an fr that predates the fields raises
+    on a cursor carrying them rather than ignoring them. Hence the `run`
+    kind's stamp bump to 3 and `fr.artifacts.run_telemetry`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -274,6 +310,29 @@ class PhaseAccounting(BaseModel):
     handoff_chars: int = 0
     spec_bytes: int = 0
     plan_bytes: int = 0
+
+    input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    def measured_fields(self) -> dict[str, int | None]:
+        """The four measured figures, by name — `None` where unmeasured."""
+        return {name: getattr(self, name) for name in MEASURED_TOKEN_FIELDS}
+
+    @property
+    def measured_tokens(self) -> int | None:
+        """The four measured figures summed, or `None` for no measurement.
+
+        A measurement is atomic — all four or none — so this never returns a
+        partial sum that would read as a small honest number. A cursor that
+        carries some of the four and not others is a structural problem, and
+        `fr.artifacts.structure.validate_run` reports it as one.
+        """
+        values = list(self.measured_fields().values())
+        if any(value is None for value in values):
+            return None
+        return sum(value for value in values if value is not None)
 
 
 def current_run_schema_version() -> int:
