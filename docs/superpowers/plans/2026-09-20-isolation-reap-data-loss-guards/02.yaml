@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The unlanded-content guard — nothing is destroyed that is not on origin (#467)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-reap-preserves-unlanded
+tasks:
+- number: 1
+  title: Content hazard, red to green
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: extend tests/unit/test_isolation.py. With the worktree CLEAN
+      (so phase 1's guard is inert and this one is isolated), assert:
+      (a) a fake runner whose diff plumbing makes `branch_changes_present`
+          report a non-empty `missing` → `ReapRefused`, kind
+          "unlanded-content", the named paths in the message, and no
+          `git worktree remove` in the recorded commands. This is #467;
+      (b) the same shape where the un-landed commit was PUSHED to the branch
+          after the merge → refuses identically. That is the #320 orphan,
+          which this guard catches for free and which is equally destroyed
+          today (spec §3.3);
+      (c) a FAILED `git fetch` (non-zero) → ReapRefused kind
+          "unverifiable" — offline defers a reap, never permits a wrong one
+          (spec §3.4);
+      (d) clean worktree + empty `missing` → down() completes and the
+          worktree IS removed. The happy path must survive, and this is the
+          assertion that fails if the guard is written too conservatively;
+      (e) the fetch targets the RESOLVED default branch, not the literal
+          "main": with `_resolve_default_branch` stubbed to "master",
+          assert the recorded fetch and the base ref both say master.
+          `verify_merge`'s `default_branch: str = "main"` default is a
+          latent bug for such a repo (spec §2, out of scope) — this test is
+          what stops the new guard inheriting it.
+      Run pytest — fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: extend `_reap_hazard` with the content check, running AFTER the
+      dirty check so the cheap local query short-circuits before any network
+      (spec §3.4). Do it in two explicit steps — `git fetch origin
+      <resolved-default>` (non-zero ⇒ unverifiable hazard), then
+      `branch_changes_present(self.run, state.worktree, state.branch,
+      f"origin/{resolved}")` (non-empty `missing` ⇒ unlanded-content hazard).
+      Do NOT call `verify_merge`: spec §3.3 and journal r3 — it bundles a
+      `self._pr(state)` shell-out to gh/glab/tea that gc already made one
+      line earlier at local.py:694, so reusing it buys a second host-CLI
+      round trip per candidate on a host-wide sweep and then discards its
+      `verified` field, which the PR-less merged-by-content path can never
+      satisfy. Leave a comment at the call site saying so, because
+      "just use verify_merge" is the obvious-looking edit a future reader
+      will otherwise make. Run the S1 tests — green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: `_reap_hazard` now has three exits and a cost ordering that
+      is load-bearing rather than incidental. Make the ordering explicit in
+      the docstring (local first, network second, each exit naming which
+      issue it answers) and confirm the function is still a pure query —
+      grep its body for any command that writes a workspace. Re-run
+      tests/unit/test_isolation.py.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

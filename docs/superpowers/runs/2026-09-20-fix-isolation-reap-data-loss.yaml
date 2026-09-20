@@ -3,7 +3,7 @@ run: 2026-09-20-fix-isolation-reap-data-loss
 workflow: fr-goal@1
 branch: fix/isolation-reap-data-loss
 started: '2026-09-20T10:54:42+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -13,10 +13,13 @@ steps:
       spec: docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
       journal:spec: docs/superpowers/journals/specs/2026-09-20-isolation-reap-data-loss-guards.md
   spec-review:
-    state: running
-    at: '2026-09-20T11:04:08+00:00'
+    state: done
+    at: '2026-09-20T11:06:20+00:00'
+    emitted:
+      journal:spec: docs/superpowers/journals/specs/2026-09-20-isolation-reap-data-loss-guards.md
   plan:
-    state: pending
+    state: running
+    at: '2026-09-20T11:06:29+00:00'
   plan-review:
     state: pending
   implement:

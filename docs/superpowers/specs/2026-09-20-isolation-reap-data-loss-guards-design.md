@@ -337,4 +337,6 @@ body. Fixtures use synthetic branch and path names throughout.
 
 ## Implementation Plans
 
-_(to be linked by `fr-plan`)_
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-20-isolation-reap-data-loss-guards | `derio-net/super-fr` | `2026-09-20-isolation-reap-data-loss-guards` | — |
