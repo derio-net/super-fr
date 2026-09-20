@@ -131,6 +131,10 @@ state:
         p1-f2 set) 3303 passed. Row run-advance-refuses-running: not-implemented ->
         ci.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-20T14:12:34+00:00'
+    note: advance refuses an already-running agent step at both call sites (exit 2,
+      naming the dispatch time and both ways forward); --redispatch re-briefs only
+      the outstanding unit and refuses when none is. 9 new tests + 2 rewritten (they
+      pinned the bug as contract). Gates green; the only pytest failures are the 3
+      known host-specific ones in p1-f2.
     observed_prs: []
