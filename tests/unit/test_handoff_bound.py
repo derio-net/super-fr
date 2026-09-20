@@ -203,13 +203,13 @@ def test_a_resolution_record_collapses_and_so_does_what_it_closed(tmp_path: Path
     assert "RES-DEP-BODY" not in out
     assert "WAS-OPEN-BODY" not in out
     assert "- res-dep · finding [fixed] · resolves was-open: closed in phase 2 (phase 2)" in out
-    # NOTE: `[open]` is the entry's OWN state field, not its effective one —
-    # `_handoff_line` reads the field while the collapse decision reads the
-    # fold. Pinned as-is because no step of this phase changes
-    # `_handoff_line`'s contract; see the open finding
-    # "the collapsed one-line form prints the entry's OWN state" in this
-    # plan's journal. Fixing it must fail HERE, loudly.
-    assert "- was-open · finding [open] · Opened then resolved (phase 2)" in out
+    # The collapsed line reports the EFFECTIVE state. `was-open` carries
+    # `state: open` on its own record — correctly, a journal is an append-only
+    # log — but the fold closed it, so a handoff that printed `[open]` would
+    # send an executor after a bug that no longer exists. That was finding
+    # `78654207c227`, fixed in this phase's review.
+    assert "- was-open · finding [fixed] · Opened then resolved (phase 2)" in out
+    assert "- was-open · finding [open]" not in out
 
 
 def test_a_closed_finding_on_a_non_dependency_phase_still_collapses(tmp_path: Path) -> None:
@@ -288,6 +288,10 @@ def test_a_closed_entry_costs_a_constant_regardless_of_its_body_size(tmp_path: P
     small = _sized_journal(tmp_path / "small", closed_mult=1, open_mult=1)
     big = _sized_journal(tmp_path / "big", closed_mult=_BIG, open_mult=1)
 
+    # 64 chars of slack, not 0: the collapsed one-liner carries the entry's
+    # id/title, and a body-length change can shift nothing else. Real
+    # un-collapsed growth here is thousands of chars, so the constant only has
+    # to be far below that.
     assert len(big) - len(small) < 64, (
         f"growing 10 closed findings' bodies {_BIG}x grew the handoff by "
         f"{len(big) - len(small)} chars: closed entries are not O(1)"
@@ -301,6 +305,93 @@ def test_but_growing_an_open_findings_body_does_grow_the_handoff(tmp_path: Path)
     small = _sized_journal(tmp_path / "small", closed_mult=1, open_mult=1)
     wide = _sized_journal(tmp_path / "wide", closed_mult=1, open_mult=_BIG)
 
-    assert len(wide) - len(small) >= len(_UNIT) * (_BIG - 1), (
+    # Minus a small allowance: asserting the EXACT delta makes any future
+    # whitespace change in `serialize_entry` fail this test spuriously, which
+    # would look like a regression in the bound and is not.
+    assert len(wide) - len(small) >= len(_UNIT) * (_BIG - 1) - 8, (
         "an OPEN finding's body must still reach the executor in full"
+    )
+
+
+def test_a_reopening_resolution_record_renders_in_full(tmp_path: Path) -> None:
+    """A resolution record that RE-OPENS must not collapse.
+
+    `fr journal add --resolves <id> --state open` is a documented path, and it
+    is the one shape where "a resolution record is history" is false. Collapsed,
+    the only text explaining why the finding is actionable again is lost, while
+    the original report still renders in full under its stale state — the
+    executor is told to act on something and not told what changed.
+    """
+    from fr.test_support import build_plan_journal
+
+    path = build_plan_journal(
+        tmp_path,
+        "reopen-plan",
+        [
+            {
+                "kind": "finding",
+                "id": "f1",
+                "phase": 1,
+                "state": "fixed",
+                "title": "Originally reported",
+                "body": "ORIGINAL-REPORT-BODY",
+            },
+            {
+                "kind": "finding",
+                "id": "rec",
+                "phase": 2,
+                "state": "open",
+                "resolves": "f1",
+                "title": "regressed under load",
+                "body": "REOPEN-REASON-BODY",
+            },
+        ],
+    )
+    out = compose_handoff(
+        parse_journal(path.read_text()),
+        phase=3,
+        scope="plan",
+        slug="reopen-plan",
+        depends_on=(1, 2),
+    )
+
+    assert "REOPEN-REASON-BODY" in out, "the reason a finding re-opened must reach the executor"
+    assert "ORIGINAL-REPORT-BODY" in out, "so must the original report it re-opens"
+
+
+def test_a_finding_dominated_journal_flattens(tmp_path: Path) -> None:
+    """The ceiling the spec commits to in §5.A3 and §7.
+
+    Distinct from the O(1) test, which holds body size against itself. Here the
+    ENTRY COUNT grows: a journal whose history is all closed findings composes
+    to roughly the same handoff at phase 10 as at phase 2, because every one of
+    those entries costs a line. This is the claim "the handoff flattens on a
+    finding-dominated journal", and it is what makes the bound a bound rather
+    than a smaller slope.
+    """
+    from fr.test_support import build_plan_journal
+
+    entries: list[dict] = []
+    for n in range(1, 10):
+        entries.append(
+            {
+                "kind": "finding",
+                "id": f"f{n}",
+                "phase": n,
+                "state": "fixed",
+                "title": f"closed in phase {n}",
+                "body": "a long finding body. " * 40,
+            }
+        )
+    path = build_plan_journal(tmp_path, "flat-plan", entries)
+    parsed = parse_journal(path.read_text())
+
+    early = compose_handoff(parsed, phase=2, scope="plan", slug="flat-plan", depends_on=(1,))
+    late = compose_handoff(
+        parsed, phase=10, scope="plan", slug="flat-plan", depends_on=tuple(range(1, 10))
+    )
+
+    assert len(late) <= len(early) * 1.15, (
+        f"a finding-dominated journal must flatten: phase 2 = {len(early)}, "
+        f"phase 10 = {len(late)} chars"
     )

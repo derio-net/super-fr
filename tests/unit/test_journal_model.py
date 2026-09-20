@@ -351,7 +351,7 @@ class TestResolveJournalReadPath:
 class TestHandoff:
     """`compose_handoff` — the curated executor brief (methodology
     restoration): open findings and dependency-relevant entries in full,
-    unrelated fixed history collapsed to one line each, raw pointer always
+    closed findings and unrelated context collapsed to one line each, raw pointer always
     present."""
 
     def _entries(self):

@@ -177,8 +177,24 @@ it writes must be tagged so the existing machinery can bound it.
 dependency test: an entry whose **effective** state is closed collapses to one
 line regardless of phase. Concretely, the `elif` becomes a three-way decision —
 open findings render full (unchanged); a `finding` whose effective state is
-`fixed` or `refuted`, or a resolution record, collapses; everything else
-(decisions, discoveries) keeps today's dependency rule. Effective state is
+`fixed` or `refuted` collapses; everything else (every non-finding kind) keeps
+today's dependency rule.
+
+**A resolution record collapses with its target, with one exception the first
+draft of this section missed.** Re-opening is a first-class documented path
+(`fr journal add --resolves <id> --state open`), and there "the record is
+history" is false: collapsing it drops the only text saying why the finding is
+live again, while the original report still renders in full under its stale
+state. So the rule asks the fold about the finding an entry *speaks for* — its
+target when it resolves one, itself otherwise. Found by the phase-2 review,
+which noted the code implemented this section faithfully and the blind spot was
+upstream, here.
+
+**The collapsed line reports effective state.** A journal is an append-only log,
+so each record correctly states what was true when written and `serialize_entry`
+keeps printing that; a handoff reports what is true *now*. Printing the record's
+own field sent an executor after ten findings the measured journal had already
+closed — the cost this bound exists to remove, recovered in cheaper form. Effective state is
 already computed for `## Open findings` via `open_finding_ids`, and is the same
 fold `fr journal check` uses, so no new state machinery is introduced — the fix
 is to consult it one branch earlier.

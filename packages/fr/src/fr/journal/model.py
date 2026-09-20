@@ -337,9 +337,20 @@ def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
         path.write_text(f"# Journal: {slug}\n\n{block}")
 
 
-def _handoff_line(entry: JournalEntry) -> str:
-    """One-line collapse of an entry: id, kind, state, title, phase."""
-    state_bit = f" [{entry.state}]" if entry.state is not None else ""
+def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> str:
+    """One-line collapse of an entry: id, kind, state, title, phase.
+
+    `effective_state` overrides the entry's OWN state for display. A journal is
+    an append-only log, so each record correctly states what was true when it
+    was written and `serialize_entry` must keep printing that — but a handoff
+    reports CURRENT state, and a finding written `open` that a later record
+    closed is not open now. Showing the entry's own field there tells a phase-6
+    executor to chase ten bugs that no longer exist, which is the cost this
+    whole bound exists to remove (super-fr#464). Defaults to the entry's own
+    state so non-finding callers are unaffected.
+    """
+    state = entry.state if effective_state is None else effective_state
+    state_bit = f" [{state}]" if state is not None else ""
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else " (unphased)"
     return f"- {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
 
@@ -358,23 +369,32 @@ def compose_handoff(
 
     1. a finding whose EFFECTIVE state is open renders in full, wherever it is
        tagged: it is actionable anywhere;
-    2. any other finding — effectively `fixed` or `refuted` — and every
-       resolution record collapses to one line, *regardless of phase*, because
-       its state says it is history and no phase relationship makes a closed bug
-       actionable again;
-    3. everything else (decisions, discoveries) keeps the dependency rule: it
-       renders in full when untagged or tagged to this phase or one it depends
-       on, and collapses otherwise.
+    2. any other finding — effectively `fixed` or `refuted` — collapses to one
+       line, *regardless of phase*: no phase relationship makes a closed bug
+       actionable again. A resolution record collapses with it, with ONE
+       exception: a record that RE-OPENS its target renders in full, because
+       there the "it is history" rationale is simply false and collapsing it
+       drops the only text saying why the finding is live again;
+    3. every non-finding kind (decisions, discoveries, reviews, and the
+       debug-scope kinds) keeps the dependency rule: it renders in full when
+       untagged or tagged to this phase or one it depends on, and collapses
+       otherwise.
 
     Rule 2 running *ahead of* the dependency test is the bound. Before it, state
     only routed a finding into `## Open findings`; past that, `{phase,
     *depends_on}` decided, so a `fixed` finding on a dependency phase rendered
     in full — and real plans depend on their predecessors, so the old
     docstring's "a phase-10 executor stops re-reading 39 fixed findings in full"
-    held only for the non-dependency ones. Measured on a real ten-phase journal
-    (spec §2), that left ~30k of phase 6's 83k handoff describing bugs that no
-    longer existed. Now a closed entry costs O(1) characters however long its
+    held only for the non-dependency ones. Measured on a real SEVEN-phase
+    journal (the category breakdown is spec §5.A3; §2 has the size-by-phase
+    table), that left 38,020 chars across 30 closed findings inside phase 6's
+    83,132-char handoff, describing bugs that no longer existed — the measured
+    saving is 34,022. Now a closed entry costs O(1) characters however long its
     body is.
+
+    The collapsed line reports the entry's EFFECTIVE state, not the state its
+    own record carries. The journal is an append-only log, so a record rightly
+    says what was true when it was written; a handoff reports what is true now.
 
     Decisions and discoveries stay dependency-scoped deliberately: a decision is
     never "closed" — it still constrains the phase that depends on it — and a
@@ -411,7 +431,17 @@ def compose_handoff(
             # anywhere; any other finding (fixed, refuted, or a resolution
             # record) is history, and no phase relationship makes a closed bug
             # actionable again. `relevant` is never consulted for a finding.
-            renders_full = e.resolves is None and e.id in still_open
+            # A resolution record is history — UNLESS it re-opens. Re-opening
+            # is a first-class CLI path (`fr journal add --resolves <id>
+            # --state open`), and collapsing one drops the only text saying
+            # why the finding is actionable again, while the original report
+            # still renders in full labelled with its old state. So ask the
+            # fold about the finding this entry SPEAKS FOR: its target when it
+            # resolves one, itself otherwise. Still one fold, and still O(1)
+            # for closed entries, because a re-opened finding is by definition
+            # open.
+            speaks_for = e.resolves if e.resolves is not None else e.id
+            renders_full = speaks_for in still_open
             section = open_findings
         else:
             # Dependency rule, deliberately unchanged: decisions and
@@ -420,6 +450,11 @@ def compose_handoff(
             section = context
         if renders_full:
             section.append(serialize_entry(e))
+        elif e.kind == "finding":
+            # Display the EFFECTIVE state: this entry reached the collapse
+            # branch, so the fold says it is closed whatever its own field
+            # reads. `refuted` is preserved; anything else folds to `fixed`.
+            collapsed.append(_handoff_line(e, "refuted" if e.state == "refuted" else "fixed"))
         else:
             collapsed.append(_handoff_line(e))
     parts = [f"# Handoff (phase {phase})"]

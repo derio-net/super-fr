@@ -28,7 +28,7 @@ dispatch, so this should be unreachable; super-fr#420.)
 - the **spec** path;
 - the **journal handoff** — the curated current state for this phase, composed by
   `fr journal handoff --scope plan --slug <plan-slug> --phase N` (open findings and
-  relevant decisions/discoveries in full, unrelated fixed history collapsed) — which
+  relevant decisions/discoveries in full, closed findings and unrelated context collapsed to a line each) — which
   stands in for the orchestrator's conversation history you do not inherit. The raw
   `fr journal render` is the escape hatch, not the default: if the handoff is missing
   anything you need to implement the phase, STOP and say so — do not guess (the

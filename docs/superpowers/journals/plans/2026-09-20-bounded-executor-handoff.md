@@ -120,3 +120,28 @@ Left OPEN rather than fixed here on purpose: the fix (thread effective_finding_s
 ### 97092f14683b · decision · The acceptance row handoff-closed-entries-bounded stays not-implemented at the end of phase 2, on purpose (phase 2)
 
 fr plan edit --complete-phase 2 warned that the row is still not-implemented. Left as-is rather than flipped: P5.T3.S1 owns flipping all four rows of this plan in one place, with --notes and --level refs, and flipping one early would split the transition across two phases and leave the three committed reports regenerated twice. The verification the row waits on now exists — tests/unit/test_handoff_bound.py::test_a_closed_entry_costs_a_constant_regardless_of_its_body_size plus its inverse guard test_but_growing_an_open_findings_body_does_grow_the_handoff — so phase 5 has the refs it needs and the row's bar (O(1) per closed entry, explicitly NOT non-monotonic growth) is exactly what those two assert.
+
+<!-- fr:journal kind=finding scope=plan id=r2-i1 created=2026-09-20T15:27:08 phase=2 state=fixed -->
+### r2-i1 · finding [fixed] · REGRESSION: a re-opening resolution record collapsed, dropping the only text saying why (phase 2) (phase 2)
+
+renders_full = e.resolves is None and e.id in still_open collapses ANY entry carrying resolves. But re-opening is a first-class documented path (journal_cmd.py:81 and :190, and effective_finding_states' own docstring). Reproduced live: the original report rendered in full under '### f1 · finding [fixed]' inside ## Open findings while the re-open reason was a one-liner with its body gone — the executor is told to act on something and not told what changed. A regression this phase introduced, covered by no test (verified: applying the fix left all 92 green, so the suite was indifferent). FIXED by asking the fold about the finding an entry SPEAKS FOR — its target when it resolves one, itself otherwise. Still one fold, still O(1) for closed entries since a re-opened finding is by definition open. The spec said 'or a resolution record, collapses', so the code was faithful and the blind spot was upstream; §5.A1 is corrected too.
+
+<!-- fr:journal kind=finding scope=plan id=r2-i2 created=2026-09-20T15:27:08 phase=2 state=fixed -->
+### r2-i2 · finding [fixed] · The shipped executor contract described a handoff that no longer exists, in five files (phase 2) (phase 2)
+
+fr-phase-executor.md and its four .opencode mirrors told executors the handoff carries 'unrelated fixed history collapsed' — 'unrelated' being exactly the qualifier this phase removed. That is the text an executor is instructed to trust ('if the handoff is missing anything you need, STOP'), so a description that overstates what arrives is the failure mode the handoff exists to prevent. No later phase scheduled it: 03.yaml touches this file only for --phase N, 05.yaml only adds the sixth norm. FIXED in the canonical file only, mirrors regenerated via scripts/sync-opencode.py (--check clean). The same stale phrase in test_journal_model.py's TestHandoff docstring was corrected with it.
+
+<!-- fr:journal kind=finding scope=plan id=r2-i3 created=2026-09-20T15:27:09 phase=2 state=fixed -->
+### r2-i3 · finding [fixed] · A spec-committed test case was dropped without a record (phase 2) (phase 2)
+
+Spec §5.A3 and §7 both commit to 'a second case pins the ceiling on a finding-dominated journal, where closed entries dominate and the handoff does flatten'. The phase shipped the O(1) test and its inverse guard — a different property: the guard asserts open bodies DO grow the handoff, not that entry-count growth flattens. grep for ceiling/flatten across all seven phase files found nothing scheduling it, and the decision entry deferring acceptance to P5.T3.S1 did not mention the drop. FIXED by writing it: test_a_finding_dominated_journal_flattens builds nine closed findings across nine phases and asserts phase 10's handoff is within 1.15x of phase 2's. Had it stayed missing, phase 5 would have flipped handoff-closed-entries-bounded to ci on evidence the spec said would exist and did not.
+
+<!-- fr:journal kind=discovery scope=plan id=r2-measure-delta created=2026-09-20T15:27:09 phase=2 -->
+### r2-measure-delta · discovery · The effective-state fix moved every measured figure by exactly +10 chars (phase 2)
+
+Re-measured after the review fixes: 26,603 / 32,848 / 30,338 / 34,414 / 39,704 / 49,120 / 49,884 against the phase-2 figures of 26,593 / 32,838 / 30,328 / 34,404 / 39,694 / 49,110 / 49,874. Uniformly +10. That is the signature of the state-label fix landing on exactly the 10 findings finding 78654207c227 predicted: each collapsed line's label grew one character from [open] to [fixed]. A coincidental match would not be uniform across all seven phases, so the count is confirmed by the delta rather than only by the count query.
+
+<!-- fr:journal kind=finding scope=plan id=78654207c227-resolved created=2026-09-20T15:27:09 state=fixed resolves=78654207c227 -->
+### 78654207c227-resolved · finding [fixed] · resolves 78654207c227: The collapsed one-line form prints the entry's OWN state, so a finding closed by a resolution record reads '[open]' in Earlier history
+
+Fixed inside phase 2's review rather than deferred. _handoff_line now takes an effective_state override and compose_handoff passes the folded state for collapsed findings; serialize_entry is deliberately untouched because it writes the append-only log, where each record must keep stating what was true when written. The review's point that deferring to 'phase 3 or a follow-up' was too loose is accepted: leaving it would have had phase 5 flip handoff-closed-entries-bounded to ci while the shipped handoff mislabelled ten closed findings as open, which contradicts the row.
