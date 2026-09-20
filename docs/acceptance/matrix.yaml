@@ -2157,3 +2157,46 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
+  - id: run-dispatch-holder-recorded
+    capability: Run cursor
+    acceptance: fr run status names the agent holding a phase and since when, and shows
+      the dispatched to returned pair once it settles
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels: {}
+    status: not-implemented
+    notes: Born with the 2026-09-20 spec. Unit level gates the PR; the live level needs
+      a real /fr-goal dispatch, since a fixture cannot show an identity was recorded
+      for a real subagent (#486 precedent).
+  - id: run-dispatch-refuses-second
+    capability: Run cursor
+    acceptance: fr run advance refuses to re-brief a phase unit that is already held,
+      naming the holder, and --redispatch is the deliberate escape
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Closes #499. Business-level because the failure it prevents is two fr-phase-executors
+      writing one worktree, where #420 forbids the usual isolation protection.'
+  - id: run-dispatch-abandon
+    capability: Run cursor
+    acceptance: An operator can declare a dispatch abandoned, freeing the phase unit
+      for re-dispatch without resolving the step
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'The recovery path for the #503 incident: an executor that never returns
+      cannot be retired from the orchestrator side, so the close must be an explicit
+      operator act.'
+  - id: run-dispatch-harness-neutral
+    capability: Harness parity
+    acceptance: The dispatch holder record is written identically on Claude Code and
+      OpenCode, each recording its own harness and agent id
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Live-only by nature: the claim is that two different harnesses produce the
+      same record shape, which no mock can demonstrate. Post-merge Test Plan items 13
+      and 14.'
