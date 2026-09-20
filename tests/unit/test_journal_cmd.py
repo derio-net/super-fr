@@ -353,6 +353,26 @@ class TestCheckRequireReviews:
     reviews) is phase 2. Here the flag's only observable behaviour is its
     refusals plus exit 0 on everything else."""
 
+    def _seed_open_finding(self, slug: str, finding_id: str = "f1") -> None:
+        """Give `slug`'s journal one OPEN finding.
+
+        Without this, every slug — right, wrong or empty — resolves to a
+        journal with no findings and exits 0, so a derivation test passes even
+        with the derivation completely broken (review r-p1-f2 proved it by
+        mutation). Seeding a finding under the EXPECTED slug is what makes
+        "exit 1, and this id in the output" evidence that the right journal
+        was read.
+        """
+        res = runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", slug,
+                "--kind", "finding", "--id", finding_id, "--state", "open",
+                "--title", "seeded", "--body", "b",
+            ],
+        )  # fmt: skip
+        assert res.exit_code == 0, res.output
+
     def _write_plan(self, root: Path, slug: str):
         from fr.plan_ops import PhaseSpec, create
 
@@ -371,6 +391,14 @@ class TestCheckRequireReviews:
     def test_require_reviews_is_inert_when_all_phases_incomplete(
         self, tmp_path: Path, monkeypatch
     ) -> None:
+        """PLACEHOLDER while the gate is unbuilt — it cannot discriminate yet.
+
+        With no owed-vs-present comparison there is nothing for the flag to be
+        inert *about*, so this currently asserts only that the option parses.
+        Once the gate lands it must be paired with a with-flag counterpart on
+        a COMPLETED phase, or it will keep passing whatever the gate does
+        (review r-p1-f2).
+        """
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
         self._write_plan(root, "RR1")
@@ -402,6 +430,7 @@ class TestCheckRequireReviews:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
         self._write_plan(root, "RR2")
+        self._seed_open_finding("RR2")
 
         res = runner.invoke(
             app,
@@ -415,16 +444,106 @@ class TestCheckRequireReviews:
             ],
         )
 
-        assert res.exit_code == 0, res.output
+        # Exit 1 naming the seeded finding proves RR2's journal was the one
+        # read. A bare `exit_code == 0` would also pass if the derivation
+        # produced "TOTALLY-WRONG-SLUG", or "" — which is how the fail-open
+        # in r-p1-f1 survived.
+        assert res.exit_code == 1, res.output
+        assert "f1" in res.output
 
     def test_slug_without_plan_dir_still_works(self, tmp_path: Path, monkeypatch) -> None:
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
         self._write_plan(root, "RR3")
+        self._seed_open_finding("RR3", "f3")
 
         res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR3"])
 
-        assert res.exit_code == 0, res.output
+        assert res.exit_code == 1, res.output
+        assert "f3" in res.output
+
+    def test_a_plan_dir_with_no_final_component_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """`--plan-dir .` must not fail OPEN (review r-p1-f1).
+
+        `Path(".").name` is `""`, and an empty slug resolves
+        `journals/plans/.md`, which does not exist, which reads as an empty
+        journal — so the command used to exit 0 having checked nothing, INCLUDING
+        the pre-existing open-findings rule. Found live: on a plan whose journal
+        carried four open findings, `--slug` exited 1 and `--plan-dir .` exited 0.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR5")
+        self._seed_open_finding("RR5", "f5")
+
+        for bad in (".", "", "docs/superpowers/plans/RR5/.."):
+            res = runner.invoke(
+                app,
+                ["journal", "check", "--scope", "plan", "--plan-dir", bad, "--require-reviews"],
+            )
+            # Exit 2 (refused), never 0 (silently passed). Exit 1 would also be
+            # acceptable behaviour but is not what this refusal does.
+            assert res.exit_code == 2, f"--plan-dir {bad!r} -> {res.exit_code}: {res.output}"
+
+    def test_scope_refusal_beats_a_missing_slug(self, tmp_path: Path, monkeypatch) -> None:
+        """The scope objection is reported first (review r-p1-f3).
+
+        `--require-reviews --scope spec` is unsatisfiable whatever slug is
+        supplied, so complaining about the missing slug would send the operator
+        to fix the wrong thing and learn the real objection one run later.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "spec", "--require-reviews"])
+
+        assert res.exit_code == 2, res.output
+        assert "only plan journals have phases" in res.output
+        assert "--slug" not in res.output
+
+    def test_plan_dir_is_refused_outside_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        """`--plan-dir` names a plan (review r-p1-f6).
+
+        Accepted under `--scope spec` it would quietly derive a slug and check
+        a SPEC journal named after that plan folder — a different file than the
+        operator asked about, reported as a clean pass.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "spec", "--plan-dir", "docs/superpowers/plans/RR6"],
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "--plan-dir" in res.output
+
+    def test_slug_wins_when_both_are_given(self, tmp_path: Path, monkeypatch) -> None:
+        """An explicit `--slug` is not overridden by `--plan-dir`'s basename.
+
+        Unpinned until now (review r-p1-f6), and about to become observable:
+        once the gate lands, a disagreeing pair reads the journal from one
+        place and the phases from another, so which one names the journal must
+        be a decision the suite holds, not an accident of argument order.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR7")
+        self._seed_open_finding("RR7", "f7")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR7",
+                "--plan-dir", "docs/superpowers/plans/SOMETHING-ELSE",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 1, res.output
+        assert "f7" in res.output
 
     def test_neither_slug_nor_plan_dir_exits_2_naming_both(
         self, tmp_path: Path, monkeypatch

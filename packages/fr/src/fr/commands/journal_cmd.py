@@ -62,7 +62,7 @@ def _validate_scope(scope: str) -> None:
 
 
 def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[str, str]:
-    """Resolve `check`'s `--slug`/`--plan-dir` pair, exit 2 if neither is given.
+    """Resolve `check`'s `--slug`/`--plan-dir` pair, exit 2 if neither resolves.
 
     `check` is the one journal verb where `--slug` is optional, because a
     `kind: cli` manifest step (spec §C) can interpolate `{{ artifacts.plan }}`
@@ -71,15 +71,37 @@ def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[
     `--plan-dir` defaults symmetrically from `--slug` (mirroring `fr journal
     handoff`'s existing default of `docs/superpowers/plans/<slug>`) so either
     option alone is sufficient.
+
+    A plan dir with no final component (`.`, `""`, a bare `/`) derives an EMPTY
+    slug, and an empty slug is not a harmless one: it resolves the journal
+    `journals/plans/.md`, which does not exist, which `_load` reads as an empty
+    journal, so the whole command — including the pre-existing open-findings
+    rule — exits 0 having checked nothing. Review r-p1-f1 found this live:
+    `--plan-dir .` exited 0 on a plan whose journal carries four open findings.
+    A gate whose premise is failing closed cannot have a spelling of its own
+    arguments that fails open, so the empty derivation is refused here.
+
+    Structured as two early returns rather than one combined guard so that
+    neither branch needs a `type: ignore` for `Path(None)` (review r-p1-f5): a
+    guard that mypy can check is one a later edit cannot silently loosen.
     """
-    if slug is None and plan_dir is None:
-        err_console.print("[red]give --slug or --plan-dir (at least one is required)[/red]")
-        raise typer.Exit(2)
-    resolved_slug = slug if slug is not None else Path(plan_dir).name  # type: ignore[arg-type]
-    resolved_plan_dir = (
-        plan_dir if plan_dir is not None else f"docs/superpowers/plans/{resolved_slug}"
-    )
-    return resolved_slug, resolved_plan_dir
+    if plan_dir is not None:
+        resolved_slug = slug if slug is not None else Path(plan_dir).name
+        # `.` and `..` are path-navigation tokens, not names: `Path("a/b/..").name`
+        # is `".."`, which is non-empty and so survives an emptiness check while
+        # resolving the journal `plans/...md` — the same fail-open by a
+        # different spelling, caught by the test written for the empty case.
+        if resolved_slug in ("", ".", ".."):
+            err_console.print(
+                f"[red]cannot derive a journal slug from --plan-dir {plan_dir!r}[/red] — "
+                "pass --slug, or a plan dir whose last component is the plan slug"
+            )
+            raise typer.Exit(2)
+        return resolved_slug, plan_dir
+    if slug is not None:
+        return slug, f"docs/superpowers/plans/{slug}"
+    err_console.print("[red]give --slug or --plan-dir (at least one is required)[/red]")
+    raise typer.Exit(2)
 
 
 @journal_app.command("add")
@@ -304,8 +326,8 @@ def check(
     require_reviews: bool = typer.Option(
         False,
         "--require-reviews",
-        help="Also fail when a phase the plan claims is done (spec §B) has no "
-        "recorded review entry. --scope plan only.",
+        help="Also fail when a phase the plan claims is done has no recorded "
+        "`review` journal entry naming it. --scope plan only.",
     ),
     plan_dir: str | None = typer.Option(
         None,
@@ -322,20 +344,34 @@ def check(
     (spec §3.G.1). A journal with no resolution records — every journal written
     before that verb existed — gates exactly as it did before.
 
-    `--require-reviews` (spec §B) additionally fails when a locally-complete,
-    non-manual phase has no `kind=review` entry naming it — opt-in, so
-    `fr journal check --scope plan` without the flag behaves exactly as it did
-    before the flag existed (spec D2). Phase 1 wires only the option surface
-    and its refusals; the gate logic itself lands in phase 2.
+    `--require-reviews` additionally fails when a locally-complete, non-manual
+    phase has no `kind=review` entry naming it — opt-in, so `fr journal check
+    --scope plan` without the flag behaves exactly as it did before the flag
+    existed.
     """
+    # NOT YET IMPLEMENTED: the option surface and its refusals are wired; the
+    # owed-vs-present comparison lands next. Deliberately not said in `--help`
+    # or the docstring — those are shipped surfaces, and a disclaimer written
+    # in one outlives the condition it described (review r-p1-f4).
     _validate_scope(scope)
-    resolved_slug, _resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
+    # Scope refusals come FIRST, before any slug resolution (review r-p1-f3).
+    # Both are unsatisfiable whatever slug is supplied, so reporting a missing
+    # `--slug` here would send the operator to fix the wrong thing and learn
+    # the real objection only on the next run.
     if require_reviews and scope != "plan":
         err_console.print(
             f"[red]--require-reviews needs --scope plan (got {scope!r}) — only "
             "plan journals have phases[/red]"
         )
         raise typer.Exit(2)
+    if plan_dir is not None and scope != "plan":
+        err_console.print(
+            f"[red]--plan-dir needs --scope plan (got {scope!r})[/red] — it names a "
+            "plan, and outside plan scope it would silently pick a "
+            f"{scope} journal named after that folder"
+        )
+        raise typer.Exit(2)
+    resolved_slug, _resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
     path = resolve_journal_read_path(root, scope, resolved_slug)  # type: ignore[arg-type]
