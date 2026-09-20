@@ -84,6 +84,8 @@ class TestAdd:
                 "one",
                 "--id",
                 "d1",
+                "--phase",
+                "1",
             ],
         )
         runner.invoke(
@@ -101,6 +103,8 @@ class TestAdd:
                 "two",
                 "--id",
                 "d2",
+                "--phase",
+                "1",
             ],
         )
         from fr.journal.model import parse_journal
@@ -123,6 +127,8 @@ class TestAdd:
             "one",
             "--id",
             "d1",
+            "--phase",
+            "1",
         )
         assert first.exit_code == 0, first.output
         before = _journal_file(root, "S").read_text()
@@ -139,6 +145,8 @@ class TestAdd:
             "two",
             "--id",
             "d1",
+            "--phase",
+            "1",
         )
 
         assert duplicate.exit_code == 2
@@ -164,9 +172,148 @@ class TestAdd:
                 "bug",
                 "--id",
                 "f1",
+                "--phase",
+                "1",
             ],
         )
         assert res.exit_code != 0
+
+
+class TestAddRequiresPhaseOrGlobal:
+    """P3.T1 (spec §5.A2): `--scope plan` must not let an entry go untagged by
+    accident — the untagged branch is what rendered 16 discoveries / 13,281
+    chars in full at every phase in the phase-2 measurement."""
+
+    def test_neither_phase_nor_global_is_refused_naming_the_consequence(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+        )
+        assert res.exit_code == 2, res.output
+        # The consequence, not just the flag name — a test asserting only on
+        # exit code would pass against a message that says nothing.
+        assert "renders in full" in res.output
+        assert "every handoff" in res.output
+        assert "every phase" in res.output
+        assert not _journal_file(root, "S").exists()
+
+    def test_global_alone_succeeds_and_writes_an_untagged_entry(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--id",
+            "d1",
+            "--global",
+        )
+        assert res.exit_code == 0, res.output
+        from fr.journal.model import parse_journal
+
+        entries = parse_journal(_journal_file(root, "S").read_text())
+        assert entries[0].phase is None
+
+    def test_phase_alone_succeeds_and_tags_it(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--id",
+            "d1",
+            "--phase",
+            "3",
+        )
+        assert res.exit_code == 0, res.output
+        from fr.journal.model import parse_journal
+
+        entries = parse_journal(_journal_file(root, "S").read_text())
+        assert entries[0].phase == 3
+
+    def test_phase_and_global_together_is_refused_as_contradictory(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "plan",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--phase",
+            "3",
+            "--global",
+        )
+        assert res.exit_code == 2, res.output
+        assert not _journal_file(root, "S").exists()
+
+    def test_spec_scope_needs_neither_flag(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "spec",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--id",
+            "d1",
+        )
+        assert res.exit_code == 0, res.output
+
+    def test_debug_scope_needs_neither_flag(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            "--scope",
+            "debug",
+            "--slug",
+            "S",
+            "--kind",
+            "discovery",
+            "--title",
+            "t",
+            "--id",
+            "d1",
+        )
+        assert res.exit_code == 0, res.output
 
 
 class TestRender:
@@ -183,6 +330,8 @@ class TestRender:
             "chose X",
             "--id",
             "dec1",
+            "--phase",
+            "1",
         )
         add(
             "--scope",
@@ -197,6 +346,8 @@ class TestRender:
             "f1",
             "--state",
             "fixed",
+            "--phase",
+            "1",
         )
         add(
             "--scope",
@@ -209,6 +360,8 @@ class TestRender:
             "quirk",
             "--id",
             "disc1",
+            "--phase",
+            "1",
         )
 
     def test_render_findings_section(self, tmp_path: Path, monkeypatch) -> None:
@@ -270,6 +423,8 @@ class TestRender:
                 "f1",
                 "--state",
                 "fixed",
+                "--phase",
+                "1",
             ],
         )
         res = runner.invoke(app, ["journal", "render", "--scope", "plan", "--slug", "S"])
@@ -298,6 +453,8 @@ class TestCheck:
                 "f1",
                 "--state",
                 "fixed",
+                "--phase",
+                "1",
             ],
         )
         res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
@@ -323,6 +480,8 @@ class TestCheck:
                 "f1",
                 "--state",
                 "open",
+                "--phase",
+                "1",
             ],
         )
         res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
@@ -573,6 +732,8 @@ class TestResolve:
             "open",
             "--id",
             fid,
+            "--phase",
+            "1",
         )
         assert res.exit_code == 0, res.output
 
@@ -651,6 +812,8 @@ class TestResolve:
             "f1",
             "--id",
             "f1-again",
+            "--phase",
+            "1",
         )
         assert reopened.exit_code == 0, reopened.output
         res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
@@ -762,6 +925,8 @@ class TestResolve:
             "a note",
             "--id",
             "d1",
+            "--phase",
+            "1",
         )
         before = _journal_file(root, "S").read_text()
         res = self._resolve(
@@ -824,6 +989,8 @@ def test_add_resolves_refuses_an_id_not_in_this_journal(tmp_path: Path, monkeypa
         "t",
         "--body",
         "b",
+        "--phase",
+        "1",
     )
 
     res = _add(
@@ -844,6 +1011,8 @@ def test_add_resolves_refuses_an_id_not_in_this_journal(tmp_path: Path, monkeypa
         "b",
         "--resolves",
         "typoed-id",
+        "--phase",
+        "1",
     )
     assert res.exit_code == 2, res.output
     assert "typoed-id" in res.output

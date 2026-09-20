@@ -61,7 +61,7 @@ take the PR out of draft.
    yet `Complete`, stop and report.
 
 2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
-   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal.
+   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal — `fr journal add --scope plan` requires `--phase N` or `--global`, so tag it explicitly.
 
 3. **Tick steps as you complete them:**
    ```bash

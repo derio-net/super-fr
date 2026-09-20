@@ -39,15 +39,18 @@ dispatch, so this should be unreachable; super-fr#420.)
 1. Read the phase scope, the spec, and the journal handoff.
 2. Implement the phase **TDD** via `superpowers:test-driven-development` /
    `fr-execute`: red → green → refactor per task, one task at a time — or record
-   `no-refactor-because: P<n>.T<m>` in the plan journal when there is nothing to
-   clean. Run every command through `fr isolation exec -- …` against the shared
-   workspace.
+   `no-refactor-because: P<n>.T<m>` in the plan journal, tagged `--phase N`, when
+   there is nothing to clean. Run every command through `fr isolation exec -- …`
+   against the shared workspace.
 3. Tick steps and complete the phase with `fr plan edit` exactly as `fr-execute`
    prescribes. **Never open a PR** — the orchestrator owns delivery.
 4. Append what you learned to the plan journal as you go:
-   `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding …`
-   (findings carry `--state open|fixed|refuted`). This is the durable record
-   the orchestrator reviews and the PR body is derived from.
+   `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding --phase N …`
+   (findings carry `--state open|fixed|refuted`; use `--global` instead of
+   `--phase N` only for an entry that genuinely applies to every phase — one of
+   the two is required, since an untagged entry renders in full in every
+   handoff, at every phase). This is the durable record the orchestrator
+   reviews and the PR body is derived from.
 
 ## Contract — the worktree has exactly one writer
 

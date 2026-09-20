@@ -2176,14 +2176,15 @@ rows:
       a phase tag and `--global`, so no entry renders in full in every handoff by accident.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec-review revised the mechanism: fr journal add --scope plan requires
-      --phase N or an explicit --global (defaulting from a plan cursor was refuted —
-      load_run_state needs a run id, no current-run resolver exists, and three runs
-      are live on disk). Root cause verified in shipped prose: the executor contract''s
-      own example omits --phase, in the canonical agent and all four .opencode/agent
-      mirrors.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: 'Phase 3 (2026-09-20-bounded-executor-handoff): fr journal add --scope plan
+      now requires --phase N or --global, refusing neither (naming the consequence:
+      renders in full in every handoff, at every phase) and refusing both (contradictory).
+      --scope spec/debug unaffected. Root-cause prose (fr-phase-executor.md + fr-execute
+      skill, mirrored) fixed in the same phase.'
   - id: executor-context-discipline
     capability: fr-goal-cost
     acceptance: The executor contract forbids re-deriving what the handoff already states

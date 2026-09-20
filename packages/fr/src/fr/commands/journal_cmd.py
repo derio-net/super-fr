@@ -69,7 +69,15 @@ def add(
     kind: str = typer.Option(..., "--kind", help="Entry kind (see spec §A)."),
     title: str = typer.Option(..., "--title", help="One-line entry title."),
     body: str = typer.Option("", "--body", help="Entry body (Markdown)."),
-    phase: int | None = typer.Option(None, "--phase", help="Phase number, if any."),
+    phase: int | None = typer.Option(
+        None, "--phase", help="Phase number (--scope plan: required unless --global)."
+    ),
+    is_global: bool = typer.Option(
+        False,
+        "--global",
+        help="--scope plan only: this entry genuinely applies to every phase — "
+        "the explicit escape from tagging one with --phase.",
+    ),
     state: str | None = typer.Option(None, "--state", help="finding only: fixed | refuted | open."),
     entry_id: str | None = typer.Option(
         None, "--id", help="Stable id; re-adding the same id is idempotent."
@@ -83,6 +91,25 @@ def add(
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
+    # spec §5.A2: an untagged plan-scope entry hits `compose_handoff`'s
+    # `e.phase is None` branch and renders in full at EVERY phase forever —
+    # measured cost: 16 untagged discoveries / 13,281 chars at phase 6 of a
+    # real journal. Spec and debug journals have no phases and are untouched.
+    if scope == "plan":
+        if phase is None and not is_global:
+            err_console.print(
+                "[red]--scope plan needs --phase N or --global[/red] — an untagged "
+                "entry renders in full in every handoff, at every phase; pass "
+                "--phase N for a phase-scoped entry, or --global for one that "
+                "genuinely applies everywhere"
+            )
+            raise typer.Exit(2)
+        if phase is not None and is_global:
+            err_console.print(
+                "[red]--phase and --global are contradictory[/red] — an entry is "
+                "either scoped to one phase or explicitly global, not both"
+            )
+            raise typer.Exit(2)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
