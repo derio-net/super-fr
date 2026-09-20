@@ -2168,11 +2168,17 @@ rows:
       unit:
       - super-fr:tests/unit/test_handoff_bound.py#test_a_closed_entry_costs_a_constant_regardless_of_its_body_size
       - super-fr:tests/unit/test_handoff_bound.py#test_but_growing_an_open_findings_body_does_grow_the_handoff
+      - super-fr:tests/unit/test_handoff_bound.py#test_a_refuted_finding_collapses_and_stays_refuted
+      - super-fr:tests/unit/test_handoff_bound.py#test_a_resolution_record_collapses_and_so_does_what_it_closed
     status: ci
-    notes: 'Phase 5 (2026-09-20-bounded-executor-handoff): the O(1)-per-closed-entry
-      bound is pinned by test_handoff_bound.py''s positive and inverse-guard cases —
-      growing a closed entry''s body does not grow the handoff, growing an open finding''s
-      body does.'
+    notes: 'Phase-5 review found the evidence narrower than the sentence: the row names
+      ''fixed or refuted finding, resolution record'' but the cited tests built journals
+      of fixed findings only — nothing asserted a refuted entry collapses, and the resolution-record
+      case was covered but uncited. Closed by adding a refuted entry to the collapse
+      fixture with its own assertion (it must collapse AND stay labelled refuted, since
+      ''we looked and it was not a bug'' is a different fact from ''we fixed it''),
+      and by citing the resolution-record test that already existed. All three levels
+      now name a test that exercises the state it claims.'
   - id: handoff-entries-always-tagged
     capability: fr-goal-cost
     acceptance: Writing a plan-scope journal entry forces an explicit choice between

@@ -135,8 +135,12 @@ this harness is a real parser, not a hopeful one.
 The same engine/transport split this repo already applies to telemetry and
 dispatch applies here. The bound belongs in `fr.journal.model.compose_handoff`
 as a **rule about entry state**, reachable by any shape or harness through
-`fr journal handoff`. The discipline belongs in the **executor contract**,
-which every harness mirrors. Neither belongs in fr-goal prose, because prose
+`fr journal handoff`. The discipline belongs in the **executor contract** — but
+"the contract" is two files, not one: Claude Code and OpenCode read
+`fr-phase-executor.md`, while Hermes has no agent mirror at all (its executor
+is a `delegate_task` child that loads `fr-execute`). A norm written only into
+the agent file reaches two harnesses of three. The phase-5 review caught
+exactly that, so the discipline lands in **both**. Neither belongs in fr-goal prose, because prose
 without a mechanism is precisely what drifted between #390 and #464.
 
 A second principle, earned from #465: **a gate that writes to the journal must

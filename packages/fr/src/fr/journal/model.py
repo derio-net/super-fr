@@ -421,6 +421,14 @@ def compose_handoff(
     # is still open. The collapsed line keeps id, title, state and phase, so the
     # handoff still says both what was found and what became of it.
     still_open = set(open_finding_ids(entries))
+    # The FULL fold, not just its open subset: the collapsed line reports
+    # effective state, and `refuted` must survive as `refuted`. Reading
+    # `e.state` instead printed the record's own label, so a finding written
+    # `refuted` and later closed by a `fixed` resolution record still read
+    # `[refuted]` — the same defect the phase-2 review fixed in the
+    # open->fixed direction, which only looked fixed because the fallback
+    # happened to say `fixed`.
+    effective = effective_finding_states(entries)
     open_findings: list[str] = []
     context: list[str] = []
     collapsed: list[str] = []
@@ -453,8 +461,8 @@ def compose_handoff(
         elif e.kind == "finding":
             # Display the EFFECTIVE state: this entry reached the collapse
             # branch, so the fold says it is closed whatever its own field
-            # reads. `refuted` is preserved; anything else folds to `fixed`.
-            collapsed.append(_handoff_line(e, "refuted" if e.state == "refuted" else "fixed"))
+            # reads. Ask the fold, never the record.
+            collapsed.append(_handoff_line(e, effective.get(e.id) or e.state))
         else:
             collapsed.append(_handoff_line(e))
     parts = [f"# Handoff (phase {phase})"]

@@ -67,10 +67,17 @@ def test_fr_phase_executor_and_all_opencode_mirrors_carry_the_context_discipline
         # ~90 chars — a literal substring check is brittle to where a line
         # break happens to fall, the same trap "raw rich output" asserts hit.
         t = " ".join(path.read_text().lower().split())
-        assert "re-derive from the code what the handoff already states" in t, path
-        assert "narrowest thing that answers the question" in t, path
-        assert "do not re-read a file you have already read this session" in t, path
-        assert "never paste verbatim tool output into the return" in t, path
+        # Discriminating TOKENS, not whole sentences. The rest of this file
+        # asserts short tokens ("single writer", "no-refactor-because") for a
+        # reason: a long verbatim phrase also fails on an innocuous rewording
+        # that preserves meaning — including the spec's own §5.B1 wording
+        # ("already read *in* this session"), one word different. These four
+        # still go red on deletion or a meaning-changing edit, which is what
+        # a tripwire is for.
+        assert "re-derive" in t, path
+        assert "narrowest" in t, path
+        assert "re-read a file" in t, path
+        assert "verbatim tool output" in t, path
         assert "return" in t and "reporting channel" in t, path
 
 

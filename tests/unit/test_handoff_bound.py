@@ -112,6 +112,14 @@ COLLAPSE_ENTRIES = [
         "body": "FIXED-DEP-BODY",
     },
     {
+        "kind": "finding",
+        "id": "refuted-dep",
+        "state": "refuted",
+        "phase": 2,
+        "title": "Refuted on a dependency phase",
+        "body": "REFUTED-DEP-BODY",
+    },
+    {
         "kind": "decision",
         "id": "dec-dep",
         "phase": 2,
@@ -210,6 +218,22 @@ def test_a_resolution_record_collapses_and_so_does_what_it_closed(tmp_path: Path
     # `78654207c227`, fixed in this phase's review.
     assert "- was-open · finding [fixed] · Opened then resolved (phase 2)" in out
     assert "- was-open · finding [open]" not in out
+
+
+def test_a_refuted_finding_collapses_and_stays_refuted(tmp_path: Path) -> None:
+    """The row's acceptance sentence names "fixed OR REFUTED finding", and
+    until this test it named a state no test exercised.
+
+    Two claims, because they can fail independently: a refuted finding is
+    closed, so it collapses like a fixed one; and `refuted` is not folded away
+    into `fixed`, because "we looked and it was not a bug" is a different fact
+    from "we fixed it" and an executor re-reading the one-liner needs to know
+    which.
+    """
+    out = _collapse_handoff(tmp_path)
+
+    assert "REFUTED-DEP-BODY" not in out
+    assert "- refuted-dep · finding [refuted] · Refuted on a dependency phase (phase 2)" in out
 
 
 def test_a_closed_finding_on_a_non_dependency_phase_still_collapses(tmp_path: Path) -> None:
