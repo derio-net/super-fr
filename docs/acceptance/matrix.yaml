@@ -2585,10 +2585,20 @@ rows:
       re-brief a running unit
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#519''s behaviour preserved under decision u1: with no attempt to name,
-      the refusal falls back to ALREADY RUNNING rather than lifting.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'Phase 1 (decision u1): the dispatch record is the only witness of a held
+      unit (_hold_on), and a running unit with NO record at all — a cursor written before
+      the record existed, or adopted from disk — keeps gh#519''s state-based refusal,
+      worded ALREADY RUNNING (dispatched <at>) because there is no holder to name. Pinned
+      at both call sites (test_a_running_member_with_no_dispatch_record_is_still_refused,
+      test_a_running_flat_step_with_no_dispatch_record_is_still_refused) plus the escape
+      (test_redispatch_is_the_way_out_of_a_recordless_running_unit). Mutation-verified:
+      dropping the fallback fails exactly the first two; widening it to every running
+      unit fails exactly the three abandon tests. The recordless shape is real — gh#517''s
+      own cursor arrived as deliver: running with no dispatch map.'
   - id: run-adopt-writes-unit-records
     capability: Run cursor
     acceptance: fr run adopt produces a current-version cursor whose already-complete

@@ -27,7 +27,7 @@ import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, NoReturn
+from typing import Any, Literal, NamedTuple
 
 import typer
 from rich.console import Console
@@ -196,13 +196,32 @@ def _unit_key(
         try:
             # (agentic, manual) since gh#496 — a `tag: manual` phase is never
             # dispatched, so only the agentic list can name a unit key.
-            agentic, _manual = _group_phases(repo_root, state)
+            agentic, manual = _group_phases(repo_root, state)
         except (RunStateError, AdoptError) as e:
             err_console.print(f"[red]{parent.id}: {e}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
         expected = _expected_group_items(parent, agentic)
         key = f"{item}/{step.id}"
         if key not in expected:
+            # #496 (spec §3.D.3): a manual phase gets its own message BEFORE
+            # the generic one. "not a phase member — expected phase/<n> for
+            # phases [1,2,3]" reads as a bug in the phase list when phase 4
+            # plainly exists in the plan; the reason it is absent is a
+            # deliberate omission, and the refusal has to say so. It lives
+            # HERE because this is the one place a unit key is validated: it
+            # used to sit in `_resolve_member` behind a call to this function,
+            # which refused first with the generic text — dead on arrival,
+            # and `claim` never had it at all.
+            if _item_phase(item) in manual:
+                err_console.print(
+                    f"[red]{key}: phase {_item_phase(item)} is `tag: manual` and is "
+                    "deliberately never dispatched, so there is no outcome to "
+                    "record.[/red]\n"
+                    "  Its record is the plan's own steps plus the PR's "
+                    '"unimplemented — operator pushes to this PR".',
+                    soft_wrap=True,
+                )
+                raise typer.Exit(2)
             err_console.print(
                 f"[red]{key}: not a phase member of {parent.id!r} — expected "
                 f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
@@ -957,11 +976,12 @@ def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
     re-dispatching it opens a NEW hold rather than silently leaving the old,
     closed one as the only record. False while the last attempt is still
     OPEN — the unit is currently HELD, which `advance` refuses to dispatch
-    over (`_refuse_held`, spec §4.C / gh-499) unless `--redispatch` says so.
+    over (`_hold_on`, spec §4.C / gh-499) unless `--redispatch` says so.
 
-    This is the ONE notion of "is this unit currently held?" in the module:
-    `advance`'s refusal, `--redispatch`'s abandon and `resolve`'s close all
-    ask it here rather than each re-deriving "the last record is open".
+    This is the ONE notion of "is the last record open?" in the module:
+    `_held_record` is its read half, and `advance`'s refusal (`_hold_on`),
+    `--redispatch`'s abandon and `resolve`'s close all go through the pair
+    rather than each re-deriving it.
     """
     attempts = (record.dispatch or {}).get(key)
     if not attempts:
@@ -981,55 +1001,39 @@ def _held_record(record: StepRecord, key: str) -> DispatchRecord | None:
     return (record.dispatch or {})[key][-1]
 
 
-def _refuse_held(
-    owner_id: str,
-    key: str,
-    held: DispatchRecord,
-    *,
-    run_id: str,
-    step_flag: str,
-    item_flag: str | None,
-) -> NoReturn:
-    """Refuse to re-brief a unit somebody is already holding — gh-499, exit 2.
+class _Hold(NamedTuple):
+    """Why `advance` will not brief a unit again (`_hold_on`)."""
 
-    ONE function for both the flat and the grouped path, so the two cannot
-    drift: the single thing gh-499 asks for is that fr stop handing out "a
-    dispatch brief that looks like an instruction to act when the correct
-    action is to wait", and a message that says so on one path only is the
-    same defect with a smaller blast radius. Nothing of the brief is printed
-    alongside it, for exactly that reason.
+    holder: DispatchRecord | None
+    """The open record — or `None` for a unit that is `running` with no
+    record at all, where there is a hold to respect but nobody to name."""
 
-    Wording follows spec §4.C, which in turn follows gh-499's own "Expected"
-    block — including its `anyway`, which carries the one thing a bare
-    `--redispatch` label does not: that re-briefing over a live holder is a
-    deliberate act, not the next step.
 
-    The three ways forward are printed as complete, copy-pastable commands
-    carrying THIS unit's own `--step`/`--item`, because an operator who is
-    being refused is exactly the reader with no appetite for reconstructing
-    a unit key by hand.
+def _hold_on(record: StepRecord, key: str, *, running: bool) -> _Hold | None:
+    """Is `key` held — must `advance` refuse to brief it again? Decision u1
+    (spec 2026-09-20-unit-record-unification §4.C), and the ONLY function
+    that answers it; both refusal call sites ask here and nowhere else.
+
+    **The dispatch record is the witness.** A unit is held iff its last record
+    is open (`_held_record`). `running` is deliberately NOT part of that
+    answer: `fr run claim --abandoned` closes the record and leaves the unit
+    `running` on purpose, so a refusal keyed on state never lifts and a lost
+    executor can never be re-briefed — the defect gh#508 and gh#519 produced
+    between them by each building this refusal off a different map.
+
+    **`running` is consulted in exactly one case: there is no record at
+    all.** A cursor written before the record existed (`run` 2 -> 3 -> 4 are
+    stamp-only migrations) or adopted from disk has running units with no
+    attempts. No witness is not the same as a witness saying "free", so there
+    gh#519's state-based refusal stands, and the caller words it `ALREADY
+    RUNNING (dispatched <at>)` because there is no holder to name. A unit
+    with ANY record, even a closed one, never reaches this branch.
     """
-    holder = f"agent {held.agent}" if held.agent else "an unclaimed agent"
-    descriptors = [d for d in (held.agent_type, held.harness) if d]
-    suffix = f" ({', '.join(descriptors)})" if descriptors else ""
-    unit = f"--step {step_flag}" + (f" --item {item_flag}" if item_flag else "")
-    err_console.print(
-        f"[red]{owner_id}: {key} is ALREADY HELD\n"
-        f"  by {holder}{suffix}\n"
-        f"  dispatched {held.dispatched} — not yet returned.\n"
-        "  Waiting on that agent — do NOT dispatch again.\n"
-        # `--state done`, never the alternation `done|failed`: this line is
-        # printed to be PASTED, and in every POSIX shell `|` is a pipe — so
-        # `--state done|failed` runs the resolve with `done` and then dies
-        # with `command not found: failed`. Found by gh#519's review (r1-f1)
-        # of its own refusal; the same defect was here verbatim.
-        f"  Resolve it:      fr run resolve {run_id} {unit} --state done\n"
-        f"                   (or --state failed)\n"
-        f"  Lost agent:      fr run claim {run_id} {unit} --abandoned\n"
-        f"  Re-brief anyway: fr run advance {run_id} --redispatch[/red]",
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
+    held = _held_record(record, key)
+    if held is not None:
+        return _Hold(held)
+    never_recorded = not (record.dispatch or {}).get(key)
+    return _Hold(None) if running and never_recorded else None
 
 
 def _replace_last_attempt(record: StepRecord, key: str, attempt: DispatchRecord) -> StepRecord:
@@ -1250,7 +1254,8 @@ def _already_running_refusal(
     # honest sentence in that case rather than a fabricated identity.
     if held is not None:
         who = _dispatch_holder_label(held)
-        head = f"[red]{named} is ALREADY HELD by {who}{_dispatch_descriptor_suffix(held)} "
+        suffix = _dispatch_descriptor_suffix(held, with_agent_type=True)
+        head = f"[red]{named} is ALREADY HELD by {who}{suffix} "
         head += f"(dispatched {held.dispatched}) — not yet returned.[/red]\n"
     else:
         head = f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
@@ -1409,8 +1414,15 @@ def _advance_group(
     # the refusal's subject, and it wins over any later pending one: the
     # group is serial by construction (`_resolve_member` refuses a second
     # writer), so an outstanding unit is the only thing this step is doing.
+    #
+    # LIFECYCLE, not refusal: `running` answers "which unit is outstanding",
+    # which is what `--redispatch` re-briefs and what its nothing-is-running
+    # refusal is about. Whether an outstanding unit may be briefed AGAIN is a
+    # different question with one answer, `_hold_on` (decision u1) — an
+    # `--abandoned` unit is still `running` here and is not held.
     running = next((key for key in expected if items.get(key) == "running"), None)
-    if running is not None and not redispatch:
+    hold = _hold_on(record, running, running=True) if running is not None else None
+    if running is not None and hold is not None and not redispatch:
         # `_split_member_id` returns (item, member); `_resolve_hint` takes
         # (member, item). Same two strings, opposite order — do not splat one
         # into the other (phase 1, `p1-d1`).
@@ -1423,7 +1435,7 @@ def _advance_group(
                 state.run,
                 member_id,
                 item,
-                _held_record(record, running),
+                hold.holder,
             ),
             # soft_wrap: the refusal's middle line is a command meant to be
             # pasted, and rich folds at width 80 whenever stderr is not a tty
@@ -1840,7 +1852,7 @@ def _dispatch_holder_label(attempt: DispatchRecord) -> str:
     orchestrator doing the work itself, and it never reports an `agent` id
     for itself. Only once a unit IS dispatched to an actual agent type does
     an absent `agent` read as `an unclaimed agent` — the same distinction
-    `_refuse_held` already draws for the gh-499 refusal.
+    the gh-499 refusal (`_already_running_refusal`) draws, by calling this.
     """
     if attempt.agent_type is None:
         return "the orchestrator"
@@ -1849,8 +1861,16 @@ def _dispatch_holder_label(attempt: DispatchRecord) -> str:
     return "an unclaimed agent"
 
 
-def _dispatch_descriptor_suffix(attempt: DispatchRecord) -> str:
-    descriptors = [d for d in (attempt.harness, attempt.model) if d]
+def _dispatch_descriptor_suffix(attempt: DispatchRecord, *, with_agent_type: bool = False) -> str:
+    """` (harness, model)` — and, for the gh-499 refusal, the agent TYPE first.
+
+    `fr run status` prints one line per attempt and already says which unit it
+    is under, so the type would be noise there. The refusal is read by someone
+    deciding whether to wait, and "what kind of agent has this" is one of the
+    four facts that decision needs (who, what kind, which harness, since when).
+    """
+    agent_type = attempt.agent_type if with_agent_type else None
+    descriptors = [d for d in (agent_type, attempt.harness, attempt.model) if d]
     return f" ({', '.join(descriptors)})" if descriptors else ""
 
 
@@ -2051,6 +2071,9 @@ def advance_cmd(
         # a `cli` step is never `running` at all — fr executes it inline — so
         # this is also what keeps the flag from becoming a second way to run
         # a command. Reported rather than silently downgraded (spec §3.A).
+        # LIFECYCLE, not the held-question: "was anything ever dispatched
+        # here" is a fact about the step's state. Whether a dispatched unit
+        # may be briefed again is `_hold_on`'s, below.
         err_console.print(
             _nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
             soft_wrap=True,
@@ -2107,25 +2130,24 @@ def advance_cmd(
         # call site. This sits AFTER the `_gate_pending` block on purpose — a
         # gated step is `blocked`, never `running`, and its brief is how the
         # operator's question gets asked, so the two must not interact.
-        if record.state == "running" and not redispatch:
+        key = _unit_key(repo_root, state, step, None, None)
+        # The same ONE question as the grouped call site (`_hold_on`, decision
+        # u1). `state == "running"` is passed in as a fact about the unit, not
+        # tested here: after `claim --abandoned` the step is still `running`
+        # and must be briefed again.
+        hold = _hold_on(record, key, running=record.state == "running")
+        if hold is not None and not redispatch:
             err_console.print(
                 # subject == step_id and member_id == step_id: a top-level
                 # step is its own unit, and `item=None` drops `--item` from
                 # the resolve hint. Same renderer as the grouped call site.
                 _already_running_refusal(
-                    step.id,
-                    step.id,
-                    record.at,
-                    state.run,
-                    step.id,
-                    None,
-                    _held_record(record, _unit_key(repo_root, state, step, None, None)),
+                    step.id, step.id, record.at, state.run, step.id, None, hold.holder
                 ),
                 soft_wrap=True,
             )
             raise typer.Exit(2)
         brief = _build_brief(step, state)
-        key = _unit_key(repo_root, state, step, None, None)
         held = _held_record(record, key)
         if held is not None:
             record = _close_dispatch(record, key, "abandoned")
@@ -2235,28 +2257,6 @@ def _resolve_member(
         err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     expected = _expected_group_items(group, agentic)
-    key = f"{item}/{member.id}"
-    if key not in expected:
-        # #496 (spec §3.D.3): a manual phase gets its own message BEFORE the
-        # generic one. "not a phase member — expected phase/<n> for phases
-        # [1,2,3]" reads as a bug in the phase list when phase 4 plainly
-        # exists in the plan; the reason it is absent is a deliberate
-        # omission, and the refusal has to say so.
-        if item is not None and _item_phase(item) in manual:
-            err_console.print(
-                f"[red]{key}: phase {_item_phase(item) if item else None} is `tag: manual` and is "
-                "deliberately never dispatched, so there is no outcome to "
-                "record.[/red]\n"
-                "  Its record is the plan's own steps plus the PR's "
-                '"unimplemented — operator pushes to this PR".',
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        err_console.print(
-            f"[red]{key}: not a phase member of {group.id!r} — expected "
-            f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
-        )
-        raise typer.Exit(2)
     # The manual markers are `_advance_group`'s to write (a group can only be
     # resolved after it was advanced, so they are already here); merged again
     # only so a cursor written before #496 acquires them on its next resolve
@@ -2268,6 +2268,10 @@ def _resolve_member(
     # One writer at a time: any OTHER outstanding unit means a second writer
     # is active (a finished executor still writing, or the orchestrator
     # alongside it) — resolve the running unit first instead of interleaving.
+    # LIFECYCLE, not the held-question (`_hold_on`): this guards `resolve`
+    # against a second WRITER, and an `--abandoned` unit still counts — it is
+    # unresolved work that must be re-briefed or resolved before another
+    # unit's outcome is recorded over it.
     running = sorted(k for k, v in items.items() if v == "running" and k != key)
     if running:
         err_console.print(

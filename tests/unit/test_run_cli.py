@@ -3779,8 +3779,10 @@ def test_a_flat_agent_step_is_refused_the_same_way(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     flat = _squash(result.output)
-    assert "step/phase/1/implement-phase is ALREADY HELD" in flat
-    assert "an unclaimed agent" in flat
+    # Named by its STEP id — what `--step` takes — never by the internal
+    # `step/<id>` unit key, which no command accepts.
+    assert "phase/1/implement-phase is ALREADY HELD by an unclaimed agent" in flat
+    assert "step/phase/1/implement-phase" not in flat
     assert "super-fr:fr-phase-executor" in flat
     assert "fr run resolve r1 --step phase/1/implement-phase --state done" in flat
     assert "done|failed" not in flat
@@ -3844,28 +3846,31 @@ def test_redispatch_prints_the_brief_and_exits_zero(tmp_path: Path) -> None:
     assert brief["item"] == "phase/1"
 
 
-def test_redispatch_on_an_unheld_unit_is_exactly_a_plain_advance(tmp_path: Path) -> None:
-    """Case (c): an escape, not a second mode. With nothing to abandon it
-    must not invent a closed record, append twice, or diverge from the
-    ordinary first dispatch — asserted against a plain `advance` in a
-    sibling repo rather than against a re-typed expectation."""
-    repo = _repo(tmp_path / "forced")
+def test_redispatch_on_a_never_dispatched_unit_is_refused_and_records_nothing(
+    tmp_path: Path,
+) -> None:
+    """Case (c): an escape, not a second mode — and not a second way to START.
+
+    gh#508 first built this as "exactly a plain advance"; gh#519 SPECIFIED the
+    opposite (its spec §3.A: "`--redispatch` with nothing outstanding exits
+    2"), published it in the explainer and cited it in the acceptance matrix.
+    The two tests asserted opposite exit codes for one command on one fixture,
+    so one had to yield, and the specified, documented behaviour is the one
+    kept. What this test still owns is the half gh#519's sibling
+    (`test_redispatch_with_nothing_outstanding_is_refused`) does not look at:
+    the DISPATCH map. A refused `--redispatch` must not leave a record behind
+    — not an open one (a hold nobody has) and not an invented closed one."""
+    repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
-    plain_repo = _repo(tmp_path / "plain")
-    _started_grouped_with_plan(plain_repo, shipped)
 
-    forced = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
-    plain = _invoke(plain_repo, shipped, ["run", "advance", "r1"])
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
 
-    assert forced.exit_code == plain.exit_code == 0, forced.output
-    assert _brief_of(forced.output) == _brief_of(plain.output)
-    forced_records = _dispatch_of(repo, "implement", "phase/1/code")
-    plain_records = _dispatch_of(plain_repo, "implement", "phase/1/code")
-    assert len(forced_records) == len(plain_records) == 1
-    assert forced_records[0].returned is None
-    assert forced_records[0].outcome is None
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert "{" not in result.stdout, result.stdout
+    assert not load_run_state(repo, "r1").steps["implement"].dispatch
 
 
 def test_redispatch_after_an_abandon_does_not_close_the_closed_record_again(
@@ -5036,15 +5041,22 @@ def test_advance_refuses_a_running_member(tmp_path: Path) -> None:
     _fr_goal_at_implement(repo, shipped)
     first = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert first.exit_code == 0, first.output
-    dispatched_at = load_run_state(repo, "r1").steps["implement"].at
+    # Decision u1: the dispatch record is the witness, so the moment the
+    # refusal names is the RECORD's `dispatched`, not the group's `at` — the
+    # two are separate `_now()` calls and only usually the same second.
+    dispatched_at = _dispatch_of(repo, "implement", "phase/1/implement-phase")[0].dispatched
     assert dispatched_at
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 2, result.output
-    assert "ALREADY RUNNING" in result.output
-    assert "phase/1/implement-phase" in result.output
-    # the refusal names WHEN it was dispatched, off the group record's `at`
+    # HELD, not RUNNING: `advance` opened a record, so there IS a holder to
+    # name — unclaimed, because nobody ran `fr run claim`. RUNNING is now the
+    # wording for the one case with no record at all
+    # (`test_a_running_member_with_no_dispatch_record_is_still_refused`).
+    flat = _squash(result.output)
+    assert "phase/1/implement-phase is ALREADY HELD by an unclaimed agent" in flat
+    assert "ALREADY RUNNING" not in flat
     assert dispatched_at in result.output, result.output
     # both ways forward, and the resolve one is the two-flag form (#501)
     assert "fr run resolve r1 --step implement-phase --item phase/1 --state done" in result.output
@@ -5063,20 +5075,109 @@ def test_advance_refuses_a_running_top_level_agent_step(tmp_path: Path) -> None:
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     first = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert first.exit_code == 0, first.output
-    dispatched_at = load_run_state(repo, "r1").steps["plan"].at
+    step_at = load_run_state(repo, "r1").steps["plan"].at
+    dispatched_at = _dispatch_of(repo, "plan", "step/plan")[0].dispatched
     assert dispatched_at
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 2, result.output
-    assert "ALREADY RUNNING" in result.output
+    # `_AGENT_SHAPE`'s step names no `agent:`, so the orchestrator runs it
+    # itself and IS the holder (decision u1: the record is the witness).
+    flat = _squash(result.output)
+    assert "plan is ALREADY HELD by the orchestrator" in flat
+    assert "ALREADY RUNNING" not in flat
     assert dispatched_at in result.output, result.output
     # no `--item` for a top-level step: it has no unit to address
     assert "fr run resolve r1 --step plan --state done" in result.output
     assert "--item" not in result.output, result.output
     assert "{" not in result.stdout, result.stdout
     # and the refusal wrote nothing
-    assert load_run_state(repo, "r1").steps["plan"].at == dispatched_at
+    assert load_run_state(repo, "r1").steps["plan"].at == step_at
+    assert len(_dispatch_of(repo, "plan", "step/plan")) == 1
+
+
+def _forget_dispatch_records(repo: Path, step_id: str) -> None:
+    """Make `step_id` look the way every cursor written BEFORE the dispatch
+    record existed looks: running, and recording no attempt at all.
+
+    That shape is real, not hypothetical — `run` 2 -> 3 -> 4 are stamp-only
+    migrations, so a v2 cursor caught mid-dispatch arrives at v4 exactly like
+    this (gh#517's own cursor did: `deliver: running`, no `dispatch`). Built by
+    letting the real CLI dispatch and then dropping the one map, so everything
+    else about the cursor is what fr wrote.
+    """
+    from fr.run.model import save_run_state
+
+    state = load_run_state(repo, "r1")
+    record = state.steps[step_id].model_copy(update={"dispatch": None})
+    save_run_state(repo, state.model_copy(update={"steps": {**state.steps, step_id: record}}))
+
+
+def test_a_running_member_with_no_dispatch_record_is_still_refused(tmp_path: Path) -> None:
+    """Decision u1's fallback, grouped half. The record is the witness — but a
+    unit that is `running` with NO record has no witness to consult, and "no
+    open record" must not be read as "free": that would silently re-open
+    gh#499 for every cursor that predates the record. It is refused on its
+    state, in the wording that names only the clock, because there is no
+    holder to name and inventing one would be worse than saying less."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_dispatch_records(repo, "implement")
+    before = load_run_state(repo, "r1")
+    dispatched_at = before.steps["implement"].at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert f"phase/1/implement-phase is ALREADY RUNNING (dispatched {dispatched_at})" in flat
+    assert "ALREADY HELD" not in flat
+    assert "{" not in result.stdout, result.stdout
+    assert load_run_state(repo, "r1") == before  # a refusal writes nothing
+
+
+def test_a_running_flat_step_with_no_dispatch_record_is_still_refused(tmp_path: Path) -> None:
+    """The same fallback at the other call site — the exact shape gh#517's
+    real cursor arrived in (`deliver: running`, no `dispatch`)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_dispatch_records(repo, "plan")
+    before = load_run_state(repo, "r1")
+    dispatched_at = before.steps["plan"].at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert f"plan is ALREADY RUNNING (dispatched {dispatched_at})" in flat
+    assert "ALREADY HELD" not in flat
+    assert "{" not in result.stdout, result.stdout
+    assert load_run_state(repo, "r1") == before
+
+
+def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path) -> None:
+    """A refusal with no escape is a wedge. `claim --abandoned` cannot help
+    here — there is no record to close — so `--redispatch` has to: it
+    re-briefs, and opens the first record this unit has ever had."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _forget_dispatch_records(repo, "implement")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["item"] == "phase/1"
+    records = _dispatch_of(repo, "implement", "phase/1/implement-phase")
+    assert len(records) == 1
+    assert records[0].returned is None
 
 
 def test_advance_still_briefs_a_blocked_gated_agent_step(tmp_path: Path) -> None:
