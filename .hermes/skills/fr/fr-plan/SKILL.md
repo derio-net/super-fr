@@ -72,12 +72,11 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a
   dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer
   it. `fr plan self-review` enforces this with error severity (#252).
-- **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence
-  following `<protocol>`", never "dispatch `<agent>`". A step naming the actor
-  or the tool rots *silently* the moment either changes — the phase executor
-  is a leaf, not an orchestrator, so it does the nearest thing it can and
-  ticks. `fr plan self-review` errors on a dispatch verb in an agentic step
-  (#428); genuine orchestrator-level dispatch belongs in a `[manual]` phase.
+- **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence following
+  `<protocol>`", never "dispatch `<agent>`". A step naming the actor or the tool rots *silently*
+  the moment either changes — the phase executor is a leaf, not an orchestrator, so it does the
+  nearest thing it can and ticks. `fr plan self-review` errors on a dispatch verb in an agentic
+  step (#428); genuine orchestrator-level dispatch belongs in a `[manual]` phase.
 - **Acceptance linkage:** a phase that advances a matrix row carries `acceptance: [row-ids]` in its
   header. `fr plan self-review` errors when the spec has a Test Plan but zero linked rows (matrix
   present) and on unknown ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
