@@ -15,153 +15,142 @@ tasks:
   title: '`reviewed_phases` — the pure fold over entries, red to green'
   steps:
   - id: P2.T1.S1
-    text: 'RED: in tests/unit/test_journal_model.py add tests for a new
-
+    text: |-
+      RED: in tests/unit/test_journal_model.py add tests for a new
       `reviewed_phases(entries) -> set[int]` in
-
       packages/fr/src/fr/journal/model.py. Assert: a `kind=review`
-
       entry with `phase=3` contributes 3; a review entry with NO phase
-
       contributes nothing (the 5 unphased plan-scope review entries
-
-      already in this repo''s journals must not blanket-satisfy the
-
+      already in this repo's journals must not blanket-satisfy the
       gate); a `kind=finding` entry with `phase=3` contributes nothing;
-
       an empty list gives an empty set; two reviews of the same phase
-
-      give one element. Run pytest — fails.'
+      give one element. Run pytest — fails.
   - id: P2.T1.S2
-    text: 'GREEN: implement `reviewed_phases` in journal/model.py beside
-
+    text: |-
+      GREEN: implement `reviewed_phases` in journal/model.py beside
       `open_finding_ids` — a one-pass comprehension over entries where
-
       `kind == "review" and phase is not None`. Keep it PURE (no I/O,
-
       no plan knowledge): model.py stays free of `fr.types`/`fr.render`
-
       imports, exactly as `compose_handoff` takes `depends_on` as a
-
-      parameter rather than reading the plan itself. Run — green.'
+      parameter rather than reading the plan itself. Run — green.
   - id: P2.T1.S3
-    text: 'REFACTOR: docstring it to say what "names a phase" means and why
-
-      an unphased review does not count, pointing at spec §A. Re-run.'
+    text: |-
+      REFACTOR: docstring it to say what "names a phase" means and why
+      an unphased review does not count, pointing at spec §A. Re-run.
 - number: 2
   title: The owed-phase computation and the gate's exit codes, red to green
   steps:
   - id: P2.T2.S1
-    text: "RED: back in the journal CLI test module, assert the gate end to\nend against real plan fixtures:\n\
-      (a) an agentic phase with `completion.at` set and no review entry\n    naming it → exit 1, message\
-      \ NAMING that phase number;\n(b) the same phase with a `kind=review phase=N` entry → exit 0;\n(c)\
-      \ THE SPEC-REVIEW FINDING r1-f1, the test this phase exists for:\n    an agentic phase with every\
-      \ step ticked and `completion.at`\n    UNSET is still owed a review → exit 1. Had the gate keyed\
-      \ on\n    `completion.at` alone this passes silently; had it keyed on\n    `_phase_complete` it\
-      \ passes silently too, because no merged PR\n    is ever observed during an fr-goal run. This test\
-      \ is the one\n    that distinguishes the three predicates;\n(d) a `tag: manual` phase with `completion.at`\
-      \ set and no review\n    → exit 0, and the failure message for an unrelated failing\n    agentic\
-      \ phase NAMES the manual exemption (spec D4: the\n    carve-out is visible, not silent);\n(e) a\
-      \ plan dir that does not exist → exit 2; a plan dir that\n    exists but does not parse → exit 2.\
-      \ Fail-closed, per §B;\n(f) COMPOSITION: a journal with both an open finding and an\n    unreviewed\
-      \ phase → exit 1 reporting BOTH, and the\n    open-findings line keeps its exact current wording\n\
-      \    `N open finding(s): <ids>` (things grep it — assert on the\n    literal string);\n(g) a finding\
-      \ closed by `fr journal resolve` does not resurface,\n    i.e. the new gate did not bypass `open_finding_ids`'\
-      \ fold.\nRun pytest — fails."
+    text: |-
+      RED: back in the journal CLI test module, assert the gate end to
+      end against real plan fixtures:
+      (a) an agentic phase with `completion.at` set and no review entry
+          naming it → exit 1, message NAMING that phase number;
+      (b) the same phase with a `kind=review phase=N` entry → exit 0;
+      (c) THE SPEC-REVIEW FINDING r1-f1, the test this phase exists for:
+          an agentic phase with every step ticked and `completion.at`
+          UNSET is still owed a review → exit 1. Had the gate keyed on
+          `completion.at` alone this passes silently; had it keyed on
+          `_phase_complete` it passes silently too, because no merged PR
+          is ever observed during an fr-goal run. This test is the one
+          that distinguishes the three predicates;
+      (d) a `tag: manual` phase with `completion.at` set and no review
+          → exit 0, and the failure message for an unrelated failing
+          agentic phase NAMES the manual exemption (spec D4: the
+          carve-out is visible, not silent);
+      (e) a plan dir that does not exist → exit 2; a plan dir that
+          exists but does not parse → exit 2. Fail-closed, per §B;
+      (f) COMPOSITION: a journal with both an open finding and an
+          unreviewed phase → exit 1 reporting BOTH, and the
+          open-findings line keeps its exact current wording
+          `N open finding(s): <ids>` (things grep it — assert on the
+          literal string);
+      (g) a finding closed by `fr journal resolve` does not resurface,
+          i.e. the new gate did not bypass `open_finding_ids`' fold.
+      Run pytest — fails.
   - id: P2.T2.S2
-    text: 'GREEN: implement the gate in journal_cmd.py''s `check`. When
-
+    text: |-
+      GREEN: implement the gate in journal_cmd.py's `check`. When
       `require_reviews` is set: import `parse` from fr.parser and
-
       `plan_locally_complete` from fr.render INSIDE the function (the
-
       module-local-import convention `handoff` already uses to keep
-
-      the journal CLI''s import cost off every other verb); parse the
-
+      the journal CLI's import cost off every other verb); parse the
       plan, fail-closed to exit 2 on PlanSchemaError/OSError with the
-
       path named; owed = {p.phase.number for p in plan.phases if
-
       plan_locally_complete(p) and p.phase.tag != "manual"}; missing =
-
       sorted(owed - reviewed_phases(entries)). Report missing, and
-
       exit 1 if missing OR open findings. Print the open-findings line
-
-      FIRST and unchanged. Run the S1 tests — green.'
+      FIRST and unchanged. Run the S1 tests — green.
   - id: P2.T2.S3
-    text: 'REFACTOR: the failure message is the whole product of this phase —
-
+    text: |-
+      REFACTOR: the failure message is the whole product of this phase —
       it is what an orchestrator reads at the moment it is blocked. Make
-
       it say the phase numbers, the exact `fr journal add --scope plan
-
       --slug <s> --kind review --phase N` command that satisfies it, and
-
-      the manual exemption. Re-run the module.'
+      the manual exemption. Re-run the module.
   - id: P2.T2.S4
-    text: 'DELETE the phase-1 disclaimer. journal_cmd.py''s `check` carries a
-
+    text: |-
+      DELETE the phase-1 disclaimer. journal_cmd.py's `check` carries a
       `# NOT YET IMPLEMENTED: ... the owed-vs-present comparison lands next`
-
       comment above its body, put there by review finding r-p1-f4 precisely
-
       because nothing else would force its removal once the gate shipped. The
-
       gate now exists: remove the comment, and confirm by grep that neither
-
       `fr journal check --help` nor the command docstring says anything about
-
       the gate being unbuilt. A stale disclaimer claiming an implemented
-
       feature is unimplemented is the same class of wrong state this whole
-
-      plan exists to remove.'
+      plan exists to remove.
 - number: 3
   title: Quality gate
   steps:
   - id: P2.T3.S1
-    text: 'ruff format + ruff check + mypy (same four src trees) +
-
+    text: |-
+      ruff format + ruff check + mypy (same four src trees) +
       `uv run pytest -q --no-cov`. Same known pre-existing failure
-
-      allowance as phase 1.'
+      allowance as phase 1.
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:46:42+00:00'
+      note: 'RED: reviewed_phases tests added (5 cases), ImportError confirmed'
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:46:42+00:00'
+      note: 'GREEN: implemented reviewed_phases as one-pass comprehension; 52/52 model
+        tests pass'
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:46:43+00:00'
+      note: 'REFACTOR: docstring explains what ''names a phase'' means and why an
+        unphased review does not count, pointing at spec section B'
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:49:47+00:00'
+      note: 'RED: 6 new tests added covering (a)-(g) per spec; confirmed failing before
+        implementation (2 initial red bugs in test fixtures fixed: step id pattern,
+        Rich bracket-markup swallowing [manual])'
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:49:48+00:00'
+      note: 'GREEN: gate implemented in check() using plan_locally_complete + reviewed_phases,
+        tag!=manual exemption; all 52 test_journal_cmd tests pass'
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:54:25+00:00'
+      note: 'REFACTOR: message names phase numbers, the exact fr journal add command
+        per phase, and the manual exemption; ruff-formatted'
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:54:26+00:00'
+      note: 'ruff format/check clean, mypy clean (4 src trees), full suite: 3313 passed,
+        80 skipped, 3 failed (all pre-existing/unrelated, per known-tolerated-reds
+        list)'
     P2.T2.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:54:25+00:00'
+      note: Deleted the '# NOT YET IMPLEMENTED' comment; confirmed via grep that neither
+        --help nor the docstring mentions the gate being unbuilt
   completion:
-    at: null
+    at: '2026-09-20T13:54:59+00:00'
     note: null
     observed_prs: []

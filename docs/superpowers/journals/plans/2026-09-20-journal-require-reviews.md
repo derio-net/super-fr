@@ -144,3 +144,18 @@ Independently verified beyond the review: the two extra full-suite failures the 
 Post-fix state: 44 tests in tests/unit/test_journal_cmd.py pass, ruff check clean, mypy clean over all four src trees, and the live fail-open now refuses (`--plan-dir .` -> exit 2 with a message naming the fix).
 
 Assessment: phase 2 proceeds on this foundation. The two Important findings were fixed BEFORE dispatching it, deliberately - phase 2's tests are written against this fixture helper, and a fixture that cannot distinguish a right slug from a wrong one would have propagated the weakness into the phase that actually matters.
+
+<!-- fr:journal kind=discovery scope=plan id=c0a82f042d30 created=2026-09-20T15:54:34 phase=2 -->
+### c0a82f042d30 · discovery · Rich markup swallows literal [manual] in err_console output (phase 2)
+
+err_console is a Rich Console(highlight=False), but that does not disable markup parsing: a literal '[manual]' in a printed string is interpreted as an (unknown) style tag and silently dropped from the rendered output, not printed verbatim. Found while writing the manual-exemption failure message (spec D4 requires the exemption be named in the failure text) — a test asserting 'manual' in the output failed because the bracketed word vanished. Fixed by phrasing the message as plain prose ('manual phases are exempt from --require-reviews') rather than '[manual] phases are exempt', avoiding the bracket syntax entirely rather than escaping it. Relevant to any future err_console message that wants to echo a tag-like phase name.
+
+<!-- fr:journal kind=discovery scope=plan id=0e6e5df920b1 created=2026-09-20T15:54:42 phase=2 -->
+### 0e6e5df920b1 · discovery · Plan step ids are schema-constrained to P<n>.T<m>.S<k>, not free-form (phase 2)
+
+PhaseDoc's step id field validates against the pattern ^P\d+\.T\d+\.S\d+$ (pydantic string_pattern_mismatch on anything else, e.g. '1.1'). Hit this writing the P2.T2.S1(c) test (the ticked-steps-but-no-completion.at fixture) with a plain '1.1' id; fixed by using 'P1.T1.S1'. Noting it because a plan fixture built by hand for a future phase will hit the same PlanSchemaError if it copies the shorter id style from ad-hoc examples in prose.
+
+<!-- fr:journal kind=discovery scope=plan id=3ec6e6b36cec created=2026-09-20T15:54:53 phase=2 -->
+### 3ec6e6b36cec · discovery · Phase 2 gate: implementation summary and predicate choice confirmed live (phase 2)
+
+Implemented reviewed_phases(entries) -> set[int] in fr/journal/model.py (pure fold: kind==review and phase is not None) and wired the owed-vs-present comparison into fr journal check's require_reviews branch in fr/commands/journal_cmd.py, using fr.render.plan_locally_complete (NOT _phase_complete) and excluding phase.tag == 'manual' per spec D4. The exemption is applied at the check call site, not inside the predicate, per spec (plan_locally_complete stays tag-agnostic for its other three callers). Confirmed via test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review (P2.T2.S1c) that a phase with every step ticked and completion.at unset is correctly flagged owed — this is the test the phase exists for, and it would pass silently under either of the two wrong predicates named in the spec. Composition with the pre-existing open-findings gate: both checks run unconditionally, the open-findings line prints first and is byte-identical to its old wording, and exit is 1 if either check fails, 2 if the plan cannot be parsed (fail-closed) or scope/derivation is unsatisfiable. Deleted the phase-1 '# NOT YET IMPLEMENTED' comment (r-p1-f4's fix point) now that the gate is real.

@@ -349,10 +349,6 @@ def check(
     --scope plan` without the flag behaves exactly as it did before the flag
     existed.
     """
-    # NOT YET IMPLEMENTED: the option surface and its refusals are wired; the
-    # owed-vs-present comparison lands next. Deliberately not said in `--help`
-    # or the docstring — those are shipped surfaces, and a disclaimer written
-    # in one outlives the condition it described (review r-p1-f4).
     _validate_scope(scope)
     # Scope refusals come FIRST, before any slug resolution (review r-p1-f3).
     # Both are unsatisfiable whatever slug is supplied, so reporting a missing
@@ -371,7 +367,7 @@ def check(
             f"{scope} journal named after that folder"
         )
         raise typer.Exit(2)
-    resolved_slug, _resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
+    resolved_slug, resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
     path = resolve_journal_read_path(root, scope, resolved_slug)  # type: ignore[arg-type]
@@ -380,12 +376,60 @@ def check(
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
+    failed = False
     still_open = open_finding_ids(entries)
     if still_open:
         # Output shape unchanged ("N open finding(s): <ids>") — things grep it.
+        # Printed FIRST, and always, so composition with the reviews gate below
+        # never reorders or swallows this line (spec §B, P2.T2.S1(f)).
         err_console.print(
             f"[yellow]{len(still_open)} open finding(s):[/yellow] " + ", ".join(still_open)
         )
+        failed = True
+    if require_reviews:
+        # Imported here, not at module scope, so the cost of importing the
+        # plan parser/renderer stays off every `fr journal` verb that never
+        # touches a plan (the same convention `handoff` already uses below).
+        from fr.journal.model import reviewed_phases
+        from fr.parser import PlanSchemaError, parse
+        from fr.render import plan_locally_complete
+
+        plan_path = root / resolved_plan_dir
+        try:
+            plan = parse(plan_path)
+        except (PlanSchemaError, OSError) as e:
+            err_console.print(
+                f"[red]cannot check --require-reviews: plan {plan_path} is not "
+                f"parseable ({e})[/red]"
+            )
+            raise typer.Exit(2) from e
+        # Which completion predicate, and why it matters (spec §B): NOT
+        # `_phase_complete` (needs an observed merged PR that never exists
+        # during an fr-goal run — a gate built on it would pass every plan
+        # forever). `plan_locally_complete` answers "does the plan ITSELF
+        # claim this phase is done" — completion.at set OR every step ticked
+        # — which is what this gate actually asks. Tag-agnostic by design, so
+        # the [manual] exemption (spec D4) is applied here at the call site.
+        owed = {
+            p.phase.number
+            for p in plan.phases
+            if plan_locally_complete(p) and p.phase.tag != "manual"
+        }
+        missing = sorted(owed - reviewed_phases(entries))
+        if missing:
+            phases_str = ", ".join(str(n) for n in missing)
+            err_console.print(
+                f"[red]{len(missing)} phase(s) owed a review, none recorded: {phases_str}[/red]"
+            )
+            for n in missing:
+                err_console.print(
+                    f"  fr journal add --scope plan --slug {resolved_slug} --kind review "
+                    f'--phase {n} --title "phase {n} review" '
+                    "--body \"<findings raised, by id; or 'no findings'>\""
+                )
+            err_console.print("(manual phases are exempt from --require-reviews — spec D4)")
+            failed = True
+    if failed:
         raise typer.Exit(1)
 
 

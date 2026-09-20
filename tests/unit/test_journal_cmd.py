@@ -388,16 +388,32 @@ class TestCheckRequireReviews:
         )
         return root / "docs" / "superpowers" / "plans" / slug
 
+    def _write_plan_phases(self, root: Path, slug: str, phases):
+        from fr.plan_ops import create
+
+        (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+        create(
+            repo_root=root,
+            slug=slug,
+            spec=None,
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=phases,
+            prose="# x\n",
+        )
+        return root / "docs" / "superpowers" / "plans" / slug
+
     def test_require_reviews_is_inert_when_all_phases_incomplete(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        """PLACEHOLDER while the gate is unbuilt — it cannot discriminate yet.
+        """No phase is locally complete, so none is OWED a review — exit 0
+        with the flag on, exactly as without it.
 
-        With no owed-vs-present comparison there is nothing for the flag to be
-        inert *about*, so this currently asserts only that the option parses.
-        Once the gate lands it must be paired with a with-flag counterpart on
-        a COMPLETED phase, or it will keep passing whatever the gate does
-        (review r-p1-f2).
+        Paired with `test_require_reviews_fails_on_a_completed_phase_with_no_review`
+        below on a COMPLETED phase of the same shape, per review r-p1-f2: that
+        counterpart is what proves the flag is doing real work here rather than
+        the gate being unbuilt (or broken) and every phase happening to look
+        incomplete.
         """
         root = _init_repo(tmp_path)
         monkeypatch.chdir(root)
@@ -572,6 +588,241 @@ class TestCheckRequireReviews:
         complete_phase(plan_dir, 1)
 
         res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR4"])
+
+        assert res.exit_code == 0, res.output
+
+    def test_require_reviews_fails_on_a_completed_phase_with_no_review(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(a): a locally-complete agentic phase with no `review`
+        entry naming it fails, and the message names the phase number."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR8")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR8", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "owed a review" in res.output
+        assert "--phase 1" in res.output
+
+    def test_require_reviews_passes_once_the_phase_is_reviewed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(b): the same phase, now with a `kind=review phase=1`
+        entry recorded, passes."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR9")
+        complete_phase(plan_dir, 1)
+        add_res = runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR9",
+                "--kind", "review", "--phase", "1", "--id", "review-1",
+                "--title", "phase 1 review", "--body", "no findings",
+            ],
+        )  # fmt: skip
+        assert add_res.exit_code == 0, add_res.output
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR9", "--require-reviews"]
+        )
+
+        assert res.exit_code == 0, res.output
+
+    def test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(c) — THE test this phase exists for.
+
+        An agentic phase with every step ticked and `completion.at` UNSET
+        still claims to be done under `plan_locally_complete`. Had the gate
+        keyed on `completion.at` alone this phase would look incomplete and
+        pass silently; had it keyed on `_phase_complete` it would ALSO pass
+        silently, because `_phase_complete` additionally requires an observed
+        merged PR that never exists during an fr-goal run (spec, "Which
+        completion predicate, and why it matters"). This is the one test that
+        distinguishes all three candidate predicates.
+        """
+        from fr.plan_ops import PhaseSpec, TaskSpec, tick
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan_phases(
+            root,
+            "RR10",
+            [
+                PhaseSpec(
+                    number=1,
+                    title="One",
+                    tasks=(
+                        TaskSpec(
+                            number=1,
+                            title="T1",
+                            steps=[{"id": "P1.T1.S1", "text": "do x"}],
+                        ),
+                    ),
+                )
+            ],
+        )
+        tick(plan_dir, "P1.T1.S1")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR10", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "owed a review" in res.output
+        assert "--phase 1" in res.output
+
+    def test_manual_phase_is_exempt_and_the_message_names_the_exemption(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(d): a `[manual]` phase with `completion.at` set and no
+        review is not owed one, and an unrelated failing agentic phase's
+        message names the manual exemption (spec D4) so a reader is not left
+        wondering why the manual phase is missing from the list."""
+        from fr.plan_ops import PhaseSpec, complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan_phases(
+            root,
+            "RR11",
+            [
+                PhaseSpec(number=1, title="Agentic", tasks=()),
+                PhaseSpec(number=2, title="Manual", tag="manual", tasks=()),
+            ],
+        )
+        complete_phase(plan_dir, 1)
+        complete_phase(plan_dir, 2, note="operator did this by hand")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR11", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "--phase 1" in res.output
+        assert "--phase 2" not in res.output
+        assert "manual" in res.output.lower()
+
+    def test_a_nonexistent_plan_dir_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(e), first half: the plan dir doesn't exist. Fail-closed."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR12",
+                "--kind", "discovery", "--title", "x", "--id", "d1",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR12",
+                "--plan-dir", "docs/superpowers/plans/RR12-does-not-exist",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+
+    def test_a_plan_dir_that_does_not_parse_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(e), second half: the plan dir exists but has no
+        `_meta.yaml` (not a v2 plan) — `parse` raises `PlanSchemaError`, and
+        the gate must fail closed rather than treat it as zero phases."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        empty_dir = root / "docs" / "superpowers" / "plans" / "RR13-empty"
+        empty_dir.mkdir(parents=True)
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR13",
+                "--kind", "discovery", "--title", "x", "--id", "d1",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR13",
+                "--plan-dir", "docs/superpowers/plans/RR13-empty",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+
+    def test_composition_reports_both_open_findings_and_owed_reviews(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(f): a journal with both an open finding and an unreviewed
+        phase fails on both, and the open-findings line keeps its exact
+        pre-existing wording, because things grep it."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR14")
+        complete_phase(plan_dir, 1)
+        self._seed_open_finding("RR14", "f14")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR14", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "1 open finding(s): f14" in res.output
+        assert "--phase 1" in res.output
+
+    def test_a_resolved_finding_does_not_resurface_under_require_reviews(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(g): a finding closed by `fr journal resolve` must not
+        resurface — the new gate must not have bypassed `open_finding_ids`'
+        fold to get its answer."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR15")
+        complete_phase(plan_dir, 1)
+        self._seed_open_finding("RR15", "f15")
+        resolve_res = runner.invoke(
+            app,
+            [
+                "journal", "resolve", "--scope", "plan", "--slug", "RR15",
+                "--id", "f15", "--state", "fixed", "--note", "fixed it",
+            ],
+        )  # fmt: skip
+        assert resolve_res.exit_code == 0, resolve_res.output
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR15",
+                "--kind", "review", "--phase", "1", "--id", "review-1",
+                "--title", "phase 1 review", "--body", "no findings",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR15", "--require-reviews"]
+        )
 
         assert res.exit_code == 0, res.output
 
