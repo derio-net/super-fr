@@ -437,9 +437,16 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
         ("review-phase", "phase/3"),
     ]
     state = load_run_state(root, "r1")
-    assert state.cursor == "deliver"
+    assert state.cursor == "journal-check"
     assert state.steps["implement"].state == "done"
     assert len(state.accounting or {}) == 6
+
+    # journal-check is `kind: cli` and self-completes: the toy plan's steps
+    # were never ticked, so no phase is locally-complete and none is "owed"
+    # a review — `--require-reviews` has nothing to flag.
+    checked = _fr(root, ["run", "advance", "r1"])
+    assert checked.exit_code == 0, checked.output
+    assert load_run_state(root, "r1").cursor == "deliver"
 
     out = _fr(root, ["run", "advance", "r1"])  # deliver brief
     assert out.exit_code == 0, out.output

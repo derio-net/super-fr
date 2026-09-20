@@ -2184,8 +2184,13 @@ rows:
       whose phases completed without recorded reviews cannot reach the PR step
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
-    levels: {}
-    status: not-implemented
-    notes: A kind:cli `journal-check` step in the shipped fr-goal manifest; exit code
-      is the verdict. Adding it drifts in-flight runs by design — recovery is `fr run
-      adopt --run-id`.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: Phase 3 (2026-09-20-journal-require-reviews) landed the kind:cli journal-check
+      step in the shipped fr-goal manifest, between implement and deliver; pinned by
+      the tests cited below and mutation-verified against the real fr run advance drift
+      error.

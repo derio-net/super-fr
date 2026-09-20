@@ -272,3 +272,44 @@ the shipped shape strands every run started against the pre-existing
 step list, on purpose — recovered via `fr run adopt <plan-dir> --run-id
 <fresh>`, which is deliver's (phase 6's) job, not this phase's. Left the run
 stranded as instructed; did not run resolve/adopt/start.
+
+<!-- fr:journal kind=discovery scope=plan id=b587abbcd3ef created=2026-09-20T17:53:01 phase=3 -->
+### b587abbcd3ef · discovery · Adding journal-check rippled into SKILL.md numbering, both skill mirrors, and one integration test (phase 3)
+
+Landing journal-check in plugins/super-fr/workflows/fr-goal.yaml (and its
+packed copy under packages/fr/src/fr/workflows/) broke four things the
+quality gate caught, none of them in the plan's own step list:
+
+1. tests/integration/test_fr_goal_shape.py::test_shipped_manifest_step_order_matches_the_skill_narration
+   compares the manifest's step ids against SKILL.md's numbered `### N. <id>`
+   headers — SKILL.md needed a new "### 7. journal-check" section (renumbering
+   deliver 7->8), or the manifest and its own narration would silently diverge.
+2. tests/integration/test_fr_goal_shape.py::test_grouped_goal_walks_implement_review_per_phase_to_deliver
+   walks the whole shape end to end with a toy 3-phase plan whose steps are
+   never ticked, so no phase is locally-complete and journal-check's
+   --require-reviews has nothing to flag (self-completes, exit 0) — but the
+   test asserted cursor == "deliver" immediately after implement, which is
+   now "journal-check" for one more advance. Updated to walk through it
+   explicitly rather than skip past it.
+3. Editing the canonical SKILL.md pushed it to 130 lines, over the 120-line
+   cap (test_skill_validation.py / test_fr_goal_hermes_dispatch.py) and left
+   the .hermes/ and .opencode/ mirrors drifted (test_tripwire_hermes_skills_sync.py,
+   test_tripwire_opencode_skills_sync.py). Trimmed prose back to exactly 120
+   lines and reran scripts/sync-hermes.py + scripts/sync-opencode.py to
+   regenerate both mirrors.
+
+Mutation-verified the manifest-side tests: removing the journal-check step
+from fr-goal.yaml (restoring the byte-identical original) makes exactly
+test_shipped_manifest_step_order_matches_the_skill_narration,
+test_grouped_goal_walks_implement_review_per_phase_to_deliver,
+test_the_packaged_copy_is_byte_identical and
+test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver fail
+— nothing else moves.
+
+Left docs/explainers/01-fr-goal.md untouched: 05.yaml already owns
+re-rendering it per .claude/rules/explainers-currency.md, so re-touching it
+here would fight that phase's own diff.
+
+Full suite after all fixes: 3318 passed, 80 skipped, 3 failed — exactly the
+three pre-existing tolerated reds (test_cli_all_fails_when_nothing_is_discoverable
+and the two Rich-wrap test_run_workspace.py failures), none new.
