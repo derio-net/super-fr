@@ -154,14 +154,22 @@ Claude ran 14 in 56 — decisive for the budget.
 
 Two consequences of that choice, from `fr harness parity`:
 
-- `subagent-dispatch / opencode: absent` — **the declaration is disputed
-  ([#493](https://github.com/derio-net/super-fr/issues/493)); the shipped
-  behaviour is not.** With 4.5.x, phases run inline, so phase executors and
-  model tiers never appear on camera — and that is *why* the run fits the
-  budget (bc88 arm G: 0 subagents, 17 min). OpenCode does in fact have a
-  dispatch primitive: the #429 experiment's arm A, also `opencode --auto`,
-  dispatched 13 `@general` subagents at $7.59 against ~$1 inline. If #493
-  flips the default before recording, re-time the run before committing to it.
+- `subagent-dispatch / opencode: **enforced**` — shipped in #494 and verified
+  2026-09-20 against the installed binary: a task-tool dispatch to
+  `fr-phase-executor-hard` produced a real child session (parented,
+  `agent = fr-phase-executor-hard`, its own cost and tokens). The Extensibility
+  beat is back on the spine.
+
+  **Two things to do before recording.** (a) The tier bindings currently
+  resolve all three tiers to the *same* model, so the three agents differ by
+  name only — differentiate them in `fr models` and re-run `install.sh`, or the
+  beat shows three labels bound to one model. (b) **Re-time the run.**
+  Dispatched phases cost and take more than inline (the measured subagent arm:
+  $7.59 and 56.2 min vs ~$1 inline) and the budget is 15–25 min. Tiering
+  mechanical phases onto a cheap model may offset it — unmeasured, so measure
+  before committing the composition. If it will not fit, shorten the brief
+  rather than the talk.
+
 - `operator-gate / opencode: advisory` — no operator-question tool exists on
   OpenCode, so nothing mechanically enforces the batched-Q&A gate. It fired
   correctly in bc88's arm G, and failed to fire at all in the earlier arm A.
@@ -192,6 +200,7 @@ them live; recovering them afterwards means re-watching the whole cast.
 | profile scaffolded, `backend: gitlab` declared | Security · Extensibility |
 | container build (**compress, label it**) | — |
 | `fr isolation up` → worktree + container | Security |
+| phase dispatched to `fr-phase-executor-<tier>` | Extensibility |
 | batched Q&A asked, turn ends | the contract (2 of 2) |
 | spec written | Continuity |
 | acceptance rows presented | Quality |
@@ -230,7 +239,11 @@ grep -n 'answered_by' "$CLONE"/docs/superpowers/runs/*.yaml   # expect: operator
 # 2. the artifacts the pipeline claims to produce actually exist
 ls "$CLONE"/docs/superpowers/specs/ "$CLONE"/docs/superpowers/plans/
 
-# 3. findings were resolved, not merely recorded
+# 3. a phase really was dispatched to a subagent (Extensibility beat)
+sqlite3 -readonly "file:$DATA/opencode/opencode.db?mode=ro" \
+  "SELECT agent, parent_id FROM session WHERE agent LIKE 'fr-phase-executor%';"
+
+# 4. findings were resolved, not merely recorded
 cd "$CLONE" && uv run fr journal check --scope plan --slug <slug>
 ```
 
@@ -240,6 +253,8 @@ By eye, from the cast itself:
 - [ ] `/fr-goal` asked its batch and **ended the turn** — gate 2 of 2 fired
 - [ ] a check genuinely **failed and was recovered** (this is why those two
       exercises were chosen; a clean run is a weaker take, not a luckier one)
+- [ ] at least one phase dispatched to a subagent — a `session` row with
+      `parent_id` set and `agent = fr-phase-executor*`
 - [ ] the merge request exists on the fork
 - [ ] annotation offsets noted live, not reconstructed
 

@@ -74,7 +74,7 @@ A `/fr-goal` run already visits the angles in order. This is the talk's outline.
 | Acceptance rows born and defended | Quality | — |
 | Plan as a **folder** with `_meta.yaml` | Continuity | formless plan; checkboxes left unticked |
 | Run cursor advances | Continuity | nothing survives the session |
-| ~~Phase executors dispatched; tier→model~~ | — | **not on camera with 4.5.x's inline default — see #493** |
+| Phase executor dispatched as a subagent; tier→model | Extensibility | — |
 | TDD per phase; adversarial review loop | Quality | — |
 | Journal findings; `check` fails on open ones | Quality | — |
 | Merge → archive to `implemented/` | Continuity | specs and plans pile up undifferentiated |
@@ -128,42 +128,52 @@ demonstrating a registry's bandwidth. Everything fr itself does is shown.
 `fr harness parity` on 2026-09-19, read before recording rather than after.
 Two rows change the plan.
 
-### `subagent-dispatch / opencode: absent` — but the declaration is disputed
+### ~~`subagent-dispatch / opencode: absent`~~ — **resolved, verified 2026-09-20**
 
-**Corrected 2026-09-19 after the operator challenged it. The challenge holds,
-and my earlier account here was wrong twice over.** Filed as
-[#493](https://github.com/derio-net/super-fr/issues/493).
+Shipped in [#494](https://github.com/derio-net/super-fr/issues/494)/PR #495 and
+re-verified here against the installed binary, not the PR narrative:
 
-I wrote that "Claude ran 14 subagents in 56 min" against OpenCode's zero. **Both
-runs were OpenCode.** The experiment's own runbook has every arm on
-`opencode --auto`, and arm A dispatched **13 `@general` subagents** — child
-sessions with `parent_id` set, still in `run-metrics.csv`. OpenCode has a
-dispatch primitive (Task tool / `@mention`, built-in `general`/`explore`/`scout`)
-and we measured it working.
+- All four shipped agents are installed and visible to `opencode agent list`:
+  `fr-phase-executor` plus `-hard`, `-mechanical`, `-standard`.
+- A task-tool dispatch to `fr-phase-executor-hard` produced a **genuine child
+  session** — parented, `agent = fr-phase-executor-hard`, its own cost ($0.0253)
+  and tokens (10098 in / 8 out). Real context isolation, not role-play.
+- `fr harness parity --check` agrees; the row is now `enforced` on all three
+  harnesses. `sync-opencode.py --check` is clean and the new tripwires pass.
 
-The parity row's stated reason — "no isolation-argument dispatch primitive" —
-cannot be the blocker: Hermes' `delegate_task` has no isolation argument either
-and is declared `enforced`, and the `fr-phase-executor` carve-out *forbids*
-giving phase executors an isolation argument at all. The surface requires its
-absence.
+The prose that would have silently defeated it was fixed too. SKILL.md:92 now
+reads: *"OpenCode dispatches the same brief, serially, through its task tool as
+`subagent_type: fr-phase-executor-<tier>` … the call carries no model, so the
+agent NAME is the only place a tier can live."* That constraint is why there are
+tier variants rather than one agent with a model argument.
 
-The real limitation is narrower: custom *named* subagents may not be reliably
-invocable on OpenCode (upstream `anomalyco/opencode#29616`), and super-fr ships
-no OpenCode agent definition to test it. Dispatch to the built-in `general`
-agent works.
+**So the Extensibility beat returns to the spine, and it is now the strongest
+one available** — a phase handed to a separate agent with its own context
+window, visible in the transcript, on a harness where this did not exist a day
+ago.
 
-**What it costs, measured:** arm A's 13 subagents cost **$7.59** against roughly
-$1 inline — about 7×. But arm A was also *faster* in wall clock (56.2 min vs
-77.6 and 105.2 for the single-session arms). So inline-by-default may well be a
-defensible **cost** policy; it is simply not the capability absence the row
-declares.
+### But the tiering is currently nominal — fix before recording
 
-**For this recording, the practical position is unchanged**: with the shipped
-4.5.x behaviour, `/fr-goal` on OpenCode runs phases inline, so phase executors
-and model tiers do not appear on camera and the Extensibility coda stays verbal.
-That is also *why* the run fits the budget — bc88's arm G was 0 subagents in
-17 min. If #493 changes the default before recording, revisit: dispatched phases
-would restore the beat at roughly 7× the cost and a longer, less watchable run.
+`install.sh` resolves each tier's model from `fr models` and injects it into the
+installed agent. On this machine all three tiers resolve to the **same** model:
+
+```
+opencode:
+  hard: github-copilot/gpt-5.6-terra
+  mechanical: github-copilot/gpt-5.6-terra
+  standard: github-copilot/gpt-5.6-terra
+```
+
+So the three agents differ by name only. Filming that would show three labels
+bound to one model and prove nothing — the opposite of the point.
+
+Differentiate the bindings and re-run `install.sh` before recording. Available
+today include `github-copilot/claude-haiku-4.5` and `gemini-3.8-flash` for
+mechanical work, against `gpt-5.6-terra` or `claude-opus-5` for hard.
+
+This may also **defuse the cost objection**. The $7.59 figure was 13 subagents
+all on one model; putting mechanical phases on a cheap one is exactly what
+tiering is for. Unmeasured, so treat it as a reason to measure, not a claim.
 
 ### `operator-gate / opencode: advisory` — the contract beat can silently not fire
 
@@ -192,8 +202,11 @@ Checked before anything is torn down, because the evidence is perishable.
    agent clearing its own gate.
 3. **A check genuinely failed and was recovered.** This is why those two
    exercises were chosen; a clean run is a weaker take, not a luckier one.
-4. **The merge request exists** on the operator's fork.
-5. **Annotation offsets were noted live**, not reconstructed afterwards.
+4. **At least one phase was dispatched to a subagent** — a `session` row with
+   `parent_id` set and `agent = fr-phase-executor*`. This is also #494's own
+   acceptance, and the Extensibility beat exists on camera only if it holds.
+5. **The merge request exists** on the operator's fork.
+6. **Annotation offsets were noted live**, not reconstructed afterwards.
 
 ## Time budget (51–59 min)
 
@@ -375,9 +388,8 @@ restriction. Two pairs of claims that look alike and are not.
   `docs/superpowers/workflows/<name>.yaml` **wholesale** over shipped. v1
   authored and ran `presentation-showdown` through exactly that path, so the
   talk can demonstrate it from its own history.
-- Phase executors and model tiers per workload complexity — **verbally, with
-  the caveat that this harness runs phases inline**, so neither appears on
-  screen (see "What this harness costs the recording").
+- Phase executors and model tiers per workload complexity — **shown, not
+  told**, as of #494. See the verification note below.
 - The three harnesses.
 - **GitLab**, including self-hosted — see below.
 
