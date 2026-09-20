@@ -18,15 +18,15 @@ devcontainer, base repo untouched while the run is live. Plain shell, any agent 
 
 ## Hard requirements
 
-- Inside a git repo. **devcontainer mode** (default) needs ≥1 profile (`.devcontainer/<profile>/devcontainer.json`);
-  missing → exit 2 pointing at fr-init. NEVER proceed unisolated; offer the fr-init interview (pause, resume).
+- Inside a git repo. **devcontainer mode** (default) needs ≥1 profile (`.devcontainer/<profile>/devcontainer.json`); missing →
+  exit 2 pointing at fr-init. NEVER proceed unisolated; offer the fr-init interview (pause, resume).
 
 ### Modes (`FR_ISOLATION_TARGET`) — same contract, docker-less environment half
 
-- **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO profile, no secrets provisioning.
-  A host-level declaration, never a per-call flag.
-- **external** (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout
-  — `up --branch` ensures the branch in place; restart/stats refuse, gc reports (the container's owner runs both).
+- **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO profile, no secrets provisioning. A host-level
+  declaration, never a per-call flag.
+- **external** (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout — `up --branch`
+  ensures the branch in place; restart/stats refuse, gc reports (the container's owner runs both).
 - Any other value fails closed naming `devcontainer|worktree`.
 
 ## Lifecycle
@@ -81,40 +81,40 @@ Which harness session holds which workspace — traceability only; the edit gate
 `EnterWorktree` → `up --session --print-path`, branch `wt/<name>`; `agent-*` keep Claude's default `<repo>/.claude/worktrees/`
 shape), `fr-worktree-remove.sh` (`down --worktree`; a refusal keeps the workspace). Hermes has no bind transport yet.
 
-**Status line** (spec 2026-09-14): `scripts/fr-statusline-segment.sh` answers "which branch, and is this session in
-fr-isolation?" — shell+jq+git, never fr. Input: status-line JSON on stdin, or `--cwd <dir>` (no stdin). A live binding wins;
-else the cwd's branch, `fr` when the cwd's toplevel is an fr workspace. `--format plain` (state `fr`/`none`, `branch: <b>`/
-`no branch`, `worktree: <path>`/`no fr-isolation`), `ansi` (the two rows, green when fr, purple when not), `oneline`
-(`fr:<branch>`/`<branch>`, 40-char slot). The v1 `iso:` hint and worktree gauge are gone. **Claude Code:** set
-`statusLine.command` to `bash ~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/fr-statusline-claude.sh`, or
-symlink it (`ln -s <that path> ~/.claude/statusline.sh`). **Hermes:** pending NousResearch/hermes-agent#109596 —
-`display.status_bar.fields: [..., custom]`, `custom_command: "bash <super-fr checkout>/plugins/super-fr/scripts/fr-statusline-segment.sh
---format oneline --cwd ."` (`fr hermes install` copies hooks only, not scripts). **OpenCode:** no status-line hook
-(anomalyco/opencode#37464); run `--format oneline --cwd <dir>` from a tmux/herdr status bar.
+**Status line** (spec 2026-09-14): `scripts/fr-statusline-segment.sh` answers "which branch, and is this session in fr-isolation?" —
+shell+jq+git, never fr. Input: status-line JSON on stdin, or `--cwd <dir>` (no stdin). A live binding wins; else the cwd's branch, `fr`
+when the cwd's toplevel is an fr workspace. `--format plain` (state `fr`/`none`, `branch: <b>`/ `no branch`, `worktree: <path>`/`no
+fr-isolation`), `ansi` (the two rows, green when fr, purple when not), `oneline` (`fr:<branch>`/`<branch>`, 40-char slot). The v1 `iso:`
+hint and worktree gauge are gone. **Claude Code:** set `statusLine.command` to `bash
+~/.claude/plugins/cache/derio-net--super-fr/super-fr/current/scripts/fr-statusline-claude.sh`, symlink it (`ln -s <that path>
+~/.claude/statusline.sh`; the script finds the segment next to its real file), or in your own script: `rows=$(printf '%s' "$data" | bash
+<scripts>/fr-statusline-segment.sh --format ansi)`, line 2 = row 1 + ` | ~/cwd`, line 3 = row 2. **Hermes:** pending
+NousResearch/hermes-agent#109596 — `display.status_bar.fields: [..., custom]`, `custom_command: "bash <super-fr
+checkout>/plugins/super-fr/scripts/fr-statusline-segment.sh --format oneline --cwd ."` (`fr hermes install` copies hooks only, not
+scripts). **OpenCode:** no status-line hook (anomalyco/opencode#37464); run `--format oneline --cwd <dir>` from a tmux/herdr status bar.
 
 ## Cleanup contract
 
 Worktree + container PERSIST after PR creation (back-loaded manual phases push there).
 
-- **gc auto-reconciles merged work, in every mode.** Fires detached on every `up`/`down` (host-wide, no daemon, ≤1
-  stale): tears down MERGED-PR and content-merged workspaces, retires state records whose worktree is gone, removes
-  empty repo folders + stale session indexes, and (devcontainer only) reaps orphaned containers / `vsc-*` images.
-  Open-PR, dirty, no-PR work: never touched. **external** only reports.
-- **Ownership boundary.** gc acts only where fr ownership is provable (state record, fr worktree cache,
-  devcontainer label); a foreign `git worktree add` is invisible to it. **`down` is the immediate lever** — verifies
-  container + worktree are gone before dropping state (never leaked) and refuses an open PR unless `--force`.
-- **`--force` is operator-requested-and-informed only (decision `d3`).** It bypasses all three reap guards
-  (uncommitted, unlanded content, open PR). An agent must not reach for `--force` on its own initiative, only after
-  the operator has asked, and it then first names what would be destroyed, from the refusal message's own
-  accounting. What it actually does: `git worktree remove --force` removes the worktree and fr's record of it; the
-  branch and any commits remain in the repo; uncommitted changes do not survive — say that plainly, not "destroys
-  your work". **This is prose with no tripwire behind it** — nothing can test "an agent decided by itself" — stated
-  knowingly, not borrowing this repo's enforced rules.
+- **gc auto-reconciles merged work, in every mode.** Fires detached on every `up`/`down` (host-wide, no daemon, ≤1 stale): tears down
+  MERGED-PR and content-merged workspaces, retires state records whose worktree is gone, removes empty repo folders + stale session
+  indexes, and (devcontainer only) reaps orphaned containers / `vsc-*` images. Open-PR, dirty, no-PR work: never touched. **external**
+  only reports.
+- **Ownership boundary.** gc acts only where fr ownership is provable (state record, fr worktree cache, devcontainer label); a foreign
+  `git worktree add` is invisible to it.
+- **`down` is the immediate lever** — verifies container + worktree are gone before dropping state (never leaked), and refuses three
+  things: an open PR, a dirty worktree (#435), content not on `origin/<default>` (#467).
+- **`--force` is operator-requested-and-informed only.** It bypasses all three. An agent must never reach for it on its own initiative —
+  only after the operator asks — and must first name what would be destroyed: `git worktree remove --force` drops the worktree and fr's
+  record; the branch and its commits stay in the repo; uncommitted changes do not. **Prose with no tripwire** — nothing can test "an
+  agent decided by itself" — said plainly, not borrowing this repo's enforced rules.
 
 ## Recovery (#341) and failure handling
 
-- **Wedged container:** `fr isolation restart [--force]` bounces the devcontainer WITHOUT dropping the
-  worktree/installs — prefer it to down+up. **Orphaned pipeline sentinel** (every base command denied, no
-  worktree to `cd` into): the guard self-heals (zero live worktrees → fails open); `fr isolation down --all`.
-- `devcontainer up` failures surface verbatim — missing Docker, a broken profile, an absent secrets file are
-  operator-environment issues: report and stop, never work around isolation (no silent degradation to a weaker mode).
+- **Wedged container:** `fr isolation restart [--force]` bounces the devcontainer WITHOUT dropping the worktree/installs — prefer it to
+  down+up.
+- **Orphaned pipeline sentinel** (every base command denied, no worktree to `cd` into): the guard self-heals (zero live worktrees → fails
+  open); `fr isolation down --all`.
+- `devcontainer up` failures surface verbatim — missing Docker, a broken profile, an absent secrets file are operator-environment issues:
+  report and stop, never work around isolation (no silent degradation to a weaker mode).
