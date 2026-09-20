@@ -28,11 +28,21 @@ class ModelsError(Exception):
     """Raised when a models config file is structurally invalid."""
 
 
+def xdg_config_home() -> Path:
+    """Base config dir: ``$XDG_CONFIG_HOME``, else ``$HOME/.config``.
+
+    Shared with `fr.opencode_agents.default_config_home`, which needs the
+    SAME resolution (it lives under the same base, at ``opencode/agent/``
+    rather than ``fr/models.yaml``) so the two can never disagree about
+    where "the config dir" is.
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return Path(xdg) if xdg else Path.home() / ".config"
+
+
 def default_models_path() -> Path:
     """User-level models config, honoring ``$XDG_CONFIG_HOME`` then ``$HOME``."""
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".config"
-    return base / "fr" / "models.yaml"
+    return xdg_config_home() / "fr" / "models.yaml"
 
 
 def load_models(path: Path) -> ModelsConfig:
