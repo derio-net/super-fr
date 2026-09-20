@@ -237,3 +237,18 @@ The full suite came back `5 failed` where phase 1 recorded 3. The two extras wer
 The file was at 120 of 120 before the edit — the budget the plan step warns about is enforced in LINES, by two independent tests, and it had zero headroom. The instinct to wrap new prose at the ~95 columns the surrounding text uses is what broke it; the budget does not count columns. The file already carries lines of 561, 312 and 304 characters, so the fix is the file's own existing convention: the two sentences were rewrapped onto the physical line they continue, and the trimmed wording is shorter besides. Back to 120 lines, both tests green, and the OpenCode + Hermes mirrors regenerated after the rewrap.
 
 For any later phase editing a shipped skill: check `wc -l` BEFORE writing, not after. Several of these files are at or near their ceiling.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-d2 created=2026-09-20T17:50:11 phase=3 -->
+### p3-d2 · discovery · What phases 4-7 inherit from phase 3: _bind_session, the hook's fall-through verb, and two live line budgets (phase 3)
+
+**`_bind_session(workspace, branch, session, harness)`** — `packages/fr/src/fr/commands/run_cmd.py`, immediately above `start_cmd`. Returns early when `session` is falsy, so an unflagged `start` is byte-identical to before. Catches only `IsolationError` and prints TWO stderr lines, both `soft_wrap=True`: the warning, then a pasteable `fr isolation attach --session <s> --branch <b> --harness <h>` recovery line. That recovery line carries no shell metacharacter — r1-f1's rule — and deliberately omits `--repo`, because `state_path` resolves through `_git_common_dir` and the base clone and the worktree therefore key to the same state file.
+
+It is called AFTER `save_run_state` and after `start_cmd`'s two `console.print` calls. Anything a later phase adds to `start_cmd` should stay above it; `start` has no JSON-brief-last invariant (that is `advance`), and the warning is on stderr, so stdout is unchanged either way.
+
+**run_cmd.py gained two module-level imports** — `from fr.isolation import sessions as _sessions` and `from fr.isolation.types import IsolationError`. No cycle: `fr.isolation.sessions` imports only `.types`. `fr/run/workspace.py`'s lazy `_select_target` import is a different case (it reaches into `fr.commands.isolation_cmd`, a CLI module) and was left alone.
+
+**The hook's verb extraction is now a fall-through, not one regex**: the `fr isolation (up|exec|down)` sed runs first, and only if it yields nothing does a second, equally start-anchored sed map a leading `fr run start` to `up`. A phase adding a third spelling should add a third fall-through rather than widening either regex — widening is what loses the start-anchoring, and `echo fr run start` is the test that catches it.
+
+**Two line budgets are live and were at zero headroom**: `plugins/super-fr/skills/fr-goal/SKILL.md` is capped at 120 lines by BOTH `test_skill_validation.py::test_under_120_lines` and `test_fr_goal_hermes_dispatch.py::test_fr_goal_stays_under_120_lines`, and it is at exactly 120 again now. See p3-f1.
+
+**Phase 6's version bump is untouched by phase 3** — no manifest, `plugin.json` or `pyproject.toml` was edited here, though this phase DOES change user-observable plugin behaviour (a new CLI flag, a changed hook, changed skill prose), so the bump phase 6 owns is genuinely owed.
