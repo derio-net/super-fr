@@ -27,7 +27,7 @@ import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import typer
 from rich.console import Console
@@ -48,6 +48,7 @@ from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
+    DispatchOutcome,
     DispatchRecord,
     PhaseAccounting,
     RunState,
@@ -431,6 +432,14 @@ def _complete_step(
         # `_fan_out_items` scans every record for exactly this.)
         items=dict(prior.items) if prior is not None and prior.items else None,
         members=list(prior.members) if prior is not None and prior.members else None,
+        # …and its dispatch history, for the same reason plus one more: the
+        # trail gh-503 asked for ("who was holding this phase, and when")
+        # would otherwise be deleted by the very act of FINISHING. A group's
+        # `dispatch` map holds EVERY phase's attempts, so the moment its last
+        # member resolved, the whole run's holder history vanished — silently,
+        # because the map is only ever read by `status`/`check`, which would
+        # then have had nothing left to read (P4.T3.S1).
+        dispatch=dict(prior.dispatch) if prior is not None and prior.dispatch else None,
     )
     new_state = _with_step(state, step_id, new_record)
     if outcome == "done" and step_id == state.cursor:
@@ -786,14 +795,183 @@ def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
     --abandoned`) or failed-and-retried unit is not currently held, so
     re-dispatching it opens a NEW hold rather than silently leaving the old,
     closed one as the only record. False while the last attempt is still
-    OPEN: that is the idempotent "still running" case `advance` already
-    handles by re-printing the same brief without touching `dispatch` at all
-    (`test_advance_*_does_not_reopen_a_dispatch_record_while_still_running`).
+    OPEN — the unit is currently HELD, which `advance` refuses to dispatch
+    over (`_refuse_held`, spec §4.C / gh-499) unless `--redispatch` says so.
+
+    This is the ONE notion of "is this unit currently held?" in the module:
+    `advance`'s refusal, `--redispatch`'s abandon and `resolve`'s close all
+    ask it here rather than each re-deriving "the last record is open".
     """
     attempts = (record.dispatch or {}).get(key)
     if not attempts:
         return True
     return attempts[-1].returned is not None
+
+
+def _held_record(record: StepRecord, key: str) -> DispatchRecord | None:
+    """`key`'s OPEN `DispatchRecord`, or `None` when the unit is free.
+
+    The read half of `_dispatch_needs_open` — same predicate, but handing
+    back the holder so a caller can name it. `validate_run` guarantees at
+    most one open record per unit and that it is the LAST element, so the
+    tail is the whole answer."""
+    if _dispatch_needs_open(record, key):
+        return None
+    return (record.dispatch or {})[key][-1]
+
+
+def _refuse_held(
+    owner_id: str,
+    key: str,
+    held: DispatchRecord,
+    *,
+    run_id: str,
+    step_flag: str,
+    item_flag: str | None,
+) -> NoReturn:
+    """Refuse to re-brief a unit somebody is already holding — gh-499, exit 2.
+
+    ONE function for both the flat and the grouped path, so the two cannot
+    drift: the single thing gh-499 asks for is that fr stop handing out "a
+    dispatch brief that looks like an instruction to act when the correct
+    action is to wait", and a message that says so on one path only is the
+    same defect with a smaller blast radius. Nothing of the brief is printed
+    alongside it, for exactly that reason.
+
+    Wording follows spec §4.C, which in turn follows gh-499's own "Expected"
+    block — including its `anyway`, which carries the one thing a bare
+    `--redispatch` label does not: that re-briefing over a live holder is a
+    deliberate act, not the next step.
+
+    The three ways forward are printed as complete, copy-pastable commands
+    carrying THIS unit's own `--step`/`--item`, because an operator who is
+    being refused is exactly the reader with no appetite for reconstructing
+    a unit key by hand.
+    """
+    holder = f"agent {held.agent}" if held.agent else "an unclaimed agent"
+    descriptors = [d for d in (held.agent_type, held.harness) if d]
+    suffix = f" ({', '.join(descriptors)})" if descriptors else ""
+    unit = f"--step {step_flag}" + (f" --item {item_flag}" if item_flag else "")
+    err_console.print(
+        f"[red]{owner_id}: {key} is ALREADY HELD\n"
+        f"  by {holder}{suffix}\n"
+        f"  dispatched {held.dispatched} — not yet returned.\n"
+        "  Waiting on that agent — do NOT dispatch again.\n"
+        f"  Resolve it:      fr run resolve {run_id} {unit} --state done|failed\n"
+        f"  Lost agent:      fr run claim {run_id} {unit} --abandoned\n"
+        f"  Re-brief anyway: fr run advance {run_id} --redispatch[/red]",
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+def _replace_last_attempt(record: StepRecord, key: str, attempt: DispatchRecord) -> StepRecord:
+    """`record` with `key`'s LAST dispatch attempt replaced by `attempt`.
+
+    The one mutation shape every dispatch write shares — `claim`'s identity
+    fill, `claim --abandoned`, `--redispatch`'s abandon and `resolve`'s close
+    all rewrite exactly the tail element, because `validate_run` requires the
+    open record to BE the tail. Copying the dicts/lists keeps the frozen
+    models honest."""
+    dispatch = dict(record.dispatch or {})
+    attempts = list(dispatch[key])
+    attempts[-1] = attempt
+    dispatch[key] = attempts
+    return record.model_copy(update={"dispatch": dispatch})
+
+
+def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
+    """Close `key`'s open dispatch: `returned` = now, `outcome` = `outcome`.
+
+    `DispatchRecord` enforces that the two are one fact, so they are written
+    in one `model_copy` and never separately. Callers must have established
+    that the unit IS held (`_held_record` / `_open_dispatch_record`); this
+    helper does not re-derive it, so there is still exactly one place that
+    decides what "open" means."""
+    return _replace_last_attempt(
+        record,
+        key,
+        (record.dispatch or {})[key][-1].model_copy(
+            update={"returned": _now(), "outcome": outcome}
+        ),
+    )
+
+
+def _claimed_identity(
+    open_record: DispatchRecord,
+    key: str,
+    *,
+    agent: str,
+    harness: str | None,
+    model: str | None,
+) -> DispatchRecord:
+    """`open_record` carrying the orchestrator's reported identity, or refuse.
+
+    Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
+    fallback (decision d2), so a *second* agent id can never be attached to a
+    dispatch by taking the other route. Re-reporting the SAME id is
+    idempotent and may refresh `harness`/`model`; a DIFFERENT one is refused
+    naming both, because two ids on one hold is the two-writers hazard this
+    whole feature exists to make visible."""
+    if open_record.agent is not None and open_record.agent != agent:
+        err_console.print(
+            f"[red]{key}: already claimed by {open_record.agent!r} — refusing to "
+            f"attribute it to {agent!r} as well. The worktree has exactly one "
+            "writer; close the first claim (`fr run resolve ... --state "
+            "done|failed`, or `fr run claim ... --abandoned`) before naming a "
+            "second.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return open_record.model_copy(
+        update={
+            "agent": agent,
+            "harness": harness if harness is not None else open_record.harness,
+            "model": model if model is not None else open_record.model,
+        }
+    )
+
+
+def _close_on_resolve(
+    state: RunState,
+    owner_id: str,
+    key: str,
+    outcome: DispatchOutcome,
+    *,
+    agent: str | None,
+    harness: str | None,
+    model: str | None,
+) -> RunState:
+    """`resolve`'s half of the dispatch pair: close `key`'s open record with
+    `outcome`, optionally attaching a late identity first (spec §4.C).
+
+    **Silent when there is nothing open** — and that is the requirement, not
+    a shortcut. A run `fr run adopt`ed from a plan on disk has no dispatch
+    history at all, and a `gate: operator` step is marked `blocked` without
+    ever being dispatched; neither may start failing to resolve because this
+    feature landed. Nothing is invented for them either: an absent record
+    stays absent rather than being back-filled with a dispatch fr never made.
+
+    A record that is already CLOSED (`claim --abandoned`) is likewise left
+    exactly as it is — `abandoned` is what happened to that attempt, and
+    overwriting it with this resolve's outcome would erase the one fact the
+    operator recorded by hand.
+    """
+    record = state.steps[owner_id]
+    if _dispatch_needs_open(record, key):
+        return state
+    open_record = (record.dispatch or {})[key][-1]
+    if agent is not None:
+        open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
+    elif harness is not None or model is not None:
+        open_record = open_record.model_copy(
+            update={
+                "harness": harness if harness is not None else open_record.harness,
+                "model": model if model is not None else open_record.model,
+            }
+        )
+    record = _replace_last_attempt(record, key, open_record)
+    return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
 
 
 def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
@@ -823,7 +1001,13 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
 
 
 def _advance_group(
-    repo_root: Path, state: RunState, manifest: WorkflowManifest, step: Step, record: StepRecord
+    repo_root: Path,
+    state: RunState,
+    manifest: WorkflowManifest,
+    step: Step,
+    record: StepRecord,
+    *,
+    redispatch: bool = False,
 ) -> None:
     """Dispatch the next pending `(phase, member)` unit of a grouped step.
 
@@ -861,6 +1045,19 @@ def _advance_group(
     # unchanged to this comparison, yet its last dispatch record is CLOSED —
     # exactly the case a fresh hold must open a new record for
     # (`_dispatch_needs_open`).
+    held = _held_record(record, pending)
+    if held is not None:
+        if not redispatch:
+            _refuse_held(
+                step.id,
+                pending,
+                held,
+                run_id=state.run,
+                step_flag=member.id,
+                item_flag=item,
+            )
+        record = _close_dispatch(record, pending, "abandoned")
+        state = _with_step(state, step.id, record)
     needs_dispatch = _dispatch_needs_open(record, pending)
     if record.state != "running" or record.items != items:
         record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
@@ -1179,7 +1376,18 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
 
 @run_app.command("advance")
-def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+def advance_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    redispatch: bool = typer.Option(
+        False,
+        "--redispatch",
+        help="Re-brief a unit that is ALREADY HELD: close its open dispatch "
+        "`abandoned` and append a fresh one. The deliberate escape for a "
+        "genuinely lost agent (gh-499) — the old holder stays in the unit's "
+        "list, which is the forensic trail. On a unit nobody holds this "
+        "changes nothing.",
+    ),
+) -> None:
     """Advance the cursor by one step.
 
     `kind: cli` executes directly (exit code + stdout captured; cursor
@@ -1188,6 +1396,11 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     gate is unanswered marks `blocked` and executes nothing; an `agent` step
     still prints its brief there, since the gate stops the run, not the
     harness's view of what the step is. `fr run resolve` answers the gate.
+
+    A unit somebody is ALREADY HOLDING is refused — exit 2, and no brief of
+    any kind (gh-499, where an identical second brief read as an instruction
+    to dispatch a second `fr-phase-executor` into the one worktree the first
+    was already writing). `--redispatch` is the deliberate escape.
     """
     repo_root = resolve_repo_root()
     try:
@@ -1254,10 +1467,18 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
     if step.kind == "agent":
         if step.steps:
-            _advance_group(repo_root, state, manifest, step, record)
+            _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
             return
         brief = _build_brief(step, state)
         key = _unit_key(repo_root, state, step, None, None)
+        held = _held_record(record, key)
+        if held is not None:
+            if not redispatch:
+                _refuse_held(
+                    step.id, key, held, run_id=state.run, step_flag=step.id, item_flag=None
+                )
+            record = _close_dispatch(record, key, "abandoned")
+            state = _with_step(state, state.cursor, record)
         needs_dispatch = _dispatch_needs_open(record, key)
         if record.state != "running" or needs_dispatch:
             if record.state != "running":
@@ -1324,6 +1545,9 @@ def _resolve_member(
     item: str | None,
     state_value: Literal["done", "failed"],
     emitted_map: dict[str, str],
+    agent: str | None = None,
+    harness: str | None = None,
+    model: str | None = None,
 ) -> None:
     """Record one `(phase, member)` outcome on its group's item map.
 
@@ -1376,6 +1600,13 @@ def _resolve_member(
         group.id,
         grec.model_copy(update={"items": items, "emitted": merged_emitted or None}),
     )
+    # The dispatch closes BEFORE `_complete_step` runs, so the closed record
+    # is what that rebuild carries forward — and before the `failed` branch
+    # too, because a failed unit's holder returned just as surely as a done
+    # one's did.
+    updated = _close_on_resolve(
+        updated, group.id, key, state_value, agent=agent, harness=harness, model=model
+    )
     if state_value == "failed":
         save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -1411,6 +1642,20 @@ def resolve_cmd(
         "Defaults to `agent`, the weaker claim; recorded only when a gate "
         "is cleared, and reported by `fr run check` and in the PR body.",
     ),
+    agent: str | None = typer.Option(
+        None,
+        "--agent",
+        help="The harness-reported agent/task id that held this unit — the "
+        "LATE fallback for an orchestrator that never called `fr run claim`. "
+        "Applied only to an unclaimed record; one that disagrees with an "
+        "existing claim is refused, naming both.",
+    ),
+    harness: str | None = typer.Option(
+        None, "--harness", help="One of fr.harness's HARNESSES, alongside --agent."
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="The model actually dispatched, alongside --agent."
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -1419,6 +1664,13 @@ def resolve_cmd(
     cursor can move past `running`; `done` advances the cursor, `failed`
     leaves it put (same asymmetry `advance` already has for `cli` steps —
     see `_complete_step`).
+
+    It is also the CLOSING half of the dispatch pair `advance` opened: the
+    unit's open `DispatchRecord` gets `returned` = now and `outcome` =
+    `--state`, which is what stops `advance` refusing the unit as held.
+    `--agent/--harness/--model` attach a late identity to a record nobody
+    claimed — the fallback for an orchestrator that never called
+    `fr run claim`, refused if it disagrees with an existing claim.
 
     It also clears an operator gate (review fix r2-f1), which is what makes
     a `gate: operator` step something other than a permanent dead end — the
@@ -1444,6 +1696,9 @@ def resolve_cmd(
         err_console.print(
             f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
         )
+        raise typer.Exit(2)
+    if harness is not None and harness not in HARNESSES:
+        err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
         raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
@@ -1471,6 +1726,9 @@ def resolve_cmd(
             item=item,
             state_value=state_value,  # type: ignore[arg-type]  # validated below
             emitted_map=emitted_map,
+            agent=agent,
+            harness=harness,
+            model=model,
         )
         return
     if item is not None:
@@ -1583,6 +1841,18 @@ def resolve_cmd(
         )
         raise typer.Exit(2)
 
+    # The flat unit's dispatch closes here, keyed through the SAME `_unit_key`
+    # `advance` opened it with and `claim` annotates it by — a `step/<id>` key
+    # computed a second time by hand is the drift phase 3 removed.
+    state = _close_on_resolve(
+        state,
+        step_id,
+        _unit_key(repo_root, state, step, None, None),
+        state_value,  # type: ignore[arg-type]  # validated above
+        agent=agent,
+        harness=harness,
+        model=model,
+    )
     new_state = _complete_step(
         state,
         manifest,
@@ -1634,11 +1904,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     """
     record = state.steps[owner_id]
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
-    dispatch = dict(record.dispatch or {})
-    attempts = list(dispatch[key])
-    attempts[-1] = attempts[-1].model_copy(update={"returned": _now(), "outcome": "abandoned"})
-    dispatch[key] = attempts
-    new_record = record.model_copy(update={"dispatch": dispatch})
+    new_record = _close_dispatch(record, key, "abandoned")
     save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
@@ -1665,26 +1931,11 @@ def _claim_identity(
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
-    if open_record.agent is not None and open_record.agent != agent:
-        err_console.print(
-            f"[red]{key}: already claimed by {open_record.agent!r} — refusing to "
-            f"also claim it for {agent!r}. The worktree has exactly one writer; "
-            "resolve it or `fr run claim --abandoned` the first claim before "
-            "making a second.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    dispatch = dict(record.dispatch or {})
-    attempts = list(dispatch[key])
-    attempts[-1] = open_record.model_copy(
-        update={
-            "agent": agent,
-            "harness": harness if harness is not None else open_record.harness,
-            "model": model if model is not None else open_record.model,
-        }
+    new_record = _replace_last_attempt(
+        record,
+        key,
+        _claimed_identity(open_record, key, agent=agent, harness=harness, model=model),
     )
-    dispatch[key] = attempts
-    new_record = record.model_copy(update={"dispatch": dispatch})
     save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(f"{key}: claimed by {agent}", soft_wrap=True)
 

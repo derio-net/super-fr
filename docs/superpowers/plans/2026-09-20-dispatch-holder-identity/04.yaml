@@ -84,42 +84,91 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:13:21+00:00'
+      note: 6 tests appended to tests/unit/test_run_cli.py; 5 RED (advance re-briefs
+        a held unit, exit 0, brief printed), 1 GREEN by construction — (e) 'does NOT
+        refuse when the last record is closed', which must never go red.
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:17:01+00:00'
+      note: _refuse_held() — ONE module-level message function for both paths — plus
+        _held_record()/_close_dispatch()/_replace_last_attempt()/_claimed_identity().
+        Wired into _advance_group and advance_cmd's flat branch. tests/unit/test_run_cli.py
+        159 passed, exit 0. One pre-existing test (test_advance_agent_step_brief_is_re_emitted_idempotently_while_running)
+        PINNED gh-499's bug — rewritten to assert the refusal while keeping what it
+        really protected.
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:17:45+00:00'
+      note: Compared against gh-499's Expected block. Adopted its 'anyway' (Re-brief
+        anyway:) — it carries the deliberateness a bare --redispatch label does not.
+        Kept ALREADY HELD over its ALREADY RUNNING (RUNNING collides with the items
+        state value, and the dispatch record, not items, is the source of truth),
+        kept the dispatched/not-yet-returned line over its inline (dispatched <ts>),
+        kept the aligned three-label block. ruff format+check clean, mypy 113 files
+        clean, test_run_cli.py exit 0.
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:20:36+00:00'
+      note: '6 --redispatch tests added. They passed ON ARRIVAL: the option was already
+        wired in T1.S2, because _refuse_held''s own message names it and the abandon-then-append
+        shares _close_dispatch with claim --abandoned. Rather than fake a red, proved
+        they CAN fail by two mutants: (1) ignore --redispatch -> 3 failed; (2) _open_dispatch
+        overwrites instead of appends -> 3 failed (the forensic-trail assertions).
+        Both mutants killed, source restored, 165 passed.'
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:20:36+00:00'
+      note: --redispatch option on advance_cmd, threaded to _advance_group(redispatch=...)
+        and the flat branch; both close via the shared _close_dispatch then fall through
+        to the ordinary _dispatch_needs_open/_open_dispatch append. Two adjacent tests
+        updated to assert the new exit 2 (test_advance_*_does_not_reopen_*) and one
+        (test_advance_is_idempotent_over_the_snapshot) switched to --redispatch so
+        it still exercises the snapshot refresh instead of passing via the refusal.
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:21:10+00:00'
+      note: ruff format + check clean; mypy 139 source files clean; tests/unit/test_run_cli.py
+        165 passed, unpiped exit 0.
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:23:03+00:00'
+      note: '13 tests appended; 9 RED, 3 green-by-construction (the two case-(d) no-open-record
+        cases and the surviving one-writer refusal — none of which may ever go red).
+        Notable RED: test_completing_a_step_does_not_erase_its_dispatch_history —
+        _complete_step rebuilds StepRecord from scratch and carries items/members
+        by hand but NOT dispatch, so finishing the group deletes the entire forensic
+        trail.'
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:26:44+00:00'
+      note: resolve_cmd gains --agent/--harness/--model (harness validated against
+        HARNESSES like claim) and closes the open record via the shared _close_on_resolve,
+        keyed through _unit_key on both the flat and member paths. _claimed_identity
+        is shared with claim so the resolve route cannot be a way around the two-ids
+        refusal. Also fixed _complete_step to carry the "dispatch" map forward — it
+        rebuilt StepRecord from scratch and would have deleted the whole forensic
+        trail at the moment a group completed. _resolve_member's separate one-writer
+        refusal untouched and pinned. 177 passed, exit 0.
     P4.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:31:20+00:00'
+      note: 'Full suite backgrounded with a bounded poll, exit code read from a FILE
+        not a pipe (finding f3): REAL_EXIT=1 — "1 failed, 3369 passed, 80 skipped
+        in 217.24s", the single failure being the known pre-existing test_cli_all_fails_when_nothing_is_discoverable
+        (journalled x-workflow-check-env). ruff check exit 0, ruff format --check
+        exit 0 (114 files), mypy exit 0 (139 files). fr validate artifacts: 33 artifacts,
+        all structurally valid. LIVE: fr run advance on this repo own cursor exited
+        2 naming agent a5b15f633d8225e2c (super-fr:fr-phase-executor, claude-code)
+        holding phase/4/implement-phase since 13:08:53 — and the run file sha256 was
+        byte-identical before and after, so the refusal wrote nothing.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-20T13:33:07+00:00'
+    note: 'advance refuses a held unit (exit 2, no brief of any kind), --redispatch
+      is the deliberate escape (abandon + append, forensic trail intact), resolve
+      closes the record and accepts a late identity. Also fixed f7: _complete_step
+      was deleting the whole dispatch map on completion. Full suite 3369 passed /
+      1 known pre-existing failure; ruff, mypy, fr validate artifacts all clean; refusal
+      live-verified against this run own cursor with a byte-identical file afterwards.'
     observed_prs: []

@@ -154,3 +154,88 @@ Not a fixture: claimed the real open dispatch for phase/3/implement-phase on run
 ### x-run-workspace-marker-wrap-resolved · finding [fixed] · resolves x-run-workspace-marker-wrap: test_run_workspace.py: two marker-refusal tests fail on this host — rich line-wrapping, not this phase (phase 3)
 
 Fixed rather than waived, because it would have tripped every remaining phase executor: they run under fr isolation exec where the failure reproduces, and it does NOT reproduce on the host, so each would have had to re-diagnose it. Root cause is rich soft-wrapping a refusal mid-phrase, so 'not a linked git worktree' in result.output is an assertion about terminal width. Already root-caused once — the comment above test_harness_matrix.py's parity-table tests names these exact two tests and says they 'pass only because Linux CI's tmp paths are short' — and fixed only there. Applied this repo's existing idiom (' '.join(output.split()), as in test_v2_pickup.py and test_plan_acceptance_links.py) to all four substring assertions in test_run_workspace.py, not just the two that happened to fail: a fourth one broke at COLUMNS=60 while I was verifying. Added a width-parametrized regression guard in the same shape test_harness_matrix.py uses. Verified green at COLUMNS 40/60/80/100/120/200/400.
+
+<!-- fr:journal kind=finding scope=plan id=f7 created=2026-09-20T15:31:34 phase=4 state=fixed -->
+### f7 · finding [fixed] · _complete_step silently deleted a step every dispatch record the moment it finished (phase 4)
+
+Found by a phase-4 test written for the wrong reason (test_completing_a_step_does_not_erase_its_dispatch_history) and red on arrival. _complete_step does NOT model_copy the prior StepRecord — it constructs a fresh one and carries selected fields across by hand (gate, answered_by, items, members). `dispatch` was not in that list, so the entire map was dropped at completion.
+
+Blast radius is larger than it looks, because a GROUPED step holds every phase unit in ONE record: the instant the last member resolved, `implement.dispatch` went from {phase/1/code: [...], phase/1/peer-review: [...], ...} to None. That is the whole run forensic trail — exactly what gh-503 asked to be able to read afterwards — deleted by the act of finishing, with nothing to report it, since the map is only ever READ by status/check and they would simply have found nothing there.
+
+Phases 1-3 could not have caught this: their tests all assert on a dispatch map while the step is still running. Not a regression introduced by phase 4 — it has been true since phase 2 opened the first record.
+
+FIXED: `dispatch=dict(prior.dispatch) if prior is not None and prior.dispatch else None` alongside items/members, with a comment naming the grouped blast radius. Pinned by a test that resolves BOTH members of a one-phase group and asserts the completed group still carries both keys with outcome done.
+
+Note for whoever adds a field to StepRecord next: this constructor is a carry-forward-by-hand list, so a new durable field is dropped on completion BY DEFAULT. Phase 5 renders the holder from exactly this map — on a completed step it would have rendered nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-refusal-wording created=2026-09-20T15:32:13 phase=4 -->
+### p4-refusal-wording · discovery · The refusal wording: what phase 4 took from gh-499 and what it kept from the spec (phase 4)
+
+P4.T1.S3 asked to compare the message against gh-499 own "Expected" block and match its shape where it is better. One thing was adopted, three were deliberately not.
+
+ADOPTED — "anyway". gh-499 wrote "Re-brief anyway with:"; the spec wrote "Re-brief:". The adverb is the whole difference between a menu item and a warning, and re-briefing over a live holder is precisely the act that must not read as the obvious next step. The line is now "Re-brief anyway: fr run advance <run> --redispatch".
+
+KEPT — "ALREADY HELD" over gh-499 "ALREADY RUNNING". RUNNING is already the value of items[key] and of StepRecord.state, and the point of this whole feature is that the DISPATCH RECORD, not items, answers "is somebody holding this". A message using the items vocabulary would have pointed the reader at the wrong field.
+
+KEPT — the two-line holder block ("by agent <id> (<agent_type>, <harness>)" / "dispatched <ts> — not yet returned.") over gh-499 inline "(dispatched <ts>)". gh-499 could not ask for the holder id because in 4.5.2 nothing recorded one; now it does, and "not yet returned" names the exact predicate the refusal fired on.
+
+KEPT — the column-aligned three-label block (Resolve it / Lost agent / Re-brief anyway). gh-499 had two escapes; the spec has three, and the middle one (claim --abandoned) is the one an operator with a genuinely lost agent needs and would not guess.
+
+One wording constraint worth knowing if this message is ever edited: it must not contain the substring "dispatch brief", and (for the flat path) not "--item". Both are asserted, because the test for "prints NO brief" is an absence test and absences rot silently.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-pinned-the-bug created=2026-09-20T15:32:23 phase=4 -->
+### p4-pinned-the-bug · discovery · A pre-existing test PINNED the gh-499 bug — rewritten, not deleted (phase 4)
+
+tests/unit/test_run_cli.py::test_advance_agent_step_brief_is_re_emitted_idempotently_while_running asserted exit_code == 0 on a second advance over a running agent step. That is gh-499 verbatim, written down as an expectation and guarded by CI since phase 7 of the run-cursor work. Any fix to gh-499 was going to turn it red, and the tempting move — delete it — would have thrown away the two things it was ACTUALLY protecting, neither of which changed: advance still executes nothing for an agent step (the _boom monkeypatch, the structural half of no-claude-p-batch), and the step is still left running.
+
+Rewritten as test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing: same fixture, same _boom, exit 2, plus a new assertion that the whole RunState is identical before and after (a refusal writes nothing). Its docstring says outright that it used to pin the bug, so a future reader does not read the rename as churn.
+
+Two adjacent tests were in the same position and got the same treatment: test_advance_{,grouped_member_}does_not_reopen_a_dispatch_record_while_still_running kept their assertions (still only one record) but now also assert exit 2 — without that they would pass just as well if advance had silently done nothing at all. And test_advance_is_idempotent_over_the_snapshot was switched to --redispatch, because a bare second advance now refuses before the snapshot code is reached, which would have left it green for a reason unrelated to what it claims to test.
+
+General lesson for phases 5-6: grep the suite for tests that assert the CURRENT behaviour of the thing you are changing before assuming a red is your own.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-redispatch-green-on-arrival created=2026-09-20T15:32:36 phase=4 -->
+### p4-redispatch-green-on-arrival · discovery · P4.T2 tests passed on arrival; two mutants used instead of a faked red (phase 4)
+
+Honest record of a TDD deviation. --redispatch was already wired during P4.T1.S2, for two reasons that were not avoidable: _refuse_held own message names it (a refusal pointing at a flag that does not exist is a worse artifact than a slightly early implementation), and the abandon-then-append shares _close_dispatch with claim --abandoned from phase 3. So P4.T2.S1 six tests were green the first time they ran.
+
+Rather than revert the wiring to manufacture a red, the tests were shown CAPABLE of failing by two mutants applied to a backed-up copy of run_cmd.py and then restored:
+
+  M1 — "if not redispatch:" -> "if True:" (the flag ignored, both paths): 3 failed / 3 passed. The three survivors are exactly the ones that do not need the flag (the unheld no-op, the after-abandon no-op, the validate_run structural check).
+  M2 — _open_dispatch overwrites the attempt list instead of appending: 3 failed / 3 passed. The failures are the forensic-trail assertions (old holder id still present, its abandoned timestamp untouched).
+
+Both mutants killed, source restored from the backup, suite re-run green (165 at that point). This is weaker than a real red for ORDERING discipline but stronger than a red for the thing a red is a proxy for — that the test can distinguish the two worlds.
+
+<!-- fr:journal kind=discovery scope=plan id=x-refusal-live created=2026-09-20T15:32:49 phase=4 -->
+### x-refusal-live · discovery · The gh-499 refusal verified live against this run own cursor, writing nothing (phase 4)
+
+Not a fixture. Ran `uv run fr run advance 2026-09-20-feat-phase-holder-identity` against the real cursor in this worktree while phase 4 itself was the held unit. Exit code read unpiped: 2.
+
+  implement: phase/4/implement-phase is ALREADY HELD
+    by agent a5b15f633d8225e2c (super-fr:fr-phase-executor, claude-code)
+    dispatched 2026-09-20T13:08:53+00:00 — not yet returned.
+    Waiting on that agent — do NOT dispatch again.
+    Resolve it:      fr run resolve 2026-09-20-feat-phase-holder-identity --step implement-phase --item phase/4 --state done|failed
+    Lost agent:      fr run claim 2026-09-20-feat-phase-holder-identity --step implement-phase --item phase/4 --abandoned
+    Re-brief anyway: fr run advance 2026-09-20-feat-phase-holder-identity --redispatch
+
+The holder it named is the phase-4 executor that ran the command — the orchestrator claimed the unit before dispatching, so fr correctly reported the tree busy TO its own occupant. That is exactly the double-dispatch gh-499 describes, caught on a real run instead of a grouped fixture.
+
+Critically, the run file sha256 was IDENTICAL before and after (checked explicitly): the refusal writes nothing, so an orchestrator that hits it mid-run has not had its cursor moved, its accounting snapshot refreshed, or a second record appended. The `M` git status on that file predates this command and belongs to the orchestrator own claim — attributed, not assumed.
+
+fr validate artifacts: 33 artifacts, all structurally valid, with the live cursor among them.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-acceptance-row-deferred created=2026-09-20T15:33:20 phase=4 -->
+### p4-acceptance-row-deferred · discovery · run-dispatch-refuses-second left not-implemented at phase completion, matching phases 1-3 (phase 4)
+
+fr plan edit --complete-phase 4 warned that acceptance row run-dispatch-refuses-second is still not-implemented. Left as-is, the same precedent phases 1, 2 and 3 already recorded (p3-acceptance-row-deferred, and phase 2 for run-dispatch-holder-recorded): the status flip is fr acceptance set-status work, done in phase 6 per that phase own steps, not per-phase.
+
+The evidence phase 6 will want is in tests/unit/test_run_cli.py, all added here:
+  test_advance_refuses_a_held_unit_and_prints_no_brief
+  test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time
+  test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed
+  test_the_refusal_prints_all_three_ways_forward
+  test_advance_does_not_refuse_when_the_last_record_is_closed
+  test_a_flat_agent_step_is_refused_the_same_way
+  test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing
+plus the six --redispatch tests and the thirteen resolve/close tests in the same file.
