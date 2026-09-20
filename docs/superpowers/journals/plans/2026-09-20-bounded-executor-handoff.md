@@ -65,3 +65,58 @@ I3: the meta.json carrying toolUseId was not committed, so nothing in the repo c
 ### r1-selfcheck · discovery · The redaction test caught its own explanation twice, which is the point (phase 1)
 
 Writing the property-based leak assertion made it fire on the capture note itself: first because the note's Redaction section quoted the /Users/ prefix while explaining that no such path may survive, then because the regex /home/[^/\"\s]+ swallowed a trailing markdown backtick and the angle brackets of a /home/<name> placeholder. Both were fixed rather than excluded — the note is scanned like every other file in the fixture directory, so the explanation has to obey the rule it explains. Recorded because a narrower fix (skip the .md) was available and would have left the note free to leak.
+
+<!-- fr:journal kind=discovery scope=plan id=08ce085e2301 created=2026-09-20T15:06:34 phase=2 -->
+### 08ce085e2301 · discovery · P2.T2 measurement: the bound is real (24-41% cut) but lands ~3k above the spec's prediction, and the reason is A2's residual, not a modelling error (phase 2)
+
+Same real journal as spec §2 (docs/superpowers/implemented/journals/plans/2026-09-18-harness-parity-matrix.md, unchanged since ea0b521), same command. BEFORE re-measured on this branch with the pre-change model.py checked out, so the comparison is apples-to-apples rather than copied from the spec.
+
+phase | before | after | cut
+1 | 35,080 | 26,593 | -24.2%
+2 | 47,028 | 32,838 | -30.2%
+3 | 46,889 | 30,328 | -35.3%
+4 | 50,439 | 34,404 | -31.8%
+5 | 66,228 | 39,694 | -40.1%
+6 | 83,132 | 49,110 | -40.9%
+7 | 68,908 | 49,874 | -27.6%
+
+My BEFORE column reproduces the spec's table exactly, +1 char per row (the spec used a command substitution, which strips the trailing newline). One discrepancy I could not reproduce: the spec calls the raw journal '728 lines, 129,972 chars'; on disk it is 729 lines / 130,016 chars and git says the file has not been touched since it was archived. 44 chars, immaterial to every conclusion, but recorded rather than smoothed over.
+
+Against §5.A3's predictions — phase 6 near 46k, phase 1 near 24k — the real figures are 49,110 and 26,593: the direction and the magnitude hold, and phase 1 -> phase 6 growth is 1.85x against the predicted 1.9x, but both phases land ~2.5-3k HIGH. The spec committed to reporting the measurement, not to being right, so: the prediction was optimistic by about 6%, consistently.
+
+The cause is measurable, not mysterious. Categorising what still renders in full at phase 6 (49,110 chars total, 38,434 of it full entries):
+
+  discovery (tagged, dependency phase)   13 entries  16,368 chars
+  UNTAGGED discovery                     16 entries  13,281 chars
+  decision (tagged, dependency phase)     7 entries   8,785 chars
+  open findings                           0 entries        0 chars
+
+§5.A3's table assumed the no-refactor bookkeeping entries were phase-TAGGED, and split them 9-stay / 5-collapse (6,557 chars residual, §5.A4). In this real journal 17 such entries exist and 14 of them render in full — because most are UNTAGGED, and an untagged entry is relevant at every phase by rule 3. So the extra ~3k is §5.A2's residual (untagged entries unbounded forever), which phase 3 attacks, not a miss in the state-first collapse. Phase 2 did the thing phase 2 was for: every closed finding, including the 26 on dependency phases, now costs one line.
+
+<!-- fr:journal kind=discovery scope=plan id=ec322bb84636 created=2026-09-20T15:06:52 phase=2 -->
+### ec322bb84636 · discovery · The one pre-existing test that changed behaviour, named rather than edited quietly (#464 comment item 11) (phase 2)
+
+Green everywhere after a contract change is the suspicious result, so I ran the whole journal suite against the new rule expecting a failure, and got exactly one:
+
+  tests/unit/test_journal_model.py::TestHandoff::test_dependency_scoped_entries_render_in_full
+  AssertionError: assert 'relevant history' in out
+
+'relevant history' is the body of fixture entry f-dep — a finding with state=fixed, tagged to phase 1, composed at phase 2 with depends_on=(1,). That assertion WAS the defect, in test form: it said a closed finding on a dependency phase must render in full, which is the ~30k of phase 6's 83k handoff that spec §2 measured. It should fail, and it did.
+
+Handled by splitting rather than deleting: the original test keeps its three still-correct assertions (dep decision, dep discovery, untagged decision all render in full — dependency scoping survives for the kinds it was ever right for), and a new sibling test_a_closed_finding_on_a_dependency_phase_collapses asserts the inverse for f-dep plus the exact one-line form, with a docstring recording that it used to assert the opposite and why that was wrong. Deleting the assertion would have left no test covering f-dep at all.
+
+Nothing else moved. In particular test_a_resolved_finding_leaves_the_open_findings_section (phase 7's fold test) stays green: its resolution record now reaches the handoff as a collapsed line instead of full context, and its assertion is on the TITLE ('resolves f1'), which the one-line form keeps — a behaviour change the existing assertion is indifferent to, checked deliberately rather than assumed. The CLI-level TestHandoff in test_journal_cmd.py has no fixed-finding-on-a-dependency-phase in its fixture, so it could not have caught this; that gap is now covered at the model level.
+
+<!-- fr:journal kind=finding scope=plan id=78654207c227 created=2026-09-20T15:07:13 phase=2 state=open -->
+### 78654207c227 · finding [open] · The collapsed one-line form prints the entry's OWN state, so a finding closed by a resolution record reads '[open]' in Earlier history (phase 2)
+
+_handoff_line (packages/fr/src/fr/journal/model.py) renders '[{entry.state}]' — the field on the entry — while the decision to collapse it now uses the EFFECTIVE state from open_finding_ids. The two disagree for exactly the shape fr journal resolve creates: a finding written state=open and later closed by an appended resolution record keeps state=open on its own entry forever (the journal is append-only, by design), so it collapses correctly but announces itself as open.
+
+Not introduced by this phase — such a finding on a NON-dependency phase already collapsed with the same wrong label — but this phase makes it the common case, because every closed finding now collapses regardless of phase. Measured on the real journal used for the P2.T2 measurement: 10 of its findings have state=open on their own entry and are effectively closed. A phase-6 executor reading that handoff sees 10 one-line entries labelled [open] and nothing marking them resolved, which is precisely the 'chase a bug that no longer exists' cost this phase exists to remove — recovered in a cheaper form rather than eliminated.
+
+Left OPEN rather than fixed here on purpose: the fix (thread effective_finding_states into _handoff_line, or render the effective state) changes _handoff_line's output contract, which is pinned by test_collapsed_lines_carry_state_and_phase and by the new phase-2 assertions, and no step of phase 2 asks for it. tests/unit/test_handoff_bound.py::test_a_resolution_record_collapses_and_so_does_what_it_closed currently PINS the present behaviour with a comment pointing here, so whoever fixes it will see this entry fail loud rather than silently. Small, self-contained, and a good candidate for the orchestrator to schedule into phase 3 or a follow-up.
+
+<!-- fr:journal kind=decision scope=plan id=97092f14683b created=2026-09-20T15:11:55 phase=2 -->
+### 97092f14683b · decision · The acceptance row handoff-closed-entries-bounded stays not-implemented at the end of phase 2, on purpose (phase 2)
+
+fr plan edit --complete-phase 2 warned that the row is still not-implemented. Left as-is rather than flipped: P5.T3.S1 owns flipping all four rows of this plan in one place, with --notes and --level refs, and flipping one early would split the transition across two phases and leave the three committed reports regenerated twice. The verification the row waits on now exists — tests/unit/test_handoff_bound.py::test_a_closed_entry_costs_a_constant_regardless_of_its_body_size plus its inverse guard test_but_growing_an_open_findings_body_does_grow_the_handoff — so phase 5 has the refs it needs and the row's bar (O(1) per closed entry, explicitly NOT non-monotonic growth) is exactly what those two assert.

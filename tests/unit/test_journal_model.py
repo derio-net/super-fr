@@ -413,14 +413,36 @@ class TestHandoff:
         assert "actionable anywhere" in out
 
     def test_dependency_scoped_entries_render_in_full(self) -> None:
+        """Dependency scoping survives the state-first collapse — for the two
+        kinds it was ever right for. A decision is never "closed" (it still
+        constrains the phase depending on it), a discovery is a trap paid for
+        once, and an untagged entry is global; all three still render in full.
+        """
         from fr.journal.model import compose_handoff
 
         out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
 
-        assert "relevant history" in out
         assert "why we did it" in out
         assert "trap to avoid" in out
         assert "applies to all" in out
+
+    def test_a_closed_finding_on_a_dependency_phase_collapses(self) -> None:
+        """CHANGED CONTRACT (bounded-executor-handoff P2.T1, spec §5.A1).
+
+        This assertion used to read `assert "relevant history" in out` and sat
+        in `test_dependency_scoped_entries_render_in_full` above: `f-dep` is
+        `fixed`, tagged to phase 1, which phase 2 depends on, so it rendered in
+        full. That test was pinning the defect — measured at ~30k of a real
+        83k handoff — and its failure on this change is the expected result,
+        not a regression. State now decides before phase does: the title stays
+        on the record, the body does not come along.
+        """
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "relevant history" not in out
+        assert "- f-dep · finding [fixed] · Fixed on dep (phase 1)" in out
 
     def test_unrelated_fixed_history_collapses_to_one_line_each(self) -> None:
         from fr.journal.model import compose_handoff

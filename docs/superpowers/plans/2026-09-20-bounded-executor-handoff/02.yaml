@@ -14,96 +14,117 @@ tasks:
   title: Collapse rules — red, green, refactor
   steps:
   - id: P2.T1.S1
-    text: "RED in tests/unit/test_handoff_bound.py, using build_plan_journal:\n(a) a finding with state=fixed\
-      \ tagged to a DEPENDENCY phase collapses to a\n    single line (assert the body text is absent and\
-      \ the one-line form is\n    present);\n(b) a finding still effectively open in a dependency phase\
-      \ renders IN FULL;\n(c) a decision and a discovery in a dependency phase render IN FULL\n    (dependency\
-      \ scoping is deliberately unchanged — they carry forward value);\n(d) a resolution record (kind=finding\
-      \ with resolves=<id>) collapses;\n(e) a fixed finding in a NON-dependency phase still collapses\
-      \ (no regression\n    on the rule #465 already shipped).\nRun; confirm (a) and (d) fail against\
-      \ current code."
+    text: |-
+      RED in tests/unit/test_handoff_bound.py, using build_plan_journal:
+      (a) a finding with state=fixed tagged to a DEPENDENCY phase collapses to a
+          single line (assert the body text is absent and the one-line form is
+          present);
+      (b) a finding still effectively open in a dependency phase renders IN FULL;
+      (c) a decision and a discovery in a dependency phase render IN FULL
+          (dependency scoping is deliberately unchanged — they carry forward value);
+      (d) a resolution record (kind=finding with resolves=<id>) collapses;
+      (e) a fixed finding in a NON-dependency phase still collapses (no regression
+          on the rule #465 already shipped).
+      Run; confirm (a) and (d) fail against current code.
   - id: P2.T1.S2
-    text: 'RED — the load-bearing property, stated as the spec''s A3 bar:
-
-      build two journals identical except that every CLOSED finding''s body is 20x
-
+    text: |-
+      RED — the load-bearing property, stated as the spec's A3 bar:
+      build two journals identical except that every CLOSED finding's body is 20x
       longer in the second. Assert the composed handoff for the last phase differs
-
       by less than a small constant (closed entries cost O(1) chars regardless of
-
       body size).
-
       Also assert the inverse guard so the test cannot pass vacuously: growing an
-
-      OPEN finding''s body DOES grow the handoff.
-
-      Run; confirm the first assertion fails and the second passes.'
+      OPEN finding's body DOES grow the handoff.
+      Run; confirm the first assertion fails and the second passes.
   - id: P2.T1.S3
-    text: "GREEN: in packages/fr/src/fr/journal/model.py, compose_handoff.\nToday the loop is:\n  if finding\
-      \ and not resolves and id in still_open:  -> full (Open findings)\n  elif e.phase is None or e.phase\
-      \ in relevant:        -> full (Relevant context)\n  else:                                      \
-      \        -> one line\nInsert the state test ahead of the dependency test: an entry that is a\nfinding\
-      \ whose EFFECTIVE state is closed (not in still_open), or that is a\nresolution record (resolves\
-      \ is not None), collapses regardless of phase.\nReuse open_finding_ids (model.py:302) — the same\
-      \ fold `fr journal check`\nuses. Do not add a second state machine.\nUpdate the docstring: its current\
-      \ claim that \"a phase-10 executor stops\nre-reading 39 fixed findings in full\" was only true outside\
-      \ dependency\nphases, which is the defect this phase fixes. Say what the code now does."
+    text: |-
+      GREEN: in packages/fr/src/fr/journal/model.py, compose_handoff.
+      Today the loop is:
+        if finding and not resolves and id in still_open:  -> full (Open findings)
+        elif e.phase is None or e.phase in relevant:        -> full (Relevant context)
+        else:                                              -> one line
+      Insert the state test ahead of the dependency test: an entry that is a
+      finding whose EFFECTIVE state is closed (not in still_open), or that is a
+      resolution record (resolves is not None), collapses regardless of phase.
+      Reuse open_finding_ids (model.py:302) — the same fold `fr journal check`
+      uses. Do not add a second state machine.
+      Update the docstring: its current claim that "a phase-10 executor stops
+      re-reading 39 fixed findings in full" was only true outside dependency
+      phases, which is the defect this phase fixes. Say what the code now does.
   - id: P2.T1.S4
-    text: 'REFACTOR + confirm the old contract''s tests now fail.
-
-      Refactor compose_handoff''s now three-way branch for legibility if warranted;
-
+    text: |-
+      REFACTOR + confirm the old contract's tests now fail.
+      Refactor compose_handoff's now three-way branch for legibility if warranted;
       otherwise record `no-refactor-because: P2.T1` (--phase 2).
-
-      Then the check #464''s comment item 11 asks for, which matters here because this
-
+      Then the check #464's comment item 11 asks for, which matters here because this
       phase CHANGES an existing contract: run the whole journal suite
-
       (`uv run pytest tests/unit/test_journal_model.py tests/unit/test_journal_cmd.py
-
       tests/unit/test_handoff_bound.py -q`). Any pre-existing test that asserted a
-
       fixed dependency-phase finding renders in full was pinning the defect, and it
-
       SHOULD now fail. Green everywhere after a contract change is the suspicious
-
       result, not the reassuring one. Name which tests changed behaviour and why,
-
-      rather than editing them quietly.'
+      rather than editing them quietly.
 - number: 2
   title: Measure the real before/after
   steps:
   - id: P2.T2.S1
-    text: "MEASURE — this is the phase's evidence, not a nicety.\nRe-run the spec section 2 measurement\
-      \ against the same real journal:\n  S=2026-09-18-harness-parity-matrix\n  PD=docs/superpowers/implemented/plans/$S\n\
-      \  for N in 1 2 3 4 5 6 7; do\n    uv run fr journal handoff --scope plan --slug $S --phase $N --plan-dir\
-      \ $PD | wc -c\n  done\nRecord the actual after-figures against the spec's before-table and its ~46k\n\
-      / ~24k predictions with `fr journal add --kind discovery --phase 2`.\nIf the real numbers differ\
-      \ materially from the prediction, say so — the spec\ncommitted to reporting the measurement, not\
-      \ to being right."
+    text: |-
+      MEASURE — this is the phase's evidence, not a nicety.
+      Re-run the spec section 2 measurement against the same real journal:
+        S=2026-09-18-harness-parity-matrix
+        PD=docs/superpowers/implemented/plans/$S
+        for N in 1 2 3 4 5 6 7; do
+          uv run fr journal handoff --scope plan --slug $S --phase $N --plan-dir $PD | wc -c
+        done
+      Record the actual after-figures against the spec's before-table and its ~46k
+      / ~24k predictions with `fr journal add --kind discovery --phase 2`.
+      If the real numbers differ materially from the prediction, say so — the spec
+      committed to reporting the measurement, not to being right.
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:59:37+00:00'
+      note: 'RED: 5 tests in tests/unit/test_handoff_bound.py. (a) fixed finding on
+        dep phase and (d) resolution record FAIL against current code; (b) open-on-dep,
+        (c) decision+discovery-on-dep, (e) fixed on non-dep phase PASS (unchanged
+        contract, pinned so the change cannot overshoot).'
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:59:42+00:00'
+      note: 'RED: O(1) assertion fails loudly — growing 10 closed findings'' bodies
+        20x grew the handoff by 2850 chars (4056 -> 6906). The inverse guard (growing
+        an OPEN body DOES grow the handoff) passes already, so the pair cannot pass
+        vacuously.'
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:04:45+00:00'
+      note: 'GREEN: compose_handoff''s branch is now state-first — ''if e.kind ==
+        "finding"'' splits open (full) from everything-else-finding (one line, regardless
+        of phase), and only non-findings reach the dependency test. Reuses open_finding_ids,
+        no second state machine. Docstring rewritten to state the three-way rule,
+        why decisions/discoveries stay dependency-scoped, and that size still grows
+        with phase by design (spec 5.A3).'
     P2.T1.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:07:36+00:00'
+      note: 'REFACTOR: done, not skipped — the nested branch duplicated the collapse
+        append, so the loop now picks a rule (state for findings, dependency for everything
+        else), sets renders_full + the target section, and appends once. Contract-change
+        check ran the whole journal suite: exactly one pre-existing test failed (test_journal_model.py::TestHandoff::test_dependency_scoped_entries_render_in_full,
+        asserting a fixed finding on a dependency phase renders in full — it was pinning
+        the defect). Split into two tests, both documented; see journal discovery
+        on item 11.'
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:07:42+00:00'
+      note: 'MEASURED against the same real journal, with BEFORE re-derived on this
+        branch from the pre-change model.py. Phase 6: 83,132 -> 49,110 (-41%); phase
+        1: 35,080 -> 26,593 (-24%); growth 1.85x vs the predicted 1.9x. Both land
+        ~3k above the spec''s ~46k/~24k, and the cause is measured: 16 UNTAGGED discoveries
+        (13,281 chars) still render in full, i.e. the 5.A2 residual phase 3 attacks,
+        not a miss in the collapse. Full table + category breakdown in the journal.'
   completion:
-    at: null
+    at: '2026-09-20T13:11:31+00:00'
     note: null
     observed_prs: []

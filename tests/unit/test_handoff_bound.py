@@ -79,3 +79,228 @@ def test_duplicate_default_ids_are_refused_at_the_builder(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="duplicate entry id"):
         build_plan_journal(tmp_path, "other-plan", [{**same, "id": "dup"}, {**same, "id": "dup"}])
+
+
+# --- Phase 2 (P2.T1): the state-first collapse. ---------------------------
+#
+# Spec §5.A1: an entry whose EFFECTIVE state is closed collapses to one line
+# REGARDLESS of phase. Before this, effective state only routed a finding into
+# `## Open findings`; past that, `relevant = {phase, *depends_on}` decided, so a
+# `fixed` finding tagged to a dependency phase rendered in full — which is where
+# ~30k of phase 6's real 83k handoff came from (§2).
+#
+# Decisions and discoveries stay dependency-scoped on purpose: a decision is
+# never "closed" (it still constrains the phase depending on it) and a discovery
+# is a trap paid for once. Only findings have a lifecycle that makes them
+# historical.
+
+COLLAPSE_ENTRIES = [
+    {
+        "kind": "finding",
+        "id": "open-dep",
+        "state": "open",
+        "phase": 2,
+        "title": "Still open on a dependency phase",
+        "body": "OPEN-DEP-BODY",
+    },
+    {
+        "kind": "finding",
+        "id": "fixed-dep",
+        "state": "fixed",
+        "phase": 2,
+        "title": "Fixed on a dependency phase",
+        "body": "FIXED-DEP-BODY",
+    },
+    {
+        "kind": "decision",
+        "id": "dec-dep",
+        "phase": 2,
+        "title": "Decision on a dependency phase",
+        "body": "DEC-DEP-BODY",
+    },
+    {
+        "kind": "discovery",
+        "id": "disc-dep",
+        "phase": 2,
+        "title": "Discovery on a dependency phase",
+        "body": "DISC-DEP-BODY",
+    },
+    {
+        "kind": "finding",
+        "id": "was-open",
+        "state": "open",
+        "phase": 2,
+        "title": "Opened then resolved",
+        "body": "WAS-OPEN-BODY",
+    },
+    {
+        "kind": "finding",
+        "id": "res-dep",
+        "state": "fixed",
+        "phase": 2,
+        "resolves": "was-open",
+        "title": "resolves was-open: closed in phase 2",
+        "body": "RES-DEP-BODY",
+    },
+    {
+        "kind": "finding",
+        "id": "fixed-far",
+        "state": "fixed",
+        "phase": 1,
+        "title": "Fixed on a non-dependency phase",
+        "body": "FIXED-FAR-BODY",
+    },
+]
+
+
+def _collapse_handoff(tmp_path: Path) -> str:
+    from fr.test_support import build_plan_journal
+
+    path = build_plan_journal(tmp_path, "collapse", COLLAPSE_ENTRIES)
+    return compose_handoff(
+        parse_journal(path.read_text()), phase=3, depends_on=(2,), scope="plan", slug="collapse"
+    )
+
+
+def test_a_closed_finding_on_a_dependency_phase_collapses(tmp_path: Path) -> None:
+    """(a) The defect §2 measured: phase 3 depends on phase 2, so `fixed-dep`
+    used to render in full. Its state says it is history; its phase no longer
+    overrides that."""
+    out = _collapse_handoff(tmp_path)
+
+    assert "FIXED-DEP-BODY" not in out
+    assert "- fixed-dep · finding [fixed] · Fixed on a dependency phase (phase 2)" in out
+
+
+def test_a_finding_still_open_on_a_dependency_phase_renders_in_full(tmp_path: Path) -> None:
+    """(b) The rule keys on EFFECTIVE state, not on kind: an open finding is
+    actionable anywhere and must survive the collapse untouched."""
+    out = _collapse_handoff(tmp_path)
+
+    assert "OPEN-DEP-BODY" in out
+    assert "## Open findings" in out
+
+
+def test_decisions_and_discoveries_on_a_dependency_phase_still_render_in_full(
+    tmp_path: Path,
+) -> None:
+    """(c) Dependency scoping is deliberately UNCHANGED for these two kinds —
+    they carry forward value (§5.A1). A test that let them collapse would be
+    pinning a bound this spec explicitly declined to take."""
+    out = _collapse_handoff(tmp_path)
+
+    assert "DEC-DEP-BODY" in out
+    assert "DISC-DEP-BODY" in out
+
+
+def test_a_resolution_record_collapses_and_so_does_what_it_closed(tmp_path: Path) -> None:
+    """(d) A resolution record is bookkeeping about a finding that is no longer
+    actionable, so it collapses too — and `was-open`, closed by the fold rather
+    than by its own `state` field, collapses with it. The titles survive, so the
+    handoff still says both what was found and what became of it."""
+    out = _collapse_handoff(tmp_path)
+
+    assert "RES-DEP-BODY" not in out
+    assert "WAS-OPEN-BODY" not in out
+    assert "- res-dep · finding [fixed] · resolves was-open: closed in phase 2 (phase 2)" in out
+    # NOTE: `[open]` is the entry's OWN state field, not its effective one —
+    # `_handoff_line` reads the field while the collapse decision reads the
+    # fold. Pinned as-is because no step of this phase changes
+    # `_handoff_line`'s contract; see the open finding
+    # "the collapsed one-line form prints the entry's OWN state" in this
+    # plan's journal. Fixing it must fail HERE, loudly.
+    assert "- was-open · finding [open] · Opened then resolved (phase 2)" in out
+
+
+def test_a_closed_finding_on_a_non_dependency_phase_still_collapses(tmp_path: Path) -> None:
+    """(e) No regression on the rule #465 already shipped."""
+    out = _collapse_handoff(tmp_path)
+
+    assert "FIXED-FAR-BODY" not in out
+    assert "- fixed-far · finding [fixed] · Fixed on a non-dependency phase (phase 1)" in out
+
+
+# --- P2.T1.S2: the load-bearing property (spec §5.A3). --------------------
+#
+# The spec's first draft asserted that handoff size stops growing with phase
+# number; categorising phase 6's REAL handoff refuted that, because what remains
+# after the collapse is decisions and discoveries from dependency phases —
+# content a later phase genuinely needs. So the shipped bar is the property that
+# is both true and load-bearing: a CLOSED entry contributes O(1) characters
+# regardless of its body size.
+
+_BIG = 20
+_UNIT = "closed detail. "
+
+
+def _sized_journal(root: Path, *, closed_mult: int, open_mult: int) -> str:
+    """A ten-phase journal whose closed and open bodies scale independently.
+
+    Every `fixed` finding sits on a phase the composed handoff DEPENDS on,
+    which is precisely the shape that used to render in full.
+    """
+    from fr.test_support import build_plan_journal
+
+    entries: list[dict[str, object]] = []
+    for phase in range(1, 11):
+        entries.append(
+            {
+                "kind": "finding",
+                "id": f"fixed-{phase}",
+                "state": "fixed",
+                "phase": phase,
+                "title": f"fixed finding from phase {phase}",
+                "body": _UNIT * closed_mult,
+            }
+        )
+        entries.append(
+            {
+                "kind": "decision",
+                "id": f"dec-{phase}",
+                "phase": phase,
+                "title": f"decision from phase {phase}",
+                "body": "rationale. " * 3,
+            }
+        )
+    entries.append(
+        {
+            "kind": "finding",
+            "id": "still-open",
+            "state": "open",
+            "phase": 4,
+            "title": "the one thing still actionable",
+            "body": _UNIT * open_mult,
+        }
+    )
+    path = build_plan_journal(root, "sized", entries)
+    return compose_handoff(
+        parse_journal(path.read_text()),
+        phase=10,
+        depends_on=tuple(range(1, 10)),
+        scope="plan",
+        slug="sized",
+    )
+
+
+def test_a_closed_entry_costs_a_constant_regardless_of_its_body_size(tmp_path: Path) -> None:
+    """Spec §5.A3's bar: two journals identical except that every CLOSED
+    finding's body is 20x longer in the second."""
+    small = _sized_journal(tmp_path / "small", closed_mult=1, open_mult=1)
+    big = _sized_journal(tmp_path / "big", closed_mult=_BIG, open_mult=1)
+
+    assert len(big) - len(small) < 64, (
+        f"growing 10 closed findings' bodies {_BIG}x grew the handoff by "
+        f"{len(big) - len(small)} chars: closed entries are not O(1)"
+    )
+
+
+def test_but_growing_an_open_findings_body_does_grow_the_handoff(tmp_path: Path) -> None:
+    """The inverse guard, without which the test above passes vacuously — a
+    `compose_handoff` that returned a constant string, or one that dropped
+    closed entries AND open ones, would satisfy it."""
+    small = _sized_journal(tmp_path / "small", closed_mult=1, open_mult=1)
+    wide = _sized_journal(tmp_path / "wide", closed_mult=1, open_mult=_BIG)
+
+    assert len(wide) - len(small) >= len(_UNIT) * (_BIG - 1), (
+        "an OPEN finding's body must still reach the executor in full"
+    )
