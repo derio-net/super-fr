@@ -1,0 +1,125 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Accessors over the old shape, the new models, the legacy reader and a pure
+    migration — nothing wired
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - run-legacy-cursors-still-migrate
+  - run-unit-record-migrates
+  tier: standard
+tasks:
+- number: 1
+  title: One accessor layer, every call site ported — behaviour unchanged
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_run_units_access.py for a new module
+      packages/fr/src/fr/run/units.py exposing pure functions over a StepRecord:
+      `unit_keys`, `unit_state`, `with_unit_state`, `attempts`, `with_attempt_appended`,
+      `with_last_attempt_replaced`, `open_attempt`, `estimate_of`, `measured_of`. Tests pin
+      today's behaviour through them, against the CAPTURED v4 fixtures from phase 1.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement them over the CURRENT shape (`items`, `dispatch`, and
+      `RunState.accounting`). Then port every reader and writer to them — run_cmd.py
+      (`_advance_group`, `_resolve_member`, `_open_dispatch`, `_close_dispatch`,
+      `_held_record`, `_dispatch_needs_open`, `_with_measurement`, `_accounting_snapshot`'s
+      write, status/check rendering, `_fan_out_items`, `_manual_items` merge),
+      fr/run/adopt.py:384, fr/run/provenance.py. This is a BEHAVIOUR-PRESERVING refactor:
+      the whole existing suite is its test, and it must stay green with zero test edits.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: `git grep -nE '\.items\b|\.dispatch\b|\.accounting\b' packages/fr/src/fr`
+      — outside fr/run/units.py, fr/run/model.py and fr/artifacts/ there must be no direct
+      access left. That grep IS the phase's exit criterion: phase 3's flip is only safe if
+      the accessor layer is the single place that knows the shape.
+- number: 2
+  title: The v5 models and the frozen legacy reader, side by side
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests for new models in fr/run/model.py under their final names —
+      `ContextEstimate`, `MeasuredTokens` (all four fields REQUIRED: a partial measurement
+      must be unrepresentable), `Attempt` (the phase-1 DispatchRecord fields + `session`,
+      `estimate`, `measured`; returned/outcome still set together), `UnitRecord`
+      (`state`, `attempts`, `evidence`). And for packages/fr/src/fr/run/legacy.py:
+      `parse_run_state_v4` parses EVERY captured fixture, v1 through v4.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add the models (unused by RunState for now). Create fr/run/legacy.py as a
+      FROZEN copy of today's StepRecord/PhaseAccounting/DispatchRecord/RunState, renamed
+      `…V4`, with a module docstring stating the rule from spec §4.F: it is a superset of
+      versions 1-4 BECAUSE every change so far was additive, and it must never be edited
+      again — a future removal freezes a V5.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: add a tripwire test that fr/run/legacy.py's models are byte-stable — hash
+      the class source, pin it — so an edit to the frozen reader fails loudly with a
+      message saying why it is frozen.
+- number: 3
+  title: The 4 → 5 rewrite, as a pure function
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests for `fr.run.legacy.v4_to_v5(data: dict) -> dict`, all on captured
+      fixtures: items -> units[k].state; manual markers keep `state: manual` with no
+      attempts; dispatch -> attempts; accounting -> split into estimate/measured on the
+      LAST attempt; accounting with NO dispatch -> one synthesized identity-less attempt
+      with `dispatched = accounting.at`; top-level `accounting` dropped; a flat step's
+      `step/<id>` unit carries NO state; idempotent (f(f(x)) == f(x)); a PARTIAL
+      measurement raises, naming the field; output parses as the v5 shape.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement it as a pure dict -> dict function, no I/O. Re-run; expect green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: property-style check over ALL captured fixtures: for every unit key in
+      the input, state, attempt count and every cost figure are recoverable from the
+      output — nothing dropped, nothing invented except the one documented synthesis.
+      ruff, mypy, full run-state test files.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

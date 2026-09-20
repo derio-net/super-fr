@@ -563,3 +563,4 @@ Neither is designed here; both are why this spec exists.
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-09-20-unit-record-unification | `derio-net/super-fr` | `2026-09-20-unit-record-unification` | — |
