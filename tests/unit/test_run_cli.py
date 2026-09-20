@@ -1836,7 +1836,9 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
-def _started_grouped_with_plan(repo: Path, shipped: Path, *, phase_tier: str | None = None) -> str:
+def _started_grouped_with_plan(
+    repo: Path, shipped: Path, *, phase_tier: str | None = None, strip_tier: bool = False
+) -> str:
     """Start against the grouped shape and resolve `plan` with a real
     one-phase plan on disk, so the group can enumerate its items.
 
@@ -1848,13 +1850,21 @@ def _started_grouped_with_plan(repo: Path, shipped: Path, *, phase_tier: str | N
     slug = "2026-05-09-fixture-minimal"
     plan_dir = repo / "docs" / "superpowers" / "plans" / slug
     shutil.copytree(_FIXTURE_PLAN, plan_dir)
-    if phase_tier is not None:
+    # SET, never append: the shared fixture carries its OWN `tier: standard`
+    # (gh#506 added one), so inserting a second key leaves a duplicate that
+    # PyYAML silently resolves to the LAST occurrence — the fixture's value,
+    # not the one the test asked for. That is the duplicate-key hazard
+    # `.claude/rules/artifact-versioning.md` names, and it is exactly what
+    # made two tests here assert against a tier they had not chosen.
+    # `phase_tier=None` leaves the fixture alone (what most callers want);
+    # `strip_tier=True` removes it, so "this phase declares no tier" is
+    # actually true when a test says so.
+    if phase_tier is not None or strip_tier:
         phase_yaml = plan_dir / "01.yaml"
-        phase_yaml.write_text(
-            phase_yaml.read_text().replace(
-                "  tag: agentic\n", f"  tag: agentic\n  tier: {phase_tier}\n", 1
-            )
-        )
+        header = [ln for ln in phase_yaml.read_text().split("\n") if not ln.startswith("  tier:")]
+        if phase_tier is not None:
+            header.insert(header.index("  tag: agentic") + 1, f"  tier: {phase_tier}")
+        phase_yaml.write_text("\n".join(header))
     _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # plan running + brief
     result = _invoke(
@@ -2814,7 +2824,7 @@ def test_advance_records_no_model_when_the_phase_header_has_no_tier(
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)  # fixture phase header has no tier
+    _started_grouped_with_plan(repo, shipped, strip_tier=True)
     _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n")
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
