@@ -2164,11 +2164,13 @@ rows:
       and the files, and deletes nothing.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
-    levels: {}
-    status: not-implemented
-    notes: '#435. Today the authoritative MERGED path calls down(force=False) with no
-      worktree check at all, while the speculative _merged_by_content path already has
-      one — the asymmetry this closes.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_down_dirty_worktree_message_names_branch_path_and_force_escape
+    status: ci
+    notes: 'Phase 1 (#435): down(force=False) now checks the worktree for uncommitted
+      changes before reaping a MERGED workspace, names the branch and files, deletes
+      nothing, and says what --force would do rather than overclaiming (f2).'
   - id: isolation-reap-preserves-unlanded
     capability: Isolation teardown
     acceptance: A merged workspace holding work that is not on origin/<default> — an
@@ -2176,11 +2178,13 @@ rows:
       refuses and names the files that would be lost.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
-    levels: {}
-    status: not-implemented
-    notes: '#435 (#467 sibling) plus the #320 orphan for free. Content-based against
-      origin/<default> (decision d2), not @{upstream}: auto-delete-branch means the
-      remote branch is usually gone by then.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_down_unlanded_content_message_names_paths_and_push_remedy
+    status: ci
+    notes: 'Phase 2 (#435 / #467 sibling): down(force=False) now checks the worktree''s
+      content against origin/<default> (decision d2) before reaping a MERGED workspace,
+      refuses and names the files not yet landed, and Push the branch. is the remedy.'
   - id: isolation-reap-force-escape
     capability: Isolation teardown
     acceptance: 'The operator can still destroy a workspace deliberately with `--force`,

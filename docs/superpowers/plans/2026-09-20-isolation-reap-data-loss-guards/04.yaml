@@ -87,9 +87,12 @@ state:
       note: 'GREEN: canonical SKILL.md got the d3 obligation clause; scripts/sync-opencode.py
         and scripts/sync-hermes.py regenerated the mirrors; tripwire passes 9/9.'
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T12:38:59+00:00'
+      note: 'Flipped isolation-reap-preserves-uncommitted and isolation-reap-preserves-unlanded
+        to ci with real test refs; the other two rows (guards-dont-strand, force-escape)
+        were already flipped in phase 3 (journal d-p3-matrix-flipped-early). fr acceptance
+        check: 128 rows OK, exit 0.'
     P4.T2.S2:
       state: ' '
       ticked_at: null
