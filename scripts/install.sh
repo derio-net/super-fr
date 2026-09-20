@@ -535,7 +535,7 @@ if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
 fi
 
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
-# because it now shells out to `fr models resolve`.
+# because it now shells out to `fr models apply`.
 
 # 8. VK MCP server at user level
 if [ "$SKIP_MCP" = true ]; then
@@ -644,7 +644,7 @@ fi
 # commands/<name>.md files from its own global dirs, and agents from .opencode/agent/).
 # Gate on an explicit opt-in or evidence the operator already uses OpenCode,
 # so installs on machines without it stay untouched.
-# Runs AFTER the fr CLI install above so `fr models resolve` is on PATH.
+# Runs AFTER the fr CLI install above so `fr models apply` is on PATH.
 if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
   echo ""
   echo "Installing skills for OpenCode ($OPENCODE_SKILLS_DIR)..."
@@ -671,36 +671,17 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   mkdir -p "$OPENCODE_AGENTS_DIR"
   for agent_file in "$PLUGIN_ROOT"/.opencode/agent/*.md; do
     agent="$(basename "$agent_file")"
-    # Derive the tier from the filename suffix (e.g., "standard" from
-    # "fr-phase-executor-standard.md"). Untiered agents (base name only) have no tier.
-    if [[ "$agent" =~ ^(.+)-(mechanical|standard|hard)\.md$ ]]; then
-      tier="${BASH_REMATCH[2]}"
-      model="$(fr models resolve --harness opencode --tier "$tier" 2>/dev/null || true)"
-    else
-      # Untiered base agent — no model even if one is somehow configured
-      model=""
-    fi
-
-    # Copy the agent file and rewrite its frontmatter to resolve the model:
-    # - Remove any existing top-level model: line
-    # - Insert the resolved model: line after mode: subagent (only if model is non-empty)
-    if [ -n "$model" ]; then
-      # Model is resolved — rewrite with it
-      awk -v model="$model" '
-        /^mode: subagent$/ {
-          print $0
-          print "model: " model
-          next
-        }
-        /^model:/ { next }  # Skip any existing model: line
-        { print }
-      ' "$agent_file" > "$OPENCODE_AGENTS_DIR/$agent"
-    else
-      # No model — copy as-is but drop any existing model: line
-      grep -v '^model:' "$agent_file" > "$OPENCODE_AGENTS_DIR/$agent"
-    fi
+    cp "$agent_file" "$OPENCODE_AGENTS_DIR/$agent"
     echo "  Installed $OPENCODE_AGENTS_DIR/$agent"
   done
+  # Resolve tier bindings into the files just copied — the single materialiser
+  # `fr.opencode_agents.materialize_agents` also used by `fr models set`
+  # (spec 2026-09-20-opencode-tier-binding-reaches-dispatch §3.A), reached
+  # through the one shell-callable entry point install.sh (bash, no Python
+  # import) can use. Tolerate any failure exactly like the old rewrite's
+  # `|| true` did — an unbound tier, a missing `fr`, or a hand-edited agent
+  # file must never fail the install.
+  fr models apply --harness opencode || true
 else
   echo ""
   echo "Skipping OpenCode skill/command/agent delivery (no ~/.config/opencode found; set"
