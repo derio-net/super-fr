@@ -322,3 +322,23 @@ The cause is that corpus_plans() reads the LIVE plans root, which contains 2026-
 What IS stable and safe to cite: plans_parsed=82, agentic_steps=2113, gate hits=0, pattern hits=0 (the tick state changes, the step population does not, until a new plan lands). The floors MIN_PLANS=70 / MIN_AGENTIC_STEPS=1800 are deliberately below the live numbers for exactly this reason.
 
 So the matrix row notes say 'the large majority of the corpus' rather than a number. The two stale docstring counts are cosmetic and pre-existing; left alone rather than churned, since the next tick would stale them again. If anyone wants them accurate, the fix is to state them as a proportion or to drop the absolute.
+
+<!-- fr:journal kind=discovery scope=plan id=3c469a2a805b created=2026-09-20T17:11:53 phase=4 -->
+### 3c469a2a805b · discovery · The explainer renderer's --isolated warning reproduces on this machine — verified with a deliberate control render (phase 4)
+
+explainers-currency.md documents the codehilite trap being found twice: run the render from inside the worktree and the project venv's pygments leaks in; run it from / on a machine with a GLOBAL pygments and --isolated is still needed. Both halves were treated as prose until now. P4.T2.S2 measured them.
+
+Verification render (the one the rule prescribes), from / with --isolated, on the UNMODIFIED 01-fr-goal.md:
+  cmp exit 0 — byte-identical to the committed page
+  sha256 3cfef3f777a196849dc7788748259f3e794b8b43b18939e4b17652615f9b2661 on both files
+
+Control render, identical in every way EXCEPT dropping --isolated, still from /:
+  differ: char 1000383, line 210
+
+So on this host, in 2026-09, the second trap is live: running from / is necessary and NOT sufficient. Anyone who reads the rule and takes only the 'run it from /' half away will produce a page diff of hundreds of lines they did not write, and — worse — will not know which lines are theirs.
+
+Two practical notes for the next editor:
+1. The fr-isolation bash guard requires a command to LEAD with 'cd <worktree>'. The render must run from /. Both hold at once with a subshell: 'cd <worktree> && W=$PWD && ( cd / && uv run --isolated ... "$W/docs/explainers/01-fr-goal.md" -o "$W/docs/explainers/01-fr-goal.html" )'. Absolute paths built from $W are what make the subshell work.
+2. Render the verification probe to the scratchpad, not over the committed page. If the probe is NOT byte-identical you still have the committed page intact to diff against, which is the whole point of doing the check first.
+
+After the real edit the page diff was exactly 5 added / 1 removed lines, all of them the new sentence and its rewrap — which is the outcome the byte-identity check buys you.

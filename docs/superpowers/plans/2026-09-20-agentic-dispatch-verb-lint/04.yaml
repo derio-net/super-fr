@@ -114,17 +114,40 @@ state:
       ticked_at: null
       note: null
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:11:27+00:00'
+      note: 'Renderer proven BEFORE any prose edit. Re-rendered the UNMODIFIED 01-fr-goal.md
+        from / (not the worktree) with uv run --isolated --no-project --with markdown
+        --with pyyaml. cmp against the committed 01-fr-goal.html: exit 0, BYTE-IDENTICAL,
+        sha256 3cfef3f777a196849dc7788748259f3e794b8b43b18939e4b17652615f9b2661 on
+        both. Also ran the control: the SAME command from / WITHOUT --isolated diverges
+        at char 1000383 / line 210 — the rule''s second-found trap reproduces on this
+        machine, so --isolated is load-bearing here and not folklore.'
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:11:34+00:00'
+      note: 'One sibling sentence added to the self-review paragraph (docs/explainers/01-fr-goal.md:367-371),
+        directly after ''names one that actually resolves.'': ''For the same reason
+        it errors on a step that tells the phase executor to dispatch a subagent of
+        its own: the executor is a leaf rather than an orchestrator, so the instruction
+        has nobody to carry it out, and an agent that meets one can still tick the
+        step — recording a finished phase for work nobody performed.'' ''For the same
+        reason'' ties it to the neighbouring defect (manual work hidden in an agentic
+        phase) — both are work assigned to an actor that cannot perform it. Deliberately
+        does NOT repeat phase 3''s corrected overclaim about per-harness tool grants
+        (finding p3-i1-harness-overclaim): ''is a leaf, not an orchestrator'' is the
+        phrasing that survived review. Regenerated with the exact verified command;
+        the .html diff is 5 added lines and 1 removed, all of them this sentence and
+        its rewrap.'
     P4.T2.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:11:40+00:00'
+      note: 'uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov:
+        3 passed in 0.03s. Re-read the sentence in RENDERED context by stripping tags
+        from 01-fr-goal.html:455-485 — it lands inside the same paragraph, between
+        the errors list and the warns clause, and reads as one more clause of that
+        list rather than an interruption. No refactor beyond that: the change is four
+        wrapped lines of prose with no structure to clean up.'
     P4.T3.S1:
       state: ' '
       ticked_at: null

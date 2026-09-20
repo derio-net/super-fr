@@ -364,7 +364,11 @@ moves on; nobody has to judge whether the output "looks fine." The CLI errors on
 defects such as dependency cycles and manual work hidden inside an agentic
 phase; when a local Test Plan and readable acceptance matrix are present, it
 also errors on unknown acceptance IDs, and it checks that a plan naming its own
-workflow shape names one that actually resolves. It warns about unresolved
+workflow shape names one that actually resolves. For the same reason it errors
+on a step that tells the phase executor to dispatch a subagent of its own: the
+executor is a leaf rather than an orchestrator, so the instruction has nobody
+to carry it out, and an agent that meets one can still tick the step —
+recording a finished phase for work nobody performed. It warns about unresolved
 local spec references (`packages/fr/src/fr/plan_ops.py:867-1029`). The agent
 fixes what it reports and advances the run again; there is nothing to record by
 hand, because a command step completes itself.
