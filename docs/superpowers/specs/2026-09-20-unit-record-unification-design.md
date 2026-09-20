@@ -170,6 +170,22 @@ built, already tested.
 - `resolve` writes `measured` onto the attempt it closes. The measurement window becomes
   `[attempt.dispatched, attempt.returned]` — **per attempt**, which repairs
   `_with_measurement`'s "exactly one dispatch" assumption instead of restating it.
+- **What "exactly one dispatch" actually assumes — and why this spec stops relying on it.**
+  The assumption is *run-wide and temporal*, not per-phase: gh#514's `select_dispatch` picks
+  the one subagent transcript whose first record falls inside a TIME WINDOW, across the whole
+  session. It holds today only because `fr run` enforces one writer at a time
+  (`_resolve_member` refuses while another unit is running, and parallel execution is
+  `fr apply --to <runner>`'s job, which never touches a run cursor). Two overlapping
+  dispatches — two phases in parallel, or a redispatch racing a slow return — put two
+  transcripts in one window, and `select_dispatch` then *"yields nothing"*: honest, but the
+  measurement is lost.
+  The unit record removes the dependency: an attempt that was **claimed** carries the
+  harness's own `agent` id, which is also the transcript's filename
+  (`subagents/agent-<agentId>.jsonl`). Measurement selects **by agent id** — exact under any
+  concurrency — and falls back to the window only for an unclaimed attempt. The record
+  itself is concurrency-safe (each unit owns its attempts); "one writer" is a policy of the
+  shared worktree, never a limit of the model, and a future parallel shape must not have to
+  rediscover that.
 - `claim --abandoned` *also* attempts a measurement for the attempt it closes: an abandoned
   agent's spend is exactly the spend worth seeing.
 - `fr run status`'s accounting section (gh#514's `_print_accounting`, kept) renders per
@@ -288,10 +304,81 @@ claude-code; `absent` on OpenCode and Hermes with a `scope_note` naming what eac
 
 ### 4.H The half no artifact fixes
 
-fr-goal §5/§6 gain two sentences of prose, stated as prose: the per-phase loop ends on a
-*dispatch*, not on a report — report and dispatch in one turn; and the skill's autonomy
-contract outranks an output-style preference. No tripwire can enforce a reflex; the Stop
-hook catches its consequence instead.
+#518 names three causes, and **none of them is a state problem**:
+
+1. *The loop's cadence ends on a report.* An executor's return arrives as a message, and the
+   natural reply to a delivered report is to summarise it and stop.
+2. *Review-and-fix is done inline*, so every iteration ends with the orchestrator holding a
+   pile of findings — peak pressure to report, exactly where the skill wants no pause.
+3. *Output style competes with the skill's contract.* An `explanatory` style tells the model
+   to surface insight as it goes; nothing says the skill's autonomy contract wins.
+
+A record describes what happened. It cannot change what a model is *inclined to do* at a
+turn boundary — that is what "reflex" means here. So the fix has two layers, and this spec
+is explicit about which is which:
+
+- **The prose layer (weak, portable).** fr-goal §5/§6 are re-cut so an iteration's natural
+  END is a dispatch, not a report: *"when an executor returns — review, fix, push, then in
+  the SAME turn `fr run advance` and dispatch the next unit; report after dispatching, never
+  instead of it."* And one sentence of precedence: *"this skill's autonomy contract outranks
+  an output-style preference; insight is welcome, ending a turn on it mid-run is not."*
+  This is exactly the kind of instruction #518 watched fail three times in a day, which is
+  why it is not the only layer.
+- **The artifact layer (strong, Claude Code only).** §4.G's Stop hook does not try to fix
+  the reflex; it catches its CONSEQUENCE — a turn ending while the run is idle — and hands
+  back the next command.
+
+The two compose: prose lowers how often the guard fires; the guard catches what prose
+misses. On OpenCode and Hermes there is no Stop hook, so **prose is all there is**, and the
+`parity.yaml` row says `absent` rather than implying parity. This session is its own
+evidence: it ran in `explanatory` style and ended turns on reports at several points that
+were not operator gates.
+
+### 4.I The day this lands — in-flight and archived work, spelled out
+
+Only the **`run`** kind changes version (4 → 5). Plans, journals, specs and the matrix are
+untouched: no plan is rewritten, no `fr_version` floor moves (this is a minor bump, inside
+every plan's `<5.0.0`).
+
+**A plan in flight WITH a run cursor.** The first `fr` command after the plugin updates hits
+the CLI-entry gate. In a terminal, on a feature branch, with no uncommitted edit to the
+cursor, fr migrates and commits it. In an agent's Bash tool, CI or a pod it **refuses** with
+the six-line message, and the agent runs `fr migrate artifacts --yes` itself — the standing
+behaviour, unchanged. After that:
+
+- every unit keeps its state; every recorded dispatch becomes an attempt; recorded cost
+  moves onto the last attempt. **A phase that was held stays held** and still names its
+  holder (`run-upgrade-mid-run-keeps-holder`).
+- review units already resolved `done` show as `done, unevidenced (predates the evidence
+  gate)` — debt, never a failure. **Reviews still to come in that same run DO need
+  evidence**, because the shipped `fr-goal` shape now declares it; the refusal names the
+  flag, and the updated skill tells the orchestrator to pass it. Manifest drift does not
+  trip: drift checks step and member ids, not fields.
+- a cursor fr cannot convert (unreadable, or carrying a partial measurement) is left
+  byte-identical and named; every other cursor still migrates.
+
+**A plan in flight with NO cursor** (pre-cursor work, or never adopted): nothing migrates,
+nothing breaks. `fr migrate artifacts` still *offers* adoption, and `fr run adopt` now
+writes a v5 cursor directly. gh#517's `fr journal check --require-reviews` remains its gate.
+
+**Other open branches.** Each run's cursor lives on its own branch, so it migrates in its
+own worktree the first time that branch meets this version. Checked on 2026-09-20: no other
+open branch bumps the `run` kind, so no third version collision is pending.
+
+**The Stop guard only reaches session-bound runs.** It finds the run through gh#500's
+session binding. Runs started before that binding existed show `sessions=none` and are
+invisible to it — silent, by the fail-open rule. It protects runs started after this lands,
+or attached by hand with `fr isolation attach`.
+
+**Archived work is frozen, and stays frozen.** Everything under
+`docs/superpowers/implemented/` — plans, journals, specs, and the 8 archived run cursors —
+is outside every locator: never migrated, never validated, never rewritten. Archived cursors
+keep their old shape (`items` / `dispatch` / `accounting`) forever. Nothing in fr re-parses
+them (`archive.py` only moves files), so the live model no longer understanding them breaks
+nothing. They remain readable by a person, and `fr.run.legacy.RunStateV4` can still parse
+one on demand — a small dividend of the legacy reader. A plan archived AFTER this lands
+takes its cursor along at v5; `fr archive` is not exempt from the gate, so it can never
+archive an unmigrated one.
 
 ## 5. Alternatives rejected
 
@@ -343,7 +430,7 @@ hook catches its consequence instead.
 
 ## 7. Acceptance rows
 
-Eighteen rows, grouped by what could go wrong. A rewrite this size is pinned by what it
+Nineteen rows, grouped by what could go wrong. A rewrite this size is pinned by what it
 could **regress** at least as much as by what it adds — the operator's call, and the audit
 it prompted found a chain-breaking flaw and an unmentioned writer before any code existed.
 
@@ -369,6 +456,7 @@ it prompted found a chain-breaking flaw and an unmentioned writer before any cod
 |---|---|
 | `run-unit-cost-per-attempt` | a redispatched unit keeps every attempt's cost; totals include abandoned attempts |
 | `run-abandoned-attempt-is-measured` | an abandoned attempt's spend is measured when it is abandoned |
+| `run-cost-attributed-by-agent-id` | a claimed attempt's cost is selected by its agent id, so overlapping dispatches neither lose nor swap measurements |
 | `run-status-cost-under-holder` | status shows each attempt's cost beneath its holder, estimate and measurement never blurred |
 
 **Evidence**

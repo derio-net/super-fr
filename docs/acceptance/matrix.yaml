@@ -2681,3 +2681,16 @@ rows:
       arrives as a notification, so a turn that ends while a unit is HELD is correct.
       Separated from run-idle-detected because it is the case most likely to be got
       wrong.'
+  - id: run-cost-attributed-by-agent-id
+    capability: Run cursor
+    acceptance: A claimed attempt's cost is selected by its agent id, so overlapping
+      dispatches neither lose nor swap their measurements
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Operator asked whether ''exactly one dispatch'' was a per-phase assumption.
+      It is run-wide and temporal: gh#514 selects a transcript by TIME WINDOW and yields
+      nothing when two overlap. The attempt''s agent id is also the transcript filename,
+      so selection becomes exact under any concurrency; the window stays as the fallback
+      for unclaimed attempts only.'
