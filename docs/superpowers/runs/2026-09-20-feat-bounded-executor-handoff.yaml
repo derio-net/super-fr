@@ -3,7 +3,7 @@ run: 2026-09-20-feat-bounded-executor-handoff
 workflow: fr-goal@1
 branch: feat/bounded-executor-handoff
 started: '2026-09-20T10:55:13+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,10 +12,11 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
   spec-review:
-    state: running
-    at: '2026-09-20T12:00:40+00:00'
+    state: done
+    at: '2026-09-20T12:02:40+00:00'
   plan:
-    state: pending
+    state: running
+    at: '2026-09-20T12:02:40+00:00'
   plan-review:
     state: pending
   implement:

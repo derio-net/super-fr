@@ -1,0 +1,109 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The bound — state-first collapse in compose_handoff
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - handoff-closed-entries-bounded
+tasks:
+- number: 1
+  title: Collapse rules — red, green, refactor
+  steps:
+  - id: P2.T1.S1
+    text: "RED in tests/unit/test_handoff_bound.py, using build_plan_journal:\n(a) a finding with state=fixed\
+      \ tagged to a DEPENDENCY phase collapses to a\n    single line (assert the body text is absent and\
+      \ the one-line form is\n    present);\n(b) a finding still effectively open in a dependency phase\
+      \ renders IN FULL;\n(c) a decision and a discovery in a dependency phase render IN FULL\n    (dependency\
+      \ scoping is deliberately unchanged — they carry forward value);\n(d) a resolution record (kind=finding\
+      \ with resolves=<id>) collapses;\n(e) a fixed finding in a NON-dependency phase still collapses\
+      \ (no regression\n    on the rule #465 already shipped).\nRun; confirm (a) and (d) fail against\
+      \ current code."
+  - id: P2.T1.S2
+    text: 'RED — the load-bearing property, stated as the spec''s A3 bar:
+
+      build two journals identical except that every CLOSED finding''s body is 20x
+
+      longer in the second. Assert the composed handoff for the last phase differs
+
+      by less than a small constant (closed entries cost O(1) chars regardless of
+
+      body size).
+
+      Also assert the inverse guard so the test cannot pass vacuously: growing an
+
+      OPEN finding''s body DOES grow the handoff.
+
+      Run; confirm the first assertion fails and the second passes.'
+  - id: P2.T1.S3
+    text: "GREEN: in packages/fr/src/fr/journal/model.py, compose_handoff.\nToday the loop is:\n  if finding\
+      \ and not resolves and id in still_open:  -> full (Open findings)\n  elif e.phase is None or e.phase\
+      \ in relevant:        -> full (Relevant context)\n  else:                                      \
+      \        -> one line\nInsert the state test ahead of the dependency test: an entry that is a\nfinding\
+      \ whose EFFECTIVE state is closed (not in still_open), or that is a\nresolution record (resolves\
+      \ is not None), collapses regardless of phase.\nReuse open_finding_ids (model.py:302) — the same\
+      \ fold `fr journal check`\nuses. Do not add a second state machine.\nUpdate the docstring: its current\
+      \ claim that \"a phase-10 executor stops\nre-reading 39 fixed findings in full\" was only true outside\
+      \ dependency\nphases, which is the defect this phase fixes. Say what the code now does."
+  - id: P2.T1.S4
+    text: 'REFACTOR + confirm the old contract''s tests now fail.
+
+      Refactor compose_handoff''s now three-way branch for legibility if warranted;
+
+      otherwise record `no-refactor-because: P2.T1` (--phase 2).
+
+      Then the check #464''s comment item 11 asks for, which matters here because this
+
+      phase CHANGES an existing contract: run the whole journal suite
+
+      (`uv run pytest tests/unit/test_journal_model.py tests/unit/test_journal_cmd.py
+
+      tests/unit/test_handoff_bound.py -q`). Any pre-existing test that asserted a
+
+      fixed dependency-phase finding renders in full was pinning the defect, and it
+
+      SHOULD now fail. Green everywhere after a contract change is the suspicious
+
+      result, not the reassuring one. Name which tests changed behaviour and why,
+
+      rather than editing them quietly.'
+- number: 2
+  title: Measure the real before/after
+  steps:
+  - id: P2.T2.S1
+    text: "MEASURE — this is the phase's evidence, not a nicety.\nRe-run the spec section 2 measurement\
+      \ against the same real journal:\n  S=2026-09-18-harness-parity-matrix\n  PD=docs/superpowers/implemented/plans/$S\n\
+      \  for N in 1 2 3 4 5 6 7; do\n    uv run fr journal handoff --scope plan --slug $S --phase $N --plan-dir\
+      \ $PD | wc -c\n  done\nRecord the actual after-figures against the spec's before-table and its ~46k\n\
+      / ~24k predictions with `fr journal add --kind discovery --phase 2`.\nIf the real numbers differ\
+      \ materially from the prediction, say so — the spec\ncommitted to reporting the measurement, not\
+      \ to being right."
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
