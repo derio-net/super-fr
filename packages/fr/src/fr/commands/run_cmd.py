@@ -909,7 +909,13 @@ def _refuse_held(
         f"  by {holder}{suffix}\n"
         f"  dispatched {held.dispatched} — not yet returned.\n"
         "  Waiting on that agent — do NOT dispatch again.\n"
-        f"  Resolve it:      fr run resolve {run_id} {unit} --state done|failed\n"
+        # `--state done`, never the alternation `done|failed`: this line is
+        # printed to be PASTED, and in every POSIX shell `|` is a pipe — so
+        # `--state done|failed` runs the resolve with `done` and then dies
+        # with `command not found: failed`. Found by gh#519's review (r1-f1)
+        # of its own refusal; the same defect was here verbatim.
+        f"  Resolve it:      fr run resolve {run_id} {unit} --state done\n"
+        f"                   (or --state failed)\n"
         f"  Lost agent:      fr run claim {run_id} {unit} --abandoned\n"
         f"  Re-brief anyway: fr run advance {run_id} --redispatch[/red]",
         soft_wrap=True,

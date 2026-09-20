@@ -3718,7 +3718,10 @@ def test_the_refusal_prints_all_three_ways_forward(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, result.output
     flat = _squash(result.output)
-    assert "fr run resolve r1 --step code --item phase/1 --state done|failed" in flat
+    # `--state done`, not `done|failed`: the line is meant to be pasted, and `|`
+    # is a pipe in every POSIX shell (gh#519 r1-f1 — this test pinned the defect).
+    assert "fr run resolve r1 --step code --item phase/1 --state done" in flat
+    assert "done|failed" not in flat
     assert "fr run claim r1 --step code --item phase/1 --abandoned" in flat
     assert "fr run advance r1 --redispatch" in flat
 
@@ -3767,7 +3770,8 @@ def test_a_flat_agent_step_is_refused_the_same_way(tmp_path: Path) -> None:
     assert "step/phase/1/implement-phase is ALREADY HELD" in flat
     assert "an unclaimed agent" in flat
     assert "super-fr:fr-phase-executor" in flat
-    assert "fr run resolve r1 --step phase/1/implement-phase --state done|failed" in flat
+    assert "fr run resolve r1 --step phase/1/implement-phase --state done" in flat
+    assert "done|failed" not in flat
     assert "fr run claim r1 --step phase/1/implement-phase --abandoned" in flat
     assert "fr run advance r1 --redispatch" in flat
     assert "--item" not in flat
