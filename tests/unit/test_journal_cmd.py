@@ -347,6 +347,116 @@ class TestCheck:
         assert res.exit_code == 0
 
 
+class TestCheckRequireReviews:
+    """Phase 1 (skeleton): `--require-reviews`, `--plan-dir` and optional
+    `--slug` are CLI plumbing only here — the gate itself (owed vs. present
+    reviews) is phase 2. Here the flag's only observable behaviour is its
+    refusals plus exit 0 on everything else."""
+
+    def _write_plan(self, root: Path, slug: str):
+        from fr.plan_ops import PhaseSpec, create
+
+        (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+        create(
+            repo_root=root,
+            slug=slug,
+            spec=None,
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=[PhaseSpec(number=1, title="One", tasks=())],
+            prose="# x\n",
+        )
+        return root / "docs" / "superpowers" / "plans" / slug
+
+    def test_require_reviews_is_inert_when_all_phases_incomplete(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR1")
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "plan", "--slug", "RR1", "--require-reviews"],
+        )
+
+        assert res.exit_code == 0, res.output
+
+    def test_require_reviews_refuses_non_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "spec", "--slug", "S", "--require-reviews"],
+        )
+
+        assert res.exit_code == 2, res.output
+        # Mirrors the refusal `fr journal handoff` already uses for the same
+        # condition (only plan journals have phases) — not a second phrasing.
+        assert "only plan journals have phases" in res.output
+
+    def test_plan_dir_without_slug_derives_slug_from_basename(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR2")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "check",
+                "--scope",
+                "plan",
+                "--plan-dir",
+                "docs/superpowers/plans/RR2",
+            ],
+        )
+
+        assert res.exit_code == 0, res.output
+
+    def test_slug_without_plan_dir_still_works(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR3")
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR3"])
+
+        assert res.exit_code == 0, res.output
+
+    def test_neither_slug_nor_plan_dir_exits_2_naming_both(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan"])
+
+        assert res.exit_code == 2, res.output
+        assert "--slug" in res.output
+        assert "--plan-dir" in res.output
+
+    def test_without_require_reviews_completed_unreviewed_phase_still_exits_zero(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Back-compat (spec D2): `fr journal check --scope plan` behaves
+        exactly as it did before the flag existed, even for a phase the plan
+        claims is done with no review entry naming it — the assertion a later
+        refactor is most likely to break silently."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR4")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR4"])
+
+        assert res.exit_code == 0, res.output
+
+
 class TestScopeValidation:
     def test_every_journal_command_rejects_invalid_scope_cleanly(
         self, tmp_path: Path, monkeypatch

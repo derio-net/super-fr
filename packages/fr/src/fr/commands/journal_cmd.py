@@ -61,6 +61,27 @@ def _validate_scope(scope: str) -> None:
         raise typer.Exit(2)
 
 
+def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[str, str]:
+    """Resolve `check`'s `--slug`/`--plan-dir` pair, exit 2 if neither is given.
+
+    `check` is the one journal verb where `--slug` is optional, because a
+    `kind: cli` manifest step (spec §C) can interpolate `{{ artifacts.plan }}`
+    as `--plan-dir` but cannot compute that folder's basename itself — without
+    this, `--require-reviews` is not expressible as a manifest step at all.
+    `--plan-dir` defaults symmetrically from `--slug` (mirroring `fr journal
+    handoff`'s existing default of `docs/superpowers/plans/<slug>`) so either
+    option alone is sufficient.
+    """
+    if slug is None and plan_dir is None:
+        err_console.print("[red]give --slug or --plan-dir (at least one is required)[/red]")
+        raise typer.Exit(2)
+    resolved_slug = slug if slug is not None else Path(plan_dir).name  # type: ignore[arg-type]
+    resolved_plan_dir = (
+        plan_dir if plan_dir is not None else f"docs/superpowers/plans/{resolved_slug}"
+    )
+    return resolved_slug, resolved_plan_dir
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -274,7 +295,25 @@ def render(
 @journal_app.command("check")
 def check(
     scope: str = typer.Option(..., "--scope"),
-    slug: str = typer.Option(..., "--slug"),
+    slug: str | None = typer.Option(
+        None,
+        "--slug",
+        help="Journal slug. Required unless --plan-dir is given (then derived "
+        "as the plan dir's basename).",
+    ),
+    require_reviews: bool = typer.Option(
+        False,
+        "--require-reviews",
+        help="Also fail when a phase the plan claims is done (spec §B) has no "
+        "recorded review entry. --scope plan only.",
+    ),
+    plan_dir: str | None = typer.Option(
+        None,
+        "--plan-dir",
+        help="Plan folder (default docs/superpowers/plans/<slug>) --require-reviews "
+        "checks phases against. May be given instead of --slug, which is then "
+        "derived as this folder's basename.",
+    ),
 ) -> None:
     """Freshness gate. Non-zero on a parse error or any EFFECTIVELY open finding.
 
@@ -282,11 +321,24 @@ def check(
     record no longer counts, and one re-opened by a later record counts again
     (spec §3.G.1). A journal with no resolution records — every journal written
     before that verb existed — gates exactly as it did before.
+
+    `--require-reviews` (spec §B) additionally fails when a locally-complete,
+    non-manual phase has no `kind=review` entry naming it — opt-in, so
+    `fr journal check --scope plan` without the flag behaves exactly as it did
+    before the flag existed (spec D2). Phase 1 wires only the option surface
+    and its refusals; the gate logic itself lands in phase 2.
     """
     _validate_scope(scope)
+    resolved_slug, _resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
+    if require_reviews and scope != "plan":
+        err_console.print(
+            f"[red]--require-reviews needs --scope plan (got {scope!r}) — only "
+            "plan journals have phases[/red]"
+        )
+        raise typer.Exit(2)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
-    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    path = resolve_journal_read_path(root, scope, resolved_slug)  # type: ignore[arg-type]
     try:
         entries = _load(path)
     except JournalParseError as e:
