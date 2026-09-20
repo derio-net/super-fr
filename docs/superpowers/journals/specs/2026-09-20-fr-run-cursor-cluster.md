@@ -44,3 +44,28 @@ The first command of this pipeline, 'fr run start fr-goal --branch fix/fr-run-cu
 ### x2 · discovery · Tier bindings ARE bound — under harness key 'claude-code', not 'claude'
 
 'fr models resolve --tier X --harness claude' prints nothing and exits 0, which reads identically to unbound. The configured key in ~/.config/fr/models.yaml is 'claude-code' (mechanical/standard -> claude-sonnet-5, hard -> claude-opus-5). No model-per-tier question was needed; noting it because 'prints nothing, exits 0' is indistinguishable from a wrong --harness value.
+
+<!-- fr:journal kind=review scope=spec id=r1 created=2026-09-20T15:23:11 -->
+### r1 · review · Codebase-reality sweep: every helper, flag and file the spec names exists
+
+Verified in the worktree: advance_cmd / _advance_group / _find_step / _group_phases / _expected_group_items / _resolve_member / _gate_pending / _check_step_drift (commands/run_cmd.py); sessions.attach(repo_root, branch, session_id, harness) raising IsolationError on missing state (isolation/sessions.py); ensure_run_workspace (run/workspace.py); state_dir resolving through _git_common_dir so attach works from base clone OR linked worktree (isolation/types.py:93); plan_locally_complete (render.py:232); self_review emitting ReviewIssue(severity='error') (plan_ops.py:876); build_run_state + plan_phase_numbers (run/adopt.py); the fr-session-bind.sh verb regex; the fr-session-bind parity.yaml row; and fr-goal.yaml's plan-review as 'kind: cli' running 'fr plan self-review {{ artifacts.plan }}'. No finding.
+
+<!-- fr:journal kind=review scope=spec id=r2 created=2026-09-20T15:23:25 -->
+### r2 · review · FIXED — --redispatch with nothing outstanding was unspecified
+
+The spec defined --redispatch only for the case where a unit IS running. Silently degrading to an ordinary advance would be a flag that did nothing and said nothing — the failure class this whole cluster is about. Fixed in §3.A: it exits 2 naming the fact, on the reasoning that an operator reaching for it believes an agent is running, and if none is, the mental model is wrong. The fr-goal loop never passes the flag, so the strictness costs the normal path nothing.
+
+<!-- fr:journal kind=review scope=spec id=r3 created=2026-09-20T15:23:25 -->
+### r3 · review · FIXED — the trailing-manual risk was written from speculation; it is measurable, and measures clean
+
+Scanned every plan in the repo for the §3.D invariant: 4/4 live, 80/80 archived, 16/16 on-disk fixture plan folders already place manual phases in a trailing block. ZERO exceptions. Fixed by adding §1.4 (the measured table) and rewriting the §4 risk row, which had asserted a migration hazard that does not exist. The rule codifies universal existing practice rather than imposing a constraint — a materially different argument for shipping it.
+
+<!-- fr:journal kind=review scope=spec id=r4 created=2026-09-20T15:23:26 -->
+### r4 · review · FIXED — inline-constructed test plans are not covered by the fixture scan
+
+tests/unit/test_plan_ops.py and siblings build Plan objects in Python rather than from fixture folders, so r3's sweep cannot see whether any constructs a non-trailing manual phase and asserts self_review passes. Fixed by adding a second §4 risk row making it the implementing phase's explicit budget — run the full suite and fix any such construction — rather than something discovered at PR time.
+
+<!-- fr:journal kind=review scope=spec id=r5 created=2026-09-20T15:23:26 -->
+### r5 · review · No finding — --redispatch does not conflict with fr run adopt or the second-writer guard
+
+adopt deliberately never marks a step 'running' ('marking the cursor step running would claim a dispatch that never happened'), so an adopted run's first advance dispatches normally and the §3.A refusal cannot misfire on it. _resolve_member's one-writer-at-a-time guard is unaffected: redispatching the SAME outstanding unit leaves the items map unchanged.

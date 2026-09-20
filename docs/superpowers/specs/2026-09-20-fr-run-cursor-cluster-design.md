@@ -48,6 +48,22 @@ phase would reject the exact plan shape fr-goal's own planner is specified to pr
 The defect is that `for_each: phase` treats a **typed** set as homogeneous. The fix is
 therefore structural, not behavioural — see §3.D.
 
+### 1.4 The trailing rule is a codification, not a new constraint
+
+Measured across this repo before §3.D was committed to:
+
+| Corpus | Plans | Manual phase not in the trailing block |
+|---|---|---|
+| `docs/superpowers/plans/` (live) | 4 | 0 |
+| `docs/superpowers/implemented/plans/` (archived) | 80 | 0 |
+| `tests/**/fixtures/**` plan folders | 16 | 0 |
+
+Every plan this repo has ever produced already satisfies the invariant §3.D introduces. That
+is the argument for enforcing it: the rule is not asking authors to change how they write
+plans, it is making the way they already write them checkable — and closing the one shape
+(`agentic, manual(unticked), agentic`) that nobody has written yet and that the run model would
+silently mis-execute if they did.
+
 ## 2. Goal
 
 `fr run advance` never hands out something that reads as an instruction to act when the
@@ -91,6 +107,11 @@ implement: phase/2/implement-phase is ALREADY RUNNING (dispatched 2026-09-20T11:
 unit only (it never selects a *different* unit, never resets an item to `pending`, and never
 overrides a `cli` step), refreshes `at`, and rewrites that unit's accounting snapshot. It is
 the deliberate escape for a genuinely lost agent.
+
+**`--redispatch` with nothing outstanding exits 2**, naming the fact, rather than quietly
+degrading into an ordinary `advance`. The operator reaching for it believes an agent is running;
+if none is, the mental model is wrong and saying so is the whole point of this section. The
+`fr-goal` loop never passes the flag, so the strictness costs the normal path nothing.
 
 Exit 2 is chosen because it is already this module's code for every refusal —
 not-running, already-done, second-writer. A distinct exit 3 was offered and declined
@@ -258,7 +279,8 @@ phase/4/implement-phase: phase 4 is `tag: manual` and is deliberately never disp
 
 | Risk | Mitigation |
 |---|---|
-| A plan already in flight has a non-trailing unticked manual phase; the new `self_review` error blocks its `plan-review` step | The message names the phase and both remedies (tick it, or move it to the trailing block). This is the intended behaviour, not a regression — the alternative is the silent build-on-undone-work the rule exists to stop. |
+| A plan already in flight has a non-trailing unticked manual phase; the new `self_review` error blocks its `plan-review` step | **Measured, not assumed: zero such plans exist.** All 4 live plans and all 80 archived plans put their manual phase last, as do all 16 on-disk fixture plan folders (§1.4). Should one appear, the message names the phase and both remedies (tick it, or move it to the trailing block) — intended behaviour, not a regression. |
+| Tests that build a plan *inline* (rather than from a fixture folder) may construct a non-trailing manual phase and assert `self_review` passes | Not measurable by scanning fixture folders, so the plan budgets for it explicitly: the phase that adds the rule runs the full suite and fixes any such construction, rather than discovering it at PR time. |
 | `--redispatch` becomes the habitual way past the #499 refusal, restoring the hazard | It is the only flag whose help text says what it costs; the refusal names `resolve` **first** and `--redispatch` second, and the PR body records the reasoning. Prose, honestly — there is no mechanism here, and the spec says so. |
 | The hook's extended regex mis-parses a `fr run start` embedded in a compound command | The hook reads only the FIRST line and is start-anchored, exactly as today; a non-leading `fr run start` does not match, which is a missed bind (harmless) rather than a wrong one. |
 | `attach` silently no-ops when isolation state is missing | It raises `IsolationError`, which §3.C.1 catches and reports as a warning naming the branch. |
