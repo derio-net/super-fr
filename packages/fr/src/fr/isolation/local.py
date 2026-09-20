@@ -940,7 +940,18 @@ class LocalWorktreeDevcontainerTarget:
         live run would refuse is not a preview.
         """
         if dry_run:
-            hazard = self._reap_hazard(state)
+            # Ask through a sibling rooted at the WORKSPACE's repo, exactly as
+            # the live path below does — `_reap_hazard` calls
+            # `_resolve_default_branch()`, which reads `self.repo_root`, and gc
+            # is host-wide: `self` here is whichever repo happened to trigger
+            # the sweep, not this workspace's. Asking `self` would resolve
+            # repo A's default branch while comparing repo B's worktree, so a
+            # `master` repo swept from a `main` one would preview "would-skip"
+            # for a workspace the live run then reaps — the preview/live
+            # divergence this dry-run change exists to remove (phase-3 review
+            # f5). Same sibling idiom as `_merged_by_content`.
+            sibling = type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn)
+            hazard = sibling._reap_hazard(state)
             if hazard is not None:
                 return GcAction(wt, state.branch, verdict, "would-skip", hazard.detail)
             return GcAction(wt, state.branch, verdict, "would-reap")

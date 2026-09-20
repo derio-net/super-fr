@@ -1777,6 +1777,70 @@ def _land_on_origin_main(repo: Path, name: str, content: str) -> None:
     subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "main"], check=True)
 
 
+def test_gc_dry_run_resolves_the_workspace_repos_default_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase-3 review f5 — the cross-repo dry-run divergence.
+
+    gc is host-wide by design ("an `up` in repo A reaps completed work in
+    B…F"), so `self` during a sweep is whichever repo triggered it, not the
+    workspace's. `_reap_hazard` resolves the default branch via
+    `_resolve_default_branch()`, which reads `self.repo_root` — so asking
+    `self` would compare repo B's worktree against repo A's default branch.
+    A `master` repo swept from a `main` one previewed "would-skip" for a
+    workspace the live run then reaps, which is exactly the preview/live
+    divergence the dry-run change exists to remove. `_merged_by_content`
+    already solves this with a sibling Target rooted at `state.repo_root`;
+    the dry-run arm must too.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    # Workspace repo: default branch `main`, clean and fully landed.
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a").mkdir()
+    repo_b, _origin_b = make_repo_with_origin(tmp_path / "b", ["dev"], default="main")
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_b),
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+        check=True,
+    )
+    runner = FakeRunner(pr_by_branch={"feat/b": "MERGED"})
+    target_b = LocalWorktreeDevcontainerTarget(repo_b, runner=runner)
+    st_b = target_b.up(None, "feat/b")
+
+    # Sweeping repo: a DIFFERENT default branch, which does not exist on
+    # repo B's origin at all.
+    repo_a, _origin_a = make_repo_with_origin(tmp_path / "a", ["dev"], default="main")
+    subprocess.run(["git", "-C", str(repo_a), "branch", "-q", "trunk"], check=True)
+    subprocess.run(["git", "-C", str(repo_a), "push", "-q", "origin", "trunk"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_a),
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/trunk",
+        ],
+        check=True,
+    )
+    target_a = LocalWorktreeDevcontainerTarget(repo_a, runner=runner)
+    assert target_a._resolve_default_branch() == "trunk"
+    assert target_b._resolve_default_branch() == "main"
+
+    action = target_a._reap_or_classify(str(st_b.worktree), st_b, "merged", dry_run=True)
+
+    # Before the fix this fetched `origin/trunk` inside repo B's worktree,
+    # failed, and previewed "would-skip" for a workspace the live sweep reaps.
+    assert action.action == "would-reap", action.detail
+
+
 def test_gc_reaps_no_pr_branch_squash_merged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -875,6 +875,15 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     assert branches == {"feat/openpr", "feat/dirty"}, "both refusals kept both workspaces"
     assert "feat/openpr" in res.output and "PR" in res.output
     assert "feat/dirty" in res.output and "uncommitted" in res.output
+    # Phase-3 review f6: each reason gets its OWN lines. A hazard refusal is
+    # multi-line by design, so inlining reasons into the summary put a "; "
+    # separator mid-sentence and pushed the sentinel count to the tail of a
+    # paragraph. The summary line must stay a summary.
+    first = res.output.splitlines()[0]
+    assert first.endswith("sentinel(s) cleared."), first
+    assert "uncommitted.txt" not in first
+    assert "  kept feat/dirty:" in res.output
+    assert "  kept feat/openpr:" in res.output
 
 
 def test_down_single_hazard_refusal_keeps_bindings_and_sentinel(

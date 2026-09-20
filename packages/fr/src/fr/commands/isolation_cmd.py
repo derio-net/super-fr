@@ -507,10 +507,19 @@ def _down_all(root: Path, force: bool) -> None:
     cleared = clear_repo_sentinels(root)
     summary = f"isolation down --all: {len(torn)} torn down"
     if kept:
-        reasons = "; ".join(f"{branch}: {reason}" for branch, reason in kept)
-        summary += f", {len(kept)} kept (rerun with --force to override): {reasons}"
+        summary += f", {len(kept)} kept (rerun with --force to override)"
     summary += f", {cleared} sentinel(s) cleared."
     typer.echo(summary)
+    # Each kept workspace's reason on its OWN lines, never inlined into the
+    # summary (phase-3 review f6). A hazard refusal is multi-line BY DESIGN —
+    # it names the offending paths and the way out — so "; "-joining reasons
+    # into the summary put a separator mid-sentence and buried the sentinel
+    # count at the tail of a paragraph. The message quality IS the product of
+    # this change; a garbled --all undoes it.
+    for branch, reason in kept:
+        typer.echo(f"  kept {branch}:")
+        for line in reason.splitlines():
+            typer.echo(f"    {line}")
 
 
 @isolation_app.command()
