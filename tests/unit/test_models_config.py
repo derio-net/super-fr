@@ -55,3 +55,43 @@ class TestResolve:
 
         user = {"claude-code": {"hard": "x"}}
         assert resolve("opencode", "hard", repo_cfg={}, user_cfg=user) is None
+
+
+# ── review r-p2-f2: one rule, two implementations, disagreeing ───────────
+#
+# Extracting `_resolved_config()` in models_cmd gave the three CLI verbs one
+# resolution path — and left `fr.models.resolve()` with no production caller
+# at all, so the repo-over-user rule now existed twice. They did not agree:
+# `resolve()` treats a falsy binding as "not bound" and falls through to the
+# user config, while a dict merge lets the falsy repo value win. Moving the
+# whole-config form into `fr.models` and defining `resolve()` on top of it
+# is what makes "one rule" true rather than aspirational.
+
+
+def test_a_falsy_repo_binding_does_not_shadow_a_real_user_one() -> None:
+    from fr.models import resolve, resolved_config
+
+    repo = {"opencode": {"hard": ""}}
+    user = {"opencode": {"hard": "provider/U"}}
+
+    assert resolve("opencode", "hard", repo_cfg=repo, user_cfg=user) == "provider/U"
+    assert resolved_config(repo_cfg=repo, user_cfg=user)["opencode"]["hard"] == "provider/U"
+
+
+def test_resolve_and_resolved_config_never_disagree() -> None:
+    """`resolve()` is a lookup on `resolved_config()`, so any (harness, tier)
+    either module can name must give the same answer."""
+    from fr.models import resolve, resolved_config
+
+    repo = {"opencode": {"hard": "provider/R"}, "claude-code": {"standard": ""}}
+    user = {
+        "opencode": {"hard": "provider/U", "standard": "provider/US"},
+        "claude-code": {"standard": "provider/CU"},
+    }
+
+    merged = resolved_config(repo_cfg=repo, user_cfg=user)
+    for harness, tiers in merged.items():
+        for tier in tiers:
+            assert merged[harness][tier] == resolve(harness, tier, repo_cfg=repo, user_cfg=user), (
+                f"{harness}/{tier} disagrees"
+            )
