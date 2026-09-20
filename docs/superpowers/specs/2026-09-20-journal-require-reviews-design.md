@@ -86,10 +86,10 @@ quo.
 
 **D2 — `--require-reviews` is an opt-in flag**, as the issue asks.
 `fr journal check --scope plan` behaves exactly as it does today unless the
-flag is passed. The repo's own history is the argument: 35 `review` entries
-exist across its journals and only 8 carry a `phase=` token, so a default-on
-gate would fail live and archived plans over a convention that was never
-stated. Back-compat is preserved; the flag's own weakness — that someone must
+flag is passed. The repo's own history is the argument: of the 13
+plan-scope `review` entries across its journals, only 8 carry a `phase=`
+token, so a default-on gate would fail live and archived plans over a
+convention that was never stated. Back-compat is preserved; the flag's own weakness — that someone must
 remember to pass it — is closed by D3 rather than by breaking consumers.
 
 **D3 — the cursor runs the gate, not the prose.** A new `kind: cli` step in
@@ -153,8 +153,35 @@ Semantics:
 
 - `--require-reviews` requires `--scope plan` — only plan journals have
   phases. Any other scope is exit 2, the same refusal shape `handoff` uses.
-- Parse the plan. A phase is **owed a review** when `state.completion.at` is
-  set and `phase.tag != "manual"`.
+- Parse the plan. A phase is **owed a review** when
+  `fr.render.plan_locally_complete(phase)` holds and `phase.tag != "manual"`.
+
+  **Which completion predicate, and why it matters** (spec-review finding
+  r1). `fr.render` already carries two, and picking the wrong one makes this
+  gate a no-op that reports success:
+
+  - `_phase_complete` requires, for an agentic phase, `completion.at` **and
+    an observed merged PR**. fr-goal opens exactly one PR per plan, at
+    `deliver`, after this gate runs — so no phase ever satisfies it during a
+    run, and a gate built on it would pass every plan forever while appearing
+    to work. Rejected.
+  - `plan_locally_complete` answers the question this gate actually asks —
+    *"does the plan itself claim this phase is done?"* — as `completion.at`
+    set **or** every step ticked, with no GitHub observation involved. Its
+    docstring names its purpose as the predicate for "surfaces that run
+    before any Issue exists", which is precisely this one, and `fr spec
+    status`, `fr archive` and the dispatch guard in `diff.py` already share
+    it.
+
+  So the gate reuses `plan_locally_complete` rather than hand-rolling a
+  fourth completion rule. This is deliberately *wider* than the issue's
+  literal "`completion.at` set": a phase whose executor ticked every step but
+  never wrote `completion.at` is a phase that claims to be done, and it must
+  not be an escape hatch from review.
+
+  The predicate is tag-agnostic by design, so D4's manual exemption is
+  applied here at the call site rather than by changing a predicate three
+  other surfaces depend on.
 - A phase's review is **present** when the journal holds at least one entry
   with `kind == "review"` and `phase == <number>`.
 - Owed-but-absent phases → exit 1, listing them, and naming the manual
@@ -204,8 +231,9 @@ user-visible workflow addition, not a fix
 
 Post-merge, operator-driven:
 
-1. On a live plan in this repo, mark a non-manual phase complete with no
-   `review` entry naming it; confirm
+1. On a live plan in this repo, mark a non-manual phase complete (either by
+   `completion.at` or by ticking every step) with no `review` entry naming
+   it; confirm
    `fr journal check --scope plan --plan-dir <dir> --require-reviews` exits 1
    and names that phase.
 2. Emit the entry with `fr journal add --kind review --phase N`; confirm the
