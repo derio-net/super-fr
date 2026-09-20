@@ -27,6 +27,7 @@ from fr.models import (
     ModelsConfig,
     default_models_path,
     load_models,
+    resolved_config,
     set_binding,
 )
 from fr.opencode_agents import Change, default_config_home, materialize_agents
@@ -57,15 +58,13 @@ def _repo_cfg() -> ModelsConfig:
 
 
 def _resolved_config() -> ModelsConfig:
-    """Repo config layered over user config, repo winning per (harness,
-    tier) — the one resolution `set_cmd`, `apply_cmd` and `resolve_cmd` all
-    need identically, extracted so a future change to the resolution order
-    cannot apply to two call sites and miss the third."""
-    merged: ModelsConfig = {}
-    for cfg in (load_models(default_models_path()), _repo_cfg()):
-        for harness, tiers in cfg.items():
-            merged.setdefault(harness, {}).update(tiers)
-    return merged
+    """This machine's repo-over-user model map.
+
+    The layering rule itself lives in `fr.models.resolved_config`, which
+    `fr.models.resolve` is also defined on — this function only supplies the
+    two config files. Reimplementing the merge here left the rule written
+    twice and the two disagreeing on a falsy repo binding (review r-p2-f2)."""
+    return resolved_config(repo_cfg=_repo_cfg(), user_cfg=load_models(default_models_path()))
 
 
 def _report_changes(changes: list[Change]) -> None:

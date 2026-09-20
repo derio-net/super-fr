@@ -179,10 +179,28 @@ The overclaim is corrected in the same PR that makes it true.
 2. Unit: the **stale-binding regression** specifically — an agent carrying `model: <A>`,
    a binding set to `<B>`, then the agent reads `<B>`. This is §1.1, and it is the test
    whose absence let the defect ship.
-3. Integration: `install.sh` still delivers correct models with the awk path deleted. The
-   three **integration** tests from PR #495 must pass **unchanged** — they assert behaviour
-   (a resolved binding lands after the anchor; one resolve per tier; an unbound tier gets no
-   key), so they are exactly the safety net for swapping the implementation underneath.
+3. Integration: `install.sh` still delivers correct models with the awk path deleted.
+
+   > **Correction, second one to this item (review `r-p2-f1`).** Spec-review `r2` already
+   > narrowed this from "all three pass unchanged" to "the three integration ones do". That
+   > was still wrong: **none** of the three could, and the reason was structural, not a
+   > count. All three were driven by a stub `fr` that faked `models resolve --tier <t>`;
+   > once resolution *and* the rewrite move behind one opaque `fr models apply`, a stub of
+   > `resolve` fakes nothing. Faking `apply` instead would mean reimplementing the
+   > materialiser in shell and asserting that the fake did the work — "the code calls the
+   > function it calls".
+   >
+   > So the three were **rewritten to use the real `fr`**, planted on the sandbox PATH as a
+   > thin argv-logging wrapper. They now exercise install.sh, the real repo-over-user
+   > resolution and the real materialiser end to end, which is strictly stronger than the
+   > stub version and is #498's own claim minus only the live OpenCode dispatch. The
+   > per-tier-call-count test is replaced by one pinning what remains install.sh's own
+   > contract: delivery goes **through `fr`**, exactly once, for the right harness.
+   > Non-vacuity proven by mutation — removing the `fr models apply` call fails all three,
+   > and `install.sh` was restored byte-exact afterwards.
+   >
+   > The lesson worth keeping: a test's *fixture* can encode an implementation detail as
+   > firmly as an assertion can. A stub is a bet on where a seam will stay.
    Two **unit** tests will need updating, and the spec should not pretend otherwise
    (spec-review `r2`): `test_install_runs_agents_delivery_after_fr_cli_install` anchors on
    the comment `"# Derive the tier from the filename suffix"`, which lives in the deleted awk
