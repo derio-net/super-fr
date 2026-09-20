@@ -75,7 +75,7 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence
   following `<protocol>`", never "dispatch `<agent>`". A step naming the actor
   or the tool rots *silently* the moment either changes — the phase executor
-  has no dispatch tool on any harness, so it does the nearest thing it can and
+  is a leaf, not an orchestrator, so it does the nearest thing it can and
   ticks. `fr plan self-review` errors on a dispatch verb in an agentic step
   (#428); genuine orchestrator-level dispatch belongs in a `[manual]` phase.
 - **Acceptance linkage:** a phase that advances a matrix row carries `acceptance: [row-ids]` in its

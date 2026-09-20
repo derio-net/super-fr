@@ -31,7 +31,7 @@ fr-execute to implement this phase."
 The Issue moves `fr:ready → fr:in-progress → fr:pr-ready → closed`; every flip
 is derived from what the renderer observes on the Issue plus its linked PRs:
 
-- **`fr:ready`:** a `tracking_issue`, no assignee, no draft or non-draft PR.
+- **`fr:ready`:** a `tracking_issue`, no assignee, no open draft or non-draft PR.
 - **`fr:in-progress`:** the Issue has an assignee OR a draft linked PR.
 - **`fr:pr-ready`:** an open non-draft, non-merged linked PR exists.
 - **closed:** `state.completion.at` set AND a merged PR observed AND no open
