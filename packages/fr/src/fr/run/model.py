@@ -335,6 +335,186 @@ class PhaseAccounting(BaseModel):
         return sum(value for value in values if value is not None)
 
 
+class ContextEstimate(BaseModel):
+    """What fr assembled for ONE attempt — `PhaseAccounting`'s V1 half, on its
+    own (spec `2026-09-20-unit-record-unification-design.md` §4.A).
+
+    Sizes, not tokens: no harness offers a token API at dispatch time, so this
+    measures the context fr itself built (journal, composed handoff, spec +
+    plan bytes) and every renderer labels the derived token figure an
+    ESTIMATE. The `at` timestamp `PhaseAccounting` carried is NOT here — in
+    the v5 shape the estimate hangs off an `Attempt`, whose `dispatched` is
+    that same moment recorded once instead of twice.
+
+    Every field defaults to `0` on purpose, and that is the opposite stance
+    from `MeasuredTokens` below: a size fr failed to read is genuinely zero
+    bytes of assembled context, while a measurement fr failed to take is not a
+    zero, it is an absence — which is why one is defaulted and the other is
+    required.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    journal_entries: int = 0
+    journal_lines: int = 0
+    handoff_chars: int = 0
+    spec_bytes: int = 0
+    plan_bytes: int = 0
+
+
+class MeasuredTokens(BaseModel):
+    """What ONE attempt actually burned, read from the harness's own
+    transcript — `PhaseAccounting`'s V2 half, with gh#514's invariant made
+    STRUCTURAL (spec §4.A).
+
+    All four fields are REQUIRED. A measurement is atomic — all four or none
+    — and `PhaseAccounting` could only say so in prose plus a validator
+    (`fr.artifacts.structure.validate_run`'s partial-measurement check), which
+    meant the unrepresentable state was representable everywhere except at the
+    one place that looked. Here a partial measurement cannot be constructed at
+    all, so "no measurement" is expressed the only honest way: no
+    `MeasuredTokens` at all, rather than a `MeasuredTokens` of zeros. A unit
+    that genuinely spent nothing stays distinguishable from one nobody could
+    read.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+
+    @property
+    def total(self) -> int:
+        """The four figures summed — never a partial sum, because a partial
+        `MeasuredTokens` does not exist."""
+        return (
+            self.input_tokens
+            + self.cache_creation_input_tokens
+            + self.cache_read_input_tokens
+            + self.output_tokens
+        )
+
+
+class Attempt(BaseModel):
+    """One attempt to hold a unit, carrying its own identity AND its own cost
+    (spec §4.A) — `DispatchRecord` plus `session`, `estimate` and `measured`.
+
+    **Not wired into `RunState` yet.** Phase 2 of the unit-record plan adds
+    this model beside the shape that is still live, so phase 3's collapse is a
+    swap rather than a rewrite. Until then `DispatchRecord` above is what a
+    cursor carries.
+
+    The three new fields are each the repair of a defect the split shape had:
+
+    - `session` — the harness session that dispatched it. gh#514's
+      `measure_unit` reads the transcript out of the CURRENT process
+      environment, so without this a cursor picked up in another session (or
+      on another host: §4.D.1) either finds nothing or, worse, measures a
+      stranger's transcript that happens to fall in the same time window.
+    - `estimate` / `measured` — per ATTEMPT, not per unit. The old top-level
+      `accounting` map held one snapshot per unit, so a redispatched unit's
+      second attempt overwrote the first one's cost and the abandoned agent's
+      spend — exactly the spend worth seeing — disappeared.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dispatched: str
+    agent: str | None = None
+    agent_type: str | None = None
+    harness: str | None = None
+    model: str | None = None
+
+    session: str | None = None
+    """The harness session id fr derived when it OPENED this attempt (§4.D.1).
+
+    Recorded so a transcript is looked up by `(session, agent)` in the
+    *recorded* session's directory rather than the current one. Absent on
+    every attempt written before this field existed, and on any harness with
+    no session concept — which reads as "not observable from here", never as
+    zero. No hostname is recorded: a missing session directory already says
+    "elsewhere", and a hostname in a public repo's committed cursor is
+    identity nobody needs."""
+
+    returned: str | None = None
+    outcome: DispatchOutcome | None = None
+
+    estimate: ContextEstimate | None = None
+    """What fr assembled for THIS attempt, written by `advance`."""
+
+    measured: MeasuredTokens | None = None
+    """What THIS attempt burned, written by `resolve` (and by `claim
+    --abandoned`, whose spend is exactly the spend worth seeing)."""
+
+    @field_validator("harness")
+    @classmethod
+    def _check_harness(cls, value: str | None) -> str | None:
+        """Validated against `fr.harness.model.HARNESSES`, imported rather
+        than re-listed — `DispatchRecord`'s rule, kept."""
+        from fr.harness.model import HARNESSES
+
+        if value is not None and value not in HARNESSES:
+            raise ValueError(f"harness {value!r} must be one of {HARNESSES}")
+        return value
+
+    @model_validator(mode="after")
+    def _returned_and_outcome_are_one_fact(self) -> Attempt:
+        """`outcome` is set exactly when `returned` is — `DispatchRecord`'s
+        invariant, kept verbatim. A half-closed record reads as still-held or
+        as held-forever depending on which half a reader happens to look at,
+        which is the double-dispatch hazard wearing a disguise."""
+        if (self.returned is None) != (self.outcome is None):
+            raise ValueError(
+                "`returned` and `outcome` are set together or not at all "
+                f"(returned={self.returned!r}, outcome={self.outcome!r}); a record with "
+                "exactly one of them is neither open nor closed"
+            )
+        return self
+
+
+UnitState = Literal["pending", "running", "done", "failed", "manual"]
+"""A unit's state in the v5 shape — the values `StepRecord.items` carried as
+bare strings, named (spec §4.B).
+
+`manual` is gh#496's marker for a `tag: manual` phase the fan-out will never
+dispatch; it is a state a unit can be IN, not an outcome, which is why it sits
+here rather than in `DispatchOutcome`. There is no `blocked`: a gate blocks a
+STEP, never one of its units."""
+
+
+class UnitRecord(BaseModel):
+    """One unit of one step — its state, every attempt to hold it, and the
+    evidence it produced (spec §4.A). **Not wired into `RunState` yet.**
+
+    This is the whole point of the unit-record spec: `items`, `dispatch` and
+    the top-level `accounting` map were three key spaces over ONE identity,
+    kept in step by call sites that each re-derived the join. Collapsing them
+    means a unit's state cannot drift from its history, and a write that
+    forgets one half stops being expressible.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: UnitState | None = None
+    """`None` exactly for a `step/<step-id>` unit — a flat `kind: agent`
+    step, whose `StepRecord.state` is that fact's ONE home (§4.B). A fact with
+    two homes is what this spec exists to stop."""
+
+    attempts: tuple[Attempt, ...] = ()
+    """Oldest first; the OPEN attempt is the last one whose `returned` is
+    `None`, and there is at most one. Empty is a real, honest state: a phase
+    `fr run adopt` found already complete was never dispatched by fr, and
+    inventing an attempt to look uniform would be fabrication."""
+
+    evidence: dict[str, str] | None = None
+    """Obligation name -> journal entry id, verified when the unit resolved
+    (§4.E). `None` on every unit resolved before the evidence gate existed —
+    visible debt reported as `done, unevidenced`, never a retroactive
+    failure."""
+
+
 def current_run_schema_version() -> int:
     """The `run` artifact version this `fr` writes.
 

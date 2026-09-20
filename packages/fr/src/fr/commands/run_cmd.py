@@ -45,14 +45,15 @@ from fr.journal.model import (
     parse_journal,
     resolve_journal_read_path,
 )
+from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
+    ContextEstimate,
     DispatchOutcome,
-    DispatchRecord,
-    PhaseAccounting,
+    MeasuredTokens,
     RunState,
     RunStateError,
     StepRecord,
@@ -65,6 +66,7 @@ from fr.run.model import (
     validate_run_id,
 )
 from fr.run.provenance import agent_cleared_gates, gates
+from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
 from fr.workflow.check import check_workflow
@@ -175,7 +177,7 @@ def _unit_key(
     parent: Step | None,
     item: str | None,
 ) -> str:
-    """The `StepRecord.dispatch`/`items` key a `(--step, --item)` pair names —
+    """The UNIT key a `(--step, --item)` pair names (`fr.run.units`) —
     spec §4.B's two key spaces (`phase/<n>/<member-id>` for a grouped member,
     `step/<step-id>` for a flat one) computed in exactly ONE place, so
     `claim`, `_resolve_member` and `advance`'s own flat-step key can never
@@ -368,7 +370,7 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
 
 def _accounting_snapshot(
     repo_root: Path, state: RunState, phase_n: int, depends_on: tuple[int, ...] = ()
-) -> PhaseAccounting:
+) -> ContextEstimate:
     """What the dispatched unit is about to re-read (V1 context accounting).
 
     Measured, not metered: journal entries/lines, the composed handoff's
@@ -426,8 +428,11 @@ def _accounting_snapshot(
     handoff_chars = len(
         compose_handoff(entries, phase=phase_n, scope="plan", slug=slug, depends_on=depends_on)
     )
-    return PhaseAccounting(
-        at=_now(),
+    # No `at` here: the estimate is a VALUE (what fr assembled), and when it
+    # was assembled is the caller's to record — `units.with_estimate(..., at=)`
+    # — because in the v5 shape that moment is the attempt's own `dispatched`
+    # rather than a second timestamp beside it.
+    return ContextEstimate(
         journal_entries=len(entries),
         journal_lines=journal_lines,
         handoff_chars=handoff_chars,
@@ -436,7 +441,7 @@ def _accounting_snapshot(
     )
 
 
-def _with_measurement(state: RunState, key: str) -> RunState:
+def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
     """`state` with V2 measured tokens folded into unit `key`'s snapshot.
 
     **Taken when the unit RESOLVES, not when it is dispatched**, and that is
@@ -459,15 +464,15 @@ def _with_measurement(state: RunState, key: str) -> RunState:
     """
     from fr.run.telemetry import measure_unit
 
-    snaps = dict(state.accounting or {})
-    snap = snaps.get(key)
-    if snap is None or snap.at is None:
+    start = units.estimated_at(state, key)
+    if start is None:
         return state
-    measured = measure_unit(os.environ, start=snap.at, end=_now())
+    measured = measure_unit(os.environ, start=start, end=_now())
     if measured is None:
         return state
-    snaps[key] = snap.model_copy(update=measured.totals.as_fields())
-    return state.model_copy(update={"accounting": snaps})
+    return units.with_measured(
+        state, step_id, key, MeasuredTokens.model_validate(measured.totals.as_fields())
+    )
 
 
 def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
@@ -611,22 +616,18 @@ def _complete_step(
         exit=exit_code,
         stdout=stdout,
         emitted=dict(emitted) if emitted else None,
-        # A completed grouped step keeps its item history and member list:
-        # `status` still shows what ran, and drift still sees member edits
-        # after the group is done. (Previously items were dropped here, which
-        # is also why an adopted flat fan-out went blind once it completed —
-        # `_fan_out_items` scans every record for exactly this.)
-        items=dict(prior.items) if prior is not None and prior.items else None,
         members=list(prior.members) if prior is not None and prior.members else None,
-        # …and its dispatch history, for the same reason plus one more: the
-        # trail gh-503 asked for ("who was holding this phase, and when")
-        # would otherwise be deleted by the very act of FINISHING. A group's
-        # `dispatch` map holds EVERY phase's attempts, so the moment its last
-        # member resolved, the whole run's holder history vanished — silently,
-        # because the map is only ever read by `status`/`check`, which would
-        # then have had nothing left to read (P4.T3.S1).
-        dispatch=dict(prior.dispatch) if prior is not None and prior.dispatch else None,
     )
+    # A completed grouped step keeps its UNITS — every state and every attempt
+    # — carried as ONE thing (`units.with_units_carried_forward`) rather than
+    # as a list of fields. Finding f7 is why: the two halves used to be copied
+    # separately, the dispatch half was once missed, and the trail gh-503 asked
+    # for ("who was holding this phase, and when") was deleted by the very act
+    # of FINISHING — silently, because only `status`/`check` ever read it. An
+    # adopted flat fan-out went blind the same way (`_fan_out_items` scans
+    # every record for exactly this).
+    if prior is not None:
+        new_record = units.with_units_carried_forward(new_record, prior)
     new_state = _with_step(state, step_id, new_record)
     if outcome == "done" and step_id == state.cursor:
         next_id = _next_step_id(manifest, step_id)
@@ -947,23 +948,21 @@ def _open_dispatch(
     to hold.
     """
     record = state.steps[step_id]
-    dispatch = dict(record.dispatch or {})
-    attempts = list(dispatch.get(key, []))
     # Detected ONCE and both recorded and used (finding f8): the harness is
     # what turns a tier into a model, so a record that carries the model
     # without naming it is not self-describing — and an orchestrator-run
     # step, which nothing ever claims, would never have it filled in later.
     harness = detect_harness(os.environ)
-    attempts.append(
-        DispatchRecord(
+    new_record = units.with_attempt_appended(
+        record,
+        key,
+        UnitAttempt(
             dispatched=_now(),
             agent_type=agent_type,
             harness=harness,
             model=_resolved_model(repo_root, harness, tier),
-        )
+        ),
     )
-    dispatch[key] = attempts
-    new_record = record.model_copy(update={"dispatch": dispatch})
     return _with_step(state, step_id, new_record)
 
 
@@ -983,28 +982,24 @@ def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
     `--redispatch`'s abandon and `resolve`'s close all go through the pair
     rather than each re-deriving it.
     """
-    attempts = (record.dispatch or {}).get(key)
-    if not attempts:
-        return True
-    return attempts[-1].returned is not None
+    return _held_record(record, key) is None
 
 
-def _held_record(record: StepRecord, key: str) -> DispatchRecord | None:
-    """`key`'s OPEN `DispatchRecord`, or `None` when the unit is free.
+def _held_record(record: StepRecord, key: str) -> UnitAttempt | None:
+    """`key`'s OPEN attempt, or `None` when the unit is free.
 
     The read half of `_dispatch_needs_open` — same predicate, but handing
-    back the holder so a caller can name it. `validate_run` guarantees at
-    most one open record per unit and that it is the LAST element, so the
-    tail is the whole answer."""
-    if _dispatch_needs_open(record, key):
-        return None
-    return (record.dispatch or {})[key][-1]
+    back the holder so a caller can name it. Delegates to
+    `fr.run.units.open_attempt`, which is where "open = the last attempt,
+    unreturned" is decided; this module keeps the name because every comment
+    and refusal in it is written in terms of the pair."""
+    return units.open_attempt(record, key)
 
 
 class _Hold(NamedTuple):
     """Why `advance` will not brief a unit again (`_hold_on`)."""
 
-    holder: DispatchRecord | None
+    holder: UnitAttempt | None
     """The open record — or `None` for a unit that is `running` with no
     record at all, where there is a hold to respect but nobody to name."""
 
@@ -1032,23 +1027,8 @@ def _hold_on(record: StepRecord, key: str, *, running: bool) -> _Hold | None:
     held = _held_record(record, key)
     if held is not None:
         return _Hold(held)
-    never_recorded = not (record.dispatch or {}).get(key)
+    never_recorded = not units.attempts(record, key)
     return _Hold(None) if running and never_recorded else None
-
-
-def _replace_last_attempt(record: StepRecord, key: str, attempt: DispatchRecord) -> StepRecord:
-    """`record` with `key`'s LAST dispatch attempt replaced by `attempt`.
-
-    The one mutation shape every dispatch write shares — `claim`'s identity
-    fill, `claim --abandoned`, `--redispatch`'s abandon and `resolve`'s close
-    all rewrite exactly the tail element, because `validate_run` requires the
-    open record to BE the tail. Copying the dicts/lists keeps the frozen
-    models honest."""
-    dispatch = dict(record.dispatch or {})
-    attempts = list(dispatch[key])
-    attempts[-1] = attempt
-    dispatch[key] = attempts
-    return record.model_copy(update={"dispatch": dispatch})
 
 
 def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
@@ -1059,23 +1039,21 @@ def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> S
     that the unit IS held (`_held_record` / `_open_dispatch_record`); this
     helper does not re-derive it, so there is still exactly one place that
     decides what "open" means."""
-    return _replace_last_attempt(
+    return units.with_last_attempt_replaced(
         record,
         key,
-        (record.dispatch or {})[key][-1].model_copy(
-            update={"returned": _now(), "outcome": outcome}
-        ),
+        units.attempts(record, key)[-1].model_copy(update={"returned": _now(), "outcome": outcome}),
     )
 
 
 def _claimed_identity(
-    open_record: DispatchRecord,
+    open_record: UnitAttempt,
     key: str,
     *,
     agent: str,
     harness: str | None,
     model: str | None,
-) -> DispatchRecord:
+) -> UnitAttempt:
     """`open_record` carrying the orchestrator's reported identity, or refuse.
 
     Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
@@ -1129,9 +1107,9 @@ def _close_on_resolve(
     operator recorded by hand.
     """
     record = state.steps[owner_id]
-    if _dispatch_needs_open(record, key):
+    open_record = _held_record(record, key)
+    if open_record is None:
         return state
-    open_record = (record.dispatch or {})[key][-1]
     if agent is not None:
         open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
     elif harness is not None or model is not None:
@@ -1141,7 +1119,7 @@ def _close_on_resolve(
                 "model": model if model is not None else open_record.model,
             }
         )
-    record = _replace_last_attempt(record, key, open_record)
+    record = units.with_last_attempt_replaced(record, key, open_record)
     return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
 
 
@@ -1224,7 +1202,7 @@ def _already_running_refusal(
     run_id: str,
     member_id: str,
     item: str | None,
-    held: DispatchRecord | None = None,
+    held: UnitAttempt | None = None,
 ) -> str:
     """The #499 refusal, in one renderer for both call sites (spec §3.A).
 
@@ -1407,7 +1385,7 @@ def _advance_group(
     # running-check, because `items` is what every branch below reads and
     # every save below writes — the completion path included. They are never
     # in `expected`, so they cannot be dispatched, resolved or counted.
-    items = {**(record.items or {}), **_manual_items(manual)}
+    items = {**units.unit_states(record), **_manual_items(manual)}
     # #499 (spec §3.A): the pending-picker below is `!= "done"`, which cannot
     # tell `running` from `pending` — so a second `advance` re-emitted a
     # byte-identical brief for a unit already dispatched. A `running` key is
@@ -1461,8 +1439,8 @@ def _advance_group(
         # `_complete_step` copies the PRIOR record's items, so the manual
         # markers have to be on the record before it runs or a group that
         # completes here would lose them.
-        if items != (record.items or {}):
-            state = _with_step(state, step.id, record.model_copy(update={"items": items}))
+        if items != units.unit_states(record):
+            state = _with_step(state, step.id, units.with_unit_states(record, items))
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
         return
@@ -1476,8 +1454,13 @@ def _advance_group(
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
-    snaps = dict(state.accounting or {})
-    snaps[pending] = _accounting_snapshot(repo_root, state, phase_n)
+    # Computed HERE, before the brief is built, and WRITTEN below once the
+    # attempt exists. `estimated_at` is the start of the measurement window, so
+    # it has to precede every transcript record of the dispatch it measures;
+    # the write has to follow `_open_dispatch`, because in the v5 shape the
+    # estimate hangs off the attempt. Splitting the two keeps both true.
+    estimate_at = _now()
+    estimate = _accounting_snapshot(repo_root, state, phase_n)
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -1496,8 +1479,10 @@ def _advance_group(
     # `or redispatch`: on a re-dispatch neither the state nor the item map
     # moves, so without it the record would keep the ORIGINAL dispatch time
     # and the next ALREADY RUNNING refusal would name the wrong moment.
-    if redispatch or record.state != "running" or record.items != items:
-        record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
+    if redispatch or record.state != "running" or units.unit_states(record) != items:
+        record = units.with_unit_states(
+            record.model_copy(update={"state": "running", "at": _now()}), items
+        )
         state = _with_step(state, step.id, record)
     if needs_dispatch:
         state = _open_dispatch(
@@ -1508,7 +1493,9 @@ def _advance_group(
             tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
             repo_root=repo_root,
         )
-    save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
+    save_run_state(
+        repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
+    )
     resolved_tier = _phase_tier(repo_root, state, phase_n)
     _print_member_dispatch(step, member, item, state, resolved_tier)
 
@@ -1818,10 +1805,7 @@ def _fan_out_items(state: RunState) -> dict[str, str]:
     fans out, so scanning for the record that carries items needs no knowledge
     of the workflow's step names.
     """
-    for record in state.steps.values():
-        if record.items:
-            return dict(record.items)
-    return {}
+    return units.fan_out_states(state)
 
 
 def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
@@ -1844,7 +1828,7 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
         raise typer.Exit(2) from e
 
 
-def _dispatch_holder_label(attempt: DispatchRecord) -> str:
+def _dispatch_holder_label(attempt: UnitAttempt) -> str:
     """Who to name for `attempt` — the priority spec §4.B.1/§4.C both rely on.
 
     `agent_type is None` means an orchestrator-run `kind: agent` step (the
@@ -1861,7 +1845,7 @@ def _dispatch_holder_label(attempt: DispatchRecord) -> str:
     return "an unclaimed agent"
 
 
-def _dispatch_descriptor_suffix(attempt: DispatchRecord, *, with_agent_type: bool = False) -> str:
+def _dispatch_descriptor_suffix(attempt: UnitAttempt, *, with_agent_type: bool = False) -> str:
     """` (harness, model)` — and, for the gh-499 refusal, the agent TYPE first.
 
     `fr run status` prints one line per attempt and already says which unit it
@@ -1874,7 +1858,7 @@ def _dispatch_descriptor_suffix(attempt: DispatchRecord, *, with_agent_type: boo
     return f" ({', '.join(descriptors)})" if descriptors else ""
 
 
-def _render_dispatch_attempt(attempt: DispatchRecord) -> str:
+def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
     """One `DispatchRecord` as a line of `fr run status`/`fr run check`
     prose — spec §4.C's illustration, cases (a)-(d) of P5.T1.S1."""
     who = _dispatch_holder_label(attempt)
@@ -1888,7 +1872,7 @@ def _render_dispatch_attempt(attempt: DispatchRecord) -> str:
 
 def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
     """Every attempt recorded for `key`, oldest first (case (e))."""
-    for attempt in (record.dispatch or {}).get(key, []):
+    for attempt in units.attempts(record, key):
         console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
 
 
@@ -1898,21 +1882,21 @@ def _render_step_and_items(state: RunState, console: Console) -> None:
     additive, never a replacement for the existing `items` line."""
     for step_id, record in state.steps.items():
         console.print(f"  {step_id}: {record.state}")
-        if record.items:
-            for key in sorted(record.items):
-                console.print(f"    {key}: {record.items[key]}")
+        # Two passes, in this order, because a unit WITH a state renders as
+        # `key: <state>` and one without renders as a bare `key:` — a flat
+        # `kind: agent` step's `step/<id>` unit carries no state at all
+        # (§4.B), and interleaving the two by key would reorder the block.
+        for key in units.unit_keys(record):
+            if units.unit_state(record, key) is not None:
+                console.print(f"    {key}: {units.unit_state(record, key)}")
                 _render_unit_dispatch(record, key, indent="      ", console=console)
-        if record.dispatch:
-            for key in sorted(record.dispatch):
-                if record.items and key in record.items:
-                    continue  # already rendered nested under its `items` line
+        for key in units.unit_keys(record):
+            if units.unit_state(record, key) is None:
                 console.print(f"    {key}:")
                 _render_unit_dispatch(record, key, indent="      ", console=console)
 
 
-def _print_accounting(
-    accounting: Mapping[str, PhaseAccounting], dispatched: int | None = None
-) -> None:
+def _print_accounting(state: RunState, dispatched: int | None = None) -> None:
     """Per-unit context accounting: V1 sizes, and V2 measurements where they
     exist — never blurred into each other.
 
@@ -1937,11 +1921,14 @@ def _print_accounting(
     measurements is a number that looks like an answer.
     """
     console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
+    accounted = units.accounted_keys(state)
     total = 0
     measured_total = 0
     measured_units = 0
-    for key in sorted(accounting):
-        snap = accounting[key]
+    for key in accounted:
+        snap = units.estimate_of(state, key)
+        if snap is None:  # pragma: no cover — `accounted_keys` is what has one
+            continue
         chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
         total += chars
         console.print(
@@ -1950,20 +1937,20 @@ def _print_accounting(
             f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
             f"(~{chars // 4} tok est)"
         )
-        measured = snap.measured_tokens
-        if measured is None:
+        tokens = units.measured_of(state, key)
+        if tokens is None:
             console.print(
                 f"      not measured: no transcript figure for this unit — "
                 f"the ~{chars // 4} tok above is an ESTIMATE",
                 soft_wrap=True,
             )
             continue
-        measured_total += measured
+        measured_total += tokens.total
         measured_units += 1
         console.print(
-            f"      measured: {measured} tok billed across the dispatch's turns "
-            f"(in {snap.input_tokens}, cache-create {snap.cache_creation_input_tokens}, "
-            f"cache-read {snap.cache_read_input_tokens}, out {snap.output_tokens}) "
+            f"      measured: {tokens.total} tok billed across the dispatch's turns "
+            f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
+            f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
             f"— cumulative harness accounting, NOT comparable to the "
             f"one-dispatch ~{chars // 4} tok estimate above",
             soft_wrap=True,
@@ -1973,7 +1960,7 @@ def _print_accounting(
     # dispatched but has no snapshot at all is invisible in the loop above, so
     # using len(accounting) silently shrinks the denominator to hide it and
     # reports better coverage than there is.
-    denom = len(accounting) if dispatched is None else dispatched
+    denom = len(accounted) if dispatched is None else dispatched
     if measured_units:
         console.print(
             f"    measured total: {measured_total} tok over {measured_units} of "
@@ -2001,16 +1988,16 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     console.print(f"branch: {state.branch}")
     console.print(f"cursor: {state.cursor}")
     _render_step_and_items(state, console)
-    if state.accounting:
+    if units.accounted_keys(state):
         # Count units the cursor actually dispatched, so a dispatched unit with
         # no snapshot still lands in the denominator rather than vanishing.
         dispatched = sum(
             1
             for record in state.steps.values()
-            for key, item_state in (record.items or {}).items()
-            if item_state != "queued"
+            for unit_state in units.unit_states(record).values()
+            if unit_state != "queued"
         )
-        _print_accounting(state.accounting, dispatched or None)
+        _print_accounting(state, dispatched or None)
 
 
 @run_app.command("advance")
@@ -2261,7 +2248,7 @@ def _resolve_member(
     # resolved after it was advanced, so they are already here); merged again
     # only so a cursor written before #496 acquires them on its next resolve
     # rather than completing with the omission unrecorded.
-    items = {**(grec.items or {}), **_manual_items(manual)}
+    items = {**units.unit_states(grec), **_manual_items(manual)}
     if items.get(key) == "done" and state_value == "done":
         err_console.print(f"[red]{key}: already recorded done[/red]")
         raise typer.Exit(2)
@@ -2284,7 +2271,7 @@ def _resolve_member(
     updated = _with_step(
         state,
         group.id,
-        grec.model_copy(update={"items": items, "emitted": merged_emitted or None}),
+        units.with_unit_states(grec.model_copy(update={"emitted": merged_emitted or None}), items),
     )
     # The dispatch closes BEFORE `_complete_step` runs, so the closed record
     # is what that rebuild carries forward — and before the `failed` branch
@@ -2293,7 +2280,7 @@ def _resolve_member(
     updated = _close_on_resolve(
         updated, group.id, key, state_value, agent=agent, harness=harness, model=model
     )
-    updated = _with_measurement(updated, key)
+    updated = _with_measurement(updated, group.id, key)
     if state_value == "failed":
         save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -2564,14 +2551,14 @@ def resolve_cmd(
     console.print(f"{step_id}: {state_value}")
 
 
-def _open_dispatch_record(record: StepRecord, key: str) -> DispatchRecord:
+def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
     """The OPEN (`returned is None`) `DispatchRecord` for `key`, or refuse.
 
     `fr run claim` annotates a dispatch `fr run advance` already made; it
     never invents one (spec §4.C) — a unit with no attempts at all, or whose
     last attempt is already closed, has nothing open to annotate."""
-    attempts = (record.dispatch or {}).get(key) or []
-    if not attempts or attempts[-1].returned is not None:
+    open_record = _held_record(record, key)
+    if open_record is None:
         err_console.print(
             f"[red]{key}: no open dispatch — nothing to claim. `fr run claim` "
             "annotates a dispatch `fr run advance` already made; it does not "
@@ -2579,7 +2566,7 @@ def _open_dispatch_record(record: StepRecord, key: str) -> DispatchRecord:
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    return attempts[-1]
+    return open_record
 
 
 def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) -> None:
@@ -2622,7 +2609,7 @@ def _claim_identity(
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
-    new_record = _replace_last_attempt(
+    new_record = units.with_last_attempt_replaced(
         record,
         key,
         _claimed_identity(open_record, key, agent=agent, harness=harness, model=model),
@@ -2718,15 +2705,15 @@ def claim_cmd(
     )
 
 
-def _open_dispatches(state: RunState) -> list[tuple[str, str, DispatchRecord]]:
+def _open_dispatches(state: RunState) -> list[tuple[str, str, UnitAttempt]]:
     """Every currently-open `(step_id, key, DispatchRecord)` in `state`,
     steps in cursor order and keys sorted within a step.
 
     Reuses `_held_record` — the one notion of "is this unit held" in the
     module — rather than re-deriving "the last attempt is open" here."""
-    open_dispatches: list[tuple[str, str, DispatchRecord]] = []
+    open_dispatches: list[tuple[str, str, UnitAttempt]] = []
     for step_id, record in state.steps.items():
-        for key in sorted(record.dispatch or {}):
+        for key in units.unit_keys(record):
             held = _held_record(record, key)
             if held is not None:
                 open_dispatches.append((step_id, key, held))

@@ -2540,23 +2540,31 @@ rows:
       with no loss
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_v4_to_v5.py
     status: not-implemented
-    notes: The first body-rewriting run migration (4 to 5). Business-level because every
-      in-flight run on every node rides it the moment the plugin updates; a lossy migration
-      here silently corrupts live cursors.
+    notes: 'Phase 2 builds the 4 to 5 rewrite as a PURE FUNCTION (fr.run.legacy.v4_to_v5)
+      and proves it lossless over all eight captured cursors — but registers no migration
+      and moves no current_version, so nothing on disk migrates yet. Status deliberately
+      stays not-implemented: the row''s acceptance is about a cursor actually migrating,
+      and the unit evidence cited here does not make that true. Phase 3 wires it and
+      flips this row.'
   - id: run-legacy-cursors-still-migrate
     capability: Artifact migration
     acceptance: A version 1, 2 or 3 run cursor still migrates all the way to the current
       version after fields were removed from the live model
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_legacy.py
     status: not-implemented
-    notes: 'Pins the flaw the spec''s first draft had: every run migration parsed with
-      the LIVE model, so removing items/dispatch/accounting would have made the chain
-      refuse every old cursor at its first hop. Business-level because a node whose
-      plugin updates mid-flight would otherwise be stranded.'
+    notes: Phase 2 freezes the prior shape as fr.run.legacy (RunStateV4 + parse_run_state_v4)
+      and proves it parses every captured cursor, v1 through v4, with a SHA-256 tripwire
+      keeping it frozen. But no migration reads it yet and the live RunState is unchanged,
+      so the chain this row is really about does not exist. Status deliberately stays
+      not-implemented until phase 3 re-points the hops and asserts the full chain [2,3,4,5].
   - id: run-migration-atomic-per-cursor
     capability: Artifact migration
     acceptance: A cursor the body-rewriting migration cannot fully convert is left byte-identical,

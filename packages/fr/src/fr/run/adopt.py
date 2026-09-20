@@ -49,6 +49,7 @@ from pathlib import Path
 
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.render import plan_locally_complete
+from fr.run import units
 from fr.run.model import (
     RunState,
     RunStateError,
@@ -76,14 +77,13 @@ __all__ = [
 ]
 
 MANUAL_ITEM = "manual"
-"""The `items`-map value for a phase the run deliberately never dispatched.
+"""The unit STATE of a phase the run deliberately never dispatched.
 
-Both writers of a group's item map use this one spelling — `fr run advance`
+Both writers of a group's unit states use this one spelling — `fr run advance`
 (`fr.commands.run_cmd._advance_group`) and adoption's `build_run_state` — so
 a resumed run cannot disagree with a started one about which phases were
-skipped and why (#496, spec §3.D.3). `StepRecord.items` values are already
-free-form strings, so this needs no schema change and no artifact version
-bump; it is a vocabulary, not a field.
+skipped and why (#496, spec §3.D.3). It is a vocabulary, not a field: no
+schema change and no artifact version bump follow from it.
 """
 
 DEFAULT_WORKFLOW = "fr-goal"
@@ -291,6 +291,12 @@ def plan_phase_numbers(repo_root: Path, plan_rel: str) -> list[int]:
     return sorted(plan_phase_tags(repo_root, plan_rel))
 
 
+def _with_unit_states(record: StepRecord, states: dict[str, str]) -> StepRecord:
+    """`record` carrying `states` — a one-line seam so adoption names the
+    accessor layer once and phase 3 changes nothing here."""
+    return units.with_unit_states(record, dict(states))
+
+
 def build_run_state(
     manifest: WorkflowManifest,
     adoption: Adoption,
@@ -377,12 +383,21 @@ def build_run_state(
             key: (MANUAL_ITEM if key in manual else value) for key, value in adoption.phases.items()
         }
 
+    # The unit states go on through `fr.run.units` rather than into a field:
+    # adoption is the FIRST writer of them (2026-08-30 §3.E — a half-implemented
+    # plan has to record WHICH phases are already done, or the cursor says
+    # `implement` and loses everything that made the adoption worth having), and
+    # it writes NO attempts, because fr never dispatched those phases. An empty
+    # history is the honest record of that; inventing an attempt to look uniform
+    # would be the fabrication spec §3 forbids.
     steps = {
-        step.id: StepRecord(
-            state="done" if index < cursor_index else "pending",
-            emitted=emitted.get(step.id) or None,
-            items=dict(items_map) if step.id == items_step else None,
-            members=[m.id for m in step.steps] or None,
+        step.id: _with_unit_states(
+            StepRecord(
+                state="done" if index < cursor_index else "pending",
+                emitted=emitted.get(step.id) or None,
+                members=[m.id for m in step.steps] or None,
+            ),
+            items_map if step.id == items_step else {},
         )
         for index, step in enumerate(manifest.steps)
     }
