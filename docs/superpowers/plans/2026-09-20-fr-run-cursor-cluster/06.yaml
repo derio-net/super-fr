@@ -60,6 +60,41 @@ tasks:
       that duplicates what another phase already did (the shared `_resolve_hint`, the shared
       `_trailing_manual_block`, the two refusal renderers). Record
       `no-refactor-because: P6.T2` with a reason if nothing is left to do.
+- number: 3
+  title: Close the two pre-existing defects phase 1 surfaced (journal `p1-f2`)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED, cause 1. `tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_
+      directory_is_refused` and `::test_an_external_marker_without_container_evidence_is_refused`
+      fail on macOS and pass on CI. Confirm the cause before touching anything: run them and read
+      the output — the assertion's substring straddles a rich fold (`...is not a linked git
+      \nworktree`), because the message embeds `tmp_path` and macOS pytest tmp paths are far longer
+      than Linux's, so WHERE the fold lands is a function of the host.
+  - id: P6.T3.S2
+    text: |-
+      GREEN, cause 1 — fix the SOURCE, not the test. `fr run start`'s refusal is an operator-facing
+      message printed without `soft_wrap=True`; find its `err_console.print` (the `RunWorkspaceError`
+      handler in `fr.commands.run_cmd.start_cmd`) and add it. This is the same defect class as
+      `p1-f1` and `r1-f2`, which is why the operator scoped it into this PR: a refusal an operator
+      cannot read is a bug wherever it appears, and folding it on a long-path host is not a test
+      artifact. Confirm both tests pass on this host WITHOUT weakening either assertion.
+  - id: P6.T3.S3
+    text: |-
+      GREEN, cause 2. `tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_
+      discoverable` monkeypatches `packaged_shipped_workflows_dir` but not `fr/workflow/resolve.py`'s
+      FOURTH source, the marketplace clone at
+      `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows` (resolve.py:88
+      and :174). On a host with super-fr installed the test finds `fr-goal: ok` and exits 0 — the
+      test asserting "nothing is discoverable" while something is. Monkeypatch that source too, so
+      the test means what its name says on every host.
+  - id: P6.T3.S4
+    text: |-
+      REFACTOR + close the finding. Re-run the FULL suite and confirm it is now `0 failed` on this
+      host, not `3 failed`. Then close the finding truthfully:
+      `uv run fr journal resolve --scope plan --slug 2026-09-20-fr-run-cursor-cluster --id p1-f2
+       --state fixed --phase 6 --note "<both causes, and which commit fixed each>"`.
+      `fr journal check --scope plan` must then be clean — `deliver` is gated on it.
 state:
   steps:
     P6.T1.S1:
@@ -83,6 +118,22 @@ state:
       ticked_at: null
       note: null
     P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T3.S4:
       state: ' '
       ticked_at: null
       note: null
