@@ -99,8 +99,9 @@ searchable:
 Verify first (`superpowers:verification-before-completion`: failing test now
 passes, no others broken). Open ONE PR via
 `superpowers:finishing-a-development-branch`; the body is derived from
-`fr journal render --scope debug` (root cause + fix + the failing-test-first
-narrative). Stop — the operator merges. Cleanup: `fr isolation down` for immediate teardown when
+`fr journal render --scope debug` (root cause + fix + the failing-test-first narrative).
+Unlike fr-goal, there is no automated review gate — record the code review with `fr journal add --scope debug --kind review --state done` (if skipped, this is noted as the operator reviews the PR itself).
+Stop — the operator merges. Cleanup: `fr isolation down` for immediate teardown when
 this skill brought the workspace up cold — otherwise `fr isolation gc` reaps the
 merged workspace automatically (fired on any up/down), so a missed `down` no
 longer leaks it.
