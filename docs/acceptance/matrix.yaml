@@ -2187,19 +2187,25 @@ rows:
       which bypasses every reap guard but never the #354 teardown post-condition verification.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
-    levels: {}
-    status: not-implemented
-    notes: Preserves the single documented escape while widening its scope from open-PR-only.
-      The companion obligation — an agent may not reach for --force unprompted (decision
-      d3) — is skill prose with no tripwire, stated as such.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: 'Phase 3 (#467): --force now bypasses all three refusal guards (open-PR,
+      dirty-worktree, unlanded-content/unverifiable), never the #354 post-condition
+      verification, and down --all/single --help and docstrings say so; gc-side and
+      down-side coverage both exist.'
   - id: isolation-reap-guards-dont-strand
     capability: Isolation teardown
     acceptance: A genuinely merged, clean, fully-landed workspace is still reaped, and
       `gc --dry-run` predicts the live outcome (would-skip when the live run would refuse).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'The false-refusal regression: a conservative guard that never reaps turns
-      gc into a permanent warner. Offline legs are unit-pinnable; the host-wide sweep
-      across real workspaces is Test Plan item 16, post-merge.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Phase 3 (#467): gc''s dry-run now asks the same hazard question the live
+      reap enforces (would-skip when it would refuse), and the clean/fully-landed reap
+      path is unchanged and still covered.'

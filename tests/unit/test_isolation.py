@@ -15,6 +15,7 @@ import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
+    ReapHazard,
     ReapRefused,
     branch_changes_present,
     subprocess_runner,
@@ -1937,6 +1938,136 @@ def test_gc_corrupt_state_does_not_abort_discovery(
     recs = target._discover_workspaces()  # must not raise
     rec = next(r for r in recs if r.worktree == wt)
     assert rec.state is None  # degrades to no-state (warned, never blindly reaped)
+
+
+# ---------- gc: a reap refusal is a skip, not a failure (phase 3, #467 spec §3.5) ----------
+
+
+def test_gc_merged_reap_refusal_reports_skipped_not_reap_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A MERGED-PR workspace with an uncommitted change: down()'s own hazard
+    # guard (unconditional, force=False) refuses it. That refusal is a
+    # deliberate decision, not a teardown failure, and must be reported as
+    # "skipped" — not "reap-failed", which reads as breakage.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={"feat/dirty-merged": '{"state": "MERGED", "url": "u"}'},
+    )
+    wt = up("feat/dirty-merged")
+    (wt / "uncommitted.txt").write_text("unsaved\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/dirty-merged"]
+    assert action.verdict == "merged" and action.action == "skipped"
+    assert "uncommitted" in action.detail
+    assert wt.is_dir()
+    assert load_state(repo, "feat/dirty-merged") is not None
+
+
+def test_gc_merged_by_content_reap_refusal_reports_skipped_not_reap_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Same wiring on the merged-by-content branch: _merged_by_content's own
+    # (separate) cleanliness check already excludes a dirty worktree from
+    # reaching this branch at all, so the refusal here is exercised by
+    # forcing the SAME hazard guard `down()` calls to fire, mirroring
+    # test_gc_merged_reap_refusal_reports_skipped_not_reap_failed.
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    synthetic = ReapHazard(kind="dirty-worktree", detail="isolation: feat/work synthetic hazard")
+    monkeypatch.setattr(
+        LocalWorktreeDevcontainerTarget, "_reap_hazard", lambda self, state: synthetic
+    )
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "skipped"
+    assert action.detail == synthetic.detail
+    assert wt.is_dir()
+    assert load_state(repo, "feat/work") is not None
+
+
+def test_gc_merged_by_content_genuine_teardown_error_still_reap_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The broad handler must survive alongside the new ReapRefused catch: a
+    # genuine teardown error (container survives docker rm) on the
+    # merged-by-content branch is still "reap-failed", never "skipped".
+    repo, origin, runner, target, up = _gc_env_origin(
+        tmp_path, monkeypatch, fail_on="rm", stdout={"docker": "cX running\n"}
+    )
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    (action,) = [a for a in target.gc() if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "reap-failed"
+
+
+def test_gc_dry_run_predicts_a_reap_refusal_as_would_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A preview that promises "would-reap" when the live run would actually
+    # refuse is not a preview — dry-run must ask the same hazard question.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={"feat/dirty-merged": '{"state": "MERGED", "url": "u"}'},
+    )
+    wt = up("feat/dirty-merged")
+    (wt / "uncommitted.txt").write_text("unsaved\n")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/dirty-merged"]
+    assert action.verdict == "merged" and action.action == "would-skip"
+    assert "uncommitted" in action.detail
+    assert wt.is_dir()
+    assert load_state(repo, "feat/dirty-merged") is not None
+
+
+def test_gc_content_reap_dry_run_predicts_a_reap_refusal_as_would_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_in_worktree(wt, "feature.txt", "the feature\n")
+    _land_on_origin_main(repo, "feature.txt", "the feature\n")
+
+    synthetic = ReapHazard(kind="dirty-worktree", detail="isolation: feat/work synthetic hazard")
+    monkeypatch.setattr(
+        LocalWorktreeDevcontainerTarget, "_reap_hazard", lambda self, state: synthetic
+    )
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "would-skip"
+    assert action.detail == synthetic.detail
+    assert wt.is_dir()
+    assert load_state(repo, "feat/work") is not None
+
+
+def test_gc_reap_refusal_does_not_abort_the_host_wide_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One workspace refuses (dirty worktree), a sibling reaps cleanly — the
+    # sweep must still produce both actions.
+    repo, runner, target, up = _gc_env(
+        tmp_path,
+        monkeypatch,
+        pr_by_branch={
+            "feat/dirty-merged": '{"state": "MERGED", "url": "u"}',
+            "feat/clean-merged": '{"state": "MERGED", "url": "u"}',
+        },
+    )
+    dirty_wt = up("feat/dirty-merged")
+    clean_wt = up("feat/clean-merged")
+    (dirty_wt / "uncommitted.txt").write_text("unsaved\n")
+
+    by_branch = {a.branch: a for a in target.gc()}
+    assert by_branch["feat/dirty-merged"].action == "skipped"
+    assert by_branch["feat/clean-merged"].action == "reaped"
+    assert not clean_wt.exists()
 
 
 def test_gc_sweeps_dangling_vsc_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
