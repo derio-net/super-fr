@@ -2221,3 +2221,59 @@ rows:
       tier (mirrors the acceptance 3.7.0 probe, routed through the shared _version_floor_issue
       helper) and a warning when an agentic phase declares no tier. Both are severity=warn,
       matching acceptance/skeleton, and neither changes an exit code.'
+  - id: isolation-reap-preserves-uncommitted
+    capability: Isolation teardown
+    acceptance: 'Uncommitted work in a workspace whose PR merged survives every reap
+      path (gc sweep, `fr isolation down`, `down --all`): fr refuses, names the branch
+      and the files, and deletes nothing.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_down_dirty_worktree_message_names_branch_path_and_force_escape
+    status: ci
+    notes: 'Phase 1 (#435): down(force=False) now checks the worktree for uncommitted
+      changes before reaping a MERGED workspace, names the branch and files, deletes
+      nothing, and says what --force would do rather than overclaiming (f2).'
+  - id: isolation-reap-preserves-unlanded
+    capability: Isolation teardown
+    acceptance: A merged workspace holding work that is not on origin/<default> — an
+      unpushed commit, or one pushed after the merge — survives every reap path; fr
+      refuses and names the files that would be lost.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_down_unlanded_content_message_names_paths_and_push_remedy
+    status: ci
+    notes: 'Phase 2 (#435 / #467 sibling): down(force=False) now checks the worktree''s
+      content against origin/<default> (decision d2) before reaping a MERGED workspace,
+      refuses and names the files not yet landed, and Push the branch. is the remedy.'
+  - id: isolation-reap-force-escape
+    capability: Isolation teardown
+    acceptance: 'The operator can still destroy a workspace deliberately with `--force`,
+      which bypasses every reap guard but never the #354 teardown post-condition verification.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: 'Phase 3 (#467): --force now bypasses all three refusal guards (open-PR,
+      dirty-worktree, unlanded-content/unverifiable), never the #354 post-condition
+      verification, and down --all/single --help and docstrings say so; gc-side and
+      down-side coverage both exist.'
+  - id: isolation-reap-guards-dont-strand
+    capability: Isolation teardown
+    acceptance: A genuinely merged, clean, fully-landed workspace is still reaped, and
+      `gc --dry-run` predicts the live outcome (would-skip when the live run would refuse).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Phase 3 (#467): gc''s dry-run now asks the same hazard question the live
+      reap enforces (would-skip when it would refuse), and the clean/fully-landed reap
+      path is unchanged and still covered.'
