@@ -2188,12 +2188,13 @@ rows:
       for an fr-goal run.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-fr-run-cursor-cluster-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.C. Three surfaces: --session/--harness passthrough (harness-neutral),
-      fr-session-bind.sh extended to match fr run start (Claude Code, no agent cooperation),
-      fr-goal SKILL.md documents fr isolation attach as fallback. Binding is traceability
-      not enforcement, so a failed bind warns and the run proceeds.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_hooks_session_bind.py
+    status: ci
+    notes: Flag, hook and skill prose all landed; the hook case is the one that binds
+      with no agent cooperation, which is why a flag alone was not enough.
   - id: plan-manual-phase-trailing
     capability: Plan authoring
     acceptance: A plan whose manual work an agentic phase would have to wait on is refused

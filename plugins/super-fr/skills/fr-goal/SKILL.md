@@ -18,7 +18,7 @@ start <shape> --branch <b>` (defaults to `fr-goal`), then loop `fr run advance <
 `$FR_SHIPPED_WORKFLOWS_DIR` → the `fr` wheel's own copy → the Claude Code marketplace clone, so
 shipped shapes resolve on a hermes pod or under OpenCode with no plugin installed. **`start` enters isolation itself** and writes the run inside that workspace — the
 first action, before anything else ("start with X" changes the first work item, never the
-first action); run every later command from the workspace it prints. No devcontainer profile
+first action); run every later command from the workspace it prints. **Bind the session** so the workspace is attributable, not `sessions=none`: pass `--session <id> --harness <h>` to `start` when your harness exposes its session id (a harness with a session-bind hook does it for you); otherwise `fr isolation attach --session <id> --branch <b> --harness <h>` binds it after the fact — traceability only, so a missing binding never blocks work. No devcontainer profile
 → pause for fr-init. `kind: cli` executes directly — exit code is the verdict, fix and
 re-`advance` on failure. `kind: agent` never executes itself: it prints a dispatch brief
 (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then `fr run resolve

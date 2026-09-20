@@ -121,17 +121,24 @@ state:
         stay absent. ''fr harness parity --check'' -> declared matrix agrees with
         the registration files; tripwire 9 passed.'
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:39:39+00:00'
+      note: 'Two sentences added to section 0: --session/--harness on start, and fr
+        isolation attach as the fallback (the skill text never mentioned attach at
+        all). Phrased harness-neutrally (''a harness with a session-bind hook'').'
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:40:45+00:00'
+      note: Ran sync-opencode.py AND sync-hermes.py (the step named only the first;
+        .hermes is a second byte-for-byte mirror that drifted — journal p3-d1). Both
+        --check runs clean; 11 sync/neutrality tripwire tests pass.
     P3.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:49:43+00:00'
+      note: 'ruff format: 361 unchanged. ruff check: All checks passed. mypy: no issues
+        in 138 files. pytest -q --no-cov: 3 failed, 3308 passed, 80 skipped — exactly
+        p1-f2''s three. fr acceptance check: 129 rows OK. Row run-start-binds-session:
+        not-implemented -> ci.'
   completion:
     at: null
     note: null
