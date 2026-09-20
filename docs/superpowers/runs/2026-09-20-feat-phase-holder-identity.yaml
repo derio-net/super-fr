@@ -105,12 +105,16 @@ steps:
         returned: '2026-09-20T14:31:19+00:00'
         outcome: done
   deliver:
-    state: running
-    at: '2026-09-20T14:31:29+00:00'
+    state: done
+    at: '2026-09-20T14:32:58+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/508
     dispatch:
       step/deliver:
       - dispatched: '2026-09-20T14:31:29+00:00'
         harness: claude-code
+        returned: '2026-09-20T14:32:58+00:00'
+        outcome: done
 accounting:
   phase/1/implement-phase:
     at: '2026-09-20T11:41:03+00:00'

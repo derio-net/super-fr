@@ -2607,6 +2607,10 @@ def test_advance_grouped_member_opens_a_dispatch_record(
     assertion pass while real dispatches recorded `model: null` (finding f4).
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    # DECLARED, not ambient: a tier resolves to a model only for a harness, and
+    # this process is itself a Claude Code session, so without this the
+    # assertion below would be about the machine rather than about fr (f11).
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
@@ -2694,6 +2698,7 @@ def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
     because there the sentinel is an instruction to the harness.
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")  # declared, not ambient (f11)
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
@@ -2759,6 +2764,7 @@ def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
     member's key — `phase/1/implement-phase` — so the two key spaces are
     provably disjoint rather than merely disjoint by convention."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")  # declared, not ambient (f11)
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
