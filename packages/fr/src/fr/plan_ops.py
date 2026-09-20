@@ -30,6 +30,7 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.render import plan_locally_complete
 
 
 class StepSpec(TypedDict):
@@ -873,6 +874,33 @@ class ReviewIssue:
         return f"[{self.severity}] {self.message}"
 
 
+def _trailing_manual_block(plan: Plan) -> set[int]:
+    """The numbers of the plan's maximal *suffix* of `tag: manual` phases.
+
+    The invariant this serves (#496, 2026-09-20 spec §3.D.1) is: **no manual
+    phase may be outstanding when an agentic phase after it runs.** A manual
+    phase is therefore valid iff it is in this trailing block, OR is already
+    `fr.render.plan_locally_complete` — the second clause is what keeps
+    fr-goal §3's front-load exception expressible, since that flow ends with
+    the operator ticking the phase's steps before implementation resumes.
+
+    Walks phases in number order from the last one backwards and stops at
+    the first agentic phase, so `1 agentic, 2 manual, 3 agentic, 4 manual`
+    returns `{4}` and not `{2, 4}`. An all-manual plan returns every number;
+    a plan with no manual phases returns the empty set.
+
+    Shared on purpose: `self_review` (the authoring gate) and the `implement`
+    group preflight (the runtime gate, spec §3.D.2) both call this, so the
+    two enforcement points cannot disagree about what "trailing" means.
+    """
+    trailing: set[int] = set()
+    for phase in sorted(plan.phases, key=lambda p: p.phase.number, reverse=True):
+        if phase.phase.tag != "manual":
+            break
+        trailing.add(phase.phase.number)
+    return trailing
+
+
 def self_review(plan: Plan) -> list[ReviewIssue]:
     """Soft lints beyond schema validation."""
     issues: list[ReviewIssue] = []
@@ -949,6 +977,37 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                             ),
                         )
                     )
+
+    # Trailing-manual invariant (#496, 2026-09-20 spec §3.D.1): no manual
+    # phase may be OUTSTANDING when an agentic phase after it runs. Checked
+    # here because "where may a manual phase sit" is a structural invariant
+    # of the plan, so it can be decided before anything is dispatched —
+    # fr-goal runs this as its `plan-review` cli step, whose exit code is
+    # the verdict, so a mis-shaped plan fails before phase 1 ever leaves.
+    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
+    trailing = _trailing_manual_block(plan)
+    for idx, phase in enumerate(ordered):
+        n = phase.phase.number
+        if phase.phase.tag != "manual" or n in trailing:
+            continue
+        if plan_locally_complete(phase):
+            continue
+        after = next(
+            (p.phase.number for p in ordered[idx + 1 :] if p.phase.tag == "agentic"),
+            None,
+        )
+        issues.append(
+            ReviewIssue(
+                severity="error",
+                message=(
+                    f"phase {n} is `tag: manual` but is neither in the plan's "
+                    f"trailing manual block nor already complete, so agentic "
+                    f"phase {after} would run while a human is still owed work. "
+                    f"Move phase {n} to the end of the plan, or tick its steps "
+                    f"(the operator's go) before the run reaches phase {after}."
+                ),
+            )
+        )
 
     # The plan's declared workflow shape (spec §4.A.1): it must resolve,
     # and it must be a valid shape. Both are errors — dispatch reads this

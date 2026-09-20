@@ -76,17 +76,23 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:57:04+00:00'
+      note: 'RED: 4 inline-built plans in tests/unit/test_plan_ops.py. Error case
+        + front-load case fail today (AssertionError: [] / ''unticked front-load must
+        error first''); the two trailing-block PASS cases are green vacuously.'
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:57:34+00:00'
+      note: 'GREEN: self_review now errors on a manual phase that is neither trailing
+        nor plan_locally_complete (imported from fr.render, not re-derived). All four
+        cases behave; tests/unit/test_plan_ops.py 10 passed.'
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T15:58:11+00:00'
+      note: 'REFACTOR: extracted _trailing_manual_block(plan) -> set[int] with a docstring
+        stating the rule in the spec''s words; pinned by three direct tests (maximal
+        suffix {4} for 1a/2m/3a/4m, empty, all-manual). 13 passed.'
     P4.T2.S1:
       state: ' '
       ticked_at: null
