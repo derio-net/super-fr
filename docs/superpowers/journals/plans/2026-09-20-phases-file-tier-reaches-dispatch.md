@@ -89,3 +89,13 @@ No findings. The one claim worth not taking on trust was that the integration te
 ### p3-f1-resolved · finding [fixed] · resolves p3-f1: resolved_tier exists but no skill tells the orchestrator to read it
 
 P5.T3 shipped: fr-goal/SKILL.md §5's Model= clause now reads the brief's resolved_tier (fallback to the phase header only for a brief with no such key, an older fr), and states explicitly that resolved_tier: null is the untiered case the Harness-dispatch clause's fallback already handles -- not a fourth rule. Mirror regenerated; gate green (test_fr_goal_dispatch_prose.py, opencode-sync and tool-neutrality tripwires, skill validation, fr harness parity --check).
+
+<!-- fr:journal kind=finding scope=plan id=p5-f1 created=2026-09-20T15:01:38 phase=5 state=fixed -->
+### p5-f1 · finding [fixed] · AGENTS.md documents one generated mirror; CI enforces two (phase 5)
+
+Phase 5 hit an unexplained 'fourth' test failure — test_tripwire_hermes_skills_sync.py — in a PR that had touched no Hermes file. Root cause is documentation, not code: AGENTS.md's 'canonical source vs. generated mirrors' section names .opencode/ and scripts/sync-opencode.py three times and never mentions .hermes/skills/fr/ or scripts/sync-hermes.py, although both exist and the latter is tripwire-enforced in CI. Any agent editing a shipped skill from that map runs one sync and leaves the other red. Fixed by documenting the second mirror in the same section, citing this PR as how it was found. AGENTS.md is explicitly outside the version-bump triggers, so no bump consequence.
+
+<!-- fr:journal kind=review scope=plan id=p5-r1 created=2026-09-20T15:01:38 phase=5 -->
+### p5-r1 · review · Phase 5 review: the rewrap of shipped prose was verified word-for-word (phase 5)
+
+T1's new Tier rule pushed fr-plan/SKILL.md past test_under_120_lines' cap, so the executor rewrapped six PRE-EXISTING Rules bullets to fit — an edit to shipped prose well outside the task's stated scope, and the one thing in phase 5 that could have silently lost meaning. Verified rather than trusted: tokenising both revisions and diffing the sorted word multisets shows ZERO words removed and 41 added (exactly the new rule). The rewrap was faithful. Also accepted: the executor's own mid-task finding that 'path.py::test_name' is not valid fr ref grammar (the format is <repo>:<path>[#fragment]) — fr acceptance check caught it, they moved the test-function name into the row notes and regenerated all three reports, and check now exits 0 with the four rows at ci and honest notes about what is still not claimed.
