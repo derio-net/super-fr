@@ -401,3 +401,64 @@ Carried forward as discoveries rather than fixed: d-p3-adopt-costs (the prescrib
 Post-fix: 10 integration tests pass, acceptance matrix 127 rows OK, skill validation and both mirror tripwires green.
 
 Assessment: phase 4 proceeds, against the rewritten 04.yaml.
+
+<!-- fr:journal kind=discovery scope=plan id=6b011ebcfd77 created=2026-09-20T18:22:59 phase=4 -->
+### 6b011ebcfd77 · discovery · no-refactor-because P4.T1 (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=r-p4-f1 created=2026-09-20T18:25:00 phase=4 state=fixed -->
+### r-p4-f1 · finding [fixed] · Both shipped skills documented a `fr journal add` command that EXITS 2 (phase 4)
+
+Phase 4 wrote `fr journal add ... --kind review --phase N --state done` into fr-goal SSS6 and `--scope debug --kind review --state done` into fr-debugging, then shipped both to all three mirrors.
+
+The command fails. `JournalEntry`'s validator rejects `state` on anything but a `finding` ('state is only valid on finding entries'), and `done` is not one of the three legal states anyway (fixed|refuted|open). Run verbatim it exits 2.
+
+Verified live before fixing: `uv run fr journal add --scope plan --slug throwaway-verify --kind review --phase 1 --state done --title t --body b` -> exit 2, 'Input should be fixed, refuted or open'.
+
+This is this PR's own failure class, in the PR: a documented obligation that cannot be satisfied by the documented means. Worse than prose that gets absorbed - prose that actively misleads, shipped to consumers through three mirrors. Nothing caught it: skill validation checks line count and structure, the tool-neutrality scanner checks tool names, and no tripwire executes a command a skill prints.
+
+Fixed: `--state done` removed from both. Both corrected forms were then RUN, not merely read.
+
+<!-- fr:journal kind=finding scope=plan id=r-p4-f2 created=2026-09-20T18:25:00 phase=4 state=fixed -->
+### r-p4-f2 · finding [fixed] · Three explanatory clauses were deleted to buy characters under the 120-line cap (phase 4)
+
+The dispatch warned explicitly: pay for new prose by tightening, never by deleting an instruction, warning or cross-reference. Word-level diff shows three losses, each of them the WHY rather than the what:
+
+1. SSS6: '(a silent no-op)' - the reason re-adding a finding id is wrong. Without it 'never by re-adding' reads as style advice rather than a warning that the command silently does nothing.
+2. SSS8: 'it folds resolution records' - the reason `fr journal resolve` is the right verb rather than editing the finding.
+3. fr-debugging: the new sentence ended '(if skipped, this is noted as the operator reviews the PR itself)', which is mush that quietly licenses skipping the very obligation the sentence exists to impose.
+
+All three restored/rewritten inside the same 120-line cap by tightening the resolve flag list instead. fr-debugging now says plainly that nothing enforces it there and that this is why it is written down - honest about the absence rather than papering it.
+
+Both files still exactly at their caps (120 / 116) and all three mirrors resynced.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p4-no-tripwire-runs-skill-commands created=2026-09-20T18:25:00 phase=4 -->
+### d-p4-no-tripwire-runs-skill-commands · discovery · No tripwire executes a command that a skill documents (phase 4)
+
+r-p4-f1 shipped a broken command through canonical source and two generated mirrors with every gate green. The existing skill gates check line count, structure, frontmatter and harness-specific tool names - none of them runs anything.
+
+A tripwire that extracts `fr <verb> ...` invocations from skill prose and at least parses them against the Typer app (not necessarily executing them) would have caught this in under a second. Not built here: it needs a convention for placeholders (`<s>`, `<f>`, `N`) so it does not fire on every documented example, which is a design decision rather than a mechanical addition.
+
+Recorded because the gap is exactly the one this PR is about, one level up: the skills tell an agent to run something, and nothing checks that the something works.
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-09-20T18:25:23 phase=4 -->
+### review-p4 · review · phase 4 review - a documented command that exits 2, and three deleted why-clauses (phase 4)
+
+Reviewed: plan phase 4 (04.yaml, as rewritten after phase 3's renumbering), and the diff 7fb2903..db4087e - fr-goal SKILL.md SSS6/SSS8, fr-debugging SKILL.md, and all four generated mirrors.
+
+Reviewed by the orchestrator directly rather than by a dispatched reviewer: phase 4 is prose-only, its diff is three sentences, and the two defects were found by running what the prose told a reader to run and by a word-level diff - both cheaper done inline than briefed out.
+
+Findings raised: 2, both fixed. Plus one discovery.
+  r-p4-f1 both skills documented a command that exits 2   [fixed]
+  r-p4-f2 three explanatory clauses deleted to buy space  [fixed]
+
+r-p4-f1 is the serious one and it is this PR's own thesis turned on the PR: the skills told an agent to run `fr journal add --kind review --state done`, which fails - `state` is only valid on `finding` entries and `done` is not a legal state. Shipped to canonical source and both mirror sets with every gate green. The correct forms have now been RUN, not merely read, for both the plan and debug scopes.
+
+r-p4-f2: the dispatch warned that the 120-line cap must be paid for by tightening and never by deleting an instruction, warning or cross-reference. Three clauses went anyway, each of them a WHY - '(a silent no-op)', 'it folds resolution records', and a trailing clause in fr-debugging that quietly licensed skipping the obligation it was imposing. All restored inside the same cap by tightening a flag list instead.
+
+Confirmed good: the obligation itself is in the right place (SSS6, beside the finding-recording clause it parallels); fr-debugging is honest that no cursor enforces it there rather than implying fr-goal's gate applies; both sync scripts were run so all three copies of each skill agree; line caps intact at 120 and 116.
+
+Carried as a discovery: d-p4-no-tripwire-runs-skill-commands. No gate executes or even parses a command a skill documents, which is how a broken one shipped through three files. Buildable, but it needs a placeholder convention first, so it is recorded rather than bolted on here.
+
+Post-fix: 109 skill/mirror/neutrality/integration tests pass.
+
+Assessment: phase 5 proceeds.

@@ -94,14 +94,14 @@ After each `implement-phase` return, run `review-phase`: `superpowers:requesting
 spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
 `superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
 (`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
-body from it; later-fixed findings close with `fr journal resolve` (--scope plan --slug <s> --id <f> --state fixed --note <why>), never by re-adding. Record the review with `fr journal add --scope plan --slug <s> --kind review --phase N --state done`, naming findings raised or that none were; the `journal-check` step fails delivery without it. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
+body from it; later-fixed findings close with `fr journal resolve` (`--id <f> --state fixed --note <why>`), never by re-adding the id (a silent no-op). Record the review — `fr journal add --scope plan --slug <s> --kind review --phase N` naming the findings raised, or that none were; `journal-check` (§7) fails delivery without it. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
 ### 7. journal-check — the review-owed gate, run by the cursor
 `fr run advance` runs `fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews` — exit code is the verdict (#430: an instruction-only obligation gets absorbed). Fails on a locally-complete, non-manual phase with no `kind=review` entry naming it; fix by completing/journaling that review, then re-`advance` (`cli` steps self-complete). Strands runs started against the older shape, by design — recover with `fr run adopt <plan-dir> --run-id <fresh>`.
 
 ### 8. deliver — one PR per repo, all artifacts aboard
 Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review
-pass, steps ticked, cursor reached deliver (having passed `journal-check` per §7). Close each fixed finding with `fr journal resolve` rather than explaining it away. Open the **draft** PR:
+pass, steps ticked, `journal-check` passed (§7 — it folds resolution records, so close each fixed finding with `fr journal resolve` rather than explaining it away). Open the **draft** PR:
 summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
 `fr journal render --scope plan --section findings`/`decisions`; an **Operator gates** section
 verbatim from `fr run gates <run-id>` (never blank — a run that never asked says so itself); the
