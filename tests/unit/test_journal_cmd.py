@@ -539,6 +539,629 @@ class TestCheck:
         assert res.exit_code == 0
 
 
+class TestCheckRequireReviews:
+    """`fr journal check --require-reviews`: its argument grammar, its
+    refusals, and the gate itself.
+
+    The gate fails when a phase the plan LOCALLY claims is done
+    (`fr.render.plan_locally_complete` — `completion.at` set, or every step
+    ticked) carries no `kind=review` journal entry naming it. Manual-tagged
+    phases are exempt (spec D4) and the exemption is stated in the failure
+    message rather than applied silently.
+
+    (This docstring described the flag as unimplemented until review r-p2-f3
+    — the same stale-disclaimer shape the gate's own source comment was
+    deleted for one step earlier.)"""
+
+    def _seed_open_finding(self, slug: str, finding_id: str = "f1") -> None:
+        """Give `slug`'s journal one OPEN finding.
+
+        Without this, every slug — right, wrong or empty — resolves to a
+        journal with no findings and exits 0, so a derivation test passes even
+        with the derivation completely broken (review r-p1-f2 proved it by
+        mutation). Seeding a finding under the EXPECTED slug is what makes
+        "exit 1, and this id in the output" evidence that the right journal
+        was read.
+        """
+        res = runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", slug,
+                "--kind", "finding", "--id", finding_id, "--state", "open",
+                "--title", "seeded", "--body", "b",
+                # Plan-scope `add` refuses an untagged entry (gh#464: `--phase N`
+                # or `--global`). The seeded finding belongs to no phase — it
+                # exists to prove WHICH journal was read — so it says so.
+                "--global",
+            ],
+        )  # fmt: skip
+        assert res.exit_code == 0, res.output
+
+    def _write_plan(self, root: Path, slug: str):
+        """One trivial agentic phase — the degenerate case of
+        `_write_plan_phases` (review r-p2-f7)."""
+        from fr.plan_ops import PhaseSpec
+
+        return self._write_plan_phases(root, slug, [PhaseSpec(number=1, title="One", tasks=())])
+
+    def _write_plan_phases(self, root: Path, slug: str, phases):
+        from fr.plan_ops import create
+
+        (root / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+        create(
+            repo_root=root,
+            slug=slug,
+            spec=None,
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=phases,
+            prose="# x\n",
+        )
+        return root / "docs" / "superpowers" / "plans" / slug
+
+    def test_require_reviews_is_inert_when_all_phases_incomplete(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No phase is locally complete, so none is OWED a review — exit 0
+        with the flag on, exactly as without it.
+
+        Paired with `test_require_reviews_fails_on_a_completed_phase_with_no_review`
+        below on a COMPLETED phase of the same shape, per review r-p1-f2: that
+        counterpart is what proves the flag is doing real work here rather than
+        the gate being unbuilt (or broken) and every phase happening to look
+        incomplete.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR1")
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "plan", "--slug", "RR1", "--require-reviews"],
+        )
+
+        assert res.exit_code == 0, res.output
+
+    def test_require_reviews_refuses_non_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "spec", "--slug", "S", "--require-reviews"],
+        )
+
+        assert res.exit_code == 2, res.output
+        # Mirrors the refusal `fr journal handoff` already uses for the same
+        # condition (only plan journals have phases) — not a second phrasing.
+        assert "only plan journals have phases" in res.output
+
+    def test_plan_dir_without_slug_derives_slug_from_basename(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR2")
+        self._seed_open_finding("RR2")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal",
+                "check",
+                "--scope",
+                "plan",
+                "--plan-dir",
+                "docs/superpowers/plans/RR2",
+            ],
+        )
+
+        # Exit 1 naming the seeded finding proves RR2's journal was the one
+        # read. A bare `exit_code == 0` would also pass if the derivation
+        # produced "TOTALLY-WRONG-SLUG", or "" — which is how the fail-open
+        # in r-p1-f1 survived.
+        assert res.exit_code == 1, res.output
+        assert "f1" in res.output
+
+    def test_slug_without_plan_dir_still_works(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR3")
+        self._seed_open_finding("RR3", "f3")
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR3"])
+
+        assert res.exit_code == 1, res.output
+        assert "f3" in res.output
+
+    def test_a_plan_dir_with_no_final_component_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """`--plan-dir .` must not fail OPEN (review r-p1-f1).
+
+        `Path(".").name` is `""`, and an empty slug resolves
+        `journals/plans/.md`, which does not exist, which reads as an empty
+        journal — so the command used to exit 0 having checked nothing, INCLUDING
+        the pre-existing open-findings rule. Found live: on a plan whose journal
+        carried four open findings, `--slug` exited 1 and `--plan-dir .` exited 0.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR5")
+        self._seed_open_finding("RR5", "f5")
+
+        for bad in (".", "", "docs/superpowers/plans/RR5/.."):
+            res = runner.invoke(
+                app,
+                ["journal", "check", "--scope", "plan", "--plan-dir", bad, "--require-reviews"],
+            )
+            # Exit 2 (refused), never 0 (silently passed). Exit 1 would also be
+            # acceptable behaviour but is not what this refusal does.
+            assert res.exit_code == 2, f"--plan-dir {bad!r} -> {res.exit_code}: {res.output}"
+
+    def test_scope_refusal_beats_a_missing_slug(self, tmp_path: Path, monkeypatch) -> None:
+        """The scope objection is reported first (review r-p1-f3).
+
+        `--require-reviews --scope spec` is unsatisfiable whatever slug is
+        supplied, so complaining about the missing slug would send the operator
+        to fix the wrong thing and learn the real objection one run later.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "spec", "--require-reviews"])
+
+        assert res.exit_code == 2, res.output
+        assert "only plan journals have phases" in res.output
+        assert "--slug" not in res.output
+
+    def test_plan_dir_is_refused_outside_plan_scope(self, tmp_path: Path, monkeypatch) -> None:
+        """`--plan-dir` names a plan (review r-p1-f6).
+
+        Accepted under `--scope spec` it would quietly derive a slug and check
+        a SPEC journal named after that plan folder — a different file than the
+        operator asked about, reported as a clean pass.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(
+            app,
+            ["journal", "check", "--scope", "spec", "--plan-dir", "docs/superpowers/plans/RR6"],
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "--plan-dir" in res.output
+
+    def test_slug_wins_when_both_are_given(self, tmp_path: Path, monkeypatch) -> None:
+        """An explicit `--slug` is not overridden by `--plan-dir`'s basename.
+
+        Unpinned until now (review r-p1-f6), and about to become observable:
+        once the gate lands, a disagreeing pair reads the journal from one
+        place and the phases from another, so which one names the journal must
+        be a decision the suite holds, not an accident of argument order.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._write_plan(root, "RR7")
+        self._seed_open_finding("RR7", "f7")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR7",
+                "--plan-dir", "docs/superpowers/plans/SOMETHING-ELSE",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 1, res.output
+        assert "f7" in res.output
+
+    def test_neither_slug_nor_plan_dir_exits_2_naming_both(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan"])
+
+        assert res.exit_code == 2, res.output
+        assert "--slug" in res.output
+        assert "--plan-dir" in res.output
+
+    def test_without_require_reviews_completed_unreviewed_phase_still_exits_zero(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Back-compat (spec D2): `fr journal check --scope plan` behaves
+        exactly as it did before the flag existed, even for a phase the plan
+        claims is done with no review entry naming it — the assertion a later
+        refactor is most likely to break silently."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR4")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "RR4"])
+
+        assert res.exit_code == 0, res.output
+
+    def test_require_reviews_fails_on_a_completed_phase_with_no_review(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(a): a locally-complete agentic phase with no `review`
+        entry naming it fails, and the message names the phase number."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR8")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR8", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "owed a review" in res.output
+        assert "--phase 1" in res.output
+
+    def test_require_reviews_passes_once_the_phase_is_reviewed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(b): the same phase, now with a `kind=review phase=1`
+        entry recorded, passes."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR9")
+        complete_phase(plan_dir, 1)
+        add_res = runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR9",
+                "--kind", "review", "--phase", "1", "--id", "review-1",
+                "--title", "phase 1 review", "--body", "no findings",
+            ],
+        )  # fmt: skip
+        assert add_res.exit_code == 0, add_res.output
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR9", "--require-reviews"]
+        )
+
+        assert res.exit_code == 0, res.output
+
+    def test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(c) — THE test this phase exists for.
+
+        An agentic phase with every step ticked and `completion.at` UNSET
+        still claims to be done under `plan_locally_complete`. Had the gate
+        keyed on `completion.at` alone this phase would look incomplete and
+        pass silently; had it keyed on `_phase_complete` it would ALSO pass
+        silently, because `_phase_complete` additionally requires an observed
+        merged PR that never exists during an fr-goal run (spec, "Which
+        completion predicate, and why it matters"). This is the one test that
+        distinguishes all three candidate predicates.
+        """
+        from fr.plan_ops import PhaseSpec, TaskSpec, tick
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan_phases(
+            root,
+            "RR10",
+            [
+                PhaseSpec(
+                    number=1,
+                    title="One",
+                    tasks=(
+                        TaskSpec(
+                            number=1,
+                            title="T1",
+                            steps=[{"id": "P1.T1.S1", "text": "do x"}],
+                        ),
+                    ),
+                )
+            ],
+        )
+        tick(plan_dir, "P1.T1.S1")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR10", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "owed a review" in res.output
+        assert "--phase 1" in res.output
+
+    def test_manual_phase_is_exempt_and_the_message_names_the_exemption(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(d): a `[manual]` phase with `completion.at` set and no
+        review is not owed one, and an unrelated failing agentic phase's
+        message names the manual exemption (spec D4) so a reader is not left
+        wondering why the manual phase is missing from the list."""
+        from fr.plan_ops import PhaseSpec, complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan_phases(
+            root,
+            "RR11",
+            [
+                PhaseSpec(number=1, title="Agentic", tasks=()),
+                PhaseSpec(number=2, title="Manual", tag="manual", tasks=()),
+            ],
+        )
+        complete_phase(plan_dir, 1)
+        complete_phase(plan_dir, 2, note="operator did this by hand")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR11", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "--phase 1" in res.output
+        assert "--phase 2" not in res.output
+        assert "manual" in res.output.lower()
+
+    def test_a_nonexistent_plan_dir_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(e), first half: the plan dir doesn't exist. Fail-closed."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR12",
+                "--kind", "discovery", "--title", "x", "--id", "d1",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR12",
+                "--plan-dir", "docs/superpowers/plans/RR12-does-not-exist",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+
+    def test_a_plan_dir_that_does_not_parse_is_refused_not_silently_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(e), second half: the plan dir exists but has no
+        `_meta.yaml` (not a v2 plan) — `parse` raises `PlanSchemaError`, and
+        the gate must fail closed rather than treat it as zero phases."""
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        empty_dir = root / "docs" / "superpowers" / "plans" / "RR13-empty"
+        empty_dir.mkdir(parents=True)
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR13",
+                "--kind", "discovery", "--title", "x", "--id", "d1",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR13",
+                "--plan-dir", "docs/superpowers/plans/RR13-empty",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+
+    def test_the_fail_closed_diagnostic_is_not_eaten_by_rich_markup(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Pydantic's error text must reach the operator intact
+        (review r-p2-f4).
+
+        A validation error ends in `[type=missing, input_value=..., input_type=
+        dict]` — the most diagnostic half of it. Rich parses `[...]` as a style
+        tag and SILENTLY DROPS it, so a fail-closed exit 2 would name the file
+        and then withhold the reason. `markup=False` is what keeps it; nothing
+        pinned that, because the repo's other fail-closed tests raise errors
+        with no brackets in them.
+        """
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        bad = root / "docs" / "superpowers" / "plans" / "RR23"
+        bad.mkdir(parents=True)
+        # A `_meta.yaml` that parses as YAML but fails PlanMeta validation, so
+        # the error carries pydantic's bracketed detail.
+        (bad / "_meta.yaml").write_text("schema_version: 2\n")
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan", "--slug", "RR23",
+                "--plan-dir", "docs/superpowers/plans/RR23", "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 2, res.output
+        assert "not parseable" in res.output
+        assert "[type=missing" in res.output, (
+            "Rich ate the bracketed pydantic detail — the fail-closed exit "
+            f"named the file but withheld the reason: {res.output!r}"
+        )
+
+    def test_composition_reports_both_open_findings_and_owed_reviews(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(f): a journal with both an open finding and an unreviewed
+        phase fails on both, and the open-findings line keeps its exact
+        pre-existing wording, because things grep it."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR14")
+        complete_phase(plan_dir, 1)
+        self._seed_open_finding("RR14", "f14")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR14", "--require-reviews"]
+        )
+
+        assert res.exit_code == 1, res.output
+        assert "1 open finding(s): f14" in res.output
+        assert "--phase 1" in res.output
+        # The source comment claims the open-findings line prints FIRST and
+        # always; nothing asserted it until review r-p2-f6. Membership alone
+        # would pass with the two gates' output interleaved or reordered.
+        assert res.output.index("open finding(s)") < res.output.index("owed a review")
+
+    def test_a_plan_with_no_recognised_phase_files_is_refused_not_passed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A vacuous pass is a fail-open (review r-p2-f1).
+
+        `fr.parser.parse` silently ignores any file not matching `NN.yaml`, so
+        a phase file misnamed `1.yaml` (or `02.yml`, or `phase-02.yaml`) makes
+        `plan.phases` empty — and a plan holding a real, COMPLETE, UNREVIEWED
+        phase would then exit 0 with no output at all. That is the state the
+        spec's Background condemns: satisfaction and violation looking the
+        same. Refuse instead, per §B's fail-closed rule.
+        """
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR20")
+        complete_phase(plan_dir, 1)
+        # Misname the phase file exactly as a careless hand-edit would.
+        (plan_dir / "01.yaml").rename(plan_dir / "1.yaml")
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR20", "--require-reviews"]
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "no phase files" in res.output
+
+    def test_the_remediation_command_is_not_wrapped_across_lines(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The failure message ends in a command meant to be pasted
+        (review r-p2-f2).
+
+        Rich folds at the terminal width in any non-TTY — a pipe, CI, or
+        `fr run advance` running the `kind: cli` step, which is exactly the
+        consumer the cursor-enforced gate was designed for. Folded, the one
+        command pastes as three broken ones.
+
+        `COLUMNS` is set NARROW here, deliberately. conftest's autouse
+        `_wide_terminal` fixture pins every CLI test at 200 columns so path
+        assertions stop depending on how long `tmp_path` happens to be — and
+        that wide default silently disables any test *about* wrapping. Written
+        without this override, this test passed with `soft_wrap` removed
+        (mutation-verified), i.e. it asserted nothing. conftest names this
+        override as the supported escape.
+        """
+        from fr.plan_ops import complete_phase
+
+        monkeypatch.setenv("COLUMNS", "80")
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR21-a-deliberately-long-slug-to-force-the-fold")
+        complete_phase(plan_dir, 1)
+
+        res = runner.invoke(
+            app,
+            [
+                "journal", "check", "--scope", "plan",
+                "--slug", "RR21-a-deliberately-long-slug-to-force-the-fold",
+                "--require-reviews",
+            ],
+        )  # fmt: skip
+
+        assert res.exit_code == 1, res.output
+        command_lines = [ln for ln in res.output.splitlines() if "fr journal add" in ln]
+        assert len(command_lines) == 1, res.output
+        line = command_lines[0]
+        for fragment in ("--scope plan", "--kind review", "--phase 1", "--title", "--body"):
+            assert fragment in line, f"{fragment!r} fell off the command line: {line!r}"
+
+    def test_an_unreadable_plan_file_is_fail_closed(self, tmp_path: Path, monkeypatch) -> None:
+        """The `OSError` arm of the fail-closed except was unpinned
+        (review r-p2-f5): narrowing it to `PlanSchemaError` alone left every
+        test green, because both existing fail-closed tests raise
+        `PlanSchemaError`. `fr.parser` reads the PHASE files outside its own
+        try-block (`parser.py:201`), so `OSError` is reachable there — whereas
+        `_meta.yaml` is read INSIDE it and surfaces as `PlanSchemaError`. The
+        first version of this test broke `_meta.yaml` and so exercised the very
+        arm it was written to pin nothing about."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR22")
+        complete_phase(plan_dir, 1)
+        # A DIRECTORY named `01.yaml` still matches the phase-file regex
+        # (which matches on the name), so `parse` reaches `read_text` and
+        # raises IsADirectoryError — an OSError, not a PlanSchemaError.
+        (plan_dir / "01.yaml").unlink()
+        (plan_dir / "01.yaml").mkdir()
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR22", "--require-reviews"]
+        )
+
+        assert res.exit_code == 2, res.output
+        assert "not parseable" in res.output
+
+    def test_a_resolved_finding_does_not_resurface_under_require_reviews(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """P2.T2.S1(g): a finding closed by `fr journal resolve` must not
+        resurface — the new gate must not have bypassed `open_finding_ids`'
+        fold to get its answer."""
+        from fr.plan_ops import complete_phase
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        plan_dir = self._write_plan(root, "RR15")
+        complete_phase(plan_dir, 1)
+        self._seed_open_finding("RR15", "f15")
+        resolve_res = runner.invoke(
+            app,
+            [
+                "journal", "resolve", "--scope", "plan", "--slug", "RR15",
+                "--id", "f15", "--state", "fixed", "--note", "fixed it",
+            ],
+        )  # fmt: skip
+        assert resolve_res.exit_code == 0, resolve_res.output
+        runner.invoke(
+            app,
+            [
+                "journal", "add", "--scope", "plan", "--slug", "RR15",
+                "--kind", "review", "--phase", "1", "--id", "review-1",
+                "--title", "phase 1 review", "--body", "no findings",
+            ],
+        )  # fmt: skip
+
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "RR15", "--require-reviews"]
+        )
+
+        assert res.exit_code == 0, res.output
+
+
 class TestScopeValidation:
     def test_every_journal_command_rejects_invalid_scope_cleanly(
         self, tmp_path: Path, monkeypatch

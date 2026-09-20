@@ -1,0 +1,563 @@
+# Journal: 2026-09-20-journal-require-reviews
+
+<!-- fr:journal kind=discovery scope=plan id=nrb-p4t1 created=2026-09-20T15:18:40 phase=4 -->
+### nrb-p4t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+P4.T1 edits three SKILL.md prose files. There is no red-green cycle to refactor from: the unit of work is sentences, and the 'refactor' of prose is rewriting the same sentences, which the step already instructs (keep the compressed voice, do not grow the section by more than a couple of lines). The mechanical follow-up that IS separable — regenerating the OpenCode mirrors and running their tripwires — is its own task, P4.T2, rather than a refactor step pretending to be one.
+
+<!-- fr:journal kind=discovery scope=plan id=nrb-p5t2 created=2026-09-20T15:18:40 phase=5 -->
+### nrb-p5t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+P5.T2 writes explainer prose and regenerates the published page with an externally-owned renderer. The .html is generated and must never be hand-edited, so there is nothing in the output to refactor; the .md's quality pass is the writing step itself. The verification that would normally be a refactor step's job is instead P5.T1.S1, which runs BEFORE the prose is written — byte-identical re-render of the unmodified page — because that ordering is what makes the later diff readable.
+
+<!-- fr:journal kind=discovery scope=plan id=nrb-p6t2 created=2026-09-20T15:18:44 phase=6 -->
+### nrb-p6t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+P6.T2 is bumped 4.8.0 -> 4.9.0 in 9 files
+running `uv sync`...
+`fr --version` -> fr 4.9.0 plus 33 artifact(s) checked — all structurally valid.. Both are single deterministic commands over generated manifests; the script owns the edit and hand-editing the version-bearing surfaces is explicitly forbidden by AGENTS.md. There is no authored code here to clean up. The phase's quality pass is P6.T3, the full CI gate.
+
+<!-- fr:journal kind=discovery scope=plan id=pre-existing-bump created=2026-09-20T15:19:51 phase=6 -->
+### pre-existing-bump · discovery · The worktree already carried an uncommitted 4.8.0 to 4.9.0 bump, provenance not this session (phase 6)
+
+Found while running plan self-review, which rebuilt the venv and installed fr==4.9.0 while origin/main is 4.8.0.
+
+The worktree (~/.cache/fr/worktrees/super-fr/feat__journal-require-reviews) was created at 12:54 today and reset to eb85d91; this session began at 15:10. So an earlier session on this same branch ran the bump and left it uncommitted.
+
+Verified it is version-ONLY: the diff over .claude-plugin/marketplace.json, packages/*/pyproject.toml, packages/fr-opencode-plugin/package.json, plugins/*/.claude-plugin/plugin.json and the workspace-root pyproject.toml is exactly five `version = "4.9.0"` lines and five JSON version keys, nothing else. That is byte-equivalent to what `scripts/bump-version.py minor` produces from 4.8.0, which is the bump this PR owes anyway.
+
+Decision: ADOPT it rather than reset-and-redo. Resetting would discard uncommitted work of unknown provenance to reproduce an identical result. P6.T2.S1 is amended to VERIFY the bump (diff is version-only, `bump-version.py --check` passes, `uv run fr --version` reads 4.9.0) and commit it, rather than bumping again — which from a dirty 4.9.0 tree would land 4.10.0 and overshoot.
+
+<!-- fr:journal kind=discovery scope=plan id=d864d12dd9ad created=2026-09-20T15:24:53 phase=1 -->
+### d864d12dd9ad · discovery · Phase-1 smoke baseline: --require-reviews rides the existing open-findings rule, exit 1 (phase 1)
+
+Ran the real binary against this repo's own live plan
+docs/superpowers/plans/2026-09-04-worktree-traceability, both by --plan-dir
+(no --slug) and by --slug (no --plan-dir):
+
+  uv run fr journal check --scope plan --plan-dir docs/superpowers/plans/2026-09-04-worktree-traceability --require-reviews
+  uv run fr journal check --scope plan --slug 2026-09-04-worktree-traceability --require-reviews
+
+Both resolve to the same journal and agree byte-for-byte:
+"4 open finding(s): d028f3cc945a, a309fda69e5a, 9ecae0965ac4, a3228f0cb118",
+exit=1. Phase 2 has not built the review-owed/present gate yet, so
+--require-reviews is currently pure plumbing: it changes nothing about what
+check does — the plan's pre-existing open findings are what fail it, exactly
+as they would without the flag. This is the baseline phase-2 tests are
+measured against: once the gate lands, this same command's failure reason
+must still include these findings (existing rule keeps firing) but may also
+gain phase-owed-review lines, or, if this plan's findings get resolved before
+phase 2 lands, may exit 0 purely on the new gate's say-so.
+
+<!-- fr:journal kind=discovery scope=plan id=576256bf712f created=2026-09-20T15:30:28 phase=1 -->
+### 576256bf712f · discovery · Full-suite gate: 2 more pre-existing environment-dependent failures beyond the documented workflow_check one (phase 1)
+
+uv run pytest -q --no-cov on this branch: 3296 passed, 80 skipped, 3 failed.
+One is the dispatch brief's known-tolerated red
+(test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable,
+#463/#489). The other two are NOT caused by this phase:
+
+  tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused
+  tests/unit/test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused
+
+Both assert a substring of an error message ("not a linked git worktree",
+"container evidence") that Rich has line-wrapped mid-phrase because this
+machine's pytest tmp_path is long enough to push the wrap point into the
+asserted words — the exact macOS-tmp_path-length failure class already
+recorded independently in
+docs/superpowers/implemented/journals/plans/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts.md.
+Confirmed unrelated to any diff in this worktree: `git diff --stat HEAD --
+tests/unit/test_run_workspace.py packages/fr/src/fr/commands/run_cmd.py` is
+empty, and running just these two tests in isolation reproduces the same
+failure with the same wrap point. Not fixed here (out of phase-1 scope; no
+file touched by this phase is anywhere near isolation-marker validation).
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f1 created=2026-09-20T15:41:46 phase=1 state=fixed -->
+### r-p1-f1 · finding [fixed] · --plan-dir with no final component failed OPEN, disabling even the pre-existing open-findings rule (phase 1)
+
+Path('.').name is '' and Path('a/b/..').name is '..'; neither names a real plan. An empty or navigation-token slug resolved journals/plans/.md (or ...md), which does not exist, which _load reads as an empty journal - so the command exited 0 having checked NOTHING, including the open-findings gate that predates this PR.
+
+Verified live before the fix, on docs/superpowers/plans/2026-09-04-worktree-traceability: --slug exited 1 with '4 open finding(s)' while --plan-dir . exited 0 silently.
+
+Fixed in _resolve_slug_and_plan_dir: a derived slug of '', '.' or '..' is exit 2. The '..' spelling was found by the test written for the empty case - the red test earned its keep.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f2 created=2026-09-20T15:41:46 phase=1 state=fixed -->
+### r-p1-f2 · finding [fixed] · Two derivation tests passed with the derivation completely broken (phase 1)
+
+The reviewer proved it by mutation rather than by reading: monkeypatching _resolve_slug_and_plan_dir to return 'TOTALLY-WRONG-SLUG' left both tests green, because the fixture journal had no findings and so every slug - right, wrong or empty - exits 0. They asserted that the command runs, not that the basename derivation happened.
+
+Fixed with a _seed_open_finding helper: the expected slug's journal gets one open finding, so the assertion becomes 'exit 1 AND this finding id in the output', which a wrong slug cannot satisfy. The inert-flag test cannot be made discriminating while the gate is unbuilt; it now carries a docstring saying so and naming what phase 2 must pair it with.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f3 created=2026-09-20T15:41:47 phase=1 state=fixed -->
+### r-p1-f3 · finding [fixed] · Refusal order reported the missing slug instead of the unsatisfiable scope (phase 1)
+
+--require-reviews --scope spec with no slug reported 'give --slug or --plan-dir'. But --require-reviews on a spec journal is unsatisfiable whatever slug is supplied, so the operator fixes the wrong thing and learns the real objection one run later. Scope refusals now run before any slug resolution; pinned by a test asserting the scope message appears and '--slug' does not.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f4 created=2026-09-20T15:41:47 phase=1 state=fixed -->
+### r-p1-f4 · finding [fixed] · The shipped --help promised the unbuilt gate and carried this plan's phase numbering (phase 1)
+
+The option help read as a description of working behaviour, and the docstring said 'Phase 1 wires only the option surface; the gate lands in phase 2'. Two defects: a reader of `fr journal check --help` has no idea what phase 1 is, and nothing would have forced that sentence's deletion once the gate shipped - a permanently stale disclaimer claiming an implemented feature is unimplemented.
+
+Moved to a '# NOT YET IMPLEMENTED' source comment, which is not a shipped surface, and added an explicit phase-2 step (P2.T2.S4) to delete it.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f5 created=2026-09-20T15:41:47 phase=1 state=fixed -->
+### r-p1-f5 · finding [fixed] · A `type: ignore` masked the very error a loosened guard would produce (phase 1)
+
+resolved_slug used '# type: ignore[arg-type]' for Path(plan_dir), because mypy cannot infer from a combined 'slug is None and plan_dir is None' guard that plan_dir is not None. Load-bearing under strict mode - but it also meant a later loosening of the guard would silently permit Path(None) and a runtime TypeError. Restructured into two early returns; the ignore is gone and mypy now checks the guard.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f6 created=2026-09-20T15:41:48 phase=1 state=fixed -->
+### r-p1-f6 · finding [fixed] · Two behaviours were unspecified and unpinned on a brand-new CLI surface (phase 1)
+
+(1) --slug and --plan-dir given together: slug wins. Sensible, unasserted, and about to become observable once the gate reads the journal from one and the phases from the other - now pinned.
+
+(2) --plan-dir was silently accepted with --scope spec|debug, where it still drove slug derivation, so `check --scope spec --plan-dir docs/superpowers/plans/foo` quietly checked the SPEC journal 'foo' and reported a clean pass on a file the operator never named. Now refused at exit 2.
+
+<!-- fr:journal kind=finding scope=plan id=r-p1-f7 created=2026-09-20T15:41:48 phase=1 state=refuted -->
+### r-p1-f7 · finding [refuted] · REFUTED: the phase executor's report speculated an out-of-order dispatch had touched phases 4-6 (phase 1)
+
+Its hand-back said the pre-existing uncommitted state 'suggests an earlier out-of-order dispatch touched phases 4-6 in this same worktree before phase 1 landed'. It did not.
+
+The phase 4-6 journal entries (nrb-p4t1, nrb-p5t2, nrb-p6t2) are no-refactor-because justifications the orchestrator wrote during PLANNING, because `fr plan self-review` demands one for a task with no refactor step; pre-existing-bump is the orchestrator's own discovery, also written during planning; the run-cursor advancement is this run's own. No phase executor ran out of order.
+
+Recorded rather than dropped because the claim was plausible and would have sent a reader hunting a dispatch bug that does not exist. The executor was right to flag unexplained state it found in its workspace - only the inference was wrong, and it correctly kept the speculation out of the journal.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-09-20T15:42:12 phase=1 -->
+### review-p1 · review · phase 1 review - 7 findings, 6 fixed and 1 refuted (phase 1)
+
+Reviewed: spec 2026-09-20-journal-require-reviews-design.md (SSA, SSB, SSC, Decisions), plan phase 1 (01.yaml), and the diff 2841955..caabff9 - packages/fr/src/fr/commands/journal_cmd.py and tests/unit/test_journal_cmd.py.
+
+Performed by an independent reviewer subagent with no session context, per fr-goal SS6. Its two Important findings were verified by the orchestrator against the running binary before any fix was written, not taken on trust.
+
+Findings raised: 7.
+  r-p1-f1 fail-open on a plan dir with no final component     [fixed]
+  r-p1-f2 two tests that passed with the derivation broken    [fixed]
+  r-p1-f3 refusal order showed the less useful error          [fixed]
+  r-p1-f4 shipped --help promised the unbuilt gate            [fixed]
+  r-p1-f5 a type: ignore masked a loosened-guard error        [fixed]
+  r-p1-f6 two unpinned behaviours on a new CLI surface        [fixed]
+  r-p1-f7 the executor's out-of-order-dispatch speculation    [refuted]
+
+Confirmed correct and left alone: scope discipline (the gate is genuinely not stubbed - no code path pretends to evaluate owed phases, and the unused plan-dir is honestly underscore-prefixed rather than noqa'd); the refusal wording really does mirror `fr journal handoff` rather than inventing a second phrasing; the plan-dir contract matches handoff's and needs no phase-2 rework; back-compat under spec D2 holds - the only observable change without the flag is a missing-slug MESSAGE, and the exit code stays 2 either way, while the greppable 'N open finding(s)' line is byte-identical; no caller anywhere in the repo invokes `fr journal check` outside prose, so the --slug asymmetry breaks nothing.
+
+Independently verified beyond the review: the two extra full-suite failures the executor reported as pre-existing really are. packages/fr/src/fr/run/workspace.py is byte-identical to origin/main on this branch, so nothing here could have caused them; they fail on a Rich wrap point that this machine's long pytest tmp_path pushes into an asserted substring.
+
+Post-fix state: 44 tests in tests/unit/test_journal_cmd.py pass, ruff check clean, mypy clean over all four src trees, and the live fail-open now refuses (`--plan-dir .` -> exit 2 with a message naming the fix).
+
+Assessment: phase 2 proceeds on this foundation. The two Important findings were fixed BEFORE dispatching it, deliberately - phase 2's tests are written against this fixture helper, and a fixture that cannot distinguish a right slug from a wrong one would have propagated the weakness into the phase that actually matters.
+
+<!-- fr:journal kind=discovery scope=plan id=c0a82f042d30 created=2026-09-20T15:54:34 phase=2 -->
+### c0a82f042d30 · discovery · Rich markup swallows literal [manual] in err_console output (phase 2)
+
+err_console is a Rich Console(highlight=False), but that does not disable markup parsing: a literal '[manual]' in a printed string is interpreted as an (unknown) style tag and silently dropped from the rendered output, not printed verbatim. Found while writing the manual-exemption failure message (spec D4 requires the exemption be named in the failure text) — a test asserting 'manual' in the output failed because the bracketed word vanished. Fixed by phrasing the message as plain prose ('manual phases are exempt from --require-reviews') rather than '[manual] phases are exempt', avoiding the bracket syntax entirely rather than escaping it. Relevant to any future err_console message that wants to echo a tag-like phase name.
+
+<!-- fr:journal kind=discovery scope=plan id=0e6e5df920b1 created=2026-09-20T15:54:42 phase=2 -->
+### 0e6e5df920b1 · discovery · Plan step ids are schema-constrained to P<n>.T<m>.S<k>, not free-form (phase 2)
+
+PhaseDoc's step id field validates against the pattern ^P\d+\.T\d+\.S\d+$ (pydantic string_pattern_mismatch on anything else, e.g. '1.1'). Hit this writing the P2.T2.S1(c) test (the ticked-steps-but-no-completion.at fixture) with a plain '1.1' id; fixed by using 'P1.T1.S1'. Noting it because a plan fixture built by hand for a future phase will hit the same PlanSchemaError if it copies the shorter id style from ad-hoc examples in prose.
+
+<!-- fr:journal kind=discovery scope=plan id=3ec6e6b36cec created=2026-09-20T15:54:53 phase=2 -->
+### 3ec6e6b36cec · discovery · Phase 2 gate: implementation summary and predicate choice confirmed live (phase 2)
+
+Implemented reviewed_phases(entries) -> set[int] in fr/journal/model.py (pure fold: kind==review and phase is not None) and wired the owed-vs-present comparison into fr journal check's require_reviews branch in fr/commands/journal_cmd.py, using fr.render.plan_locally_complete (NOT _phase_complete) and excluding phase.tag == 'manual' per spec D4. The exemption is applied at the check call site, not inside the predicate, per spec (plan_locally_complete stays tag-agnostic for its other three callers). Confirmed via test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review (P2.T2.S1c) that a phase with every step ticked and completion.at unset is correctly flagged owed — this is the test the phase exists for, and it would pass silently under either of the two wrong predicates named in the spec. Composition with the pre-existing open-findings gate: both checks run unconditionally, the open-findings line prints first and is byte-identical to its old wording, and exit is 1 if either check fails, 2 if the plan cannot be parsed (fail-closed) or scope/derivation is unsatisfiable. Deleted the phase-1 '# NOT YET IMPLEMENTED' comment (r-p1-f4's fix point) now that the gate is real.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f1 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f1 · finding [fixed] · A plan parsing to zero phases made the gate exit 0 having evaluated nothing (phase 2)
+
+fr.parser.parse silently ignores any file not matching ^NN\.yaml$ and does not require that any phase file exist (only parse_strict does). So a plan folder with a valid _meta.yaml and a phase file misnamed `1.yaml`, `02.yml` or `phase-02.yaml` yields plan.phases == (), owed == set(), and exit 0 with NO OUTPUT AT ALL - on a plan holding a real, complete, UNREVIEWED phase.
+
+Proved directly: copying this plan's own _meta.yaml and 01.yaml into a dir as `1.yaml` gives plan.phases == () and an empty owed set.
+
+Same shape as phase 1's r-p1-f1 fail-open, and materially worse once phase 3 makes the gate cursor-enforced: after that a vacuous pass is invisible, because the run simply proceeds to deliver.
+
+Fixed: `if not plan.phases` is exit 2, refusing rather than reporting a vacuous pass. Mutation-verified - replacing the guard with `if False` fails exactly the new test and nothing else.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f2 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f2 · finding [fixed] · The remediation command was folded by Rich into three broken shell commands (phase 2)
+
+P2.T2.S3 made the failure message the declared product of phase 2, and the message ends in a command the reader is meant to paste. err_console has markup and wrapping on, so in any non-TTY - a pipe, CI, or `fr run advance` executing the kind:cli step, i.e. exactly the consumer spec D3 designed this for - Rich folds at the terminal width.
+
+Observed: `fr journal add --scope plan --slug ... --kind` / `review --phase 2 --title ...` / `'no findings'>"` - three lines, which paste as a command missing its --kind value, a command-not-found, and a syntax error.
+
+The repo already has this convention with the reason written down (run_cmd.py's gate lines, archive_cmd.py, workflow_cmd.py all pass soft_wrap=True). Fixed with markup=False, soft_wrap=True.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f3 created=2026-09-20T16:12:15 phase=2 state=fixed -->
+### r-p2-f3 · finding [fixed] · The test class docstring still described the gate as unimplemented (phase 2)
+
+TestCheckRequireReviews' docstring read 'Phase 1 (skeleton) ... the gate itself is phase 2 ... the flag's only observable behaviour is its refusals plus exit 0' - false of seven of its own tests. P2.T2.S4 deleted the equivalent disclaimer from journal_cmd.py for exactly this reason and left this one standing. Fixed: the docstring now describes the gate, and names why it was stale.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f4 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f4 · finding [fixed] · Rich markup silently ate the most diagnostic half of the fail-closed message (phase 2)
+
+The parse-failure print interpolated pydantic's error text into a markup-enabled console. Pydantic ends its errors with `[type=missing, input_value=..., input_type=dict]`, which Rich parses as a style tag and DROPS - so a fail-closed exit 2 named the file and then withheld the reason, leaving orphaned trailing spaces where the detail had been. Pre-existing in `handoff`; newly copied here.
+
+Fixed with markup=False, soft_wrap=True. Pinning it needed a test of its own: the repo's other fail-closed tests raise errors with no brackets in them, so nothing could have caught this. Mutation-verified.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f5 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f5 · finding [fixed] · The OSError arm of the fail-closed except was unpinned (phase 2)
+
+Narrowing `except (PlanSchemaError, OSError)` to `except PlanSchemaError` left every test green, because both existing fail-closed tests raise PlanSchemaError. The arm is correct and reachable - fr.parser reads the PHASE files outside its own try-block - just untested.
+
+Fixed with a test that makes `01.yaml` a DIRECTORY (still matching the phase-file regex, so parse reaches read_text and raises IsADirectoryError). Note the first version of that test broke _meta.yaml instead, which is read INSIDE parse's try and surfaces as PlanSchemaError - it would have exercised the arm it was written to pin nothing about.
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f6 created=2026-09-20T16:12:16 phase=2 state=fixed -->
+### r-p2-f6 · finding [fixed] · The documented 'open findings print FIRST' ordering was asserted by nothing (phase 2)
+
+The source comment claims the open-findings line prints first and always, so composition with the reviews gate never reorders or swallows it. Both composition assertions were membership tests, which pass with the two gates' output interleaved. Fixed with an index comparison. (The reviewer also noted, correctly, that the composition test does not prove the reviews gate affects the EXIT CODE - removing `failed = True` leaves it green because the seeded open finding alone gives exit 1. That is covered by tests (a), (c) and (d), so there is no coverage hole; the test is simply weaker than its docstring implied.)
+
+<!-- fr:journal kind=finding scope=plan id=r-p2-f7 created=2026-09-20T16:12:17 phase=2 state=fixed -->
+### r-p2-f7 · finding [fixed] · _write_plan had become a duplicate of _write_plan_phases (phase 2)
+
+Two test helpers identical apart from the phases argument. Collapsed the first into a call to the second.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p2-conftest-width created=2026-09-20T16:12:17 phase=2 -->
+### d-p2-conftest-width · discovery · conftest's wide-terminal fixture silently disables any test ABOUT wrapping (phase 2)
+
+Found while mutation-testing my own fix for r-p2-f2: the first version of the anti-wrapping test PASSED with soft_wrap removed, i.e. asserted nothing.
+
+Cause: tests/conftest.py's autouse `_wide_terminal` fixture sets COLUMNS=200 for every in-process CLI test. It exists for a good reason, documented at tests/conftest.py:49 - Rich wraps to the terminal width, so an assertion naming a PATH passes or fails depending on how long pytest's tmp root happens to be on the machine running the suite, which really did break test_archive_cmd.py once. But a test whose subject IS the wrapping cannot see anything at 200 columns.
+
+The fixture's own docstring names the escape: 'output that must survive a NARROW terminal has its own test that sets COLUMNS=40 explicitly, and that test still overrides this.' The fixed test sets COLUMNS=80.
+
+Worth recording because the trap is invisible: the test looks right, passes, and proves nothing - and it is the same defect class as the two pre-existing test_run_workspace.py failures this branch tolerates, which fail because this machine's long tmp_path pushes a Rich wrap point into an asserted substring.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-09-20T16:12:38 phase=2 -->
+### review-p2 · review · phase 2 review - 7 findings, all fixed, predicate proved by mutation (phase 2)
+
+Reviewed: spec SSB (the completion-predicate subsection above all), plan phase 2 (02.yaml, including the lettered test list (a)-(g) in P2.T2.S1), and the diff 8fdc2fb..cc9430c - packages/fr/src/fr/journal/model.py, packages/fr/src/fr/commands/journal_cmd.py and both test modules.
+
+Performed by an independent reviewer subagent with no session context, which MUTATION-TESTED rather than read: 7 mutations, each restored and md5-verified. Both of its Important findings were then reproduced by the orchestrator before any fix was written.
+
+Findings raised: 7, all fixed.
+  r-p2-f1 a zero-phase plan exited 0 having evaluated nothing   [fixed]
+  r-p2-f2 the remediation command was folded into 3 broken ones [fixed]
+  r-p2-f3 the test class docstring still said 'unimplemented'   [fixed]
+  r-p2-f4 Rich markup ate the fail-closed diagnostic            [fixed]
+  r-p2-f5 the OSError arm was unpinned                          [fixed]
+  r-p2-f6 the 'open findings print FIRST' claim was unasserted   [fixed]
+  r-p2-f7 a duplicated test helper                              [fixed]
+
+THE THING THIS PHASE EXISTED TO GET RIGHT is right, and is proved right rather than asserted. Mutating the predicate to `completion.at is not None` fails EXACTLY ONE test - test_every_step_ticked_but_completion_at_unset_is_still_owed_a_review - and modelling `_phase_complete` during an fr-goal run (the predicate forced False, since no merged PR is ever observed) fails four. The permanent-no-op failure mode the spec warns about is caught by the suite, not merely argued against in prose.
+
+Also confirmed: `reviewed_phases` is pure (fr/journal/model.py imports only pathlib, typing, pydantic - no fr.types/fr.render/fr.parser); the manual exemption is applied at the CALL SITE, leaving plan_locally_complete untouched and spec.py/diff.py/archive.py unaffected; `except (PlanSchemaError, OSError)` is neither too narrow nor too broad - a deliberate AttributeError inside the gate propagates rather than being reported as 'unparseable'; the greppable 'N open finding(s)' line is character-for-character unchanged against 8fdc2fb; P2.T2.S4 really did delete phase 1's disclaimer.
+
+Every fix above was mutation-verified by the orchestrator before being called done - and that mattered: the first versions of TWO of the new tests passed with the code under test mutated, i.e. asserted nothing. One of them failed for a reason worth knowing, recorded as discovery d-p2-conftest-width.
+
+Behavioural note carried forward: with --require-reviews, open findings no longer short-circuit, so an unparseable plan now exits 2 rather than 1. Correct under SSB's fail-closed rule, but a change for anything keying on exit 1.
+
+Post-fix: 56 tests in test_journal_cmd.py pass, ruff clean, mypy clean over 138 source files, and all four mutations of the new fixes are caught by exactly their intended test.
+
+Assessment: phase 3 proceeds. r-p2-f1 was fixed BEFORE dispatching it, deliberately - phase 3 makes this gate cursor-enforced, and after that a vacuous pass is invisible.
+
+<!-- fr:journal kind=discovery scope=plan id=5bf93baa6de9 created=2026-09-20T17:31:53 phase=3 -->
+### 5bf93baa6de9 · discovery · Adding journal-check drifts this very run, as designed — verbatim message (phase 3)
+
+Ran the two commands P3.T2.S1 names against this run
+(2026-09-20-feat-journal-require-reviews), which was started before
+journal-check existed in the fr-goal manifest.
+
+`uv run fr run status 2026-09-20-feat-journal-require-reviews` still reports
+normally (status does not re-resolve/compare the manifest's step list, only
+the recorded cursor) — cursor: implement, phase/3/implement-phase: running.
+
+`uv run fr run advance 2026-09-20-feat-journal-require-reviews` exits 2 with:
+
+    run '2026-09-20-feat-journal-require-reviews' was started against a
+    different version of 'fr-goal@1' (added: journal-check). A run's cursor
+    is a position in a step list; start a new run rather than advancing this
+    one against a list it was never computed for.
+
+This is exactly the drift `_check_step_drift` (run_cmd.py:258) is designed
+to raise, and confirms the spec's claim (§C / D3): landing journal-check in
+the shipped shape strands every run started against the pre-existing
+step list, on purpose — recovered via `fr run adopt <plan-dir> --run-id
+<fresh>`, which is deliver's (phase 6's) job, not this phase's. Left the run
+stranded as instructed; did not run resolve/adopt/start.
+
+<!-- fr:journal kind=discovery scope=plan id=b587abbcd3ef created=2026-09-20T17:53:01 phase=3 -->
+### b587abbcd3ef · discovery · Adding journal-check rippled into SKILL.md numbering, both skill mirrors, and one integration test (phase 3)
+
+Landing journal-check in plugins/super-fr/workflows/fr-goal.yaml (and its
+packed copy under packages/fr/src/fr/workflows/) broke four things the
+quality gate caught, none of them in the plan's own step list:
+
+1. tests/integration/test_fr_goal_shape.py::test_shipped_manifest_step_order_matches_the_skill_narration
+   compares the manifest's step ids against SKILL.md's numbered `### N. <id>`
+   headers — SKILL.md needed a new "### 7. journal-check" section (renumbering
+   deliver 7->8), or the manifest and its own narration would silently diverge.
+2. tests/integration/test_fr_goal_shape.py::test_grouped_goal_walks_implement_review_per_phase_to_deliver
+   walks the whole shape end to end with a toy 3-phase plan whose steps are
+   never ticked, so no phase is locally-complete and journal-check's
+   --require-reviews has nothing to flag (self-completes, exit 0) — but the
+   test asserted cursor == "deliver" immediately after implement, which is
+   now "journal-check" for one more advance. Updated to walk through it
+   explicitly rather than skip past it.
+3. Editing the canonical SKILL.md pushed it to 130 lines, over the 120-line
+   cap (test_skill_validation.py / test_fr_goal_hermes_dispatch.py) and left
+   the .hermes/ and .opencode/ mirrors drifted (test_tripwire_hermes_skills_sync.py,
+   test_tripwire_opencode_skills_sync.py). Trimmed prose back to exactly 120
+   lines and reran scripts/sync-hermes.py + scripts/sync-opencode.py to
+   regenerate both mirrors.
+
+Mutation-verified the manifest-side tests: removing the journal-check step
+from fr-goal.yaml (restoring the byte-identical original) makes exactly
+test_shipped_manifest_step_order_matches_the_skill_narration,
+test_grouped_goal_walks_implement_review_per_phase_to_deliver,
+test_the_packaged_copy_is_byte_identical and
+test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver fail
+— nothing else moves.
+
+Left docs/explainers/01-fr-goal.md untouched: 05.yaml already owns
+re-rendering it per .claude/rules/explainers-currency.md, so re-touching it
+here would fight that phase's own diff.
+
+Full suite after all fixes: 3318 passed, 80 skipped, 3 failed — exactly the
+three pre-existing tolerated reds (test_cli_all_fails_when_nothing_is_discoverable
+and the two Rich-wrap test_run_workspace.py failures), none new.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f1 created=2026-09-20T18:11:26 phase=3 state=fixed -->
+### r-p3-f1 · finding [fixed] · CI proved the cursor REACHED the gate, never that it BLOCKED (phase 3)
+
+The integration walk advances through journal-check and asserts exit 0 - but the toy plan's steps are never ticked, so no phase is locally-complete and the gate has nothing to flag. It proved the step exists and self-completes.
+
+The composed claim this whole PR makes - 'a run whose phases completed without recorded reviews cannot reach deliver' - was asserted NOWHERE. Phase 2's unit tests prove the CLI exits 1; test_run_cli.py proves a failing cli step holds the cursor; nothing joined them. A change to the interpolation, the slug derivation or the --require-reviews guard could make the step exit 0 unconditionally with every cited test still green.
+
+Fixed: test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed. It ticks phase 2's step (WITHOUT setting completion.at - the same predicate distinction phase 2's unit test pins, now exercised through the real CLI), asserts `fr run advance` fails with journal-check `failed` and the cursor still on journal-check with deliver `pending`, then adds the review entry and asserts the run advances to deliver. Spec Test Plan item 4, promoted from post-merge into CI.
+
+Mutation-verified: dropping --require-reviews from the manifest, and mistargeting --plan-dir, are each caught.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f2 created=2026-09-20T18:11:26 phase=3 state=fixed -->
+### r-p3-f2 · finding [fixed] · The acceptance row was flipped to ci on evidence covering half its claim, by the wrong phase (phase 3)
+
+Row fr-goal-review-gate-is-cursor-enforced claims '...so a run whose phases completed without recorded reviews cannot reach the PR step'. The cited unit ref proved placement/kind/flag; the cited int ref proved the cursor visits it. The 'cannot reach' clause - the actual business claim - was untested (r-p3-f1). Separately, 06.yaml P6.T1.S1 explicitly owns flipping all three rows, so phase 3 pre-empted it.
+
+Fixed by landing r-p3-f1 first, which makes `ci` honestly earned, then re-running `fr acceptance set-status` with the blocking test as the int-level evidence and a note that says what each ref actually proves. The old note conflated two unrelated verifications (mutation of the tests, observation of step drift) and read as evidence for something it was not.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f3 created=2026-09-20T18:11:27 phase=3 state=fixed -->
+### r-p3-f3 · finding [fixed] · The shipped manifest header asserted an enforcement that does not exist (phase 3)
+
+The header read: 'journal-check re-checks that every locally-complete phase actually got one, ONE MORE TIME ... a whole-run backstop for the per-phase loop above, not a duplicate of it.'
+
+Nothing checks it the first time. `review-phase` is a kind:agent step, so it completes on `fr run resolve --state done` and leaves no artifact by itself - an agent that skipped the review entirely resolves it identically to one that did the work. That IS #430. journal-check is the ONLY machine check, not a second one.
+
+This ships to consumers. The concrete risk: a maintainer trimming the shape reads 'backstop, not a duplicate', concludes the loop already enforces it, and deletes the step. Phase 4's own P4.T1.S3 names this class - 'a promise of a gate that does not exist is the failure this whole change is about'.
+
+Fixed in both manifest copies: the header now says review-phase leaves no artifact by itself, that the journal entry comes from the skill prose, and that this step is what makes forgetting it fail.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f4 created=2026-09-20T18:11:27 phase=3 state=fixed -->
+### r-p3-f4 · finding [fixed] · One word of content was lost to the 120-line cap trim (phase 3)
+
+SKILL.md §4's plan-review line read '— deterministic, exit code is the verdict'; the trim dropped 'deterministic', which carried a real point: a cli step's verdict is not a judgement call. Restored, mirrors resynced, still exactly 120 lines. Word-level set-diff of the whole file confirms this was the ONLY token lost - every other change was line-joining, the new §7, and the §7→§8 renumber. No clause, cross-reference, warning or instruction was removed.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f5 created=2026-09-20T18:11:28 phase=3 state=fixed -->
+### r-p3-f5 · finding [fixed] · 04.yaml's committed instructions were invalidated by phase 3's renumbering (phase 3)
+
+Phase 3 inserted §7 (journal-check) and pushed deliver to §8, so phase 4's committed steps ('Edit §7: the journal-check line currently reads as an instruction to the agent') described a section that no longer exists in that form, and were partly already done. Rewritten before dispatch: P4.T1.S1 now flags the renumber and warns that the file is AT its 120-line cap so new prose must be paid for by tightening, never by deleting an instruction, warning or cross-reference; P4.T1.S2 now reconciles §8 against §7 rather than re-describing it.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f6 created=2026-09-20T18:11:28 phase=3 state=fixed -->
+### r-p3-f6 · finding [fixed] · needs: [plan] understated the step's inputs (phase 3)
+
+The gate reads the plan journal as well as the plan, but declared only `plan`, while `review-phase` next to it declares `journal:plan`. Reachability is unaffected (journal:* is not a repo-tracked artifact), so this was about the manifest telling the truth about its own inputs. Now `needs: [plan, journal:plan]`; `fr workflow check fr-goal` still ok.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-adopt-costs created=2026-09-20T18:11:28 phase=3 -->
+### d-p3-adopt-costs · discovery · The prescribed drift recovery has unstated costs (phase 3)
+
+Both SKILL.md §7 and the manifest header prescribe `fr run adopt <plan-dir> --run-id <fresh>` to recover a run stranded by this step's drift. P3.T2.S1 verified the drift but not the recovery. Reading packages/fr/src/fr/run/adopt.py:
+
+- for an all-phases-complete plan, build_run_state keys reconstructed items on the FIRST group member only, so every phase's `review-phase` comes back pending - adoption re-dispatches review for every completed phase;
+- adopting with `--pr <open-url>` lands the cursor on `deliver`, marking journal-check `done` WITHOUT ever running it.
+
+Both are pre-existing adopt semantics, and the second is arguably right (the PR already exists). But phase 3 is what makes this recovery path routine, so the one-line prescription is doing more work than it admits. Recorded rather than fixed: changing adopt is out of this spec's scope, and the second behaviour is a deliberate design choice, not a bug. Worth an issue of its own if the recovery becomes common.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-cap-paid-by-joining created=2026-09-20T18:11:29 phase=3 -->
+### d-p3-cap-paid-by-joining · discovery · The 120-line cap was paid for by joining lines, not cutting (phase 3)
+
+SKILL.md's longest line went 312 -> 477 chars when §7 was added by joining wrapped lines. The file already carried a 561-char line so nothing forbids it, but tests/unit/test_skill_validation.py's own docstring names 'rewrapping to buy a line' as the known-dangerous move under this cap - it makes a diff look like a rewrite and hides deletions inside re-flowed paragraphs.
+
+Stated here, and owed in the PR body, so an auditor does not have to re-derive it: the cap was met by joining, and exactly one word (`deterministic`) was dropped, since restored.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-20T18:11:49 phase=3 -->
+### review-p3 · review · phase 3 review - 6 findings fixed; the gate now proves it BLOCKS, not just that it runs (phase 3)
+
+Reviewed: spec SSC and decision D3, plan phase 3 (03.yaml), and the diff cc9430c..878da57 - the shipped fr-goal manifest and its wheel copy, the new tripwire, the modified integration test, SKILL.md and its two mirrors, and the acceptance matrix.
+
+Independent reviewer subagent, no session context. It mutation-tested the manifest three ways (step removed, step moved after deliver, --require-reviews dropped) and restored by shasum, and it did a WORD-LEVEL set-diff of the whole 120-line SKILL.md rather than eyeballing the trim.
+
+Findings raised: 6 findings + 2 discoveries. All 6 fixed.
+  r-p3-f1 CI proved the cursor REACHED the gate, never that it BLOCKED  [fixed]
+  r-p3-f2 acceptance row flipped on half its evidence, by wrong phase   [fixed]
+  r-p3-f3 manifest header asserted an enforcement that does not exist   [fixed]
+  r-p3-f4 one word lost to the 120-line cap trim                       [fixed]
+  r-p3-f5 04.yaml's instructions invalidated by the renumbering        [fixed]
+  r-p3-f6 needs:[plan] understated the step's inputs                   [fixed]
+
+r-p3-f1 is the one that mattered. The gate's whole promise is 'a run whose phases completed without recorded reviews cannot reach deliver', and nothing asserted it: the happy-path walk could not, because the toy plan's steps are never ticked so the gate has nothing to flag. Unit tests proved the CLI exits 1; another test proved a failing cli step holds the cursor; nothing joined them. Now joined, by a test that ticks a phase's step WITHOUT setting completion.at - the same predicate distinction phase 2 pins, exercised through the real CLI - asserts advance fails with the cursor still on journal-check and deliver pending, then adds the review entry and asserts the run proceeds. Mutation-verified twice: dropping --require-reviews from the manifest, and mistargeting --plan-dir, are each caught. This is spec Test Plan item 4, promoted out of 'post-merge, operator-driven' into CI.
+
+r-p3-f3 was shipping false prose to consumers: the header called this step a 'backstop ... not a duplicate' of the per-phase loop, when the loop enforces nothing - review-phase is a kind:agent step that completes on `fr run resolve --state done` and leaves no artifact, so a skipped review resolves identically to a performed one. The header now says so.
+
+Confirmed and left alone: both manifest copies byte-identical and `fr workflow check fr-goal` ok; all three SKILL.md copies identical with both sync scripts reporting in sync; the drift was really verified, with the verbatim exit-2 message journaled, and the reviewer noted the non-obvious correct detail that `fr run status` does not re-resolve the manifest and so reports normally; the SKILL.md edit was FORCED by test_shipped_manifest_step_order_matches_the_skill_narration, not scope bleed.
+
+Carried forward as discoveries rather than fixed: d-p3-adopt-costs (the prescribed `fr run adopt` recovery re-dispatches review for every completed phase, and adopting with --pr marks journal-check done without running it - pre-existing adopt semantics, out of this spec's scope) and d-p3-cap-paid-by-joining (the line cap was met by joining lines; owed in the PR body so an auditor need not re-derive it).
+
+Post-fix: 10 integration tests pass, acceptance matrix 127 rows OK, skill validation and both mirror tripwires green.
+
+Assessment: phase 4 proceeds, against the rewritten 04.yaml.
+
+<!-- fr:journal kind=discovery scope=plan id=6b011ebcfd77 created=2026-09-20T18:22:59 phase=4 -->
+### 6b011ebcfd77 · discovery · no-refactor-because P4.T1 (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=r-p4-f1 created=2026-09-20T18:25:00 phase=4 state=fixed -->
+### r-p4-f1 · finding [fixed] · Both shipped skills documented a `fr journal add` command that EXITS 2 (phase 4)
+
+Phase 4 wrote `fr journal add ... --kind review --phase N --state done` into fr-goal SSS6 and `--scope debug --kind review --state done` into fr-debugging, then shipped both to all three mirrors.
+
+The command fails. `JournalEntry`'s validator rejects `state` on anything but a `finding` ('state is only valid on finding entries'), and `done` is not one of the three legal states anyway (fixed|refuted|open). Run verbatim it exits 2.
+
+Verified live before fixing: `uv run fr journal add --scope plan --slug throwaway-verify --kind review --phase 1 --state done --title t --body b` -> exit 2, 'Input should be fixed, refuted or open'.
+
+This is this PR's own failure class, in the PR: a documented obligation that cannot be satisfied by the documented means. Worse than prose that gets absorbed - prose that actively misleads, shipped to consumers through three mirrors. Nothing caught it: skill validation checks line count and structure, the tool-neutrality scanner checks tool names, and no tripwire executes a command a skill prints.
+
+Fixed: `--state done` removed from both. Both corrected forms were then RUN, not merely read.
+
+<!-- fr:journal kind=finding scope=plan id=r-p4-f2 created=2026-09-20T18:25:00 phase=4 state=fixed -->
+### r-p4-f2 · finding [fixed] · Three explanatory clauses were deleted to buy characters under the 120-line cap (phase 4)
+
+The dispatch warned explicitly: pay for new prose by tightening, never by deleting an instruction, warning or cross-reference. Word-level diff shows three losses, each of them the WHY rather than the what:
+
+1. SSS6: '(a silent no-op)' - the reason re-adding a finding id is wrong. Without it 'never by re-adding' reads as style advice rather than a warning that the command silently does nothing.
+2. SSS8: 'it folds resolution records' - the reason `fr journal resolve` is the right verb rather than editing the finding.
+3. fr-debugging: the new sentence ended '(if skipped, this is noted as the operator reviews the PR itself)', which is mush that quietly licenses skipping the very obligation the sentence exists to impose.
+
+All three restored/rewritten inside the same 120-line cap by tightening the resolve flag list instead. fr-debugging now says plainly that nothing enforces it there and that this is why it is written down - honest about the absence rather than papering it.
+
+Both files still exactly at their caps (120 / 116) and all three mirrors resynced.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p4-no-tripwire-runs-skill-commands created=2026-09-20T18:25:00 phase=4 -->
+### d-p4-no-tripwire-runs-skill-commands · discovery · No tripwire executes a command that a skill documents (phase 4)
+
+r-p4-f1 shipped a broken command through canonical source and two generated mirrors with every gate green. The existing skill gates check line count, structure, frontmatter and harness-specific tool names - none of them runs anything.
+
+A tripwire that extracts `fr <verb> ...` invocations from skill prose and at least parses them against the Typer app (not necessarily executing them) would have caught this in under a second. Not built here: it needs a convention for placeholders (`<s>`, `<f>`, `N`) so it does not fire on every documented example, which is a design decision rather than a mechanical addition.
+
+Recorded because the gap is exactly the one this PR is about, one level up: the skills tell an agent to run something, and nothing checks that the something works.
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-09-20T18:25:23 phase=4 -->
+### review-p4 · review · phase 4 review - a documented command that exits 2, and three deleted why-clauses (phase 4)
+
+Reviewed: plan phase 4 (04.yaml, as rewritten after phase 3's renumbering), and the diff 7fb2903..db4087e - fr-goal SKILL.md SSS6/SSS8, fr-debugging SKILL.md, and all four generated mirrors.
+
+Reviewed by the orchestrator directly rather than by a dispatched reviewer: phase 4 is prose-only, its diff is three sentences, and the two defects were found by running what the prose told a reader to run and by a word-level diff - both cheaper done inline than briefed out.
+
+Findings raised: 2, both fixed. Plus one discovery.
+  r-p4-f1 both skills documented a command that exits 2   [fixed]
+  r-p4-f2 three explanatory clauses deleted to buy space  [fixed]
+
+r-p4-f1 is the serious one and it is this PR's own thesis turned on the PR: the skills told an agent to run `fr journal add --kind review --state done`, which fails - `state` is only valid on `finding` entries and `done` is not a legal state. Shipped to canonical source and both mirror sets with every gate green. The correct forms have now been RUN, not merely read, for both the plan and debug scopes.
+
+r-p4-f2: the dispatch warned that the 120-line cap must be paid for by tightening and never by deleting an instruction, warning or cross-reference. Three clauses went anyway, each of them a WHY - '(a silent no-op)', 'it folds resolution records', and a trailing clause in fr-debugging that quietly licensed skipping the obligation it was imposing. All restored inside the same cap by tightening a flag list instead.
+
+Confirmed good: the obligation itself is in the right place (SSS6, beside the finding-recording clause it parallels); fr-debugging is honest that no cursor enforces it there rather than implying fr-goal's gate applies; both sync scripts were run so all three copies of each skill agree; line caps intact at 120 and 116.
+
+Carried as a discovery: d-p4-no-tripwire-runs-skill-commands. No gate executes or even parses a command a skill documents, which is how a broken one shipped through three files. Buildable, but it needs a placeholder convention first, so it is recorded rather than bolted on here.
+
+Post-fix: 109 skill/mirror/neutrality/integration tests pass.
+
+Assessment: phase 5 proceeds.
+
+<!-- fr:journal kind=discovery scope=plan id=b19699bc0c0a created=2026-09-20T18:35:31 phase=5 -->
+### b19699bc0c0a · discovery · Explainer's SKILL.md line citations had already drifted before this phase touched them (phase 5)
+
+docs/explainers/01-fr-goal.md cites plugins/super-fr/skills/fr-goal/SKILL.md by line range in a dozen places. Phase 3's journal-check insertion and phase 4's line-joins (removing manual wraps) shifted nearly every one of those ranges without anyone updating the explainer — it was never in scope for those phases. Verified each citation against origin/main and current HEAD by diffing the exact cited text, then corrected all twelve ranges (16-32->16-31, 44-47->43-46, 49-56->48-55 x2, 58-64->57-63, 69-74->68-72, 81-95->78-93, 97-102->95-103, 104-114->105-115 x2, 116-120->117-120) plus added a new :99-100 for the journal-check section itself. No tripwire catches this class of drift (line-range citations in prose pointing at line numbers in a different file) - it is the same gap as d-p4-no-tripwire-runs-skill-commands one level over: nothing checks that a cited line range still contains what the citation claims.
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-09-20T18:37:49 phase=5 -->
+### review-p5 · review · phase 5 review - no findings; citations, render fidelity and claim accuracy verified (phase 5)
+
+Reviewed: plan phase 5 (05.yaml), .claude/rules/explainers-currency.md, and the diff db4087e..b451cb2 - docs/explainers/01-fr-goal.md and its rendered .html.
+
+Reviewed by the orchestrator inline. Phase 5 is documentation whose correctness is checkable by direct verification rather than by judgement, so the checks below were run rather than briefed out.
+
+Findings raised: 0.
+
+VERIFIED, not taken on trust:
+1. Citations. The phase claims it corrected twelve drifted `SKILL.md:<range>` citations. All 17 distinct ranges in the file were checked against the 120-line SKILL.md: none out of range, none inverted. Spot-checked for SEMANTIC accuracy too, since in-range is not correct - `SKILL.md:99-100` lands exactly on `### 7. journal-check`, the section the explainer cites it for, and `95-103` spans the review-loop tail into deliver as claimed.
+2. The rendered page actually carries the new prose (the new heading appears in the .html), so this is not the failure the explainers-currency rule exists to catch - an edited .md with a stale published page.
+3. Diff shape is proportionate: 87 lines of .md, 74 of .html. Hundreds of .html lines would have meant pygments leaked into the render env and codehilite rewrote every code block; it did not, which corroborates the byte-identity check the phase reports passing before any prose was written.
+
+ACCURACY OF THE CLAIMS, which is what a published page gets wrong most easily: the new SSS7 states the limit rather than implying it away - 'This check only confirms that a record exists - it does not reopen the review, re-read what it says, or judge whether it was thorough ... a reviewer who wrote three careless words passes the same way one who wrote three careful paragraphs does.' That matches the spec's Non-goals exactly. It also names the manual-phase exemption. The page does not oversell the gate, which for outward-facing prose about a control is the thing most worth getting right.
+
+Carried as a discovery by the phase itself: the SKILL.md line citations had ALREADY drifted before this phase touched them, and nothing catches that class - the same shape as d-p4-no-tripwire-runs-skill-commands. Recorded, not fixed here.
+
+Assessment: phase 6 proceeds.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-t1-refs created=2026-09-20T18:40:50 phase=6 -->
+### p6-t1-refs · discovery · Acceptance rows flipped with refs matched to each row's actual acceptance clause (phase 6)
+
+journal-require-reviews-gate -> unit=tests/unit/test_journal_cmd.py: covers the CLI gate's full claim (fails on completed+unreviewed non-manual phase, passes once reviewed, manual exemption, inert pre-completion, back-compat without the flag, non-plan-scope refusal). journal-review-entry-per-phase -> unit=tests/unit/test_journal_model.py::TestReviewedPhases: pins the pure fold a kind=review entry with phase=N contributes, which is exactly what that row's acceptance text claims (a machine-readable trace exists) - the CLI consumption of that fold is the separate journal-require-reviews-gate row, so citing test_fr_goal_shape.py here would have repeated r-p3-f2's mistake of covering half a claim under the wrong row. fr-goal-review-gate-is-cursor-enforced left untouched (already ci from phase 3, refs still correct). fr acceptance check: 127 rows OK, no new warnings introduced.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-t3-gate created=2026-09-20T18:45:40 phase=6 -->
+### p6-t3-gate · discovery · Full CI gate is green modulo the three pre-documented tolerated reds (phase 6)
+
+uv run pytest (full, not -q --no-cov) over the whole worktree: 3319 passed, 80 skipped, 3 failed, coverage 91.71% (cov-fail-under=75 satisfied). All 3 failures match the reds this dispatch pre-declared as unrelated-and-tolerated: test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused, test_run_workspace.py::test_an_external_marker_without_container_evidence_is_refused (Rich wrap point this machine's long tmp_path pushes into an asserted substring), and test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable (#463/#489). No test introduced or touched by this plan is among them. ruff format/check and mypy over the 4 src trees are clean; bump-version.py --check agrees at 4.9.0.
+
+<!-- fr:journal kind=finding scope=plan id=r-p6-f1 created=2026-09-20T18:48:46 phase=6 state=fixed -->
+### r-p6-f1 · finding [fixed] · Phase 6's commits cited gh-434 — a real but unrelated issue (phase 6)
+
+Both phase 6 commits ended '(gh-434)'. This PR is gh-430. #434 is a real, separate issue (the phases-file tier bug, which has its own worktree on this machine), so the reference was not merely dead — GitHub would have linked this release commit into #434's timeline and this work would appear, permanently, as progress on something it has nothing to do with.
+
+Caught by grepping the branch's own log for issue refs rather than by reading the two messages, which is the check worth keeping: the wrong ref reads perfectly well in isolation.
+
+Fixed rather than annotated, because both commits were local-only (verified with `git branch -r --contains`). Squashed via `git reset --soft HEAD~2` and recommitted with the correct ref; the tree hash before and after is identical, so nothing in the content moved.
+
+<!-- fr:journal kind=review scope=plan id=review-p6 created=2026-09-20T18:48:46 phase=6 -->
+### review-p6 · review · phase 6 review - a wrong issue ref, and every release claim re-run (phase 6)
+
+Reviewed: plan phase 6 (06.yaml), and the diff e147703..HEAD — the acceptance matrix and its three generated reports, the version-bearing manifests, uv.lock, and the phase's own journal entries.
+
+Reviewed by the orchestrator inline: phase 6 makes no product change, so its correctness is entirely a matter of re-running the commands it claims to have run.
+
+Findings raised: 1, fixed.
+  r-p6-f1 commits cited gh-434, a real but unrelated issue   [fixed]
+
+RE-RUN, not taken on trust:
+- `bump-version.py --check` -> 'ok — versions agree', all ten surfaces at 4.9.0; `fr --version` -> 4.9.0. The diff against origin/main over the root pyproject.toml, .claude-plugin/marketplace.json and packages/fr/pyproject.toml contains NOTHING but the version lines — verified by filtering the diff to changed lines and deduplicating, so a stray edit riding along in a release commit would have shown.
+- The bump was VERIFIED rather than re-made, which was the trap: 4.9.0 arrived uncommitted from an earlier session, and `bump-version.py minor` from that state would have landed 4.10.0 and overshot the release this PR owes.
+- `fr acceptance check` -> 127 rows OK (ci 105, skipped 18, not-implemented 4), warnings only, both pre-existing and about archived spec paths unrelated to this PR.
+- `fr validate artifacts` -> 33 artifacts, all structurally valid. No stamp bump and no migration owed, consistent with the spec's Non-goals: nothing here changed an artifact's shape.
+- Working tree clean.
+
+The acceptance-ref reasoning is right and worth recording: phase 6 cited test_journal_model.py::TestReviewedPhases for `journal-review-entry-per-phase` and deliberately did NOT also cite the integration test, on the grounds that cursor-enforcement is the third row's claim and citing it here would repeat r-p3-f2 — a row flipped on evidence covering only half its acceptance. That is the lesson from phase 3 being applied without being told to.
+
+The executor also declined to self-record phase 6's own review entry, noting that doing so would defeat the gate's purpose. Correct, and the reason this run ends with the orchestrator writing review-p6 rather than the phase that wrote the code.
+
+Full gate: 3319 passed, 80 skipped, 3 failed, coverage 91.71% against the 75% floor. The three reds are exactly the pre-existing environment-dependent ones this branch has tolerated throughout — two Rich wrap-point failures in test_run_workspace.py and test_workflow_check.py's discoverability test (#463/#489) — and were re-confirmed unrelated: the only source file this branch changes under packages/ is journal_cmd.py plus journal/model.py.
+
+Assessment: the plan is complete. Deliver.
+
+<!-- fr:journal kind=finding scope=plan id=r-p6-f2 created=2026-09-20T18:51:18 phase=6 state=fixed -->
+### r-p6-f2 · finding [fixed] · The drift-recovery instruction this PR ships does not work (phase 6)
+
+Found by running it, at delivery, on this PR's own stranded run.
+
+Phase 3 added `journal-check` to the shape, which by design strands every in-flight run. SKILL.md SSS7 and the manifest header both prescribed the recovery as `fr run adopt <plan-dir> --run-id <fresh>`. That command REFUSES:
+
+  docs/superpowers/plans/2026-09-20-journal-require-reviews already has a run:
+  2026-09-20-feat-journal-require-reviews.
+
+`_existing_run_for` matches on (workflow, branch) and there is no --force. So adopt refuses precisely when the plan has a run — which is the stranded case, the only case the instruction is for. The prescription was written from reading adopt's docstring rather than from running it.
+
+This is r-p4-f1's class again, and mine this time rather than a phase executor's: a documented obligation that cannot be satisfied by the documented means, about to ship to consumers through a skill and a workflow manifest.
+
+What actually works, verified end to end here: move `docs/superpowers/runs/<stranded-id>.yaml` aside first, THEN `fr run adopt <plan-dir> --branch <b> --run-id <fresh>`. Adoption then correctly reconstructed brainstorm/spec-review/plan/plan-review as done and all 6 phases' implement-phase as done.
+
+Two further costs, both predicted by d-p3-adopt-costs from reading the source and now CONFIRMED by running it: every phase's `review-phase` came back pending (adopt keys items on the first group member), so all six had to be re-resolved; and `fr run gates` on the adopted cursor reports 'cleared, but provenance not recorded' — the original run recorded `--answered-by operator` for the brainstorm batch and adoption does not carry it.
+
+Fixed in SKILL.md SSS7 and both manifest copies, with the mirrors resynced. Not fixed in `adopt` itself: giving it a --force, or making it supersede a drifted run, is a change to run-cursor semantics and belongs in its own spec, not smuggled into this one.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-gate-ran-for-real created=2026-09-20T18:51:18 phase=6 -->
+### d-p6-gate-ran-for-real · discovery · The gate ran as a cursor step on this PR's own run, and passed (phase 6)
+
+End-to-end dogfood, after the adopted cursor was walked to it:
+
+  $ fr run advance 2026-09-20-journal-require-reviews-v2
+  journal-check: done (exit 0)
+
+It passed because all six completed phases carry a `kind=review` entry naming them (review-p1 .. review-p6). Earlier in the same run, with phase 2 complete and unreviewed, the same check exited 1 and named phase 2. Both states were observed on the real plan, not a fixture - which is the distinction #430 says did not previously exist.

@@ -479,6 +479,47 @@ class TestHandoff:
         assert "Open" not in out
 
 
+class TestReviewedPhases:
+    """`reviewed_phases` — the pure fold `fr journal check --require-reviews`
+    (phase 2) uses to decide which owed phases already have a recorded
+    review. A phase "names" its review by carrying `phase=N` on a `kind=review`
+    entry; an unphased review (the 5 unphased plan-scope review entries
+    already in this repo's journals, spec §B) does not blanket-satisfy every
+    phase, or the gate would be trivially defeated by one undated review."""
+
+    def test_a_phased_review_entry_contributes_its_phase(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=3, title="phase 3 review")]
+        assert reviewed_phases(entries) == {3}
+
+    def test_an_unphased_review_entry_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=None, title="a general review")]
+        assert reviewed_phases(entries) == set()
+
+    def test_a_finding_with_a_phase_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="finding", phase=3, state="open", title="a bug")]
+        assert reviewed_phases(entries) == set()
+
+    def test_empty_entries_gives_empty_set(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        assert reviewed_phases([]) == set()
+
+    def test_two_reviews_of_the_same_phase_give_one_element(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [
+            _entry(kind="review", id="r1", phase=2, title="first pass"),
+            _entry(kind="review", id="r2", phase=2, title="second pass"),
+        ]
+        assert reviewed_phases(entries) == {2}
+
+
 class TestEffectiveFindingStates:
     """Phase 7 (spec §3.G.1): a finding's state is a FOLD over records in file
     order, not a field read off its own entry.

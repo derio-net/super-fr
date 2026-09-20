@@ -17,8 +17,10 @@ tldr: |
   can be reviewed or picked back up instead of vanishing with the chat. Inside
   that boundary the agent writes down the design, breaks the work into
   checkable pieces, builds each piece, runs acceptance tests, reviews it, and
-  fixes what the review finds. After merge, the agent can guide you through a
-  manual Test Plan in the real environment. You remain responsible for human
+  fixes what the review finds, leaving a written record that the review
+  happened before it opens a pull request. After merge, the agent can guide
+  you through a manual Test Plan in the real environment. You remain
+  responsible for human
   decisions, privileged actions, and the final merge.
 tags: ["fr-goal", "agent-workflows", "automation", "pull-requests"]
 target: "."
@@ -42,7 +44,8 @@ the check finds, then continue.
 
 The journey itself is written down. A **workflow shape** is a small YAML file
 that lists the steps of a run — brainstorm, review the spec, plan, review the
-plan, implement (with a review running inside every phase), deliver — and `fr-goal`
+plan, implement (with a review running inside every phase), confirm every
+review left a record, deliver — and `fr-goal`
 reads that file rather than containing the sequence in its own prose. Asking for `fr-goal` with no argument
 runs the shape described in this article: feature delivery, test first. Naming
 one, as in `fr-goal ux-research`, runs a different shape. A project can write
@@ -85,7 +88,8 @@ flowchart TD
     I --> G
     H -->|No| J{More pieces?}
     J -->|Yes| F
-    J -->|No| K[Prepare the pull request]
+    J -->|No| K0[Confirm every review left a record]
+    K0 --> K[Prepare the pull request]
     K --> L[You review and merge]
     L --> M[Agent confirms the change arrived]
     M --> N{Manual Test Plan?}
@@ -97,7 +101,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`, `:44-47`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-31`, `:43-46`). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -121,7 +125,7 @@ risks instead.
 Because the pipeline is a shape, the command also takes an optional shape name.
 `/fr-goal` runs the feature-delivery shape this article describes;
 `/fr-goal <name>` runs another one that the project or the plugin provides
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-32`). Most requests never need
+(`plugins/super-fr/skills/fr-goal/SKILL.md:16-31`). Most requests never need
 the argument, and nothing about the rest of this article changes when you use
 it: the machinery is the same, only the list of steps differs.
 
@@ -139,8 +143,9 @@ setup interview rather than working directly on your machine
 The simple loop above is assembled from several narrower super-fr features, and
 the assembly itself is a file you can open. Each feature solves a different
 failure mode: damaging the original checkout, building the wrong thing, losing
-track of unfinished work, hiding human-only steps, merging before review fixes
-arrive, or cleaning up before the change is actually present. The two sections
+track of unfinished work, hiding human-only steps, a skipped review looking
+identical to a clean one, merging before review fixes arrive, or cleaning up
+before the change is actually present. The two sections
 below describe the file that orders those features and the record that tracks
 them; the numbered sections after that introduce each feature at the point where
 it joins the whole.
@@ -340,7 +345,7 @@ It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`).
+real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:48-55`).
 
 This is the shape's one operator gate, and an unanswered batch is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
@@ -381,7 +386,7 @@ existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
-(`plugins/super-fr/skills/fr-goal/SKILL.md:49-56`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md:48-55`,
 `plugins/super-fr/skills/fr-brainstorming/SKILL.md`).
 
 The important promises also become **acceptance tests**: concrete statements of
@@ -448,7 +453,7 @@ Back-loading is the default. The final PR labels the phase as unimplemented,
 and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
-(`plugins/super-fr/skills/fr-goal/SKILL.md:69-74`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:68-72`).
 
 Where a manual phase may sit is a rule the tooling checks, not a convention you
 are trusted to keep: a manual phase must be in the plan's trailing block, or
@@ -501,7 +506,7 @@ from one phase to the next: findings, decisions, and discoveries are written
 down rather than being remembered, which is what makes a phase handover
 survivable at all. Progress is recorded step by step, and acceptance rows are
 updated only when there is honest test evidence
-(`plugins/super-fr/skills/fr-goal/SKILL.md:78-91`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md:75-87`,
 `plugins/super-fr/skills/fr-execute/SKILL.md:79-82`).
 
 At each completed phase the agent reviews the spec, plan, and code together — the
@@ -511,9 +516,36 @@ with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
 the pull-request description is later written from
-(`plugins/super-fr/skills/fr-goal/SKILL.md:92-97`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:89-94`).
 
-### 7. Keep delivery in draft until the checks pass (`deliver`)
+A review is judgment work, the same kind of step as `brainstorm` or `plan`. Like
+those, it finishes simply by being marked done, and on its own that leaves no
+trace of what happened: a phase that got a careful review and a phase whose
+review was rushed, or skipped outright, arrive at the same "done" with nothing
+to tell them apart. Until now that was the one point in the whole pipeline
+where skipping the work and doing it looked identical from outside the
+conversation. So the agent writes the review down the same way it writes down
+a finding — noting which phase it reviewed, and what it found, or that it
+found nothing to fix.
+
+### 7. Confirm every review left a record (`journal-check`)
+
+Before a pull request exists, one more step reads back across the whole plan.
+For every phase that is finished and is not a manual one, it looks for the
+record described above — an entry naming that phase as reviewed. Find one for
+every such phase, and the run continues; find a phase with none, and the run
+stops right there, before there is a pull request to hide the gap inside, with
+a plain instruction to do the review, write it down, and try again. This check
+only confirms that a record exists — it does not reopen the review, re-read
+what it says, or judge whether it was thorough. That is a real limit, stated
+plainly rather than implied away: a reviewer who wrote three careless words
+passes the same way one who wrote three careful paragraphs does. What it
+closes is narrower and still worth having — a skipped review can no longer
+pass for free. Manual phases are exempt, because no agent review ever runs on
+them
+(`plugins/super-fr/skills/fr-goal/SKILL.md:96-97`).
+
+### 8. Keep delivery in draft until the checks pass (`deliver`)
 
 The agent opens one **draft pull request**, a visible change that GitHub marks as
 not ready to merge. It remains a draft while reviews and fixes continue. Only
@@ -532,7 +564,7 @@ acceptance debt — and, because the run's record is committed on the same branc
 the sequence of steps that produced all of it. The agent then stops. Merge
 remains the operator's decision.
 
-### 8. Confirm the merge, then drive the manual Test Plan
+### 9. Confirm the merge, then drive the manual Test Plan
 
 When you report the merge, `fr-goal` checks that the final result actually
 arrived on the project's main line before deleting its workspace. It runs
@@ -565,7 +597,7 @@ and one PR. A coordinating spec may cover several repositories, but `fr-goal`
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:58-64`).
+`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:57-63`).
 
 The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped
@@ -632,12 +664,15 @@ Expect this visible sequence:
 3. After your answers, it writes and reviews the spec without section approvals.
 4. It creates the plan, and the plan self-review runs as a command whose exit
    code decides whether the run continues.
-5. It implements the agentic phases with TDD, one phase at a time.
-6. It opens a draft PR, fixes review findings, verifies, and marks the PR ready.
-7. You complete any disclosed manual phase and merge the PR.
-8. After you report the merge, it verifies the merged content.
-9. When a manual Test Plan exists, it guides you through each real-world check.
-10. It reports remaining acceptance debt and closes out the isolated workspace.
+5. It implements the agentic phases with TDD, one phase at a time, reviewing
+   and fixing each one before moving to the next.
+6. Once every phase is done, it confirms each one's review left a record —
+   before any pull request exists.
+7. It opens a draft PR, verifies, and marks it ready once the checks pass.
+8. You complete any disclosed manual phase and merge the PR.
+9. After you report the merge, it verifies the merged content.
+10. When a manual Test Plan exists, it guides you through each real-world check.
+11. It reports remaining acceptance debt and closes out the isolated workspace.
 
 At any point you can ask `fr run status <run-id>` where the run has got to, and
 after the fact the same record is in the pull request. If you leave a required

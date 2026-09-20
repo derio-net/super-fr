@@ -382,6 +382,108 @@ def _next_member_brief(root: Path, run_id: str) -> dict:
     return _walk_brief(out.output)
 
 
+def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
+    tmp_path: Path,
+) -> None:
+    """The composed claim the whole change exists to make, proved end to end.
+
+    Review r-p3-f1: the happy-path walk below proves the cursor REACHES
+    `journal-check` and that it self-completes — never that it BLOCKS. It
+    cannot, because the toy plan's steps are never ticked, so no phase is
+    locally-complete and the gate has nothing to flag. Phase 2's unit tests
+    prove the CLI exits 1; `test_run_cli.py` proves a failing `cli` step holds
+    the cursor; nothing joined them. So a future change to the interpolation,
+    the slug derivation, or the `--require-reviews` guard could make the step
+    exit 0 unconditionally with every cited test still green — precisely the
+    "gate that reports success while doing nothing" this spec was written
+    about.
+
+    This is spec Test Plan item 4, promoted out of "post-merge,
+    operator-driven" into CI.
+    """
+    root = _workspace(tmp_path, "feat/gate")
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "spec.md").write_text(
+        "# spec\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    plan_rel = _toy_plan(root)
+    slug = Path(plan_rel).name
+
+    _fr(root, ["run", "start", "fr-goal", "--branch", "feat/gate", "--run-id", "g1"])
+    _fr(root, ["run", "advance", "g1"])
+    _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done",
+               "--emitted", "spec=docs/spec.md"])  # fmt: skip
+    _fr(root, ["run", "advance", "g1"])
+    _fr(root, ["run", "resolve", "g1", "--step", "spec-review", "--state", "done"])
+    _fr(root, ["run", "advance", "g1"])
+    _fr(root, ["run", "resolve", "g1", "--step", "plan", "--state", "done",
+               "--emitted", f"plan={plan_rel}"])  # fmt: skip
+    _fr(root, ["run", "advance", "g1"])  # plan-review (cli, self-completes)
+
+    # Walk the per-phase loop, resolving both members for all three phases.
+    for n in (1, 2, 3):
+        for member in ("implement-phase", "review-phase"):
+            _fr(root, ["run", "advance", "g1"])
+            _fr(root, ["run", "resolve", "g1", "--step", member,
+                       "--item", f"phase/{n}", "--state", "done"])  # fmt: skip
+
+    # THE DIFFERENCE FROM THE HAPPY-PATH WALK: phase 2's step is ticked, so
+    # the plan itself claims that phase is done and a review is owed for it.
+    # Ticking WITHOUT setting `completion.at` is deliberate — it is the exact
+    # case that separates `plan_locally_complete` from a naive
+    # `completion.at is not None`, exercised here through the real CLI rather
+    # than only in phase 2's unit tests.
+    # Absolute: `_fr` sets VK_REPO_ROOT but does not chdir, so a repo-relative
+    # plan path would resolve against the real cwd.
+    tick = _fr(root, ["plan", "edit", str(root / plan_rel), "--tick", "P2.T1.S1"])
+    assert tick.exit_code == 0, tick.output
+
+    state = load_run_state(root, "g1")
+    assert state.cursor == "journal-check", state.cursor
+
+    blocked = _fr(root, ["run", "advance", "g1"])
+    assert blocked.exit_code != 0, blocked.output
+    # The step's OWN stderr goes to the real stderr (it runs as a subprocess),
+    # so this layer sees the verdict, not the message. The message wording is
+    # pinned by phase 2's unit tests; what matters here is the composition.
+    assert "journal-check" in blocked.output and "failed" in blocked.output, blocked.output
+    # The cursor must NOT move: a run that skipped review cannot reach the PR.
+    after = load_run_state(root, "g1")
+    assert after.cursor == "journal-check", after.cursor
+    assert after.steps["journal-check"].state == "failed"
+    assert after.steps["deliver"].state == "pending", after.steps["deliver"].state
+
+    # Record the review the gate is asking for; the same command now passes
+    # and the run proceeds — so the gate is satisfiable, not merely strict.
+    assert (
+        _fr(
+            root,
+            [
+                "journal",
+                "add",
+                "--scope",
+                "plan",
+                "--slug",
+                slug,
+                "--kind",
+                "review",
+                "--phase",
+                "2",
+                "--title",
+                "phase 2 review",
+                "--body",
+                "no findings",
+            ],
+        ).exit_code
+        == 0  # fmt: skip
+    )
+    passed = _fr(root, ["run", "advance", "g1"])
+    assert passed.exit_code == 0, passed.output
+    assert load_run_state(root, "g1").cursor == "deliver"
+
+
 def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path) -> None:
     """The operator-visible proof: review fires inside every phase iteration
     (the next brief after an implement return is that phase's review, never
@@ -454,9 +556,16 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
         ("review-phase", "phase/3"),
     ]
     state = load_run_state(root, "r1")
-    assert state.cursor == "deliver"
+    assert state.cursor == "journal-check"
     assert state.steps["implement"].state == "done"
     assert len(state.accounting or {}) == 6
+
+    # journal-check is `kind: cli` and self-completes: the toy plan's steps
+    # were never ticked, so no phase is locally-complete and none is "owed"
+    # a review — `--require-reviews` has nothing to flag.
+    checked = _fr(root, ["run", "advance", "r1"])
+    assert checked.exit_code == 0, checked.output
+    assert load_run_state(root, "r1").cursor == "deliver"
 
     out = _fr(root, ["run", "advance", "r1"])  # deliver brief
     assert out.exit_code == 0, out.output

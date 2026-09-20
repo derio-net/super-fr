@@ -337,6 +337,24 @@ def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
         path.write_text(f"# Journal: {slug}\n\n{block}")
 
 
+def reviewed_phases(entries: list[JournalEntry]) -> set[int]:
+    """Phase numbers that already have a recorded review (spec §B).
+
+    A phase's review is *present* when the journal holds at least one
+    `kind=review` entry naming it via `phase=N`. An entry "names" a phase only
+    through that field: a `review` entry with no `phase` does not count toward
+    ANY phase, and a non-`review` entry (a `finding`, even one tagged with the
+    same `phase=N`) does not count either, however closely findings and
+    reviews are related. This is deliberately narrower than "any activity
+    happened during phase N" — this repo's own journals carry 5 unphased
+    plan-scope `review` entries (spec §B, D2's evidence), predating the
+    `--phase` convention; treating them as blanket cover would let one
+    undated review satisfy every phase a plan ever grows, which is the exact
+    hole `fr journal check --require-reviews` exists to close.
+    """
+    return {e.phase for e in entries if e.kind == "review" and e.phase is not None}
+
+
 def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> str:
     """One-line collapse of an entry: id, kind, state, title, phase.
 

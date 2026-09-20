@@ -2744,3 +2744,55 @@ rows:
       keeps stopping. Host-local memory of the last position acted on, plus Claude Code's
       stop_hook_active as a second independent brake. Without this the never-wedges
       claim is false in exactly the case that matters.
+  - id: journal-review-entry-per-phase
+    capability: journal
+    acceptance: 'A completed phase leaves a machine-readable trace that it was code-reviewed:
+      a plan-journal entry with kind=review naming that phase number'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: 'reviewed_phases (the pure fold fr journal check --require-reviews reads)
+      pinned directly: a phased kind=review entry contributes its phase number, an unphased
+      one contributes nothing, two reviews of the same phase fold to one element, and
+      no-entries folds to the empty set (test_journal_model.py::TestReviewedPhases).
+      The consuming CLI gate is the separate journal-require-reviews-gate row.'
+  - id: journal-require-reviews-gate
+    capability: journal
+    acceptance: '`fr journal check --scope plan --require-reviews` exits non-zero when
+      a non-manual phase has completion.at set and no review entry names it, and exits
+      0 once one does'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: 'fr journal check --require-reviews fully exercised: exits 1 on a completed
+      non-manual phase with no review entry naming it (test_require_reviews_fails_on_a_completed_phase_with_no_review),
+      exits 0 once one exists (test_require_reviews_passes_once_the_phase_is_reviewed),
+      manual phases exempt per spec D4 (test_manual_phase_is_exempt_and_the_message_names_the_exemption),
+      inert without a completed phase (test_require_reviews_is_inert_when_all_phases_incomplete),
+      back-compat without the flag (test_without_require_reviews_completed_unreviewed_phase_still_exits_zero),
+      and non-plan scope refusal (test_require_reviews_refuses_non_plan_scope).'
+  - id: fr-goal-review-gate-is-cursor-enforced
+    capability: workflow
+    acceptance: fr-goal's run cursor executes the review gate before deliver, so a run
+      whose phases completed without recorded reviews cannot reach the PR step
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py
+    status: ci
+    notes: Placement and order pinned by tests/unit/test_tripwire_shipped_workflows.py;
+      the 'cannot reach the PR step' clause pinned by test_fr_goal_shape.py::test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed,
+      which ticks a phase's step, asserts fr run advance fails and the cursor stays
+      on journal-check with deliver pending, then adds the review entry and asserts
+      the run proceeds. Added after review r-p3-f2 found the row flipped on evidence
+      covering only placement — the composed claim was untested, which is the failure
+      class this row is about.

@@ -25,6 +25,28 @@
 # by the cursor, not by prose. There is deliberately NO trailing single
 # `review` step — it is what the loop replaces. Runs started against the
 # flat shape hit manifest drift (by design) and start a new run.
+#
+# `journal-check` (spec §C, decision D3) is the ONLY machine check that a
+# completed phase was reviewed — not a second one, and not a backstop. Read
+# the loop above literally: `review-phase` dispatches a review, but it is a
+# `kind: agent` step, so it completes on `fr run resolve --state done` and
+# leaves no artifact by itself. An agent that skipped the review entirely
+# resolves it identically to one that did the work. That is #430 exactly.
+# The `kind=review` journal entry is written by the skill prose (SKILL.md
+# §6), and this step is what makes forgetting it FAIL rather than pass
+# silently. It is a `cli` step rather than a line in `deliver`'s prose for
+# the same reason the prose alone was never enough: an obligation enforced
+# by an instruction gets absorbed under load. It sits strictly between
+# `implement` and `deliver` — after `deliver` the PR already exists, so
+# checking there would be too late to matter. Adding this step drifts every
+# run started against the pre-existing shape (`_check_step_drift`, by design
+# — see run_cmd.py). Recovering a stranded run is NOT the one-liner it
+# looks like, verified on this repo's own run: `fr run adopt` REFUSES while
+# a run file exists for the same shape+branch, which is precisely the
+# stranded case, so the old `docs/superpowers/runs/<id>.yaml` must be moved
+# aside first. Adoption then re-dispatches `review-phase` for every
+# completed phase (it keys items on the first group member) and does not
+# carry the old cursor's gate provenance. Correct, but not free.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.
@@ -73,6 +95,16 @@ steps:
         skill: superpowers:requesting-code-review
         needs: [spec, plan, journal:plan]
         emits: [journal:plan]
+
+  - id: journal-check
+    kind: cli
+    # `journal:plan` as well as `plan`: the gate reads the plan for which
+    # phases are complete AND the plan journal for which were reviewed.
+    # Declaring only `plan` understated it (review r-p3-f6). Reachability is
+    # unaffected — `journal:*` is not a repo-tracked artifact — so this is
+    # about the manifest telling the truth about its own inputs.
+    needs: [plan, journal:plan]
+    run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
 
   - id: deliver
     kind: agent

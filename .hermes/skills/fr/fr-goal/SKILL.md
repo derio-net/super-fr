@@ -24,8 +24,7 @@ re-`advance` on failure. `kind: agent` never executes itself: it prints a dispat
 (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then `fr run resolve
 <run-id> --step <id> --state done|failed [--emitted name=path ...]` (each `name` must be one
 the step `emits`; a `spec`/`plan` path must exist and is stored repo-relative). `gate:
-operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next
-`advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics.
+operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next `advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics.
 
 **`fr` refused with "artifacts … must be migrated"?** Expected — a pod, CI and an agent's Bash
 tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate
@@ -68,12 +67,10 @@ minimum runtime exercised, external fixtures captured never constructed. `fr pla
 must pass and phases must read back against the spec. fr-plan's agentic-purity gate collects manual
 work into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
 PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work
-depends on it** (spec+plan PR, pause for the go). Multi-repo `depends_on` is within-plan only.
-Resolve `--emitted plan=<path>`.
+depends on it** (spec+plan PR, pause for the go). Multi-repo `depends_on` is within-plan only. Resolve `--emitted plan=<path>`.
 
 ### 4. plan-review
-`fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — deterministic, exit code
-is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
+`fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — deterministic, exit code is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
 
 ### 5. implement — grouped per-phase loop, journal-fed, TDD
 The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet, so NOT dispatched (`fr apply --yes` refuses). `implement` is a grouped `for_each`: per phase in dependency order, dispatch ONE phase-executor for `implement-phase` — brief = `fr pickup` + spec + `fr journal handoff --scope plan --phase N`: TDD (`superpowers:test-driven-development`), journals discoveries/findings (`fr journal add … --phase N`), ticks steps / completes the phase, returns a structured result — pass/fail summary and journal ids, never pasted output (return is the only reporting channel, #461) — the handoff IS the context. Model = the brief's `resolved_tier` (falls back to the phase header's `tier` only when the brief lacks that key — an older `fr`) via `fr models resolve --harness <h>` (unbound → set at step 1); `resolved_tier: null` is the untiered case the dispatch clause below already handles, not a fourth rule; blocked → run inline; never a manual phase.
@@ -94,11 +91,14 @@ After each `implement-phase` return, run `review-phase`: `superpowers:requesting
 spec + plan + code; fix every finding with tests (a wrong one gets refuting reasoning via
 `superpowers:receiving-code-review`, never a silent drop); record each as a plan-scope `finding`
 (`--state open|fixed|refuted`) — the next phase's handoff includes them, `deliver` derives the PR
-body from it; a finding fixed LATER is closed with `fr journal resolve --scope plan --slug <s> --id <f> --state fixed --note <why>`, never by re-adding the id (a silent no-op). **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
+body from it; later-fixed findings close with `fr journal resolve` (`--id <f> --state fixed --note <why>`), never by re-adding the id (a silent no-op). Record the review — `fr journal add --scope plan --slug <s> --kind review --phase N` naming the findings raised, or that none were; `journal-check` (§7) fails delivery without it. **Push the branch ONLY — never open the PR** (#320, 3×). Resolve `implement` done only once every phase's BOTH members land.
 
-### 7. deliver — one PR per repo, all artifacts aboard
+### 7. journal-check — the review-owed gate, run by the cursor
+`fr run advance` runs `fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews` — exit code is the verdict (#430: an instruction-only obligation gets absorbed). Fails on a locally-complete, non-manual phase with no `kind=review` entry naming it; fix by completing/journaling that review, then re-`advance` (`cli` steps self-complete). Strands runs started against the older shape, by design — recover by moving the stranded `docs/superpowers/runs/<id>.yaml` aside FIRST (`adopt` refuses while a run exists for the same shape+branch, which is exactly the stranded case), then `fr run adopt <plan-dir> --branch <b> --run-id <fresh>`; it re-dispatches every completed phase's `review-phase` and does not carry the old cursor's gate provenance.
+
+### 8. deliver — one PR per repo, all artifacts aboard
 Verify first (`superpowers:verification-before-completion`): full test-suite output, self-review
-pass, steps ticked, `fr journal check --scope plan` clean — it folds resolution records, so close each fixed finding with `fr journal resolve` rather than explaining it away. Open the **draft** PR:
+pass, steps ticked, `journal-check` passed (§7 — it folds resolution records, so close each fixed finding with `fr journal resolve` rather than explaining it away). Open the **draft** PR:
 summary + spec/plan paths; findings + fixes (+ refutations) and decisions via
 `fr journal render --scope plan --section findings`/`decisions`; an **Operator gates** section
 verbatim from `fr run gates <run-id>` (never blank — a run that never asked says so itself); the
