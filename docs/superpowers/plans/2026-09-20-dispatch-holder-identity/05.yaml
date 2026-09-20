@@ -3,6 +3,7 @@ phase:
   number: 5
   title: fr run status answers the question, and fr run check counts the debt
   tag: agentic
+  tier: mechanical
   depends_on:
   - 4
   tracking_issue: null

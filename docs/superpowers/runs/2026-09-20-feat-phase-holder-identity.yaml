@@ -43,7 +43,10 @@ steps:
       - dispatched: '2026-09-20T12:35:32+00:00'
       phase/3/implement-phase:
       - dispatched: '2026-09-20T12:35:34+00:00'
+        agent: a5dbd5f0e9bdf3362
         agent_type: super-fr:fr-phase-executor
+        harness: claude-code
+        model: claude-sonnet-5
   deliver:
     state: pending
 accounting:

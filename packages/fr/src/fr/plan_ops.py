@@ -113,6 +113,13 @@ class PhaseSpec:
     # Walking-skeleton marker — emitted only when set (same byte-stability
     # rule as `acceptance`).
     skeleton: bool = False
+    # Harness-neutral complexity hint (`PhaseHeader.tier`) that fr-goal §5
+    # resolves to a model via `fr models resolve`. Emitted only when set, same
+    # byte-stability rule as the two above. Its absence here is why
+    # `fr plan create --phases-file` accepted a `tier:` and silently dropped
+    # it, leaving every scaffolded plan untiered and every dispatch made from
+    # one able to record only `model: null`.
+    tier: str | None = None
 
 
 def create(
@@ -295,6 +302,20 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
     if ps.skeleton:
         # Omitted when unset so pre-marker plans stay byte-stable.
         phase_header["skeleton"] = True
+    if ps.tier is not None:
+        # Validated here rather than left to `fr.parser.parse`: `PhaseHeader.
+        # tier` is a closed Literal, so an unknown tier would scaffold a plan
+        # that cannot be read back — a create that reports success and leaves
+        # an unparseable artifact. The vocabulary is derived from the Literal
+        # (`phase_tiers()`), never re-listed.
+        from fr.types import phase_tiers
+
+        if ps.tier not in phase_tiers():
+            raise PlanEditError(
+                f"phase {ps.number}: unknown tier {ps.tier!r} — "
+                f"must be one of {', '.join(phase_tiers())}"
+            )
+        phase_header["tier"] = ps.tier
     return {
         "schema_version": 2,
         "phase": phase_header,

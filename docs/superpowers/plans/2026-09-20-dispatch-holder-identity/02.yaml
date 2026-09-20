@@ -4,6 +4,7 @@ phase:
   title: advance opens the record — for a grouped member, a flat step, and nothing
     at all for a gate
   tag: agentic
+  tier: standard
   depends_on:
   - 1
   tracking_issue: null

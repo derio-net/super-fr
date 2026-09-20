@@ -3,6 +3,7 @@ phase:
   number: 3
   title: fr run claim — the reported identity, idempotent, single-writer, and abandonable
   tag: agentic
+  tier: standard
   depends_on:
   - 2
   tracking_issue: null

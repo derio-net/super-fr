@@ -4,6 +4,7 @@ phase:
   title: The prose that makes it happen — skill, agent, parity, mirrors, matrix, version,
     explainer
   tag: agentic
+  tier: standard
   depends_on:
   - 5
   tracking_issue: null

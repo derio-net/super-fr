@@ -4,6 +4,7 @@ phase:
   title: advance refuses a held unit (gh-499), --redispatch is the escape, and resolve
     closes the record
   tag: agentic
+  tier: hard
   depends_on:
   - 3
   tracking_issue: null

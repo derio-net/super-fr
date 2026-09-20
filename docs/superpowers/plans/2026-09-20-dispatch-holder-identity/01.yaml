@@ -4,6 +4,7 @@ phase:
   title: Skeleton — the DispatchRecord shape, the 2→3 artifact bump, and this repo's
     own cursors migrated
   tag: agentic
+  tier: standard
   depends_on: []
   tracking_issue: null
   acceptance:
