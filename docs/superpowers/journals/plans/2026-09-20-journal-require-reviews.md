@@ -531,3 +531,33 @@ The executor also declined to self-record phase 6's own review entry, noting tha
 Full gate: 3319 passed, 80 skipped, 3 failed, coverage 91.71% against the 75% floor. The three reds are exactly the pre-existing environment-dependent ones this branch has tolerated throughout — two Rich wrap-point failures in test_run_workspace.py and test_workflow_check.py's discoverability test (#463/#489) — and were re-confirmed unrelated: the only source file this branch changes under packages/ is journal_cmd.py plus journal/model.py.
 
 Assessment: the plan is complete. Deliver.
+
+<!-- fr:journal kind=finding scope=plan id=r-p6-f2 created=2026-09-20T18:51:18 phase=6 state=fixed -->
+### r-p6-f2 · finding [fixed] · The drift-recovery instruction this PR ships does not work (phase 6)
+
+Found by running it, at delivery, on this PR's own stranded run.
+
+Phase 3 added `journal-check` to the shape, which by design strands every in-flight run. SKILL.md SSS7 and the manifest header both prescribed the recovery as `fr run adopt <plan-dir> --run-id <fresh>`. That command REFUSES:
+
+  docs/superpowers/plans/2026-09-20-journal-require-reviews already has a run:
+  2026-09-20-feat-journal-require-reviews.
+
+`_existing_run_for` matches on (workflow, branch) and there is no --force. So adopt refuses precisely when the plan has a run — which is the stranded case, the only case the instruction is for. The prescription was written from reading adopt's docstring rather than from running it.
+
+This is r-p4-f1's class again, and mine this time rather than a phase executor's: a documented obligation that cannot be satisfied by the documented means, about to ship to consumers through a skill and a workflow manifest.
+
+What actually works, verified end to end here: move `docs/superpowers/runs/<stranded-id>.yaml` aside first, THEN `fr run adopt <plan-dir> --branch <b> --run-id <fresh>`. Adoption then correctly reconstructed brainstorm/spec-review/plan/plan-review as done and all 6 phases' implement-phase as done.
+
+Two further costs, both predicted by d-p3-adopt-costs from reading the source and now CONFIRMED by running it: every phase's `review-phase` came back pending (adopt keys items on the first group member), so all six had to be re-resolved; and `fr run gates` on the adopted cursor reports 'cleared, but provenance not recorded' — the original run recorded `--answered-by operator` for the brainstorm batch and adoption does not carry it.
+
+Fixed in SKILL.md SSS7 and both manifest copies, with the mirrors resynced. Not fixed in `adopt` itself: giving it a --force, or making it supersede a drifted run, is a change to run-cursor semantics and belongs in its own spec, not smuggled into this one.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p6-gate-ran-for-real created=2026-09-20T18:51:18 phase=6 -->
+### d-p6-gate-ran-for-real · discovery · The gate ran as a cursor step on this PR's own run, and passed (phase 6)
+
+End-to-end dogfood, after the adopted cursor was walked to it:
+
+  $ fr run advance 2026-09-20-journal-require-reviews-v2
+  journal-check: done (exit 0)
+
+It passed because all six completed phases carry a `kind=review` entry naming them (review-p1 .. review-p6). Earlier in the same run, with phase 2 complete and unreviewed, the same check exited 1 and named phase 2. Both states were observed on the real plan, not a fixture - which is the distinction #430 says did not previously exist.
