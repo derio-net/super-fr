@@ -187,6 +187,13 @@ built, already tested.
   unit met no obligation.
 - gh#517's `fr journal check --require-reviews` **stays**, as the gate for plans with no
   cursor (adopted or pre-cursor work). Two gates, one rule, one verifier.
+- **Reviews resolved before this gate existed are not retroactively failed.** The migration
+  cannot invent evidence and does not try; `fr run check` reports such a unit as
+  `done, unevidenced (predates the evidence gate)` — visible debt, never a failure. An
+  obligation cannot be enforced backwards in time, and pretending otherwise would fail
+  every in-flight run on the day the plugin updates.
+- **A shape that declares no `evidence:` resolves exactly as before.** The gate is opt-in per
+  step, so repo-authored workflows are untouched until they ask for it.
 - "Review skipped" and "review passed clean" are now different states on the cursor:
   `done` with evidence, versus a unit that cannot reach `done` at all.
 - **Mechanically:** branch `feat/journal-require-reviews` is merged into this one as the
@@ -205,10 +212,51 @@ Both prior run migrations were stamp-only. This one **rewrites the body**:
 4. `RunState.accounting` dropped.
 
 It parses first and refuses rather than certifying a cursor it cannot read (the
-`run_provenance` invariant), and is **idempotent on its output**. Per
+`run_provenance` invariant), and is **idempotent on its output**.
+
+**The legacy reader — a flaw this spec's first draft had.** Every existing run migration
+"parses first" with `parse_run_state`, i.e. with the LIVE model. That was sound only because
+every prior change was additive, so the live model stayed a superset of every old shape. This
+change **removes** `items`, `dispatch` and `accounting` from an `extra="forbid"` model — so a
+v2 cursor carrying `items` no longer parses, and the chain `2 → 3 → 4 → 5` would refuse every
+old cursor at its FIRST hop, stranding exactly the files the framework exists to carry.
+
+So the prior shape is frozen as `fr.run.legacy.RunStateV4` (a superset of versions 1–4, which
+it can be precisely because those were all additive), and every hop up to and including
+`4 → 5` reads with it; the live `RunState` is v5 only. The general rule goes into
+`.claude/rules/artifact-versioning.md`: *the first migration that removes or moves a field
+freezes the prior shape as a legacy model, and no migration may validate an old file against
+the live one.* Found by auditing the blast radius after the operator called this rewrite
+what it is.
+
+Two edges, decided rather than left to the implementer:
+
+- **A v4 cursor with a PARTIAL measurement** (some of the four token fields) is already
+  invalid under gh#514's validator. The migration **refuses that cursor** and names the
+  field — it never drops a figure silently to make `MeasuredTokens` constructible.
+- **A cursor the migration cannot fully convert is left byte-identical.** A body-rewriting
+  migration can half-write in a way a stamp-only one cannot, so the rewrite is built in
+  memory and written once, through the framework's existing atomic writer. Per
 `.claude/rules/artifact-versioning.md` the same PR runs `fr migrate artifacts --yes` over
 this repo's own cursors. The chain test asserts every hop — `[2, 3, 4, 5]` — because that
 assertion is the only collision guard this repo has (see §8).
+
+### 4.F.1 Every other reader and writer — the blast radius, audited
+
+`run_cmd.py` is not the only code that knows these maps:
+
+- **`fr run adopt`** (`fr/run/adopt.py`) is the first WRITER of `items` — it records which
+  phases of a half-implemented plan are already done. It now writes `units`, and a phase it
+  finds complete becomes a `done` unit with **no attempts**: fr never dispatched it, and an
+  empty list is the honest record of that. Inventing an attempt to look uniform would be the
+  exact fabrication §3 of #508's spec forbids.
+- **`fr/run/provenance.py`** walks a group's member keys for `fr run gates`; it reads `units`.
+- **`fr/run/telemetry.py`**'s `measured_fields()` becomes `MeasuredTokens`.
+- **The bridge is not coupled.** `fr_dispatch`, `fr_vk` and `fr_cncd` never load a run
+  cursor — their `items` are work items and API payloads. Recorded here because AGENTS.md's
+  bridge-audit rule requires the check, and so nobody has to re-derive the answer.
+- **Archived cursors** under `implemented/runs/` (8 today) stay frozen: nothing re-parses
+  them, and the migration's locator does not reach them.
 
 ### 4.G Liveness (decision u5) — the artifact half of #518
 
@@ -295,16 +343,57 @@ hook catches its consequence instead.
 
 ## 7. Acceptance rows
 
-| id | claim | level |
-|---|---|---|
-| `run-unit-cost-per-attempt` | A redispatched unit keeps every attempt's cost; totals include abandoned attempts | unit → live |
-| `run-unit-review-evidence` | A review unit cannot be resolved done without journal evidence; skipped and passed-clean are different cursor states | unit → live |
-| `run-idle-detected` | `fr run check --idle` distinguishes an advanceable-and-idle run from every legitimate stop | unit |
-| `run-idle-stop-guard` | On Claude Code, ending a turn on an idle run is blocked with the next command | unit → live |
-| `run-unit-record-migrates` | A v4 cursor's items, dispatch and accounting migrate into one unit map with no loss | unit |
+Eighteen rows, grouped by what could go wrong. A rewrite this size is pinned by what it
+could **regress** at least as much as by what it adds — the operator's call, and the audit
+it prompted found a chain-breaking flaw and an unmentioned writer before any code existed.
 
-Existing rows carried: `run-dispatch-holder-recorded`, `run-dispatch-refuses-second` (absorbs
-gh#519's `run-advance-refuses-running`), `run-dispatch-abandon`, `run-dispatch-harness-neutral`,
+**Upgrade safety** — the riskiest part of a shape-*removing* change
+
+| id | claim |
+|---|---|
+| `run-unit-record-migrates` | a v4 cursor's items, dispatch and accounting migrate into one unit map with no loss, idempotently |
+| `run-legacy-cursors-still-migrate` | a v1/v2/v3 cursor still reaches the current version after fields left the live model |
+| `run-migration-atomic-per-cursor` | an unconvertible cursor is left byte-identical, never half-rewritten; the rest still migrate |
+| `run-upgrade-mid-run-keeps-holder` | a run upgraded while a phase is held still refuses a second dispatch and names the holder |
+
+**The witness**
+
+| id | claim |
+|---|---|
+| `run-adopted-cursor-refuses-double-dispatch` | an adopted cursor with no attempts still refuses to re-brief a running unit |
+| `run-adopt-writes-unit-records` | `fr run adopt` writes a current cursor; complete phases are done units with no invented attempts |
+
+**Cost**
+
+| id | claim |
+|---|---|
+| `run-unit-cost-per-attempt` | a redispatched unit keeps every attempt's cost; totals include abandoned attempts |
+| `run-abandoned-attempt-is-measured` | an abandoned attempt's spend is measured when it is abandoned |
+| `run-status-cost-under-holder` | status shows each attempt's cost beneath its holder, estimate and measurement never blurred |
+
+**Evidence**
+
+| id | claim |
+|---|---|
+| `run-unit-review-evidence` | a review unit cannot be resolved done without journal evidence |
+| `run-review-evidence-cannot-be-faked` | evidence must be a review entry for that same phase |
+| `run-legacy-reviews-not-retro-failed` | pre-gate reviews show as unevidenced debt, never retroactively failed |
+| `workflow-without-evidence-unchanged` | a shape declaring no evidence resolves exactly as before |
+
+**Liveness**
+
+| id | claim |
+|---|---|
+| `run-idle-detected` | `fr run check --idle` separates an advanceable-and-idle run from every legitimate stop |
+| `run-idle-stop-guard` | on Claude Code, ending a turn on an idle run is blocked with the next command |
+| `run-idle-guard-allows-waiting` | ending a turn while a dispatched executor works is allowed |
+| `run-idle-guard-never-wedges` | the guard is silent with no bound run and fails open on any fr error |
+| `run-stalled-reported-not-failed` | a unit held past the threshold is reported with its age, never failed |
+
+Existing rows carried and re-pointed: `run-dispatch-holder-recorded`,
+`run-dispatch-refuses-second` (absorbs gh#519's `run-advance-refuses-running`),
+`run-dispatch-abandon`, `run-dispatch-harness-neutral`, `run-manual-phase-never-dispatched`,
+`run-resolve-teaches-item-flag`, `run-start-binds-session`,
 `run-telemetry-measured-claude-code` (re-pointed at per-attempt storage).
 
 ## 8. Process finding — recorded, not designed
