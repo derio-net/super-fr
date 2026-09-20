@@ -2157,3 +2157,44 @@ rows:
       the session row''s model. That live claim stays with opencode-subagent-dispatch,
       deliberately left at skipped (its scope correction is already in its own notes,
       finding r-s1) and is this plan''s manual phase 4.'
+  - id: phase-header-fields-survive-phases-file
+    capability: fr-goal subagent execution
+    acceptance: Every PhaseHeader field an operator writes in a --phases-file survives
+      into the scaffolded plan, and a field left unset is omitted so pre-existing plans
+      stay byte-stable
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm. The class-level claim behind gh#434: tier was dropped
+      by a hardcoded ingestion whitelist that no test covered, and the whitelist will
+      drift again at the next added field. The regression test is derived from PhaseHeader.model_fields
+      rather than restating a list, so the next field is covered without an edit.'
+  - id: phase-tier-reaches-the-dispatch-brief
+    capability: fr-goal subagent execution
+    acceptance: A tier declared in a --phases-file reaches the dispatch brief fr run
+      advance emits for that phase, joining plan ingestion to dispatch without an LLM
+      in the path
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm. Closes the third break found during this brainstorm:
+      tier: from_phase is a policy sentinel fr never resolved, so the brief carried
+      the literal string and the join was prose-only (fr-goal §5). The new resolved_tier
+      key on the MEMBER brief makes the join deterministic and testable in CI. Deliberately
+      stops short of a real subagent dispatch — that live claim stays with opencode-subagent-dispatch
+      at skipped.'
+  - id: plan-self-review-flags-tier-gaps
+    capability: fr-goal subagent execution
+    acceptance: fr plan self-review warns when a plan carries a tier its fr_version
+      constraint cannot support, and when an agentic phase declares no tier at all
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Born at brainstorm. Two warn-severity gates giving tier the treatment acceptance
+      (3.7.0 probe) and skeleton already have. The untiered warning is #498''s fail-visibly
+      doctrine applied at plan time rather than at dispatch. Both fire on this repo''s
+      existing plans by design — disclosed to the operator before the decision and accepted;
+      warn does not affect exit codes.'
