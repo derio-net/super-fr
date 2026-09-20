@@ -92,6 +92,32 @@ tasks:
       Final gate: `uv run --no-project python scripts/bump-version.py --check`,
       `uv run pytest`, `uv run fr acceptance check`, `uv run fr validate artifacts`,
       `uv run fr journal check --scope plan`.
+- number: 3
+  title: fr-goal tells the orchestrator to read resolved_tier
+  steps:
+  - id: P5.T3.S1
+    text: |
+      Phase 3 added `resolved_tier` to the member dispatch brief, but no skill
+      tells anyone to read it: `plugins/super-fr/skills/fr-goal/SKILL.md:84`
+      still says "Model = phase `tier` via `fr models resolve`", which sends the
+      orchestrator back to the plan file. The mechanism exists and the
+      instruction does not — the same half-closed shape as break 2, found at
+      phase 3's review.
+
+      Update that clause to take the tier from the brief's `resolved_tier`,
+      falling back to reading the phase header only when the brief has no such
+      key (an older `fr`). Keep the existing untiered/unresolved rules intact:
+      `resolved_tier: null` IS the untiered case the clause already handles, so
+      say so explicitly rather than adding a fourth rule.
+
+      Then regenerate the mirror (`uv run python scripts/sync-opencode.py`,
+      verify with `--check`) — never hand-edit `.opencode/skills/fr-goal/SKILL.md`.
+
+      Gate: `uv run pytest tests/unit/test_fr_goal_dispatch_prose.py
+      tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_skill_tool_neutrality.py
+      tests/unit/test_skill_validation.py -q --no-cov` and
+      `uv run fr harness parity --check`.
 state:
   steps:
     P5.T1.S1:
@@ -115,6 +141,10 @@ state:
       ticked_at: null
       note: null
     P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
       state: ' '
       ticked_at: null
       note: null
