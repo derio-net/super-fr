@@ -79,3 +79,152 @@ Review finding, confirmed (0.87s per full parse; 3 parses per module run). FIXED
 ### m2-blank-step-text · finding [fixed] · M2: isinstance(text, str) waved through a step whose text had vanished (phase 1)
 
 Review finding, confirmed (0 of 2113 blank today, min length 7). FIXED: assert step.text.strip().
+
+<!-- fr:journal kind=finding scope=plan id=05793d7b5aa2 created=2026-09-20T15:50:03 phase=2 state=fixed -->
+### 05793d7b5aa2 · finding [fixed] · Rich ate the escape route: '[manual]' and every '[error]' prefix were silently dropped by fr plan self-review (phase 2)
+
+Found by P2.T3.S1, the end-to-end CLI test, and it is exactly the defect that test exists to catch. fr.plan_ops.self_review's message is correct in memory, but plan_cmd.self_review_cmd printed it with console.print(str(issue)) — rich parses '[...]' as a style tag and DROPS what it does not recognise. Observed output: '...or move the dispatch into a phase.' The four load-bearing tokens the spec pins are 'no Agent tool', 'task: deny', '[manual] phase', '#428'; three survived, the one naming the escape route did not.
+
+The blast radius is wider than #428: str(ReviewIssue) is '[{severity}] {message}', so EVERY self-review issue has been printed without its severity prefix since the command shipped. A reader could not tell an error from a warn in the CLI output at all. Any other lint whose message carries brackets lost them too.
+
+FIXED in packages/fr/src/fr/commands/plan_cmd.py: console.print(escape(str(issue))) with rich.markup.escape, plus a comment stating that a lint message is data, not markup. Pinned by tests/unit/test_v2_plan_ops.py::test_plan_self_review_cli_exits_1_and_names_both_escapes, which asserts all four tokens against whitespace-normalized output.
+
+Deviation note: this is a one-line fix in a command module phase 2's step text does not name. It is in scope because P2.T3's contract is the end-to-end CLI verdict, and the message cannot 'carry' a token the CLI deletes on the way out.
+
+<!-- fr:journal kind=discovery scope=plan id=e2b40b82b564 created=2026-09-20T15:50:22 phase=2 -->
+### e2b40b82b564 · discovery · The shipped detector re-measures at 82 plans / 2113 agentic steps / 0 hits, and all three refinements are individually load-bearing (phase 2)
+
+Re-measured with the REAL fr.plan_ops.self_review over corpus_plans(), not with the patterns applied to raw text.
+
+Verdict: census Census(plans_parsed=82, plans_skipped=3, agentic_steps=2113), dispatch-gate hits = 0. Exactly the number phase 1 and spec 2.D predicted.
+
+Counterfactuals, each run over the 286 PENDING agentic steps (1827 of 2113 are ticked and exempt):
+
+1. Bare newline as an instruction boundary: 2 hits, both this plan — P2.T1.S2 'spawn or\nhand off to a subagent' and P3.T1.S2 'hand off to a subagent'. Both describe the executor contract; neither instructs. The refinement stands.
+
+2. Bare mechanism nouns (Task tool / Agent tool / subagent_type with no instructional frame): 2 hits, both this plan — P2.T3.S1 and P2.T3.S2, quoting the verdict's own token list. (Phase 1 measured 3; the third was P2.T1.S2 before the plan was rewritten.) The refinement stands.
+
+3. Stripping inline backticks as well as fences: the observed defect 'Dispatch `blog-craft:post-researcher` per post' stops matching entirely — the object IS the backticked name. The refinement stands.
+
+One refinement NOT in the plan text, found while implementing: the punctuation boundary must require trailing whitespace, i.e. (?<=[.;:!?])\s+ rather than (?<=[.;:!?]). Without it 'fr_dispatch.tick()' reads as a sentence start, and so does the ellipsis in this plan's own P2.T1.S2 ('"...spawn or'), which would have flagged the step describing the refinement. It is the same principle as the soft-wrap rule — a boundary is a real sentence break, not any occurrence of the character.
+
+For scale: a naive \bdispatch\b over all 2113 steps hits 292 (spec 2.D's 237 was the smaller enforcing-read corpus).
+
+<!-- fr:journal kind=discovery scope=plan id=4f601edccc3a created=2026-09-20T15:50:33 phase=2 -->
+### 4f601edccc3a · discovery · The first fence-exemption fixture was vacuous — it passed with _strip_fenced_code deleted (phase 2)
+
+P2.T2.S1(c) asks for 'a dispatch verb inside a fenced block yields NO issue'. The obvious fixture was:
+
+  Write the fixture the cold reader consumes:\n\n```\nDispatch the cold-reader agent over the draft\n```
+
+It passed. It also passed with the strip removed, because the opening fence itself sits between the ':' boundary and the verb, so the head pattern never reached 'Dispatch' on the raw text either. The test asserted nothing about the exemption it was named for — this repo's recurring defect, a check that reports success while doing nothing.
+
+Fixed by giving the fenced block its OWN instruction boundary, a list marker:
+
+  Quote the rejected wording in the skill's example block:\n\n```\n- Dispatch the cold-reader agent over the draft\n```
+
+Raw text matches ('- Dispatch the cold-reader'); stripped text does not. The test now carries an explicit assertion that the raw fixture still matches _RE_DISPATCH_HEAD, so a future edit cannot quietly make it vacuous again. Mutation-verified: with 'scanned = step.text' substituted for 'scanned = _strip_fenced_code(step.text)', the test fails and the other 13 dispatch tests still pass.
+
+Generalisable: for an EXEMPTION test, the fixture must be one the detector would otherwise fire on. Asserting the positive match alongside the exemption is the cheapest way to pin that.
+
+<!-- fr:journal kind=finding scope=plan id=ebfd1af6071a created=2026-09-20T15:54:58 phase=2 state=open -->
+### ebfd1af6071a · finding [open] · Phase 2's two acceptance rows are still not-implemented — phase 4 owes the flip (phase 2)
+
+'fr plan edit --complete-phase 2' warned: 'phase 2 completed but its acceptance rows are still not-implemented: goal-agentic-dispatch-purity, goal-dispatch-lint-precision'.
+
+Left deliberately. The plan assigns the matrix work to P4.T1, and .claude/rules/acceptance-matrix.md requires the status move to carry evidence refs plus a --notes reason, which is a phase-4 shape ('fr acceptance set-status --id ... --status ci --level unit=... --notes ...'). Flipping them here would either duplicate P4.T1 or land a half-cited row.
+
+The refs phase 4 needs now exist:
+- goal-dispatch-lint-precision -> super-fr:tests/unit/test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans (82 plans / 2113 agentic steps / 0 hits)
+- goal-agentic-dispatch-purity -> super-fr:tests/unit/test_v2_plan_ops.py::test_self_review_errors_on_dispatch_verb_in_agentic_step and ::test_plan_self_review_cli_exits_1_and_names_both_escapes
+
+Closes when P4.T1 runs set-status on both.
+
+<!-- fr:journal kind=discovery scope=plan id=b6c9cc6229ea created=2026-09-20T16:27:10 phase=2 -->
+### b6c9cc6229ea · discovery · Correction to e2b40b82b564: the 'fr_dispatch.tick()' half of the trailing-whitespace rationale was wrong (phase 2)
+
+Journal entries are append-only, so this corrects e2b40b82b564 rather than rewriting it.
+
+That entry justified requiring trailing whitespace on the punctuation boundary — (?<=[.;:!?])\\s+ rather than (?<=[.;:!?]) — with two examples. One is right, one is not.
+
+RIGHT: the ellipsis. '"...spawn or' has '.' immediately before 'spawn'; without the \\s+ that reads as a sentence start and this plan's own P2.T1.S2 is flagged. Now pinned by a true-negative fixture carrying the literal text, so the rule is defended in the precision direction and not only in the recall direction.
+
+WRONG: 'fr_dispatch.tick()'. That string matches under NEITHER variant, because no dispatch verb follows the '.' — 'tick()' does. It was cited from reasoning about what the pattern could do, not from running it. Re-checked: with the \\s+ removed, 'GREEN: implement fr_dispatch.tick() so it dispatches phases to the runner' still does not match.
+
+The lesson is the one this run keeps re-learning: a rationale sentence is a claim, and a claim that was not executed is a guess wearing evidence's clothes. The entry's verdict stands (the refinement is real and now mutation-tested); one of its two supporting facts did not.
+
+<!-- fr:journal kind=finding scope=plan id=6f0e2519d163 created=2026-09-20T16:27:58 phase=2 state=fixed -->
+### 6f0e2519d163 · finding [fixed] · Phase-2 review: the ZERO-hits claim was measured over the wrong population, and seven pattern defects followed from it (phase 2)
+
+Seven defects, all confirmed by the reviewer against shipped code and re-confirmed here before fixing. Recorded together because they share one root cause.
+
+ROOT CAUSE. The corpus regression ran the real self_review and filtered its issues — gate-accurate, and blind by construction to 1835 of 2113 agentic steps, because the gate exempts ticked ones. The comment in plan_ops.py claimed "ZERO over the same 2113 agentic steps". Measured: _RE_DISPATCH_HEAD was genuinely 0/2113, but _RE_DISPATCH_MECHANISM had 1 live hit — 2026-09-19-opencode-subagent-dispatch P4.T1.S2, matched 'subagent_type:', state 'x'. The test was green because the step is ticked. The exemption is also temporal: that plan, read a week earlier, was unticked, and the gate would have errored on it at authoring time — exactly when this gate is meant to be usable.
+
+C1. Pattern 2 was entirely undefended: replacing _RE_DISPATCH_MECHANISM with a never-matching regex left 85/85 green, so half of normative §4.A was deletable in silence. FIXED with three true positives ("Use the fr-phase-executor agent for each phase", "Call the Task tool with subagent_type: general-purpose", "Invoke the code-reviewer subagent on the diff").
+
+C2. The frameless subagent_type[:=] arm is DROPPED. In YAML and markdown that token is a key name — a mention, not a call site — which is why it hit a legitimate live plan, and the in-flight 2026-09-20-opencode-tier-binding-reaches-dispatch would have hit it next, at error severity, while being authored. The framed form still catches "Call the Task tool with subagent_type: general-purpose".
+
+I1. The head window spanned newlines while pattern 2's did not. FIXED: [^.;:!?\n]{0,60}?. It costs the verb-and-object-split-by-wrap shape; the cost is taken deliberately and pinned by test_self_review_dispatch_gate_does_not_look_across_a_line_break.
+
+I2. The boundary anchored POSITION, not MOOD. FIXED three ways: bare verb stems only (no -es/-ed/-ing); a negative lookahead refusing "of" plus copulas/modals after the verb; and lookbehinds excluding e.g./i.e./etc./cf./vs., which all satisfy punctuation-then-whitespace while continuing a sentence. A FOURTH defect surfaced while writing the fixture that isolates the first: the bare stem "dispatch" matched the PREFIX of "dispatching", so the mood rule bought nothing until a trailing \b was added. It was found only because the new true negative was written to isolate that one element — the general lesson of this round.
+
+I3. _FENCED_CODE_RE mis-paired 4-backtick fences. Verified against the old regex: a ````markdown block quoting a ```-fenced one paired the outer opener with the INNER closer and left "- Dispatch the cold-reader agent over the draft" UN-FENCED and matching. That is worse than stripping too little — the gate fires on a step whose only crime is quoting the thing it forbids, and it is the exact shape phases 3/4 must write into SKILL.md. FIXED with a backreference on the captured opening run (a longer closer is accepted). Unterminated fences now strip to end of text, decided explicitly: for a precision-first gate, an opened block means everything after it is content.
+
+I4. Any backticked word:word counted as an agent object, re-admitting the 42-hit class of §2.D (plan:my-slug, fr:synced, fr.tracker:GithubTracker, start:end, cli:app). FIXED: every object arm requires a role word. The backticked arm is kept and is NOT redundant — it is what makes the REPORTED match the complete token including its closing backtick; the unbackticked colon arm catches a glued name (blog-craft:postresearcher) where the role word has no word boundary. Both now die under mutation.
+
+I5. Pattern 2 had no instruction anchor and admitted using/calling/invokes. FIXED: the same _INSTRUCTION_BOUNDARY as pattern 1, bare stems only, plus a required non-empty modifier between "the" and the role word — which is what separates naming an agent from "Use the agent frontmatter in plugins/super-fr/agents/fr-phase-executor.md".
+
+ALSO: _pending_agentic_steps renamed _not_ticked_steps (it checked neither "agentic" nor "pending" — it yields '-' too).
+
+VERIFICATION. A 15-mutant sweep now kills every element of §4.A: each pattern, the window's newline exclusion, the bare stems, the verb word boundary, the predicate guard, the abbreviation lookbehinds, the fence backreference, the unterminated-fence decision, both object arms, the role-word requirement, the mechanism anchor, the mechanism stems, the non-empty modifier, and the fence strip itself. Before this round, four of those elements had no test that noticed their removal.
+
+RE-MEASURED after all seven fixes: 82 plans / 2113 agentic steps / 1835 ticked / 278 pending. HEAD 0 over all, 0 over pending. MECHANISM 0 over all, 0 over pending. The pattern-level corpus test now asserts that over ALL steps, and it goes red (naming slug, step id, state and matched text) if the frameless subagent_type arm is restored.
+
+<!-- fr:journal kind=discovery scope=plan id=29da23f914cb created=2026-09-20T16:28:14 phase=2 -->
+### 29da23f914cb · discovery · The deliberate d2 recall baseline: four dispatch shapes the gate does not flag, and why (phase 2)
+
+Decision d2 is precision over recall, and this is the bill for it — written down so that a future reader deciding whether to widen the gate is arguing against a known list rather than discovering it.
+
+Shapes the gate does NOT flag today, each a real instruction to dispatch:
+
+  "Launch a subagent to gather evidence"
+  "Run the code-reviewer agent over the diff"
+  "Ask the cold-reader agent for a verdict"
+  "Send the draft to the cold-reader agent"
+
+The verb list is closed at dispatch / delegate to / spawn / hand off to / fan out to. "Launch", "run", "ask" and "send" are all far more common in ordinary plan steps than in dispatch instructions — "Run the test suite" is the single most common step shape in this corpus — so adding them trades a large precision loss for a small recall gain. §2.D is the evidence that the trade goes the wrong way: this is a repo about dispatch, and a gate that fires on prose gets switched off.
+
+Two further priced gaps, both pinned by tests rather than merely stated:
+
+  * verb and object split by a hard wrap ("Dispatch the\ncold-reader agent") — the window excludes \n, because one that spans newlines lets an object on an unrelated wrapped line manufacture a hit;
+  * a dispatch instruction inside a fenced block — stripped as content, which is what makes it safe for a skill to quote a rejected step.
+
+If a real defect ever escapes through one of these, the right response is to add the specific shape and re-run both halves of the corpus measurement, not to loosen an anchor. Every element of the current shape dies under mutation, so a widening that breaks precision will show up as a red test naming the plan, the step and the matched text.
+
+<!-- fr:journal kind=finding scope=plan id=9002f8a61068 created=2026-09-20T16:28:48 phase=2 state=open -->
+### 9002f8a61068 · finding [open] · Out of scope, needs its own issue: 40 command-layer print sites interpolate into rich unescaped, and one can crash the parse-error reporter (phase 2)
+
+OUT OF SCOPE for #428 — recorded open, deliberately not fixed here. It needs its own issue.
+
+The #428 work fixed ONE print site (plan_cmd.py self_review_cmd, finding 05793d7b5aa2: rich was silently dropping "[manual]" and every "[error]"/"[warn]" severity prefix). That fix was in scope because the phase-2 contract is the end-to-end CLI verdict. The class it belongs to is not.
+
+Scope of the class, measured in this checkout: 40 sites under packages/fr/src/fr/commands/ interpolate an exception or other runtime value into a rich markup string as print(f"...{e}"), out of 123 console.print(f"...") sites overall. None escapes.
+
+Two failure modes, both reproduced:
+
+  Console.print("parse error: [manual] phase missing")
+    -> "parse error:  phase missing"          # token silently DROPPED
+
+  Console.print("parse error: unexpected [/red] token")
+    -> rich.errors.MarkupError: closing tag '[/red]' at position 24
+       doesn't match any open tag                # RAISES
+
+The second is the serious one. plan_cmd.py:358 is
+
+    err_console.print(f"[red]parse error:[/red] {e}")
+
+so if a PlanSchemaError message ever contains a "[/...]"-shaped token — a step text, a YAML fragment, a path, anything quoted back from the plan being parsed — then `fr plan self-review` crashes with a MarkupError while trying to report the parse error. The diagnostic destroys its own diagnosis, and the traceback names rich rather than the plan.
+
+Shape of the fix, when someone takes it: rich.markup.escape at the interpolation boundary, i.e. escape the DATA and leave the literal markup alone — escape(str(e)) inside an f-string whose "[red]" tags are author-written. A blanket markup=False would also kill the intended colouring. A tripwire over packages/fr/src/fr/commands/ for print(f"...{...}") without escape() is plausible but needs care: many interpolations are values the author knows are safe (ints, enum members, already-escaped text), so the useful rule is probably narrower — "no unescaped interpolation of an exception or of file-sourced text".
+
+Closes when that issue ships. Until then, any command that echoes parsed-file content is one bracket away from crashing on the error it exists to report.

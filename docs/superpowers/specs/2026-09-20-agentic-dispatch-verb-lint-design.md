@@ -100,9 +100,12 @@ super-fr is a repo *about* dispatch — "GREEN: implement `fr_dispatch.tick()`",
 severity the literal list would fail `fr plan self-review` on super-fr's own
 plans, i.e. the gate would be turned off within a week of shipping.
 
-The narrowed shape in §4.A scores **0 hits across all 2,113 agentic steps**
-while matching the observed real defect verbatim, and 9 of 9 curated true
-positives.
+The narrowed shape in §4.A scores **0 hits across all 2,113 agentic steps** —
+ticked and pending alike, for both patterns — while matching the observed real
+defect verbatim, and 10 of 10 curated true positives. "Ticked and pending alike"
+is the load-bearing half of that sentence: see §4.A on why measuring only the
+278 pending steps is how the first cut of pattern 2 shipped a live-plan hit
+behind a green test.
 
 ### 2.E The observed defect (derio-net/frank, 2026-07-28, per #428)
 
@@ -155,50 +158,100 @@ with the same exemptions:
 backticks **kept**. A fenced block is content being written, not an instruction
 to the executor. Inline backticks must survive because the backticked agent
 name *is* the object — stripping them turns ``Dispatch `blog-craft:post-researcher` per post``
-into `Dispatch   per post` and the detector goes blind. (Measured: stripping
-fences changes nothing for the head detector and removes one mechanism-token
-false positive.)
+into `Dispatch   per post` and the detector goes blind.
+
+A fence is closed by a backtick run **at least as long as its opener**, and the
+implementation back-references the opening run to enforce that. Matching any
+```` ``` ```` as a closer mis-pairs a ````` ```` `````-fenced block that quotes a
+```` ``` ````-fenced one — the exact shape a skill must use to quote a rejected
+plan step — and the mis-pairing does not merely strip too little: it *un-fences*
+the quoted instruction, so the gate fires on a step whose only crime is quoting
+the thing it forbids. An **unterminated** fence strips to end of text: for a
+precision-first gate that is the safer reading of an ambiguous document.
 
 **Two patterns, both error:**
 
 1. **Imperative-head dispatch verb with an agent-shaped object.** The verb must
    open the step or follow an **instruction boundary** (optionally after a
    connective — `then`, `and`, `next`, `finally`, `also`), and an agent-shaped
-   object must appear within ~60 characters on the same sentence:
+   object must appear within ~60 characters **on the same line**:
 
-   - verbs: `dispatch`, `delegate to`, `spawn`, `hand off to`, `fan out to`
-     (with their inflections);
-   - agent-shaped object: the words `agent`/`subagent`/`sub-agent`/`executor`/
-     `researcher`/`reviewer`/`reader`, a backticked `` `plugin:name` ``
-     reference, or a bare `plugin:name` whose name contains one of those words.
+   - verbs: `dispatch`, `delegate to`, `spawn`, `hand off to`, `fan out to` —
+     **bare stems only**, each closed by a word boundary. An inflected form
+     (`dispatches`, `spawning`) is indicative or gerund: it *describes*. The
+     boundary anchors position; the bare stem anchors **mood**, and both are
+     needed — "Note: dispatch is described in the agent docs" satisfies the
+     boundary. The word boundary is equally load-bearing: without it the stem
+     `dispatch` matches the prefix of `dispatching` and the mood rule buys
+     nothing.
+   - the verb must not be followed by `of`, a copula or a modal (`is`, `are`,
+     `can`, `must`, `belongs`, …), which turn the stem back into a subject or a
+     noun: "dispatch **is** described", "dispatch **of** a subagent belongs in a
+     `[manual]` phase".
+   - agent-shaped object — **every** form requires a role word
+     (`agent`/`subagent`/`sub-agent`/`executor`/`researcher`/`reviewer`/`reader`):
+     the role word standing alone, a backticked `` `plugin:name` `` *whose name
+     carries one*, or the same unbackticked. A bare `` `word:word` `` with no
+     role word is **not** an object — that was the 42-hit false-positive class of
+     §2.D (`plan:my-slug`, `fr:synced`, `fr.tracker:GithubTracker`, `start:end`,
+     `cli:app`). The backticked form is kept as its own alternative so the
+     *reported match* is the complete token an author can recognise, closing
+     backtick included; the unbackticked one catches a glued name
+     (`blog-craft:postresearcher`) where the role word has no word boundary.
 
    The head anchor is what buys the precision: it separates *instructing* the
-   executor to dispatch from *describing* dispatch, which is what 237 of the
-   237 false positives were doing.
+   executor to dispatch from *describing* dispatch, which is what every one of
+   the measured false positives was doing.
 
-   **An instruction boundary is real punctuation (`.;:!?`) or a list marker
-   starting a line — never a bare newline.** This is not a detail; it was found
-   by running the detector over the corpus. Plan step text is hard-wrapped
-   prose, so treating `\n` as a boundary lets a *soft wrap* fake one: phase 3's
-   own step, "A step instructing you to dispatch, delegate to, spawn or\nhand
-   off to a subagent is a BLOCKER", was flagged purely because the wrap landed
-   before the verb. It is describing the contract, not issuing an instruction.
-   A list item is a fresh instruction and keeps its anchor; a wrap is an
-   artifact of formatting and must not create one.
+   **An instruction boundary is start-of-text, real punctuation (`.;:!?`)
+   followed by whitespace, or a list marker starting a line — never a bare
+   newline.** This is not a detail; it was found by running the detector over the
+   corpus. Plan step text is hard-wrapped prose, so treating `\n` as a boundary
+   lets a *soft wrap* fake one: phase 3's own step, "A step instructing you to
+   dispatch, delegate to, spawn or\nhand off to a subagent is a BLOCKER", was
+   flagged purely because the wrap landed before the verb. It is describing the
+   contract, not issuing an instruction. A list item is a fresh instruction and
+   keeps its anchor; a wrap is an artifact of formatting and must not create one.
 
-2. **Explicit mechanism tokens, in an instructional frame.** `use`/`call`/
-   `invoke` + `the <X> agent`/`subagent`/`Task tool`/`Agent tool`, or
-   `subagent_type` immediately followed by `:` or `=` (a call site, not a
-   mention).
+   Two further refinements on the punctuation form, both from measurement: the
+   trailing whitespace is required (without it the ellipsis in `"...spawn` reads
+   as a sentence start), and `e.g.`, `i.e.`, `etc.`, `cf.` and `vs.` are excluded
+   by lookbehind — each satisfies "punctuation then whitespace" while *continuing*
+   the same sentence, so "Cf. dispatch to the fr-phase-executor agent" is a
+   cross-reference, not an instruction.
+
+   **Priced recall gap.** The ~60-character window excludes `\n`, so a verb and
+   object split by a hard wrap ("Dispatch the\ncold-reader agent") is not
+   flagged. The alternative costs more: a window that spans newlines lets an
+   object on an unrelated wrapped line manufacture a hit — the soft-wrap defect
+   one level down. Precision first, and the gap is pinned by a test so it cannot
+   be widened by accident.
+
+2. **Explicit mechanism tokens, in an instructional frame, behind the same
+   instruction boundary as pattern 1.** `use`/`call`/`invoke` (bare stems) +
+   either `the <X> agent`/`subagent` — where `<X>` is a **non-empty** modifier —
+   or `the Task tool`/`the Agent tool`.
 
    The instructional frame is required for the same reason the head anchor is.
    Bare `Agent tool` and `Task tool` are ordinary nouns in a repo that
    documents dispatch: measured over the corpus, the nominal form flagged 3
    steps and **all 3 were this spec's own plan** describing what the executor
    lacks — "the message contains \"no Agent tool\"". A gate whose only real-world
-   hits are the plan that implements it is measuring the wrong thing. The
-   instructional form scores 0 on the corpus and still catches "Call the Task
-   tool with subagent_type: general-purpose".
+   hits are the plan that implements it is measuring the wrong thing.
+
+   The non-empty modifier is what distinguishes *naming* an agent ("Use the
+   fr-phase-executor agent") from using `agent` as a *modifier* ("Use the agent
+   frontmatter in `plugins/super-fr/agents/fr-phase-executor.md`" — phase 3's own
+   work). The boundary and the bare stem together refuse "Explain why calling the
+   Agent tool is impossible here" — phase 4's own work.
+
+   **There is deliberately no frameless `subagent_type[:=]` arm.** The first cut
+   of this spec had one, on the reasoning that it is "a call site, not a
+   mention". In YAML and in markdown it is a **key name**, and the arm hit a real
+   live plan (`2026-09-19-opencode-subagent-dispatch` P4.T1.S2) — invisible at
+   first because that step is ticked and the gate exempts ticked steps. The
+   framed form still catches "Call the Task tool with `subagent_type:
+   general-purpose`", so recall for the real instruction survives.
 
 **Message** — names the cause, the reason it is unexecutable, and both ways out:
 
@@ -218,14 +271,30 @@ frozen, so that any future widening of the patterns that would break super-fr's
 own plans fails in CI instead of in an operator's run. Archived plans are read
 purely as a corpus; nothing rewrites them.
 
-It runs the **real `fr.plan_ops.self_review`** over the parsed plans and filters
-its issues for this gate, rather than applying the patterns to raw step text.
-That is deliberate: `self_review` already applies agentic-only and `state == "x"`
-in one loop, so the exemptions come for free and cannot drift. Applying the
-regexes directly would re-implement those exemptions inside the test — and they
-matter enormously here, since 1,826 of the 2,113 agentic steps are already
-ticked. A corpus test whose exemptions drift from the shipped gate is measuring
-a lint nobody runs.
+It has **two halves, and both are required.**
+
+The *gate-accurate* half runs the **real `fr.plan_ops.self_review`** over the
+parsed plans and filters its issues for this gate by a stable message token. That
+is deliberate: `self_review` already applies agentic-only and `state == "x"` in
+one loop, so the exemptions come for free and cannot drift. A test that
+re-implemented them inside itself would be free to drift from the shipped gate,
+and would be measuring a lint nobody runs.
+
+The *pattern-level* half applies the patterns directly to **every** agentic step,
+ticked or not, applying **no** exemptions at all. This is not a re-implementation
+of the gate — it has nothing to drift from, because it is measuring the patterns
+rather than the verdict. It exists because the gate-accurate half is blind by
+construction to the overwhelming majority of the evidence: 1,835 of the 2,113
+agentic steps are ticked. The first cut of pattern 2 shipped a frameless
+`subagent_type[:=]` arm that hit a real live plan, and the gate-accurate test
+stayed green solely because that step was ticked. The exemption is also
+*temporal* — the same plan, read a week earlier, would have been unticked and the
+gate would have errored on it at authoring time, which is precisely when this
+gate is meant to be usable. A precision claim measured only over the subset the
+gate happens to look at today is not a precision claim.
+
+Both halves currently score **zero**: over all 2,113 steps and over the 278
+pending ones, for pattern 1 and pattern 2 alike.
 
 That test needs one guard to be worth anything. Plans that do not parse must be
 skipped (§2.D: 41 of them raise `PlanSchemaError`, 38 on a frozen `fr_version`

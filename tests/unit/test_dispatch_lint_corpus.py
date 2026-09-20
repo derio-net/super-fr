@@ -175,3 +175,105 @@ def test_the_corpus_was_actually_read():
     assert census.plans_parsed >= MIN_PLANS, census
     assert census.agentic_steps >= MIN_AGENTIC_STEPS, census
     assert len(list(agentic_steps())) == census.agentic_steps, census
+
+
+# ---------------------------------------------------------------------------
+# The precision claim, pinned (spec §4.A, §2.D)
+
+DISPATCH_GATE_TOKEN = "#428"
+"""The stable marker every dispatch-gate issue carries in its message.
+
+Filtering on the message is the whole point: it runs the SHIPPED
+`self_review`, so the gate's agentic-only and `state == "x"` exemptions
+apply exactly as they do in production and cannot drift. Re-applying the
+regexes to raw step text would re-implement those exemptions inside the
+test — and 1827 of the corpus's 2113 agentic steps are ticked, so the
+re-implementation would decide 86% of the corpus on its own.
+"""
+
+
+def dispatch_gate_hits() -> list[tuple[str, str]]:
+    """(plan slug, message) for every dispatch-gate issue in the corpus."""
+    from fr.plan_ops import self_review
+
+    return [
+        (plan.dir.name, issue.message)
+        for plan in corpus_plans()
+        for issue in self_review(plan)
+        if DISPATCH_GATE_TOKEN in issue.message
+    ]
+
+
+def test_the_dispatch_gate_scores_zero_on_this_repos_own_plans():
+    """Zero VERDICTS over every plan folder this repo has ever written.
+
+    super-fr is a repo ABOUT dispatch — "GREEN: implement
+    `fr_dispatch.tick()`", "assert `fr apply --yes` refuses to dispatch an
+    unreachable plan". #428's literal `\\bdispatch\\b` scores 292 hits here
+    and every one is a false positive (spec §2.D measured 237 on the
+    smaller enforcing read); at error severity that gate would be switched
+    off within a week of shipping. So the precision claim is PINNED, not
+    asserted: any future widening of the patterns that would break
+    super-fr's own plans fails here, in CI, instead of in an operator's
+    run.
+
+    This is the GATE-ACCURATE half, and on its own it is not enough. It
+    sees only what the shipped gate sees, and the gate exempts ticked
+    steps — 1835 of the corpus's 2113. A frameless `subagent_type[:=]`
+    arm in the first cut of §4.A hit a real live plan
+    (`2026-09-19-opencode-subagent-dispatch` P4.T1.S2) and this test
+    stayed green, because that step is ticked. The pattern-level half
+    below closes that hole; read the two together, plus
+    `test_the_corpus_was_actually_read`, which is why "no hits" cannot
+    pass green on a corpus of zero plans.
+    """
+    hits = dispatch_gate_hits()
+    # The message names the plan, the step and the MATCHED TEXT, so a
+    # widening is diagnosable from the CI log alone — nobody should have
+    # to re-run the detector locally to find out what fired.
+    assert not hits, "dispatch gate fired on the corpus:\n" + "\n".join(
+        f"  {slug}: {' '.join(message.split())}" for slug, message in hits
+    )
+
+
+def pattern_hits() -> list[tuple[str, str, str, str]]:
+    """(slug, step id, state, matched text) for every raw pattern hit.
+
+    Deliberately applies NO exemptions — not the agentic-only one, not
+    the ticked one. That is the opposite of re-implementing the gate's
+    exemptions inside a test (which is what `corpus_plans()` exists to
+    avoid): there is nothing here to drift from, because this half is
+    measuring the PATTERNS, not the gate.
+    """
+    from fr.plan_ops import _DISPATCH_RES, _strip_fenced_code
+
+    out = []
+    for step in agentic_steps():
+        scanned = _strip_fenced_code(step.text)
+        for pattern in _DISPATCH_RES:
+            m = pattern.search(scanned)
+            if m is not None:
+                out.append((step.plan_slug, step.step_id, step.state, " ".join(m.group(0).split())))
+                break
+    return out
+
+
+def test_the_patterns_score_zero_on_every_corpus_step_ticked_or_not():
+    """The precision claim, measured where the gate cannot see.
+
+    A ticked step is exempt from the VERDICT for a good reason — it
+    already ran — but it is still evidence about the PATTERNS, and 87% of
+    the corpus is ticked. Measuring only the pending 278 is how a
+    frameless `subagent_type[:=]` arm shipped a hit on a real live plan
+    while every test stayed green. Worse, the exemption is temporal: the
+    same plan, authored a week earlier, would have been unticked and the
+    gate would have errored on it at authoring time, which is exactly
+    when this gate is supposed to be usable.
+
+    So: zero hits over all 2113 agentic steps, ticked and pending alike.
+    """
+    hits = pattern_hits()
+    assert not hits, "dispatch patterns fired on the corpus:\n" + "\n".join(
+        f"  {slug} {step_id} (state {state!r}): {matched!r}"
+        for slug, step_id, state, matched in hits
+    )
