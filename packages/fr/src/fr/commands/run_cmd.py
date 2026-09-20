@@ -667,6 +667,23 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
     }
 
 
+def _resolve_hint(run_id: str, member_id: str, item: str) -> str:
+    """The exact `fr run resolve` command that records one grouped unit's
+    outcome — the two-flag form `--step <member> --item <head>` that
+    `_split_member_id` teaches when someone reaches for the composite.
+
+    One builder because two surfaces print it for the same act: `advance`
+    pre-empts the #501 error beside every dispatch brief, and (Phase 2) the
+    ALREADY RUNNING refusal names the command that clears it. Spelled
+    separately they would drift, and an operator who was shown two different
+    commands for one outcome has no way to tell which is current.
+
+    `done|failed` is left as a literal alternation, not a guess: the caller
+    printing this does not know how the agent will come back.
+    """
+    return f"fr run resolve {run_id} --step {member_id} --item {item} --state done|failed"
+
+
 def _advance_group(
     repo_root: Path, state: RunState, manifest: WorkflowManifest, step: Step, record: StepRecord
 ) -> None:
@@ -706,7 +723,18 @@ def _advance_group(
         state = _with_step(state, step.id, record)
     save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
     console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
-    console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
+    # spec §3.B: the resolve command goes BEFORE the brief, never after — the
+    # brief is a single JSON line a harness parses off stdout, and this hint
+    # must not become the last line a naive `tail -1` reads. Same ordering
+    # constraint the gate-degradation notice in `advance_cmd` documents.
+    console.print(f"  resolve with: {_resolve_hint(state.run, member_id, item)}", soft_wrap=True)
+    # soft_wrap: without it rich folds this JSON at the console width (80 when
+    # stdout is not a tty — i.e. exactly when a harness is piping it), which
+    # leaves `tail -1` holding a fragment. `advance_cmd`'s top-level brief
+    # already passed it; this one did not.
+    console.print(
+        json.dumps(_build_member_brief(member, step, item, state), sort_keys=True), soft_wrap=True
+    )
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:

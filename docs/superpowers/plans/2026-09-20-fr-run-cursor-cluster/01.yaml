@@ -102,17 +102,27 @@ state:
         is recognised but never accepted. _find_step calls it; the not-found prefix
         is built once. All 130 tests in tests/unit/test_run_cli.py pass.'
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:36:40+00:00'
+      note: 'RED: test_advance_prints_the_resolve_command_before_the_json failed on
+        assertion (a) — output was only ''implement: dispatch brief (phase/1/implement-phase)''
+        plus the brief. Assertion (b) also exposed a second defect: _advance_group
+        printed the brief WITHOUT soft_wrap, so rich folded it at 80 cols and splitlines()[-1]
+        held a fragment.'
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:36:41+00:00'
+      note: 'GREEN: hint line printed between the human line and the JSON, soft_wrap=True,
+        with a comment citing spec 3.B and the gate-degradation notice''s identical
+        constraint. Also added the missing soft_wrap=True to _advance_group''s own
+        brief print — without it ''tail -1'' could never have parsed a grouped brief.'
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T13:37:26+00:00'
+      note: 'REFACTOR: extracted _resolve_hint(run_id, member_id, item) -> str, placed
+        directly above _advance_group; docstring names phase 2''s ALREADY RUNNING
+        refusal as the second consumer and why the two must not drift. 131 tests in
+        tests/unit/test_run_cli.py pass.'
     P1.T3.S1:
       state: ' '
       ticked_at: null

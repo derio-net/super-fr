@@ -37,3 +37,14 @@ That is today's message verbatim, produced by the real runtime: the new helper `
 Two facts phases 2-5 can rely on:
 1. `plan-review` (`run: fr plan self-review {{ artifacts.plan }}`) EXITS 0 against `tests/unit/fixtures/v2_plan_minimal` even though it prints a complaint that the fixture's spec does not resolve. So the cli step does not block the walk. It does shell out to whatever `fr` is on PATH (the venv's, under `uv run pytest`), which is the one environmental coupling in this helper.
 2. The ambient `CLAUDECODE=1` in a Claude Code session makes `_gate_degradation_notice()` return None, so the gated `brainstorm` advance prints no notice and exits 0. A test that cares about the notice must use `_invoke_as_harness`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1 created=2026-09-20T15:36:41 phase=1 state=fixed -->
+### p1-f1 · finding [fixed] · _advance_group printed its JSON brief without soft_wrap, so rich folded it at 80 columns (phase 1)
+
+Found while writing P1.T2.S1's RED test. `advance_cmd`'s top-level agent branch prints its brief with `soft_wrap=True` and carries a comment explaining why (rich's default folding breaks a long token mid-string and produces invalid JSON). `_advance_group` — the grouped `for_each` branch, which is the one fr-goal actually uses for every phase — did not.
+
+Observed in the RED run: the brief came back as three physical lines, the fold landing inside the object between `"run": "r1", ` and `"skill": null`. `_brief_of` (`json.loads(output[output.index('{'):])`) survives that because the inserted newline is legal inter-token whitespace, which is why no existing test caught it. A harness doing `tail -1` gets a fragment.
+
+Rich picks width 80 whenever stdout is not a tty — i.e. exactly when a harness is piping it — so this was a live defect, not a test artifact. Fixed in the same edit as the hint line, since spec 3.B's ordering requirement ('the brief must remain the last stdout line a naive tail -1 parses') is meaningless while the brief is not one line.
+
+Phases 2-5 touching `_advance_group`: the print block at the end of that function is now three `console.print` calls, all `soft_wrap=True`, in the order human-line / resolve-hint / JSON. Keep the JSON last.

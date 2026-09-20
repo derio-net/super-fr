@@ -2597,3 +2597,26 @@ def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> No
     assert result.exit_code == 2, result.output
     assert "--step implement-phase" in result.output
     assert "--item phase/1" in result.output
+
+
+def test_advance_prints_the_resolve_command_before_the_json(tmp_path: Path) -> None:
+    """The other half of #501: pre-empt the error rather than only improving
+    it. `advance` already prints the composite in its human line; it now also
+    prints the exact resolve command — BEFORE the JSON brief, because
+    `run_cmd` treats the brief as the line a naive `tail -1` parses (the same
+    ordering constraint the gate-degradation notice documents)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    expected = (
+        "fr run resolve r1 --step implement-phase --item phase/1 --state done|failed"
+    )
+    assert any(expected in line for line in result.output.splitlines()), result.output
+    # The brief is still the last line `tail -1` reads.
+    brief = json.loads(result.output.strip().splitlines()[-1])
+    assert brief["step"] == "implement-phase"
+    assert brief["item"] == "phase/1"
