@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 4
-  title: Measured cost — Claude Code transcript telemetry, and the artifact bump it owes
+  title: Measured cost — Claude Code transcript telemetry, and the artifact bump it
+    owes
   tag: agentic
   tier: hard
   depends_on:
@@ -14,160 +15,146 @@ tasks:
   title: Telemetry reader — red, green, refactor
   steps:
   - id: P4.T1.S1
-    text: "RED: tests/unit/test_run_telemetry.py against the phase-1 fixtures.\n**Read tests/fixtures/transcripts/claude-code-session.NOTE.md\
-      \ first** — phase 1\ndisproved this spec section's original attribution design, and the corrected\n\
-      shape is TWO files, not one stream:\n  claude-code-session.jsonl        orchestrator, isSidechain\
-      \ false throughout\n  claude-code-subagent.jsonl       one subagent, isSidechain true throughout\n\
-      \  claude-code-subagent.meta.json   carries toolUseId / agentType / model\n(a) `fr.run.telemetry.read_claude_code(path)`\
-      \ sums message.usage over\n    `type == \"assistant\"` records only, PROJECTING onto the four named\
-      \ keys —\n    the real usage object carries more, and non-assistant records carry none;\n(b) a dispatch\
-      \ is attributed by matching the subagent metadata's `toolUseId`\n    to the `Agent` tool_use id\
-      \ in the orchestrator stream. Do NOT filter one\n    file on isSidechain: that finds nothing on\
-      \ a real transcript, and a test\n    that passes by doing so is the defect class this plan exists\
-      \ to fix;\n(c) neither `sessionId` (it is the orchestrator's) nor `cwd` (it is the launch\n    directory,\
-      \ not the worktree) may be used to identify a unit — assert both,\n    so a later shortcut fails\
-      \ here;\n(d) a missing transcript, an unreadable one, and a unit with no attributable\n    records\
-      \ each return \"no measurement\" WITHOUT raising, distinguishable from\n    a measured zero.\nRun;\
-      \ confirm red (module absent)."
+    text: |-
+      RED: tests/unit/test_run_telemetry.py against the phase-1 fixtures.
+      **Read tests/fixtures/transcripts/claude-code-session.NOTE.md first** — phase 1
+      disproved this spec section's original attribution design, and the corrected
+      shape is TWO files, not one stream:
+        claude-code-session.jsonl        orchestrator, isSidechain false throughout
+        claude-code-subagent.jsonl       one subagent, isSidechain true throughout
+        claude-code-subagent.meta.json   carries toolUseId / agentType / model
+      (a) `fr.run.telemetry.read_claude_code(path)` sums message.usage over
+          `type == "assistant"` records only, PROJECTING onto the four named keys —
+          the real usage object carries more, and non-assistant records carry none;
+      (b) a dispatch is attributed by matching the subagent metadata's `toolUseId`
+          to the `Agent` tool_use id in the orchestrator stream. Do NOT filter one
+          file on isSidechain: that finds nothing on a real transcript, and a test
+          that passes by doing so is the defect class this plan exists to fix;
+      (c) neither `sessionId` (it is the orchestrator's) nor `cwd` (it is the launch
+          directory, not the worktree) may be used to identify a unit — assert both,
+          so a later shortcut fails here;
+      (d) a missing transcript, an unreadable one, and a unit with no attributable
+          records each return "no measurement" WITHOUT raising, distinguishable from
+          a measured zero.
+      Run; confirm red (module absent).
   - id: P4.T1.S2
-    text: 'RED: extend tests/unit/test_run_state.py — PhaseAccounting accepts the four
-
+    text: |-
+      RED: extend tests/unit/test_run_state.py — PhaseAccounting accepts the four
       new optional int fields and still parses a snapshot written without them
-
-      (a pre-telemetry run must not become unreadable). Confirm red.'
+      (a pre-telemetry run must not become unreadable). Confirm red.
   - id: P4.T1.S3
-    text: 'GREEN: create packages/fr/src/fr/run/telemetry.py with a harness-scoped
-
+    text: |-
+      GREEN: create packages/fr/src/fr/run/telemetry.py with a harness-scoped
       reader and one Claude Code implementation. No harness API is called — it
-
       reads a file the harness already writes. Keep the module free of fr-goal
-
-      specifics; it takes paths and a window, and returns numbers.'
+      specifics; it takes paths and a window, and returns numbers.
   - id: P4.T1.S4
-    text: 'GREEN: add the four optional defaulted int fields to PhaseAccounting in
-
+    text: |-
+      GREEN: add the four optional defaulted int fields to PhaseAccounting in
       packages/fr/src/fr/run/model.py and record them at the point the V1 snapshot
-
       is taken (run_cmd.py:_accounting_snapshot / the advance path around :660).
-
-      Run the phase-4 tests; green.'
+      Run the phase-4 tests; green.
   - id: P4.T1.S5
-    text: 'REFACTOR: the reader and the attributor are two jobs.
-
+    text: |-
+      REFACTOR: the reader and the attributor are two jobs.
       If they tangled during GREEN, separate them -- parsing a transcript into usage
-
       records is one concern, deciding which unit a record belongs to is another, and
-
       only the second is fr-goal-shaped. Otherwise record `no-refactor-because:
-
-      P4.T1` (--phase 4). Then ruff format, ruff check, mypy.'
+      P4.T1` (--phase 4). Then ruff format, ruff check, mypy.
 - number: 2
   title: The artifact bump this is, whether or not the fields are optional
   steps:
   - id: P4.T2.S1
-    text: "Per .claude/rules/artifact-versioning.md this IS a shape change: RunState and\nPhaseAccounting\
-      \ are extra=\"forbid\", so a released fr reading a cursor that\ncarries the new keys raises — optional\
-      \ and defaulted buys nothing against a\nclosed-world reader. The rule's own worked example is this\
-      \ exact kind.\nShip all three in THIS phase:\n(1) move the `run` kind's current_version 2 -> 3 in\n\
-      \    packages/fr/src/fr/artifacts/registry.py and NOWHERE else;\n(2) register a migration v2 ->\
-      \ v3 reached through a module imported by\n    fr/artifacts/__init__.py (a migration nobody imports\
-      \ never runs);\n(3) update the `run` structure validator reached as ArtifactKind.validate."
+    text: |-
+      Per .claude/rules/artifact-versioning.md this IS a shape change: RunState and
+      PhaseAccounting are extra="forbid", so a released fr reading a cursor that
+      carries the new keys raises — optional and defaulted buys nothing against a
+      closed-world reader. The rule's own worked example is this exact kind.
+      Ship all three in THIS phase:
+      (1) move the `run` kind's current_version 2 -> 3 in
+          packages/fr/src/fr/artifacts/registry.py and NOWHERE else;
+      (2) register a migration v2 -> v3 reached through a module imported by
+          fr/artifacts/__init__.py (a migration nobody imports never runs);
+      (3) update the `run` structure validator reached as ArtifactKind.validate.
   - id: P4.T2.S2
-    text: 'Dogfood it: run `uv run fr migrate artifacts --yes` over this repo''s own
-
+    text: |-
+      Dogfood it: run `uv run fr migrate artifacts --yes` over this repo's own
       artifacts and commit the result. Do NOT hand-edit an artifact.
-
       Then `uv run fr validate artifacts` and
-
       `uv run pytest tests/unit/test_validate_artifacts.py tests/unit/test_migration_runner.py
-
       tests/unit/test_migration_trigger.py -q`.
-
       Expect this to matter: the moment current_version moves, every live run in
-
-      this repo is stale and CI would refuse until migrated.'
+      this repo is stale and CI would refuse until migrated.
   - id: P4.T2.S3
-    text: 'REFACTOR + verify the migration on this repo''s own artifacts.
-
+    text: |-
+      REFACTOR + verify the migration on this repo's own artifacts.
       Refactor the migration/validator pair if they restate each other; otherwise
-
       record `no-refactor-because: P4.T2` (--phase 4).
-
       Then confirm the dogfood actually worked: `uv run fr validate artifacts` clean,
-
       and `uv run pytest tests/unit/test_validate_artifacts.py
-
       tests/unit/test_migration_runner.py tests/unit/test_migration_trigger.py -q`
-
-      green. Remember the rule''s own warning -- the moment current_version moves,
-
+      green. Remember the rule's own warning -- the moment current_version moves,
       every live run in this repo is stale and CI refuses until migrated. That is the
-
-      intended behaviour, not a failure.'
+      intended behaviour, not a failure.
 - number: 3
   title: Render it — measured and estimated must never look the same
   steps:
   - id: P4.T3.S1
-    text: 'RED then GREEN: `fr run status` renders measured token figures for a unit
-
+    text: |-
+      RED then GREEN: `fr run status` renders measured token figures for a unit
       that has them and the existing labeled estimate for one that does not, and a
-
       reader can tell which is which. Assert on the distinguishing text.
-
       Degradation is loud: when no transcript is found, status says so in band
-
-      rather than silently showing estimates as if they were measurements.'
+      rather than silently showing estimates as if they were measurements.
   - id: P4.T3.S2
-    text: 'Refactor the telemetry module if the reader and the attributor tangled;
-
+    text: |-
+      Refactor the telemetry module if the reader and the attributor tangled;
       otherwise record `no-refactor-because: P4.T5` (--phase 4).
-
       Full gate: pytest, ruff check, mypy across all four package src trees.
-
-      Report actual output.'
+      Report actual output.
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:25:46+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:25:47+00:00'
       note: null
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:25:47+00:00'
       note: null
     P4.T1.S4:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:25:47+00:00'
       note: null
     P4.T1.S5:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:26:25+00:00'
       note: null
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:29:41+00:00'
       note: null
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:29:42+00:00'
       note: null
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:30:01+00:00'
       note: null
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:29:42+00:00'
       note: null
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-20T14:33:54+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-09-20T14:34:35+00:00'
     note: null
     observed_prs: []

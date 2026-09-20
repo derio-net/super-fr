@@ -151,6 +151,83 @@ def test_accounting_round_trips_and_defaults_to_absent() -> None:
     assert "accounting" not in dump_run_state(_sample_state())
 
 
+# --- V2 measured tokens (spec §5.C, phase 4) ------------------------------
+#
+# The four figures come from the harness's own transcript, so they are
+# `None` — *no measurement* — wherever no transcript could be read. `None` is
+# not zero: a unit that genuinely spent nothing is a measured zero, and the
+# two must never render as the same thing.
+
+_MEASURED = {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 51315,
+    "cache_read_input_tokens": 200784,
+    "output_tokens": 1927,
+}
+
+
+def test_accounting_carries_four_optional_measured_token_fields() -> None:
+    from fr.run.model import PhaseAccounting
+
+    snap = PhaseAccounting(at="2026-09-20T00:00:01Z", handoff_chars=10, **_MEASURED)
+    state = _sample_state().model_copy(update={"accounting": {"phase/1/code": snap}})
+
+    text = dump_run_state(state)
+
+    assert "cache_read_input_tokens: 200784" in text
+    assert parse_run_state(text) == state
+    assert parse_run_state(text).accounting["phase/1/code"].output_tokens == 1927
+
+
+def test_a_pre_telemetry_snapshot_still_parses_and_measures_nothing() -> None:
+    """A run written before these fields existed must not become unreadable —
+    and must not read as a measured zero either."""
+    text = """\
+run: r1
+workflow: fr-goal@1
+branch: feat/x
+started: '2026-09-09T09:00:00Z'
+cursor: implement
+steps:
+  implement:
+    state: running
+accounting:
+  phase/1/code:
+    at: '2026-09-09T09:00:01Z'
+    journal_entries: 3
+    journal_lines: 40
+    handoff_chars: 900
+    spec_bytes: 100
+    plan_bytes: 200
+"""
+
+    snap = parse_run_state(text).accounting["phase/1/code"]
+
+    assert snap.journal_entries == 3
+    assert snap.input_tokens is None
+    assert snap.cache_creation_input_tokens is None
+    assert snap.cache_read_input_tokens is None
+    assert snap.output_tokens is None
+    assert snap.measured_tokens is None
+
+
+def test_a_measured_zero_is_not_no_measurement() -> None:
+    from fr.run.model import PhaseAccounting
+
+    nothing = PhaseAccounting(at="2026-09-20T00:00:01Z")
+    zero = PhaseAccounting(
+        at="2026-09-20T00:00:01Z",
+        input_tokens=0,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
+        output_tokens=0,
+    )
+
+    assert nothing.measured_tokens is None
+    assert zero.measured_tokens == 0
+    assert nothing != zero
+
+
 # --- Phase 4: gate provenance + the `run` artifact stamp -------------------
 #
 # `RunState`/`StepRecord` are `extra="forbid"`, so adding `answered_by` is a

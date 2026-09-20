@@ -227,6 +227,40 @@ def _accounting_snapshot(
     )
 
 
+def _with_measurement(state: RunState, key: str) -> RunState:
+    """`state` with V2 measured tokens folded into unit `key`'s snapshot.
+
+    **Taken when the unit RESOLVES, not when it is dispatched**, and that is
+    a deliberate departure from the plan step's wording (P4.T1.S4 pointed at
+    the advance path, where the V1 sizes are recorded). At dispatch time the
+    unit's transcript does not exist yet, so a measurement taken there is
+    structurally always empty — it would pass a test and read zero from every
+    real run. The figure lands in the same `PhaseAccounting` record under the
+    same key; only the moment differs.
+
+    The window is `[snapshot.at, now]`: the V1 snapshot's timestamp is written
+    immediately before the dispatch brief is printed, so it precedes every
+    transcript record of the unit it dispatched, and `now` is this resolve.
+    Serial dispatch makes that window hold exactly one dispatch.
+
+    Never a gate and never noisy: a unit with no V1 snapshot, a harness with
+    no reader, a missing or unreadable transcript, or an unattributable window
+    all leave the snapshot untouched — `fr run status` is where that absence
+    is reported, in band, and the V1 estimate stays labeled an estimate.
+    """
+    from fr.run.telemetry import measure_unit
+
+    snaps = dict(state.accounting or {})
+    snap = snaps.get(key)
+    if snap is None or snap.at is None:
+        return state
+    measured = measure_unit(os.environ, start=snap.at, end=_now())
+    if measured is None:
+        return state
+    snaps[key] = snap.model_copy(update=measured.totals.as_fields())
+    return state.model_copy(update={"accounting": snaps})
+
+
 def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
     ids = [s.id for s in manifest.steps]
     idx = ids.index(step_id)
@@ -941,6 +975,68 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
         raise typer.Exit(2) from e
 
 
+def _print_accounting(accounting: Mapping[str, PhaseAccounting]) -> None:
+    """Per-unit context accounting: V1 sizes, and V2 measurements where they
+    exist — never blurred into each other.
+
+    Two numbers appear here and they mean different things. A `~N tok est` is
+    fr's own 4-chars-per-token arithmetic over the context it assembled: a
+    guess, and labeled one everywhere it appears. A `measured: N tok` is the
+    harness's own accounting, read back out of its transcript.
+
+    So an absent measurement is printed, not skipped. Leaving the unit's
+    estimate line alone with nothing beside it is how an estimate comes to be
+    read as a measurement — the quiet degradation this whole rendering exists
+    to prevent. The closing line says how many units carry a real figure, and
+    says `none` rather than `0 tok` when none do: a total of zero over no
+    measurements is a number that looks like an answer.
+    """
+    console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
+    total = 0
+    measured_total = 0
+    measured_units = 0
+    for key in sorted(accounting):
+        snap = accounting[key]
+        chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
+        total += chars
+        console.print(
+            f"    {key}: journal {snap.journal_entries} entries/"
+            f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
+            f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
+            f"(~{chars // 4} tok est)"
+        )
+        measured = snap.measured_tokens
+        if measured is None:
+            console.print(
+                f"      not measured: no transcript figure for this unit — "
+                f"the ~{chars // 4} tok above is an ESTIMATE",
+                soft_wrap=True,
+            )
+            continue
+        measured_total += measured
+        measured_units += 1
+        console.print(
+            f"      measured: {measured} tok "
+            f"(in {snap.input_tokens}, cache-create {snap.cache_creation_input_tokens}, "
+            f"cache-read {snap.cache_read_input_tokens}, out {snap.output_tokens}) "
+            f"— measured from the harness transcript",
+            soft_wrap=True,
+        )
+    console.print(f"    total: {total} chars (~{total // 4} tok est)")
+    if measured_units:
+        console.print(
+            f"    measured total: {measured_total} tok over {measured_units} of "
+            f"{len(accounting)} units (the ~tok estimates above are NOT part of this total)",
+            soft_wrap=True,
+        )
+    else:
+        console.print(
+            f"    measured total: none — no transcript figure for any of the "
+            f"{len(accounting)} units; every ~tok figure above is an estimate",
+            soft_wrap=True,
+        )
+
+
 @run_app.command("status")
 def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Print the cursor and every step's state."""
@@ -957,19 +1053,7 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             for key in sorted(record.items):
                 console.print(f"    {key}: {record.items[key]}")
     if state.accounting:
-        console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-        total = 0
-        for key in sorted(state.accounting):
-            snap = state.accounting[key]
-            chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
-            total += chars
-            console.print(
-                f"    {key}: journal {snap.journal_entries} entries/"
-                f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
-                f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
-                f"(~{chars // 4} tok est)"
-            )
-        console.print(f"    total: {total} chars (~{total // 4} tok est)")
+        _print_accounting(state.accounting)
 
 
 @run_app.command("advance")
@@ -1170,6 +1254,7 @@ def _resolve_member(
         group.id,
         grec.model_copy(update={"items": items, "emitted": merged_emitted or None}),
     )
+    updated = _with_measurement(updated, key)
     if state_value == "failed":
         save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
