@@ -61,3 +61,19 @@ Causes, both host-local — they should be green on CI's Linux runners, and a la
 2. `test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable` — it monkeypatches `packaged_shipped_workflows_dir` to defeat the wheel-internal copy, but `fr/workflow/resolve.py` has a FOURTH source it does not defeat: `Path.home() / '.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows'` (resolve.py:88, :174). This machine has super-fr installed there, so `--all` finds `fr-goal: ok` and exits 0 where the test wants 1. On a runner with no marketplace install there is nothing to find and it passes.
 
 Left OPEN deliberately: phase 1 must not widen into unrelated fixes, but both are genuine and worth a follow-up issue.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-d1 created=2026-09-20T15:47:09 phase=1 -->
+### p1-d1 · discovery · What phase 2 inherits: _split_member_id and _resolve_hint signatures, and the print order in _advance_group (phase 1)
+
+Both helpers live in `packages/fr/src/fr/commands/run_cmd.py`.
+
+`_split_member_id(manifest: WorkflowManifest, step_id: str) -> tuple[str, str] | None` — sits immediately above `_find_step`. Returns `(item, member_id)`, in that order (`('phase/1', 'implement-phase')`), or None. Recognition is manifest-driven, not string-shaped: it splits on the LAST slash and requires the tail to name a member of a step that has `for_each` set, so `foo/bar` with no matching member still gets the plain not-found message. It never resolves the composite — spec 3.B keeps one canonical spelling in `--step`.
+
+`_resolve_hint(run_id: str, member_id: str, item: str) -> str` — sits immediately above `_advance_group`. Note the argument order is (member, item), the same order the flags print in, NOT the (item, member) tuple `_split_member_id` returns; phase 2 must not splat one into the other. Returns exactly `fr run resolve <run> --step <member> --item <item> --state done|failed` with no leading indent and no trailing newline — the caller supplies its own prefix (`advance` prints `  resolve with: ` + the string).
+
+`_advance_group` now ends with THREE console.print calls, all soft_wrap=True, in this order:
+1. `f"{step.id}: dispatch brief ({pending})"`
+2. `f"  resolve with: {_resolve_hint(state.run, member_id, item)}"`
+3. the `json.dumps(...)` brief
+
+Phase 2's ALREADY RUNNING refusal returns BEFORE all three and goes to `err_console` with exit 2, so the invariant 'the JSON brief is the last stdout line' is not at risk there — but anything phase 2 adds to the dispatching path must stay above line 3. `_brief_of` in the tests (`json.loads(output[output.index('{'):])`) is tolerant of a leading hint because the hint contains no brace; do not put a `{` in any line printed before the brief.
