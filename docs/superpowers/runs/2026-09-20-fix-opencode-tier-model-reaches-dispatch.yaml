@@ -3,12 +3,18 @@ run: 2026-09-20-fix-opencode-tier-model-reaches-dispatch
 workflow: fr-goal@1
 branch: fix/opencode-tier-model-reaches-dispatch
 started: '2026-09-20T06:23:59+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: pending
+    state: done
+    at: '2026-09-20T06:51:56+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-20-opencode-tier-binding-reaches-dispatch-design.md
+      journal:spec: docs/superpowers/journals/specs/2026-09-20-opencode-tier-binding-reaches-dispatch.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-20T06:51:57+00:00'
   plan:
     state: pending
   plan-review:

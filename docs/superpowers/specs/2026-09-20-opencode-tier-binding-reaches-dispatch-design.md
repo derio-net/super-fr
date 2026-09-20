@@ -91,9 +91,17 @@ next harness's binding path a second special case.
 materialize_agents(config_home, *, models_cfg) -> list[Change]
 ```
 
-- **Targets** `<config_home>/opencode/agent/fr-phase-executor-<tier>.md`, for each tier in
-  `fr.types.PHASE_TIERS`. XDG-aware via the same resolution `fr.models.default_models_path`
-  uses, so a sandboxed `XDG_CONFIG_HOME` works — which is what makes this testable at all.
+- **Targets are discovered, not named** (spec-review `r1`). The materialiser globs
+  `<config_home>/opencode/agent/*.md` and rewrites any file whose stem ends in `-<tier>` for
+  a tier in `fr.types.PHASE_TIERS`. It must NOT hardcode `fr-phase-executor`: it cannot read
+  `plugins/super-fr/agents/` (no checkout is guaranteed at bind time), so a literal stem
+  would be a second source of truth for the agent set that nothing reconciles — and it would
+  silently skip a second canonical agent the moment one exists. install.sh's regex
+  (`^(.+)-(mechanical|standard|hard)\.md$`) already works this way; this is that rule,
+  moved.
+- **XDG-aware** via the same resolution `fr.models.default_models_path` uses
+  (`$XDG_CONFIG_HOME` then `$HOME/.config`), which is what makes this testable in a sandbox
+  at all.
 - **Rewrites in place**, on the layout contract PR #495's generator guarantees: drop any
   top-level `model:` line, and insert the resolved one directly after `mode: subagent`.
   Unresolved → no key written (never an empty one, which OpenCode would try to resolve).
@@ -171,8 +179,18 @@ The overclaim is corrected in the same PR that makes it true.
 2. Unit: the **stale-binding regression** specifically — an agent carrying `model: <A>`,
    a binding set to `<B>`, then the agent reads `<B>`. This is §1.1, and it is the test
    whose absence let the defect ship.
-3. Integration: `install.sh` still delivers correct models with the awk path deleted —
-   the three tests from PR #495 must pass unchanged against the new implementation.
+3. Integration: `install.sh` still delivers correct models with the awk path deleted. The
+   three **integration** tests from PR #495 must pass **unchanged** — they assert behaviour
+   (a resolved binding lands after the anchor; one resolve per tier; an unbound tier gets no
+   key), so they are exactly the safety net for swapping the implementation underneath.
+   Two **unit** tests will need updating, and the spec should not pretend otherwise
+   (spec-review `r2`): `test_install_runs_agents_delivery_after_fr_cli_install` anchors on
+   the comment `"# Derive the tier from the filename suffix"`, which lives in the deleted awk
+   block, and `test_install_calls_fr_models_resolve_for_agents` asserts the literal
+   `"fr models resolve --harness opencode"`, which becomes `fr models apply`. Both are
+   text-assertions over `install.sh`; both must keep asserting the same *property* (delivery
+   is ordered after the `fr` CLI step; delivery goes through `fr` rather than reimplementing
+   resolution) against the new call.
 4. Integration: `fr models set` under a sandboxed `HOME`/`XDG_CONFIG_HOME` updates the
    installed agent, and reports what it changed.
 5. Prose: `fr-goal` §5 instructs the untiered fallback; `scan_prose` still clean.
