@@ -313,3 +313,91 @@ here would fight that phase's own diff.
 Full suite after all fixes: 3318 passed, 80 skipped, 3 failed — exactly the
 three pre-existing tolerated reds (test_cli_all_fails_when_nothing_is_discoverable
 and the two Rich-wrap test_run_workspace.py failures), none new.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f1 created=2026-09-20T18:11:26 phase=3 state=fixed -->
+### r-p3-f1 · finding [fixed] · CI proved the cursor REACHED the gate, never that it BLOCKED (phase 3)
+
+The integration walk advances through journal-check and asserts exit 0 - but the toy plan's steps are never ticked, so no phase is locally-complete and the gate has nothing to flag. It proved the step exists and self-completes.
+
+The composed claim this whole PR makes - 'a run whose phases completed without recorded reviews cannot reach deliver' - was asserted NOWHERE. Phase 2's unit tests prove the CLI exits 1; test_run_cli.py proves a failing cli step holds the cursor; nothing joined them. A change to the interpolation, the slug derivation or the --require-reviews guard could make the step exit 0 unconditionally with every cited test still green.
+
+Fixed: test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed. It ticks phase 2's step (WITHOUT setting completion.at - the same predicate distinction phase 2's unit test pins, now exercised through the real CLI), asserts `fr run advance` fails with journal-check `failed` and the cursor still on journal-check with deliver `pending`, then adds the review entry and asserts the run advances to deliver. Spec Test Plan item 4, promoted from post-merge into CI.
+
+Mutation-verified: dropping --require-reviews from the manifest, and mistargeting --plan-dir, are each caught.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f2 created=2026-09-20T18:11:26 phase=3 state=fixed -->
+### r-p3-f2 · finding [fixed] · The acceptance row was flipped to ci on evidence covering half its claim, by the wrong phase (phase 3)
+
+Row fr-goal-review-gate-is-cursor-enforced claims '...so a run whose phases completed without recorded reviews cannot reach the PR step'. The cited unit ref proved placement/kind/flag; the cited int ref proved the cursor visits it. The 'cannot reach' clause - the actual business claim - was untested (r-p3-f1). Separately, 06.yaml P6.T1.S1 explicitly owns flipping all three rows, so phase 3 pre-empted it.
+
+Fixed by landing r-p3-f1 first, which makes `ci` honestly earned, then re-running `fr acceptance set-status` with the blocking test as the int-level evidence and a note that says what each ref actually proves. The old note conflated two unrelated verifications (mutation of the tests, observation of step drift) and read as evidence for something it was not.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f3 created=2026-09-20T18:11:27 phase=3 state=fixed -->
+### r-p3-f3 · finding [fixed] · The shipped manifest header asserted an enforcement that does not exist (phase 3)
+
+The header read: 'journal-check re-checks that every locally-complete phase actually got one, ONE MORE TIME ... a whole-run backstop for the per-phase loop above, not a duplicate of it.'
+
+Nothing checks it the first time. `review-phase` is a kind:agent step, so it completes on `fr run resolve --state done` and leaves no artifact by itself - an agent that skipped the review entirely resolves it identically to one that did the work. That IS #430. journal-check is the ONLY machine check, not a second one.
+
+This ships to consumers. The concrete risk: a maintainer trimming the shape reads 'backstop, not a duplicate', concludes the loop already enforces it, and deletes the step. Phase 4's own P4.T1.S3 names this class - 'a promise of a gate that does not exist is the failure this whole change is about'.
+
+Fixed in both manifest copies: the header now says review-phase leaves no artifact by itself, that the journal entry comes from the skill prose, and that this step is what makes forgetting it fail.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f4 created=2026-09-20T18:11:27 phase=3 state=fixed -->
+### r-p3-f4 · finding [fixed] · One word of content was lost to the 120-line cap trim (phase 3)
+
+SKILL.md §4's plan-review line read '— deterministic, exit code is the verdict'; the trim dropped 'deterministic', which carried a real point: a cli step's verdict is not a judgement call. Restored, mirrors resynced, still exactly 120 lines. Word-level set-diff of the whole file confirms this was the ONLY token lost - every other change was line-joining, the new §7, and the §7→§8 renumber. No clause, cross-reference, warning or instruction was removed.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f5 created=2026-09-20T18:11:28 phase=3 state=fixed -->
+### r-p3-f5 · finding [fixed] · 04.yaml's committed instructions were invalidated by phase 3's renumbering (phase 3)
+
+Phase 3 inserted §7 (journal-check) and pushed deliver to §8, so phase 4's committed steps ('Edit §7: the journal-check line currently reads as an instruction to the agent') described a section that no longer exists in that form, and were partly already done. Rewritten before dispatch: P4.T1.S1 now flags the renumber and warns that the file is AT its 120-line cap so new prose must be paid for by tightening, never by deleting an instruction, warning or cross-reference; P4.T1.S2 now reconciles §8 against §7 rather than re-describing it.
+
+<!-- fr:journal kind=finding scope=plan id=r-p3-f6 created=2026-09-20T18:11:28 phase=3 state=fixed -->
+### r-p3-f6 · finding [fixed] · needs: [plan] understated the step's inputs (phase 3)
+
+The gate reads the plan journal as well as the plan, but declared only `plan`, while `review-phase` next to it declares `journal:plan`. Reachability is unaffected (journal:* is not a repo-tracked artifact), so this was about the manifest telling the truth about its own inputs. Now `needs: [plan, journal:plan]`; `fr workflow check fr-goal` still ok.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-adopt-costs created=2026-09-20T18:11:28 phase=3 -->
+### d-p3-adopt-costs · discovery · The prescribed drift recovery has unstated costs (phase 3)
+
+Both SKILL.md §7 and the manifest header prescribe `fr run adopt <plan-dir> --run-id <fresh>` to recover a run stranded by this step's drift. P3.T2.S1 verified the drift but not the recovery. Reading packages/fr/src/fr/run/adopt.py:
+
+- for an all-phases-complete plan, build_run_state keys reconstructed items on the FIRST group member only, so every phase's `review-phase` comes back pending - adoption re-dispatches review for every completed phase;
+- adopting with `--pr <open-url>` lands the cursor on `deliver`, marking journal-check `done` WITHOUT ever running it.
+
+Both are pre-existing adopt semantics, and the second is arguably right (the PR already exists). But phase 3 is what makes this recovery path routine, so the one-line prescription is doing more work than it admits. Recorded rather than fixed: changing adopt is out of this spec's scope, and the second behaviour is a deliberate design choice, not a bug. Worth an issue of its own if the recovery becomes common.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-cap-paid-by-joining created=2026-09-20T18:11:29 phase=3 -->
+### d-p3-cap-paid-by-joining · discovery · The 120-line cap was paid for by joining lines, not cutting (phase 3)
+
+SKILL.md's longest line went 312 -> 477 chars when §7 was added by joining wrapped lines. The file already carried a 561-char line so nothing forbids it, but tests/unit/test_skill_validation.py's own docstring names 'rewrapping to buy a line' as the known-dangerous move under this cap - it makes a diff look like a rewrite and hides deletions inside re-flowed paragraphs.
+
+Stated here, and owed in the PR body, so an auditor does not have to re-derive it: the cap was met by joining, and exactly one word (`deterministic`) was dropped, since restored.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-20T18:11:49 phase=3 -->
+### review-p3 · review · phase 3 review - 6 findings fixed; the gate now proves it BLOCKS, not just that it runs (phase 3)
+
+Reviewed: spec SSC and decision D3, plan phase 3 (03.yaml), and the diff cc9430c..878da57 - the shipped fr-goal manifest and its wheel copy, the new tripwire, the modified integration test, SKILL.md and its two mirrors, and the acceptance matrix.
+
+Independent reviewer subagent, no session context. It mutation-tested the manifest three ways (step removed, step moved after deliver, --require-reviews dropped) and restored by shasum, and it did a WORD-LEVEL set-diff of the whole 120-line SKILL.md rather than eyeballing the trim.
+
+Findings raised: 6 findings + 2 discoveries. All 6 fixed.
+  r-p3-f1 CI proved the cursor REACHED the gate, never that it BLOCKED  [fixed]
+  r-p3-f2 acceptance row flipped on half its evidence, by wrong phase   [fixed]
+  r-p3-f3 manifest header asserted an enforcement that does not exist   [fixed]
+  r-p3-f4 one word lost to the 120-line cap trim                       [fixed]
+  r-p3-f5 04.yaml's instructions invalidated by the renumbering        [fixed]
+  r-p3-f6 needs:[plan] understated the step's inputs                   [fixed]
+
+r-p3-f1 is the one that mattered. The gate's whole promise is 'a run whose phases completed without recorded reviews cannot reach deliver', and nothing asserted it: the happy-path walk could not, because the toy plan's steps are never ticked so the gate has nothing to flag. Unit tests proved the CLI exits 1; another test proved a failing cli step holds the cursor; nothing joined them. Now joined, by a test that ticks a phase's step WITHOUT setting completion.at - the same predicate distinction phase 2 pins, exercised through the real CLI - asserts advance fails with the cursor still on journal-check and deliver pending, then adds the review entry and asserts the run proceeds. Mutation-verified twice: dropping --require-reviews from the manifest, and mistargeting --plan-dir, are each caught. This is spec Test Plan item 4, promoted out of 'post-merge, operator-driven' into CI.
+
+r-p3-f3 was shipping false prose to consumers: the header called this step a 'backstop ... not a duplicate' of the per-phase loop, when the loop enforces nothing - review-phase is a kind:agent step that completes on `fr run resolve --state done` and leaves no artifact, so a skipped review resolves identically to a performed one. The header now says so.
+
+Confirmed and left alone: both manifest copies byte-identical and `fr workflow check fr-goal` ok; all three SKILL.md copies identical with both sync scripts reporting in sync; the drift was really verified, with the verbatim exit-2 message journaled, and the reviewer noted the non-obvious correct detail that `fr run status` does not re-resolve the manifest and so reports normally; the SKILL.md edit was FORCED by test_shipped_manifest_step_order_matches_the_skill_narration, not scope bleed.
+
+Carried forward as discoveries rather than fixed: d-p3-adopt-costs (the prescribed `fr run adopt` recovery re-dispatches review for every completed phase, and adopting with --pr marks journal-check done without running it - pre-existing adopt semantics, out of this spec's scope) and d-p3-cap-paid-by-joining (the line cap was met by joining lines; owed in the PR body so an auditor need not re-derive it).
+
+Post-fix: 10 integration tests pass, acceptance matrix 127 rows OK, skill validation and both mirror tripwires green.
+
+Assessment: phase 4 proceeds, against the rewritten 04.yaml.

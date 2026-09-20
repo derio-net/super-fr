@@ -70,7 +70,7 @@ PR ships it unimplemented, operator pushes to the same PR); **front-load only wh
 depends on it** (spec+plan PR, pause for the go). Multi-repo `depends_on` is within-plan only. Resolve `--emitted plan=<path>`.
 
 ### 4. plan-review
-`fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — exit code is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
+`fr run advance` runs `fr plan self-review {{ artifacts.plan }}` — deterministic, exit code is the verdict. Fix findings against the spec and re-`advance`; no `resolve` needed (`cli` steps self-complete).
 
 ### 5. implement — grouped per-phase loop, journal-fed, TDD
 The run's workspace is the working copy (`fr isolation exec`); spec/plan aren't on main yet,
