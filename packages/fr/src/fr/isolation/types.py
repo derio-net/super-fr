@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from collections.abc import Iterable
+import time
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -142,6 +144,91 @@ def sentinel_dir() -> Path:
     return Path(os.environ.get("FR_SENTINEL_DIR", str(_home() / ".cache" / "fr" / "sentinels")))
 
 
+_LOCK_STALE_SECONDS = 60.0
+_LOCK_WAIT_SECONDS = 60.0
+
+
+@contextmanager
+def _sentinel_lock(sentinel: Path) -> Iterator[bool]:
+    """The lock every sentinel writer shares; yields whether it is HELD.
+
+    Same protocol and path as `fr_sentinel_lock` in
+    hooks/lib/fr-isolation-decision.sh (the skill-load hook and the guard's
+    heal) — the two MUST agree, and that file's comment is the full rationale.
+    In short: `<sentinel>.lock/` holding an `owner` PID; broken only when the
+    holder is dead (or ownerless and older than 60s), NEVER while it lives —
+    the first version broke any lock after ~5s and so let a bind and the
+    guard's heal interleave into deleting a live pipeline's sentinel. A caller
+    that is not handed the lock must take its own fail-closed action rather than
+    write. Release is owner-checked.
+    """
+    lock = sentinel.with_name(sentinel.name + ".lock")
+    held = _acquire(lock)
+    try:
+        yield held
+    finally:
+        if held and _owner(lock) == os.getpid():
+            try:
+                (lock / "owner").unlink(missing_ok=True)
+                os.rmdir(lock)
+            except OSError:
+                pass
+
+
+def _owner(lock: Path) -> int | None:
+    try:
+        text = (lock / "owner").read_text().strip()
+    except OSError:
+        return None
+    return int(text) if text.isdigit() else None
+
+
+def _abandoned(lock: Path) -> bool:
+    pid = _owner(lock)
+    if pid is None:
+        try:
+            return time.time() - lock.stat().st_mtime > _LOCK_STALE_SECONDS
+        except OSError:
+            return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False  # exists but not ours to signal: alive
+    return False
+
+
+def _acquire(lock: Path) -> bool:
+    """Take `lock`, or return False: when a LIVE holder keeps it past the wait
+    budget, or when `mkdir` fails for any reason but "exists" (read-only or
+    full disk, no sentinel dir) — which used to raise out of `attach`."""
+    deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+    while True:
+        try:
+            os.mkdir(lock)
+        except FileExistsError:
+            pass
+        except OSError:
+            return False
+        else:
+            try:
+                (lock / "owner").write_text(f"{os.getpid()}\n")
+            except OSError:
+                pass
+            return True
+        if _abandoned(lock):
+            try:
+                (lock / "owner").unlink(missing_ok=True)
+                os.rmdir(lock)
+            except OSError:
+                pass
+            continue
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+
+
 def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
     """Record a bound workspace in this session's sentinel, if one exists.
 
@@ -172,19 +259,25 @@ def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
     rel = _cache_relative(worktree)
     if rel is None:
         return
-    try:
-        data = json.loads(f.read_text())
-    except (OSError, json.JSONDecodeError):
-        return
-    if not isinstance(data, dict) or not isinstance(data.get("repo_root"), str):
-        return
-    if _git_common_dir(Path(data["repo_root"])).resolve() != (
-        _git_common_dir(Path(worktree)).resolve()
-    ):
-        return
-    kept = [w for w in _workspaces(data) if w == rel or _cache_dir(w).is_dir()]
-    data["workspaces"] = kept if rel in kept else [*kept, rel]
-    write_text_atomic(f, json.dumps(data))
+    with _sentinel_lock(f) as held:
+        if not held:
+            return  # a live writer holds it: skip the record rather than race it
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict) or not isinstance(data.get("repo_root"), str):
+            return
+        if _git_common_dir(Path(data["repo_root"])).resolve() != (
+            _git_common_dir(Path(worktree)).resolve()
+        ):
+            return
+        kept = [w for w in _workspaces(data) if w == rel or _cache_dir(w).is_dir()]
+        data["workspaces"] = kept if rel in kept else [*kept, rel]
+        try:
+            write_text_atomic(f, json.dumps(data))
+        except OSError:
+            pass  # unwritable sentinel dir: stays as it was (armed)
 
 
 def _workspaces(data: dict[str, Any]) -> list[str]:
@@ -247,26 +340,32 @@ def clear_workspace_sentinels(
     ids = set(session_ids)
     removed = 0
     for f in sorted(d.glob("*.json")):
-        try:
-            data = json.loads(f.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        root = data.get("repo_root")
-        if not isinstance(root, str) or str(Path(root).resolve()) != target:
-            continue
-        entries = _workspaces(data)
-        if not ((rel is not None and rel in entries) or f.stem in ids):
-            continue
-        survivors = [w for w in entries if w != rel and _cache_dir(w).is_dir()]
-        if survivors:
-            data["workspaces"] = survivors
-            write_text_atomic(f, json.dumps(data))
-            continue
-        f.unlink(missing_ok=True)
-        removed += 1
+        with _sentinel_lock(f) as held:
+            if held:  # a live writer holds it: leave it armed
+                removed += _clear_one(f, target, rel, ids)
     return removed
+
+
+def _clear_one(f: Path, target: str, rel: str | None, ids: set[str]) -> int:
+    try:
+        data = json.loads(f.read_text())
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    root = data.get("repo_root")
+    if not isinstance(root, str) or str(Path(root).resolve()) != target:
+        return 0
+    entries = _workspaces(data)
+    if not ((rel is not None and rel in entries) or f.stem in ids):
+        return 0
+    survivors = [w for w in entries if w != rel and _cache_dir(w).is_dir()]
+    if survivors:
+        data["workspaces"] = survivors
+        write_text_atomic(f, json.dumps(data))
+        return 0
+    f.unlink(missing_ok=True)
+    return 1
 
 
 def clear_repo_sentinels(repo_root: Path) -> int:
@@ -292,7 +391,10 @@ def clear_repo_sentinels(repo_root: Path) -> int:
             continue
         root = data.get("repo_root") if isinstance(data, dict) else None
         if root and str(Path(root).resolve()) == target:
-            f.unlink(missing_ok=True)
+            with _sentinel_lock(f) as held:
+                if not held:
+                    continue
+                f.unlink(missing_ok=True)
             removed += 1
     return removed
 

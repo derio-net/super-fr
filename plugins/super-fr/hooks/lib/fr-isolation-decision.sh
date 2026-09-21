@@ -281,6 +281,77 @@ fr_strip_command_prefix() {
     -e 's/^[[:space:]]*uv[[:space:]]+run[[:space:]]+//'
 }
 
+# fr_sentinel_lock <sentinel-path> [max-attempts]  -> 0 held, 1 not held
+# fr_sentinel_owns <sentinel-path>                 -> 0 iff this process holds it
+# fr_sentinel_unlock <sentinel-path>               -> releases only its OWN lock
+#
+#   One lock for every writer of a pipeline sentinel: the skill-load hook, the
+#   guard's heal, and (in Python, fr.isolation.types._sentinel_lock — same
+#   protocol, same path) `attach` and `down`'s clears. Each read-modify-renames
+#   the file; unlocked, one erased the other's update, and a lost workspace entry
+#   can fail OPEN (the heal retires a sentinel whose lost workspace is live).
+#
+#   The lock is the directory `<sentinel>.lock` (`mkdir` is atomic, and is the
+#   one primitive bash on macOS — no flock by default — and Python both have),
+#   holding an `owner` file with the holder's PID. OWNERSHIP is the whole
+#   design, because the first version got it wrong: it let any waiter break any
+#   lock after ~5s, so a guard still inside its heal (a slow `git worktree list`)
+#   lost the lock to a bind, and then deleted a sentinel the bind had just made
+#   live — a fail-open, found by adversarial review. Now:
+#     * a lock is broken only when its holder is DEAD (`kill -0` fails), or when
+#       it has no owner and is older than 60s (a holder that died between the
+#       mkdir and writing its PID);
+#     * a live holder is NEVER broken. A waiter that runs out of attempts gets 1
+#       and takes its own fail-closed action (the guard skips the heal; `attach`
+#       skips its record; the skill-load hook, which must arm the pipeline,
+#       writes anyway);
+#     * release is owner-checked, so a late release (an EXIT trap, a second
+#       call) can never remove a lock someone else has since taken;
+#     * `mkdir` failing for any reason but "exists" (read-only or full disk, a
+#       vanished dir) returns 1 at once instead of spinning — it used to hang
+#       every Bash call.
+#   max-attempts is in 0.05s steps; default 1200 (~60s). Hot paths pass less.
+fr_sentinel_lock() {
+  _fr_lk="$1.lock"
+  _fr_max="${2:-1200}"
+  _fr_tries=0
+  while :; do
+    if mkdir "$_fr_lk" 2>/dev/null; then
+      printf '%s\n' "$$" > "$_fr_lk/owner" 2>/dev/null || true
+      return 0
+    fi
+    [ -d "$_fr_lk" ] || return 1   # mkdir failed, and not because it exists
+    if _fr_lock_abandoned "$_fr_lk"; then
+      rm -f "$_fr_lk/owner" 2>/dev/null || true
+      rmdir "$_fr_lk" 2>/dev/null || true
+      continue
+    fi
+    _fr_tries=$((_fr_tries + 1))
+    [ "$_fr_tries" -lt "$_fr_max" ] || return 1
+    sleep 0.05
+  done
+}
+
+_fr_lock_abandoned() {
+  _fr_owner=$(cat "$1/owner" 2>/dev/null || true)
+  case "$_fr_owner" in
+    ''|*[!0-9]*)   # no (readable) owner: abandoned only once clearly stale
+      [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ] ;;
+    *)
+      ! kill -0 "$_fr_owner" 2>/dev/null ;;
+  esac
+}
+
+fr_sentinel_owns() {
+  [ "$(cat "$1.lock/owner" 2>/dev/null || true)" = "$$" ]
+}
+
+fr_sentinel_unlock() {
+  fr_sentinel_owns "$1" || return 0
+  rm -f "$1.lock/owner" 2>/dev/null || true
+  rmdir "$1.lock" 2>/dev/null || true
+}
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
 # An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts

@@ -20,6 +20,10 @@
 
 set -eu
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$SCRIPT_DIR/lib/fr-isolation-decision.sh"   # fr_sentinel_lock / _unlock
+
 input=$(cat)
 
 tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
@@ -51,10 +55,35 @@ repo_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
 mkdir -p "$dir"
 
-# GC: sentinels self-expire with their sessions (48h = 2880 min).
-find "$dir" -name '*.json' -mmin +2880 -delete 2>/dev/null || true
+# GC: a sentinel untouched for 48h (2880 min) belongs to a session that has
+# stopped — the guard refreshes it on every Bash call — EXCEPT when a workspace
+# it lists still exists: that is a pipeline parked (a weekend, a resumed
+# session), and expiring it would bring the session back unguarded while its
+# work is live (adversarial review, fail-open). Such a sentinel is retired by
+# the guard's heal once its workspaces are gone, which is safe. Lock dirs left
+# by dead writers are collected on the same clock.
+find "$dir" -name '*.json' -type f -mmin +2880 2>/dev/null | while IFS= read -r old; do
+  keep=0
+  while IFS= read -r ws; do
+    if [ -n "$ws" ] && [ -d "$HOME/.cache/fr/$ws" ]; then keep=1; break; fi
+  done <<EOF_GC
+$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+         | select(type == "string")' "$old" 2>/dev/null || true)
+EOF_GC
+  [ "$keep" -eq 1 ] || rm -f "$old" 2>/dev/null || true
+done
+find "$dir" -name '*.json.lock' -type d -mmin +2880 -exec rm -rf {} + 2>/dev/null || true
 
 sentinel="$dir/$session_id.json"
+
+# Read-carry-write under the lock every sentinel writer shares (see the lib):
+# `attach` adding a workspace between our read and our rename would otherwise be
+# erased by the rename.
+# Writes even if the lock could not be had (a live holder hung for ~60s, or a
+# read-only dir): arming the pipeline matters more than the race. Released
+# once, by the owner-checked EXIT trap, so set -e cannot strand it either.
+fr_sentinel_lock "$sentinel" || true
+trap 'fr_sentinel_unlock "$sentinel"' EXIT
 
 # Carry the LIVE part of the stamp across a reload. fr-goal loads, `fr run
 # start` binds (and stamps), then fr-goal invokes fr-brainstorming — which
@@ -94,7 +123,7 @@ jq -n \
   --argjson workspaces "$carried" \
   '{repo_root: $repo_root, skill: $skill, started_at: $started_at}
    + (if ($workspaces | length) == 0 then {} else {workspaces: $workspaces} end)' \
-  > "$tmp"
-mv -f "$tmp" "$sentinel"
+  > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; exit 0; }   # unwritable dir
+mv -f "$tmp" "$sentinel" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
 
 exit 0

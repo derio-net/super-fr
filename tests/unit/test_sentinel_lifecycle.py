@@ -270,3 +270,27 @@ def test_a_second_pipeline_in_the_session_is_not_staked_on_the_first(world: Worl
     _git(repo, "worktree", "remove", "--force", str(one))
     assert world.guard("ls", repo) == "deny"
     assert world.sentinel.exists()
+
+
+def test_external_mode_end_to_end(world: World) -> None:
+    """External mode through the real writer and guard (it was pinned only at
+    guard level): a preparer's PRIMARY checkout carrying a `mode: external`
+    marker is itself the workspace. Loading fr-goal there writes a sentinel,
+    nothing is ever bound (no linked worktree, nothing under ~/.cache/fr), so it
+    stays fresh — and a fresh sentinel is never healed. Without the marker
+    allowance every command in the only checkout the session has is denied."""
+    repo = world.repo("pod")
+    (repo / "docs" / "superpowers" / "plans").mkdir(parents=True)  # fr-enabled
+    (repo / ".fr-isolation").write_text(
+        json.dumps({"toplevel": str(repo.resolve()), "branch": "feat/x", "mode": "external"})
+    )
+    world.load_skill("super-fr:fr-goal", repo)
+    assert world.sentinel.exists() and world.workspaces() == []
+
+    world.env["KUBERNETES_SERVICE_HOST"] = "10.0.0.1"  # container evidence
+    assert world.guard("git status", repo) == "allow"
+    assert world.sentinel.exists(), "allowed, not retired: the pipeline is live"
+
+    world.env["KUBERNETES_SERVICE_HOST"] = ""  # the same marker on a bare host
+    if not (Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()):
+        assert world.guard("git status", repo) == "deny"
