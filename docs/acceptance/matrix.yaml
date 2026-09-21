@@ -1487,7 +1487,7 @@ rows:
       when not, well inside one status-line refresh (0.5 s CI guard).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-04-worktree-traceability-design.md
-    - super-fr:docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-14-statusline-session-branch-design.md
     levels:
       int:
       - super-fr:tests/unit/test_statusline_segment.py
@@ -1849,7 +1849,7 @@ rows:
       of warning, and the kept VibeKanban-product names (VK_DERIO_OPS_PROJECT_ID, willikins_vk_bridge_*
       metrics) are unaffected
     origin:
-    - super-fr:docs/superpowers/specs/2026-07-24-remove-vk-legacy-fallbacks-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-07-24-remove-vk-legacy-fallbacks-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -1864,7 +1864,7 @@ rows:
       one shell command (--cwd, --format oneline), without the fr CLI and without stdin
       JSON.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-14-statusline-session-branch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-14-statusline-session-branch-design.md
     levels:
       int:
       - super-fr:tests/unit/test_statusline_segment.py
@@ -1879,7 +1879,7 @@ rows:
     acceptance: Every shipped enforcement and interaction surface declares its state
       on every supported harness, and an undeclared surface fails CI.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_harness_parity.py
@@ -1892,7 +1892,7 @@ rows:
     acceptance: The declared matrix is checked against the real registration files,
       so a hook wired (or unwired) without a matrix update fails.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_harness_check.py
@@ -1905,7 +1905,7 @@ rows:
     acceptance: No skill names a harness-specific tool as the way to do something outside
       an explicitly scoped per-harness clause.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_harness_vocabulary.py
@@ -1919,7 +1919,7 @@ rows:
     acceptance: On a harness where the operator gate is not enforced, fr run advance
       says so at the gate instead of behaving as though it fired.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -1932,7 +1932,7 @@ rows:
     acceptance: A gate cleared without an operator is recorded as such and reported
       in the delivered PR.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -1947,7 +1947,7 @@ rows:
     acceptance: A journal finding can be resolved, and the freshness gate that requires
       no open findings can therefore reach clean.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_cmd.py
@@ -1962,7 +1962,7 @@ rows:
     acceptance: An acceptance row's status can be moved with a command, so the matrix's
       own lifecycle rule needs no hand-edited YAML.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_acceptance_set_status.py
@@ -1976,7 +1976,7 @@ rows:
     acceptance: An operator cannot accidentally resolve or validate a journal containing
       two entries with the same id
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-gh-429-journal-hardening-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gh-429-journal-hardening-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_model.py
@@ -1989,7 +1989,7 @@ rows:
     acceptance: An operator receives a failure and resolution guidance instead of a
       silent no-op when reusing a journal id
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-gh-429-journal-hardening-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gh-429-journal-hardening-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_cmd.py
@@ -2002,7 +2002,7 @@ rows:
       — file existence, file text, and directory listing — against a live instance whose
       default branch is not 'main'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_real_glabclient.py
@@ -2021,7 +2021,7 @@ rows:
       gitlab'' alone; ''host:'' overrides, and a host declared for a backend fr cannot
       target says so'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
     levels:
       unit:
       - super-fr:tests/unit/test__hosts.py
@@ -2044,7 +2044,7 @@ rows:
     acceptance: A malformed or unauthorized GitLab request surfaces as an error rather
       than as 'the file is not there'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gitlab-contents-ref-and-self-hosted-hosts-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_glab.py#TestIsNotFound
@@ -2176,7 +2176,7 @@ rows:
       into the scaffolded plan, and a field left unset is omitted so pre-existing plans
       stay byte-stable
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_phases_file_field_coverage.py
@@ -2192,7 +2192,7 @@ rows:
       advance emits for that phase, joining plan ingestion to dispatch without an LLM
       in the path
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2212,7 +2212,7 @@ rows:
     acceptance: fr plan self-review warns when a plan carries a tier its fr_version
       constraint cannot support, and when an agentic phase declares no tier at all
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_plan_tier_gates.py
@@ -2227,7 +2227,7 @@ rows:
       path (gc sweep, `fr isolation down`, `down --all`): fr refuses, names the branch
       and the files, and deletes nothing.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py#test_down_dirty_worktree_message_names_branch_path_and_force_escape
@@ -2241,7 +2241,7 @@ rows:
       unpushed commit, or one pushed after the merge — survives every reap path; fr
       refuses and names the files that would be lost.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py#test_down_unlanded_content_message_names_paths_and_push_remedy
@@ -2254,7 +2254,7 @@ rows:
     acceptance: 'The operator can still destroy a workspace deliberately with `--force`,
       which bypasses every reap guard but never the #354 teardown post-condition verification.'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -2269,7 +2269,7 @@ rows:
     acceptance: A genuinely merged, clean, fully-landed workspace is still reaped, and
       `gc --dry-run` predicts the live outcome (would-skip when the live run would refuse).
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-isolation-reap-data-loss-guards-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_isolation.py
@@ -2283,7 +2283,7 @@ rows:
       contributes a constant amount to an executor handoff regardless of its body size,
       including within dependency phases.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-bounded-executor-handoff-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_handoff_bound.py#test_a_closed_entry_costs_a_constant_regardless_of_its_body_size
@@ -2304,7 +2304,7 @@ rows:
     acceptance: Writing a plan-scope journal entry forces an explicit choice between
       a phase tag and `--global`, so no entry renders in full in every handoff by accident.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-bounded-executor-handoff-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_cmd.py
@@ -2320,7 +2320,7 @@ rows:
       and pasting verbatim tool output into the return, on every harness that mirrors
       the agent.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-bounded-executor-handoff-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py#test_fr_phase_executor_and_all_opencode_mirrors_carry_the_context_discipline_norm
@@ -2336,7 +2336,7 @@ rows:
     acceptance: fr run status reports real per-phase token figures parsed from the Claude
       Code transcript, and degrades loudly to a labeled estimate when it cannot.
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-bounded-executor-handoff-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-bounded-executor-handoff-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -2355,7 +2355,7 @@ rows:
     acceptance: fr run status names the agent holding a phase and since when, and shows
       the dispatched to returned pair once it settles
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-dispatch-holder-identity-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2376,7 +2376,7 @@ rows:
     acceptance: fr run advance refuses to re-brief a phase unit that is already held,
       naming the holder, and --redispatch is the deliberate escape
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-dispatch-holder-identity-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2412,7 +2412,7 @@ rows:
     acceptance: An operator can declare a dispatch abandoned, freeing the phase unit
       for re-dispatch without resolving the step
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-dispatch-holder-identity-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2429,7 +2429,7 @@ rows:
     acceptance: The dispatch holder record is written identically on Claude Code and
       OpenCode, each recording its own harness and agent id
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-dispatch-holder-identity-design.md
     levels: {}
     status: not-implemented
     notes: 'LIVE-ONLY BY NATURE - stays not-implemented, re-confirmed at phase 7 (the
@@ -2536,7 +2536,7 @@ rows:
     acceptance: A redispatched unit keeps every attempt's cost, and totals include abandoned
       attempts
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2553,7 +2553,7 @@ rows:
     acceptance: A review unit cannot be resolved done without journal evidence, so review-skipped
       and review-passed-clean are different cursor states
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py#L196
@@ -2573,7 +2573,7 @@ rows:
     acceptance: fr run check --idle distinguishes an advanceable-and-idle run from every
       legitimate stop
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_idle.py#L81
@@ -2601,7 +2601,7 @@ rows:
     acceptance: On Claude Code, ending a turn on an idle run is blocked with the next
       command
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       int:
       - super-fr:tests/integration/test_run_idle_guard.py#L231
@@ -2622,7 +2622,7 @@ rows:
     acceptance: A v4 cursor's items, dispatch and accounting migrate into one unit map
       with no loss
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_v4_to_v5.py
@@ -2645,7 +2645,7 @@ rows:
     acceptance: A version 1, 2 or 3 run cursor still migrates all the way to the current
       version after fields were removed from the live model
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_legacy.py
@@ -2667,7 +2667,7 @@ rows:
     acceptance: A cursor the body-rewriting migration cannot fully convert is left byte-identical,
       never half-rewritten, and every other cursor still migrates
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_migration_run_unit_record.py
@@ -2688,7 +2688,7 @@ rows:
     acceptance: A run upgraded while a phase is held still refuses a second dispatch
       and still names the holder
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_upgrade_in_flight.py
@@ -2710,7 +2710,7 @@ rows:
     acceptance: A run adopted from disk, which records no attempts, still refuses to
       re-brief a running unit
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2730,7 +2730,7 @@ rows:
     acceptance: fr run adopt produces a current-version cursor whose already-complete
       phases are done units with no invented attempts
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_adopt.py
@@ -2747,7 +2747,7 @@ rows:
     capability: Run cursor
     acceptance: An abandoned attempt's spend is measured at the moment it is abandoned
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2761,7 +2761,7 @@ rows:
     acceptance: fr run status shows each attempt's cost beneath its holder, with estimate
       and measurement labelled as different quantities
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_cli.py
@@ -2778,7 +2778,7 @@ rows:
     acceptance: Review evidence must be a review entry for that same phase; a finding,
       or a review of another phase, is refused
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py#L236
@@ -2795,7 +2795,7 @@ rows:
     acceptance: Reviews resolved before the evidence gate existed are shown as unevidenced
       debt and are never retroactively failed
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py#L377
@@ -2812,7 +2812,7 @@ rows:
     acceptance: A repo-authored workflow that declares no evidence resolves its steps
       exactly as before
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence.py#L153
@@ -2830,7 +2830,7 @@ rows:
     acceptance: A unit held beyond the threshold is reported with its age and never
       fails the check
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_idle.py#L421
@@ -2849,7 +2849,7 @@ rows:
     acceptance: The idle Stop guard stays silent when no run is bound to the session
       and fails open on any fr error
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       int:
       - super-fr:tests/integration/test_run_idle_guard.py#L332
@@ -2874,7 +2874,7 @@ rows:
     capability: Harness parity
     acceptance: Ending a turn while a dispatched executor is still working is allowed
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_idle.py#L159
@@ -2895,7 +2895,7 @@ rows:
     acceptance: A claimed attempt's cost is selected by its agent id, so overlapping
       dispatches neither lose nor swap their measurements
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -2911,7 +2911,7 @@ rows:
     acceptance: A run pushed mid-phase and picked up on another host shows the orphaned
       holder, refuses a double dispatch, and recovers via --abandoned
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
     notes: 'LIVE-ONLY BY NATURE - stays not-implemented, re-confirmed at phase 7. The
@@ -2938,7 +2938,7 @@ rows:
     acceptance: An attempt dispatched from another session or host is never assigned
       this session's subagent costs, and its cost shows as not observable
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
@@ -2959,7 +2959,7 @@ rows:
     acceptance: On OpenCode, an idle run is continued by re-injecting the next command
       when the session goes idle
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
     notes: 'LIVE-ONLY BY NATURE - stays not-implemented, deliberately. The handler exists
@@ -2991,7 +2991,7 @@ rows:
     acceptance: The idle guard acts at most once per cursor position, so a failing advance
       cannot trap a session in a loop
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_idle.py#L361
@@ -3017,7 +3017,7 @@ rows:
     acceptance: 'A completed phase leaves a machine-readable trace that it was code-reviewed:
       a plan-journal entry with kind=review naming that phase number'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-journal-require-reviews-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_model.py
@@ -3033,7 +3033,7 @@ rows:
       a non-manual phase has completion.at set and no review entry names it, and exits
       0 once one does'
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-journal-require-reviews-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_journal_cmd.py
@@ -3050,7 +3050,7 @@ rows:
     acceptance: fr-goal's run cursor executes the review gate before deliver, so a run
       whose phases completed without recorded reviews cannot reach the PR step
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-journal-require-reviews-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_tripwire_shipped_workflows.py
@@ -3070,7 +3070,7 @@ rows:
       its phase is still open, so a review is received (each finding fixed or refuted)
       and not merely requested
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-unit-record-unification-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_run_evidence_findings.py#L96
@@ -3092,7 +3092,7 @@ rows:
       self-review with error severity, naming both escapes (name the outcome, or move
       it to a [manual] phase)
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py
@@ -3110,7 +3110,7 @@ rows:
     acceptance: The dispatch-verb lint produces zero errors across every agentic step
       of every plan folder already in the repo
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_dispatch_lint_corpus.py
@@ -3135,7 +3135,7 @@ rows:
     acceptance: A phase executor facing a dispatch step it has no tool for reports a
       BLOCKER and leaves the step unticked
     origin:
-    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_skill_tokens.py
