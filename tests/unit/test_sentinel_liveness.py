@@ -102,6 +102,11 @@ class World:
         assert proc.stdin is not None
         proc.stdin.write(json.dumps(payload))
         proc.stdin.close()
+        # Detach the closed pipe: `communicate()` flushes `stdin` when it is
+        # set, which raises "I/O operation on closed file" on some Pythons (CI's,
+        # not 3.14's). The hook reads stdin to EOF, so it must be closed here —
+        # before `done()` — for the concurrency tests to start it early.
+        proc.stdin = None
         return proc
 
     def load_skill(self, repo: Path, session: str = SESSION) -> subprocess.Popen[str]:
