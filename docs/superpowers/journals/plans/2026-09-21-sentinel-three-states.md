@@ -44,3 +44,18 @@ docs/explainers/fr-isolation.html has no committed .md source (explainers-curren
 ### ccd8ff87c958 · discovery · P3: verify-merge reaped fallback landed (phase 3)
 
 LocalWorktreeDevcontainerTarget.verify_merge_reaped + shared _verdict (verify_merge delegates; verdict logic not forked). Ref resolved local, origin/<b>, one targeted fetch, else IsolationError naming ref -> CLI exit 1. Old 'ghost branch exits 2' test replaced: explicit --branch with no state is now the reaped path. SKILL.md fr-goal line left as is (does not imply live workspace).
+
+<!-- fr:journal kind=finding scope=plan id=f-p3-ref created=2026-09-21T17:32:21 phase=3 state=open -->
+### f-p3-ref · finding [open] · verify-merge reaped path preferred a possibly-stale local ref (phase 3)
+
+A stale local branch could hide a post-merge push to origin/<b> (the #320 orphan) and read verified. Fixed: origin ref first, then local; red test test_verify_merge_reaped_prefers_origin_ref_over_a_stale_local_one.
+
+<!-- fr:journal kind=finding scope=plan id=f-p3-ref-resolved created=2026-09-21T17:32:22 state=fixed resolves=f-p3-ref -->
+### f-p3-ref-resolved · finding [fixed] · resolves f-p3-ref: verify-merge reaped path preferred a possibly-stale local ref
+
+origin/<b> resolved before local; test added
+
+<!-- fr:journal kind=review scope=plan id=rev-p3 created=2026-09-21T17:32:22 phase=3 -->
+### rev-p3 · review · Phase 3 review (phase 3)
+
+Raised f-p3-ref (fixed with test). Verdict logic shared via _verdict, not forked; no --branch keeps old error; unresolvable ref exits 1.

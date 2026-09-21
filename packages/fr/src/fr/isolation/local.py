@@ -588,8 +588,9 @@ class LocalWorktreeDevcontainerTarget:
 
         No state file and no worktree, so the same fetch + content check +
         PR-state verdict runs from the repo root, with the branch ref resolved
-        local-then-`<remote>/<branch>`. Raises IsolationError naming the ref
-        when neither resolves. `verified` still needs all three signals."""
+        `<remote>/<branch>`-then-local (a stale local ref must not hide a
+        post-merge push). Raises IsolationError naming the ref when neither
+        resolves. `verified` still needs all three signals."""
         ref = self._resolve_branch_ref(branch, remote)
         pr = self._pr_from(self.repo_root, branch)
         res = self._verdict(self.repo_root, branch, default_branch, remote, pr=pr, ref=ref)
@@ -597,7 +598,8 @@ class LocalWorktreeDevcontainerTarget:
         return res
 
     def _resolve_branch_ref(self, branch: str, remote: str) -> str:
-        for cand in (branch, f"{remote}/{branch}"):
+        # origin FIRST: a stale local branch would hide a commit pushed after the merge
+        for cand in (f"{remote}/{branch}", branch):
             probe = self.run(
                 ["git", "rev-parse", "--verify", "--quiet", f"{cand}^{{commit}}"],
                 cwd=self.repo_root,
