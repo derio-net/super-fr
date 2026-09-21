@@ -105,9 +105,13 @@ surfaces:
           CONTINUES rather than blocks — OpenCode cannot refuse a stop, so on
           `session.idle` the plugin sends the next command back into the
           session (`/session/{id}/prompt_async`). The event and the endpoint
-          were verified in the installed 1.18.31 SDK types; that a
-          plugin-originated prompt on idle actually EXECUTES is NOT live-proven
-          (the gh#494 standard) — a green `bun test` does not show it.
+          were verified in `@opencode-ai/sdk` type definitions on the authoring
+          machine — versions 1.17.15, 1.1.27 and 1.0.23, all three carrying
+          both. 1.18.31 is the opencode BINARY's version, not an SDK copy on
+          disk here; this note said "the installed 1.18.31 SDK types" until
+          phase 6 went looking. That a plugin-originated prompt on idle
+          actually EXECUTES is NOT live-proven (the gh#494 standard) — a green
+          `bun test` does not show it.
       hermes:
         state: absent
         scope_note: >-

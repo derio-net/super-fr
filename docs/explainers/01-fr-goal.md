@@ -101,7 +101,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-31`, `:43-46`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:14-27`, `:42-53`). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -125,18 +125,18 @@ risks instead.
 Because the pipeline is a shape, the command also takes an optional shape name.
 `/fr-goal` runs the feature-delivery shape this article describes;
 `/fr-goal <name>` runs another one that the project or the plugin provides
-(`plugins/super-fr/skills/fr-goal/SKILL.md:16-31`). Most requests never need
+(`plugins/super-fr/skills/fr-goal/SKILL.md:14-27`). Most requests never need
 the argument, and nothing about the rest of this article changes when you use
 it: the machinery is the same, only the list of steps differs.
 
 The skill also recognizes `/goal` and natural-language requests such as "build
 this autonomously" or "take this to a PR"
-(`plugins/super-fr/skills/fr-goal/SKILL.md:3-11`). Use interactive
+(`plugins/super-fr/skills/fr-goal/SKILL.md:1-10`). Use interactive
 `fr-brainstorming` instead when you want to shape the design together over
 several conversations. `fr-goal` also requires the repository's isolated
 development environment; if that has not been set up, it pauses and offers the
 setup interview rather than working directly on your machine
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-44`).
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-53`).
 
 ## Workflow
 
@@ -295,6 +295,85 @@ accumulate per phase, oldest first, so the pull request carries the whole
 history of who was asked to do what — including the attempt that was abandoned,
 which is usually the one worth reading.
 
+### What did that phase cost, and who spent it?
+
+There is one record per phase and every attempt lives on it, so a phase that had
+to be dispatched twice keeps both rather than letting the retry overwrite what
+came before. Each attempt also carries its own cost, printed by `fr run status`
+directly beneath the holder that incurred it. Identity and spend on the same
+line is the whole point: a number with no agent beside it cannot be argued with,
+and the spend that produced nothing is usually the spend worth looking at.
+
+Two numbers appear there, and they are deliberately never blended into one. The
+first is an **estimate**, computed as the brief goes out: how much context this
+dispatch is about to be handed — the journal, the handoff, the specification,
+the plan. The second is a **measurement**, taken when the attempt closes and
+read out of the harness's own accounting for that particular agent. On a real
+phase of this feature's own run the estimate was about 23,600 tokens and the
+measurement 56,092,764 — a factor of roughly two thousand, more than three
+orders of magnitude apart. Neither number is wrong. The estimate describes one
+prompt. The measurement is everything the harness billed across every turn the
+agent took, cached reads included, which over a long phase is largely the same
+context re-sent dozens of times. Averaged into a single figure they would
+produce a number that is true of nothing, so `fr` prints both, beneath the same
+holder, and says in writing that the two are not comparable.
+
+A measurement is also refused more often than you might expect, and each refusal
+is a fact rather than a gap. The transcript an attempt is measured from lives on
+the machine that ran it, under the session that dispatched it, and neither
+travels with the branch. So if you push a run mid-phase and pick it up on
+another host, that attempt's cost reads *not observable from here* rather than
+zero: `fr` will not fall back to a time window and quietly charge you for
+whatever else happened to be running inside it. That refusal carries better news
+than the cost does. A holder dispatched from a session this one cannot see may
+well have died with its host, so `fr run advance` says exactly that when it
+refuses, instead of leaving you waiting on it, and `fr run claim … --abandoned`
+is the way on. Re-briefing then starts from the last commit, because uncommitted
+work did not travel either.
+
+### Ending a turn on a run that is waiting for nobody
+
+The loop has one failure that no amount of recorded state can fix, because it is
+not a state problem. An executor finishes and reports back; the report arrives
+as a message; and the natural, well-mannered reply to a delivered report is to
+summarize it and stop. Do that mid-run and nothing is broken — the record is
+intact, the cursor is exactly where it should be, the next command is obvious —
+and the run simply stops, waiting for a person who believed it was still going.
+This happened three times in a single day before it was taken seriously.
+
+Two things were done about it, and it is worth being clear which is which. The
+first is wording: the skill now says that an iteration *ends on a dispatch*, not
+on a report — review, fix, push, record the review, and then, in the same turn,
+advance and brief the next phase, reporting afterwards rather than instead. That
+is the weak fix, and it is also the portable one, because it works wherever the
+skill is read.
+
+The second is a mechanism, and it catches the consequence rather than the
+inclination. `fr run check --idle` asks one question — is this run advanceable
+with nobody working on it? — and answers it identically everywhere, exiting with
+a distinct code when the answer is yes and naming the command that would move it
+along. A legitimate stop is not idle: a run waiting on your answer, a manual
+phase, a failed step, a finished run, and above all a phase an executor is
+*still working on*. A turn that ends while a background agent is busy is exactly
+right, and nothing interferes with it.
+
+What each harness can do with that answer differs, and the difference is
+declared rather than smoothed over. On Claude Code a stop-time hook can refuse
+to let the turn end and hand the next command back, which is what it does — at
+most once per position in the run, so that a command which keeps failing cannot
+trap the session in a loop, and so that stopping on purpose needs nothing more
+than stopping a second time. On OpenCode a stop cannot be refused at all; there
+the plugin continues the session with that command instead, which is weaker, and
+is recorded as weaker — it has not yet been proved on a live session. Where no
+adapter exists, the wording above is all there is.
+
+The Claude Code guard costs two things worth knowing about. It calls whichever
+`fr` is on your `PATH`, so a global install older than the run it is guarding
+simply fails, and the guard goes quiet — safe, but invisible, which is why it is
+written down here rather than left to be discovered. And it adds one `fr`
+start-up, roughly two seconds, to the end of every turn in a session that has a
+workspace bound to it.
+
 ### 1. Establish the boundary before everything else (`fr run start`)
 
 Before reading deeply, running measurements, asking design questions, or
@@ -310,7 +389,7 @@ The worktree remains visible on the host, so the agent can edit it normally.
 Builds, tests, and project commands cross an execution bridge into the
 container. Authenticated Git and GitHub operations stay on the host, while the
 container receives only the secrets explicitly assigned to its profile and no
-SSH identity (`plugins/super-fr/skills/fr-isolation/SKILL.md:67-80`). On a host
+SSH identity (`plugins/super-fr/skills/fr-isolation/SKILL.md:55-71`). On a host
 with no container runtime the worktree is the isolation on its own, and the
 project's container profile is not required.
 
@@ -319,7 +398,7 @@ so a mistyped shape name fails before any worktree or container is created —
 then ensures the isolation for the branch, then writes the run's record inside
 the resulting workspace. Every later command is run from there. A new feature
 branch is normally based on the latest remote default branch
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-44`).
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:23-53`).
 
 It is worth knowing why isolation is a precondition rather than the run's own
 first step, because the alternative was tried and does not work. If entering
@@ -345,7 +424,7 @@ It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
 question set, with no more than four questions and recommended choices first.
 A deployed change may include a question about how you will verify it in the
-real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:48-55`).
+real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
 
 This is the shape's one operator gate, and an unanswered batch is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
@@ -386,7 +465,7 @@ existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
-(`plugins/super-fr/skills/fr-goal/SKILL.md:48-55`,
+(`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
 `plugins/super-fr/skills/fr-brainstorming/SKILL.md`).
 
 The important promises also become **acceptance tests**: concrete statements of
@@ -401,8 +480,8 @@ updates the row with honest evidence such as a unit, integration, or end-to-end
 test. This prevents completed code from being mistaken for proven behavior.
 Under `fr-goal`, the agent presents these rows and a short defense for each
 during the spec review rather than asking for another approval
-(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:67-76`,
-`plugins/super-fr/skills/fr-plan/SKILL.md:79-84`).
+(`plugins/super-fr/skills/fr-brainstorming/SKILL.md:67-79`,
+`plugins/super-fr/skills/fr-plan/SKILL.md:63-91`).
 
 Not every promise can be automated immediately. Any remaining acceptance debt
 stays visible in the final pull request instead of being quietly described as
@@ -416,7 +495,7 @@ skips `fr-plan`'s usual section-by-section approval because the reviewed spec
 already records your decisions. Each phase carries its own checklist, tests,
 dependencies, and links to the acceptance criteria it advances
 (`plugins/super-fr/skills/fr-plan/SKILL.md:15-38`,
-`plugins/super-fr/skills/fr-plan/SKILL.md:63-84`).
+`plugins/super-fr/skills/fr-plan/SKILL.md:63-91`).
 
 Reviewing that plan is the shape's one command step, and a good illustration of
 why the distinction between kinds matters. `fr plan self-review` runs against
@@ -453,7 +532,7 @@ Back-loading is the default. The final PR labels the phase as unimplemented,
 and the operator performs it and records a completion note on the same branch.
 Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
-(`plugins/super-fr/skills/fr-goal/SKILL.md:68-72`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:62-70`).
 
 Where a manual phase may sit is a rule the tooling checks, not a convention you
 are trusted to keep: a manual phase must be in the plan's trailing block, or
@@ -506,8 +585,8 @@ from one phase to the next: findings, decisions, and discoveries are written
 down rather than being remembered, which is what makes a phase handover
 survivable at all. Progress is recorded step by step, and acceptance rows are
 updated only when there is honest test evidence
-(`plugins/super-fr/skills/fr-goal/SKILL.md:75-87`,
-`plugins/super-fr/skills/fr-execute/SKILL.md:79-82`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:75-88`,
+`plugins/super-fr/skills/fr-execute/SKILL.md:52-100`).
 
 At each completed phase the agent reviews the spec, plan, and code together — the
 review is part of every phase iteration, not a single pass at the end. It fixes every
@@ -516,7 +595,7 @@ with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
 the pull-request description is later written from
-(`plugins/super-fr/skills/fr-goal/SKILL.md:89-94`).
+(`plugins/super-fr/skills/fr-goal/SKILL.md:90-94`).
 
 A review is judgment work, the same kind of step as `brainstorm` or `plan`. Like
 those, it finishes simply by being marked done, and on its own that leaves no
@@ -527,6 +606,25 @@ where skipping the work and doing it looked identical from outside the
 conversation. So the agent writes the review down the same way it writes down
 a finding — noting which phase it reviewed, and what it found, or that it
 found nothing to fix.
+
+Writing it down is now required rather than encouraged, and what changed is
+where the requirement sits. Marking the review done is a command, and that
+command asks for the written entry by name. Without it, the step is refused and
+the refusal names the flag; and the identifier it is given is checked rather
+than stored — it must be a review entry, and a review entry *for that phase*,
+so that another phase's review, or a stray finding, cannot stand in for one
+that was never written. A review that genuinely failed needs no evidence,
+because a failed review met no obligation, and demanding proof of one would
+make failure the hardest outcome to report. All of this exists for a single
+distinction the pipeline could not previously make: "review skipped" and
+"review passed clean" used to arrive at the same `done`. Now the first cannot
+reach `done` at all.
+
+What it deliberately does not do is reach backwards. A review marked done
+before this gate existed is not retroactively failed; it is reported as
+unevidenced debt and the run carries on. An obligation enforced backwards in
+time would fail every run that happened to be in flight on the day the tool
+updated, which is an efficient way to teach people to distrust the tool.
 
 ### 7. Confirm every review left a record (`journal-check`)
 
@@ -544,6 +642,14 @@ closes is narrower and still worth having — a skipped review can no longer
 pass for free. Manual phases are exempt, because no agent review ever runs on
 them
 (`plugins/super-fr/skills/fr-goal/SKILL.md:96-97`).
+
+Inside a run that walked the whole plan this step now finds nothing to
+complain about, because the evidence gate in the loop above already refused to
+close any of those reviews unevidenced. That is composition rather than
+duplication: the gate fires per phase, as the phase finishes, and this one
+reads back across work no cursor ever walked — a plan carried over from before
+runs existed, a plan adopted midway, a phase added after the loop had already
+finished. The same rule, asked twice, of two different populations.
 
 ### 8. Keep delivery in draft until the checks pass (`deliver`)
 
@@ -597,7 +703,7 @@ and one PR. A coordinating spec may cover several repositories, but `fr-goal`
 locates each checkout and assigns one isolated agent per other repository, each
 running this same pipeline from planning onward in its own repo. Dependencies
 between repositories live in the spec and PR order, not in a plan phase's local
-`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:57-63`).
+`depends_on` field (`plugins/super-fr/skills/fr-goal/SKILL.md:55-60`).
 
 The shape decides the granularity at which its work is handed out, by declaring
 one of three units: a whole run as a single item, which is what the shipped

@@ -2381,14 +2381,32 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py
     status: ci
-    notes: 'Closed #499 in phase 4: fr run advance exits 2 on a unit whose dispatch
-      record is still open, naming the holder and printing no brief (test_advance_refuses_a_held_unit_and_prints_no_brief,
-      test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time, test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed,
-      test_the_refusal_prints_all_three_ways_forward), and --redispatch closes the old
-      record abandoned and appends a fresh one (test_redispatch_closes_the_holder_abandoned_and_appends_a_fresh_record).
+    notes: 'CANONICAL ROW for "fr run advance will not hand out a second brief for a
+      unit somebody is already holding". Closed #499: advance exits 2 on a unit whose
+      dispatch record is still open, naming the holder and printing no brief (tests/unit/test_run_cli.py:
+      test_advance_refuses_a_held_unit_and_prints_no_brief, test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time,
+      test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed, test_the_refusal_prints_all_three_ways_forward),
+      and --redispatch closes the old record abandoned and appends a fresh one (test_redispatch_closes_the_holder_abandoned_and_appends_a_fresh_record).
       Mutation-verified, and verified live against this feature''s own run cursor writing
       nothing (journal x-refusal-live, x-refusal-verified-independently). Test Plan
-      item 15 repeats it live post-merge.'
+      item 15 repeats it live post-merge. Phase 4 of the unit-record plan added the
+      cross-session arm: the refusal says the holder was dispatched from ANOTHER session
+      and that its cost is not observable from here (test_advance_refusing_another_sessions_holder_says_it_cannot_see_it),
+      while the ordinary refusal deliberately acquires no such sentence (test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions).
+
+      MERGE (2026-09-21, unit-record-unification spec section 7): gh#519''s row run-advance-refuses-running
+      is ABSORBED HERE - one behaviour, one row. Witness decision u1 (spec journal)
+      made them literally the same claim: the witness IS the open attempt, and "the
+      unit is running" is lifecycle state everywhere else, so the two rows could only
+      ever move together and a reader had no way to tell which one to trust. THIS row
+      is canonical. The other is NOT deleted - the matrix ships add / set-status / check
+      and no delete or edit verb (checked: fr acceptance --help), and removing a row
+      by hand is exactly the hand-edit the acceptance-matrix rule forbids - so it remains
+      as a pointer back here. Its evidence is folded in: the grouped-member and flat-step
+      arms (test_advance_refuses_a_running_member, test_advance_refuses_a_running_top_level_agent_step,
+      test_a_running_member_with_no_dispatch_record_is_still_refused, test_a_running_flat_step_with_no_dispatch_record_is_still_refused,
+      test_a_flat_agent_step_is_refused_the_same_way) and the --redispatch escape (test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only,
+      test_redispatch_with_nothing_outstanding_is_refused, test_redispatch_is_the_way_out_of_a_recordless_running_unit).'
   - id: run-dispatch-abandon
     capability: Run cursor
     acceptance: An operator can declare a dispatch abandoned, freeing the phase unit
@@ -2414,14 +2432,21 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-dispatch-holder-identity-design.md
     levels: {}
     status: not-implemented
-    notes: 'Live-only by nature: the claim is that two different harnesses produce the
-      same record shape, which no mock can demonstrate - a fixture asserting it would
-      only assert that fr writes what fr writes. DELIBERATELY left not-implemented when
-      its three sibling rows moved to ci in phase 6 of the 2026-09-20 plan: the unit
-      tests that gate those rows say nothing about this one. It closes with post-merge
-      Test Plan items 13 and 14 - a real /fr-goal run on Claude Code recording harness
-      claude-code with a real subagent task id, and the same on OpenCode recording harness
-      opencode with a child session id - transcripts in the PR.'
+    notes: 'LIVE-ONLY BY NATURE - stays not-implemented, re-confirmed at phase 7 (the
+      phase that closes this plan) rather than left unexamined. The claim is that two
+      DIFFERENT harnesses produce the same record shape, each recording its own harness
+      and agent id. No unit test can be that: a fixture asserting it would only assert
+      that fr writes what fr writes, and the harness value in such a fixture is one
+      fr itself put there. Deliberately left red when its three sibling rows moved to
+      ci in phase 6 - the unit tests that gate those rows say nothing about this one,
+      and flipping it on their evidence would report a live claim as verified.
+
+      What closes it: post-merge Test Plan items 13 and 14 - a real /fr-goal run on
+      Claude Code recording harness=claude-code with a real subagent task id, and the
+      same run shape on OpenCode recording harness=opencode with a child session id
+      - transcripts in the PR. Half of that is already true incidentally (this plan''s
+      own run cursor carries harness claude-code with real per-attempt agent ids), but
+      one harness is not parity.'
   - id: run-advance-refuses-running
     capability: Run state
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
@@ -2432,8 +2457,25 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_cli.py
     status: ci
-    notes: Grouped member and top-level agent step both refuse re-dispatch with exit
-      2; --redispatch re-briefs only the outstanding unit and exits 2 when none is.
+    notes: 'SUPERSEDED - MERGED INTO run-dispatch-refuses-second (2026-09-21, unit-record-unification
+      spec section 7). One behaviour, one row: witness decision u1 established that
+      "advance refuses a RUNNING unit" and "advance refuses a HELD unit" are the same
+      claim, because the open ATTEMPT is the witness and "running" is lifecycle state
+      everywhere else. Two rows that can only ever move together are one row wearing
+      two labels.
+
+      KEPT, NOT DELETED, and that is a tooling fact rather than a preference: fr acceptance
+      ships add / set-status / check / report and no delete or edit verb (checked against
+      fr acceptance --help on 2026-09-21), and striking a row out of matrix.yaml by
+      hand is precisely the hand-edit .claude/rules/acceptance-matrix.md forbids. So
+      this row survives as a POINTER. Add no evidence here; read run-dispatch-refuses-second,
+      which now carries this row''s test refs as well as its own.
+
+      Status stays ci and that is not an overclaim: the behaviour named above really
+      is CI-pinned in tests/unit/test_run_cli.py (test_advance_refuses_a_running_member,
+      test_advance_refuses_a_running_top_level_agent_step, test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only,
+      test_redispatch_with_nothing_outstanding_is_refused). A merged row demoted to
+      not-implemented would report a false red for a capability that works.'
   - id: run-resolve-teaches-item-flag
     capability: Run state
     acceptance: A grouped for_each member id copied from advance's output resolves,
@@ -2872,16 +2914,25 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
-    notes: 'STAYS not-implemented after phase 4, deliberately. The unit half of its
-      mechanism landed (the refusal now says the holder was dispatched from ANOTHER
-      session and that its cost is not observable from here, and names fr run claim
-      --abandoned: tests/unit/test_run_cli.py::test_advance_refusing_another_sessions_holder_says_it_cannot_see_it,
+    notes: 'LIVE-ONLY BY NATURE - stays not-implemented, re-confirmed at phase 7. The
+      mechanism''s unit half landed in phase 4 and is genuinely covered: the refusal
+      now says the holder was dispatched from ANOTHER session and that its cost is not
+      observable from here, and names fr run claim --abandoned (tests/unit/test_run_cli.py::test_advance_refusing_another_sessions_holder_says_it_cannot_see_it,
       with test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions
-      pinning that the ordinary refusal does NOT acquire that sentence). But this row''s
-      claim is two REAL hosts — a cursor pushed mid-phase, pulled on another machine
-      whose transcripts and session bindings never travelled — and no unit test can
-      be that. Flipping it on the unit evidence would report a live claim as verified.
-      Owed: a live demonstration, Test Plan item 16''s sibling.'
+      pinning that the ORDINARY refusal does not acquire that sentence), and the window
+      is refused for an attempt this session did not dispatch (tests/unit/test_run_telemetry.py::test_the_window_is_refused_for_an_attempt_this_session_did_not_dispatch).
+
+      But this row''s claim is TWO REAL HOSTS: a cursor pushed mid-phase and pulled
+      on another machine whose transcripts (~/.claude/projects) and session bindings
+      (~/.cache/fr/sessions) never travelled with the branch, and whose executor may
+      have died with its host. No unit test can be two machines - every such test simulates
+      absence by not writing a file, which is the thing being tested. Flipping it on
+      the unit evidence would report a live claim as verified.
+
+      What closes it: a live demonstration, Test Plan item 16''s sibling. Phase 7 shipped
+      the operator-facing half in fr-goal SKILL.md section 5 ("Picking the run up somewhere
+      else?"), so the recovery is now documented where an operator meets it - documentation
+      is not verification, and the row stays red until the walk happens.'
   - id: run-cost-never-misattributed-across-sessions
     capability: Run cursor
     acceptance: An attempt dispatched from another session or host is never assigned
@@ -2911,17 +2962,30 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
-    notes: 'STAYS not-implemented, deliberately. The handler exists (packages/fr-opencode-plugin/src/idle.ts,
-      wired as the plugin''s event hook) and bun test covers it — 50 tests, 10 mutants
-      killed: one promptAsync per run position on session.idle, silent otherwise, child
-      sessions left alone, never throws. But every one of those tests drives a FAKE
-      client. That a plugin-originated prompt on session.idle actually EXECUTES in a
-      live OpenCode session is not shown by any of them, and that is the claim this
-      row makes. By the gh#494 standard it needs a live run; until then parity.yaml
-      says opencode: partial. Cannot BLOCK a stop, only continue — a weaker tier, declared
-      as such. Note: the opencode binary here is 1.18.31 but the SDK type copies found
-      on the machine are 1.17.15; both session.idle and /session/{id}/prompt_async are
-      in them.'
+    notes: 'LIVE-ONLY BY NATURE - stays not-implemented, deliberately. The handler exists
+      (packages/fr-opencode-plugin/src/idle.ts, wired as the existing plugin''s event
+      hook) and bun test covers it - 50 tests, 10 mutants killed: exactly one promptAsync
+      per run position on session.idle, silent otherwise, child sessions left alone,
+      never throws. But every one of those tests drives a FAKE client. That a plugin-originated
+      prompt on session.idle actually EXECUTES in a live OpenCode session - that the
+      event fires for a TUI session at the moment a turn ends, that promptAsync is callable
+      from inside an event hook, that the injected text is acted on, and that it does
+      not collide with the operator typing - is shown by none of them, and that is the
+      claim this row makes. By the gh#494 standard it needs a live run; until then parity.yaml
+      says opencode: partial with a scope_note saying why. The adapter cannot BLOCK
+      a stop, only continue the session - a weaker tier than the Claude Code guard,
+      declared as such rather than implied to be parity.
+
+      VERSION CORRECTION (phase 6, carried into prose and parity.yaml in phase 7): the
+      event and the endpoint were verified in @opencode-ai/sdk TYPE DEFINITIONS on the
+      authoring machine, of versions 1.17.15, 1.1.27 and 1.0.23 - all three carrying
+      EventSessionIdle {properties.sessionID}, Session.parentID, and session.promptAsync
+      -> /session/{id}/prompt_async with body.parts and query.directory. 1.18.31 is
+      the opencode BINARY''s version and is NOT an SDK copy on disk here; the earlier
+      claim "verified in the installed 1.18.31 SDK types" (spec section 4.G table, parity.yaml
+      scope_note) was wrong about WHICH artifact was read and both are now corrected.
+      The design is unaffected - every version found carries both - but a verification
+      is only worth its provenance.'
   - id: run-idle-guard-acts-once-per-position
     capability: Harness parity
     acceptance: The idle guard acts at most once per cursor position, so a failing advance

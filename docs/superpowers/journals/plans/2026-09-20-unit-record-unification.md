@@ -600,3 +600,96 @@ VERIFIED INDEPENDENTLY, in a sandboxed HOME so the operator's real ~/.cache/fr/s
 Deviations ACCEPTED: is_idle takes a 'refusals' keyword so the plan-on-disk refusals are computed by advance's own functions and the predicate stays pure; 'manual phase' as a stop means the FRONT-LOADED one advance's preflight refuses, not 'the plan contains a manual marker' — keying on the marker would have silenced the guard for nearly every plan; the hook has no set -e and always exits 0, because exit 2 from a Stop hook is itself a block and fr exits 2 on every refusal; four surviving mutants were each a real hole and are fixed. One correction to the orchestrator's own claim: the OpenCode event and endpoint were verified in SDK type definitions of versions 1.17.15, 1.1.27 and 1.0.23 — not '1.18.31', which is the binary's version. All three carry both, so the design holds; the spec is corrected.
 
 Two costs to state in phase 7's prose: a stale global fr on PATH exits 2 and silently disables the guard; and the guard adds roughly two seconds to every turn end of a bound session.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-prose-recut created=2026-09-21T02:27:52 phase=7 -->
+### p7-prose-recut · discovery · fr-goal §5/§6 re-cut: an iteration ends on a dispatch, the review carries evidence, and the idle guard's two costs are in the shipped prose (phase 7)
+
+**What the re-cut says, and where it sits** — `plugins/super-fr/skills/fr-goal/SKILL.md`, still **117 lines** against the 120 cap (unchanged: +1 line in §5, -1 in §6).
+
+**§6 gained three rules and a clause, in this order** (the order is the point — it reads as the sequence an orchestrator actually performs):
+
+1. *the review is closed with EVIDENCE, not an assertion* — write the `kind=review` entry first, then `fr run resolve … --step review-phase --item phase/<n> --state done --evidence review=<entry-id>`; without it the resolve exits 2 and names the flag; the id is verified, so another phase's review or a `finding` is refused; `--state failed` needs none; "review skipped" and "review passed clean" are now different states; a pre-gate unit reads `done, unevidenced`, which is debt and never a failure.
+2. *an iteration ENDS ON A DISPATCH, not a report* (#518) — review, fix, push, **resolve the review with its evidence**, then IN THE SAME TURN `fr run advance` and dispatch the next unit; report after dispatching, never instead. Plus the precedence sentence spec §4.H asks for verbatim in substance: this skill's autonomy contract outranks an output-style preference. And the closed list of legitimate turn ends: an operator gate, a genuine block, a HELD unit, the finished run.
+3. `**Harness — idle guard:**` — a scoped clause naming all three supported harnesses, so `test_tripwire_skill_tool_neutrality` is satisfied structurally and an OpenCode or Hermes reader is actually served. `fr run check --idle` is the neutral predicate (exit 3); Claude Code blocks at stop time and acts at most once per cursor position; a turn ending while a unit is HELD is never blocked. **Both costs are in the shipped prose**, per spec §4.G: the guard calls the `fr` on PATH, so a stale global install exits 2 and SILENTLY disables it; and it adds ~2s to every turn end of a bound session. OpenCode continues rather than blocks (weaker, not live-proven); Hermes has no adapter, "the prose above is all there is".
+
+**§5 gained the other-session recovery** (spec §4.D.1) as `**Picking the run up somewhere else?**`: the cursor travels with the branch and nothing else does; a holder dispatched from ANOTHER session is named as such and its cost reads `not observable from here`; do not wait on it — `claim … --abandoned` / `advance --redispatch`, re-briefing from the last COMMIT; bind the new session or the guard cannot find the run. The `fr run status` sentence also grew the per-attempt cost surface (estimate vs measurement, "not comparable").
+
+**The refactor step (P7.T1.S3) was not a no-op — it found two real gaps** by re-reading §5/§6 as an orchestrator holding a just-delivered report:
+- the end-on-dispatch sequence said "review, fix, push, then advance" and **skipped the resolve**, which would have walked an orchestrator straight into the evidence refusal it had just been told about. Now "review, fix, push, resolve the review with its evidence, then …".
+- §5's cadence line literally **ended on `resolve`** (`dispatch → claim → wait → resolve`) — a loop statement that stops is the #518 reflex written into the skill. Now `dispatch → claim → wait → review → resolve → advance, and that last arrow is the next dispatch: the cycle closes, it does not stop.`
+
+**Nothing was cut to make room.** The only rule that moved is §6's old "Record the review … `journal-check` (§7) fails delivery without it", which is now inside the evidence paragraph with an explicit §7 pointer ("§7 is the same rule read a second time, for phases no cursor ever walked — it still fails delivery without the entry"). The repack that paid for the new lines was §6's opening paragraph, reflowed from five soft-wrapped lines to one.
+
+**Both mirror generators run, both `--check` clean** — `scripts/sync-opencode.py` AND `scripts/sync-hermes.py`. Forgetting the Hermes one has bitten this repo twice; the mirrors are byte-identical to canonical and `test_tripwire_hermes_skills_sync` / `test_tripwire_opencode_skills_sync` pass.
+
+<!-- fr:journal kind=decision scope=plan id=p7-matrix-merge created=2026-09-21T02:28:01 phase=7 -->
+### p7-matrix-merge · decision · The two refusal rows merged by notes, not deletion (there is no delete verb); three rows stay live-only; the 1.18.31 SDK claim corrected in parity.yaml too (phase 7)
+
+**The merge asked for by spec §7 ("`run-dispatch-refuses-second` absorbs gh#519's `run-advance-refuses-running`") cannot be a deletion, and that is a tooling fact rather than a preference.**
+
+`fr acceptance` ships `add` / `set-status` / `check` / `report` / `status` / `summary` / `init` / `backfill` / `digest` — **no delete verb and no edit verb** (checked against `fr acceptance --help` on 2026-09-21, not from memory). `set-status` moves status, adds `--level` refs and replaces `--notes`; it cannot touch a row's `acceptance` text or remove it. And `.claude/rules/acceptance-matrix.md` forbids hand-editing `matrix.yaml`, which is the only other way to strike a row out. The same wall was already hit and recorded on `opencode-subagent-dispatch`, whose note says a row's acceptance text cannot be edited and a follow-up is filed for an edit verb.
+
+**So the merge is recorded in BOTH rows' notes, and the direction is explicit:**
+
+- `run-dispatch-refuses-second` (origin: the dispatch-holder spec) is **canonical**, and its note now opens by saying so. It absorbed the other row's evidence by test name — the grouped-member and flat-step arms (`test_advance_refuses_a_running_member`, `test_advance_refuses_a_running_top_level_agent_step`, `test_a_running_member_with_no_dispatch_record_is_still_refused`, `test_a_running_flat_step_with_no_dispatch_record_is_still_refused`, `test_a_flat_agent_step_is_refused_the_same_way`) and the `--redispatch` escape (`test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only`, `test_redispatch_with_nothing_outstanding_is_refused`, `test_redispatch_is_the_way_out_of_a_recordless_running_unit`). Every name pasted from a grep over `tests/unit/test_run_cli.py`, never from memory.
+- `run-advance-refuses-running` stays as a **pointer**: "SUPERSEDED — MERGED INTO run-dispatch-refuses-second", "add no evidence here".
+
+**Why they were ever one claim:** witness decision u1. The witness is the OPEN ATTEMPT, and "the unit is running" is lifecycle state everywhere else — so "advance refuses a RUNNING unit" and "advance refuses a HELD unit" could only ever move together, and a reader had no way to tell which row to trust.
+
+**Both rows stay `ci`, deliberately.** Demoting the pointer to `not-implemented` would report a false red for a capability that genuinely is CI-pinned; a merged row is not an unverified one.
+
+**The three live-only rows stay `not-implemented`, re-confirmed rather than left unexamined**, each note now saying WHY the row is live-only by nature and what closes it:
+- `run-dispatch-harness-neutral` — the claim is that two DIFFERENT harnesses produce the same record shape. A fixture would only assert that fr writes what fr writes, and the harness value in it is one fr put there. Closes with Test Plan items 13 + 14.
+- `run-pickup-on-another-host` — the unit half genuinely landed in phase 4 (cited by test name), but the claim is two REAL machines whose transcripts and session bindings never travelled. Every such unit test simulates absence by not writing a file, which is the thing under test. Phase 7 shipped the operator-facing half in SKILL.md §5; documentation is not verification.
+- `run-idle-reprompt-opencode` — 50 bun tests, 10 mutants, all driving a FAKE client. That a plugin-originated prompt on `session.idle` EXECUTES in a live session is shown by none of them.
+
+**One factual correction carried across three surfaces.** The claim "the event and the endpoint were verified in the installed **1.18.31** SDK types" was wrong about which artifact was read: 1.18.31 is the opencode **BINARY**; the `@opencode-ai/sdk` type copies on the authoring machine are **1.17.15, 1.1.27 and 1.0.23**, all three carrying `EventSessionIdle {properties.sessionID}`, `Session.parentID` and `session.promptAsync` → `/session/{id}/prompt_async`. Phase 6 found it and fixed the spec table; phase 7 fixed the two places that still carried it — the matrix note (via `set-status --notes`) and **`packages/fr/src/fr/harness/parity.yaml`'s `fr-run-idle-guard` opencode `scope_note`**, which is a shipped artifact and was still saying it. The design is unaffected; a verification is only worth its provenance.
+
+**Version: 4.11.0 → 4.12.0 (MINOR), via `scripts/bump-version.py minor`, 9 files + `uv.lock`, never hand-edited.** Minor rather than patch on four independent grounds, each user-visible: a new subcommand flag (`fr run check --idle`, exit 3), a new MANDATORY `--evidence` on a step the shipped shape declares, a new shipped hook (`fr-run-idle-guard.sh`), and a `run` artifact shape change (v4 → v5). `bump-version.py --check` → `ok — versions agree`, `fr --version` → 4.12.0.
+
+**`fr validate artifacts` run after every matrix write** (48 artifacts, all structurally valid) — its strict loader is what catches the duplicate YAML key `safe_load` hides. `fr acceptance check`: 170 rows OK, {ci: 145, skipped: 18, not-implemented: 7}. `fr acceptance report --check`: all three committed reports in sync.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-explainer-and-gate created=2026-09-21T02:28:10 phase=7 -->
+### p7-explainer-and-gate · discovery · The explainer: the pre-check matched byte-for-byte this time, all 21 SKILL.md citations re-derived (four were pointing at the wrong thing), and the full gate green (phase 7)
+
+**The renderer pre-check PASSED byte-for-byte, and that is itself a result** — phase 1 recorded that HEAD's committed `.html` was already behind HEAD's `.md` (the gh#519 fold-in took the prose and kept an older page) and regenerated it. Phase 7 re-ran the check against the UNMODIFIED source before touching anything:
+
+```
+cd / && uv run --isolated --no-project --with markdown --with pyyaml python \
+  "$B/tools/render_explainer.py" docs/explainers/01-fr-goal.md \
+  --style broadsheet --embed-fonts -o <scratch>/precheck.html
+cmp <scratch>/precheck.html docs/explainers/01-fr-goal.html   # rc=0
+```
+
+`cmp` exit **0**. So phase 1's regeneration genuinely put the page back in sync, the renderer reproduces it exactly, and every line of the committed diff is prose someone wrote. Both `--isolated` and running from `/` were used; the rule explains why (a leaked `pygments` flips codehilite and rewrites every code block). Evidence that they worked: the `.html` diff is **+125/-32 lines and contains no code-block churn at all** — only the paragraphs and the citation edits below.
+
+**Every `SKILL.md:<lines>` citation in the page was re-derived as a whole-section range — all 21 of them, not only the ones this phase's edits moved.** Phase 1's merge note said "other citations in that page were not audited — phase 7", and finding f9 of the earlier plan is the reason it matters: nothing checks these, so a stale one makes the published page wrong through a diff that never touched it. Derived from each skill's live header map (`grep -n '^#\{1,4\} '` plus the blank line before the next header), not guessed:
+
+| citation | was | now |
+|---|---|---|
+| fr-goal frontmatter / `description:` | `3-11` | `1-10` |
+| fr-goal preamble (shape + autonomy) | `16-31` | `14-27` |
+| fr-goal §1 `brainstorm` | `43-46`, `48-55` (×2) | `42-53` |
+| fr-goal §2 `spec-review` (cross-repo) | `57-63` | `55-60` |
+| fr-goal §3 `plan` (manual front/back-load) | `68-72` | `62-70` |
+| fr-goal §5 `implement` | `75-87` | `75-88` |
+| fr-goal §6 `review-phase` | `89-94` | `90-94` |
+| fr-goal §7 / §8 / close-out | `96-97` / `99-111` / `113-117` | unchanged — already whole sections |
+| fr-brainstorming §0 Isolation first | `23-44` (×2) | `23-53` |
+| fr-brainstorming §2 Hand off | `67-76` | `67-79` |
+| fr-plan Rules | `79-84`, `63-84` | `63-91` |
+| fr-plan Format | `15-38` | unchanged |
+| fr-execute Procedure | `79-82` | `52-100` |
+| fr-isolation Exec-bridge discipline | `67-80` | `55-71` |
+
+Four of these were citing a range that no longer contained what the sentence claimed — `fr-execute:79-82` pointed into the label-lifecycle tail, `fr-isolation:67-80` straddled two sections, and the two fr-plan acceptance citations both landed mid-Rules. The substitution script **fails loudly on a non-matching pattern** (`raise SystemExit` on zero hits) and printed a hit count per rule, so a silently-matched-nothing edit could not read as a pass.
+
+**Three things were added to the page, in its own voice:**
+
+1. `### What did that phase cost, and who spent it?` — one record per phase with every attempt on it; cost printed beneath the holder that incurred it; **estimate vs measurement**, with this run's own figures (≈23,600 tok estimated against 56,092,764 measured — a factor of roughly two thousand) and WHY they differ: the estimate describes one prompt, the measurement is everything the harness billed across every turn including cached re-sends, so averaging them "would produce a number that is true of nothing". Then the third absence: a cost reads `not observable from here` on another host rather than zero, because fr will not borrow a time window — and that refusal carries the more useful news, that the holder may have died with its host.
+2. `### Ending a turn on a run that is waiting for nobody` — #518 stated as a cadence problem rather than a state problem, then the two layers **labelled as strong and weak**: the prose (portable, weak) and the guard (Claude Code only, catches the consequence). Why a turn cannot end on an advanceable run, why ending one while an executor works is correct and never blocked, the once-per-position loop breaker, and both costs — a stale `fr` on PATH silently disables it, and ~2s per turn end.
+3. The evidence gate, folded into §6 and §7: why "review skipped" and "review passed clean" had to become different states, why a FAILED review needs no evidence, why the gate does not reach backwards ("an obligation enforced backwards in time would fail every run that happened to be in flight on the day the tool updated"), and — in §7 — why the two gates are composition rather than duplication now that the cursor gate fires strictly earlier.
+
+`tests/unit/test_tripwire_explainers_fresh.py` passes (the rendered page carries the source's title and every heading, new ones included).
+
+**Full CI gate, `CLAUDE*` unset, every exit code read from a file and not a pipe:** pytest WITH coverage `rc=0` — **3915 passed, 80 skipped in 295s, total coverage 92.17%** (floor 75); `ruff format --check` rc=0 (389 files already formatted — run as the last check before committing, per the scar a phase on this plan left on CI's lint job); `ruff check` rc=0; mypy over all four src trees rc=0 (146 files); `bump-version.py --check` rc=0; `fr acceptance check` rc=0 (170 rows); `fr acceptance report --check` rc=0; `fr validate artifacts` rc=0 (48); `fr harness parity --check` rc=0; `sync-opencode --check` and `sync-hermes --check` both rc=0; `fr workflow check fr-goal` rc=0; `bun test` rc=0 (50 tests, 3 files).
