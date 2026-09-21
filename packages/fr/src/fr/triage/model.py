@@ -48,6 +48,11 @@ def normalize_key(key: str) -> str:
     return key.lower()
 
 
+def _bad_keys(keys: list[object]) -> list[object]:
+    """The entries of *keys* that do not match the key grammar `<repo-name>#<number>`."""
+    return [k for k in keys if not isinstance(k, str) or not KEY_RE.match(k)]
+
+
 @dataclass(frozen=True)
 class Scope:
     """What is being triaged: one repo, or every non-archived repo of an owner."""
@@ -190,6 +195,15 @@ class Pattern(_Strict):
     ids: list[str] = []
     body: str = ""
 
+    @field_validator("ids")
+    @classmethod
+    def _ids_are_keys(cls, v: list[str]) -> list[str]:
+        """Same grammar and normaliser as judgement keys, so a typo is loud (r-p2-pattern-ids)."""
+        bad = _bad_keys(list(v))
+        if bad:
+            raise ValueError(f"pattern ids must be '<repo-name>#<number>', got {bad!r}")
+        return [normalize_key(k) for k in v]
+
 
 class Judgements(_Strict):
     schema_: Literal[1] = Field(1, alias="schema")
@@ -204,7 +218,7 @@ class Judgements(_Strict):
         """Validate the key grammar, then normalise; a case-only collision is a conflict."""
         if not isinstance(v, dict):
             return v  # pydantic reports the wrong type
-        bad = [k for k in v if not isinstance(k, str) or not KEY_RE.match(k)]
+        bad = _bad_keys(list(v))
         if bad:
             raise ValueError(f"judgement keys must be '<repo-name>#<number>', got {bad!r}")
         out: dict[str, object] = {}

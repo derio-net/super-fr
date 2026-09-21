@@ -180,3 +180,23 @@ def test_two_judgement_keys_differing_only_by_case_are_a_conflict(tmp_path: Path
         load_judgements(path)
     assert "conflict" in str(exc.value)
     assert "Super-FR#435" in str(exc.value)
+
+
+# ------------------------------------------------ review r-p2-pattern-ids
+
+
+@pytest.mark.parametrize("bad", ["super-fr 435", "derio-net/super-fr#435", "super-fr#", "435"])
+def test_a_typod_pattern_id_is_refused_naming_the_file(tmp_path: Path, bad: str) -> None:
+    text = JUDGEMENTS_YAML.replace('ids: ["super-fr#435"]', f"ids: [{json.dumps(bad)}]")
+    path = _write(tmp_path / "judgements.yaml", text)
+
+    with pytest.raises(TriageError, match=str(path)) as exc:
+        load_judgements(path)
+    assert bad in str(exc.value)
+
+
+def test_pattern_ids_go_through_the_same_normaliser_as_keys(tmp_path: Path) -> None:
+    text = JUDGEMENTS_YAML.replace('ids: ["super-fr#435"]', 'ids: ["Super-FR#435"]')
+    j = load_judgements(_write(tmp_path / "judgements.yaml", text))
+
+    assert j.patterns[0].ids == ["super-fr#435"]
