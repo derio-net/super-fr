@@ -10,19 +10,14 @@ is a second class, not an edit to the collector.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from fr import gh
-from fr.isolation.types import _home
+from fr.triage.model import Scope
 
-SCHEMA = 1
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
-
-ScopeKind = Literal["repo", "org"]
 
 
 class Forge(Protocol):
@@ -53,28 +48,6 @@ class GhForge:
         return gh.view_issue(repo, number)
 
 
-@dataclass(frozen=True)
-class Scope:
-    """What is being triaged: one repo, or every non-archived repo of an owner."""
-
-    kind: ScopeKind
-    target: str  # "OWNER/REPO" for a repo, "OWNER" for an org
-
-    @property
-    def name(self) -> str:
-        """Directory-safe scope name: `<owner>--<repo>` or `<owner>` (spec §3.B)."""
-        return self.target.replace("/", "--")
-
-    @property
-    def owner(self) -> str:
-        return self.target.split("/", 1)[0]
-
-
-def default_state_dir(scope: Scope) -> Path:
-    """`$HOME/.cache/fr/triage/<scope>/` — fr's existing cache root."""
-    return _home() / ".cache" / "fr" / "triage" / scope.name
-
-
 def scope_repos(forge: Forge, scope: Scope) -> list[str]:
     """The `OWNER/REPO` slugs in *scope*, sorted."""
     if scope.kind == "repo":
@@ -90,7 +63,7 @@ def collect_facts(forge: Forge, scope: Scope, *, now: datetime) -> dict[str, Any
         for issue in forge.list_issues(repo=repo, state="open", limit=ISSUE_LIMIT):
             issues.append({"repo": repo, "number": issue["number"], "title": issue["title"]})
     return {
-        "schema": SCHEMA,
+        "schema": 1,
         "scope": scope.name,
         "kind": scope.kind,
         "collected_at": now.isoformat(timespec="seconds"),

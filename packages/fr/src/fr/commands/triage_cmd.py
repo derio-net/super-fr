@@ -22,7 +22,8 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.gh import GhError
-from fr.triage.collect import Forge, GhForge, Scope, collect_facts, default_state_dir
+from fr.triage.collect import Forge, GhForge, collect_facts
+from fr.triage.model import Scope, state_dir
 
 console = Console()
 err_console = Console(stderr=True)
@@ -61,13 +62,13 @@ def _scope(repo: str | None, org: str | None) -> Scope:
 def collect_command(
     repo: str | None = typer.Option(None, "--repo", help="Triage one repo: OWNER/REPO."),
     org: str | None = typer.Option(None, "--org", help="Triage every repo of OWNER."),
-    state_dir: Path | None = typer.Option(
+    dir_override: Path | None = typer.Option(
         None, "--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."
     ),
 ) -> None:
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
-    target_dir = state_dir if state_dir is not None else default_state_dir(scope)
+    target_dir = state_dir(scope, dir_override)
     try:
         facts = collect_facts(make_forge(), scope, now=datetime.now(UTC))
     except GhError as exc:
