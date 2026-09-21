@@ -19,8 +19,10 @@ tasks:
     text: |-
       RED: tests/unit/test_triage_check.py. Given facts and judgements: an open issue with no
       judgement is unranked; a judged issue now closed or merged is settled; a judgement whose
-      key is in neither set is orphaned; exit code is 0 in all three cases; --json emits the
-      three sets. Spec-review r7: an issue titled "[manual] x [/red]" prints verbatim through the
+      key is in neither set is orphaned — unless its issue is in Facts.unviewed or its repo in
+      Facts.skipped, which makes it unreachable (spec 3.F as amended by review r-p2-unviewed;
+      this step originally said three sets); exit code is 0 in all four cases; --json emits the
+      four sets. Spec-review r7: an issue titled "[manual] x [/red]" prints verbatim through the
       human output and does not raise MarkupError. Confirm red.
   - id: P3.T1.S2
     text: |-
@@ -28,7 +30,7 @@ tasks:
       every forge-sourced string passes through rich.markup.escape before printing. Run green.
   - id: P3.T1.S3
     text: |-
-      REFACTOR: the command formats only; the three sets come from classify(). Re-run.
+      REFACTOR: the command formats only; the four sets come from classify(). Re-run.
 - number: 2
   title: Inline markup, escaped first, allowlist of two
   steps:

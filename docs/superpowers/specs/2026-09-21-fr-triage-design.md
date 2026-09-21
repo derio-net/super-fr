@@ -242,8 +242,9 @@ One HTML file, following `fr.acceptance.report`'s pattern: a pure Python rendere
   complete with JavaScript off, and tests assert on HTML rather than a DOM.
 - **Unranked renders first and loudly**, as its own tier: "not yet triaged — run the fr-triage
   skill". An unjudged issue is the most important thing on a stale board.
-- **Deterministic:** no clock read at render time. The only timestamp shown is `collected_at`,
-  which is data. The same facts and judgements give the same bytes.
+- **Deterministic:** no clock read at render time. Every timestamp shown — `collected_at`,
+  `ranked_at` and each row's filed date — is read from the facts or the judgements, never from
+  the clock. The same facts and judgements give the same bytes.
 - **Untrusted text is inert.** Issue titles, bodies and labels come from anyone who can file an
   issue, and in org scope that is many people. They are escaped, and the facts blob is never
   interpolated into a `<script>` element. It works offline: web fonts, if reachable, degrade to
