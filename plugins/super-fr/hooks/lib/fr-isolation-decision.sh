@@ -266,6 +266,21 @@ fr_isolation_marker_valid() {
   _fr_marker_valid "$_fr_rtop"
 }
 
+# fr_strip_command_prefix <command-line>
+#   Prints the line with a leading env-assignment prefix (`A=b C=d …`, optionally
+#   after `env`) and a leading `uv run` removed, so `FR_ISOLATION_TARGET=worktree
+#   fr isolation up` and `uv run fr run start` are recognised as the `fr …`
+#   commands they are (rev2-f3). ONE definition for every hook that matches `fr`
+#   verbs: the guard had this strip and the session-bind hook did not, so the
+#   exact command the guard's deny message prescribes never bound a session, and
+#   its sentinel was never stamped (adversarial review H1). Stripping only feeds
+#   matchers — a non-`fr` command behind the same prefix still matches nothing.
+fr_strip_command_prefix() {
+  printf '%s' "$1" | sed -E \
+    -e 's/^[[:space:]]*(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)+//' \
+    -e 's/^[[:space:]]*uv[[:space:]]+run[[:space:]]+//'
+}
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
 # An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts
