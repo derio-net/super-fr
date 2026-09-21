@@ -23,9 +23,17 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
 from fr.triage.errors import TriageError
-from fr.triage.model import Facts, Scope, load_judgements, state_dir
+from fr.triage.model import (
+    Facts,
+    Judgements,
+    Scope,
+    load_facts,
+    load_judgements,
+    state_dir,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -108,3 +116,63 @@ def collect_command(
     _report(facts)
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({n_open} open issues)", markup=False)
+
+
+def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
+    """The scope's facts and judgements, through the `fr.triage.model` loaders.
+
+    No facts.json is an error naming `collect`; no judgements.yaml is allowed —
+    everything is then unranked.
+    """
+    target_dir = state_dir(scope, dir_override)
+    facts_path = target_dir / "facts.json"
+    if not facts_path.exists():
+        err_console.print(
+            f"[red]error:[/red] no facts at {escape(str(facts_path))}; run "
+            f"`fr triage collect --{scope.kind} {escape(scope.target)}` first"
+        )
+        raise typer.Exit(code=2)
+    judgements_path = target_dir / "judgements.yaml"
+    try:
+        facts = load_facts(facts_path)
+        judgements = (
+            load_judgements(judgements_path)
+            if judgements_path.exists()
+            else Judgements.model_validate({"schema": 1})
+        )
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
+    return target_dir, facts, judgements
+
+
+@triage_app.command("check")
+def check_command(
+    repo: str | None = typer.Option(None, "--repo", help="Triage one repo: OWNER/REPO."),
+    org: str | None = typer.Option(None, "--org", help="Triage every repo of OWNER."),
+    dir_override: Path | None = typer.Option(
+        None, "--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the four sets as JSON."),
+) -> None:
+    """Report unranked, settled, orphaned and unreachable. Always exits 0."""
+    _, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    result = classify(facts, judgements)
+    if as_json:
+        print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
+        return
+    console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
+    for i in result.unranked:
+        console.print(f"  {escape(i.key)}  {escape(i.title)}")
+    console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")
+    for i in result.settled:
+        console.print(f"  {escape(i.key)}  {i.stage}  {escape(i.title)}")
+    console.print(f"[bold]orphaned[/bold] ({len(result.orphaned)}) — judged, found nowhere")
+    for key in result.orphaned:
+        console.print(f"  {escape(key)}")
+    console.print(
+        f"[bold]unreachable[/bold] ({len(result.unreachable)}) — judged, the forge would "
+        "not show it; not orphaned"
+    )
+    for u in result.unreachable:
+        console.print(f"  {escape(u.key)}  {escape(u.reason)}")
