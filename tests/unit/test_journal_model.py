@@ -744,3 +744,37 @@ def test_an_unknown_token_does_not_disturb_the_effective_state_fold() -> None:
         "Body.\n"
     )
     assert open_finding_ids(parse_journal(text)) == ["f1"]
+
+
+def test_a_deferred_finding_is_neither_open_nor_closed_in_the_fold() -> None:
+    from fr.journal.model import (
+        effective_finding_states,
+        open_finding_ids,
+        parse_journal,
+        phase_finding_states,
+    )
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-22T00:00:00 "
+        "phase=2 state=open -->\n### f1 · finding [open] · real but later (phase 2)\n\nbody\n\n"
+        "<!-- fr:journal kind=finding scope=plan id=f1-resolved created=2026-09-22T00:01:00 "
+        "state=open resolves=f1 tracked_by=#535 -->\n"
+        "### f1-resolved · finding [deferred → #535] · resolves f1: real but later\n\nwhy\n"
+    )
+    entries = parse_journal(text)
+    assert effective_finding_states(entries) == {"f1": "deferred"}
+    assert open_finding_ids(entries) == []
+    # `fr run resolve`'s findings obligation reads this map: deferred != open.
+    assert phase_finding_states(entries, 2) == {"f1": "deferred"}
+
+
+def test_tracked_by_is_only_valid_on_an_open_resolution_record() -> None:
+    from fr.journal.model import JournalEntry
+
+    base = dict(kind="finding", scope="plan", id="r", created="t", title="x", body="")
+    with pytest.raises(ValueError, match="tracked_by"):
+        JournalEntry(**base, state="open", tracked_by="#1")  # no `resolves`
+    with pytest.raises(ValueError, match="tracked_by"):
+        JournalEntry(**base, state="fixed", resolves="f1", tracked_by="#1")
+    ok = JournalEntry(**base, state="open", resolves="f1", tracked_by="#1")
+    assert ok.tracked_by == "#1"

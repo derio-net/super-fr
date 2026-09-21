@@ -21,7 +21,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     the tree is glanceable; archived to `implemented/journals/<scope>/`).
     `add` (create-only on `--id` — re-adding an existing id fails loudly and
     directs the caller to `resolve`) / `resolve` (appends a
-    RESOLUTION RECORD closing a finding; append-only, so the original entry is
+    RESOLUTION RECORD closing a finding — fixed | refuted | deferred, the last
+    needing `--tracked-by <issue>`; append-only, so the original entry is
     never rewritten) / `render` (raw, feeds PR bodies) / `check` (fail-closed on
     findings whose **effective** state — the fold of every record naming them,
     last one wins — is still open). `fr plan create` seeds a plan journal;
