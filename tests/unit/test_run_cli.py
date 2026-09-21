@@ -1903,9 +1903,14 @@ def _started_grouped_with_plan(
         slug = plan_rel.rstrip("/").rsplit("/", 1)[-1]
         plan_dir = repo / plan_rel
     else:
+        from tests.unit.skeleton_override import write_skeleton_override
+
         slug = "2026-05-09-fixture-minimal"
         plan_dir = repo / "docs" / "superpowers" / "plans" / slug
         shutil.copytree(_FIXTURE_PLAN, plan_dir)
+        # One agentic phase, marked skeleton: a self-review error since debug
+        # journal C2 — recorded as the sanctioned override, see the helper.
+        write_skeleton_override(repo)
     # SET, never append: the shared fixture carries its OWN `tier: standard`
     # (gh#506 added one), so inserting a second key leaves a duplicate that
     # PyYAML silently resolves to the LAST occurrence — the fixture's value,
@@ -5213,9 +5218,12 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
     spec_rel = "docs/superpowers/specs/2026-09-20-fixture-design.md"
     (repo / spec_rel).parent.mkdir(parents=True, exist_ok=True)
     (repo / spec_rel).write_text("# Fixture\n")
+    from tests.unit.skeleton_override import write_skeleton_override
+
     slug = "2026-05-09-fixture-minimal"
     plan_rel = f"docs/superpowers/plans/{slug}"
     shutil.copytree(_FIXTURE_PLAN, repo / plan_rel)
+    write_skeleton_override(repo)  # sole-skeleton fixture, debug journal C2
 
     def step(argv: list[str]) -> None:
         result = _invoke(repo, shipped, argv)
