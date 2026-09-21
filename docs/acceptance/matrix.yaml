@@ -3222,10 +3222,14 @@ rows:
       as a local HTML file, with no Artifact tool and no server
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm. Target ci: collect/render unit tests over captured gh
-      fixtures (Test Plan 1, 5, 7).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'Test Plan items 5 and 7: render groups a repo''s captured-fixture facts
+      by tier with Unranked first, carries the filter/sort data attributes, writes triage.html
+      via the CLI, and two renders under different patched clocks are byte-identical.
+      Collect side proven by test_triage_collect.py (items 1-3).'
   - id: triage-org-scope
     capability: Backlog triage
     acceptance: An operator can triage every non-archived repo of an org into one board,
@@ -3244,10 +3248,15 @@ rows:
       in its own Unranked tier, and fr triage check names it'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm. The failure the Artifact board had: four new issues
-      were missing and nothing reported it. Target ci (Test Plan 4, 5).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+      - super-fr:tests/unit/test_triage_check.py
+    status: ci
+    notes: 'Test Plan items 4 and 5: check reports unranked, settled, orphaned and unreachable
+      (unviewed or skipped-repo judgements never orphaned), exit 0 throughout; render
+      puts the unranked issue in the first tier, labelled not yet triaged with the fr-triage
+      prompt, also when judgements.yaml is missing.'
   - id: triage-stage-derived
     capability: Backlog triage
     acceptance: Each issue's stage (backlog, blocked, PR draft, PR ready, merged, closed)
@@ -3266,10 +3275,14 @@ rows:
       filed by anyone render as inert text'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm. Business-level because org scope renders text from every
-      contributor. Target ci (Test Plan 6).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'Test Plan item 6: a <script> title, a </script> body and a markup label
+      render only escaped, the page''s single script element carries no facts text,
+      and inline markup escapes first then allows only code and bold. check''s human
+      output escapes rich markup (r7, test_triage_check.py).'
   - id: triage-skill-claude-code
     capability: Backlog triage
     acceptance: An agent on Claude Code can follow fr-triage end to end for a repo and
