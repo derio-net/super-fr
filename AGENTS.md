@@ -90,6 +90,24 @@ uv workspace monorepo, version lockstepped across every manifest (see
     declaration, and `check.py` is the only bridge between the two. CLI:
     `fr harness parity` (`commands/harness_cmd.py`). `prose.py`'s
     `scan_prose` is the sibling tool-neutrality scanner over skill prose.
+  - **`fr/triage`** (2026-09-21 spec, `fr-triage`) — backlog triage, split
+    into a deterministic **engine** (`fr triage {collect,check,render}`,
+    `commands/triage_cmd.py`) and a thin **skill**
+    (`plugins/super-fr/skills/fr-triage/`) that holds only the judgement
+    discipline. The split is forced: the OpenCode/Hermes mirrors copy only
+    `SKILL.md`, so a script bundled beside a skill never reaches them — only
+    the `fr` wheel reaches every harness. State lives under
+    `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
+    `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
+    agent's, shape in spec §3.D), `triage.html` (render). It is never
+    committed by default, so it is NOT an artifact kind. `collect.py`'s
+    `Forge` protocol (one implementation, `GhForge` over `fr.gh`) is the one
+    place a second forge lands — a new class, not an edit to the collector.
+    `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
+    touches a registered artifact), so the migration gate never refuses it.
+    `check` reports four sets and always exits 0: unranked, settled,
+    orphaned (the only prune candidate) and unreachable (the forge failed to
+    answer or the repo was skipped — never prune those).
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
