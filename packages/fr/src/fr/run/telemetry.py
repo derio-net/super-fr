@@ -73,8 +73,9 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -126,6 +127,20 @@ class UsageTotals:
     cache_read_input_tokens: int = 0
     output_tokens: int = 0
     assistant_records: int = 0
+    served_models: tuple[str, ...] = field(default=(), compare=False)
+    """Distinct `message.model` values of the assistant records, in order of
+    first appearance — the model that actually SERVED the transcript. Not the
+    agent metadata's `model`, which is the dispatch REQUEST (`"opus"`), i.e.
+    the same claim the orchestrator already made (2026-09-21 debug journal C3).
+    `compare=False`: this value's equality is the four FIGURES, and who served
+    them is provenance beside them, not part of the sum."""
+
+    @property
+    def served_model(self) -> str | None:
+        """The one model that served every record, or several joined by `+`
+        (never observed for a subagent, but a mid-dispatch switch must not be
+        reported as either model alone); `None` when no record named one."""
+        return "+".join(self.served_models) or None
 
     @property
     def total(self) -> int:
@@ -210,17 +225,22 @@ def read_claude_code(path: Path) -> UsageTotals | None:
         return None
     totals = dict.fromkeys(USAGE_KEYS, 0)
     seen = 0
+    served: list[str] = []
     for record in records:
         usage = _usage_of(record)
         if usage is None:
             continue
         seen += 1
+        # `_usage_of` already proved `message` is a Mapping.
+        model = record["message"].get("model")
+        if isinstance(model, str) and model and model not in served:
+            served.append(model)
         for key in USAGE_KEYS:
             value = usage.get(key)
             # `isinstance(True, int)` is True in Python; a boolean is not a count.
             if isinstance(value, int) and not isinstance(value, bool):
                 totals[key] += value
-    return UsageTotals(**totals, assistant_records=seen)
+    return UsageTotals(**totals, assistant_records=seen, served_models=tuple(served))
 
 
 # --- 2. attributing: which dispatch does a transcript answer for? --------
@@ -527,6 +547,53 @@ class ClaudeCodeReader:
         return measure_dispatch(
             session, agent=agent, start=start, end=end, same_session=same_session
         )
+
+
+_ORCHESTRATOR_TAIL_BYTES = 512 * 1024
+"""How far back from the end `orchestrator_model` looks. A live orchestrator
+transcript runs to tens of MB and this is read on every `advance`; the last
+assistant record is always near the end, so the tail is the whole question."""
+
+
+def orchestrator_model(env: Mapping[str, str]) -> str | None:
+    """The model THIS session's orchestrator is running on right now — the
+    `message.model` of the last main-thread assistant record in its transcript
+    — or `None` when that cannot be observed.
+
+    2026-09-21 debug journal C3: the orchestrator runs every non-dispatched
+    unit (spec-review, plan, review, deliver) and fr recorded no model for any
+    of it, on the grounds that it "cannot see" one. It can: the transcript names
+    it. Observed, never resolved — a tier binding says what SHOULD run; this
+    says what DID, which is the only thing a cursor may record without it being
+    a claim. Sidechain (subagent) records are skipped: their model is the
+    subagent's. Claude Code only, like the rest of this module; never raises.
+    """
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    try:
+        transcript = claude_code_session(env)
+        if transcript is None:
+            return None
+        with transcript.open("rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - _ORCHESTRATOR_TAIL_BYTES))
+            tail = fh.read().decode("utf-8", errors="replace")
+    except (OSError, HarnessError):
+        return None
+    for line in reversed(tail.splitlines()):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # the first line of the tail, or a half-written last one
+        if not isinstance(record, dict) or record.get("isSidechain") is True:
+            continue
+        if _usage_of(record) is None:
+            continue
+        model = record["message"].get("model")
+        if isinstance(model, str) and model:
+            return model
+    return None
 
 
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}

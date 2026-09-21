@@ -2485,6 +2485,138 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     assert snap.handoff_chars > 0
 
 
+def test_resolve_records_the_served_model_not_the_claimed_alias(tmp_path: Path) -> None:
+    """2026-09-21 debug journal C3: the cursor recorded `model: opus` — the
+    alias the orchestrator typed — while the executor's own transcript said
+    `claude-opus-5` on every assistant record, and fr was already reading that
+    transcript for `measured:`. A claim held beside the measurement that
+    contradicts it. The captured fixture has the same split: its metadata says
+    `sonnet` (the request), its assistant records `claude-sonnet-5` (the
+    model that actually served it). The measurement wins."""
+    from fr.run import units
+
+    from tests.unit.transcript_sessions import dispatched_at
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
+    at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
+    assert at is not None
+    dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
+
+    result = _invoke_measurable(
+        repo,
+        shipped,
+        [
+            "run", "resolve", "r1", "--step", "code", "--item", "phase/1",
+            "--state", "done", "--model", "sonnet",
+        ],
+        root,
+        "sess-1",
+    )  # fmt: skip
+
+    assert result.exit_code == 0, result.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/code")
+    assert attempt is not None
+    assert attempt.model == "claude-sonnet-5"
+
+
+def _orchestrator_session(root: Path, session_id: str, model: str) -> None:
+    """A captured orchestrator transcript whose last main-thread assistant
+    record says `model` — what a session looks like after `/model <model>`."""
+    from tests.unit.transcript_sessions import ORCHESTRATOR, copy_of, records, write_session
+
+    rows = records(ORCHESTRATOR)
+    last = copy_of(next(r for r in rows if r.get("type") == "assistant"))
+    last["message"]["model"] = model
+    write_session(root, session_id=session_id, rows=[*rows, last])
+
+
+def test_advance_records_the_observed_model_of_an_orchestrator_run_step(tmp_path: Path) -> None:
+    """2026-09-21 debug journal C3: every orchestrator-run unit of the first
+    fr-goal run after #508 (spec-review, plan, review-phase, deliver) recorded
+    no model, although the whole run went through on claude-sonnet-5. The
+    transcript names the model; fr now records what it OBSERVES — never a tier
+    resolution, which is what once wrote seven false reviews into the archive."""
+    from fr.run import units
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    root = tmp_path / "projects"
+    _orchestrator_session(root, "sess-o", "claude-sonnet-5")
+    _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"],
+        root,
+        "sess-o",
+    )
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-o")
+
+    assert result.exit_code == 0, result.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "step/plan")
+    assert attempt is not None
+    assert attempt.agent_type is None
+    assert attempt.model == "claude-sonnet-5"
+
+
+def test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model(tmp_path: Path) -> None:
+    """Record + warn, never block (operator decision, debug journal C3): an
+    `orchestrator` key in models.yaml is the contract, the transcript is the
+    observation, and a mismatch is said out loud on every `advance` — the
+    run is not refused, because the operator's `/model` choice outranks it."""
+    repo = _repo(tmp_path)
+    (repo / "docs" / "superpowers").mkdir(parents=True, exist_ok=True)
+    (repo / "docs" / "superpowers" / "models.yaml").write_text(
+        "claude-code:\n  orchestrator: claude-opus-5\n"
+    )
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    root = tmp_path / "projects"
+    _orchestrator_session(root, "sess-o", "claude-sonnet-5")
+    _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"],
+        root,
+        "sess-o",
+    )
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-o")
+
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.stderr.split())
+    assert "orchestrator is running on claude-sonnet-5" in flat
+    assert "orchestrator to claude-opus-5" in flat
+
+
+def test_advance_is_silent_when_the_orchestrator_matches_its_binding(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "docs" / "superpowers").mkdir(parents=True, exist_ok=True)
+    (repo / "docs" / "superpowers" / "models.yaml").write_text(
+        "claude-code:\n  orchestrator: claude-opus-5\n"
+    )
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    root = tmp_path / "projects"
+    _orchestrator_session(root, "sess-o", "claude-opus-5")
+    _invoke_measurable(
+        repo,
+        shipped,
+        ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"],
+        root,
+        "sess-o",
+    )
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-o")
+
+    assert result.exit_code == 0, result.output
+    assert "orchestrator is running on" not in result.stderr
+
+
 def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) -> None:
     """Degradation is never a zero: an unmeasurable unit keeps `None` in all
     four fields, which is what `status` reports as an absence."""

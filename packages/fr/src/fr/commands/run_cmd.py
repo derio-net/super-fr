@@ -502,7 +502,11 @@ def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
     if measured is None:
         return state
     return units.with_measured(
-        state, step_id, key, MeasuredTokens.model_validate(measured.totals.as_fields())
+        state,
+        step_id,
+        key,
+        MeasuredTokens.model_validate(measured.totals.as_fields()),
+        served_model=measured.totals.served_model,
     )
 
 
@@ -1294,6 +1298,45 @@ def _resolved_model(repo_root: Path, harness: str | None, tier: str | None) -> s
     return resolve_model(harness, tier, repo_cfg=repo_cfg, user_cfg=user_cfg)
 
 
+ORCHESTRATOR_ROLE = "orchestrator"
+"""The models.yaml key binding the ORCHESTRATOR's model, beside the phase tiers
+(`claude-code: {orchestrator: claude-opus-5, standard: …}`). A role, not a
+tier: nothing dispatches to it, so it is only ever compared, never resolved
+into a dispatch (2026-09-21 debug journal C3)."""
+
+
+def _orchestrator_model_notice(repo_root: Path) -> str | None:
+    """A loud line when the orchestrator runs on a model other than the one
+    bound to `orchestrator` for this harness — else `None`.
+
+    Record + warn, NEVER block (operator decision, debug journal C3): the
+    session model is the operator's `/model` choice and outranks the binding.
+    Silent with no binding (no contract was asked for) and silent when the
+    running model cannot be observed — an unobservable model is not a mismatch,
+    and saying so on every harness without a transcript reader would be noise.
+    """
+    from fr.run.telemetry import orchestrator_model
+
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        # A bad FR_HARNESS is `advance`'s gate path's error to raise (exit 2,
+        # naming the variable); a notice must never pre-empt it.
+        return None
+    bound = _resolved_model(repo_root, harness, ORCHESTRATOR_ROLE)
+    if bound is None:
+        return None
+    running = orchestrator_model(os.environ)
+    if running is None or running == bound:
+        return None
+    return (
+        f"warning: this run's orchestrator is running on {running}, but models.yaml "
+        f"binds the {harness} orchestrator to {bound}. Every non-dispatched step "
+        f"(brainstorm, reviews, deliver) runs on the orchestrator's model. Switch "
+        f"with `/model` if that was not intended; fr records the model it observes."
+    )
+
+
 def _open_dispatch(
     state: RunState,
     step_id: str,
@@ -1323,7 +1366,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import current_session
+    from fr.run.telemetry import current_session, orchestrator_model
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -1338,17 +1381,21 @@ def _open_dispatch(
             dispatched=at or _now(),
             agent_type=agent_type,
             harness=harness,
-            # Only for work fr DISPATCHED to a tier. A tier binding answers
-            # "which model does a dispatched agent of this tier get"; an
-            # attempt with no `agent_type` is the orchestrator running the unit
-            # in its own session, on a model fr cannot see. Such a member still
-            # inherits its group's tier, so resolving it here wrote a model for
-            # work that tier never touched — seven false `claude-opus-5`
-            # reviews in this repo's own archive. `harness` above is different:
-            # fr detects that about its own process. The orchestrator may still
-            # REPORT a model (`claim`/`resolve --model`); fr will not say it
-            # on its behalf.
-            model=_resolved_model(repo_root, harness, tier) if agent_type is not None else None,
+            # A tier is resolved only for work fr DISPATCHED to a tier. A tier
+            # binding answers "which model does a dispatched agent of this tier
+            # get"; an attempt with no `agent_type` is the orchestrator running
+            # the unit in its own session. Such a member still inherits its
+            # group's tier, so resolving it here wrote a model for work that
+            # tier never touched — seven false `claude-opus-5` reviews in this
+            # repo's own archive. That lesson stands. What changed (2026-09-21
+            # debug journal C3) is that the orchestrator's model is no longer
+            # invisible: its own transcript names it, so fr records what it
+            # OBSERVES there — never a resolution — and `None` when it cannot.
+            model=(
+                _resolved_model(repo_root, harness, tier)
+                if agent_type is not None
+                else orchestrator_model(os.environ)
+            ),
             # Derived from fr's OWN environment, exactly like `harness` — the
             # agent never reports it (§4.D.1). It is what lets a later session
             # read the RIGHT transcript directory, and what stops a window
@@ -2125,6 +2172,9 @@ def start_cmd(
     # the failure look like "the session is here" while the cursor the session
     # was bound for does not exist.
     _bind_session(workspace, branch, *_sessions.ambient_binding(session, harness, os.environ))
+    notice = _orchestrator_model_notice(workspace)
+    if notice is not None:
+        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
 
 @run_app.command("adopt")
@@ -2537,6 +2587,12 @@ def advance_cmd(
     except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
+
+    # Every advance, not once at start: `/model` can move mid-run, and the
+    # moment a turn is spent on the wrong model is the moment to hear it (C3).
+    notice = _orchestrator_model_notice(repo_root)
+    if notice is not None:
+        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
     record = state.steps.get(state.cursor)
     if record is None:

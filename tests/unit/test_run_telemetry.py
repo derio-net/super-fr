@@ -741,3 +741,50 @@ def test_no_hostname_is_recorded_or_read_anywhere_in_telemetry() -> None:
     assert "gethostname" not in source
     assert "socket" not in source
     assert "platform.node" not in source
+
+
+# --- the orchestrator's own model (2026-09-21 debug journal C3) ----------
+
+
+def test_orchestrator_model_is_the_last_main_thread_assistant_model(tmp_path: Path) -> None:
+    """The orchestrator runs every non-dispatched unit in its own session, and
+    until now fr recorded no model for that work because it "could not see"
+    one. The session transcript names it on every assistant record. The LAST
+    one is the model running now — a `/model` switch mid-session moves it."""
+    from fr.run.telemetry import orchestrator_model
+
+    root = tmp_path / "projects"
+    rows = records(ORCHESTRATOR)
+    later = copy_of(next(r for r in rows if r.get("type") == "assistant"))
+    later["message"]["model"] = "claude-sonnet-5"
+    write_session(root, session_id="sess-o", rows=[*rows, later])
+    env = {
+        "FR_TRANSCRIPT_ROOT": str(root),
+        "CLAUDE_CODE_SESSION_ID": "sess-o",
+        "CLAUDECODE": "1",
+    }
+    assert orchestrator_model(env) == "claude-sonnet-5"
+
+
+def test_orchestrator_model_is_none_when_no_transcript_is_readable(tmp_path: Path) -> None:
+    """Not observable is `None`, never a guess — and never the binding."""
+    from fr.run.telemetry import orchestrator_model
+
+    env = {"FR_TRANSCRIPT_ROOT": str(tmp_path), "CLAUDE_CODE_SESSION_ID": "nope", "CLAUDECODE": "1"}
+    assert orchestrator_model(env) is None
+    assert orchestrator_model({"FR_TRANSCRIPT_ROOT": str(tmp_path)}) is None
+
+
+def test_orchestrator_model_ignores_sidechain_records(tmp_path: Path) -> None:
+    """A subagent's records can be interleaved in some harness builds; they are
+    the SUBAGENT's model, not the orchestrator's."""
+    from fr.run.telemetry import orchestrator_model
+
+    root = tmp_path / "projects"
+    rows = records(ORCHESTRATOR)
+    side = copy_of(next(r for r in rows if r.get("type") == "assistant"))
+    side["isSidechain"] = True
+    side["message"]["model"] = "claude-haiku-4-5"
+    write_session(root, session_id="sess-s", rows=[*rows, side])
+    env = {"FR_TRANSCRIPT_ROOT": str(root), "CLAUDE_CODE_SESSION_ID": "sess-s", "CLAUDECODE": "1"}
+    assert orchestrator_model(env) == "claude-opus-5"
