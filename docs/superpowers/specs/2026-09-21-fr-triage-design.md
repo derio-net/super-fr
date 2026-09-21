@@ -117,10 +117,22 @@ whatever same-numbered issue sat in the wrong repo — a plausible, wrong board.
 repository is outside the scope is dropped: in repo scope that means any other repo, in org scope
 any other owner.
 
-Org scope enumerates repos with the existing `fr.gh.list_repos(owner=)`, which already excludes
-archived repos. That call has its own hardcoded `--limit 200`, so the repo list is a third list
-that can be cut short. It gets the same treatment: when it returns exactly its limit, `collect`
-records the possibly-truncated warning (review `r-p1-repo-cap`). A repo whose issue list fails — issues disabled, no access — is recorded under
+Org scope enumerates repos with `fr.gh.list_repos(owner=, include_archived=True)`. The repo list
+is a third list that can be cut short, so it gets the same treatment: when it returns exactly its
+limit, `collect` records the possibly-truncated warning (review `r-p1-repo-cap`). Archived repos
+are counted *before* they are dropped. Counting after the filter would hide a full list that
+happens to contain archived repos, which is precisely the truncation the warning exists for.
+
+**When there is nothing to show, exit 2 rather than write a board** (review `r-p2-empty`). Repo
+scope whose one repo fails, and org scope where every repo is skipped, both exit 2 with the
+reasons. An empty `facts.json` would render as a clean backlog, a failure reported as a clean
+result. The "one unreadable repo never aborts the board" rule is about org scope with at least one
+readable repo.
+
+**A judged issue that could not be viewed is recorded, not dropped** (review `r-p2-unviewed`).
+`view_issue` fails for a deleted issue, and also for a rate limit, a 5xx or a token without access.
+Only the forge can tell those apart, and it does not. So every failure is recorded under
+`unviewed` with its key and reason. `check` reports those separately, and never as orphaned. A repo whose issue list fails — issues disabled, no access — is recorded under
 `skipped` with its reason and the collection continues. One unreadable repo never aborts the
 board.
 
@@ -158,6 +170,13 @@ patterns:
 **Key grammar:** `"<repo-name>#<number>"` in **both** scopes, so there is one code path. In
 repo scope every key simply shares a prefix.
 
+**Keys and scope names are case-insensitive, and lowercase is canonical** (review
+`r-p2-case`). GitHub repo names are case-insensitive, so `Super-FR#5` and `super-fr#5` are the
+same issue, and `--repo Derio-Net/Super-FR` must name the same state directory as
+`--repo derio-net/super-fr`. Every key is lowercased at one point, on construction and on load,
+and `collect`, `check` and `render` all compare through that one function. Two judgement keys that
+differ only by case are refused on load as a conflict, never silently merged.
+
 `detail`, `note` and pattern `body` accept exactly two inline forms — `` `code` `` and
 `**bold**` — applied **after** HTML escaping. Nothing else is interpreted.
 
@@ -169,7 +188,7 @@ repo scope every key simply shares a prefix.
 | `merged` | open, but a PR naming it has merged |
 | `pr-ready` | open, with an open non-draft PR naming it |
 | `pr-draft` | open, with an open draft PR naming it |
-| `blocked` | open, no PR, and carrying a label named `blocked` (case-insensitive) |
+| `blocked` | open, no open or merged PR, and carrying a label named `blocked` (case-insensitive). A PR closed without merging advances nothing, so it does not unblock (review `r-p2-blocked`) |
 | `backlog` | anything else |
 
 The most advanced linked PR wins. The page is read-only; "moving" an issue means doing the work
@@ -180,13 +199,16 @@ preference.
 
 ### F. `check` — make debt visible
 
-`check` reports three sets:
+`check` reports four sets:
 
 - **unranked** — in `facts`, with no judgement. These are the rows the board silently lacked.
 - **settled** — judged, and now `closed` or `merged`. Kept and rendered as done; listed so the
   agent can note what shipped.
 - **orphaned** — a judgement whose issue collect could not find at all, such as a deleted issue
-  or a typo'd key.
+  or a typo'd key. A judgement is **not** orphaned when its issue is in `unviewed` (the forge
+  failed to answer) or when its repo is in `skipped`. Those are reported as **unreachable**, with
+  the reason, because pruning a judgement over a transient failure would destroy the ranking
+  (review `r-p2-unviewed`).
 
 It exits 0 in every case. The sets are the work queue for the skill, not a failure. `--json`
 emits them for machine use.
@@ -282,7 +304,7 @@ It drives `collect → check → judge the unranked → render --open`, and trea
    repo outside the scope is dropped (`r2`).
 3. Unit, stage derivation: one case per row of §3.E, including "a merged PR naming a still-open
    issue" → `merged`.
-4. Unit, `check`: the unranked, settled and orphaned sets, and exit 0 in every case. An issue
+4. Unit, `check`: the unranked, settled, orphaned and unreachable sets — a judgement in `unviewed` or in a `skipped` repo is unreachable, never orphaned — and exit 0 in every case. An issue
    titled `[manual] x [/red]` prints verbatim and does not raise (`r7`).
 4a. Unit: `triage` is in `READ_ONLY_COMMANDS`, and the pinned exemption-list test is updated
    with the argument from §3.F′ (`r3`). The state directory is `$HOME/.cache/fr/triage/<scope>`

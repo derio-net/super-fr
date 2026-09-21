@@ -43,7 +43,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-09-21T17:20:36+00:00'
+    at: '2026-09-21T17:41:33+00:00'
     members:
     - implement-phase
     - review-phase
@@ -73,17 +73,62 @@ steps:
             cache_read_input_tokens: 3953735
             output_tokens: 23126
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-21T17:20:36+00:00'
           harness: claude-code
+          model: claude-opus-5
           session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
+          returned: '2026-09-21T17:24:51+00:00'
+          outcome: done
           estimate:
             journal_entries: 11
             journal_lines: 56
             handoff_chars: 3339
             spec_bytes: 17716
             plan_bytes: 26544
+          measured:
+            input_tokens: 32
+            cache_creation_input_tokens: 129529
+            cache_read_input_tokens: 1204488
+            output_tokens: 7910
+        evidence:
+          review: review-p1
+          findings: r-p1-exempt-prose,r-p1-test-split
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T17:25:02+00:00'
+          agent: af38b4f0c1857cdc6
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
+          returned: '2026-09-21T17:41:32+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 22
+            journal_lines: 111
+            handoff_chars: 9677
+            spec_bytes: 18374
+            plan_bytes: 26544
+          measured:
+            input_tokens: 226
+            cache_creation_input_tokens: 287567
+            cache_read_input_tokens: 10847089
+            output_tokens: 61104
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-21T17:41:33+00:00'
+          harness: claude-code
+          session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
+          estimate:
+            journal_entries: 30
+            journal_lines: 151
+            handoff_chars: 9025
+            spec_bytes: 18374
+            plan_bytes: 27048
   journal-check:
     state: pending
   deliver:
