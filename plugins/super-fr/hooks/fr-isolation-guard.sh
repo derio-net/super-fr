@@ -235,8 +235,11 @@ fi
 # the worktree (fr.run.workspace, review fix r2-f5). fr-goal makes it the FIRST
 # action, so denying it from the base clone made the skill's first instruction
 # unexecutable on Claude Code — but only in a repo that already had some linked
-# worktree; with none, the self-heal below retires the sentinel first, which is
-# why this hid. `start` ONLY: `adopt` deliberately writes where it is run, and
+# worktree; with none, the COUNT-based heal this file used to carry retired the
+# sentinel first, which is why this hid. That heal is gone (#529: a fresh
+# pipeline IS the zero-worktree case), so this allowance is now the only thing
+# keeping the skill's first action executable. `start` ONLY: `adopt`
+# deliberately writes where it is run, and
 # every other run verb belongs in the workspace `start` prints. It does not
 # retire the sentinel — entering a pipeline is not ending one.
 if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+run[[:space:]]+start([[:space:]]|$)'; then
@@ -254,8 +257,9 @@ fi
 #     strip still fired and the match still succeeded.
 #   * any multi-line command, including a heredoc merely quoting the command in
 #     prose — now excluded upstream by the first-line rule.
-# Fails CLOSED: a sentinel that lingers is self-healed when the last worktree
-# goes (#341, below), whereas a pipeline ended by mistake is not recoverable.
+# Fails CLOSED: a sentinel that lingers is self-healed when its own stamped
+# workspace is gone (below), whereas a pipeline ended by mistake is not
+# recoverable.
 down_targets_this_repo() {
   [ -z "${cd_other_repo:-}" ] || return 1
   if [ -n "${cd_target:-}" ] && [ -z "${rtarget:-}" ]; then return 1; fi
@@ -282,23 +286,80 @@ if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation([[:space
   exit 0
 fi
 
-# Self-heal (#341 Task 2A): if the pipeline's sentinel has outlived all
-# worktrees, the `cd <worktree>` escape below is unsatisfiable — denying is pure
-# deadlock. Detect zero linked worktrees via a SUCCESSFUL `git worktree list`
-# (exactly one `worktree ` line = the main checkout) and fail open, clearing the
-# orphaned sentinel so the next command sees no active pipeline. Gated on git
-# success so a non-git cwd fails closed (keeps the discipline; the `fr isolation
-# down --all` escape and the guard tests both rely on this). Companion:
-# clear_repo_sentinels() in fr/isolation/types.py (the eager, explicit lever).
-if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
-  n=$(printf '%s\n' "$wt" | grep -c '^worktree ' || true)
-  if [ "${n:-0}" -eq 1 ]; then
-    rm -f "$sentinel" || true
+# Self-heal (#341 Task 2A, rebuilt for #472/#529): if this session's workspace
+# is gone, the `cd <worktree>` escape below is unsatisfiable and denying is pure
+# deadlock. The decision is PER SENTINEL and reads a RECORDED fact, never a
+# repo-wide count.
+#
+# The count it replaces (`grep -c '^worktree '` == 1, i.e. "no linked worktree
+# survives") was a proxy for a per-session question, and it failed in BOTH
+# directions:
+#   * #472 — never heals. ANY other session's worktree, or a Claude subagent
+#     checkout, keeps the count above one, so a session whose own workspace was
+#     reaped stayed locked out of every base-clone command.
+#   * #529 — heals too eagerly. A FRESH pipeline has not cut its worktree yet,
+#     so the count is also one: the first base-repo command (`ls` included)
+#     retired the sentinel and silently disarmed the guard for the whole
+#     session. That is why #508's `fr run start` deny only reproduced in a repo
+#     that already had some worktree.
+# The two cannot both be fixed by any count: "never had a workspace" versus
+# "had one, lost it" is not inferable from `git worktree list`.
+#
+# So the sentinel records it. `fr.isolation.types.stamp_sentinel_workspace`
+# (called from `attach`, the one place a session is bound) writes `workspace`:
+# the worktree path RELATIVE to `${HOME}/.cache/fr`. Three states:
+#   fresh     — no `workspace` key. Armed, never healed. A legacy sentinel and
+#               an unstampable workspace (outside the cache dir) read as fresh:
+#               fail-closed, bounded by `fr isolation down` and the 48h GC.
+#   live      — the stamped directory exists AND is a listed linked worktree of
+#               this repo. Armed.
+#   orphaned  — stamped, and not that. Retire THIS sentinel only (another
+#               session's is not ours to remove) and allow.
+# Both sides of the path comparison are `pwd -P`'d: on macOS `$HOME` and
+# `$TMPDIR` are reached through symlinks, and an unresolved compare reads a
+# live workspace as orphaned — the #529 disarm by another route.
+# A FAILED `git worktree list` (non-git cwd) is unknown, not orphaned: it falls
+# through and denies, as it always has. Companion: clear_repo_sentinels() in
+# fr/isolation/types.py (the eager, explicit lever).
+sentinel_workspace=$(jq -r '.workspace // empty' "$sentinel" 2>/dev/null || true)
+if [ -n "$sentinel_workspace" ]; then
+  if rws=$(cd "$HOME/.cache/fr/$sentinel_workspace" 2>/dev/null && pwd -P); then
+    if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
+      listed=0
+      while IFS= read -r line; do
+        case "$line" in
+          "worktree "*)
+            wpath=${line#worktree }
+            if rwt=$(cd "$wpath" 2>/dev/null && pwd -P) && [ "$rwt" = "$rws" ]; then
+              listed=1
+              break
+            fi
+            ;;
+        esac
+      done <<< "$wt"   # herestring, not a heredoc: a path with a `$` in it is
+                       # data here, never re-expanded — and the loop must stay
+                       # in THIS shell, so a pipe is not an option ($listed).
+      if [ "$listed" -eq 0 ]; then   # stamped dir survives, but is no workspace
+        rm -f "$sentinel" || true
+        exit 0
+      fi
+    fi
+  else
+    rm -f "$sentinel" || true        # the stamped workspace is gone
     exit 0
   fi
 fi
 
-if [ -n "${cd_same_repo_worktree:-}" ]; then
+if [ -n "${cd_target:-}" ] && ! [ -d "$cd_target" ]; then
+  # #432: the prescribed escape is `cd <worktree>`, and the commonest reason it
+  # fails is that the worktree is GONE — fr removes a workspace once its branch
+  # merges, and the 48h GC reaps the rest. Answering that with the generic "work
+  # in the worktree" text sends the operator back to a path that no longer
+  # exists. `cd_target` has already been tilde-expanded above; an unexpanded
+  # `$VAR` lands here too, which is honest enough (the hook performs no shell
+  # expansion, so that path really is not a directory it can see).
+  reason="fr-isolation: \`$cd_target\` no longer exists, so this \`cd\` cannot succeed — an fr workspace is removed once its branch merges, and unused ones are GC'd after 48h. Where are this session's live workspaces? \`fr isolation status\`. Start a fresh one with \`fr isolation up --branch <name>\` (prefix \`FR_ISOLATION_TARGET=worktree\` if this repo has no devcontainer profile) and work from the path it reports; \`fr isolation exec -- …\` runs a one-off there. A live pipeline still gates base-repo commands — that part is unchanged. See plugins/super-fr/rules/fr-isolation-required.md (#432)."
+elif [ -n "${cd_same_repo_worktree:-}" ]; then
   # Same repository, different linked worktree — NOT "another repo". Naming it
   # one, and recommending `fr isolation up` inside it, is incoherent (rev2-f4).
   reason="fr-isolation: \`${cd_other_repo:-${rtarget:-}}\` is a linked worktree of THIS repo, but it carries no valid \`.fr-isolation\` marker, so it is not an isolation workspace. Run \`fr isolation up --branch <branch>\` (allowed from here) and work from the workspace it reports, or add this path to FR_CD_ALLOW_PREFIXES if it is a worktree you manage yourself. See plugins/super-fr/rules/fr-isolation-required.md."
@@ -318,7 +379,15 @@ elif [ -n "${cd_other_repo:-}" ]; then
     reason="fr-isolation: \`$cd_other_repo\` is not fr-managed, so there is no isolation to enter and this hook has no opinion about that repo's own tooling — the deny is only about a live pipeline in \`$rroot\` reaching sideways mid-run. Finish or end this pipeline (\`fr isolation down\`), or run the command from a session that holds no pipeline. FR_BASE_OK=1 also disables the gate, but the hook reads it from its OWN environment: an inline \`FR_BASE_OK=1 <cmd>\` is not parsed, so it has to be set where the harness is launched. See plugins/super-fr/rules/fr-isolation-required.md (#421)."
   fi
 else
-  reason="fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Run via \`fr isolation exec -- …\` (or \`fr isolation up\` first), or lead with \`cd <worktree> && …\` to work from the worktree cwd. Working in a DIFFERENT repo? \`cd <other-repo> && fr isolation up\` is allowed from here (prefix \`FR_ISOLATION_TARGET=worktree\` if that repo has no devcontainer profile) — enter that repo's isolation and work from its worktree. No worktree left? \`fr isolation down --all\` clears the pipeline. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329/#421)."
+  # The standard denial. It points at THIS session's workspace first (#432):
+  # `fr isolation status` says where it is, `up --branch` makes one when there
+  # is none. `down --all` used to be offered here as the no-worktree escape,
+  # unconditionally and unqualified — to a session that cannot see the other
+  # workspaces it would destroy, uncommitted pre-PR work included. It stays
+  # only as an explicitly-warned last resort, after the two remedies that are
+  # actually this session's to run. (The orphan heal above is what makes it
+  # rarely needed: a session whose own workspace is gone is no longer gated.)
+  reason="fr pipeline active — ALL base-repo commands are gated (not just git/gh), so work runs in the isolation worktree. Where is this session's workspace? \`fr isolation status\`. No workspace yet? \`fr isolation up --branch <name>\` (prefix \`FR_ISOLATION_TARGET=worktree\` if this repo has no devcontainer profile). Then run via \`fr isolation exec -- …\`, or lead with \`cd <worktree> && …\` to work from the worktree cwd. Working in a DIFFERENT repo? \`cd <other-repo> && fr isolation up\` is allowed from here — enter that repo's isolation and work from its worktree. LAST RESORT, and rarely right: \`fr isolation down --all\` acts on EVERY workspace in this repo, including other sessions' — a workspace with no PR yet is torn down with whatever was uncommitted in it. See plugins/super-fr/skills/fr-isolation (exec-bridge discipline, #265/#279/#329/#421/#432)."
 fi
 
 jq -n --arg reason "$reason" \

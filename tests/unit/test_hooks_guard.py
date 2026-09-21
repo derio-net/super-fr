@@ -37,10 +37,25 @@ def run_hook(
     )
 
 
-def write_sentinel(sentinel_dir: Path, repo_root: Path, session: str = "sess-1") -> Path:
+def write_sentinel(
+    sentinel_dir: Path,
+    repo_root: Path,
+    session: str = "sess-1",
+    workspace: str | None = None,
+) -> Path:
+    """Write a session sentinel, optionally STAMPED with a workspace.
+
+    `workspace` is the cache-relative path `fr.isolation.types.
+    stamp_sentinel_workspace` records (e.g. `worktrees/repo/feat__x`). Omitting
+    it produces a FRESH sentinel — the shape `fr-pipeline-sentinel.sh` writes,
+    and the shape every legacy sentinel has.
+    """
     sentinel_dir.mkdir(parents=True, exist_ok=True)
     sentinel = sentinel_dir / f"{session}.json"
-    sentinel.write_text(json.dumps({"repo_root": str(repo_root), "skill": "fr-goal"}))
+    data: dict[str, str] = {"repo_root": str(repo_root), "skill": "fr-goal"}
+    if workspace is not None:
+        data["workspace"] = workspace
+    sentinel.write_text(json.dumps(data))
     return sentinel
 
 
@@ -181,33 +196,144 @@ def _git_repo(path: Path) -> Path:
     return path
 
 
-class TestOrphanedSentinelSelfHeal:
-    """#341 Task 2A: when the sentinel outlives all worktrees, the `cd
-    <worktree>` escape is unsatisfiable — the guard fails open AND clears the
-    orphaned sentinel, but ONLY on a successful `git worktree list` showing zero
-    linked worktrees. A non-git cwd or a repo that still has a linked worktree
-    stays denied."""
+class TestSentinelThreeStates:
+    """#472 / #529: the heal is a per-sentinel decision, not a repo-wide count.
 
-    def test_no_linked_worktree_self_heals(self, tmp_path: Path) -> None:
+    The guard used to clear the sentinel whenever `git worktree list` showed
+    exactly one `worktree ` line (#341 Task 2A). That count is a repo-wide
+    proxy for a per-session fact and it failed in BOTH directions: any other
+    session's worktree kept a genuinely orphaned session locked out (#472),
+    while a FRESH pipeline — which has not cut its worktree yet, so the count
+    is also one — was disarmed by its first base-repo command, `ls` included
+    (#529).
+
+    A sentinel has three states, and which one it is in is a RECORDED fact:
+
+      fresh     no `workspace` key          armed, never healed
+      live      `workspace` names a dir     armed
+                that IS a listed worktree
+      orphaned  `workspace` names one       THIS sentinel retired, allow
+                that is gone (or is no
+                longer a listed worktree)
+
+    `workspace` is cache-relative, so `${HOME}/.cache/fr/<workspace>` is what
+    resolves it — hence the `HOME` override in these setups.
+    """
+
+    def _home(self, tmp_path: Path) -> tuple[Path, dict[str, str]]:
+        home = tmp_path / "home"
+        (home / ".cache" / "fr" / "worktrees").mkdir(parents=True)
+        return home, {"HOME": str(home)}
+
+    # --- fresh: never healed, whatever the worktree count says (#529) -------
+
+    def test_fresh_sentinel_with_zero_worktrees_stays_armed(self, tmp_path: Path) -> None:
+        """#529: the exact shape that used to disarm the guard silently. A
+        pipeline that has not entered isolation yet has no worktree, so the old
+        count was one and the first command — any command — retired the
+        sentinel for the whole session."""
         repo = _git_repo(tmp_path / "repo")
         sentinels = tmp_path / "sentinels"
         sentinel = write_sentinel(sentinels, repo)
-        result = run_hook(payload("git status", repo), sentinels)
-        assert decision(result) is None, "no worktree to cd into → fail open"
-        assert not sentinel.exists(), "orphaned sentinel is cleared on self-heal"
+        result = run_hook(payload("ls", repo), sentinels)
+        assert decision(result) == "deny", "a fresh pipeline is armed, not healed"
+        assert sentinel.exists(), "the sentinel survives its own first command"
 
-    def test_linked_worktree_present_still_denies(self, tmp_path: Path) -> None:
+    def test_legacy_unstamped_sentinel_stays_armed(self, tmp_path: Path) -> None:
+        """A sentinel written before the `workspace` field existed reads as
+        fresh and stays armed — deliberately fail-closed, bounded by the 48h
+        GC and `fr isolation down`."""
         repo = _git_repo(tmp_path / "repo")
-        wt = tmp_path / "wt"
-        _git(repo, "worktree", "add", "-q", str(wt), "-b", "feat/x")
+        _git(repo, "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "feat/x")
         sentinels = tmp_path / "sentinels"
         sentinel = write_sentinel(sentinels, repo)
-        result = run_hook(payload("git status", repo), sentinels)
-        assert decision(result) == "deny", "a live worktree exists → keep the discipline"
-        assert sentinel.exists(), "sentinel preserved while a worktree lives"
+        assert decision(run_hook(payload("git status", repo), sentinels)) == "deny"
+        assert sentinel.exists()
 
-    def test_non_git_cwd_fails_closed(self, tmp_path: Path) -> None:
-        # git worktree list errors on a non-git dir → must NOT self-heal.
+    # --- orphaned: healed regardless of other sessions' worktrees (#472) ----
+
+    def test_orphaned_sentinel_heals_with_another_worktree_present(self, tmp_path: Path) -> None:
+        """#472: the stamped workspace is gone (merged branch, gc-reaped), so
+        the `cd <worktree>` escape is unsatisfiable for THIS session — even
+        though another session's worktree keeps the repo-wide count above one.
+        Only this session's sentinel is retired."""
+        home, env = self._home(tmp_path)
+        repo = _git_repo(tmp_path / "repo")
+        _git(repo, "worktree", "add", "-q", str(tmp_path / "someone-elses"), "-b", "feat/other")
+        sentinels = tmp_path / "sentinels"
+        mine = write_sentinel(sentinels, repo, workspace="worktrees/repo/fix__gone")
+        theirs = write_sentinel(sentinels, repo, session="sess-2", workspace="worktrees/repo/live")
+        assert not (home / ".cache" / "fr" / "worktrees" / "repo" / "fix__gone").exists()
+
+        result = run_hook(payload("git status", repo), sentinels, env)
+
+        assert decision(result) is None, "no workspace to cd into → fail open"
+        assert not mine.exists(), "this session's orphaned sentinel is retired"
+        assert theirs.exists(), "another session's sentinel is not ours to remove"
+
+    def test_stamped_dir_that_is_not_a_listed_worktree_is_orphaned(self, tmp_path: Path) -> None:
+        """A directory surviving at the stamped path is not enough: `git
+        worktree remove` can leave one behind, and a leftover directory is not
+        a workspace."""
+        home, env = self._home(tmp_path)
+        repo = _git_repo(tmp_path / "repo")
+        stale = home / ".cache" / "fr" / "worktrees" / "repo" / "feat__x"
+        stale.mkdir(parents=True)
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo, workspace="worktrees/repo/feat__x")
+
+        result = run_hook(payload("git status", repo), sentinels, env)
+
+        assert decision(result) is None
+        assert not sentinel.exists()
+
+    # --- live: stamped and still a listed worktree → armed -----------------
+
+    def test_live_workspace_keeps_the_discipline(self, tmp_path: Path) -> None:
+        home, env = self._home(tmp_path)
+        repo = _git_repo(tmp_path / "repo")
+        ws = home / ".cache" / "fr" / "worktrees" / "repo" / "feat__x"
+        _git(repo, "worktree", "add", "-q", str(ws), "-b", "feat/x")
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo, workspace="worktrees/repo/feat__x")
+
+        result = run_hook(payload("git status", repo), sentinels, env)
+
+        assert decision(result) == "deny", "the workspace exists → work there"
+        assert sentinel.exists()
+
+    def test_live_workspace_via_symlinked_home(self, tmp_path: Path) -> None:
+        """macOS reaches `$HOME` (and `$TMPDIR`) through symlinks, so the
+        stamped path and `git worktree list`'s path can differ by a symlink
+        alone. Compared unresolved, a live workspace reads as orphaned and the
+        guard disarms itself — the #529 failure by another route."""
+        real, _ = self._home(tmp_path)
+        link = tmp_path / "home-link"
+        link.symlink_to(real)
+        env = {"HOME": str(link)}
+        repo = _git_repo(tmp_path / "repo")
+        _git(
+            repo,
+            "worktree",
+            "add",
+            "-q",
+            str(real / ".cache" / "fr" / "worktrees" / "repo" / "feat__x"),
+            "-b",
+            "feat/x",
+        )
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo, workspace="worktrees/repo/feat__x")
+
+        result = run_hook(payload("git status", repo), sentinels, env)
+
+        assert decision(result) == "deny", "same directory, reached through a symlink"
+        assert sentinel.exists()
+
+    # --- unknown: a failed `git worktree list` fails CLOSED -----------------
+
+    def test_non_git_repo_root_fails_closed(self, tmp_path: Path) -> None:
+        """`git worktree list` errors on a non-git dir: unknown is not
+        orphaned, so the discipline holds."""
         repo = tmp_path / "repo"
         repo.mkdir()
         sentinels = tmp_path / "sentinels"
@@ -215,6 +341,105 @@ class TestOrphanedSentinelSelfHeal:
         result = run_hook(payload("git status", repo), sentinels)
         assert decision(result) == "deny"
         assert sentinel.exists()
+
+    def test_stamped_live_dir_in_non_git_repo_root_fails_closed(self, tmp_path: Path) -> None:
+        home, env = self._home(tmp_path)
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (home / ".cache" / "fr" / "worktrees" / "repo" / "feat__x").mkdir(parents=True)
+        sentinels = tmp_path / "sentinels"
+        sentinel = write_sentinel(sentinels, repo, workspace="worktrees/repo/feat__x")
+        result = run_hook(payload("git status", repo), sentinels, env)
+        assert decision(result) == "deny", "the list failed → unknown, not orphaned"
+        assert sentinel.exists()
+
+
+def reason_of(result: subprocess.CompletedProcess[str]) -> str:
+    assert decision(result) == "deny", "only a denial carries a reason"
+    return str(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"])
+
+
+class TestDenialsSayTheTrueThing:
+    """#432: the deny message must not prescribe a remedy that cannot work, nor
+    one whose blast radius it does not state.
+
+    Two defects, both from the same paragraph. It advertised `fr isolation down
+    --all` unconditionally to a session that cannot see other sessions'
+    workspaces — `--all` tears down EVERY workspace in the repo, pre-PR work
+    included. And when the reason the prescribed `cd <worktree>` was
+    unsatisfiable was that the worktree had been reaped, nothing said so: the
+    operator re-read a message about a path that no longer exists.
+    """
+
+    def _armed(self, tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+        """A live pipeline in a git repo. The sentinel is fresh, so it is armed
+        and stays armed (TestSentinelThreeStates) — these tests are about the
+        text of the denial, not about reaching it.
+
+        `FR_CD_ALLOW_PREFIXES` is pinned at a nonexistent path: `tmp_path` sits
+        under `$TMPDIR` on macOS, so the default prefixes would ALLOW every
+        `cd` below and there would be no message to assert on.
+        """
+        repo = _git_repo(tmp_path / "repo")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        return repo, sentinels, {"FR_CD_ALLOW_PREFIXES": str(tmp_path / "nonexistent")}
+
+    def test_cd_into_a_reaped_worktree_says_it_is_gone(self, tmp_path: Path) -> None:
+        """An fr worktree is removed once its branch merges. The old message
+        answered a question the operator had not asked."""
+        repo, sentinels, env = self._armed(tmp_path)
+        gone = tmp_path / "worktrees" / "repo" / "feat__merged"
+        reason = reason_of(run_hook(payload(f"cd {gone} && git push", repo), sentinels, env))
+        assert "no longer exists" in reason
+        assert str(gone) in reason, "name the path that is gone"
+        assert "fr isolation status" in reason, "where the live workspaces are"
+        assert "fr isolation up --branch" in reason, "how to start a new one"
+
+    def test_cd_gone_message_does_not_advertise_down_all(self, tmp_path: Path) -> None:
+        repo, sentinels, env = self._armed(tmp_path)
+        reason = reason_of(run_hook(payload(f"cd {tmp_path}/nope && ls", repo), sentinels, env))
+        assert "down --all" not in reason
+
+    def test_standard_denial_points_at_status_and_up_first(self, tmp_path: Path) -> None:
+        repo, sentinels, env = self._armed(tmp_path)
+        reason = reason_of(run_hook(payload("cat README.md", repo), sentinels, env))
+        assert "fr isolation status" in reason
+        assert "fr isolation up --branch" in reason
+        assert reason.index("fr isolation status") < reason.index("down --all"), (
+            "find the workspace before being told how to destroy every workspace"
+        )
+
+    def test_down_all_never_appears_without_its_blast_radius(self, tmp_path: Path) -> None:
+        """`--all` is not this session's lever: it acts on every workspace in
+        the repo, other sessions' included, and a workspace with no PR yet is
+        torn down with whatever was uncommitted in it."""
+        repo, sentinels, env = self._armed(tmp_path)
+        reason = reason_of(run_hook(payload("cat README.md", repo), sentinels, env))
+        if "down --all" not in reason:
+            return
+        warning = reason[reason.index("down --all") :].lower()
+        assert "every workspace" in warning
+        assert "other sessions" in warning
+        assert "no pr" in warning
+
+    def test_cross_repo_reason_is_unchanged(self, tmp_path: Path) -> None:
+        """The cd-target-gone branch must not swallow the #421 messages: that
+        target RESOLVED, it is simply another repo."""
+        repo, sentinels, env = self._armed(tmp_path)
+        other = _fr_enable(_git_repo(tmp_path / "other"))
+        reason = reason_of(run_hook(payload(f"cd {other} && git push", repo), sentinels, env))
+        assert "no longer exists" not in reason
+        assert str(other) in reason
+        assert "fr isolation up --branch" in reason
+
+    def test_same_repo_worktree_reason_is_unchanged(self, tmp_path: Path) -> None:
+        repo, sentinels, env = self._armed(tmp_path)
+        wt = tmp_path / "unmarked-wt"
+        _git(repo, "worktree", "add", "-q", str(wt), "-b", "feat/x")
+        reason = reason_of(run_hook(payload(f"cd {wt} && git push", repo), sentinels, env))
+        assert "no longer exists" not in reason
+        assert "linked worktree of THIS repo" in reason
 
 
 class TestBootstrapAllowance:
@@ -270,10 +495,12 @@ class TestRunStartEntersIsolation:
     the skill was rewritten around it. The allowlist never learned the second
     way in.
 
-    It only bit in a repo that ALREADY had some linked worktree, anyone's: with
-    none, the #341 orphan self-heal retires the sentinel on the first command,
-    which is why a fresh repo never showed it. `_sent` uses a non-git dir, where
-    the heal fails closed, so these assertions are about the allowlist alone.
+    It only bit in a repo that ALREADY had some linked worktree, anyone's: the
+    count-based heal of the day retired the sentinel on the first command in a
+    repo with none, which is why a fresh repo never showed it. That heal is gone
+    (#529 — see TestSentinelThreeStates), so the condition now reproduces
+    everywhere. `_sent` uses a non-git dir, where the state decision fails
+    closed, so these assertions are about the allowlist alone.
     """
 
     _sent = TestBootstrapAllowance._sent
@@ -297,7 +524,8 @@ class TestRunStartEntersIsolation:
 
     def test_allowed_in_the_condition_it_was_actually_denied_in(self, tmp_path: Path) -> None:
         """The live report: a real git repo that ALREADY has a linked worktree
-        (anyone's), so the #341 self-heal does not fire and the sentinel stays."""
+        (anyone's) — the condition in which the old count-heal did not fire and
+        the sentinel stayed. A fresh sentinel now stays either way."""
         repo = _git_repo(tmp_path / "repo")
         _git(repo, "worktree", "add", "-q", str(tmp_path / "someone-elses"), "-b", "feat/other")
         sentinels = tmp_path / "sentinels"
@@ -455,8 +683,10 @@ class TestCrossRepoReachability:
     def _setup(self, tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
         """A live pipeline in repo A, with a live linked worktree.
 
-        The worktree matters: without one, the #341 self-heal fires and every
-        command is allowed, so the tests would pass for the wrong reason.
+        The worktree is kept from when the heal counted worktrees and a repo
+        with none had every command allowed — which would have made these tests
+        pass for the wrong reason. A fresh sentinel is armed regardless now
+        (#529), so it is belt-and-braces rather than load-bearing.
         """
         repo_a = _git_repo(tmp_path / "repo-a")
         _git(repo_a, "worktree", "add", "-q", str(tmp_path / "wt-a"), "-b", "feat/x")
@@ -759,8 +989,10 @@ class TestOtherRepoStillHonoursItsOwnIsolation:
 
 
 def pipeline_world(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, str]]:
-    """repo_a with a LIVE linked worktree (so the #341 self-heal cannot fail
-    open and mask every deny), a separate repo_b, and a sentinel for repo_a.
+    """repo_a with a LIVE linked worktree (dating from the count-based heal,
+    which in a worktree-less repo failed open and masked every deny; a fresh
+    sentinel is armed either way now), a separate repo_b, and a sentinel for
+    repo_a.
 
     `FR_CD_ALLOW_PREFIXES` is pointed at a nonexistent path so the prefix loop
     cannot admit anything — these tests are about the target/`fr …` logic only.

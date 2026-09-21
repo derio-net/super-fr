@@ -176,8 +176,10 @@ def clear_repo_sentinels(repo_root: Path) -> int:
     The explicit "drop session state" lever behind `fr isolation down --all`
     (#341 Task 2A). Foreign-repo sentinels are left alone; a malformed /
     unreadable file is skipped, never removed (it isn't ours to interpret). The
-    guard's own self-heal (fail open + clear when no worktree survives) is the
-    lazy backstop; this is the eager path.
+    guard's own self-heal (fail open + clear when THIS session's stamped
+    workspace is gone — see `stamp_sentinel_workspace`) is the lazy, per-session
+    backstop; this is the eager, repo-wide path, and the difference is the
+    blast radius: `--all` retires every session's sentinel for the repo.
     """
     d = sentinel_dir()
     if not d.is_dir():
