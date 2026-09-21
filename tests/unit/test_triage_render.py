@@ -23,7 +23,7 @@ from fr.triage.model import Facts, Judgements, load_facts, load_judgements
 from fr.triage.render import inline, render
 from typer.testing import CliRunner
 
-from tests.unit.triage_fixtures import NOW, SUPER_FR, _super_fr_forge
+from tests.unit.triage_fixtures import NOW, SUPER_FR, _super_fr_forge, forbidden_imports
 
 
 @pytest.mark.parametrize(
@@ -173,10 +173,46 @@ def test_two_renders_are_byte_identical_whatever_the_clock_says(
     assert first == second
 
 
+CLOCKS = ("time", "datetime")
+
+
+def _clock_imports(path: Path) -> list[str]:
+    """Clock imports in *path*, through the seam test's AST walker (not a copy of it)."""
+    return forbidden_imports(path, "fr.triage", CLOCKS)
+
+
 def test_render_reads_no_clock() -> None:
     """The structural half of determinism: render.py imports neither clock."""
-    source = (Path(render.__code__.co_filename)).read_text(encoding="utf-8")
-    assert not re.search(r"^\s*(import|from)\s+(time|datetime)\b", source, flags=re.M)
+    assert _clock_imports(Path(render.__code__.co_filename)) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import time",
+        "import os, time",
+        "import datetime as dt",
+        "from datetime import date",
+        "from time import monotonic as m",
+        "def f():\n    import time",
+        "import importlib\nimportlib.import_module('datetime')",
+        "__import__('time')",
+    ],
+)
+def test_the_clock_check_catches_every_spelling(tmp_path: Path, source: str) -> None:
+    """Non-vacuity (review r-p3-clock-regex): each planted clock import is caught."""
+    plant = tmp_path / "plant.py"
+    plant.write_text(source + "\n", encoding="utf-8")
+
+    assert _clock_imports(plant) != []
+
+
+@pytest.mark.parametrize("source", ["import timeit", "from fr.triage import model", "x = 'time'"])
+def test_the_clock_check_does_not_flag_lookalikes(tmp_path: Path, source: str) -> None:
+    plant = tmp_path / "plant.py"
+    plant.write_text(source + "\n", encoding="utf-8")
+
+    assert _clock_imports(plant) == []
 
 
 def test_the_page_carries_collected_at_and_ranked_at(tmp_path: Path) -> None:
