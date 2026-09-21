@@ -5237,6 +5237,67 @@ def test_run_start_binds_the_session_when_given_one(
     assert [(b.session_id, b.harness) for b in state.sessions] == [("s1", "claude-code")]
 
 
+def test_run_start_binds_the_ambient_session_when_none_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-09-21 debug journal C4: the first fr-goal run after the #508
+    refactor reported `sessions=none` although every cursor attempt recorded
+    the session id. The run was started as `uv run fr run start …` (this repo's
+    AGENTS.md mandates `uv run fr`), which the bind hook's start-anchored
+    `^fr …` regex never matches — and `start` bound nothing without an explicit
+    `--session`, although it already knows the session (`current_session`, the
+    same rule `advance` stamps every attempt with). A missing binding also
+    silences the Stop idle guard (#518), which finds a run only through it.
+
+    The engine now binds what it knows; the hook is no longer the only path.
+    """
+    from fr.isolation.types import load_state
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"],
+        {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": "ambient-1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_state(repo, "feat/x")
+    assert state is not None
+    assert [(b.session_id, b.harness) for b in state.sessions] == [("ambient-1", "claude-code")]
+
+
+def test_run_start_binds_nothing_when_no_session_is_knowable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ambient default must never invent a session: no `--session` and no
+    session id in the environment is exactly the pre-C4 behaviour."""
+    from fr.isolation.types import load_state
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"],
+        {"CLAUDE_CODE_SESSION_ID": None},
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_state(repo, "feat/x")
+    assert state is not None
+    assert state.sessions == []
+
+
 def test_run_start_warns_but_succeeds_when_attach_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

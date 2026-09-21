@@ -201,6 +201,24 @@ def test_up_with_session_attaches(tmp_path: Path, repo: Path, fake_run: list) ->
     assert _index(tmp_path, "s9").is_file()
 
 
+# (f2) up with NO --session binds the session fr already knows (debug C4)
+def test_up_without_session_binds_the_ambient_one(
+    tmp_path: Path, repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`uv run fr isolation up …` never matched the bind hook's `^fr …`
+    regex, so a workspace entered that way stayed `sessions=none` and the Stop
+    idle guard could not find its run. The engine binds what it knows."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "amb-7")
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/z"])
+    assert res.exit_code == 0, res.output
+    assert "isolation up: worktree=" in res.output
+    state = load_state(repo, "feat/z")
+    assert state is not None
+    assert [(b.session_id, b.harness) for b in state.sessions] == [("amb-7", "claude-code")]
+    assert _index(tmp_path, "amb-7").is_file()
+
+
 # (g) down warns about still-attached sessions and unbinds them
 def test_down_warns_and_unbinds(tmp_path: Path, repo: Path, fake_run: list) -> None:
     res = runner.invoke(

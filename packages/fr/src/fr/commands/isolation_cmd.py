@@ -254,6 +254,19 @@ def up(
     except IsolationError as err:
         _fail(err)
         return
+    if not session:
+        # The ambient default (2026-09-21 debug journal, C4): bind the session
+        # fr already knows, so traceability and the Stop idle guard no longer
+        # hinge on the bind hook recognising how `fr` was launched. Unlike an
+        # explicit `--session`, a failure here never costs the workspace.
+        ambient, ambient_harness = _sessions.ambient_binding(None, harness, os.environ)
+        if ambient is not None:
+            try:
+                state = _sessions.attach(
+                    state.repo_root, state.branch, ambient, harness=ambient_harness
+                )
+            except IsolationError as err:
+                typer.echo(f"warning: could not bind session {ambient!r}: {err}", err=True)
     typer.echo(
         f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}",
         err=print_path,

@@ -87,3 +87,19 @@ def _transcript_root_off_the_operators_machine(
     measured-status tests set it to a root they built themselves.
     """
     monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "no-transcripts-here"))
+
+
+@pytest.fixture(autouse=True)
+def _sessions_dir_off_the_operators_machine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Point session bindings at a tmp dir for the whole suite.
+
+    Same reason as the transcript root above, one step further: `fr run start`
+    and `fr isolation up` now bind the ambient `CLAUDE_CODE_SESSION_ID` when no
+    `--session` is given (2026-09-21 debug journal, C4). A suite run inside a
+    Claude Code session would otherwise write bindings for the OPERATOR's live
+    session into `~/.cache/fr/sessions`. Tests that inspect bindings still set
+    `FR_SESSIONS_DIR` themselves, which overrides this.
+    """
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions-sandbox"))

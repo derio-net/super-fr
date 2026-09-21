@@ -2124,7 +2124,7 @@ def start_cmd(
     # leave a bound workspace with no run in it. The reverse order would make
     # the failure look like "the session is here" while the cursor the session
     # was bound for does not exist.
-    _bind_session(workspace, branch, session, harness)
+    _bind_session(workspace, branch, *_sessions.ambient_binding(session, harness, os.environ))
 
 
 @run_app.command("adopt")
