@@ -1,0 +1,168 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Check and render — make the debt visible and the page safe
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-repo-local
+  - triage-unranked-visible
+  - triage-untrusted-text-inert
+  tier: hard
+tasks:
+- number: 1
+  title: fr triage check
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_check.py. Given facts and judgements: an open issue with no
+      judgement is unranked; a judged issue now closed or merged is settled; a judgement whose
+      key is in neither set is orphaned; exit code is 0 in all three cases; --json emits the
+      three sets. Spec-review r7: an issue titled "[manual] x [/red]" prints verbatim through the
+      human output and does not raise MarkupError. Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: classify() in packages/fr/src/fr/triage/check.py (pure), and a check command whose
+      every forge-sourced string passes through rich.markup.escape before printing. Run green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: the command formats only; the three sets come from classify(). Re-run.
+- number: 2
+  title: Inline markup, escaped first, allowlist of two
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_render.py::inline — `x` renders as <code>x</code>, **x** as
+      <strong>x</strong>, and <b>, <a href>, <img onerror> and a raw & all come out escaped.
+      Confirm red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: inline(text) in packages/fr/src/fr/triage/render.py — html.escape first, then only
+      the backtick and double-asterisk patterns. Run green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: compile both patterns once at module level. Re-run.
+- number: 3
+  title: The renderer
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: extend test_triage_render.py over the captured fixtures plus a small judgements.yaml:
+      (a) an unranked issue renders inside the first tier section, labelled as not yet triaged;
+      (b) a judged issue renders in its own tier, carrying data-stage, data-cx, data-theme and
+      data-tier attributes; (c) an issue titled <script>alert(1)</script> and a body containing
+      </script> appear only escaped, and no facts text appears inside any <script> element;
+      (d) two renders of identical inputs are byte-identical, with the clock patched to two
+      different times (no clock read at render); (e) the page carries collected_at and
+      ranked_at. Confirm red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: render(facts, judgements) -> str following fr.acceptance.report's pattern — pure
+      Python, inline CSS, html.escape on every forge string. Rows are rendered in Python grouped
+      by tier with Unranked first. Carry the board's visual language: the colour tokens on
+      :root, a prefers-color-scheme dark block, the IBM Plex Sans/Mono stack with system
+      fallbacks, the severity stripe, the tier headers and the stage pills, at phone width
+      without horizontal scroll. The small inline script only shows, hides and reorders rows by
+      their data-* attributes, and uses localStorage (wrapped in try/catch) solely for the
+      viewer's filter and sort. Run green.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: split CSS and JS into module-level constants, as fr.acceptance.report does, so
+      render() reads as structure. Re-run.
+- number: 4
+  title: fr triage render [--open]
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: CliRunner test — `triage render --repo derio-net/super-fr --dir <tmp>` with facts and
+      judgements present writes <tmp>/triage.html and exits 0; with --open, webbrowser.open
+      (monkeypatched) is called once with the file URI; with no facts.json, it exits non-zero
+      naming the collect command to run first. Confirm red.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: wire the render command and --open through Python's webbrowser module. A missing
+      judgements.yaml is allowed: everything then renders as unranked. Run green.
+  - id: P3.T4.S3
+    text: |-
+      REFACTOR: one shared option set for --repo/--org/--dir across collect, check and render.
+      Re-run.
+- number: 5
+  title: Flip the rows this phase proves, then the quality gate
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Move triage-repo-local, triage-unranked-visible and triage-untrusted-text-inert to ci with
+      `uv run fr acceptance set-status`, each with --level unit=super-fr:tests/unit/test_triage_render.py
+      (plus test_triage_check.py for triage-unranked-visible) and a --notes line naming the Test
+      Plan items it proves. `uv run fr acceptance check` must pass.
+  - id: P3.T5.S2
+    text: |-
+      Quality gate: ruff format, ruff check, mypy over all four packages, `uv run pytest -q --no-cov`.
+      Then render the real super-fr board once from the worktree
+      (`uv run fr triage collect --repo derio-net/super-fr` then `uv run fr triage render --repo derio-net/super-fr`)
+      and record in the plan journal that it produced a file and how many issues it holds. No
+      browser is needed for this; the file existing and parsing is the evidence.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

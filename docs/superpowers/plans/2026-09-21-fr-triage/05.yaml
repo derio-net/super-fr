@@ -1,0 +1,47 @@
+schema_version: 2
+phase:
+  number: 5
+  title: '[manual] Post-merge live walks on Claude Code and OpenCode'
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - triage-skill-claude-code
+  - triage-skill-opencode
+  - triage-skill-hermes
+tasks:
+- number: 1
+  title: Walk the skill on real harnesses (decision d4)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      On Claude Code, from an installed super-fr at the merged version: ask for a triage of
+      derio-net/super-fr, then of the derio-net org. Open both boards. Then
+      `fr acceptance set-status --id triage-skill-claude-code --status skipped --notes "<what was walked, when>"`.
+  - id: P5.T1.S2
+    text: |-
+      On OpenCode, the same repo-scope walk, which may ride with the OpenCode verification run
+      already in progress. Then set triage-skill-opencode to skipped with a note.
+  - id: P5.T1.S3
+    text: |-
+      Hermes is not walked (decision d4). Leave triage-skill-hermes not-implemented, and make
+      sure its note says why.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

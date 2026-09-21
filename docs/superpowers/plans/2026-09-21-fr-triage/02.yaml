@@ -1,0 +1,169 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Collect — the full facts model, derived stages, cross-repo links and org
+    scope
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-org-scope
+  - triage-stage-derived
+  tier: hard
+tasks:
+- number: 1
+  title: Facts and judgements models, state directory, schema refusal
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_model.py. (a) A judgements.yaml shaped like spec §3.D loads;
+      keys follow "<repo-name>#<number>"; cx accepts XS, S, S-M, M, L and "-". (b) schema: 2 in
+      either facts.json or judgements.yaml is refused with a message naming the file path.
+      (c) With HOME set to tmp_path, the default state directory for --repo derio-net/super-fr is
+      tmp_path/.cache/fr/triage/derio-net--super-fr and for --org derio-net is
+      tmp_path/.cache/fr/triage/derio-net; --dir overrides both (spec-review r1). Confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/model.py with pydantic models (extra="forbid",
+      schema: Literal[1]) for Facts, Issue, PullRequest, Judgements, Tier, Judgement, Pattern;
+      a state_dir(scope, override) resolved via fr.isolation.types._home(), never
+      XDG_CACHE_HOME; and loaders that raise a triage error naming the file on a bad schema.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: one scope-naming function ("owner--repo" / "owner") used by both the command and
+      state_dir, so the two cannot disagree. Re-run.
+- number: 2
+  title: PR-to-issue inversion keyed on the reference's repository, limits, truncation
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_collect.py over the captured fixtures: each open issue carries
+      the PRs whose closingIssuesReferences name it; the most advanced linked PR wins (merged >
+      open non-draft > draft); bodies are truncated to 2,000 characters; the fake forge records
+      that --limit 1000 and --limit 200 were requested; a list returning exactly its limit
+      yields a possibly-truncated warning in facts. Cross-repo (spec-review r2): a synthetic PR
+      in repo A whose reference names repo B's issue #7 attaches to B#7 and not to A#7, and a
+      reference to a repo outside the scope is dropped. The cross-repo case may add a record,
+      but it must reuse the exact reference shape of the captured fixture
+      (repository.owner.login, repository.name). Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in collect.py, invert PRs into an issue key -> PRs map keyed on
+      (reference.repository.owner.login, reference.repository.name, reference.number), filter to
+      the scope, truncate bodies, record warnings. Run green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: make the inversion a pure function over parsed models (no forge access), so its
+      test needs no fake. Re-run.
+- number: 3
+  title: Stages derived, never set
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_triage_stage.py, one case per row of spec §3.E: closed issue ->
+      closed; open issue with a merged PR -> merged; open non-draft PR -> pr-ready; open draft PR
+      -> pr-draft; no PR and a label named "Blocked" (any case) -> blocked; otherwise backlog;
+      and a closed issue with an open PR still -> closed. Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: derive_stage(issue, prs) -> Stage in packages/fr/src/fr/triage/stage.py, a pure
+      function over models, with Stage a Literal of the six names. Run green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: order the stages in one tuple, so "most advanced" and the page's display order
+      both read the same source. Re-run.
+- number: 4
+  title: Org scope, skipped repos, and judged issues that closed
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: extend test_triage_collect.py. Org scope with fictional repo names: list_repos
+      returns three repos; the fake raises the triage forge error on the second one's issue
+      list; facts records it under skipped with the reason, and the other two still collect.
+      Judged-but-closed: with a judgements.yaml naming an issue absent from the open list, the
+      forge's view_issue is called for exactly that key and the issue appears as closed; no
+      view_issue call for keys that are already open. Confirm red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: --org via Forge.list_repos (GhForge delegates to fr.gh.list_repos, which already
+      drops archived repos); per-repo failure -> skipped; view_issue bounded by judgement keys.
+      Run green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: the forge-error type is fr.triage's own, raised by GhForge from fr.gh.GhError, so
+      nothing above collect.py knows gh exists. Re-run.
+- number: 5
+  title: Flip the rows this phase proves, then the quality gate
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      `uv run fr acceptance set-status --id triage-org-scope --status ci --level unit=super-fr:tests/unit/test_triage_collect.py --notes "Org-scope collect with a failing repo recorded under skipped, plus cross-repo PR links keyed on the reference's repository (spec §3.C, review r2)."`
+      and the same for triage-stage-derived with --level unit=super-fr:tests/unit/test_triage_stage.py
+      and a note naming the six stages. Then `uv run fr acceptance check` must pass.
+  - id: P2.T5.S2
+    text: |-
+      Quality gate: ruff format, ruff check, mypy over all four packages, `uv run pytest -q --no-cov`.
+      All green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

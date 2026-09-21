@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — fr triage collect runs end to end on captured fixtures,
+    and is gate-exempt
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  tier: standard
+tasks:
+- number: 1
+  title: Capture the gh fixtures the whole feature is tested against
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Capture, never construct. From the worktree run
+      `gh issue list --repo derio-net/super-fr --state open --limit 1000 --json number,title,labels,createdAt,updatedAt,url,body`
+      and write the raw output to tests/fixtures/triage/super-fr-issues.json, then
+      `gh pr list --repo derio-net/super-fr --state all --limit 200 --json number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences`
+      to tests/fixtures/triage/super-fr-prs.json. You may keep a SUBSET of the records
+      (whole records only, to keep the fixture small), but never edit a field inside a
+      record. Keep at least one PR whose closingIssuesReferences is non-empty, one draft PR,
+      one merged PR, and one issue with a label if any exist.
+  - id: P1.T1.S2
+    text: |-
+      Write tests/fixtures/triage/README.md stating the capture date, the two exact commands,
+      that the repo is public and derio-net-owned (nothing to redact under
+      .claude/rules/third-party-privacy.md), and that records were subset but never edited.
+- number: 2
+  title: fr triage collect exists and writes facts.json
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: create tests/unit/test_triage_skeleton.py. Using typer.testing.CliRunner against
+      fr.cli.app, run `triage collect --repo derio-net/super-fr --dir <tmp_path>` with the
+      forge replaced by a fake that returns the two captured fixtures (inject through the
+      Forge seam — monkeypatch the factory the command uses to build its forge; do not
+      monkeypatch subprocess). Assert exit 0, <tmp_path>/facts.json exists, it has
+      schema == 1, scope == "derio-net--super-fr", kind == "repo", and every issue number in
+      the issues fixture appears. Run it and confirm it fails because fr triage does not exist.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add gh.list_issues(*, repo, state, limit) and gh.list_prs(*, repo, state, limit)
+      to packages/fr/src/fr/gh.py beside list_repos, each passing --limit and the exact --json
+      field lists from spec §3.C. Create packages/fr/src/fr/triage/__init__.py and
+      packages/fr/src/fr/triage/collect.py with a Forge Protocol (list_repos, list_issues,
+      list_prs, view_issue) and GhForge backed by fr.gh — the ONLY place fr.triage touches a
+      forge (decision d2). Create packages/fr/src/fr/commands/triage_cmd.py with a triage_app
+      Typer group and a collect command taking exactly one of --repo/--org plus --dir, and
+      register it in packages/fr/src/fr/cli.py with app.add_typer(triage_app, name="triage").
+      Minimal facts.json: schema, scope, kind, collected_at, repos, and issues as
+      [{repo, number, title}]. Run the test green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep collect.py free of Typer and of printing (pure functions returning data;
+      the command layer does I/O), so P2 can extend it without touching the CLI. Re-run the test.
+- number: 3
+  title: triage joins the migration gate's read-only list, on the list's own criterion
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_migration_trigger.py, update
+      test_the_exemption_list_is_exactly_these_things so its expected literal includes
+      "triage". Run it and confirm it fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add "triage" to READ_ONLY_COMMANDS in packages/fr/src/fr/artifacts/trigger.py,
+      extending the docstring with the argument from spec §3.F′: triage never reads or writes a
+      registered artifact and writes only under its own state directory, so gating it protects
+      nothing and refuses an org triage over artifacts it never touches. Run the test green.
+  - id: P1.T3.S3
+    text: |-
+      Quality gate for the skeleton: `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest -q --no-cov`, and `uv run fr triage --help` exits 0. All green before the
+      phase completes.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
