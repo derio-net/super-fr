@@ -1,0 +1,539 @@
+[
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABLN8C1Q",
+        "number": 432,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/432"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABRPCnJQ",
+        "number": 472,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/472"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSX22TA",
+        "number": 529,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/529"
+      }
+    ],
+    "headRefName": "fix/isolation-guard-sentinel-states",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 534,
+    "state": "OPEN",
+    "title": "Guard sentinel has three states, as a recorded set: fix #472, #529, #432 (+ verify-merge after gc)",
+    "url": "https://github.com/derio-net/super-fr/pull/534"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABSMivuQ",
+        "number": 497,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/497"
+      }
+    ],
+    "headRefName": "fix/497-agent-tool-neutrality",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 532,
+    "state": "OPEN",
+    "title": "fix(agents): scope the phase-executor's Claude-only flag; tripwire covers agent trees (#497)",
+    "url": "https://github.com/derio-net/super-fr/pull/532"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "fix/508-live-test-plan-defects",
+    "isDraft": false,
+    "mergedAt": "2026-09-21T13:42:08Z",
+    "number": 527,
+    "state": "MERGED",
+    "title": "Five defects found driving #508's Test Plan live: unbriefed resolve, a false model, a guard that blocked fr-goal's first action, venv thrash, and an unobserved parity claim",
+    "url": "https://github.com/derio-net/super-fr/pull/527"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "chore/archive-agentic-dispatch-verb-lint",
+    "isDraft": false,
+    "mergedAt": "2026-09-21T13:18:55Z",
+    "number": 524,
+    "state": "MERGED",
+    "title": "chore(fr): archive 2026-09-20-agentic-dispatch-verb-lint (gh-428)",
+    "url": "https://github.com/derio-net/super-fr/pull/524"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "chore/tier-the-two-pre-tier-plans",
+    "isDraft": false,
+    "mergedAt": "2026-09-21T13:53:43Z",
+    "number": 523,
+    "state": "MERGED",
+    "title": "chore(fr): tier the two remaining pre-tier plans (gh-434 follow-up)",
+    "url": "https://github.com/derio-net/super-fr/pull/523"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABSNK6qw",
+        "number": 499,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/499"
+      }
+    ],
+    "headRefName": "fix/fr-run-cursor-cluster",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 519,
+    "state": "CLOSED",
+    "title": "The fr run cursor tells the truth about what it is waiting for (gh-499, gh-501, gh-500, gh-496)",
+    "url": "https://github.com/derio-net/super-fr/pull/519"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKlzymQ",
+        "number": 430,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/430"
+      }
+    ],
+    "headRefName": "feat/journal-require-reviews",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 517,
+    "state": "CLOSED",
+    "title": "Review is an obligation with an artifact: fr journal check --require-reviews (gh-430)",
+    "url": "https://github.com/derio-net/super-fr/pull/517"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABQPqUNA",
+        "number": 461,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/461"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABQV3M_w",
+        "number": 464,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/464"
+      }
+    ],
+    "headRefName": "feat/bounded-executor-handoff",
+    "isDraft": false,
+    "mergedAt": "2026-09-20T16:47:54Z",
+    "number": 514,
+    "state": "MERGED",
+    "title": "Bound the executor handoff, and the multiplier behind it (gh-464, gh-461)",
+    "url": "https://github.com/derio-net/super-fr/pull/514"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKjMijA",
+        "number": 428,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/428"
+      }
+    ],
+    "headRefName": "feat/plan-self-review-dispatch-verb-lint",
+    "isDraft": false,
+    "mergedAt": "2026-09-21T13:03:11Z",
+    "number": 513,
+    "state": "MERGED",
+    "title": "A plan step that tells the phase executor to dispatch is unexecutable by construction — catch it at authoring time (gh-428)",
+    "url": "https://github.com/derio-net/super-fr/pull/513"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKlzymQ",
+        "number": 430,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/430"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSMinyQ",
+        "number": 496,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/496"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSNK6qw",
+        "number": 499,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/499"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSNLA2w",
+        "number": 500,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/500"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSNLFIw",
+        "number": 501,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/501"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSNVD1w",
+        "number": 503,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/503"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABSPjB_g",
+        "number": 518,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/518"
+      }
+    ],
+    "headRefName": "feat/phase-holder-identity",
+    "isDraft": false,
+    "mergedAt": "2026-09-21T07:38:13Z",
+    "number": 508,
+    "state": "MERGED",
+    "title": "One record per unit: who holds a phase, what it cost, was it reviewed, is anyone working (gh-503)",
+    "url": "https://github.com/derio-net/super-fr/pull/508"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABN5Ngdg",
+        "number": 435,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/435"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABQeqpJw",
+        "number": 467,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/467"
+      }
+    ],
+    "headRefName": "fix/isolation-reap-data-loss",
+    "isDraft": false,
+    "mergedAt": "2026-09-20T16:23:35Z",
+    "number": 507,
+    "state": "MERGED",
+    "title": "A merged PR is not permission to delete a working tree (gh-435, gh-467)",
+    "url": "https://github.com/derio-net/super-fr/pull/507"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABMk_hRA",
+        "number": 434,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/434"
+      }
+    ],
+    "headRefName": "fix/434-phases-file-tier",
+    "isDraft": false,
+    "mergedAt": "2026-09-20T15:34:40Z",
+    "number": 506,
+    "state": "MERGED",
+    "title": "phases-file tier ingestion, and the two further breaks between a planner's intent and a dispatched model (gh-434)",
+    "url": "https://github.com/derio-net/super-fr/pull/506"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKlwYDg",
+        "number": 429,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/429"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABLFdgKg",
+        "number": 431,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/431"
+      }
+    ],
+    "headRefName": "experiment/vanilla-planned-429",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 480,
+    "state": "OPEN",
+    "title": "feat: update acceptance and journal state",
+    "url": "https://github.com/derio-net/super-fr/pull/480"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKlwYDg",
+        "number": 429,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/429"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABLFdgKg",
+        "number": 431,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/431"
+      }
+    ],
+    "headRefName": "feat/acceptance-journal-state-updates",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 479,
+    "state": "OPEN",
+    "title": "feat: make acceptance and journal state mutable",
+    "url": "https://github.com/derio-net/super-fr/pull/479"
+  },
+  {
+    "closingIssuesReferences": [
+      {
+        "id": "I_kwDOR-_5V88AAAABKlwYDg",
+        "number": 429,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/429"
+      },
+      {
+        "id": "I_kwDOR-_5V88AAAABLFdgKg",
+        "number": 431,
+        "repository": {
+          "id": "R_kgDOR-_5Vw",
+          "name": "super-fr",
+          "owner": {
+            "id": "O_kgDODxK1tw",
+            "login": "derio-net"
+          }
+        },
+        "url": "https://github.com/derio-net/super-fr/issues/431"
+      }
+    ],
+    "headRefName": "experiment/vanilla-429",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 478,
+    "state": "OPEN",
+    "title": "feat: make acceptance and journal state mutable",
+    "url": "https://github.com/derio-net/super-fr/pull/478"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "feat/codex-harness-adapter",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 476,
+    "state": "OPEN",
+    "title": "docs: Codex harness adapter — spec and plan (design only, nothing implemented)",
+    "url": "https://github.com/derio-net/super-fr/pull/476"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "feat/ste-output-tone",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 474,
+    "state": "OPEN",
+    "title": "[derio-net/super-fr] super-fr chattiness — reporting contract, prose lint, opt-in STE style",
+    "url": "https://github.com/derio-net/super-fr/pull/474"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "feat/presentation-showdown",
+    "isDraft": true,
+    "mergedAt": null,
+    "number": 468,
+    "state": "OPEN",
+    "title": "presentation-showdown: shape, spec, plan, half-1 deck skeleton",
+    "url": "https://github.com/derio-net/super-fr/pull/468"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "tmp/gc-open",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 426,
+    "state": "CLOSED",
+    "title": "[test-plan #423] OPEN workspace — must survive gc",
+    "url": "https://github.com/derio-net/super-fr/pull/426"
+  },
+  {
+    "closingIssuesReferences": [],
+    "headRefName": "feat/secrets-injection",
+    "isDraft": false,
+    "mergedAt": null,
+    "number": 314,
+    "state": "OPEN",
+    "title": "feat(isolation): pluggable secret providers — Infisical runtime injection (docker substrate)",
+    "url": "https://github.com/derio-net/super-fr/pull/314"
+  }
+]
