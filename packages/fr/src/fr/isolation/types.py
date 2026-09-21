@@ -11,6 +11,8 @@ from typing import Any, Protocol
 import yaml
 from pydantic import BaseModel, Field
 
+from fr.artifacts.atomic import write_text_atomic
+
 
 def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
@@ -131,8 +133,41 @@ def sentinel_dir() -> Path:
     session ({"repo_root": ...}); fr-isolation-guard.sh reads it to gate
     base-repo commands. `$FR_SENTINEL_DIR` overrides the default (both hooks
     honour the same env var).
+
+    A sentinel may carry an optional `workspace` field (see
+    `stamp_sentinel_workspace`): the bound worktree relative to `~/.cache/fr`.
     """
     return Path(os.environ.get("FR_SENTINEL_DIR", str(_home() / ".cache" / "fr" / "sentinels")))
+
+
+def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
+    """Record the bound workspace in this session's sentinel, if one exists.
+
+    A sentinel is in one of three states: *fresh* (no `workspace` key — armed,
+    never healed; an absent key IS fresh), *live* (`workspace` names a
+    surviving linked worktree) or *orphaned* (`workspace` names one that is
+    gone — the guard heals it). The value is RELATIVE to `~/.cache/fr`, so the
+    username never lands in the file. A worktree outside that dir is not
+    stamped (stays fresh, i.e. armed); a missing or malformed sentinel is left
+    untouched. Other keys are preserved; the write is atomic.
+    """
+    if not session_id or "/" in session_id or session_id in (".", ".."):
+        return
+    f = sentinel_dir() / f"{session_id}.json"
+    if not f.is_file():
+        return
+    try:
+        rel = Path(worktree).resolve().relative_to((_home() / ".cache" / "fr").resolve())
+    except ValueError:
+        return
+    try:
+        data = json.loads(f.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    data["workspace"] = rel.as_posix()
+    write_text_atomic(f, json.dumps(data))
 
 
 def clear_repo_sentinels(repo_root: Path) -> int:

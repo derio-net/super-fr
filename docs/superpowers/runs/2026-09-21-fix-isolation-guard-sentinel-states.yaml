@@ -44,10 +44,27 @@ steps:
       \ tier but fr_version '>=3.0.0,<5.0.0' admits a pre-tier fr \n— floor it at\
       \ '>=3.12.0,<5.0.0'.\n"
   implement:
-    state: pending
+    state: running
+    at: '2026-09-21T14:59:40+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-21T14:59:40+00:00'
+          agent: af97715d201e0e010
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+          estimate:
+            journal_entries: 1
+            journal_lines: 6
+            handoff_chars: 209
+            spec_bytes: 6785
+            plan_bytes: 10308
   journal-check:
     state: pending
   deliver:

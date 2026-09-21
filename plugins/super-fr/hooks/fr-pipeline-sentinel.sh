@@ -9,6 +9,10 @@
 # (clear_repo_sentinels() in fr/isolation/types.py — the Python mirror of this
 # writer's contract), and by the 48h GC below. See #265/#341; same philosophy
 # as agent-worktree-required.sh, extended from the Agent tool to inline Bash.
+#
+# Optional `workspace` field: written later by `fr isolation attach`
+# (stamp_sentinel_workspace) — the bound worktree RELATIVE to ~/.cache/fr, never
+# absolute. Absent = fresh (armed); this writer never sets it.
 
 set -eu
 
