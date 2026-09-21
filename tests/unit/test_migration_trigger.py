@@ -111,6 +111,19 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         {"migrate", "status", "skills", "isolation", "init", "validate", "harness", "triage"}
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
+    assert trigger.EXEMPTIONS == (
+        "--help",
+        "--version",
+        "migrate",
+        "status",
+        "skills",
+        "isolation",
+        "init",
+        "validate",
+        "harness",
+        "triage",
+        "FR_SKIP_MIGRATION=1",
+    )
 
 
 def test_the_rule_prose_names_every_read_only_command() -> None:
@@ -129,19 +142,6 @@ def test_the_rule_prose_names_every_read_only_command() -> None:
     assert not missing, (
         f"{rule.name}'s Exempt commands paragraph does not name {missing}; "
         "it must name every member of fr.artifacts.trigger.READ_ONLY_COMMANDS"
-    )
-    assert trigger.EXEMPTIONS == (
-        "--help",
-        "--version",
-        "migrate",
-        "status",
-        "skills",
-        "isolation",
-        "init",
-        "validate",
-        "harness",
-        "triage",
-        "FR_SKIP_MIGRATION=1",
     )
 
 

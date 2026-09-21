@@ -118,7 +118,9 @@ repository is outside the scope is dropped: in repo scope that means any other r
 any other owner.
 
 Org scope enumerates repos with the existing `fr.gh.list_repos(owner=)`, which already excludes
-archived repos. A repo whose issue list fails — issues disabled, no access — is recorded under
+archived repos. That call has its own hardcoded `--limit 200`, so the repo list is a third list
+that can be cut short. It gets the same treatment: when it returns exactly its limit, `collect`
+records the possibly-truncated warning (review `r-p1-repo-cap`). A repo whose issue list fails — issues disabled, no access — is recorded under
 `skipped` with its reason and the collection continues. One unreadable repo never aborts the
 board.
 
@@ -252,6 +254,11 @@ It drives `collect → check → judge the unranked → render --open`, and trea
 - **`gh` field drift.** `closingIssuesReferences` is the load-bearing field. A captured fixture
   pins its shape, and a missing field fails collect loudly rather than rendering every PR as
   unlinked.
+- **The PR window is already full for this repo.** At capture on 2026-09-21,
+  `gh pr list --limit 200` on `derio-net/super-fr` returned exactly 200. So the
+  possibly-truncated warning will fire on the first real super-fr board. That is the warning
+  working, not a bug. A linked PR older than the newest 200 is missed, which only matters for
+  an old issue whose PR is also old, and `--pr-limit` widens the window.
 - **Large orgs.** Two calls per repo is linear in repos. At derio-net's 19 that is fine. An org
   of hundreds would want `gh search`, which is a follow-up if it is ever needed, not a guess made
   now.
