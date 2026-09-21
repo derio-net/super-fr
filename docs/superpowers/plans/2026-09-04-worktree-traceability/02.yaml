@@ -9,6 +9,7 @@ phase:
   acceptance:
   - nested-up-files-under-main-checkout
   - gc-reaps-empty-repo-dirs
+  tier: hard
 tasks:
 - number: 1
   title: RED — repo_cache_name and nested up

@@ -9,6 +9,7 @@ phase:
   tracking_issue: null
   acceptance:
   - native-worktree-sessions-land-in-fr
+  tier: standard
 tasks:
 - number: 1
   title: RED — up --print-path and down --worktree

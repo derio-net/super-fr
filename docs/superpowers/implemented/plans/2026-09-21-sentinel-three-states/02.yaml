@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The guard decides fresh / live / orphaned, and its denials say the true thing
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - sentinel-three-state-guard
+  - guard-denial-truthful
+  tier: hard
+tasks:
+- number: 1
+  title: Three-state heal replaces the worktree count (#529,
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: extend tests/unit/test_hooks_guard.py (rewrite TestOrphanedSentinelSelfHeal and
+      every test whose comment leans on the old count-heal; keep intent, change the setup). Set
+      HOME=tmp so ${HOME}/.cache/fr resolves. Cases: (1) FRESH — a sentinel with no `workspace`
+      key in a repo with ZERO linked worktrees, any command including `ls`, stays DENIED and the
+      sentinel file survives (#529); (2) ORPHANED with company — sentinel stamped with a
+      workspace whose directory is gone while ANOTHER linked worktree exists in the repo →
+      allowed, THIS sentinel removed, a second session's sentinel untouched (#472); (3) LIVE —
+      stamped, directory exists and is a listed linked worktree → denied, kept; (4) stamped
+      directory exists but is not a listed worktree → orphaned; (5) legacy unstamped sentinel
+      stays armed; (6) non-git repo_root fails closed (deny, kept); (7) macOS symlink case:
+      HOME reached through a symlink still classifies a live worktree as live (compare after
+      pwd -P). Run pytest — the fresh and orphaned-with-company cases fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in plugins/super-fr/hooks/fr-isolation-guard.sh delete the `grep -c '^worktree '`
+      heal block and add a small sentinel_state() function: read `.workspace // empty` from the
+      sentinel; empty → fresh; else resolve ${HOME}/.cache/fr/<workspace> and test dir-exists AND
+      present in `git -C "$rroot" worktree list --porcelain` (both sides pwd -P'd) → live else
+      orphaned; a failed worktree list → live/unknown. Orphaned → rm -f this sentinel only, exit
+      0. Update the surrounding comments (the heal's rationale, the "Fails CLOSED" note that
+      pointed at #341's count). Run test_hooks_guard.py green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: run the whole hooks test set (test_hooks_*.py, test_hermes_bash_guard.py) and fix
+      setups that depended on the count-heal; confirm shellcheck-clean if shellcheck is
+      installed. Record no-refactor-because in the plan journal if nothing further to tidy.
+- number: 2
+  title: Denial messages (#432)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in test_hooks_guard.py assert on the deny reason text: (a) a command leading with
+      `cd <nonexistent path>` gets a reason containing "no longer exists" and both
+      `fr isolation up --branch` and `fr isolation status`; (b) the standard denial never
+      contains `down --all` without an adjacent warning naming that it acts on every workspace
+      in the repo including other sessions'; (c) it points first at `fr isolation status` /
+      `up --branch`; (d) existing cross-repo / same-repo-worktree reasons unchanged. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: edit the reason strings in fr-isolation-guard.sh: add the cd-target-gone branch
+      (test `[ -n "$cd_target" ] && ! [ -d "$cd_target" ]`, after tilde expansion) and rewrite the
+      default denial. Green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: mirror the mechanics change in plugins/super-fr/rules/fr-isolation-required.md
+      only if it describes the heal (it does not, today — verify by grep for "self-heal" across
+      plugins/, docs/explainers, AGENTS.md and update any prose that says the count).
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T15:09:35+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-21T15:09:35+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-21T15:20:01+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-21T15:12:17+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-21T15:12:17+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-21T15:20:02+00:00'
+      note: null
+  completion:
+    at: '2026-09-21T15:24:26+00:00'
+    note: null
+    observed_prs: []

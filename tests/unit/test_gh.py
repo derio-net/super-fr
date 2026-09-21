@@ -379,6 +379,43 @@ class TestListRepos:
         repos = gh.list_repos(owner="derio-net")
         assert [r["name"] for r in repos] == ["mystery"]
 
+    def test_limit_and_archived_are_selectable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """fr triage needs the RAW count to detect a full list (review r-p1-repo-cap)."""
+        import json
+
+        captured: list[list] = []
+
+        def fake(args: list) -> str:
+            captured.append(args)
+            return json.dumps(
+                [{"name": "a", "isArchived": False}, {"name": "b", "isArchived": True}]
+            )
+
+        monkeypatch.setattr(gh, "_run_gh", fake)
+        repos = gh.list_repos(owner="derio-net", limit=500, include_archived=True)
+        assert [r["name"] for r in repos] == ["a", "b"]
+        assert captured[0][-2:] == ["--limit", "500"]
+
+
+class TestViewIssue:
+    def test_asks_for_the_fields_a_closed_triage_row_needs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Shared --json list: fields are only ever ADDED (review r-p1-view-fields)."""
+        import json
+
+        captured: list[list] = []
+
+        def fake(args: list) -> str:
+            captured.append(args)
+            return json.dumps({"number": 7, "state": "CLOSED"})
+
+        monkeypatch.setattr(gh, "_run_gh", fake)
+        gh.view_issue("o/r", 7)
+        fields = set(captured[0][captured[0].index("--json") + 1].split(","))
+        assert {"title", "body", "labels", "state"} <= fields  # the original four stay
+        assert {"number", "url", "closedAt"} <= fields
+
 
 class TestDeleteLabel:
     def test_emits_delete_yes(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,135 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The fr-triage skill, and everything that ships it
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - triage-skill-claude-code
+  - triage-skill-opencode
+  - triage-skill-hermes
+  tier: hard
+tasks:
+- number: 1
+  title: Write the skill against the recorded baseline
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: read plan-journal entry skill-baseline (`uv run fr journal render --scope plan`). It
+      records how an agent triaged WITHOUT this skill, and the specific failures observed. If
+      the entry is absent, stop and report the phase blocked. Do not write the skill without it.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: create plugins/super-fr/skills/fr-triage/SKILL.md, at most 120 lines. Frontmatter
+      name fr-triage; a description that states only when to use it (triaging, ranking,
+      prioritising or organising a repo's or an org's open issues; a backlog board; "what should
+      we work on next"; syncing an existing triage) and never summarises the workflow. The body
+      carries the flow of spec §3.H (collect -> check -> judge the unranked -> render --open;
+      a re-run is the sync), the judgement discipline (rank by the cost of failure; re-read the
+      cited file:line at current main before marking verified; hunt duplicates and batches; never
+      act on the forge unasked), the judgements.yaml shape by reference to `fr triage --help`,
+      one line on `fr migrate artifacts --yes` if a refusal ever appears, and one line on
+      keeping org-scope output for third-party orgs local. It must address each baseline failure
+      in skill-baseline explicitly. Harness-neutral: name no harness-specific tool outside a
+      scoped per-harness clause.
+  - id: P4.T1.S3
+    text: |-
+      Verify: `uv run pytest tests/unit/test_skill_validation.py tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`
+      passes with fr-triage included, and `wc -l` is at most 120.
+- number: 2
+  title: Both mirror generators, every guard
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run BOTH generators: `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`. AGENTS.md records three sessions that
+      ran only the first and left the Hermes tripwire red. Confirm that
+      .opencode/skills/fr-triage/SKILL.md, .opencode/commands/fr-triage.md and
+      .hermes/skills/fr/fr-triage/SKILL.md now exist.
+  - id: P4.T2.S2
+    text: |-
+      Run both with --check, then
+      `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_install_copies_opencode_skills.py -q --no-cov`.
+      All green. install.sh needs no edit: it copies plugins/super-fr/skills/*/ by glob. Confirm
+      by reading the loop rather than assuming it.
+- number: 3
+  title: fr skills, AGENTS.md
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests/unit/test_skills_cmd.py — `fr skills` output includes fr-triage with
+      "fr triage {collect,check,render}". Confirm red.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: add an fr-triage entry to SKILLS in packages/fr/src/fr/commands/skills_cmd.py. Run
+      green.
+  - id: P4.T3.S3
+    text: |-
+      Add an fr/triage bullet to AGENTS.md's Repo shape: the engine/skill split and why (the
+      mirrors copy only SKILL.md), the $HOME/.cache/fr/triage/<scope> state root, the Forge seam
+      as the one place a second forge lands, and the READ_ONLY_COMMANDS membership.
+- number: 4
+  title: Version, and the full gate
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      A new CLI verb plus a new shipped skill is a minor bump under AGENTS.md's rules:
+      `uv run --no-project python scripts/bump-version.py minor`, then
+      `uv run --no-project python scripts/bump-version.py --check`. Commit every changed manifest
+      together with uv.lock.
+  - id: P4.T4.S2
+    text: |-
+      Full gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy
+      over all four packages, `uv run pytest -q --no-cov` (the FULL suite — a targeted tripwire
+      run can be green while the full suite is red, as gh#503 phase 6 found),
+      `uv run fr validate artifacts`, `uv run fr acceptance check` and
+      `uv run fr harness parity --check`. All green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T18:34:58+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-21T18:36:16+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-21T18:36:17+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-21T18:36:47+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-21T18:36:48+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-21T18:37:37+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-21T18:37:37+00:00'
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-21T18:37:38+00:00'
+      note: null
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-09-21T18:37:53+00:00'
+      note: null
+    P4.T4.S2:
+      state: x
+      ticked_at: '2026-09-21T18:43:54+00:00'
+      note: null
+  completion:
+    at: '2026-09-21T18:43:55+00:00'
+    note: fr-triage skill (105 lines) + both mirrors + fr skills entry + AGENTS.md
+      bullet + 4.14.0; full gate green
+    observed_prs: []

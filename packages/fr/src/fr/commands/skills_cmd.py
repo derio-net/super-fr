@@ -49,6 +49,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "  ·  fr plan {create,self-review,edit}",
     ),
     (
+        "fr-triage",
+        "Rank a repo's or an org's open issues onto a re-runnable board (skill).",
+        "fr triage {collect,check,render}  ·  judgements.yaml in $HOME/.cache/fr/triage/<scope>/",
+    ),
+    (
         "fr-isolation",
         "Isolated workspace: worktree + devcontainer, exec-bridge (skill).",
         "fr isolation {up,exec,status,attach,detach,down,gc}",

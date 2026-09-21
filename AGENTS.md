@@ -21,7 +21,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     the tree is glanceable; archived to `implemented/journals/<scope>/`).
     `add` (create-only on `--id` — re-adding an existing id fails loudly and
     directs the caller to `resolve`) / `resolve` (appends a
-    RESOLUTION RECORD closing a finding; append-only, so the original entry is
+    RESOLUTION RECORD closing a finding — fixed | refuted | deferred, the last
+    needing `--tracked-by <issue>`; append-only, so the original entry is
     never rewritten) / `render` (raw, feeds PR bodies) / `check` (fail-closed on
     findings whose **effective** state — the fold of every record naming them,
     last one wins — is still open). `fr plan create` seeds a plan journal;
@@ -90,6 +91,27 @@ uv workspace monorepo, version lockstepped across every manifest (see
     declaration, and `check.py` is the only bridge between the two. CLI:
     `fr harness parity` (`commands/harness_cmd.py`). `prose.py`'s
     `scan_prose` is the sibling tool-neutrality scanner over skill prose.
+  - **`fr/triage`** (2026-09-21 spec, `fr-triage`) — backlog triage, split
+    into a deterministic **engine** (`fr triage {collect,check,render}`,
+    `commands/triage_cmd.py`) and a thin **skill**
+    (`plugins/super-fr/skills/fr-triage/`) that holds only the judgement
+    discipline. The split is forced: the OpenCode/Hermes mirrors copy only
+    `SKILL.md`, so a script bundled beside a skill never reaches them — only
+    the `fr` wheel reaches every harness. State lives under
+    `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`, lowercased;
+    `--dir` overrides): `facts.json` (collect), `judgements.yaml` (the
+    agent's, shape in spec §3.D), `triage.html` (render). It is never
+    committed by default, so it is NOT an artifact kind. `collect.py`'s
+    `Forge` protocol (one implementation, `GhForge` over `fr.gh`) is the one
+    place a second forge lands — a new class, not an edit to the collector.
+    `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
+    touches a registered artifact), so the migration gate never refuses it.
+    `check` reports four sets and always exits 0: unranked, settled,
+    orphaned (the key names no repo collect read — the only set safe to act
+    on without the forge) and unreachable (the forge would not show the issue,
+    the repo was skipped, or the key was judged after the last collect). A
+    DELETED issue is unreachable, not orphaned: collect views every judged key
+    in a collected repo, so its failure is always recorded.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -141,8 +163,8 @@ code you are testing.
 
 ## Skills/rules: canonical source vs. generated mirrors
 
-Never hand-edit a generated file — `scripts/sync-opencode.py` overwrites it
-and a CI tripwire will catch drift anyway:
+Never hand-edit a generated file — the sync scripts overwrite it and a CI
+tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
@@ -152,20 +174,26 @@ and a CI tripwire will catch drift anyway:
   `.claude/rules/explainers-currency.md` and
   `.claude/rules/third-party-privacy.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
-- Generated: `.opencode/skills/<name>/SKILL.md` and
-  `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
-  `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
-  the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
-  `test_tripwire_opencode_instructions_sync.py` fail on drift.
+- Generated: `.opencode/skills/<name>/SKILL.md`, `.opencode/instructions/*.md`,
+  **and** the per-tier subagent files
+  `.opencode/agent/<name>{,-mechanical,-standard,-hard}.md` generated from
+  `plugins/super-fr/agents/`. After editing a canonical skill/rule/agent, run
+  `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit the
+  regenerated mirror. THREE guards, three surfaces —
+  `test_tripwire_opencode_skills_sync.py`,
+  `test_tripwire_opencode_instructions_sync.py` and
+  `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
+  files, so an agent-only edit can leave a green skills guard and a red mirror.
 - Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
   `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
   one — `scripts/sync-hermes.py` is the second sync, guarded by
   `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
   only `sync-opencode.py` leaves that tripwire red, which is how it was found
   (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
-  touched no Hermes file) — and again, independently, in gh#503 phase 6, where
-  the symptom was a GREEN targeted tripwire run and a red full suite. Two
-  sessions hit the same trap a day apart; run BOTH after any skill edit.
+  touched no Hermes file) — and again, independently, in gh#503 phase 6 (a GREEN
+  targeted tripwire run and a red full suite) and gh#428 phase 3 (both OpenCode
+  guards green while the Hermes one was red). THREE sessions hit the same trap
+  within days; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

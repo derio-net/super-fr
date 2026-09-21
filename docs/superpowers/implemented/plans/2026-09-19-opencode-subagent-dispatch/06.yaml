@@ -1,0 +1,55 @@
+schema_version: 2
+phase:
+  number: 6
+  title: '[manual] Post-merge live verification on a paid model and a real consumer
+    install'
+  tag: manual
+  depends_on:
+  - 5
+  tracking_issue: null
+tasks:
+- number: 1
+  title: A full /fr-goal run on OpenCode dispatches a phase
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      MANUAL (operator, post-merge): run a real `/fr-goal` on OpenCode against a
+      paid model on any small issue. Confirm at least one phase is dispatched to
+      `fr-phase-executor-<tier>`, evidenced by an opencode.db session row with
+      parent_id set and that agent name, and that the child's token counts are
+      its own — i.e. the orchestrator's context does not carry the phase's file
+      reads. Paste the redacted row into the PR. This is the half of the
+      acceptance a free-model smoke cannot buy: it exercises the skill prose
+      driving the dispatch, not just the primitive.
+- number: 2
+  title: A real consumer install resolves the operator's own bindings
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      MANUAL (operator, post-merge): run scripts/install.sh on a machine with
+      ~/.config/opencode present and `fr models` bound for opencode. Confirm
+      ~/.config/opencode/agent/ holds the four agents, that each TIER file
+      carries the model that machine's bindings resolve to, that the base file
+      carries none, and that `opencode agent list` in an unrelated project shows
+      all four. Then `--uninstall` and confirm only super-fr's agents were
+      removed.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T17:58:01+00:00'
+      note: 'Live 2026-09-21: opencode.db child ses_f3b00175… agent=fr-phase-executor-mechanical
+        model=github-copilot/gpt-5.6-terra, parent_id set, own usage, 32 tool calls
+        under the child. Journal p6-live-evidence.'
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-09-21T17:58:02+00:00'
+      note: 'Live 2026-09-21: bound install carried this machine''s models, base none,
+        4/4 subagents from an unrelated dir, --uninstall removed only super-fr''s
+        agents. One listing miss not reproduced (3/3 reruns). Journal p6-live-evidence.'
+  completion:
+    at: '2026-09-21T17:58:09+00:00'
+    note: 'Operator-driven post-merge verification, run live 2026-09-21 on OpenCode
+      + github-copilot/gpt-5.6-terra. Both tasks pass; see journal p6-live-evidence.
+      Two defects found and filed (#537, #538), not fixed here.'
+    observed_prs: []

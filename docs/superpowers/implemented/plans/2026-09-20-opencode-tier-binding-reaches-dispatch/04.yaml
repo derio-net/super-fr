@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '[manual] The live proof only a real run can give'
+  tag: manual
+  depends_on:
+  - 3
+  tracking_issue: null
+tasks:
+- number: 1
+  title: From unbound, answer the tier question and see it take effect
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      MANUAL (operator, post-merge) — #498's own acceptance. Back up and
+      clear the opencode tier bindings so `fr models resolve --harness
+      opencode --tier hard` prints nothing. Start a real `/fr-goal` run on
+      OpenCode, answer the model-per-tier question when it is asked, and let
+      it dispatch a phase. Then show a `session` row where `agent =
+      fr-phase-executor-<tier>` AND `model` is the model just answered:
+      `sqlite3 ~/.local/share/opencode/opencode.db "select
+      id,parent_id,agent,model from session where agent like
+      'fr-phase-executor%' order by time_created desc limit 3;"`. Paste the
+      redacted row into the PR. This is the half no unit test can buy: it
+      proves the answer reached the dispatched agent inside the run that
+      asked for it, which is the entire claim of #498.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T17:58:23+00:00'
+      note: 'Live 2026-09-21: installed unbound, then all tier agents materialised
+        to github-copilot/gpt-5.6-terra during the run; opencode.db child ran fr-phase-executor-mechanical
+        on that model. CAVEAT: the tier question was never asked (turn 1 never ran
+        fr models resolve) — the answer came as the operator''s turn 2. Mechanism
+        proven, elicitation not: #538. Journal p4-live-evidence.'
+  completion:
+    at: '2026-09-21T17:58:23+00:00'
+    note: 'gh#498''s own acceptance, run live 2026-09-21: an answer given mid-run
+      reached the dispatched agent. The question that should have elicited it was
+      never asked — #538. See journal p4-live-evidence.'
+    observed_prs: []

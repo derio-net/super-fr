@@ -87,6 +87,17 @@ above never consults a binding: it reads the `.fr-isolation` marker only, so an
 unbound session inside a valid workspace edits freely and a bound session in the
 base clone is still denied. A missing or stale binding changes nothing here.
 
+**One exception, and it is the Bash guard's, not the edit gate's.** Binding
+also adds the workspace to the session's pipeline sentinel, and the guard's
+self-heal reads that list: it retires the sentinel only once EVERY workspace the
+session bound is gone (super-fr#472/#529). So for the guard a missing binding
+does matter — a session that never bound (no session id, or an `fr` on PATH too
+old to record it) keeps a *fresh* sentinel, which is armed and never healed, and
+after its workspace is reaped it stays locked out of the base clone until
+`fr isolation up --branch <b>` (the usual escape), `down --all`, or 48 hours of
+inactivity. Failing closed there is deliberate; the alternative is a guard that
+switches itself off.
+
 ## Three isolation modes
 
 The marker's `mode` records who owns the environment; the edit-gate only cares

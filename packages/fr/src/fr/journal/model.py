@@ -17,6 +17,7 @@ deterministically parseable; the body below is what a human reads.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -34,6 +35,15 @@ JournalKind = Literal[
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
+# What the FOLD can say about a finding. `deferred` is never WRITTEN as a
+# `state=` token (an older fr would reject the value and fail to parse the whole
+# journal); it is an `open` resolution record carrying `tracked_by`, which the
+# fold reads as deferred and an older reader reads as still open — fail closed.
+EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred"]
+
+# Where deferred work may be tracked: `#N`, `owner/repo#N`, or an http(s) URL.
+# A reference, not prose — so a deferral always says where the work went.
+TRACKED_BY_RE = re.compile(r"^(#\d+|[\w.-]+/[\w.-]+#\d+|https?://\S+)$")
 
 JOURNALS_REL = Path("docs/superpowers/journals")
 IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
@@ -83,6 +93,12 @@ class JournalEntry(BaseModel):
     # than rewriting the finding, because a finding mutated in place erases
     # that it was ever open. `effective_finding_states` folds them.
     resolves: str | None = None
+    # A DEFERRAL: an `open` resolution record naming the issue that now carries
+    # a finding that is valid but not this change's to fix. The fold reads it as
+    # `deferred` (closed for the gate, never "refuted"). Header token
+    # `tracked_by=`, appended last — ignored by an fr that predates it, exactly
+    # as `resolves=` was (see test_a_header_token_this_fr_does_not_know_...).
+    tracked_by: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -105,6 +121,17 @@ class JournalEntry(BaseModel):
                 raise ValueError(
                     f"entry `{self.id}` cannot resolve itself — a resolution record is a "
                     "SEPARATE entry naming the finding it closes"
+                )
+        if self.tracked_by is not None:
+            if self.resolves is None or self.state != "open":
+                raise ValueError(
+                    "`tracked_by` is only valid on an `open` resolution record (a "
+                    "deferral): it says the finding is still real, and where it went"
+                )
+            if not TRACKED_BY_RE.match(self.tracked_by):
+                raise ValueError(
+                    "`tracked_by` must name an issue — `#N`, `owner/repo#N` or an "
+                    f"http(s) URL — got {self.tracked_by!r}"
                 )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
@@ -157,7 +184,7 @@ _DELIM_SUFFIX = " -->"
 # the byte-for-byte header it already has; an fr that predates the field reads
 # the token and ignores it (`parse_journal` names the fields it wants), so an
 # older reader sees a resolution record as an ordinary fixed/refuted finding.
-_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves")
+_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves", "tracked_by")
 
 
 def serialize_entry(entry: JournalEntry) -> str:
@@ -171,6 +198,8 @@ def serialize_entry(entry: JournalEntry) -> str:
     header = _DELIM_PREFIX + " ".join(parts) + _DELIM_SUFFIX
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else ""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
+    if entry.tracked_by is not None:
+        state_bit = f" [deferred → {entry.tracked_by}]"
     heading = f"### {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
     body = entry.body.rstrip("\n")
     return f"{header}\n{heading}\n\n{body}\n" if body else f"{header}\n{heading}\n"
@@ -244,6 +273,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 body="\n".join(block),
                 state=fields.get("state"),  # type: ignore[arg-type]
                 resolves=fields.get("resolves"),
+                tracked_by=fields.get("tracked_by"),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -271,7 +301,7 @@ def _title_from_heading(text: str, entry_id: str) -> str:
 # --- effective finding state (the fold) ----------------------------------
 
 
-def effective_finding_states(entries: list[JournalEntry]) -> dict[str, FindingState]:
+def effective_finding_states(entries: list[JournalEntry]) -> dict[str, EffectiveFindingState]:
     """Each finding id → the state its LAST record gives it (spec §3.G.1).
 
     A *record* for a finding is either the finding entry itself or a later
@@ -288,11 +318,17 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, FindingSt
 
     A journal with no resolution records — every journal written before this
     existed — folds to exactly each finding's own `state`.
+
+    A deferral (an `open` record with `tracked_by`) folds to `deferred`: not
+    open, so the gate passes; not fixed or refuted, so nothing claims the work
+    was done or the finding was wrong. A later record still wins.
     """
-    states: dict[str, FindingState] = {}
+    states: dict[str, EffectiveFindingState] = {}
     for e in entries:
         if e.resolves is not None:
-            if e.state is not None:
+            if e.tracked_by is not None:
+                states[e.resolves] = "deferred"
+            elif e.state is not None:
                 states[e.resolves] = e.state
         elif e.kind == "finding" and e.state is not None:
             states[e.id] = e.state
@@ -320,7 +356,9 @@ def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
     return ordered
 
 
-def phase_finding_states(entries: list[JournalEntry], phase: int) -> dict[str, FindingState]:
+def phase_finding_states(
+    entries: list[JournalEntry], phase: int
+) -> dict[str, EffectiveFindingState]:
     """Every finding FILED AGAINST `phase` -> its effective state, in
     first-appearance order.
 

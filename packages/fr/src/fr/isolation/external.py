@@ -225,6 +225,10 @@ class ExternalTarget:
             "pr": None,
         }
 
+    def down_refusal(self, state: IsolationState) -> str | None:
+        """External `down` has no refusal guard — it only retires fr's claim."""
+        return None
+
     def down(self, state: IsolationState, force: bool = False) -> None:
         """Retire fr's state file and the marker's branch claim ONLY. The checkout
         and container belong to the preparer — no worktree removal, no docker, and

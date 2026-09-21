@@ -204,11 +204,41 @@ surfaces:
 
   - id: subagent-dispatch
     kind: interaction
-    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule. Every dispatch is now recorded fr-side per unit — `fr run advance` opens a DispatchRecord carrying the agent type, the resolved model and the harness that resolved it, `fr run claim --agent <id>` names the holder in that harness's own id vocabulary, `fr run resolve` closes it — so this row points at observable state in the run cursor (`fr run status`, `fr run check`) instead of resting entirely on the skill prose being followed, and a still-held unit is refused a second dispatch identically on every harness (gh-503, gh-499).
+    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule. Every dispatch is now recorded fr-side per unit — `fr run advance` opens a DispatchRecord carrying the agent type, the resolved model and the harness that resolved it, `fr run claim --agent <id>` names the holder in that harness's own id vocabulary, `fr run resolve` closes it — so this row points at observable state in the run cursor (`fr run status`, `fr run check`) instead of resting entirely on the skill prose being followed, and a still-held unit is refused a second dispatch identically on every harness (gh-503, gh-499). WHEN that holder can be named is not identical — see `dispatch-holder-identity`.
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: enforced}
       hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: dispatch-holder-identity
+    kind: interaction
+    summary: WHEN the agent holding a dispatched unit becomes nameable (`fr run claim --agent <id>`). Separate from subagent-dispatch on purpose — dispatch is enforced wherever a primitive exists, but the moment its holder can be named depends on whether the harness's dispatch call returns at once or blocks. What does NOT vary — fr opens the record at `fr run advance` with the harness it detected and the tier's model, and that open record refuses a second dispatch whether or not anyone has claimed it.
+    harnesses:
+      claude-code:
+        state: advisory
+        scope_note: >-
+          the holder is NAMEABLE in flight — the Agent call returns a task id at
+          once and the child runs in the background, observed live 2026-09-21 —
+          but nothing blocks an unclaimed dispatch: claiming is skill prose, and
+          `fr run check` reports an unclaimed record as debt, never as a failure
+      opencode:
+        state: partial
+        scope_note: >-
+          the task tool BLOCKS and returns the child session id only with the
+          result, so the holder is claimed when the call returns and is not
+          nameable while the unit is held — live 2026-09-21, status from inside
+          the child read "HELD BY an unclaimed agent (opencode, <model>)". The
+          unclaimed record still refuses a second dispatch, and harness and
+          model are recorded at dispatch. A plugin-side claim on the child's
+          first tool call would close this; not built.
+      hermes:
+        state: partial
+        scope_note: >-
+          the record and the refusal are the same harness-neutral CLI, but when
+          `delegate_task` yields its handle has not been observed live, so
+          nothing here claims the holder is nameable in flight
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
