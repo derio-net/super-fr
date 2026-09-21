@@ -45,12 +45,14 @@ repo-location question per other repo of a cross-repo spec (ask only if not foun
 into ONE batch (max 4, recommended first) put to the operator, then STOP; add a post-merge Test
 Plan question when the deliverable deploys, a model-per-tier one if `fr models resolve` is
 unbound. Log each answer as a spec-scope `decision`. **Hard gate:** an unanswered batch is a
-stop signal — restate the open questions, never default. Resolve `--emitted spec=<path>`, adding
-`--answered-by operator` once the operator actually answered (defaults to `agent` otherwise).
+stop signal — restate the open questions, never default. Resolve `--emitted spec=<path>`. "The
+request already decided everything" is still a question to put, not a reason to skip the batch;
+the one bypass is `--no-questions --reason "…"`, written to the spec journal and the PR body.
 
-**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call. Hermes and
-OpenCode have no question tool: put the numbered batch in your reply and END THE TURN — an
-unanswered batch is the same stop signal there, and clearing the gate unasked is recorded.
+**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call, and `resolve`
+VERIFIES it: no answered question in the session transcript since the gate blocked → refused.
+Hermes and OpenCode have no question tool: put the numbered batch in your reply and END THE TURN,
+then `--answered-by operator` once the operator answered — unverified there, so advisory.
 
 ### 2. spec-review
 Review the spec against the Q&A answers AND codebase reality (do the named

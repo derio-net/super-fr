@@ -596,6 +596,77 @@ def orchestrator_model(env: Mapping[str, str]) -> str | None:
     return None
 
 
+QUESTION_TOOL = "AskUserQuestion"
+"""Claude Code's operator-question tool — the one `operator_answered_since`
+looks for. Named once, here, beside the only reader that knows its records."""
+
+
+def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
+    """Did the operator ANSWER a question in this session at or after `since`?
+
+    `True`/`False` when the transcript was read; `None` when it could not be
+    (another harness, no session id, no file) — the caller must be able to tell
+    "observed: nobody asked" from "cannot see", because the first refuses a gate
+    and the second only degrades loudly (2026-09-21 debug journal C1).
+
+    Answered means BOTH halves, paired by tool_use id: a main-thread assistant
+    record with a `QUESTION_TOOL` tool_use stamped at or after `since` (a
+    question asked before the gate blocked answered an earlier question), and a
+    `tool_result` for it whose `toolUseResult` is an object with a non-empty
+    `answers` map. A declined or failed call carries a plain string there
+    (captured, `tests/fixtures/transcripts/`), and asking is not answering.
+    """
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    start = parse_timestamp(since)
+    if start is None:
+        return None
+    try:
+        transcript = claude_code_session(env)
+    except (OSError, HarnessError):
+        return None
+    if transcript is None:
+        return None
+    records = _read_records(transcript)
+    if records is None:
+        return None
+    asked: set[str] = set()
+    for record in records:
+        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        if stamp is None or stamp < start:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_use"
+                and block.get("name") == QUESTION_TOOL
+                and isinstance(block.get("id"), str)
+            ):
+                asked.add(block["id"])
+    if not asked:
+        return False
+    for record in records:
+        if record.get("type") != "user":
+            continue
+        result = record.get("toolUseResult")
+        if not isinstance(result, Mapping) or not result.get("answers"):
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") in asked
+            ):
+                return True
+    return False
+
+
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
 """Harness key -> reader. Deliberately not a fallback-to-Claude-Code default:
 an unlisted harness measures NOTHING, which `fr run status` then says out loud,

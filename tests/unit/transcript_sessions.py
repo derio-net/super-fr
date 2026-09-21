@@ -21,6 +21,13 @@ FIXTURES = Path(__file__).parents[1] / "fixtures" / "transcripts"
 ORCHESTRATOR = FIXTURES / "claude-code-session.jsonl"
 SUBAGENT = FIXTURES / "claude-code-subagent.jsonl"
 SUBAGENT_META = FIXTURES / "claude-code-subagent.meta.json"
+QUESTION = FIXTURES / "claude-code-askuserquestion.jsonl"
+"""Captured 2026-09-21 from a live Claude Code 2.1.278 session (local paths
+redacted to `/home/user`): line 0 is the `assistant` record carrying an
+`AskUserQuestion` tool_use, line 1 the `user` record carrying its tool_result,
+whose `toolUseResult` is an object with a non-empty `answers` map. A declined
+or failed tool call carries a plain STRING `toolUseResult` instead — observed
+on other tools in the same transcript."""
 
 AGENT_ID = "adc0716be5565cc07"
 TOOL_USE_ID = "toolu_014ynBvFpxdbG1PXwxASc1Cu"
@@ -128,3 +135,27 @@ def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[st
             row["message"]["usage"] = dict(usage)
     write_agent(session, rows=subagent)
     return session
+
+
+def asked_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    answered: bool = True,
+) -> Path:
+    """A session whose captured `AskUserQuestion` exchange lands at `timestamp`.
+
+    `answered=False` swaps the captured result's `toolUseResult` object for the
+    string form a declined tool call carries, keeping everything else captured.
+    Timestamps are moved (the gate window comes from the cursor's own `at`,
+    which a test cannot predict), never the shape.
+    """
+    question, answer = copy_of(records(QUESTION))
+    question["timestamp"] = timestamp
+    answer["timestamp"] = timestamp
+    if not answered:
+        answer["toolUseResult"] = "User rejected tool use"
+    return write_session(
+        root, session_id=session_id, rows=[*records(ORCHESTRATOR), question, answer]
+    )

@@ -388,18 +388,56 @@ def test_advance_prints_the_degradation_notice_on_opencode(tmp_path: Path) -> No
 
 
 def test_advance_prints_no_notice_when_the_harness_enforces_the_gate(tmp_path: Path) -> None:
-    """claude-code's `operator-gate` row is `enforced` — the one harness where
-    the gate genuinely blocks, so the loud notice would be noise there."""
+    """claude-code's `operator-gate` row is `enforced`, and since debug journal
+    C1 that means `resolve` VERIFIES an answered question in the session
+    transcript — so it is quiet exactly when that transcript is readable. (It
+    used to be quiet unconditionally, on the strength of a tool existing.)"""
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-e")
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated", _GATE_SHAPE)
     _invoke_as_harness(
         repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
     )
-    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"CLAUDECODE": "1"})
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "advance", "r1"],
+        {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": "s-e", "FR_TRANSCRIPT_ROOT": str(root)},
+    )
     assert result.exit_code == 0, result.output
     assert "advisory" not in result.output
     assert "answered_by: agent" not in result.output
+
+
+def test_advance_degrades_loudly_on_claude_code_when_it_cannot_verify(tmp_path: Path) -> None:
+    """Operator decision C1 ("Both"): where the mechanism behind `enforced`
+    cannot run — no readable transcript — Claude Code gets the same STOP notice
+    OpenCode and Hermes do, instead of the silence the #497 run got."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated", _GATE_SHAPE)
+    _invoke_as_harness(
+        repo, shipped, ["run", "start", "gated", "--branch", "b", "--run-id", "r1"], {}
+    )
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "advance", "r1"],
+        {
+            "CLAUDECODE": "1",
+            "CLAUDE_CODE_SESSION_ID": "nobody",
+            "FR_TRANSCRIPT_ROOT": str(tmp_path),
+        },
+    )
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    assert "claude-code" in flat
+    assert "advisory" in flat
+    assert "STOP" in flat
 
 
 def test_advance_prints_the_degradation_notice_when_the_harness_is_unrecognised(
@@ -3280,6 +3318,137 @@ def test_a_gated_agent_step_can_record_an_operator(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert load_run_state(repo, "r1").steps["brainstorm"].answered_by == "operator"
+
+
+# --- debug journal C1: on Claude Code the gate is VERIFIED, not trusted -----
+
+
+def _gated_agent_blocked(tmp_path: Path, root: Path, session: str) -> tuple[Path, Path, str]:
+    """A `gated-agent` run blocked on its brainstorm gate, driven as a Claude
+    Code session whose transcript lives under `root`. Returns the block time."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    (repo / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
+    (repo / "docs" / "superpowers" / "specs" / "2026-09-21-x-design.md").write_text("# spec\n")
+    argv = ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"]
+    _invoke_measurable(repo, shipped, argv, root, session)
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, session)
+    blocked_at = load_run_state(repo, "r1").steps["brainstorm"].at
+    assert blocked_at is not None
+    return repo, shipped, blocked_at
+
+
+_RESOLVE_BRAINSTORM = [
+    "run", "resolve", "r1", "--step", "brainstorm", "--state", "done",
+    "--emitted", "spec=docs/superpowers/specs/2026-09-21-x-design.md",
+]  # fmt: skip
+
+
+def test_a_gate_cleared_with_no_question_in_the_transcript_is_refused(tmp_path: Path) -> None:
+    """The first fr-goal run after #508, exactly: Claude Code, a readable
+    transcript, no question asked, `resolve --state done` — which succeeded and
+    recorded `answered_by: agent` while `parity.yaml` called the gate
+    `enforced`. Observed-unasked is now a refusal naming both ways forward."""
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+
+    result = _invoke_measurable(repo, shipped, _RESOLVE_BRAINSTORM, root, "s-g")
+
+    assert result.exit_code == 2, result.output
+    flat = " ".join(result.stderr.split())
+    assert "no answered question" in flat
+    assert "--no-questions" in flat
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+
+def test_a_gate_whose_question_was_answered_records_the_operator(tmp_path: Path) -> None:
+    """Provenance is DERIVED, not claimed: no `--answered-by` passed, and the
+    record still says `operator`, because the transcript shows the answer."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import asked_at
+
+    root = tmp_path / "projects"
+    repo, shipped, blocked_at = _gated_agent_blocked(tmp_path, root, "s-g")
+    after = parse_timestamp(blocked_at)
+    assert after is not None
+    asked_at(root, after.strftime("%Y-%m-%dT%H:%M:%S.999Z"), session_id="s-g")
+
+    result = _invoke_measurable(repo, shipped, _RESOLVE_BRAINSTORM, root, "s-g")
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.state == "done"
+    assert record.answered_by == "operator"
+
+
+def test_an_operator_claim_the_transcript_contradicts_is_refused(tmp_path: Path) -> None:
+    """`--answered-by operator` used to be an unverified claim. Against a
+    transcript that shows no answer it is refused, not recorded."""
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+
+    result = _invoke_measurable(
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--answered-by", "operator"], root, "s-g"
+    )
+
+    assert result.exit_code == 2, result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+
+def test_no_questions_needs_a_reason_and_records_it_on_the_spec_journal(tmp_path: Path) -> None:
+    """The explicit, visible bypass: `--no-questions --reason …` clears the gate
+    as `agent`, and the reason lands on the spec journal the same resolve
+    emits — where the PR body's decisions section reads it."""
+    from fr.journal.model import journal_path, parse_journal
+
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+
+    bare = _invoke_measurable(repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions"], root, "s-g")
+    assert bare.exit_code == 2, bare.output
+    assert "--reason" in " ".join(bare.stderr.split())
+
+    result = _invoke_measurable(
+        repo,
+        shipped,
+        [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "every decision was in the ask"],
+        root,
+        "s-g",
+    )
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert record.state == "done"
+    assert record.answered_by == "agent"
+    entries = parse_journal(journal_path(repo, "spec", "2026-09-21-x").read_text())
+    assert [(e.kind, e.id) for e in entries] == [("decision", "gate-no-questions-brainstorm")]
+    assert "every decision was in the ask" in entries[0].body
+
+
+def test_an_unobservable_gate_degrades_loudly_instead_of_refusing(tmp_path: Path) -> None:
+    """No readable transcript (a session id fr cannot find): fr cannot verify,
+    so it keeps the pre-C1 behaviour — and SAYS it could not verify, rather than
+    passing silently the way it did on the #497 run."""
+    root = tmp_path / "projects"
+    root.mkdir()
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-missing")
+
+    result = _invoke_measurable(repo, shipped, _RESOLVE_BRAINSTORM, root, "s-missing")
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify" in " ".join(result.stderr.split())
+    assert load_run_state(repo, "r1").steps["brainstorm"].answered_by == "agent"
 
 
 def test_a_resolve_that_clears_no_gate_records_no_provenance(tmp_path: Path) -> None:

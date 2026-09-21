@@ -686,14 +686,28 @@ def _gate_degradation_notice() -> str | None:
     `fr.harness.HARNESSES` — a typo must not silently become an inference,
     so the caller surfaces it as a command error rather than guessing.
     """
+    from fr.run.telemetry import operator_answered_since
+
     harness = detect_harness(os.environ)
     matrix = load_matrix()
     surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
     if harness is not None:
         hstate = surface.harnesses[harness]
-        if hstate.state == "enforced":
+        # `enforced` is a claim about a MECHANISM — `resolve` verifying an
+        # answered question in the session transcript — so it holds only where
+        # that transcript can be read. Before 2026-09-21 (debug journal C1) it
+        # was a claim about a TOOL existing, nothing checked it, and this early
+        # return spared the one harness that skipped its gate the only warning.
+        epoch = "1970-01-01T00:00:00+00:00"
+        if hstate.state == "enforced" and operator_answered_since(os.environ, epoch) is not None:
             return None
-        detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
+        if hstate.state == "enforced":
+            detail = (
+                f"your harness ({harness}) enforces this gate by reading the session "
+                "transcript, which is not readable here — so this gate is advisory now"
+            )
+        else:
+            detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
         if hstate.scope_note:
             detail += f" — {hstate.scope_note}"
     else:
@@ -721,6 +735,93 @@ def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
     like once `advance` has seen it.
     """
     return step.gate == "operator" and record.state == "blocked" and outcome == "done"
+
+
+def _gate_provenance(
+    repo_root: Path,
+    step_id: str,
+    record: StepRecord,
+    *,
+    claimed: str,
+    no_questions: bool,
+    reason: str | None,
+    emitted: Mapping[str, str],
+) -> AnsweredBy:
+    """Who cleared this operator gate — OBSERVED where fr can see it, refused
+    where the observation contradicts the resolve (2026-09-21 debug journal C1).
+
+    The first fr-goal run after #508 cleared its brainstorm gate on Claude Code
+    without asking anything; `resolve` recorded `answered_by: agent` and let it
+    through, while `parity.yaml` declared the gate `enforced` — which also
+    suppressed the one warning OpenCode and Hermes get. Enforced now means what
+    it says, read from the session transcript (`operator_answered_since`):
+
+    - an answered question since the gate blocked → `operator`, whatever was
+      claimed: provenance is derived, not asserted;
+    - observed, none answered → REFUSED (exit 2), unless the bypass is explicit
+      and on the record: `--no-questions --reason "…"` → `agent`, the reason
+      written to the spec journal this resolve emits (when it emits one);
+    - not observable (another harness, no transcript) → the claim stands, as
+      before, and on Claude Code it says out loud that it could not verify.
+    """
+    from fr.journal.model import append_journal_entry, journal_path, spec_journal_slug
+    from fr.run.telemetry import operator_answered_since
+
+    if no_questions and not (reason and reason.strip()):
+        err_console.print(
+            f'[red]{step_id}: --no-questions needs --reason "…" — clearing an operator '
+            "gate without asking is allowed, but only on the record.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    observed = operator_answered_since(os.environ, record.at) if record.at else None
+    if observed is True and not no_questions:
+        return "operator"
+    if observed is False and not no_questions:
+        err_console.print(
+            f"[red]{step_id}: no answered question in this session's transcript since the "
+            f"gate blocked at {record.at}. Put the questions to the operator with your "
+            "harness's question tool (AskUserQuestion on Claude Code) and resolve again "
+            "once they answer — or clear it without asking, on the record: "
+            f'`--no-questions --reason "<why no operator decision was needed>"`.[/red]',
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if no_questions:
+        spec = emitted.get("spec")
+        if spec and spec.endswith(".md"):
+            slug = spec_journal_slug(Path(spec).name[: -len(".md")])
+            append_journal_entry(
+                journal_path(repo_root, "spec", slug),
+                slug,
+                JournalEntry(
+                    kind="decision",
+                    scope="spec",
+                    id=f"gate-no-questions-{step_id}",
+                    # `fr journal add`'s own stamp shape (local, second precision).
+                    created=_dt.datetime.now().replace(microsecond=0).isoformat(),
+                    title=f"Operator gate `{step_id}` cleared without asking",
+                    body=reason or "",
+                ),
+            )
+        err_console.print(
+            f"[yellow]{step_id}: operator gate cleared WITHOUT asking (answered_by: "
+            f"agent). Reason: {reason}[/yellow]",
+            soft_wrap=True,
+        )
+        return "agent"
+    try:
+        on_claude_code = detect_harness(os.environ) == "claude-code"
+    except HarnessError:
+        on_claude_code = False
+    if on_claude_code:
+        err_console.print(
+            f"[yellow]{step_id}: could not verify this gate — no readable transcript for "
+            f"this session, so `answered_by: {claimed}` is recorded as claimed, "
+            "unverified.[/yellow]",
+            soft_wrap=True,
+        )
+    return claimed  # type: ignore[return-value]  # validated by the caller
 
 
 def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
@@ -2909,6 +3010,19 @@ def resolve_cmd(
         help="Phase item (phase/<n>) this outcome is for — required when --step "
         "names a member of a grouped `for_each` step.",
     ),
+    no_questions: bool = typer.Option(
+        False,
+        "--no-questions",
+        help="Clear an operator gate WITHOUT having asked the operator — the "
+        "explicit, recorded bypass. Requires --reason. On Claude Code a gate "
+        "cleared with no answered question in the transcript is otherwise refused.",
+    ),
+    reason: str | None = typer.Option(
+        None,
+        "--reason",
+        help="Why no operator decision was needed (with --no-questions); written "
+        "to the spec journal this resolve emits.",
+    ),
     answered_by: str = typer.Option(
         "agent",
         "--answered-by",
@@ -3053,6 +3167,22 @@ def resolve_cmd(
         )
         raise typer.Exit(2)
 
+    # Decided ONCE, before either branch writes a byte: a refused gate leaves
+    # the cursor exactly as it was (debug journal C1).
+    gate_by: AnsweredBy | None = (
+        _gate_provenance(
+            repo_root,
+            step_id,
+            record,
+            claimed=answered_by,
+            no_questions=no_questions,
+            reason=reason,
+            emitted=emitted_map,
+        )
+        if _clears_gate(step, record, state_value)
+        else None
+    )
+
     if step.kind == "cli":
         # A `cli` step is fr's to execute, so `resolve` may never declare one
         # done — that would let an operator report success for a command that
@@ -3077,9 +3207,7 @@ def resolve_cmd(
                     # but the helper exists so the condition lives in one
                     # place, and a future second writer of `blocked` would
                     # have made these diverge silently.
-                    "answered_by": (
-                        answered_by if _clears_gate(step, record, state_value) else None
-                    ),
+                    "answered_by": gate_by,
                     "at": _now(),
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
@@ -3165,11 +3293,7 @@ def resolve_cmd(
         # it goes straight from `blocked` to `done` here and never acquires
         # `gate: cleared`, so provenance is the only trace that its gate was
         # cleared at all.
-        answered_by=(
-            answered_by  # type: ignore[arg-type]  # validated above
-            if _clears_gate(step, record, state_value)
-            else None
-        ),
+        answered_by=gate_by,
     )
     save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")

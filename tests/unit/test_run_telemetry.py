@@ -788,3 +788,70 @@ def test_orchestrator_model_ignores_sidechain_records(tmp_path: Path) -> None:
     write_session(root, session_id="sess-s", rows=[*rows, side])
     env = {"FR_TRANSCRIPT_ROOT": str(root), "CLAUDE_CODE_SESSION_ID": "sess-s", "CLAUDECODE": "1"}
     assert orchestrator_model(env) == "claude-opus-5"
+
+
+# --- was the operator actually asked? (2026-09-21 debug journal C1) ------
+
+
+def _question_env(root: Path, session_id: str) -> dict[str, str]:
+    return {
+        "FR_TRANSCRIPT_ROOT": str(root),
+        "CLAUDE_CODE_SESSION_ID": session_id,
+        "CLAUDECODE": "1",
+    }
+
+
+def test_an_answered_question_after_the_gate_blocked_counts(tmp_path: Path) -> None:
+    """The captured exchange: an AskUserQuestion tool_use and a tool_result whose
+    `toolUseResult.answers` is non-empty — asked after the gate blocked."""
+    from fr.run.telemetry import operator_answered_since
+
+    from tests.unit.transcript_sessions import asked_at
+
+    root = tmp_path / "projects"
+    asked_at(root, "2026-09-21T16:05:00.000Z", session_id="s-q")
+    assert operator_answered_since(_question_env(root, "s-q"), "2026-09-21T16:00:00+00:00") is True
+
+
+def test_a_question_asked_before_the_gate_blocked_does_not_count(tmp_path: Path) -> None:
+    """An earlier session question answers an earlier gate, not this one."""
+    from fr.run.telemetry import operator_answered_since
+
+    from tests.unit.transcript_sessions import asked_at
+
+    root = tmp_path / "projects"
+    asked_at(root, "2026-09-21T15:00:00.000Z", session_id="s-q")
+    assert operator_answered_since(_question_env(root, "s-q"), "2026-09-21T16:00:00+00:00") is False
+
+
+def test_a_declined_question_does_not_count(tmp_path: Path) -> None:
+    from fr.run.telemetry import operator_answered_since
+
+    from tests.unit.transcript_sessions import asked_at
+
+    root = tmp_path / "projects"
+    asked_at(root, "2026-09-21T16:05:00.000Z", session_id="s-q", answered=False)
+    assert operator_answered_since(_question_env(root, "s-q"), "2026-09-21T16:00:00+00:00") is False
+
+
+def test_a_session_with_no_question_is_observed_false(tmp_path: Path) -> None:
+    """The #497 run exactly: a readable transcript, no question in it."""
+    from fr.run.telemetry import operator_answered_since
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-none")
+    assert (
+        operator_answered_since(_question_env(root, "s-none"), "2020-01-01T00:00:00+00:00") is False
+    )
+
+
+def test_unobservable_is_none_never_false(tmp_path: Path) -> None:
+    """No transcript, or a harness with no reader: fr cannot say, so it says
+    nothing — `None` is what lets the caller degrade loudly instead of refusing."""
+    from fr.run.telemetry import operator_answered_since
+
+    assert (
+        operator_answered_since(_question_env(tmp_path, "missing"), "2026-09-21T16:00:00+00:00")
+        is None
+    )
+    assert operator_answered_since({"FR_HARNESS": "opencode"}, "2026-09-21T16:00:00+00:00") is None

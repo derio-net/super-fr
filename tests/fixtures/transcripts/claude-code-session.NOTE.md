@@ -110,3 +110,21 @@ spec, and phase 4 depends on the corrected version.
    binding a dispatch actually used is recoverable from the transcript without
    asking the harness anything — useful to `fr models` reporting, beyond
    telemetry.
+
+## `claude-code-askuserquestion.jsonl` (added 2026-09-21)
+
+Captured live 2026-09-21 from this operator's own `super-fr` orchestrator
+session (Claude Code 2.1.278, no third-party content), for the operator-gate
+verification of debug journal `2026-09-21-fr-goal-first-run-contracts` (C1).
+Two records, selected verbatim and paired by tool_use id:
+
+- line 0 — the `assistant` record carrying an `AskUserQuestion` tool_use;
+- line 1 — the `user` record carrying its `tool_result`. Its top-level
+  `toolUseResult` is an OBJECT with `questions`, `answers` and `annotations`;
+  `answers` maps each question to the chosen label.
+
+Only redaction: absolute home paths rewritten to `/home/user`, like the files
+above. A declined or failed tool call is NOT captured here; in the same
+transcript, failed calls of other tools carry `toolUseResult` as a plain
+STRING, which is the shape `asked_at(..., answered=False)` substitutes — the one
+field the helper varies beyond timestamps.
