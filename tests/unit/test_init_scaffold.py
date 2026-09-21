@@ -526,11 +526,26 @@ def test_a_uv_profile_keeps_uvs_environment_out_of_the_bind_mount(repo: Path) ->
 
     env = _config(repo)["containerEnv"]
     assert env == {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
-    # Absolute, and nowhere a workspace is ever mounted: `/workspaces/<name>` is
-    # the devcontainer default, and the scaffold itself mounts at the HOST path.
-    assert UV_CONTAINER_PROJECT_ENV.startswith("/")
-    assert not UV_CONTAINER_PROJECT_ENV.startswith(("/workspaces", "/Users", "/home"))
-    assert "${" not in UV_CONTAINER_PROJECT_ENV
+
+
+def test_the_container_env_is_relative_so_it_is_per_project() -> None:
+    """uv resolves a RELATIVE `UV_PROJECT_ENVIRONMENT` against each project's
+    root; an ABSOLUTE one is a single directory every project in the container
+    shares. Review of this fix tried the absolute form with two independent
+    projects: nothing was destroyed, but project `a` could import a package only
+    `b` declared — a consumer's tests passing on a dependency they forgot. So:
+    relative, and not the host's own name for it."""
+    from pathlib import PurePosixPath
+
+    from fr.isolation.scaffold import UV_CONTAINER_PROJECT_ENV
+
+    path = PurePosixPath(UV_CONTAINER_PROJECT_ENV)
+    assert not path.is_absolute()
+    assert len(path.parts) == 1, "a bare directory name, resolved per project"
+    assert UV_CONTAINER_PROJECT_ENV != ".venv", "the host's — the collision this fixes"
+    # Hidden, so pytest's default `norecursedirs` (`.*`) never collects from it;
+    # uv writes its own `.gitignore: *` inside, which keeps it out of git and ruff.
+    assert UV_CONTAINER_PROJECT_ENV.startswith(".")
 
 
 def test_a_profile_without_uv_gets_no_container_env(repo: Path) -> None:

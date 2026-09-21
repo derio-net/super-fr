@@ -2774,13 +2774,15 @@ def _resolve_member(
     # evidence attached to work nothing records anyone being asked to do.
     # `_close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
     # cursors), so nothing downstream would ever notice; the check belongs
-    # here, before the write. A unit that is `running` with no record (adopted
-    # mid-flight) still resolves: it was briefed, just not by this cursor.
+    # here, before the write. A unit that is `running` with no record still
+    # resolves — a cursor migrated from before dispatch records existed carries
+    # those; `adopt` itself never writes `running`, only `done` and `pending`.
     if items.get(key) in (None, "pending"):
         err_console.print(
             f"[red]{key}: refused — this unit was never briefed, so there is no dispatch "
-            f"to close and nothing to record an outcome for. Run `fr run advance "
-            f"{state.run}` first: it opens the unit and prints its brief.[/red]",
+            f"to close and nothing to record an outcome for. `fr run advance "
+            f"{state.run}` briefs the next unit in order — which may be an earlier "
+            f"one than this — and prints its brief; resolve what it briefs.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)

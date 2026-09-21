@@ -38,12 +38,23 @@ def _row():
 def test_holder_identity_is_its_own_surface_not_a_clause_of_dispatch() -> None:
     """Dispatch IS enforced on OpenCode; holder identity is not. One row could
     not say both, so the honest cell had nowhere to live."""
+    matrix = load_matrix()
+    dispatch = next(s for s in matrix.surfaces if s.id == "subagent-dispatch")
     assert _row().kind == "interaction"
+    assert dispatch.harnesses["opencode"].state == "enforced"
+    assert _row().harnesses["opencode"].state != "enforced"
+    assert "dispatch-holder-identity" in dispatch.summary
 
 
-def test_claude_code_is_the_only_harness_proven_to_know_the_holder_in_flight() -> None:
+def test_no_harness_is_said_to_enforce_naming_the_holder() -> None:
+    """Review caught this row repeating the defect it exists to correct. On
+    Claude Code the holder is NAMEABLE in flight — observed live — but nothing
+    makes anyone name it: claiming is skill prose, and an unclaimed dispatch is
+    reported by `fr run check` as debt, never blocked. That is `advisory`."""
     cells = _row().harnesses
-    assert cells["claude-code"].state == "enforced"
+    assert cells["claude-code"].state == "advisory"
+    note = " ".join(cells["claude-code"].scope_note.split()).lower()
+    assert "nameable" in note and "nothing blocks" in note
     for harness in ("opencode", "hermes"):
         assert cells[harness].state == "partial", harness
         assert cells[harness].scope_note

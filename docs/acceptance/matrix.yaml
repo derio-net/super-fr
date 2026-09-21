@@ -3088,8 +3088,9 @@ rows:
       not that the review was rigorous.'
   - id: run-resolve-requires-briefing
     capability: Run cursor
-    acceptance: A grouped unit cannot be resolved until fr run advance has briefed it,
-      so no unit ends done without a dispatch record naming its holder and cost
+    acceptance: A grouped unit cannot be resolved through its own member resolve until
+      fr run advance has briefed it, so that path can no longer leave a done unit with
+      no dispatch record
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
@@ -3097,10 +3098,11 @@ rows:
       - super-fr:tests/unit/test_run_resolve_requires_advance.py#L51
       - super-fr:tests/unit/test_run_resolve_requires_advance.py#L66
     status: ci
-    notes: 'Found live on PR #508''s post-merge Test Plan (C3): review-phase resolved
-      done with no advance, leaving a done unit with no attempt. The grouped path now
-      holds the rule the flat path always had. Red first; one existing test had encoded
-      the defect and was corrected.'
+    notes: 'C3, found live on PR #508''s post-merge Test Plan: review-phase resolved
+      done with no advance, leaving a done unit with no attempt. The member-resolve
+      path now holds the rule the flat path always had. NARROWED in review: a whole-group
+      resolve and an adopted done unit still end done with no attempt, by design, and
+      an unclaimed record names no holder - so this row claims the member path only.'
   - id: run-model-only-for-dispatched-work
     capability: Run cursor
     acceptance: fr records a model only for work it dispatched to a tier; a unit the
@@ -3133,9 +3135,8 @@ rows:
       debug journal.'
   - id: scaffold-uv-env-outside-bind-mount
     capability: Isolation
-    acceptance: A scaffolded uv profile keeps uv's project environment inside the container,
-      so alternating between host and fr isolation exec never deletes the other side's
-      environment
+    acceptance: A scaffolded uv profile gives the container its own per-project uv environment,
+      under a different name from the host's, so neither side replaces the other's
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
@@ -3143,7 +3144,10 @@ rows:
       - super-fr:tests/unit/test_init_scaffold.py#L522
       - super-fr:tests/unit/test_init_scaffold.py#L544
     status: ci
-    notes: 'C5. Also proven live, which no CI job repeats: container rebuilt from the
-      committed profile, three host/container alternations, zero deletions. Existing
-      containers must be recreated; profiles already scaffolded in consumer repos are
-      not rewritten.'
+    notes: 'C5. CI verifies the profile that is EMITTED (key present, relative, not
+      the host''s name) - not the behaviour. The behaviour was proven live twice, which
+      no CI job repeats: container rebuilt from the committed profile, three host/container
+      alternations, zero deletions. Relative, not absolute, after review: one absolute
+      path is shared by every project in a container, and a probe showed project a importing
+      a package only b declared. Existing containers must be recreated; profiles already
+      scaffolded in consumer repos are not rewritten.'

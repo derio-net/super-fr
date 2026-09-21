@@ -32,14 +32,22 @@ from fr.plan_validator_wrapper import (
 # reproducible. See super-fr#300.
 BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 
-# Where uv keeps a project's environment INSIDE the container. The worktree is
+# What uv calls a project's environment INSIDE the container. The worktree is
 # bind-mounted, and uv defaults to `<project>/.venv` on both sides of that
 # mount — one path, two operating systems. A venv's interpreter link is only
 # valid where it was made, so host and container each found the other's
 # "broken" and replaced it on every alternation, which fr's exec-bridge
-# discipline makes the normal case. Absolute and outside anywhere a workspace
-# is mounted; one container serves one workspace, so it needs no per-repo name.
-UV_CONTAINER_PROJECT_ENV = "/var/tmp/fr-uv-project-env"
+# discipline makes the normal case.
+#
+# RELATIVE on purpose: uv resolves a relative value against each project's own
+# root, so every project gets its own. An absolute path is ONE directory shared
+# by every project in the container — tried during review of this fix, with two
+# independent projects: nothing was destroyed, but project `a` could import a
+# package only `b` declared, i.e. tests passing on an undeclared dependency.
+# Hidden (pytest's default `norecursedirs` skips `.*`), and uv writes its own
+# `.gitignore: *` inside, so it never shows up in git, ruff or a reap check.
+# It stays on the bind mount, which is exactly as fast as `.venv` was before.
+UV_CONTAINER_PROJECT_ENV = ".venv-container"
 
 # Known tool → devcontainer feature mapping. Unknown tools land in the
 # profile's notes for the skill/operator to wire via postCreateCommand.
@@ -181,8 +189,10 @@ def scaffold_profile(
     }
     if "uv" in known:
         # `containerEnv`, not `remoteEnv`: it is set on the container itself, so
-        # a plain `docker exec` — which is what `fr isolation exec` is — sees it.
-        # Absent rather than empty for every other profile.
+        # EVERY process in it sees it — `devcontainer exec` (what `fr isolation
+        # exec` runs), the postCreateCommand, and a raw `docker exec` alike.
+        # `remoteEnv` reaches only what the devcontainer CLI launches. Absent
+        # rather than empty for every other profile.
         config["containerEnv"] = {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")

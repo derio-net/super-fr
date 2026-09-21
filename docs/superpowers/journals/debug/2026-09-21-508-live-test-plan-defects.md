@@ -127,3 +127,32 @@ What fr SAYS now matches what was observed; fr's behaviour did not change, becau
 Failing-first: tests/unit/test_parity_dispatch_holder.py, 7 red (no such row; no such prose in the skill or either mirror). One of my own assertions was too narrow ("not observed" vs the note's "has not been observed") and was corrected - the note said the right thing.
 
 NOT done, and it is the real closing of the gap: fr-opencode-plugin already tells child sessions from top-level ones (idle.ts isTopLevel) and sees a sessionID on every tool call, so it could claim on the child's first tool call. That needs a new CLI affordance (claim "the one open unclaimed unit") and cannot be live-verified from a Claude Code session. Recorded in the parity cell itself so it is found by whoever reads the limitation.
+
+<!-- fr:journal kind=discovery scope=debug id=c5-correction created=2026-09-21T15:02:33 -->
+### c5-correction · discovery · C5 correction: fr isolation exec is devcontainer exec, and the env path is relative
+
+CORRECTION to c5-fixed and c5-root-cause above. Two statements there are wrong, both caught by independent review:
+
+1. "the plain `docker exec` behind `fr isolation exec`" - false. `fr isolation exec` runs `devcontainer exec --workspace-folder ... --config ...` (fr/isolation/local.py). I asserted a mechanism without reading the function. `containerEnv` is still the right key, for a better reason than the one I gave: it is set on the container, so every process sees it - devcontainer exec, the postCreateCommand and a raw docker exec alike - whereas remoteEnv reaches only what the devcontainer CLI launches. The live proof stands on what was measured (the variable present in `docker inspect`, the alternation quiet), not on the explanation.
+
+2. The path. c5-fixed says /var/tmp/fr-uv-project-env. Review pointed out that an absolute UV_PROJECT_ENVIRONMENT is ONE directory shared by every project in the container. Its claim that packages get destroyed did NOT reproduce - probed in the container with two independent projects, `uv run` alternating: 0 uninstalls. What did reproduce is worse in a quieter way: project a could import a package only project b declared, i.e. tests passing on an undeclared dependency. The value is now the RELATIVE `.venv-container`, which uv resolves per project. Re-proven live: container rebuilt from the committed profile, three alternations, zero deletions, host .venv untouched, and git does not see the directory (uv writes its own `.gitignore: *` inside). It stays on the bind mount - as fast as .venv was before this fix, slower than the absolute path would have been.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-21T15:02:34 -->
+### review-1 · review · Independent review: 11 findings, 10 fixed, 1 refuted-as-by-design
+
+Reviewed by an independent reviewer dispatched through superpowers:requesting-code-review, with no session history - the diff, this journal and a list of specific holes to look for. Findings handled through superpowers:receiving-code-review: each verified against the code or by experiment before acting. Verdict: no Critical, no legitimate flow broken by any of the five fixes. Eleven findings.
+
+FIXED, each red-first where behavioural:
+ r1 (Important) fr-goal never told the orchestrator to `advance` before review-phase - the prose that PRODUCED C3 live, and would have tripped the new refusal once per phase. The skill and both mirrors now say so; token-tested.
+ r2 the refusal promised `advance` "opens the unit"; it briefs the NEXT unit in order, which may be an earlier one. Reworded, asserted.
+ r3 the matrix row claimed no unit ever ends done without a record. Narrowed to the member-resolve path: a whole-group resolve and an adopted done unit still do, by design.
+ r4 a comment said "adopted mid-flight"; adopt never writes `running`. Corrected.
+ r6 nothing asked the orchestrator to report its own model, so after C2 the field would simply never be filled. The skill now asks for --model on the review resolve.
+ r7 the actual live trigger (a repo that already has a linked worktree) was unpinned. Test added; it fails when the allowance is removed.
+ r8 (Important) the `docker exec` rationale was false - see the correction entry.
+ r9 (Important for consumer repos) shared absolute env. "Destroys packages" REFUTED by experiment; cross-project contamination FOUND by the same experiment. Switched to a relative path and re-proven live.
+ r10 a test that compared a constant to literal prefixes could not fail; replaced by one about relativity. The scaffold row's sentence now says what CI verifies.
+ r11 `claude-code: enforced` on the new parity row repeated the very defect the row exists to correct - nameable is not enforced. Now `advisory` with a note.
+
+NOT CHANGED, with reasoning:
+ r5 a repo-authored `kind: agent` step with a tier and a skill but no `agent:` now records no model. By design: `agent_type None` already means "the orchestrator" everywhere (_dispatch_holder_label); a shape that dispatches such a step to a subagent should name the agent. No shipped shape does this.

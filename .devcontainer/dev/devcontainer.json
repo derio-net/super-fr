@@ -11,7 +11,7 @@
     "${localEnv:HOME}/.config/fr/secrets/super-fr/dev.env"
   ],
   "containerEnv": {
-    "UV_PROJECT_ENVIRONMENT": "/var/tmp/fr-uv-project-env"
+    "UV_PROJECT_ENVIRONMENT": ".venv-container"
   },
   "customizations": {
     "fr": {

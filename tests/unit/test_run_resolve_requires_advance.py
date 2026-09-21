@@ -57,6 +57,10 @@ def test_a_unit_that_was_never_advanced_cannot_be_resolved(tmp_path: Path, state
     out = _squash(result.output)
     assert "phase/1/peer-review" in out
     assert "fr run advance r1" in out
+    # `advance` briefs the NEXT unit in order, which need not be the one named:
+    # promising it "opens this unit" sends someone resolving phase 2 early to a
+    # brief for phase 1 with no warning.
+    assert "next unit in order" in out
     after = load_run_state(repo, "r1")
     assert after.steps["implement"].state == "running"
     assert units.unit_state(after.steps["implement"], "phase/1/peer-review") != state
@@ -76,3 +80,28 @@ def test_once_advanced_it_resolves_and_the_attempt_is_there(tmp_path: Path) -> N
     (attempt,) = units.attempts(record, "phase/1/peer-review")
     assert attempt.returned is not None
     assert attempt.outcome == "done"
+
+
+SKILLS = [
+    Path(__file__).resolve().parents[2] / "plugins/super-fr/skills/fr-goal/SKILL.md",
+    Path(__file__).resolve().parents[2] / ".opencode/skills/fr-goal/SKILL.md",
+    Path(__file__).resolve().parents[2] / ".hermes/skills/fr/fr-goal/SKILL.md",
+]
+
+
+@pytest.mark.parametrize("path", SKILLS, ids=lambda p: p.parts[-4])
+def test_the_skill_describes_the_sequence_fr_now_enforces(path: Path) -> None:
+    """The defect was produced by following the skill: its loop went straight
+    from the executor's return to resolving the review, with no `advance` to
+    brief `review-phase` in between. Refusing the shortcut while the prose still
+    describes it would make every phase trip the refusal once."""
+    text = " ".join(path.read_text().split())
+    assert "`fr run advance <run-id>` again to brief `review-phase`" in text
+
+
+@pytest.mark.parametrize("path", SKILLS, ids=lambda p: p.parts[-4])
+def test_the_skill_asks_the_orchestrator_to_say_what_it_ran_on(path: Path) -> None:
+    """fr no longer guesses a model for work the orchestrator did itself (C2),
+    so unless the skill asks for it the field is simply never filled."""
+    text = " ".join(path.read_text().split())
+    assert "--model <the model you are running on>" in text

@@ -295,6 +295,20 @@ class TestRunStartEntersIsolation:
         assert (sentinels / "sess-1.json").is_file()
         assert decision(run_hook(payload("ls", repo), sentinels)) == "deny"
 
+    def test_allowed_in_the_condition_it_was_actually_denied_in(self, tmp_path: Path) -> None:
+        """The live report: a real git repo that ALREADY has a linked worktree
+        (anyone's), so the #341 self-heal does not fire and the sentinel stays."""
+        repo = _git_repo(tmp_path / "repo")
+        _git(repo, "worktree", "add", "-q", str(tmp_path / "someone-elses"), "-b", "feat/other")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+
+        start = run_hook(payload("fr run start fr-goal --branch feat/x", repo), sentinels)
+
+        assert decision(start) is None
+        assert (sentinels / "sess-1.json").is_file()
+        assert decision(run_hook(payload("fr run advance r1", repo), sentinels)) == "deny"
+
     @pytest.mark.parametrize(
         "cmd",
         [
