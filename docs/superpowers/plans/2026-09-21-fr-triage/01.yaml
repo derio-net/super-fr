@@ -87,16 +87,16 @@ state:
       ticked_at: '2026-09-21T17:10:41+00:00'
       note: null
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:11:31+00:00'
       note: null
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:12:34+00:00'
       note: null
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:12:35+00:00'
       note: null
     P1.T3.S1:
       state: ' '
