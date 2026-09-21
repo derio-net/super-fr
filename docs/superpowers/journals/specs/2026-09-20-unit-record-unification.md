@@ -34,3 +34,14 @@ gh#514's measure_unit locates the transcript from the CURRENT process environmen
 ### v2 · review · Operator review: 'OpenCode and Hermes have no Stop hook' was asserted, not checked
 
 The same error gh#494 documents — a parity row declared absent for a reason that did not survive the binary. The operator supplied a survey of stop-like hooks; treated as a lead, not a fact, and checked where possible on the authoring machine: OpenCode 1.18.31 has session.idle in its SDK types and a prompt_async endpoint (so: re-prompt tier, cannot block); Copilot CLI 1.0.84 has a hooks system with a user hook already installed (blocking semantics unverified); Codex, Hermes and Agy are not installed and stay unverified. Redesigned as one harness-neutral predicate (fr run check --idle) plus adapters as strong as each harness allows: block on Claude Code, re-prompt on OpenCode (partial until live-proven), absent-with-note on Hermes. The survey's note that one harness caps consecutive continuations exposed a missing loop breaker: the guard now acts at most once per cursor position.
+
+<!-- fr:journal kind=decision scope=spec id=u6 created=2026-09-21T08:34:15 -->
+### u6 · decision · u6: name both review skills and enforce a derived findings obligation; block literals in this PR
+
+Operator review of PR #508, two inline comments, answered through a two-question batch.
+
+1. On the shipped review-phase member: "I would expect another element here, invoking superpowers:receiving-code-review. Is it being left at the implementing agent's discretion?" It was. Offered three readings: (a) name both skills AND add an enforceable findings obligation, (b) a third member step, (c) only name the second skill. Operator chose (a). (b) was rejected for drift: a new member id strands every fr-goal cursor in flight. (c) was rejected as still discretionary.
+
+2. On a run cursor's stdout scalar: "is this valid yaml?" It is, but it looks broken. Offered: block literals now, leave it, or a follow-up issue. Operator chose block literals in this PR.
+
+Spec section 4.E.1 records the design.

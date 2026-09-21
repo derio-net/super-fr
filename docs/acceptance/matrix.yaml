@@ -2560,7 +2560,7 @@ rows:
       - super-fr:tests/unit/test_run_evidence.py#L210
       - super-fr:tests/unit/test_run_evidence.py#L221
       int:
-      - super-fr:tests/integration/test_fr_goal_shape.py#L529
+      - super-fr:tests/integration/test_fr_goal_shape.py#L542
     status: ci
     notes: 'Phase 5 landed the gate: fr run resolve --state done on a step declaring
       evidence: refuses without --evidence review=<journal-entry-id> (exit 2, naming
@@ -3064,3 +3064,25 @@ rows:
       the run proceeds. Added after review r-p3-f2 found the row flipped on evidence
       covering only placement — the composed claim was untested, which is the failure
       class this row is about.
+  - id: run-review-findings-gate
+    capability: Run cursor
+    acceptance: A review unit cannot be resolved done while a finding filed against
+      its phase is still open, so a review is received (each finding fixed or refuted)
+      and not merely requested
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_findings.py#L96
+      - super-fr:tests/unit/test_run_evidence_findings.py#L169
+      - super-fr:tests/unit/test_run_evidence_findings.py#L212
+      - super-fr:tests/unit/test_run_evidence_findings.py#L267
+      int:
+      - super-fr:tests/integration/test_fr_goal_shape.py#L613
+    status: ci
+    notes: 'Added by the PR #508 operator review (spec 4.E.1). The findings obligation
+      is DERIVED from the plan journal at resolve time and never offered; five mutations
+      (gate never refuses, offered value accepted, fold ignores resolution records,
+      phase filter dropped, partial debt silenced) each fail the suite, and the shipped-shape
+      integration walk fails when the gate is disabled. Enforces that findings END closed,
+      not that the review was rigorous.'

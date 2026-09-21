@@ -610,6 +610,66 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
                 assert bare.exit_code == 2, bare.output
                 assert "--evidence review=" in " ".join(bare.output.split())
                 extra = ["--evidence", f"review={_record_review(root, slug, n)}"]
+                # The `findings` half, live on the SHIPPED shape too (PR #508
+                # review): a review that RAISED something is not done until it
+                # is fixed or refuted — through the real `fr journal`, so the
+                # pasteable command the refusal prints is one that works.
+                fid = f"f-p{n}"
+                journal = ["--scope", "plan", "--slug", slug]
+                raised = _fr(
+                    root,
+                    [
+                        "journal",
+                        "add",
+                        *journal,
+                        "--kind",
+                        "finding",
+                        "--phase",
+                        str(n),
+                        "--id",
+                        fid,
+                        "--state",
+                        "open",
+                        "--title",
+                        f"phase {n} finding",
+                        "--body",
+                        "raised by the review",
+                    ],  # fmt: skip
+                )
+                assert raised.exit_code == 0, raised.output
+                held = _fr(
+                    root,
+                    [
+                        "run",
+                        "resolve",
+                        "r1",
+                        "--step",
+                        member,
+                        "--item",
+                        f"phase/{n}",
+                        "--state",
+                        "done",
+                        *extra,
+                    ],  # fmt: skip
+                )
+                assert held.exit_code == 2, held.output
+                flat = " ".join(held.output.split())
+                assert f"--id {fid} --state fixed" in flat
+                closed = _fr(
+                    root,
+                    [
+                        "journal",
+                        "resolve",
+                        *journal,
+                        "--id",
+                        fid,
+                        "--state",
+                        "fixed",
+                        "--note",
+                        "fixed, with a test",
+                    ],  # fmt: skip
+                )
+                assert closed.exit_code == 0, closed.output
             else:
                 extra = []
             assert (

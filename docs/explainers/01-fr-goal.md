@@ -620,6 +620,26 @@ distinction the pipeline could not previously make: "review skipped" and
 "review passed clean" used to arrive at the same `done`. Now the first cannot
 reach `done` at all.
 
+A review entry proves that a review happened. It says nothing about what was
+done with what the review found, and that turns out to be the easier half to
+lose. Asking for a review and receiving one are two different disciplines:
+the second is the unglamorous part, where each finding is checked against the
+code, and then either fixed with a test that pins it or refuted with reasons
+— never quietly dropped, and never agreed with just to be agreeable. For a
+while the pipeline named only the first of the two, and left the second to
+whichever agent happened to be holding the phase. So the step now names both,
+in order, and backs the second with something it can actually observe. Naming
+a discipline cannot prove anyone followed it; its outcome can be checked. When
+the review is marked done, the tool reads the journal itself and refuses while
+any finding raised against that phase is still open, printing the exact
+command that closes each one. Nobody passes this in — a requirement satisfied
+by typing a flag is satisfied by anyone who can type — and what gets recorded
+is what the tool saw: the findings it found closed, or that there were none. A
+finding that honestly belongs to a later phase is filed against that phase,
+and holds *that* review open instead. The same check already ran once, at the
+very end, just before delivery. It has simply moved to the moment a finding is
+cheapest to fix: while the phase that caused it is still the one in hand.
+
 What it deliberately does not do is reach backwards. A review marked done
 before this gate existed is not retroactively failed; it is reported as
 unevidenced debt and the run carries on. An obligation enforced backwards in

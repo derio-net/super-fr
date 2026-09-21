@@ -256,6 +256,42 @@ for the idle guard to find the run at all.
 - **Mechanically:** branch `feat/journal-require-reviews` is merged into this one as the
   plan's first phase, as gh#519's was; its PR #517 closes as superseded.
 
+#### 4.E.1 `findings` — the second obligation (decision u6, from the PR #508 review)
+
+The operator's review comment on the shipped `review-phase` member: *"I would expect another
+element here, invoking `superpowers:receiving-code-review`. Is it being left at the
+implementing agent's discretion?"* It was. The member named one skill; the second appeared
+once, in a parenthesis of fr-goal §6, for the wrong-finding case only. And this very run is
+the evidence: the orchestrator reviewed all thirteen phases inline and invoked neither skill
+through its harness. `review` evidence proves an ENTRY exists; it cannot show what method
+produced it, or whether anything was done with what it found.
+
+- `Step.skill` accepts a string **or an ordered list**; `Step.skills` is the normalised
+  tuple. A one-skill step is byte-identical in the model and in the dispatch brief. The
+  shipped member now lists `requesting-code-review` then `receiving-code-review`.
+- The shipped member declares `evidence: [review, findings]`. **`findings` is derived, never
+  offered** — `--evidence findings=` is refused. Naming a skill cannot prove the skill was
+  used; fr can observe only its OUTCOME, so that is what it gates: `--state done` is refused
+  while any finding *filed against this unit's phase* is effectively open in the plan
+  journal, by the same fold `fr journal check` applies (`effective_finding_states`; a later
+  record can re-open). The refusal prints one pasteable `fr journal resolve … --state fixed`
+  line per open finding. On success fr stores the witness — the ids it saw closed, in the
+  order raised, or `none`.
+- **Deferral is a phase number, not a state.** A finding that belongs to a later phase is
+  filed against that phase and gates its review instead. A `--global` finding belongs to no
+  review and stays `journal-check`'s business. No fourth finding state was added.
+- **Rejected: a third member step** (`implement → review → address-review`), which is what
+  the comment most literally reads as. Drift compares member IDS, so a new member strands
+  every `fr-goal` cursor in flight on upgrade — what adding `journal-check` did to this
+  run's own cursor — and recovery today discards dispatch history. A field cannot do that;
+  `test_growing_the_obligation_does_not_strand_the_cursor` pins it.
+- **Debt is per obligation.** A unit resolved with `review=` before `findings` existed reads
+  `evidence: review=<id>` plus `unevidenced: findings (predates that obligation)`; exit
+  codes unchanged, exactly as §4.E's original debt rule.
+- **Limit, stated:** this enforces that findings END closed, not that the reviewer was
+  rigorous in raising them, nor that a `refuted` is well reasoned. Those remain judgment,
+  visible in the journal and in the PR body that is rendered from it.
+
 ### 4.F Migration — `run` 4 → 5, the first body-rewriting run migration
 
 Both prior run migrations were stamp-only. This one **rewrites the body**:
@@ -558,7 +594,7 @@ archive an unmigrated one.
 
 ## 7. Acceptance rows
 
-Twenty-three rows, grouped by what could go wrong. A rewrite this size is pinned by what it
+Twenty-three rows (plus `run-review-findings-gate`, added by the PR #508 review — §4.E.1), grouped by what could go wrong. A rewrite this size is pinned by what it
 could **regress** at least as much as by what it adds — the operator's call, and the audit
 it prompted found a chain-breaking flaw and an unmentioned writer before any code existed.
 

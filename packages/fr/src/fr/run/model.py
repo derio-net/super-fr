@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
@@ -550,7 +550,7 @@ def _represent_str(dumper: yaml.SafeDumper, value: str) -> yaml.ScalarNode:
 _CursorDumper.add_representer(str, _represent_str)
 
 
-def dump_cursor_yaml(data: dict) -> str:
+def dump_cursor_yaml(data: dict[str, Any]) -> str:
     """The ONE way a run cursor's mapping becomes text.
 
     Both writers call it — `dump_run_state` and the 4 -> 5 body rewrite

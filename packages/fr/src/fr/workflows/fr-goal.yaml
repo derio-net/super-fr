@@ -92,7 +92,16 @@ steps:
         emits: [journal:plan]
       - id: review-phase
         kind: agent
-        skill: superpowers:requesting-code-review
+        # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
+        # Naming only the first left what happens to a review's findings
+        # (verify each; fix it with a test or refute it with reasoning; never
+        # drop it) in one parenthesis of skill prose, i.e. at the implementing
+        # agent's discretion. A list on this step rather than a third member,
+        # because drift compares member IDS: a new one strands every cursor in
+        # flight, which is what adding `journal-check` did.
+        skill:
+          - superpowers:requesting-code-review
+          - superpowers:receiving-code-review
         needs: [spec, plan, journal:plan]
         emits: [journal:plan]
         # The evidence gate (unit-record-unification spec §4.E), and the
@@ -105,7 +114,17 @@ steps:
         # `kind=review` entry carrying this phase's `phase=N`. Two gates, one
         # rule, one verifier: `journal-check` remains the gate for a plan with
         # no cursor, this one for a plan that has one.
-        evidence: [review]
+        #
+        # `findings` is the enforceable half of the second skill, and it is
+        # DERIVED — never passed. Naming a skill cannot prove the skill was
+        # used; what fr can observe is its outcome. So `--state done` is also
+        # refused while any finding filed against this phase is effectively
+        # open in the plan journal (the fold `fr journal check` uses), and fr
+        # records the ids it saw closed, or `none`. It is `journal-check`'s own
+        # rule, moved from once-before-`deliver` to the moment a finding is
+        # cheapest to act on. A finding that belongs to a later phase is filed
+        # against THAT phase and gates its review instead.
+        evidence: [review, findings]
 
   - id: journal-check
     kind: cli

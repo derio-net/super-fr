@@ -320,6 +320,28 @@ def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
     return ordered
 
 
+def phase_finding_states(entries: list[JournalEntry], phase: int) -> dict[str, FindingState]:
+    """Every finding FILED AGAINST `phase` -> its effective state, in
+    first-appearance order.
+
+    The phase is the ORIGINAL entry's, never a resolution record's: a record
+    speaks about the finding it names, and `fr journal resolve` does not ask
+    for a phase. The state is the same fold `fr journal check` gates on
+    (`effective_finding_states`), so `fr run resolve`'s `findings` obligation
+    and the end-of-run gate cannot disagree about what "open" means — one rule,
+    two moments.
+
+    A finding filed with no phase (`--global`) belongs to no review, so it is
+    in no phase's map. It stays `fr journal check`'s business.
+    """
+    states = effective_finding_states(entries)
+    return {
+        e.id: states[e.id]
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.phase == phase and e.id in states
+    }
+
+
 def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
     """The ONE writer — `fr journal add`, `fr journal resolve`, and any test
     fixture built through `fr.test_support.build_plan_journal` all land here,
