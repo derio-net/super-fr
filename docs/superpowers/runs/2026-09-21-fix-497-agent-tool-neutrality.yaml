@@ -96,4 +96,15 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: done
+    at: '2026-09-21T15:03:07+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/532
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-21T15:02:39+00:00'
+          harness: claude-code
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-21T15:03:07+00:00'
+          outcome: done
