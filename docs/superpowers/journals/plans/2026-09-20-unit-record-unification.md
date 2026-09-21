@@ -693,3 +693,18 @@ Four of these were citing a range that no longer contained what the sentence cla
 `tests/unit/test_tripwire_explainers_fresh.py` passes (the rendered page carries the source's title and every heading, new ones included).
 
 **Full CI gate, `CLAUDE*` unset, every exit code read from a file and not a pipe:** pytest WITH coverage `rc=0` — **3915 passed, 80 skipped in 295s, total coverage 92.17%** (floor 75); `ruff format --check` rc=0 (389 files already formatted — run as the last check before committing, per the scar a phase on this plan left on CI's lint job); `ruff check` rc=0; mypy over all four src trees rc=0 (146 files); `bump-version.py --check` rc=0; `fr acceptance check` rc=0 (170 rows); `fr acceptance report --check` rc=0; `fr validate artifacts` rc=0 (48); `fr harness parity --check` rc=0; `sync-opencode --check` and `sync-hermes --check` both rc=0; `fr workflow check fr-goal` rc=0; `bun test` rc=0 (50 tests, 3 files).
+
+<!-- fr:journal kind=review scope=plan id=rev-p7 created=2026-09-21T02:31:17 phase=7 -->
+### rev-p7 · review · Phase 7 reviewed: the loop now ends on a dispatch; explainer citations verified; matrix merged by notes (phase 7)
+
+Phase 7 reviewed against spec 4.H, 4.G, 4.E, 4.D.1 and the explainers and acceptance-matrix rules. No findings.
+
+THE PROSE, read the way its reader will — as an orchestrator that has just received an executor's report. Section 5's cadence line now reads 'dispatch, claim, wait, review, resolve, advance, and that last arrow is the next dispatch: the cycle closes, it does not stop'; it previously ENDED on 'resolve'. Section 6 opens 'An iteration ENDS ON A DISPATCH, not a report', gives the same-turn sequence, states that the skill's autonomy contract outranks an output-style preference, and closes the list of legitimate turn ends (an operator gate, a genuine block, a unit HELD by a working executor, the finished run). The executor's own refactor step found two real gaps and fixed both: the sequence had skipped 'resolve the review with its evidence', which would have walked an orchestrator straight into the refusal the same section describes. Both guard costs are in shipped prose verbatim: a stale global fr on PATH exits 2 and SILENTLY disables the guard; roughly two seconds per turn end of a bound session. 117 lines against the 120 cap, net zero, nothing cut.
+
+EXPLAINER: the pre-check re-render of the unmodified source was byte-identical to the committed page, so the renderer is faithful and the page diff is only the prose written. All 21 SKILL.md line citations were re-derived, not just the ones this phase moved; four had been pointing at the WRONG SECTION before this PR ever touched them. Spot-checked five independently: each range starts on its section heading and ends exactly where the next heading begins.
+
+MATRIX: no delete or edit verb exists in fr acceptance, so gh#519's run-advance-refuses-running is merged into run-dispatch-refuses-second by notes on both rows — one canonical, one a SUPERSEDED pointer — and both stay ci, because demoting a merged row would report a false red for a capability that works. Three rows remain not-implemented, each live-only by nature and each saying what closes it: run-dispatch-harness-neutral, run-pickup-on-another-host, run-idle-reprompt-opencode.
+
+One stale claim found still live in a SHIPPED artifact: parity.yaml's opencode scope_note said the event was verified in 'the installed 1.18.31 SDK types'. 1.18.31 is the binary; the SDK type copies are 1.17.15, 1.1.27 and 1.0.23. Fixed at source.
+
+Gate re-run by the orchestrator: prose tripwires 102 passed, ruff format --check clean, versions agree at 4.12.0, acceptance check clean.
