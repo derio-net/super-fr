@@ -1911,9 +1911,12 @@ rows:
       - super-fr:tests/unit/test_harness_vocabulary.py
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
     status: ci
-    notes: Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1,
-      fr-init §2, both mirrors). Mirrors stay byte-identical; neutrality is
-      enforced at the canonical source.
+    notes: 'Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1, fr-init
+      §2, both mirrors). Mirrors stay byte-identical; neutrality is enforced at the
+      canonical source. Widened 2026-09-21 (agent-body-tool-neutrality, #497): the scan
+      now also covers the agent bodies — plugins/super-fr/agents/*.md and the generated
+      .opencode/agent/*.md — which were outside every tree, with scan_prose''s new extra_tools
+      flagging Claude Code''s isolation: "worktree" dispatch flag for those trees only.'
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance
