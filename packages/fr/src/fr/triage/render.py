@@ -28,7 +28,9 @@ if TYPE_CHECKING:
     from fr.triage.model import Facts, Issue, Judgement, Judgements
 
 _CODE = re.compile(r"`([^`\n]+)`")
-_BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
+# One pass over code OR bold, so two matches can never overlap and a code span is
+# never rescanned for bold (review r-p3-inline-nesting).
+_INLINE = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*")
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
 IN_FLIGHT = frozenset({"pr-draft", "pr-ready"})
@@ -240,9 +242,19 @@ def esc(s: str) -> str:
 
 
 def inline(text: str) -> str:
-    """Escape first, then allow exactly `code` and **bold** (spec §3.D)."""
-    out = _CODE.sub(r"<code>\1</code>", esc(text))
-    return _BOLD.sub(r"<strong>\1</strong>", out)
+    """Escape first, then allow exactly `code` and **bold** (spec §3.D).
+
+    A single left-to-right pass: code content is literal, and code inside bold
+    nests validly (`<strong><code>x</code></strong>`) because only the bold
+    span's own text is scanned for code.
+    """
+
+    def tag(m: re.Match[str]) -> str:
+        if m.group(1) is not None:
+            return f"<code>{m.group(1)}</code>"
+        return "<strong>" + _CODE.sub(r"<code>\1</code>", m.group(2)) + "</strong>"
+
+    return _INLINE.sub(tag, esc(text))
 
 
 def _safe_url(url: str) -> str | None:

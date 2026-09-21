@@ -38,6 +38,11 @@ from tests.unit.triage_fixtures import NOW, SUPER_FR, _super_fr_forge
         ("a & b", "a &amp; b"),
         ("`<script>`", "<code>&lt;script&gt;</code>"),
         ("*one* _two_ [l](u)", "*one* _two_ [l](u)"),
+        # r-p3-inline-nesting: one pass, so matches never overlap and code is literal.
+        ("`a**`b**", "<code>a**</code>b**"),
+        ("**a`b**c`", "<strong>a`b</strong>c`"),
+        ("`**x**`", "<code>**x**</code>"),
+        ("**`x`**", "<strong><code>x</code></strong>"),  # code inside bold nests validly
     ],
 )
 def test_inline_escapes_first_then_allows_only_code_and_bold(text: str, html: str) -> None:
