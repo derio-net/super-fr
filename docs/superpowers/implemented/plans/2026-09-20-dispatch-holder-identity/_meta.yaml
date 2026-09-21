@@ -1,6 +1,6 @@
 schema_version: 2
-plan: 2026-09-20-journal-require-reviews
-spec: docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+plan: 2026-09-20-dispatch-holder-identity
+spec: 2026-09-20-dispatch-holder-identity-design.md
 target_repo: derio-net/super-fr
 fr_version: '>=4.2.0,<5.0.0'
 created: '2026-09-20'
