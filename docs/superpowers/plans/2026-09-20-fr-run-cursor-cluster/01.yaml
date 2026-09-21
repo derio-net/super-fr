@@ -1,0 +1,143 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Walking skeleton: the composite step id teaches its two flags (#501)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - run-resolve-teaches-item-flag
+  skeleton: true
+tasks:
+- number: 1
+  title: '`_find_step` refuses a composite member id with an actionable message'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In `tests/unit/test_run_cli.py`, add `test_resolve_composite_member_id_teaches_the_two_flags`:
+      start a run against the shipped `fr-goal` shape, resolve `brainstorm`/`plan` so a plan is
+      recorded, advance into `implement`, then invoke
+      `fr run resolve <id> --step phase/1/implement-phase --state done`.
+      Assert exit 2 AND that stderr contains both `--step implement-phase` and `--item phase/1`.
+      Run `uv run pytest tests/unit/test_run_cli.py -k composite -q --no-cov` and CONFIRM IT FAILS
+      with today's message `step 'phase/1/implement-phase' not found in workflow 'fr-goal'`.
+      Paste the failing output into the phase journal — this is the walking skeleton's proof that
+      the CLI test harness reaches the real runtime, not a mock.
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In `packages/fr/src/fr/commands/run_cmd.py`, before `_find_step` raises, check whether
+      `step_id` contains `/` and its tail after the last `/` matches a member step id of some
+      grouped `for_each` step in the manifest. If so raise `RunStateError` with:
+        step '<id>' not found in workflow '<w>'.
+        It is a grouped `for_each` member, which takes two flags:
+          --step <member> --item <head>
+      Leave the message unchanged for every other not-found id. Re-run the test; confirm green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR. Extract the split into `_split_member_id(manifest, step_id) -> tuple[str, str] | None`
+      returning `(item, member_id)` or `None`, with a docstring saying why the composite is NOT
+      accepted in `--step` (spec 3.B: one canonical form, the flags are taught rather than hidden).
+      `_find_step` calls it. Re-run the file's tests; confirm still green.
+- number: 2
+  title: '`advance` prints the resolve command, before the JSON brief'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED. Add `test_advance_prints_the_resolve_command_before_the_json`: advance into `implement`,
+      capture stdout, and assert (a) some line contains
+      `fr run resolve <run-id> --step implement-phase --item phase/1 --state done|failed`,
+      and (b) `json.loads(stdout.strip().splitlines()[-1])` still succeeds — the brief must remain
+      the last line a naive `tail -1` reads. Confirm (a) FAILS today.
+  - id: P1.T2.S2
+    text: |-
+      GREEN. In `_advance_group`, print the hint line between the existing
+      `f"{step.id}: dispatch brief ({pending})"` line and the `json.dumps(...)` line, with
+      `soft_wrap=True`. Add a comment citing the same ordering constraint the gate-degradation
+      notice already documents (spec 3.B). Confirm both assertions pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR. Extract `_resolve_hint(run_id, member_id, item) -> str` building that command
+      string once; `_advance_group` uses it. Phase 2 reuses it for the ALREADY RUNNING refusal, so
+      the two surfaces cannot drift into printing different commands for the same act.
+- number: 3
+  title: 'Delivery-infrastructure smoke: every CI gate green on this slice'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Run, from the worktree, in order: `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest -q --no-cov`. All four must pass. This is the skeleton's point: the smallest
+      real change proves lint, types and the whole suite are reachable before the expensive phases.
+  - id: P1.T3.S2
+    text: |-
+      Flip the row now that evidence exists:
+      `uv run fr acceptance set-status --id run-resolve-teaches-item-flag --status ci
+       --level unit=super-fr:tests/unit/test_run_cli.py
+       --notes "Composite member id refused with the two flags spelled out; advance prints the same
+       command before the JSON brief, and the brief stays the last stdout line."`
+      Commit the regenerated reports with the code.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T13:34:33+00:00'
+      note: 'RED: test_resolve_composite_member_id_teaches_the_two_flags fails on
+        today''s message "step ''phase/1/implement-phase'' not found in workflow ''fr-goal''"
+        — the real shipped fr-goal manifest, driven to its implement group by real
+        CLI calls.'
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T13:35:01+00:00'
+      note: 'GREEN inline in _find_step: a slash-bearing id whose tail matches a member
+        of some for_each group raises the three-line message teaching --step <member>
+        --item <head>. Every other not-found id keeps the original one-line message.
+        Test passes.'
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T13:35:45+00:00'
+      note: 'REFACTOR: extracted _split_member_id(manifest, step_id) -> tuple[item,
+        member_id] | None, docstring citing spec 3.B / journal d2 for why the composite
+        is recognised but never accepted. _find_step calls it; the not-found prefix
+        is built once. All 130 tests in tests/unit/test_run_cli.py pass.'
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T13:36:40+00:00'
+      note: 'RED: test_advance_prints_the_resolve_command_before_the_json failed on
+        assertion (a) — output was only ''implement: dispatch brief (phase/1/implement-phase)''
+        plus the brief. Assertion (b) also exposed a second defect: _advance_group
+        printed the brief WITHOUT soft_wrap, so rich folded it at 80 cols and splitlines()[-1]
+        held a fragment.'
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T13:36:41+00:00'
+      note: 'GREEN: hint line printed between the human line and the JSON, soft_wrap=True,
+        with a comment citing spec 3.B and the gate-degradation notice''s identical
+        constraint. Also added the missing soft_wrap=True to _advance_group''s own
+        brief print — without it ''tail -1'' could never have parsed a grouped brief.'
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T13:37:26+00:00'
+      note: 'REFACTOR: extracted _resolve_hint(run_id, member_id, item) -> str, placed
+        directly above _advance_group; docstring names phase 2''s ALREADY RUNNING
+        refusal as the second consumer and why the two must not drift. 131 tests in
+        tests/unit/test_run_cli.py pass.'
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T13:46:06+00:00'
+      note: 'Gate sweep: ruff format (1 file reformatted), ruff check ''All checks
+        passed!'', mypy ''Success: no issues found in 138 source files'', pytest ''3
+        failed, 3292 passed, 80 skipped''. The 3 failures are pre-existing and host-specific
+        — proven by reproducing them at the pre-phase commit and by an empty diff
+        vs origin/main for every file involved. See journal p1-f2.'
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T13:46:44+00:00'
+      note: 'run-resolve-teaches-item-flag: not-implemented -> ci, level unit=super-fr:tests/unit/test_run_cli.py.
+        All three committed reports regenerated by set-status; ''fr acceptance check''
+        reports 129 rows OK (ci 103, skipped 18, not-implemented 8).'
+  completion:
+    at: '2026-09-20T13:46:55+00:00'
+    note: null
+    observed_prs: []

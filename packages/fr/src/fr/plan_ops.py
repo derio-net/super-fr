@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -30,6 +31,8 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.render import plan_locally_complete
+from fr.types import PHASE_TIERS, PhaseDoc, Step
 
 
 class StepSpec(TypedDict):
@@ -113,6 +116,31 @@ class PhaseSpec:
     # Walking-skeleton marker — emitted only when set (same byte-stability
     # rule as `acceptance`).
     skeleton: bool = False
+    # Harness-neutral complexity hint (2026-07-22 fr-goal-subagent-execution
+    # spec §B.2) — emitted only when set (same byte-stability rule as
+    # `acceptance`/`skeleton`). Validated against `fr.types.PHASE_TIERS` in
+    # `create()`'s pre-flight loop, not left to `PhaseHeader`'s Literal at the
+    # post-write re-parse (#133: that would strand a half-built folder).
+    tier: Literal["mechanical", "standard", "hard"] | None = None
+
+
+def _preflight_phase_error(ps: PhaseSpec) -> str | None:
+    """The first pre-flight validation error for `ps`, or None.
+
+    Each check here mirrors a `PhaseHeader` schema gate that would otherwise
+    only reject at `create()`'s post-write re-parse, stranding a half-built
+    plan folder (#133). One function per phase keeps `create()`'s loop a
+    single readable rule ("for each phase, raise the first pre-flight
+    error") instead of a growing set of inline `if`s.
+    """
+    if ps.number < 1:
+        return f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
+    if ps.tier is not None and ps.tier not in PHASE_TIERS:
+        return (
+            f"phase {ps.number} ({ps.title!r}): tier {ps.tier!r} is not valid, "
+            f"must be one of {list(PHASE_TIERS)}"
+        )
+    return None
 
 
 def create(
@@ -149,14 +177,14 @@ def create(
     # filesystem. A spec missing its '## Implementation Plans' section must
     # fail loud here — not after the folder is half-built — so a re-run after
     # adding the section isn't blocked by a stranded folder (#133). Mirrors how
-    # `fr apply` validates the diff before `--yes` touches GitHub.
-    # Same doctrine for phase numbering: the schema gate (PhaseHeader ge=1)
-    # would only reject at the post-write re-parse, stranding the folder.
+    # `fr apply` validates the diff before `--yes` touches GitHub. Same
+    # doctrine for phase numbering and tier below: their schema gates
+    # (PhaseHeader's `ge=1` and `Literal`) would only reject at the post-write
+    # re-parse, stranding the folder (#434 spec-review finding for tier).
     for ps in phases:
-        if ps.number < 1:
-            raise PlanEditError(
-                f"phase {ps.number} ({ps.title!r}): phase numbering starts at 1, not 0"
-            )
+        error = _preflight_phase_error(ps)
+        if error is not None:
+            raise PlanEditError(error)
     spec_path: Path | None = None
     if spec_str:
         candidate = (repo_root / spec_str).resolve()
@@ -289,12 +317,14 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
         "depends_on": list(ps.depends_on),
         "tracking_issue": None,
     }
+    # Optional header fields are emitted only when set, so plans written
+    # before each field existed stay byte-stable and parse on older readers.
     if ps.acceptance:
-        # Omitted when empty so pre-acceptance plans stay byte-stable.
         phase_header["acceptance"] = list(ps.acceptance)
     if ps.skeleton:
-        # Omitted when unset so pre-marker plans stay byte-stable.
         phase_header["skeleton"] = True
+    if ps.tier is not None:
+        phase_header["tier"] = ps.tier
     return {
         "schema_version": 2,
         "phase": phase_header,
@@ -849,6 +879,190 @@ _MANUAL_VERB_RES = tuple(
 )
 
 
+# Agentic dispatch-verb gate (#428). `fr-phase-executor` is a leaf on both
+# harnesses — Claude Code omits `Agent` from its frontmatter tool grant,
+# OpenCode sets `task: deny` — so a step telling it to dispatch a subagent
+# is unexecutable by construction. The honest executor does the nearest
+# thing it can, reports the deviation, and ticks anyway; the plan then
+# records completion for work nobody performed as written (spec §2.E).
+#
+# Precision is the whole design problem: super-fr is a repo ABOUT dispatch.
+# #428's literal proposal `\bdispatch(es|ed|ing)?\b` scores 292 hits across
+# this repo's own plan corpus (the bare stem alone scores 262) and every
+# one is a false positive (spec §2.D measured 237 on the smaller enforcing
+# read) — at error severity the gate would be switched
+# off within a week. Both patterns below score ZERO over all 2113 agentic
+# steps of that corpus, ticked and pending alike, pinned by
+# `tests/unit/test_dispatch_lint_corpus.py`.
+#
+# "Both patterns, over ALL steps" is the claim that matters and it is the
+# one that was nearly shipped false: the first cut added a frameless
+# `subagent_type[:=]` arm, which hit a real live plan
+# (`2026-09-19-opencode-subagent-dispatch` P4.T1.S2). The corpus test
+# stayed green only because that step is ticked and the gate exempts
+# ticked steps — so the measurement has to be taken over every step, not
+# over the subset the gate happens to look at today.
+
+# Bare imperatives only. An inflected form (`dispatches`, `spawning`) is a
+# verb in the indicative or a gerund — it DESCRIBES. The boundary anchors
+# position; the bare stem is what anchors mood, and the two together are
+# what separate "Dispatch the cold-reader agent" from "Note: dispatch is
+# described in the agent docs".
+_DISPATCH_VERB = r"""(?:
+      dispatch
+    | delegate\s+to
+    | spawn
+    | hand\s+off\s+to
+    | fan\s+out\s+to
+)\b"""
+# The trailing `\b` is load-bearing, not tidiness: without it the stem
+# `dispatch` matches the PREFIX of `dispatching`, the window swallows the
+# suffix, and the bare-stem rule silently buys nothing — "Add a test:
+# dispatching to the fr-phase-executor agent is refused" was flagged.
+
+# ...and the verb must not be followed by a copula, a modal or `of`, all
+# of which turn the stem back into a subject or a noun: "dispatch IS
+# described", "dispatch OF a subagent belongs in a [manual] phase".
+_NOT_A_PREDICATE = r"""(?!\s+(?:
+      of|is|are|was|were|isn't|aren't
+    | can|cannot|can't|could|should|must|may|might|will|would
+    | does|do|did|has|have|had
+    | means|happens|occurs|belongs|remains|stays
+)\b)"""
+
+# An agent-shaped OBJECT. Every arm requires a ROLE WORD: without one, a
+# bare `word:word` token re-admits the 42-hit false-positive class §2.D
+# measured (`plan:my-slug`, `fr:synced`, `fr.tracker:GithubTracker`,
+# `start:end`, `cli:app`).
+_AGENT_ROLE = r"(?:sub-?agents?|agents?|executors?|researchers?|reviewers?|readers?)"
+_ROLE_STEM = r"(?:agent|executor|researcher|reviewer|reader)"
+_AGENT_OBJECT = rf"""(?:
+      `[\w.-]+:[\w.-]*{_ROLE_STEM}[\w.-]*`
+    | \b[\w.-]+:[\w.-]*{_ROLE_STEM}[\w.-]*\b
+    | \b{_AGENT_ROLE}\b
+)"""
+# Arm 1 (backticked) is not subsumed by arm 3 even though arm 3 would
+# also match `researcher` inside it: it is what makes the reported match
+# the COMPLETE token an author can recognise —
+# "Dispatch `blog-craft:post-researcher`" rather than a truncation
+# missing its closing backtick. Arm 2 catches the glued form
+# (`blog-craft:postresearcher`), where arm 3's word boundary fails. Both
+# are pinned by tests; delete either and a test goes red.
+
+# An INSTRUCTION BOUNDARY is start-of-text, real sentence punctuation
+# followed by whitespace, or a list marker starting a line — NEVER a bare
+# newline. Plan step text is hard-wrapped prose, so a bare-newline
+# boundary lets a SOFT WRAP fake an imperative: measured over the corpus,
+# it flagged this feature's own phase-3 step for saying "...spawn or\nhand
+# off to a subagent is a BLOCKER", which describes the contract and
+# instructs nothing. A list item is a fresh instruction and keeps its
+# anchor; a wrap is a formatting artifact and must not create one.
+#
+# Two refinements on the punctuation arm, both from measurement:
+#   * the trailing `\s+`, without which the ellipsis in `"...spawn` reads
+#     as a sentence start;
+#   * the abbreviation lookbehinds, because `e.g.`, `i.e.`, `etc.`, `cf.`
+#     and `vs.` all satisfy `(?<=[.;:!?])\s+` while continuing the same
+#     sentence — "Cf. dispatch to the fr-phase-executor agent" is a
+#     cross-reference, not an instruction.
+_INSTRUCTION_BOUNDARY = r"""(?:
+      \A\s*
+    | (?<=[.;:!?])(?<!e\.g\.)(?<!i\.e\.)(?<!etc\.)(?<!cf\.)(?<!vs\.)\s+
+    | ^[ \t]*(?:[-*+]|\d+[.)])[ \t]+
+)"""
+
+_CONNECTIVE = r"(?:(?:then|and|next|finally|also)\s+)?"
+
+# Pattern 1 — imperative-head dispatch verb with an agent-shaped object
+# within ~60 characters of the SAME LINE. The head anchor is what buys the
+# precision: it separates INSTRUCTING the executor to dispatch from
+# DESCRIBING dispatch, which is what every measured false positive
+# ("implement `fr_dispatch.tick()` so it dispatches phases to the runner")
+# was doing.
+#
+# `\n` is excluded from the window deliberately, and it costs recall: a
+# verb and its object split by a hard wrap ("Dispatch the\ncold-reader
+# agent") is NOT flagged. That is the priced trade — the same window
+# spanning newlines lets an object on an unrelated wrapped line manufacture
+# a hit, which is the soft-wrap defect one level down. Precision first: a
+# gate that fires on prose gets switched off, a gate that misses a wrapped
+# instruction still catches the next unwrapped one.
+_RE_DISPATCH_HEAD = re.compile(
+    _INSTRUCTION_BOUNDARY
+    + _CONNECTIVE
+    + _DISPATCH_VERB
+    + _NOT_A_PREDICATE
+    + r"[^.;:!?\n]{0,60}?"
+    + _AGENT_OBJECT,
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+
+# Pattern 2 — the explicit mechanism, in an instructional frame, behind
+# the SAME instruction boundary as pattern 1. Bare `Agent tool` / `Task
+# tool` are ordinary nouns in a repo that documents dispatch: measured
+# over the corpus the nominal form flagged 3 steps, all 3 of them this
+# feature's own plan describing what the executor lacks. Anchoring and
+# bare-stem mood are both needed — "Explain why calling the Agent tool is
+# impossible here" is phase 4's own work, and it is not an instruction to
+# dispatch.
+#
+# Arm A requires a NON-EMPTY modifier between `the` and the role word,
+# which is what distinguishes naming an agent ("Use the fr-phase-executor
+# agent") from using `agent` as a modifier ("Use the agent frontmatter in
+# plugins/super-fr/agents/fr-phase-executor.md" — phase 3's own step).
+# Arm B is the fixed tool token.
+#
+# There is deliberately NO frameless `subagent_type[:=]` arm. In YAML and
+# in markdown that token is a KEY NAME — a mention, not a call site — and
+# a frameless arm hit a legitimate live plan on the corpus. The framed
+# form still catches "Call the Task tool with subagent_type:
+# general-purpose", so recall for the real instruction survives.
+_RE_DISPATCH_MECHANISM = re.compile(
+    _INSTRUCTION_BOUNDARY
+    + _CONNECTIVE
+    + r"""(?:use|call|invoke)\s+the\s+(?:
+          (?:[^\s.;:!?]+[ \t]+){1,3}"""
+    + _AGENT_ROLE
+    + r"""\b
+        | (?:Task|Agent)[ \t]+tools?\b
+    )""",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+
+_DISPATCH_RES = (_RE_DISPATCH_HEAD, _RE_DISPATCH_MECHANISM)
+
+# Fenced code blocks are content being WRITTEN, not an instruction to the
+# executor, so they are stripped before the scan. Inline backticks are
+# deliberately NOT stripped: the backticked agent name IS the object the
+# detector keys on, and removing it turns the observed defect
+# "Dispatch `blog-craft:post-researcher` per post" into "Dispatch   per
+# post" — the detector goes blind on the one case it exists for (spec
+# §4.A).
+#
+# The opening run is CAPTURED and back-referenced, because a fence is
+# closed by a run at least as long as its opener. Matching any ``` as a
+# closer mis-pairs a ````-fenced block that quotes a ```-fenced one — and
+# a ````markdown block quoting a rejected plan step is exactly the shape
+# phases 3 and 4 must write into SKILL.md. The mis-pairing does not merely
+# strip too little: it UN-FENCES the quoted instruction, so the gate fires
+# on a step that is only quoting the thing it forbids.
+#
+# An unterminated fence strips to end of text. For a precision-first gate
+# that is the safer reading of an ambiguous document: an author who opened
+# a block meant everything after it to be content.
+_FENCED_CODE_RE = re.compile(
+    r"^[ \t]*(`{3,})[^\n]*\n"  # opening run (captured) + info string
+    r".*?"  # content
+    r"(?:^[ \t]*\1`*[ \t]*$|\Z)",  # a run at least as long, or end of text
+    re.DOTALL | re.MULTILINE,
+)
+
+
+def _strip_fenced_code(text: str) -> str:
+    """Remove fenced code blocks. Inline backticks survive, by design."""
+    return _FENCED_CODE_RE.sub("\n", text)
+
+
 def _note_defers_forward(note: str, phase_number: int) -> bool:
     """True iff `note` defers execution beyond `phase_number`.
 
@@ -864,6 +1078,24 @@ def _note_defers_forward(note: str, phase_number: int) -> bool:
     return any(phrase in lowered for phrase in _DEFER_PHRASES)
 
 
+def _not_ticked_steps(phase: PhaseDoc) -> Iterator[Step]:
+    """Every not-yet-ticked step of `phase`, in document order.
+
+    The single walk both per-step detectors of the agentic-purity gate
+    consume (#252's manual-verb scan and #428's dispatch scan). They share
+    an exemption — a completed (`'x'`) step is a claim of performance that
+    already happened, so neither gate retro-errors on it — and sharing the
+    walk is what stops a future change to that exemption from applying to
+    one detector and not the other.
+    """
+    for task in phase.tasks:
+        for step in task.steps:
+            state = phase.state.steps.get(step.id)
+            if state is not None and state.state == "x":
+                continue
+            yield step
+
+
 @dataclass(frozen=True)
 class ReviewIssue:
     severity: Literal["info", "warn", "error"]
@@ -871,6 +1103,33 @@ class ReviewIssue:
 
     def __str__(self) -> str:
         return f"[{self.severity}] {self.message}"
+
+
+def _trailing_manual_block(plan: Plan) -> set[int]:
+    """The numbers of the plan's maximal *suffix* of `tag: manual` phases.
+
+    The invariant this serves (#496, 2026-09-20 spec §3.D.1) is: **no manual
+    phase may be outstanding when an agentic phase after it runs.** A manual
+    phase is therefore valid iff it is in this trailing block, OR is already
+    `fr.render.plan_locally_complete` — the second clause is what keeps
+    fr-goal §3's front-load exception expressible, since that flow ends with
+    the operator ticking the phase's steps before implementation resumes.
+
+    Walks phases in number order from the last one backwards and stops at
+    the first agentic phase, so `1 agentic, 2 manual, 3 agentic, 4 manual`
+    returns `{4}` and not `{2, 4}`. An all-manual plan returns every number;
+    a plan with no manual phases returns the empty set.
+
+    Shared on purpose: `self_review` (the authoring gate) and the `implement`
+    group preflight (the runtime gate, spec §3.D.2) both call this, so the
+    two enforcement points cannot disagree about what "trailing" means.
+    """
+    trailing: set[int] = set()
+    for phase in sorted(plan.phases, key=lambda p: p.phase.number, reverse=True):
+        if phase.phase.tag != "manual":
+            break
+        trailing.add(phase.phase.number)
+    return trailing
 
 
 def self_review(plan: Plan) -> list[ReviewIssue]:
@@ -903,9 +1162,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                 )
             )
 
-    # Agentic-purity gate (#252). An agentic phase is meant to be fully
-    # agent-completable and end in one PR. Two error-severity detectors per
-    # agentic phase (the gate is enforced, not advisory):
+    # Agentic-purity gate (#252, extended by #428). An agentic phase is
+    # meant to be fully agent-completable and end in one PR. Three
+    # error-severity detectors per agentic phase (the gate is enforced, not
+    # advisory):
     #   1. Deferred steps — a step skipped (`'-'`) with a forward-deferring
     #      note was manual by nature and belongs in a manual phase.
     #   2. Manual-operation language in a not-yet-completed step. Completed
@@ -914,6 +1174,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     #      step texts that merely QUOTE the phrases) from retro-erroring.
     #      At authoring time every step is unticked, so the gate bites
     #      exactly where it should.
+    #   3. A dispatch instruction aimed at an actor with no Agent tool
+    #      (#428). Detectors 2 and 3 consume the same
+    #      `_not_ticked_steps` walk, so the exemptions above cannot
+    #      apply to one gate and not the other.
     for phase in plan.phases:
         if phase.phase.tag != "agentic":
             continue
@@ -932,23 +1196,51 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                         ),
                     )
                 )
-        for task in phase.tasks:
-            for step in task.steps:
-                state = phase.state.steps.get(step.id)
-                if state is not None and state.state == "x":
-                    continue
-                hit = next((p for p in _MANUAL_VERB_RES if p.search(step.text)), None)
-                if hit is not None:
-                    issues.append(
-                        ReviewIssue(
-                            severity="error",
-                            message=(
-                                f"phase {n} (agentic) step {step.id} reads like a "
-                                f"manual operation (matched {hit.pattern!r}) — move it "
-                                f"into a manual phase; agentic phases must be pure agentic."
-                            ),
-                        )
+        for step in _not_ticked_steps(phase):
+            hit = next((p for p in _MANUAL_VERB_RES if p.search(step.text)), None)
+            if hit is not None:
+                issues.append(
+                    ReviewIssue(
+                        severity="error",
+                        message=(
+                            f"phase {n} (agentic) step {step.id} reads like a "
+                            f"manual operation (matched {hit.pattern!r}) — move it "
+                            f"into a manual phase; agentic phases must be pure agentic."
+                        ),
                     )
+                )
+            scanned = _strip_fenced_code(step.text)
+            m = next(
+                (m for m in (p.search(scanned) for p in _DISPATCH_RES) if m is not None),
+                None,
+            )
+            if m is not None:
+                matched = " ".join(m.group(0).split())
+                issues.append(
+                    ReviewIssue(
+                        severity="error",
+                        message=(
+                            f"phase {n} (agentic) step {step.id} tells the phase "
+                            f"executor to dispatch a subagent (matched {matched!r}) "
+                            f"— fr-phase-executor has no Agent tool (OpenCode: "
+                            f"task: deny) and cannot dispatch anything, so this step "
+                            f"is unexecutable by construction (#428). Name the "
+                            f'OUTCOME instead ("gather file:line-cited evidence '
+                            f'following <protocol>"), or move the dispatch into '
+                            f"the plan's TRAILING [manual] phase — a mid-plan "
+                            f"[manual] phase with agentic work after it trades this "
+                            f"error for the #496 placement one."
+                        ),
+                    )
+                )
+
+    # Trailing-manual invariant (#496, 2026-09-20 spec §3.D.1): no manual
+    # phase may be OUTSTANDING when an agentic phase after it runs. Checked
+    # here because "where may a manual phase sit" is a structural invariant
+    # of the plan, so it can be decided before anything is dispatched —
+    # fr-goal runs this as its `plan-review` cli step, whose exit code is
+    # the verdict, so a mis-shaped plan fails before phase 1 ever leaves.
+    issues.extend(_manual_placement_issues(plan))
 
     # The plan's declared workflow shape (spec §4.A.1): it must resolve,
     # and it must be a valid shape. Both are errors — dispatch reads this
@@ -962,6 +1254,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # Walking-skeleton gate (fr-goal methodology restoration): the first
     # agentic phase is the delivery-infrastructure smoke.
     issues.extend(_skeleton_issues(plan))
+
+    # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
+    # fr_version floor probe for `tier`, and the untiered-agentic-phase nudge.
+    issues.extend(_tier_issues(plan))
 
     # Refactor-or-justify gate (fr-goal methodology restoration): every
     # multi-step task ends red → green → refactor, or records why not.
@@ -1015,6 +1311,89 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         )
 
     return issues
+
+
+def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
+    """Where a manual phase may sit (#496, 2026-09-20 spec §3.D.1).
+
+    One invariant — *no manual phase may be outstanding when an agentic
+    phase after it runs* — with two ways to break it, so one pass over the
+    phases and two distinct `severity="error"` messages:
+
+      POSITION    a manual phase that is neither in the trailing manual
+                  block nor already `plan_locally_complete`, with agentic
+                  work still to come after it.
+      DEPENDENCY  an agentic phase whose `depends_on` names an OUTSTANDING
+                  manual phase, whatever the two positions — position alone
+                  is not the invariant, and a *trailing* manual phase
+                  reintroduces the hazard the moment something agentic waits
+                  on it.
+
+    Both halves key on the same word, *outstanding*, and that is the whole
+    point (review `r4-f1`). An earlier draft made the dependency half
+    unconditional over every manual phase, which read as the stricter and
+    therefore safer choice. It is not: it makes fr-goal §3's **front-load**
+    exception unexpressible, because front-loading is defined by that very
+    dependency — §3 front-loads "only when agentic work depends on it". The
+    canonical front-load shape is `1 [manual] (ticked, the operator's go),
+    2 agentic depends_on [1]`, and the unconditional rule errors on it
+    forever with no remedy that keeps the plan's meaning: "drop the
+    dependency" discards a true fact about the build order, and "make
+    phase 2 manual" abandons the automation. Operator decision `d5` chose
+    "trailing OR already complete" precisely so §3 survived; a dependency on
+    an already-complete manual phase waits on nobody.
+
+    The reverse dependency direction is deliberately legal: a trailing
+    manual phase may declare backward deps on the agentic work it collects.
+    """
+    out: list[ReviewIssue] = []
+    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
+    trailing = _trailing_manual_block(plan)
+    # OUTSTANDING manual phases, not all of them: a manual phase whose steps
+    # are already ticked is work nobody is still owed, so nothing waits on it
+    # (review `r4-f1`). Same predicate the position half uses, so the two
+    # halves cannot disagree about what "outstanding" means.
+    outstanding_manual = {
+        p.phase.number for p in ordered if p.phase.tag == "manual" and not plan_locally_complete(p)
+    }
+    for idx, phase in enumerate(ordered):
+        n = phase.phase.number
+        if phase.phase.tag == "manual":
+            if n in trailing or plan_locally_complete(phase):
+                continue
+            after = next(
+                (p.phase.number for p in ordered[idx + 1 :] if p.phase.tag == "agentic"),
+                None,
+            )
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is `tag: manual` but is neither in the plan's "
+                        f"trailing manual block nor already complete, so agentic "
+                        f"phase {after} would run while a human is still owed work. "
+                        f"Move phase {n} to the end of the plan, or tick its steps "
+                        f"(the operator's go) before the run reaches phase {after}."
+                    ),
+                )
+            )
+            continue
+        for dep in sorted(set(phase.phase.depends_on) & outstanding_manual):
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is agentic but declares depends_on phase {dep}, "
+                        f"which is `tag: manual` and still outstanding — an agentic "
+                        f"phase must never wait on a human, whatever the two "
+                        f"positions. Tick phase {dep}'s steps before the run reaches "
+                        f"phase {n} (fr-goal's front-load: the operator's go), drop "
+                        f"the dependency, or make phase {n} manual and move both into "
+                        f"the plan's trailing manual block."
+                    ),
+                )
+            )
+    return out
 
 
 def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
@@ -1117,23 +1496,37 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
     # the version gate there and die on a raw "extra field" pydantic error
     # (#352 review). Probe: does the constraint admit any pre-3.7.0 version?
     if linked and plan.meta.fr_version:
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("3.6.99", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            f"phases link acceptance rows but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
-                            f"floor it at '>=3.7.0,<4.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.6.99",
+            message=(
+                f"phases link acceptance rows but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-acceptance fr — "
+                f"floor it at '>=3.7.0,<4.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
+
+
+def _version_floor_issue(
+    fr_version: str, *, probe_version: str, message: str
+) -> ReviewIssue | None:
+    """Shared shape behind the `acceptance:`/`tier:` (and, in principle, any
+    future field's) version-floor probes: does `fr_version` admit
+    `probe_version` (the highest pre-feature release)? If so, a `warn` issue
+    carrying `message`; otherwise `None`. A malformed constraint is left to
+    the parser, which already fails loud elsewhere — swallow silently here
+    rather than duplicate a worse-worded error."""
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+
+    try:
+        if SpecifierSet(fr_version).contains(probe_version, prereleases=True):
+            return ReviewIssue(severity="warn", message=message)
+    except InvalidSpecifier:
+        pass  # the parser already fails loud on malformed constraints
+    return None
 
 
 def _has_cycle(graph: dict[int, set[int]], start: int) -> bool:
@@ -1201,25 +1594,21 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
             )
         )
     if marked and plan.meta.fr_version:
-        # Same floor probe as `acceptance:` (#352 review): a plan that marks a
+        # Same floor probe as `acceptance:` (#352 review) and `tier:` — and it
+        # says so, so it goes through the same helper. A plan that marks a
         # skeleton while its fr_version admits a pre-marker fr passes here and
         # dies on a raw "extra field" pydantic error over there.
-        from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-        try:
-            if SpecifierSet(plan.meta.fr_version).contains("4.1.1", prereleases=True):
-                out.append(
-                    ReviewIssue(
-                        severity="warn",
-                        message=(
-                            "a phase marks the skeleton but fr_version "
-                            f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
-                            "floor it at '>=4.2.0,<5.0.0'."
-                        ),
-                    )
-                )
-        except InvalidSpecifier:
-            pass  # the parser already fails loud on malformed constraints
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="4.1.1",
+            message=(
+                "a phase marks the skeleton but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-skeleton fr — "
+                "floor it at '>=4.2.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
     return out
 
 
@@ -1257,6 +1646,52 @@ def _skeleton_overridden(plan: Plan) -> bool:
         return False
     want = f"skeleton-override-{plan.meta.plan}"
     return any(e.kind == "decision" and e.id == want for e in entries)
+
+
+def _tier_issues(plan: Plan) -> list[ReviewIssue]:
+    """`tier` gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2):
+
+    1. Floor probe — same shape as `_acceptance_link_issues`'/`_skeleton_issues`'
+       3.7.0/4.1.1 probes: `tier` is a 3.12.0 schema field on the closed-world
+       `PhaseHeader`, so a plan using it while `fr_version` admits an older fr
+       would pass the version gate and die on a raw "extra field" pydantic
+       error over there.
+    2. Untiered-agentic-phase warning — #498's fail-visibly doctrine moved to
+       plan time: an agentic phase with no `tier` is dispatched untiered,
+       silently inheriting the session model, which was previously
+       indistinguishable from working tiering at every observable point.
+       Manual phases are never dispatched to a model, so a missing tier there
+       is not a gap.
+    """
+    out: list[ReviewIssue] = []
+    tiered = any(ph.phase.tier is not None for ph in plan.phases)
+    if tiered and plan.meta.fr_version:
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="3.11.99",
+            message=(
+                f"phases carry a tier but fr_version {plan.meta.fr_version!r} "
+                f"admits a pre-tier fr — floor it at '>=3.12.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
+
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic" or ph.phase.tier is not None:
+            continue
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"phase {ph.phase.number} is agentic but declares no tier — "
+                    f"it will be dispatched untiered, inheriting the session's "
+                    f"model. Add `tier` to the phase header, one of "
+                    f"{list(PHASE_TIERS)}."
+                ),
+            )
+        )
+    return out
 
 
 def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
@@ -1298,7 +1733,7 @@ def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
                         f"phase {n} task {task_id} has no refactor step and no "
                         f"no-refactor-because justification — add a refactor step "
                         f"or record one: `fr journal add --scope plan "
-                        f"--slug {plan.meta.plan} --kind discovery "
+                        f"--slug {plan.meta.plan} --kind discovery --phase {n} "
                         f"--title 'no-refactor-because {task_id}' --body <reason>`."
                     ),
                 )

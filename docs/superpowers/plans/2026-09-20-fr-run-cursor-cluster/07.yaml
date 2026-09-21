@@ -1,0 +1,78 @@
+schema_version: 2
+phase:
+  number: 7
+  title: '[manual] Post-merge live verification against a real fr-goal run'
+  tag: manual
+  depends_on:
+  - 2
+  - 3
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - run-advance-refuses-running
+  - run-resolve-teaches-item-flag
+  - run-start-binds-session
+  - plan-manual-phase-trailing
+  - run-manual-phase-never-dispatched
+tasks:
+- number: 1
+  title: Exercise all four fixes on a real, paid run
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      OPERATOR. Start a fresh `/fr-goal` run on a real feature branch (a paid model, a real
+      workspace). While `implement` has a phase executor outstanding, run `fr run advance <id>` a
+      second time: expect the ALREADY RUNNING refusal and exit 2, naming the dispatch time. Then run
+      `fr run advance <id> --redispatch` and confirm it re-briefs the SAME unit and touches no other.
+      Finally run `--redispatch` with nothing outstanding and confirm exit 2.
+  - id: P7.T1.S2
+    text: |-
+      OPERATOR. Copy the composite id out of that run's `advance` output verbatim into
+      `fr run resolve <id> --step phase/N/implement-phase --state done` and confirm the error
+      teaches `--step implement-phase --item phase/N`. Confirm the hint line appears in `advance`'s
+      output ahead of the JSON, and that `fr run advance <id> | tail -1 | jq .` still parses.
+  - id: P7.T1.S3
+    text: |-
+      OPERATOR. On that same fresh branch, run `fr isolation status` immediately after
+      `fr run start` and confirm the row reads `sessions=<uuid>`, not `sessions=none` — the exact
+      symptom 1.2 reproduced while writing this spec. Then disable the bind hook, repeat with an
+      explicit `fr run start --session <id> --harness claude-code`, and confirm it binds too.
+  - id: P7.T1.S4
+    text: |-
+      OPERATOR. Let that run reach a plan with a trailing `[manual]` phase and confirm: no dispatch
+      brief is built for it, `fr run status` shows `phase/<n>: manual`, `implement` completes, and
+      `deliver` still opens the PR. Then hand-author a plan with a middle unticked manual phase and
+      confirm `fr plan self-review` refuses it with the 3.D.1 message.
+  - id: P7.T1.S5
+    text: |-
+      OPERATOR. Report the outcome. If every check passes, flip the five rows to reflect live
+      evidence with `fr acceptance set-status ... --notes "live-verified <date> (host/org redacted
+      per third-party-privacy)"`. If any check fails, file it and set that row `failing` rather than
+      leaving a green report that no run supports.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 SUPPORTED_SCHEMA = 1
 """The only `schema:` value `parse_manifest` accepts today (spec §4.A: "an
@@ -39,12 +39,57 @@ class Step(BaseModel):
     id: str
     kind: Literal["cli", "agent"]
     run: str | None = None
-    skill: str | None = None
+    # One skill, or several IN ORDER — the dispatched agent loads each. A plain
+    # string stays a plain string (in the model and in the brief), so every
+    # manifest and every brief consumer written before the list form is
+    # untouched. The list exists because some work is two disciplines, not one:
+    # a review is REQUESTED and then RECEIVED, and a step that could only name
+    # the first left the second to the implementing agent's discretion. It is a
+    # field, not a second member step, for `evidence`'s reason below: drift
+    # compares member ids. Read it through `skills`.
+    skill: str | tuple[str, ...] | None = None
     agent: str | None = None
     needs: tuple[str, ...] = ()
     emits: tuple[str, ...] = ()
     gate: Literal["operator"] | None = None
     tier: str | None = None
+    # Obligations this step must EVIDENCE before it can be resolved `done`
+    # (spec 2026-09-20-unit-record-unification §4.E). Each name is verified by
+    # `fr run resolve --evidence <name>=<journal-entry-id>`, and the verified
+    # id is stored on the unit. `review` is the one name fr knows how to
+    # verify — against the plan journal, by gh#517's own rule — so a step
+    # declaring anything else is refused at resolve time rather than recorded
+    # unverified.
+    #
+    # **Opt-in, per step, empty by default**, which is the whole compatibility
+    # story: a shape declaring none resolves EXACTLY as it did before this
+    # field existed, so repo-authored workflows are untouched until they ask.
+    # It is also a FIELD, not a step: drift (`run_cmd._check_step_drift`)
+    # compares step and member IDS, so adding this to a shipped shape cannot
+    # strand a cursor already in flight the way adding a step does.
+    evidence: tuple[str, ...] = ()
+
+    @field_validator("skill")
+    @classmethod
+    def _a_skill_names_something(
+        cls, value: str | tuple[str, ...] | None
+    ) -> str | tuple[str, ...] | None:
+        if value is None:
+            return None
+        names = (value,) if isinstance(value, str) else value
+        if not names or any(not name.strip() for name in names):
+            raise ValueError("`skill` must name at least one skill, and none may be blank")
+        if len(set(names)) != len(names):
+            raise ValueError(f"`skill` names the same skill twice: {list(names)}")
+        return value
+
+    @property
+    def skills(self) -> tuple[str, ...]:
+        """`skill`, whichever form it was written in, as an ordered tuple."""
+        if self.skill is None:
+            return ()
+        return (self.skill,) if isinstance(self.skill, str) else self.skill
+
     # Legal for `unit: run` (spec example: `implement`'s `for_each: phase`);
     # an error for `unit: phase` (items are already per-phase) — that
     # unit-dependent conflict is a SEMANTIC check, enforced by

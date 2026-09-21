@@ -123,9 +123,70 @@ class GcAction:
     # merged | merged-by-content | open | no-pr | orphan | no-state | dangling-image
     # | empty-repo-dir | stale-session (cache/index hygiene, spec 2026-09-04 §5)
     verdict: str
-    # reaped | skipped | warned | reap-failed | would-reap | removed | would-remove
+    # reaped | skipped | warned | reap-failed | would-reap | would-skip | removed
+    # | would-remove
     action: str
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class ReapHazard:
+    """Work that a reap would destroy, and how to keep it (spec 2026-09-20
+    isolation-reap-data-loss-guards §3.1)."""
+
+    kind: str  # "dirty-worktree" | "unlanded-content" | "unverifiable"
+    detail: str  # names the branch and what would be lost — see _hazard_detail
+
+
+class ReapRefused(IsolationError):  # noqa: N818 — a refusal is a decision, not
+    # an "Error" (spec §3.5: gc classifies it as a skip, never a failure); the
+    # name is the spec's own vocabulary (§3.1), kept verbatim.
+    """Raised INSTEAD of tearing down, by `_down_worktree_tail`'s hazard check.
+    Carries the hazard so gc can classify a refusal as a deliberate skip rather
+    than a failure (spec §3.5, phase 3)."""
+
+    def __init__(self, hazard: ReapHazard) -> None:
+        self.hazard = hazard
+        super().__init__(hazard.detail)
+
+
+def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) -> str:
+    """One shared voice for every reap-hazard message (spec §3.8) — phases 2
+    and 3 add two more callers (unlanded-content, unverifiable-fetch), and all
+    three must read as the same product, not three ad hoc f-strings.
+
+    `remedy` is per-hazard and NOT optional: the three hazards do not have the
+    same way out, and a single hardcoded clause was wrong for two of them
+    (phase-1 review f1). "Commit or stash them" has no referent when the
+    hazard is that `git status` itself failed, and the way out of unlanded
+    content is to push, not to stash.
+
+    The `--force` sentence deliberately says what --force *does* rather than
+    "destroys the work", because that is not uniformly true (phase-1 review
+    f2, verified against real git): `git worktree remove --force` removes the
+    working tree and fr's state record, and does NOT delete the branch or its
+    commits. So a forced reap of a DIRTY tree is unrecoverable (uncommitted
+    edits were never objects), while a forced reap of an unlanded COMMIT
+    leaves the branch ref intact and recoverable. Overstating it is not a
+    harmless exaggeration — an operator who believes --force deletes their
+    commits will not use it, which is a false refusal by other means.
+
+    Caps the listed paths so a hazard on a 200-file branch doesn't produce a
+    wall of text: the first few, then `+N more`.
+    """
+    lines = [f"isolation: {branch} {headline} — refusing to reap (nothing was deleted)."]
+    if paths:
+        shown = paths[:5]
+        rest = len(paths) - len(shown)
+        listed = ", ".join(shown) + (f", +{rest} more" if rest > 0 else "")
+        lines.append(f"  {listed}")
+    lines.append(remedy)
+    lines.append(
+        f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
+        "which removes the worktree and fr's record of it (the branch and any "
+        "commits on it remain in the repo; uncommitted changes do not)."
+    )
+    return "\n".join(lines)
 
 
 def _branch_added_lines(
@@ -529,6 +590,146 @@ class LocalWorktreeDevcontainerTarget:
             "fetched": fetched,
         }
 
+    def _reap_hazard(self, state: IsolationState) -> ReapHazard | None:
+        """PURE QUERY — runs no destructive command — so `gc --dry-run` (phase 3)
+        can ask exactly the question the live reap path enforces, instead of
+        predicting a different answer. `git fetch` is the one exception to
+        "no command that writes": it only advances remote-tracking refs, never
+        a workspace, branch, or working tree (spec §3.4).
+
+        The exits are ordered LOCAL-FIRST, NETWORK-SECOND, and the ordering is
+        load-bearing, not incidental: the free local check must short-circuit
+        before any candidate pays for a fetch.
+
+        1. Worktree directory already gone (removed out-of-band) → None, not a
+           hazard — the `_down_worktree_tail` post-condition check further down
+           treats that as already-torn-down. Nothing left to query, nothing
+           left to lose.
+        2. DIRTY WORKTREE (#435, phase 1): `git status --porcelain` in
+           `state.worktree`. Non-empty output is a hazard — tracked AND
+           untracked alike (decision d1: #435's own lost work was a newly
+           authored, therefore untracked, file). A NON-ZERO return code is
+           also a hazard (`kind="unverifiable"`) rather than being read as
+           clean — the #354 invariant ("a failed query is not evidence of
+           absence") applied to the working tree. Ignored paths (`.venv/`,
+           `.fr-isolation`, `__pycache__/`) never appear in `--porcelain`, so
+           routine workspace clutter cannot wedge the guard.
+        3. UNLANDED CONTENT (#467, phase 2): the worktree is clean, but the
+           branch may hold content that never reached `origin/<default>` — a
+           local-only commit, or one pushed to the branch after its PR merged
+           (the #320 orphan, caught for free). Fetches `origin/<default>`
+           first (a stale local ref would misread a genuinely-merged workspace
+           as unlanded), then compares content with `branch_changes_present`.
+           A failed fetch is `kind="unverifiable"`, the same #354 invariant
+           applied to the network call: offline defers a reap, never permits a
+           wrong one.
+        """
+        if not state.worktree.is_dir():
+            return None
+        status = self.run(["git", "status", "--porcelain"], cwd=state.worktree)
+        if status.returncode != 0:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    "could not be checked for uncommitted changes (git status failed)",
+                    [],
+                    "Fix the worktree so `git status` runs there, then re-run `fr isolation down`.",
+                ),
+            )
+        paths = [line[3:] for line in (status.stdout or "").splitlines() if line.strip()]
+        if paths:
+            return ReapHazard(
+                kind="dirty-worktree",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"has {len(paths)} uncommitted change(s)",
+                    paths,
+                    "Commit or stash them.",
+                ),
+            )
+
+        # Phase 2 (#467): the worktree is clean, but the BRANCH may still hold
+        # content that never reached origin/<default> — a local-only commit,
+        # or one pushed to the branch after its PR merged (the #320 orphan).
+        # Fetch first, using the RESOLVED default branch (never the literal
+        # "main" `verify_merge` defaults to — that default is a latent bug for
+        # a repo on master) — a stale local origin/<default> would read every
+        # genuinely-merged workspace as unlanded (spec §3.4). A failed fetch is
+        # itself a hazard, not a pass: the #354 invariant ("a failed query is
+        # not evidence of absence") applied to the network call — offline
+        # defers a reap, it never permits a wrong one.
+        # A repo with NO `origin` remote at all is a different thing from a
+        # fetch that failed, and conflating them made `down` unusable there
+        # (phase-2 review f3). There is no remote for the branch to be behind,
+        # so the content question is unanswerable AND meaningless; and nothing
+        # unrecoverable is at stake, because `git worktree remove` leaves the
+        # branch and its commits in the repo (phase-1 review f2) while guard 2
+        # above still covers the uncommitted work that genuinely has no object.
+        # Refusing here would mean a local-only repo could only ever be reaped
+        # with --force — the one lever an agent may not reach for on its own
+        # (decision d3). Local check, no network.
+        if self.run(["git", "remote", "get-url", "origin"], cwd=state.worktree).returncode != 0:
+            return None
+        default = self._resolve_default_branch()
+        fetch = self.run(["git", "fetch", "origin", default], cwd=state.worktree)
+        if fetch.returncode != 0:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"could not be checked against origin/{default} (git fetch failed)",
+                    [],
+                    "Check connectivity to origin (or that the remote still exists), "
+                    "then re-run `fr isolation down`.",
+                ),
+            )
+        # Deliberately NOT `self.verify_merge(state)` — the tempting reuse and
+        # the wrong one (spec §3.3). verify_merge is fetch + branch_changes_present
+        # + `self._pr(state)`, and that third call shells out to gh/glab/tea; gc
+        # has already made exactly that call one line earlier (`_gc_one`) to
+        # classify the workspace, so reusing verify_merge would buy a SECOND
+        # host-CLI round trip per reap candidate on a host-wide sweep, only to
+        # recompute a PR state the caller is already holding — and then discard
+        # `verified`, which the PR-less merged-by-content path can never
+        # satisfy anyway. Do the two steps this guard actually needs directly.
+        # TOTAL, never raising (phase-2 review f4): `branch_changes_present`
+        # raises IsolationError when `git merge-base` fails (unrelated
+        # histories, a base ref that vanished between the fetch and here).
+        # A guard that raises is worse than one that refuses — `_gc_one`'s
+        # `if dry_run:` arms sit OUTSIDE their `try`, so an exception escaping
+        # here aborts the whole host-wide sweep, breaking gc's documented
+        # "one failed workspace never aborts the sweep" invariant. Unknown
+        # state is not "safe to reap"; it is `unverifiable`, which phase 3
+        # classifies as a skip. Mirrors `_merged_by_content`'s own
+        # `except Exception: return False`.
+        try:
+            result = branch_changes_present(
+                self.run, state.worktree, state.branch, f"origin/{default}"
+            )
+        except Exception as e:
+            return ReapHazard(
+                kind="unverifiable",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"could not be compared with origin/{default} ({e})",
+                    [],
+                    "Check that the branch and origin/"
+                    f"{default} share history, then re-run `fr isolation down`.",
+                ),
+            )
+        if result.missing:
+            return ReapHazard(
+                kind="unlanded-content",
+                detail=_hazard_detail(
+                    state.branch,
+                    f"has {len(result.missing)} changed file(s) that are not on origin/{default}",
+                    result.missing,
+                    "Push the branch.",
+                ),
+            )
+        return None
+
     def down(self, state: IsolationState, force: bool = False) -> None:
         """Tear down the workspace, verifying each destructive step's
         POST-CONDITION before deleting the bookkeeping (#354 Task A).
@@ -539,31 +740,37 @@ class LocalWorktreeDevcontainerTarget:
         status` could no longer see (state gone). Now: re-query the container /
         worktree AFTER the teardown call and, if it survived, raise
         `IsolationError` while LEAVING the state file + `.fr-isolation` marker in
-        place, so the workspace stays visible and a retry (or `--force` for the
-        open-PR case) can finish the job.
+        place, so the workspace stays visible and a retry (or `--force`, for a
+        refused-guard case) can finish the job.
 
         Re-query — not the return code — is authoritative: `docker rm` on an
         already-gone container returns non-zero while the post-condition (gone)
         holds, and a `rm` can return 0 yet leave a wedged container. `--force`
-        bypasses the open-PR guard ONLY; it never skips this verification (that
-        would re-introduce the invisible-leak bug).
+        bypasses all three refusal guards — the open-PR check AND the
+        reap-hazard guard (#467 phase 3: dirty worktree, unlanded content,
+        unverifiable) — but it never skips THIS verification (that would
+        re-introduce the invisible-leak bug).
         """
         self._down_worktree_tail(state, force)
         self._spawn_gc()
 
     def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
-        """PR guard → environment teardown → verified worktree removal → marker +
-        state retirement. Shared with `HostWorktreeTarget` (#... isolation host
-        modes): the ONLY per-mode difference is `_teardown_container`, which the
-        host-worktree mode overrides to a no-op (no docker), so the guard, the
-        post-condition verification, and the marker/state cleanup stay identical
-        across modes."""
+        """PR guard → reap-hazard guard → environment teardown → verified
+        worktree removal → marker + state retirement. Shared with
+        `HostWorktreeTarget` (#... isolation host modes): the ONLY per-mode
+        difference is `_teardown_container`, which the host-worktree mode
+        overrides to a no-op (no docker), so both guards, the post-condition
+        verification, and the marker/state cleanup stay identical across modes."""
         pr = self._pr(state)
         if pr and pr.get("state") == "OPEN" and not force:
             raise IsolationError(
                 f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
                 "the operator may push to it. Re-run with --force to tear down anyway."
             )
+        if not force:
+            hazard = self._reap_hazard(state)
+            if hazard is not None:
+                raise ReapRefused(hazard)
         self._teardown_container(state)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
@@ -694,22 +901,7 @@ class LocalWorktreeDevcontainerTarget:
         pr = self._pr_from(state.worktree, state.branch)
         pr_state = pr.get("state") if pr else None
         if pr_state == "MERGED":
-            if dry_run:
-                return GcAction(wt, state.branch, "merged", "would-reap")
-            try:
-                # Tear down through a Target rooted at the workspace's OWN repo
-                # (down() keys git/gh off its repo_root) — substrate-neutral: gc
-                # orchestrates Targets, it doesn't reach past them. The sibling
-                # gets the NO-OP spawner so a reap never re-triggers a sweep.
-                type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
-                    state, force=False
-                )
-                return GcAction(wt, state.branch, "merged", "reaped")
-            except Exception as e:
-                # Broad by design (matches the orphan branch): one workspace's
-                # teardown — IsolationError, a missing binary, an OSError from
-                # delete_state — must NEVER abort the host-wide sweep.
-                return GcAction(wt, state.branch, "merged", "reap-failed", str(e))
+            return self._reap_or_classify(wt, state, "merged", dry_run)
         if pr_state == "OPEN":
             return GcAction(wt, state.branch, "open", "skipped")
         # No MERGED/OPEN PR. Before warning forever, check whether the branch's
@@ -718,18 +910,67 @@ class LocalWorktreeDevcontainerTarget:
         # to gc's PR-only view, so the workspace would warn forever. Reap only
         # when provably safe (see _merged_by_content).
         if self._merged_by_content(state):
-            if dry_run:
-                return GcAction(wt, state.branch, "merged-by-content", "would-reap")
-            try:
-                type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
-                    state, force=False
-                )
-                return GcAction(wt, state.branch, "merged-by-content", "reaped")
-            except Exception as e:  # per-workspace; never abort the host-wide sweep
-                return GcAction(wt, state.branch, "merged-by-content", "reap-failed", str(e))
+            return self._reap_or_classify(wt, state, "merged-by-content", dry_run)
         return GcAction(
             wt, state.branch, "no-pr", "warned", "no PR — `fr isolation down` when done"
         )
+
+    def _reap_or_classify(
+        self, wt: str, state: IsolationState, verdict: str, dry_run: bool
+    ) -> GcAction:
+        """Shared tail for both reap-eligible verdicts (MERGED-by-PR and
+        merged-by-content, phase 3, #467 spec §3.5): the classification that
+        gets here differs (PR state vs. content comparison), but what to DO
+        once classified — preview or reap, and how a refusal reads — is
+        identical, so it lives once.
+
+        `_down_worktree_tail`'s hazard guard (force=False, unconditional) can
+        still refuse a workspace gc has already classified as reap-eligible —
+        e.g. a MERGED PR with an uncommitted change in the worktree. That
+        refusal is a DECISION, not a teardown failure: caught here as
+        `ReapRefused`, BEFORE the broad `except Exception`, and reported as
+        "skipped" with the hazard's own detail — never "reap-failed", which
+        reads as breakage and trains the operator to ignore the row. The
+        broad handler still catches genuine teardown errors (IsolationError,
+        a missing binary, an OSError from delete_state) so one workspace's
+        failure never aborts the host-wide sweep.
+
+        dry-run asks `_reap_hazard` the SAME question the live reap enforces
+        before promising "would-reap" — a preview that predicts an action the
+        live run would refuse is not a preview.
+        """
+        if dry_run:
+            # Ask through a sibling rooted at the WORKSPACE's repo, exactly as
+            # the live path below does — `_reap_hazard` calls
+            # `_resolve_default_branch()`, which reads `self.repo_root`, and gc
+            # is host-wide: `self` here is whichever repo happened to trigger
+            # the sweep, not this workspace's. Asking `self` would resolve
+            # repo A's default branch while comparing repo B's worktree, so a
+            # `master` repo swept from a `main` one would preview "would-skip"
+            # for a workspace the live run then reaps — the preview/live
+            # divergence this dry-run change exists to remove (phase-3 review
+            # f5). Same sibling idiom as `_merged_by_content`.
+            sibling = type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn)
+            hazard = sibling._reap_hazard(state)
+            if hazard is not None:
+                return GcAction(wt, state.branch, verdict, "would-skip", hazard.detail)
+            return GcAction(wt, state.branch, verdict, "would-reap")
+        try:
+            # Tear down through a Target rooted at the workspace's OWN repo
+            # (down() keys git/gh off its repo_root) — substrate-neutral: gc
+            # orchestrates Targets, it doesn't reach past them. The sibling
+            # gets the NO-OP spawner so a reap never re-triggers a sweep.
+            type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
+                state, force=False
+            )
+            return GcAction(wt, state.branch, verdict, "reaped")
+        except ReapRefused as e:
+            return GcAction(wt, state.branch, verdict, "skipped", e.hazard.detail)
+        except Exception as e:
+            # Broad by design (matches the orphan branch): one workspace's
+            # teardown — IsolationError, a missing binary, an OSError from
+            # delete_state — must NEVER abort the host-wide sweep.
+            return GcAction(wt, state.branch, verdict, "reap-failed", str(e))
 
     def _gc_stale_state(self, rec: GcWorkspace, dry_run: bool) -> GcAction:
         """Worktree gone, no container: retire the dangling fr state RECORD.

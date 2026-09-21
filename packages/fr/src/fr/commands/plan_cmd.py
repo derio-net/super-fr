@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from fr import parse
@@ -142,7 +143,10 @@ def create_cmd(
 
     --phases-file YAML shape:
       - {number, title, tag (agentic|manual), depends_on: [N,...],
+          acceptance ([row-ids], acceptance-matrix rows this phase advances),
           skeleton (bool, walking-skeleton marker for the first agentic phase),
+          tier (mechanical|standard|hard, harness-neutral dispatch complexity
+            hint; agentic phases should set one, see fr-plan),
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
@@ -165,6 +169,7 @@ def create_cmd(
                     tasks=tuple(p.get("tasks") or ()),
                     acceptance=tuple(p.get("acceptance") or ()),
                     skeleton=bool(p.get("skeleton", False)),
+                    tier=p.get("tier"),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
@@ -362,6 +367,11 @@ def self_review_cmd(
         console.print("[green]self-review passed[/green]")
         return
     for issue in issues:
-        console.print(str(issue))
+        # `escape`, because a lint message is data, not markup. Rich reads
+        # `[...]` as a style tag and silently DROPS it: the #428 verdict's
+        # "move the dispatch into a [manual] phase" rendered as "into a
+        # phase", i.e. the escape route the message offers disappeared —
+        # and so did every issue's own "[error]"/"[warn]" severity prefix.
+        console.print(escape(str(issue)))
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)

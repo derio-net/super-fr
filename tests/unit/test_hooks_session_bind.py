@@ -164,6 +164,21 @@ class TestSessionBind:
             " --branch feat/z --harness claude"
         ]
 
+    def test_run_start_with_branch_attaches(self, tmp_path: Path, stub_fr: dict[str, str]) -> None:
+        """#500: `fr run start` enters isolation, so it must bind like `up` does.
+
+        This is the surface that works with NO agent cooperation — an agent
+        cannot reliably know its own session id, so `fr run start --session`
+        alone would leave the common Claude Code path unbound (spec §3.C.2).
+        """
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        result = run_hook(BIND, bash_payload("fr run start fr-goal --branch feat/x", repo), stub_fr)
+        assert result.returncode == 0, result.stderr
+        assert logged(stub_fr) == [
+            f"isolation attach --session sess-1 --repo {repo} --branch feat/x --harness claude"
+        ]
+
     def test_down_detaches(self, tmp_path: Path, stub_fr: dict[str, str]) -> None:
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -177,6 +192,9 @@ class TestSessionBind:
             "git status",
             # only a LEADING `fr …` matches, mirroring the guard
             "echo x && fr isolation up --branch a",
+            "echo fr run start --branch a",
+            # a different `fr run` verb is not a workspace-creating command
+            "fr run advance r1",
         ],
     )
     def test_non_matching_commands_are_ignored(

@@ -1,0 +1,136 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — fold in gh#517, settle the witness, capture real cursors, and
+    get the branch green
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-refuses-second
+  - run-dispatch-abandon
+  - run-adopted-cursor-refuses-double-dispatch
+  skeleton: true
+  tier: hard
+tasks:
+- number: 1
+  title: Fold in feat/journal-require-reviews
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      `git fetch origin && git merge origin/feat/journal-require-reviews --no-edit`. Expect
+      conflicts in the fr-goal SKILL.md, both mirrors, matrix.yaml, the three acceptance
+      reports, the explainer pair, version manifests and uv.lock — NOT in run_cmd.py.
+      Resolve by category, exactly as the two earlier fold-ins did:
+      version manifests + uv.lock -> ours (4.11.0), then `uv sync`;
+      matrix.yaml -> NEVER a text-hunk merge (a hunk split inside a row beheaded one last
+      time): rebuild by ROW BLOCK — take our clean file (`git show HEAD:…`), append the
+      rows only theirs has, delimited by `  - id:` lines;
+      reports -> regenerate (`uv run fr acceptance report --deterministic`);
+      mirrors -> regenerate with BOTH `scripts/sync-opencode.py` and `scripts/sync-hermes.py`;
+      explainer .html -> ours for now (phase 7 regenerates it).
+  - id: P1.T1.S2
+    text: |-
+      Resolve the fr-goal SKILL.md conflict, keeping all three sides: keep main's `resolved_tier` sentence, this
+      branch's claim-loop paragraphs, and gh#517's review-obligation text. The file has a
+      120-line cap (`tests/unit/test_skill_validation.py`) and is at 118 — reflow soft-wrapped
+      paragraphs into single lines rather than cutting content. Then
+      `uv run fr validate artifacts` (its STRICT loader is what catches a duplicate YAML
+      key; plain safe_load does not) and `uv run fr acceptance check`. Check each exit
+      code explicitly — `set -e` is inert in this harness's Bash tool.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: run `uv run fr migrate artifacts` (gh#517's run cursor arrives at an older
+      `run` version; apply with `--yes`). Confirm no file still carries a conflict marker
+      (`git grep -nE '^(<<<<<<<|>>>>>>>)'` must be empty) and commit the merge.
+- number: 2
+  title: Decision u1 — the dispatch record is the only witness
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED is already on the branch: 9 tests fail in tests/unit/test_run_cli.py. Run
+      `uv run pytest tests/unit/test_run_cli.py -q --no-cov > /tmp/p1.txt 2>&1; echo rc=$?`
+      and list them. Seven assert `ALREADY RUNNING` where a holder now exists; one
+      (`test_advance_does_not_refuse_when_the_last_record_is_closed`) is the real conflict:
+      gh#519's refusal fires on `items[key] == "running"` / `record.state == "running"`, which
+      `claim --abandoned` deliberately leaves untouched. Add one more RED test before fixing:
+      a cursor ADOPTED from disk (a running unit with NO dispatch record at all) is still
+      refused, with the `ALREADY RUNNING (dispatched <at>)` fallback wording.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py make `_held_record` the ONLY
+      predicate both refusal call sites consult (spec §4.C). A unit with an open record is
+      refused naming the holder; a unit whose last record is CLOSED is not held, so
+      `advance` re-briefs and appends; a running unit with NO record at all (adopted
+      cursor) keeps gh#519's state-based refusal as the fallback. Update the seven wording
+      tests to expect ALREADY HELD where a holder exists — do not loosen them to accept
+      either. Re-run; expect 0 failures in the file.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: there must now be exactly one function answering "is this unit held?".
+      `git grep -n 'state == "running"' packages/fr/src/fr/commands/run_cmd.py` — every
+      remaining hit must be about lifecycle, never about refusal; say which in a comment
+      where it is not obvious. ruff format/check, mypy over the four src trees.
+- number: 3
+  title: Capture real cursors, and prove the delivery path
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      CAPTURE, never construct: this repo holds real run cursors at EVERY version —
+      archived ones frozen at v1 (2026-09-09-feat-issue-464, 2026-09-14-feat-statusline-…),
+      v2 (2026-09-18-feat-harness-parity-matrix, …) and v3
+      (2026-09-20-feat-bounded-executor-handoff, …) under docs/superpowers/implemented/runs/,
+      and live v4 ones under docs/superpowers/runs/ (this run's own carries items, dispatch,
+      accounting AND a manual-free grouped step). Copy one or two of each version,
+      byte-for-byte, to tests/fixtures/run_cursors/v{1,2,3,4}/ with a NOTE.md recording
+      each file's source path and commit. For v4 take the file from `git show
+      HEAD:<path>` so it is the committed bytes. These are phases 2-3's migration fixtures.
+  - id: P1.T3.S2
+    text: |-
+      The skeleton's point — a GREEN, fully-merged baseline on GitHub. Full gate, long
+      commands backgrounded with a BOUNDED wait, exit codes read from files never pipes:
+      `uv run pytest -q --basetemp=/tmp/sb > /tmp/full.txt 2>&1; echo rc=$? >> /tmp/full.txt`
+      run with every CLAUDE* variable unset (`env -u CLAUDECODE -u CLAUDE_PLUGIN_ROOT …`) —
+      that is how CI sees it, and three tests here once passed only on a Claude Code host.
+      Expected: only `test_cli_all_fails_when_nothing_is_discoverable` (gh#463, local-only).
+      Then ruff, mypy, bump-version --check, acceptance check, validate artifacts, harness
+      parity --check, both sync scripts --check, and `bun test` in packages/fr-opencode-plugin.
+      Commit. Leave nothing running at handback.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T20:09:07+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T20:09:08+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T20:09:08+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T20:20:06+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T20:20:07+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T20:20:07+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T20:22:00+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T20:26:57+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T20:26:58+00:00'
+    note: null
+    observed_prs: []

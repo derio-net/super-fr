@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The executor contract that refuses the tick, and the fr-plan guidance that
+    prevents the step
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - goal-executor-refuses-tick
+tasks:
+- number: 1
+  title: Prose tokens first, then the prose
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_skill_tokens.py (which already pins FR_PLAN,
+      FR_EXECUTE and FR_PHASE_EXECUTOR — mirror its existing one-assert-per-
+      token style), add three tests:
+      (a) fr-phase-executor.md states the capability absence and the tick
+          refusal — assert it contains "no `Agent` tool" (or the exact token
+          you write) AND "unticked" AND "BLOCKER";
+      (b) fr-execute/SKILL.md carries the same contract — same tokens;
+      (c) fr-plan/SKILL.md carries the outcomes-not-mechanisms guidance —
+          assert "outcomes, not mechanisms" and "#428".
+      Fails: none of that prose exists yet.
+  - id: P3.T1.S2
+    text: |-
+      GREEN, part 1 — plugins/super-fr/agents/fr-phase-executor.md: add a
+      short section after the existing `isolation: "worktree"` warning (which
+      is #420, the sibling defect going the other way — say so in one clause).
+      Content: you have no `Agent` tool; on OpenCode the same absence is
+      `task: deny`. A step instructing you to dispatch, delegate to, spawn or
+      hand off to a subagent is a BLOCKER. Report it in your structured
+      result, leave the step UNTICKED, and do not complete the phase. Do NOT
+      perform the work inline as a substitute — the dispatch existed to put
+      that work in a context blind to yours, and doing it here destroys the
+      only property it had (#428). A tick is a claim of performance.
+  - id: P3.T1.S3
+    text: |-
+      GREEN, part 2 — plugins/super-fr/skills/fr-execute/SKILL.md: the same
+      contract, stated where ticking happens (Procedure step 3) with a
+      one-line pointer in Constraints. This is the skill an OpenCode or
+      Hermes child loads, so the contract cannot live only in the Claude Code
+      agent file. GREEN, part 3 — plugins/super-fr/skills/fr-plan/SKILL.md:
+      a bullet directly after "Pure agentic phases" (grep for it): steps name
+      OUTCOMES, NOT MECHANISMS — "gather file:line-cited evidence following
+      `<protocol>`", never "dispatch `<agent>`"; a step naming a tool rots the
+      moment the actor changes, and rots silently; `fr plan self-review`
+      errors on dispatch verbs in an agentic step (#428), and genuine
+      orchestrator-level dispatch belongs in a `[manual]` phase.
+      `uv run pytest tests/unit/test_skill_tokens.py -q --no-cov` green.
+  - id: P3.T1.S4
+    text: |-
+      REFACTOR: read the three edited prose surfaces back as ONE policy, not
+      three bolted-on paragraphs. fr-phase-executor.md already refuses the
+      #420 poisoned dispatch with "STOP and say so"; this adds a second
+      refusal for the opposite direction, and the two must read as one
+      contract about what this agent is (a leaf, on the shared branch),
+      not as a growing list of prohibitions. Cut any sentence the other two
+      files already carry, keep each surface's own voice (agent file =
+      second person to the executor; SKILL.md = operator-facing), and verify
+      `uv run pytest tests/unit/test_skill_tokens.py -q --no-cov` still green.
+- number: 2
+  title: Mirrors regenerated, both drift guards green
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Run `uv run python scripts/sync-opencode.py` (no flag = write) to
+      regenerate .opencode/skills/fr-execute/SKILL.md,
+      .opencode/skills/fr-plan/SKILL.md and the four
+      .opencode/agent/fr-phase-executor{,-mechanical,-standard,-hard}.md
+      variants. Never hand-edit a generated file. Then verify BOTH guards,
+      which are different tests covering different surfaces:
+      `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_opencode_agent_mirror.py tests/unit/test_tripwire_opencode_instructions_sync.py -q --no-cov`.
+  - id: P3.T2.S2
+    text: |-
+      REFACTOR + quality gate: re-read the three edited prose files end to
+      end for voice and for accidental contradiction with neighbouring rules
+      (the executor file already says "STOP and say so" for #420 — the two
+      refusals must read as one policy, not two bolted-on paragraphs). Then
+      `uv run python scripts/sync-opencode.py --check` clean and
+      `uv run pytest -q --no-cov`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T14:36:06+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T14:36:39+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T14:36:53+00:00'
+      note: null
+    P3.T1.S4:
+      state: x
+      ticked_at: '2026-09-20T14:37:43+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T14:39:24+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T14:53:13+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T14:53:14+00:00'
+    note: null
+    observed_prs: []

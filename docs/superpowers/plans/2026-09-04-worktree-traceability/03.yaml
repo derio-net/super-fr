@@ -9,6 +9,7 @@ phase:
   tracking_issue: null
   acceptance:
   - session-workspace-binding
+  tier: standard
 tasks:
 - number: 1
   title: RED — hook tests with a stub fr

@@ -116,8 +116,10 @@ def test_up_outside_git_repo_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def _upped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, RecordingRunner, HostWorktreeTarget, IsolationState]:
+    # Real origin (main pushed): the phase-2 unlanded-content guard fetches
+    # origin/<default> on every force=False down().
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path)
+    repo, _origin = make_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     target = HostWorktreeTarget(repo, runner=runner)
     st = target.up(profile=None, branch="feat/x")
@@ -226,8 +228,10 @@ class GhRecordingRunner(RecordingRunner):
 def _gc_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pr_by_branch: dict[str, str] | None = None
 ) -> tuple[Path, GhRecordingRunner, HostWorktreeTarget]:
+    # Real origin (main pushed): the merged-PR live-reap path now fetches
+    # origin/<default> too (phase 2's unlanded-content guard).
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path)
+    repo, _origin = make_repo_with_origin(tmp_path)
     runner = GhRecordingRunner(pr_by_branch)
     return repo, runner, HostWorktreeTarget(repo, runner=runner)
 
@@ -379,8 +383,10 @@ def test_up_and_down_fire_the_gc_spawner(tmp_path: Path, monkeypatch: pytest.Mon
     """The sweep is no longer docker-coupled, so this mode participates in the
     same opportunistic reconciliation as devcontainer mode — that is what bounds
     the leak on a pod whose session exits before its PR merges."""
+    # Real origin: the force=False down() below now fetches origin/<default>
+    # (phase-2 unlanded-content guard).
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    repo = make_repo(tmp_path)
+    repo, _origin = make_repo_with_origin(tmp_path)
     spawns: list[Path] = []
     target = HostWorktreeTarget(
         repo, runner=GhRecordingRunner(), gc_spawner=lambda root: spawns.append(root)

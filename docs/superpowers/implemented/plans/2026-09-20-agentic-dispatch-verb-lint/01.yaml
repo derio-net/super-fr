@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the real-plan corpus harness, with floors that stop it going green
+    on nothing
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - goal-dispatch-lint-precision
+  skeleton: true
+tasks:
+- number: 1
+  title: The corpus reader, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_dispatch_lint_corpus.py. It reads THIS
+      REPO's real plan folders — docs/superpowers/plans/ and
+      docs/superpowers/implemented/plans/ — as a captured corpus; it must
+      never construct plan fixtures inline (spec §4.A: the measurement is
+      the evidence, and a constructed corpus would measure nothing).
+      Assert a module-level helper `agentic_steps()` that yields
+      `(plan_slug, step_id, step_text)` for every step of every phase whose
+      `phase.tag == "agentic"`, and TWO floor assertions in their own test:
+      at least 70 plan folders parsed and at least 1800 agentic steps
+      yielded (today: 82 and 2113), plus a per-root floor.
+      REVISED IN REVIEW: the yielded tuple carries the step's tick STATE
+      too, and `corpus_plans()` exposes the parsed plans, because phase 2
+      must run the real `self_review` rather than re-implement its
+      exemptions (1826 of 2113 agentic steps are ticked).
+      The floors are the point of this phase — see P1.T1.S2's note.
+      Fails with NameError/ImportError: nothing is implemented.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: implement `agentic_steps()`, `corpus_plans()` and
+      `corpus_census()` in that test module. For each entry under both
+      roots: skip non-directories, call
+      `fr.parser.parse(d, enforce_fr_version=False)` inside
+      `try/except PlanSchemaError: continue`, and count what parsed.
+      REVISED IN REVIEW: the first draft enforced the version gate and
+      called the resulting 41 skips "unavoidable". They are not — the
+      parser's own docstring says that gate "must never apply to a purely
+      historical read", which is exactly what a corpus scan is. Disabling
+      it takes the corpus from 44/1444 to 82/2113, leaves only 3 genuine
+      `PhaseDoc` failures, decouples the floors from the next major bump
+      (on which 14 more plans would fall out and land the aggregate on
+      exactly the old floor) — and changes no verdict: 0 hits either way.
+      Memoise the parse (`functools.lru_cache`), it runs per consumer.
+      WRITE THE COMMENT saying so, and say why the floors exist: skip-then-
+      assert-zero-hits degrades SILENTLY into a passing test that read
+      nothing the day a schema bump lands. Precedent for the shape:
+      tests/unit/test_plan_folder_corpus.py's
+      `test_manifest_covers_the_corpus_exactly`, which exists so a fixture
+      cannot silently drop out of its contract.
+      `uv run pytest tests/unit/test_dispatch_lint_corpus.py -q --no-cov`
+      must pass and the census must print/assert >= 30 plans, >= 1000 steps.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR + quality gate: extract the two roots to a module constant,
+      make `corpus_census()` return a small frozen dataclass or NamedTuple
+      (plans_parsed, plans_skipped, agentic_steps) instead of a bare tuple,
+      then `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`,
+      `uv run pytest tests/unit/test_dispatch_lint_corpus.py -q --no-cov`.
+      No mypy target here (tests/ is not in the mypy roots — see AGENTS.md).
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T13:11:23+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T13:12:04+00:00'
+      note: 'census: 44 parsed / 41 skipped / 1444 agentic steps; brainstorm''s 43/1419
+        + this plan folder itself (25 steps)'
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T13:16:14+00:00'
+      note: ruff format/check clean; _parse_corpus() extracted so agentic_steps and
+        corpus_census share one parse loop; Census NamedTuple
+  completion:
+    at: '2026-09-20T13:16:14+00:00'
+    note: null
+    observed_prs: []

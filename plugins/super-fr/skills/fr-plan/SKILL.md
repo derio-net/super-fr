@@ -7,10 +7,9 @@ description: >
 
 # fr-plan
 
-Produce implementation plans through collaborative dialogue. Conversational
-parts stay here; mechanical parts delegate to the `fr plan` CLI.
-
-**Announce at start:** "I'm using fr-plan to create the implementation plan."
+Produce implementation plans through collaborative dialogue; conversational
+parts stay here, mechanical parts delegate to the `fr plan` CLI. **Announce at
+start:** "I'm using fr-plan to create the implementation plan."
 
 ## Format (v2 plan-as-folder)
 
@@ -20,19 +19,18 @@ A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
   created date, optional rework metadata (`parent_plan`, `prior_rework`,
   `origin_items`).
   - **`spec` ref notation:** a same-repo spec is a plain repo-relative path
-    (`docs/superpowers/specs/<file>.md`). A spec that lives in **another repo**
-    MUST use the cross-repo form `<owner>/<repo>:<path-in-that-repo>` (e.g.
+    (`docs/superpowers/specs/<file>.md`); a spec in **another repo** MUST use
+    the cross-repo form `<owner>/<repo>:<path-in-that-repo>` (e.g.
     `derio-net/frank:docs/superpowers/specs/<file>.md`). Without the
-    `owner/repo:` prefix, `fr apply`'s reachability gate treats it as a missing
+    `owner/repo:` prefix, `fr apply`'s reachability gate reads it as a missing
     same-repo file and refuses to dispatch. `fr plan self-review` warns when a
     same-repo-form spec doesn't resolve locally (#248).
 - `_prose.md` — the human-readable narrative. Tooling never parses this; it's
   for humans (and the implementing agent).
-- `NN.yaml` (one file per phase, two-digit zero-padded: `01.yaml`, `02.yaml`,
-  …, `99.yaml`) — phase header, tasks, steps, and per-step state. Per-phase
-  files prevent merge conflicts when parallel branches tick different phases.
-  Phases are numbered **from 1**: `01.yaml` is the first phase; `00.yaml`
-  (phase 0) fails parse — `fr plan create` rejects it pre-flight.
+- `NN.yaml` (one per phase, two-digit zero-padded: `01.yaml` … `99.yaml`) —
+  phase header, tasks, steps, per-step state. Per-phase files prevent merge
+  conflicts when parallel branches tick different phases. Phases number **from
+  1**; `00.yaml` fails parse — `fr plan create` rejects it pre-flight.
 
 Every step id follows `P<n>.T<n>.S<n>` (phase number, task number, step
 number). The renderer / observer / diff / apply chain depends on this shape.
@@ -64,41 +62,43 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 
 - TDD (`superpowers:test-driven-development`): red → green → refactor — or a recorded `no-refactor-because:`
   (task id) in the plan journal. No speculative generality; no silent skipping.
-- **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a
-  separate `REFACTOR + quality gate` **task** for larger ones. Omit only with justification;
-  `fr plan self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
-- **Walking skeleton first:** the first agentic phase smokes delivery infrastructure (CI green
-  on a trivial test, minimum runtime exercised, fixtures captured never constructed). Mark it
-  `skeleton: true` — self-review errors without it (override: spec-scope `skeleton-override-*`).
-- **Pure agentic phases:** an agentic phase must be fully agent-completable
-  end-to-end. Collect ALL manual work (secrets, UI operations, deploy actions,
-  cluster-dependent config) into a dedicated `[manual]` phase — never author a
-  manual step into an agentic phase planning to defer it. `fr plan
-  self-review` enforces this with error severity (#252).
-- **Acceptance linkage:** a phase that advances a matrix row carries
-  `acceptance: [row-ids]` in its header. `fr plan self-review` errors when the
-  spec has a Test Plan but zero linked rows (matrix present) and on unknown
-  ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when decomposition exposes a missed
-  business acceptance — flagged as an addition, defended at PR time, never ironed over.
+- **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a separate
+  `REFACTOR + quality gate` **task** for larger ones. Omit only with justification; `fr plan
+  self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
+- **Walking skeleton first:** the first agentic phase smokes delivery infrastructure (CI green on a
+  trivial test, minimum runtime exercised, fixtures captured never constructed). Mark it `skeleton:
+  true` — self-review errors without it (override: spec-scope `skeleton-override-*`).
+- **Pure agentic phases:** an agentic phase must be fully agent-completable end-to-end. Collect
+  ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a
+  dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer
+  it. `fr plan self-review` enforces this with error severity (#252).
+- **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence following
+  `<protocol>`", never "dispatch `<agent>`". A step naming the actor or the tool rots *silently*
+  the moment either changes — the phase executor is a leaf, not an orchestrator, so it does the
+  nearest thing it can and ticks. Self-review errors on a dispatch verb in an agentic step
+  (#428); real dispatch belongs in the TRAILING `[manual]` phase, never a mid-plan one (#496).
+- **Acceptance linkage:** a phase that advances a matrix row carries `acceptance: [row-ids]` in its
+  header. `fr plan self-review` errors when the spec has a Test Plan but zero linked rows (matrix
+  present) and on unknown ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when
+  decomposition exposes a missed business acceptance — flagged as an addition, defended at PR time,
+  never ironed over.
+- **Tier:** every agentic phase declares `tier: mechanical | standard | hard` (`fr.types.PHASE_TIERS`;
+  manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
+  dispatch is untiered, inheriting the session model — self-review warns when missing.
 - No placeholders: every step has actual code, commands, expected output.
-- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the
-  accumulated handoff, so cost grows superlinearly with phase count (`fr run status` shows the
-  per-phase accounting).
+- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the accumulated
+  handoff, so cost grows superlinearly with phase count (`fr run status` shows the per-phase accounting).
 - Use BEGIN/END markers for full-file embeds, not nested fences.
-- **Cross-repo completeness:** If the spec lists multiple plans across repos,
-  write ALL of them before offering the execution handoff. For each target
-  repo: scaffold the plan in that repo's `docs/superpowers/plans/` directory.
-  `fr plan create` updates the spec table automatically.
+- **Cross-repo completeness:** If the spec lists multiple plans across repos, write ALL of them
+  before offering the execution handoff. For each target repo: scaffold the plan in that repo's
+  `docs/superpowers/plans/` directory. `fr plan create` updates the spec table automatically.
 
 ## Dependency declarations
 
 Each per-phase yaml declares its blockers via `phase.depends_on: [N, ...]`
-(integers, comma-separated when multiple).
-
-- Root phases: `depends_on: []`.
-- Non-root phases: `depends_on: [1, 2]` for fan-in.
-- Deps are backward-only: phase N may only reference phases < N.
-- Cycles are caught by `fr plan self-review`.
+(integers): `[]` for a root phase, `[1, 2]` for fan-in. Deps are
+backward-only — phase N may only reference phases < N — and cycles are caught
+by `fr plan self-review`.
 
 ## Rework plans
 

@@ -1,0 +1,127 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — the measurement harness and a captured transcript fixture
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - handoff-closed-entries-bounded
+  - run-telemetry-measured-claude-code
+  skeleton: true
+tasks:
+- number: 1
+  title: Journal builder — red, green, refactor
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_handoff_bound.py.
+      Import `from fr.test_support import build_plan_journal` (does not exist yet).
+      Assert the builder writes a real plan journal under a tmp repo and that
+      `fr.journal.model.compose_handoff` over its parsed entries returns text
+      starting with "# Handoff (phase 3)" for phase=3.
+      Signature the test pins:
+        build_plan_journal(repo_root, slug, entries) -> Path
+      where `entries` is a list of dicts {kind, title, body, phase, state, id,
+      resolves} matching `fr journal add`'s own vocabulary — the builder writes
+      through the SAME serializer the CLI uses, never a hand-rolled markdown
+      string, so a fixture cannot drift from the real format.
+      Run `uv run pytest tests/unit/test_handoff_bound.py -q`; confirm it fails
+      with ImportError on build_plan_journal.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add build_plan_journal to packages/fr/src/fr/test_support.py.
+      Reuse the existing journal write path (the same function `fr journal add`
+      calls) rather than formatting entries locally — the point of the helper is
+      that a test fixture is a CAPTURE of the real serializer's output, which is
+      the repo's standing rule applied to its own formats.
+      Return the journal Path. Run the test; confirm green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: the builder landed green, so clean it now.
+      Extract any duplication between the builder and the existing test_support
+      helpers; keep the public signature the test pinned. If there is genuinely
+      nothing to clean, record `no-refactor-because: P1.T1` with
+      `fr journal add --scope plan --slug 2026-09-20-bounded-executor-handoff
+      --kind discovery --phase 1 --title 'no-refactor-because P1.T1' --body '<why>'`.
+      Then run `uv run ruff format packages/ tests/`, `uv run ruff check packages/
+      tests/` and `uv run mypy packages/fr/src`. All three clean before moving on --
+      this phase exists to prove the gate is green before any expensive phase builds
+      on it.
+- number: 2
+  title: Captured transcript fixture — capture, assert, refactor
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Capture, do not build. Take a REAL Claude Code transcript from
+      ~/.claude/projects/<cwd-slug>/<session-id>.jsonl and reduce it to a fixture
+      at tests/fixtures/transcripts/claude-code-session.jsonl.
+      Reduce by SELECTING whole records (head/tail/filter), never by editing a
+      record's shape: the fixture must remain something the harness actually
+      emitted. Keep at least one assistant record carrying `message.usage`, and
+      if the source session dispatched a subagent, at least one record with
+      `isSidechain: true`.
+      REDACT per .claude/rules/third-party-privacy.md before committing: absolute
+      home paths, any hostname, any non-derio-net org or repo name. Keep the
+      shape — the four usage keys, isSidechain, parentUuid, sessionId, cwd,
+      gitBranch — because the shape is the evidence.
+      State the redaction in the fixture's companion note, do not hide it.
+  - id: P1.T2.S2
+    text: |-
+      RED then GREEN in one step (the assertion is the capture's contract):
+      add tests/unit/test_transcript_fixture.py asserting the fixture parses as
+      JSONL, that at least one record carries message.usage with ALL FOUR keys
+      input_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+      output_tokens, and that `isSidechain` is present as a boolean on the
+      records that carry it.
+      This is the phase-1 smoke for the riskiest external format in this plan:
+      if the transcript shape is not what §2 of the spec claims, this plan learns
+      it now and not in the last phase (#464 suggestion 4).
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR + the question a capture cannot answer.
+      First: name one shape you have NOT seen and say why it is or is not handled
+      (the #464 comment's strengthening of "captures, never constructions" -- a
+      capture proves a shape exists, it cannot prove that shape is the only one).
+      Concretely: a session with NO subagent dispatch, a record with `usage` absent,
+      and a transcript written while cwd was the fr worktree rather than the base
+      clone (the directory slug is cwd-derived, so it differs). Record the answer
+      with `fr journal add --scope plan --kind discovery --phase 1`.
+      Then refactor the two new test modules for shared setup, or record
+      `no-refactor-because: P1.T2` the same way.
+      Then the full gate: `uv run pytest -q --no-cov`, `uv run ruff check packages/
+      tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src
+      packages/fr-vk/src packages/fr-cncd/src`. Report the ACTUAL output -- a phase
+      that reports green while a gate is red is the defect r6-c1 recorded in the
+      harness-parity run.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T12:14:38+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T12:14:38+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T12:14:39+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T12:23:20+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T12:23:41+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T12:29:43+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T12:29:46+00:00'
+    note: null
+    observed_prs: []

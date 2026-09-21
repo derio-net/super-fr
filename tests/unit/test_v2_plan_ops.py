@@ -703,6 +703,328 @@ def test_self_review_manual_verb_exempts_completed_steps(tmp_path):
     assert _purity_issues(plan_dir) == []
 
 
+# ---------------------------------------------------------------------------
+# fr plan self-review — agentic dispatch-verb gate (#428)
+#
+# The executor has no Agent tool (OpenCode: `task: deny`), so a step telling
+# it to dispatch a subagent is unexecutable by construction. Mirrors the #252
+# gate above: same loop, same agentic-only and `state == "x"` exemptions.
+
+
+def _all_issues(plan_dir):
+    from fr import parse
+    from fr.plan_ops import self_review
+
+    return self_review(parse(plan_dir))
+
+
+def _dispatch_issues(plan_dir):
+    """Only the #428 gate's issues — the token is the stable filter."""
+    return [i for i in _all_issues(plan_dir) if "#428" in i.message]
+
+
+def _assert_exactly_one_new_issue(tmp_path, step_text):
+    """The step yields ONE dispatch issue and no other change to the verdict.
+
+    Filtering on "#428" alone cannot see a detector that fires twice on
+    one step, or one that drags an unrelated lint in with it. The baseline
+    plan is identical but for the step text, so the whole issue list is
+    comparable and "exactly one" means exactly one.
+    """
+    baseline = _purity_plan(tmp_path / "baseline", step_text="Run the test suite")
+    plan_dir = _purity_plan(tmp_path / "subject", step_text=step_text)
+    issues = _dispatch_issues(plan_dir)
+    assert len(issues) == 1, [str(i) for i in issues]
+    assert issues[0].severity == "error"
+    assert "P1.T1.S1" in issues[0].message
+    assert len(_all_issues(plan_dir)) == len(_all_issues(baseline)) + 1, [
+        str(i) for i in _all_issues(plan_dir)
+    ]
+    return issues[0]
+
+
+@pytest.mark.parametrize(
+    "step_text",
+    [
+        # Pattern 1 — imperative head + agent-shaped object.
+        # The observed defect, verbatim (spec §2.E, derio-net/frank).
+        "Dispatch `blog-craft:post-researcher` per post",
+        "Dispatch the cold-reader agent over the draft",
+        "Dispatch one `general-purpose` subagent per file",
+        "Spawn a subagent to gather evidence",
+        "Delegate to the code-reviewer agent",
+        # The verb follows a sentence boundary AND a connective, which a
+        # naive head-anchor misses. In the list because the brainstorm
+        # probe missed it.
+        "RED: write the test. Then dispatch `blog-craft:post-researcher` to gather evidence.",
+        # Pattern 2 — the explicit mechanism, in an instructional frame.
+        # Without these three the whole of §4.A pattern 2 is deletable in
+        # silence: it can be replaced by a never-matching regex and the
+        # rest of the suite stays green.
+        "Use the fr-phase-executor agent for each phase",
+        "Call the Task tool with subagent_type: general-purpose",
+        "Invoke the code-reviewer subagent on the diff",
+    ],
+)
+def test_self_review_errors_on_dispatch_verb_in_agentic_step(tmp_path, step_text):
+    """#428: a pending agentic step instructing the executor to dispatch."""
+    _assert_exactly_one_new_issue(tmp_path, step_text)
+
+
+@pytest.mark.parametrize(
+    "step_text",
+    [
+        # Real super-fr step shapes. This is a repo ABOUT dispatch: the
+        # literal `\bdispatch\b` of #428 flags 292 of these (spec §2.D).
+        "GREEN: implement fr_dispatch.tick() so it dispatches phases to the runner",
+        "Add a test asserting `fr apply --yes` refuses to dispatch an unreachable plan",
+        "RED: assert the dispatch brief names the fr-phase-executor agent",
+        "Dispatch phase 3 to the vk runner via fr apply",
+        "Write docs describing how Claude Code dispatches the fr-phase-executor",
+        # `agent` as a MODIFIER, not the head of the noun phrase — the
+        # literal shape of phase 3's own work. Pattern 2 arm A requires a
+        # non-empty modifier between `the` and the role word precisely so
+        # that "the agent frontmatter" cannot read as naming an agent.
+        "Use the agent frontmatter in plugins/super-fr/agents/fr-phase-executor.md",
+        # Phase 4's own work: an inflected verb, mid-sentence. The
+        # boundary anchors position; the bare stem anchors mood.
+        "Explain why calling the Agent tool is impossible here",
+        # A boundary, a bare stem — and still not an instruction, because
+        # the stem is the SUBJECT ("dispatch is") or a NOUN ("dispatch of").
+        "Note: dispatch is described in the agent docs",
+        "Add a bullet: dispatch of a subagent belongs in a [manual] phase",
+        # Abbreviations satisfy `(?<=[.;:!?])\s+` while continuing the
+        # same sentence, so they are not instruction boundaries.
+        "Cf. dispatch to the fr-phase-executor agent",
+        "RED: add a test. e.g. dispatch to the cold-reader agent stays unflagged",
+        # A soft wrap is not a boundary. This is the exact text of this
+        # feature's own phase-3 step, which an earlier cut flagged.
+        '"...spawn or\nhand off to a subagent is a BLOCKER"',
+        # `word:word` tokens with no role word: the 42-hit false-positive
+        # class §2.D measured. Every object arm requires a role word —
+        # including the backticked one, which is why the third of these
+        # puts a real imperative dispatch verb in front of the token.
+        "Record the plan ref as `plan:my-slug` and the label as `fr:synced`",
+        "Assert `fr.tracker:GithubTracker` is the only adapter; dispatch is unchanged",
+        "Dispatch the range `start:end` to the worker pool",
+        # An inflected verb AT a boundary: position is right, mood is not.
+        # Only the bare-stem rule refuses these two.
+        "Add a test: dispatching to the fr-phase-executor agent is refused",
+        "Note: using the fr-phase-executor agent is impossible here",
+        # A bare verb NOT at a boundary: mood is right, position is not.
+        # Only the instruction anchor on pattern 2 refuses this one.
+        "Explain why you cannot use the fr-phase-executor agent here",
+    ],
+)
+def test_self_review_dispatch_gate_ignores_descriptive_dispatch_prose(tmp_path, step_text):
+    """The head anchor separates INSTRUCTING a dispatch from DESCRIBING one."""
+    plan_dir = _purity_plan(tmp_path, step_text=step_text)
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_self_review_dispatch_gate_does_not_look_across_a_line_break(tmp_path):
+    """A PRICED recall gap, pinned so it cannot be widened by accident.
+
+    The window between verb and object excludes `\n`. The cost is real:
+    a verb and object split by a hard wrap go unflagged. The alternative
+    costs more — a window that spans newlines lets an object on an
+    unrelated wrapped line manufacture a hit, which is the soft-wrap
+    defect one level down. Precision first: a gate that fires on prose
+    gets switched off; a gate that misses a wrapped instruction still
+    catches the next unwrapped one.
+    """
+    plan_dir = _purity_plan(tmp_path, step_text="Dispatch the\ncold-reader agent over the draft")
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_self_review_dispatch_message_quotes_the_whole_backticked_agent(tmp_path):
+    """The reported match is the COMPLETE token, closing backtick included.
+
+    This is what the backticked object arm is for. Drop it and the role
+    word alone still matches, but the message truncates to
+    "Dispatch `blog-craft:post-researcher" — an author scanning their own
+    step for the quoted text would not find it.
+    """
+    issue = _assert_exactly_one_new_issue(
+        tmp_path, "Dispatch `blog-craft:post-researcher` per post"
+    )
+    assert "'Dispatch `blog-craft:post-researcher`'" in issue.message
+
+
+def test_self_review_dispatch_gate_catches_a_glued_plugin_name(tmp_path):
+    """The colon arm, defended.
+
+    `blog-craft:postresearcher` has no word boundary before `researcher`,
+    so the role-word arm cannot see it; only the `plugin:name` arm can.
+    """
+    _assert_exactly_one_new_issue(tmp_path, "Dispatch blog-craft:postresearcher per post")
+
+
+def test_self_review_dispatch_gate_ignores_manual_phase_steps(tmp_path):
+    """Decision d3: the `[manual]` phase IS the escape route.
+
+    A dispatch that genuinely needs an Agent tool is not forbidden — it is
+    work for an actor that has one, and a manual phase is where that actor
+    is the operator's own main loop. So the gate must never fire there,
+    or the escape the error message offers would not exist.
+    """
+    plan_dir = _purity_plan(
+        tmp_path,
+        phase1_tag="manual",
+        step_text="Dispatch `blog-craft:post-researcher` per post",
+    )
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_self_review_dispatch_gate_exempts_completed_steps(tmp_path):
+    """Mirrors `test_self_review_manual_verb_exempts_completed_steps`.
+
+    A ticked step already ran; the exemption keeps historical plans (and
+    plans whose step text QUOTES a dispatch instruction) from
+    retro-erroring. 1827 of the corpus's 2113 agentic steps are ticked —
+    which is also why the corpus measurement is taken over ALL steps, not
+    over the subset this exemption leaves.
+    """
+    from fr.plan_ops import tick
+
+    plan_dir = _purity_plan(tmp_path, step_text="Dispatch `blog-craft:post-researcher` per post")
+    tick(plan_dir, "P1.T1.S1")  # state 'x'
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_self_review_dispatch_gate_strips_fences_but_not_inline_backticks(tmp_path):
+    """A fenced block is content being WRITTEN, not an instruction.
+
+    Inline backticks are the opposite: the backticked agent name IS the
+    object the detector keys on, so stripping them would turn the observed
+    defect into "Dispatch   per post" and blind the gate (spec §4.A).
+    """
+    from fr.plan_ops import _RE_DISPATCH_HEAD
+
+    # The fenced instruction carries its own list-marker boundary, so it
+    # DOES match the head pattern on the raw text — verified, because a
+    # fixture the strip is not load-bearing for would pass with
+    # `_strip_fenced_code` deleted.
+    fenced = _purity_plan(
+        tmp_path / "fenced",
+        step_text=(
+            "Quote the rejected wording in the skill's example block:\n\n"
+            "```\n"
+            "- Dispatch the cold-reader agent over the draft\n"
+            "```"
+        ),
+    )
+    assert _RE_DISPATCH_HEAD.search("```\n- Dispatch the cold-reader agent over the draft\n```"), (
+        "fixture no longer exercises the strip"
+    )
+    assert _dispatch_issues(fenced) == []
+
+    inline = _purity_plan(
+        tmp_path / "inline",
+        step_text=(
+            "Dispatch `blog-craft:post-researcher` per post, writing each "
+            "result to:\n\n"
+            "```\n"
+            "docs/research/<slug>.md\n"
+            "```"
+        ),
+    )
+    issues = _dispatch_issues(inline)
+    assert len(issues) == 1, [str(i) for i in issues]
+    assert "blog-craft:post-researcher" in issues[0].message
+
+
+def test_self_review_dispatch_gate_pairs_a_four_backtick_fence(tmp_path):
+    """A fence is closed by a run AT LEAST AS LONG as its opener.
+
+    Phases 3 and 4 must quote a rejected step into SKILL.md, which means a
+    ````markdown block wrapping a ```-fenced one — and this repo's corpus
+    already contains four-backtick fences. Pairing the outer opener with
+    the INNER closer does not merely strip too little: it UN-FENCES the
+    quoted instruction, so the gate fires on a step whose only crime is
+    quoting the thing it forbids.
+    """
+    plan_dir = _purity_plan(
+        tmp_path,
+        step_text=(
+            "Quote the rejected step into the skill:\n\n"
+            "````markdown\n"
+            "```yaml\n"
+            "text: whatever\n"
+            "```\n"
+            "- Dispatch the cold-reader agent over the draft\n"
+            "````"
+        ),
+    )
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_self_review_dispatch_gate_treats_an_unterminated_fence_as_open(tmp_path):
+    """An unterminated fence strips to end of text — decided, not incidental.
+
+    For a precision-first gate that is the safer reading of an ambiguous
+    document: an author who opened a block meant everything after it to be
+    content. The opposite reading (strip nothing) turns one missing
+    backtick into a false error.
+    """
+    plan_dir = _purity_plan(
+        tmp_path,
+        step_text=(
+            "Sketch the rejected step:\n\n```\n- Dispatch the cold-reader agent over the draft"
+        ),
+    )
+    assert _dispatch_issues(plan_dir) == []
+
+
+def test_plan_self_review_cli_exits_1_and_names_both_escapes(tmp_path, monkeypatch):
+    """End-to-end #428 contract: the verdict an author actually reads.
+
+    Four load-bearing tokens, because each carries one of the four things
+    the author needs: what the executor lacks ("no Agent tool"), that the
+    absence is structural on the other harness too ("task: deny"), the
+    escape ("[manual] phase"), and where to read the rest ("#428").
+    """
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    plan_dir = _purity_plan(tmp_path, step_text="Dispatch `blog-craft:post-researcher` per post")
+    repo = plan_dir.parents[3]
+    # `_make_repo` scaffolds the pre-migration `archived-plans/`, which the
+    # CLI's layout guard hard-stops on before any command runs.
+    (repo / "docs" / "superpowers" / "archived-plans").rmdir()
+    monkeypatch.chdir(repo)
+
+    result = CliRunner().invoke(app, ["plan", "self-review", str(plan_dir)])
+    assert result.exit_code == 1, result.output
+    # Rich wraps to the terminal width, so the tokens are asserted against
+    # whitespace-normalized output: a line break landing between "no" and
+    # "Agent tool" is a rendering detail, not a missing token.
+    flat = " ".join(result.output.split())
+    # BOTH escapes, as this test's name claims: the [manual] phase AND
+    # "name the outcome". The second is the half d1 called the thing that
+    # makes the lint actionable — a gate that errors without saying what to
+    # write instead is half a fix — so it must not be droppable in silence.
+    for token in (
+        "no Agent tool",
+        "task: deny",
+        "[manual] phase",
+        "Name the OUTCOME",
+        "#428",
+        # The escape must name the TRAILING manual phase. #496 (shipped in
+        # 4.12.0) errors on a mid-plan manual phase with agentic work after
+        # it, so "move it into a [manual] phase" — the message as first
+        # written — hands the author a plan that fails the sibling gate.
+        # Demonstrated: make the dispatch step's phase manual mid-plan and
+        # self-review swaps #428's error for #496's.
+        "TRAILING",
+        "#496",
+    ):
+        assert token in flat, f"{token!r} missing from:\n{flat}"
+    # The MATCHED TEXT, not the raw pattern — an author reading
+    # `(?:dispatch|delegate to|...)` learns nothing about their own step.
+    assert "Dispatch `blog-craft:post-researcher`" in flat
+
+
 def test_create_rejects_phase_zero_before_writing(tmp_path):
     """Phase numbering starts at 1. create() must refuse a 0-numbered
     PhaseSpec BEFORE any file is written — failing only at the post-write
@@ -1291,3 +1613,72 @@ def test_journal_justification_silences_the_refactor_gate(tmp_path):
     )
 
     assert _refactor_issues(plan_dir) == []
+
+
+# --- phase tier carried by `create()` (dispatch-holder-identity, finding f6) ---
+#
+# `PhaseHeader.tier` is the harness-neutral hint fr-goal §5 resolves to a model
+# via `fr models resolve`, and fr-plan's own skill says it "tags each phase a
+# tier". `PhaseSpec` carried no such field, so `fr plan create --phases-file`
+# accepted a `tier:` in the phases file and silently dropped it — every plan it
+# scaffolded was untiered, and every dispatch made from one could only record
+# `model: null`.
+
+
+def _tiered(tmp_path, tier=None):
+    from fr.plan_ops import PhaseSpec, create
+
+    kwargs = {"tier": tier} if tier is not None else {}
+    return create(
+        repo_root=tmp_path,
+        slug="2026-09-20-tiered",
+        spec=None,
+        target_repo="derio-net/test",
+        fr_version=">=4.2.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="Build", tag="agentic", skeleton=True, **kwargs)],
+        prose="# x\n",
+    ).dir
+
+
+def test_create_carries_a_phase_tier_into_the_phase_header(tmp_path):
+    import yaml
+
+    header = yaml.safe_load((_tiered(tmp_path, "hard") / "01.yaml").read_text())["phase"]
+
+    assert header["tier"] == "hard"
+
+
+def test_create_omits_tier_when_unset_so_untiered_plans_stay_byte_stable(tmp_path):
+    """Same rule `acceptance` and `skeleton` already follow — an absent tier
+    must not start emitting `tier: null` into every existing plan."""
+    import yaml
+
+    header = yaml.safe_load((_tiered(tmp_path) / "01.yaml").read_text())["phase"]
+
+    assert "tier" not in header
+
+
+def test_create_refuses_a_tier_outside_the_closed_vocabulary(tmp_path):
+    """`PhaseHeader.tier` is a closed Literal, so an unknown tier would write a
+    plan that `fr.parser.parse` cannot read back — a scaffold that succeeds and
+    produces an unparseable artifact. Refused at create time, naming the valid
+    tiers, which are derived from the Literal rather than re-listed."""
+    from fr.plan_ops import PlanEditError
+    from fr.types import phase_tiers
+
+    with pytest.raises(PlanEditError) as e:
+        _tiered(tmp_path, "turbo")
+
+    assert "turbo" in str(e.value)
+    for tier in phase_tiers():
+        assert tier in str(e.value)
+
+
+def test_a_tiered_plan_parses_back_with_its_tier(tmp_path):
+    """The round-trip that matters: `fr pickup`/`fr run advance` read the tier
+    through `fr.parser.parse`, not off the raw yaml."""
+    from fr.parser import parse
+
+    plan = parse(_tiered(tmp_path, "mechanical"))
+
+    assert plan.phases[0].phase.tier == "mechanical"

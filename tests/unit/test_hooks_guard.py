@@ -259,6 +259,75 @@ class TestBootstrapAllowance:
         assert decision(run_hook(payload("myfr init", repo), sentinels)) == "deny"
 
 
+class TestRunStartEntersIsolation:
+    """`fr run start` is an ISOLATION-ENTERING command, like `fr isolation up`.
+
+    Found live on PR #508's Test Plan: with the sentinel up and the session in
+    the base clone, the guard denied `fr run start` — which fr-goal calls "the
+    first action" that "enters isolation itself". The allowlist was written
+    when `fr isolation up` was the only way in; review fix r2-f5 later made
+    `fr run start` call `ensure_run_workspace` before it writes anything, and
+    the skill was rewritten around it. The allowlist never learned the second
+    way in.
+
+    It only bit in a repo that ALREADY had some linked worktree, anyone's: with
+    none, the #341 orphan self-heal retires the sentinel on the first command,
+    which is why a fresh repo never showed it. `_sent` uses a non-git dir, where
+    the heal fails closed, so these assertions are about the allowlist alone.
+    """
+
+    _sent = TestBootstrapAllowance._sent
+
+    def test_fr_run_start_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        cmd = "fr run start fr-goal --branch feat/x"
+        assert decision(run_hook(payload(cmd, repo), sentinels)) is None
+
+    def test_fr_run_start_behind_uv_run_allowed(self, tmp_path: Path) -> None:
+        repo, sentinels = self._sent(tmp_path)
+        cmd = "uv run fr run start fr-goal --branch feat/x --session s1 --harness claude-code"
+        assert decision(run_hook(payload(cmd, repo), sentinels)) is None
+
+    def test_starting_a_run_does_not_end_the_pipeline(self, tmp_path: Path) -> None:
+        """`fr isolation down` retires the sentinel; entering must not."""
+        repo, sentinels = self._sent(tmp_path)
+        run_hook(payload("fr run start fr-goal --branch feat/x", repo), sentinels)
+        assert (sentinels / "sess-1.json").is_file()
+        assert decision(run_hook(payload("ls", repo), sentinels)) == "deny"
+
+    def test_allowed_in_the_condition_it_was_actually_denied_in(self, tmp_path: Path) -> None:
+        """The live report: a real git repo that ALREADY has a linked worktree
+        (anyone's), so the #341 self-heal does not fire and the sentinel stays."""
+        repo = _git_repo(tmp_path / "repo")
+        _git(repo, "worktree", "add", "-q", str(tmp_path / "someone-elses"), "-b", "feat/other")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+
+        start = run_hook(payload("fr run start fr-goal --branch feat/x", repo), sentinels)
+
+        assert decision(start) is None
+        assert (sentinels / "sess-1.json").is_file()
+        assert decision(run_hook(payload("fr run advance r1", repo), sentinels)) == "deny"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "fr run advance r1",
+            "fr run resolve r1 --step plan --state done",
+            "fr run adopt docs/superpowers/plans/x",
+            "fr run status r1",
+            "fr run startle",
+            "fr runs start x",
+        ],
+    )
+    def test_every_other_run_verb_is_still_gated(self, tmp_path: Path, cmd: str) -> None:
+        """Only `start` enters isolation. `adopt` deliberately does not (it
+        writes where it is run), and the rest belong in the workspace `start`
+        printed — which is the discipline this guard exists for."""
+        repo, sentinels = self._sent(tmp_path)
+        assert decision(run_hook(payload(cmd, repo), sentinels)) == "deny"
+
+
 class TestCdTransitionAllowance:
     """#279: a command LEADING with `cd <dir>` whose target resolves
     inside an allowed prefix (fr worktrees, temp dirs) and outside the

@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
 """A step's lifecycle in run state — distinct from `fr.item_state.ItemState`
@@ -48,6 +48,258 @@ IMPLEMENTED_RUNS_REL = Path("docs") / "superpowers" / "implemented" / "runs"
 
 class RunStateError(Exception):
     """Raised for any structurally invalid run-state file."""
+
+
+DispatchOutcome = Literal["done", "failed", "abandoned"]
+"""How a dispatch ended, reported at `fr run resolve`/`claim --abandoned` time
+(spec `2026-09-20-dispatch-holder-identity-design.md` §4.A).
+
+`abandoned` is not a lifecycle state `StepState` also has — it describes the
+DISPATCH, not the step: §1.C found there is no way to retire a non-returning
+agent from the outside, so `abandoned` is the honest terminal state for "this
+dispatch is never coming back", recorded while the step itself goes back to
+`running` for a fresh attempt."""
+
+
+class ContextEstimate(BaseModel):
+    """What fr assembled for ONE attempt — `PhaseAccounting`'s V1 half, on its
+    own (spec `2026-09-20-unit-record-unification-design.md` §4.A).
+
+    Sizes, not tokens: no harness offers a token API at dispatch time, so this
+    measures the context fr itself built (journal, composed handoff, spec +
+    plan bytes) and every renderer labels the derived token figure an
+    ESTIMATE. The `at` timestamp `PhaseAccounting` carried is NOT here — in
+    the v5 shape the estimate hangs off an `Attempt`, whose `dispatched` is
+    that same moment recorded once instead of twice.
+
+    Every field defaults to `0` on purpose, and that is the opposite stance
+    from `MeasuredTokens` below: a size fr failed to read is genuinely zero
+    bytes of assembled context, while a measurement fr failed to take is not a
+    zero, it is an absence — which is why one is defaulted and the other is
+    required.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    journal_entries: int = 0
+    journal_lines: int = 0
+    handoff_chars: int = 0
+    spec_bytes: int = 0
+    plan_bytes: int = 0
+
+
+class MeasuredTokens(BaseModel):
+    """What ONE attempt actually burned, read from the harness's own
+    transcript — `PhaseAccounting`'s V2 half, with gh#514's invariant made
+    STRUCTURAL (spec §4.A).
+
+    All four fields are REQUIRED. A measurement is atomic — all four or none
+    — and `PhaseAccounting` could only say so in prose plus a validator
+    (`fr.artifacts.structure.validate_run`'s partial-measurement check), which
+    meant the unrepresentable state was representable everywhere except at the
+    one place that looked. Here a partial measurement cannot be constructed at
+    all, so "no measurement" is expressed the only honest way: no
+    `MeasuredTokens` at all, rather than a `MeasuredTokens` of zeros. A unit
+    that genuinely spent nothing stays distinguishable from one nobody could
+    read.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+
+    @property
+    def total(self) -> int:
+        """The four figures summed — never a partial sum, because a partial
+        `MeasuredTokens` does not exist."""
+        return (
+            self.input_tokens
+            + self.cache_creation_input_tokens
+            + self.cache_read_input_tokens
+            + self.output_tokens
+        )
+
+
+class Attempt(BaseModel):
+    """One attempt to hold a unit, carrying its own identity AND its own cost
+    (spec §4.A) — `DispatchRecord` plus `session`, `estimate` and `measured`.
+
+    A unit's attempts (`UnitRecord.attempts`) are kept oldest first and never
+    overwritten: a failed unit that is retried, or one `--redispatch`ed over a
+    lost agent, keeps every prior attempt — the forensic trail gh-503 asked
+    for. Which side of the dispatch-holder spec's §3 line each field sits on:
+
+    - **fr knows it** — `dispatched`, fr's own timestamp of the act of
+      dispatching. Stamped BEFORE the brief is built, because it doubles as
+      the start edge of the measurement window (`fr.run.units.estimated_at`):
+      one moment, recorded once.
+    - **fr derives it** — `agent_type`, `model`, `session`, `estimate`.
+    - **reported, unverifiable** — `agent`, `harness`, `returned`, `outcome`.
+      An unreported `agent` is recorded as absent, never guessed.
+
+    The three new fields are each the repair of a defect the split shape had:
+
+    - `session` — the harness session that dispatched it. gh#514's
+      `measure_unit` reads the transcript out of the CURRENT process
+      environment, so without this a cursor picked up in another session (or
+      on another host: §4.D.1) either finds nothing or, worse, measures a
+      stranger's transcript that happens to fall in the same time window.
+    - `estimate` / `measured` — per ATTEMPT, not per unit. The old top-level
+      `accounting` map held one snapshot per unit, so a redispatched unit's
+      second attempt overwrote the first one's cost and the abandoned agent's
+      spend — exactly the spend worth seeing — disappeared.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dispatched: str
+    agent: str | None = None
+    agent_type: str | None = None
+    harness: str | None = None
+    model: str | None = None
+
+    session: str | None = None
+    """The harness session id fr derived when it OPENED this attempt (§4.D.1).
+
+    Recorded so a transcript is looked up by `(session, agent)` in the
+    *recorded* session's directory rather than the current one. Absent on
+    every attempt written before this field existed, and on any harness with
+    no session concept — which reads as "not observable from here", never as
+    zero. No hostname is recorded: a missing session directory already says
+    "elsewhere", and a hostname in a public repo's committed cursor is
+    identity nobody needs."""
+
+    returned: str | None = None
+    outcome: DispatchOutcome | None = None
+
+    estimate: ContextEstimate | None = None
+    """What fr assembled for THIS attempt, written by `advance`."""
+
+    measured: MeasuredTokens | None = None
+    """What THIS attempt burned, written by `resolve` (and by `claim
+    --abandoned`, whose spend is exactly the spend worth seeing)."""
+
+    synthesized: Literal[True] | None = None
+    """`True` on the ONE kind of attempt fr did not record when it happened:
+    the attempt the 4 -> 5 migration creates for a unit that had a cost
+    snapshot and no dispatch record (spec §4.F — every cursor that predates
+    the dispatch record, which is most of them). Absent everywhere else.
+
+    **A synthesized attempt carries COST, never a HOLD.** It exists so the
+    unit's estimate and measurement have an attempt to hang off, with
+    `dispatched` = the moment fr briefed it, which is the only fact fr has.
+    It has no `returned`, and that must NOT read as "still held": the unit may
+    be `done`, or `failed` and waiting to be retried, and treating it as held
+    made `advance` refuse to retry a failed unit of an in-flight run the
+    moment the run was migrated, and made `fr run check` report every finished
+    unit of every older cursor as open. It has no `agent_type`, and that must
+    NOT read as "the orchestrator ran it" — which is what an absent
+    `agent_type` means on an attempt fr DID record. Nothing else on the
+    record can tell the two apart, so the record says it.
+
+    The witness (`fr.run.units.open_attempt`) skips it, so a migrated unit
+    behaves exactly as it did while its cost lived in the v4 `accounting` map,
+    which no witness ever read. Stated, not invented: closing it instead would
+    have needed a `returned` timestamp fr never had.
+    """
+
+    @field_validator("harness")
+    @classmethod
+    def _check_harness(cls, value: str | None) -> str | None:
+        """Validated against `fr.harness.model.HARNESSES`, imported rather
+        than re-listed — `DispatchRecord`'s rule, kept."""
+        from fr.harness.model import HARNESSES
+
+        if value is not None and value not in HARNESSES:
+            raise ValueError(f"harness {value!r} must be one of {HARNESSES}")
+        return value
+
+    @model_validator(mode="after")
+    def _returned_and_outcome_are_one_fact(self) -> Attempt:
+        """`outcome` is set exactly when `returned` is — `DispatchRecord`'s
+        invariant, kept verbatim. A half-closed record reads as still-held or
+        as held-forever depending on which half a reader happens to look at,
+        which is the double-dispatch hazard wearing a disguise."""
+        if (self.returned is None) != (self.outcome is None):
+            raise ValueError(
+                "`returned` and `outcome` are set together or not at all "
+                f"(returned={self.returned!r}, outcome={self.outcome!r}); a record with "
+                "exactly one of them is neither open nor closed"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _a_synthesized_attempt_claims_nothing_fr_did_not_know(self) -> Attempt:
+        """A synthesized attempt is `dispatched` + cost and NOTHING else.
+
+        Identity or a close on one would be a claim nobody made — and it would
+        also make the record ambiguous again: is this a hold, or not? The
+        marker only means something while the answer stays "never"."""
+        if self.synthesized:
+            claimed = [
+                name
+                for name in (
+                    "agent",
+                    "agent_type",
+                    "harness",
+                    "model",
+                    "session",
+                    "returned",
+                    "outcome",
+                )
+                if getattr(self, name) is not None
+            ]
+            if claimed:
+                raise ValueError(
+                    f"a synthesized attempt carries only `dispatched` and its cost, but this "
+                    f"one also sets {', '.join(claimed)}"
+                )
+        return self
+
+
+UnitState = Literal["pending", "running", "done", "failed", "manual"]
+"""A unit's state — the values the v4 `StepRecord.items` map carried as bare
+strings, named (spec §4.B).
+
+`manual` is gh#496's marker for a `tag: manual` phase the fan-out will never
+dispatch; it is a state a unit can be IN, not an outcome, which is why it sits
+here rather than in `DispatchOutcome`. There is no `blocked`: a gate blocks a
+STEP, never one of its units."""
+
+
+class UnitRecord(BaseModel):
+    """One unit of one step — its state, every attempt to hold it, and the
+    evidence it produced (spec §4.A) — the value type of `StepRecord.units`.
+
+    This is the whole point of the unit-record spec: `items`, `dispatch` and
+    the top-level `accounting` map were three key spaces over ONE identity,
+    kept in step by call sites that each re-derived the join. Collapsing them
+    means a unit's state cannot drift from its history, and a write that
+    forgets one half stops being expressible.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: UnitState | None = None
+    """`None` exactly for a `step/<step-id>` unit — a flat `kind: agent`
+    step, whose `StepRecord.state` is that fact's ONE home (§4.B). A fact with
+    two homes is what this spec exists to stop."""
+
+    attempts: tuple[Attempt, ...] = ()
+    """Oldest first; the OPEN attempt is the last one whose `returned` is
+    `None` (a `synthesized` one never counts), and there is at most one.
+    Empty is a real, honest state: a phase `fr run adopt` found already
+    complete was never dispatched by fr, and inventing an attempt to look
+    uniform would be fabrication."""
+
+    evidence: dict[str, str] | None = None
+    """Obligation name -> journal entry id, verified when the unit resolved
+    (§4.E). `None` on every unit resolved before the evidence gate existed —
+    visible debt reported as `done, unevidenced`, never a retroactive
+    failure."""
 
 
 class StepRecord(BaseModel):
@@ -85,30 +337,6 @@ class StepRecord(BaseModel):
     exit: int | None = None
     stdout: str | None = None
 
-    items: dict[str, str] | None = None
-    """Per-item state for a step that fans out (`for_each: phase`).
-
-    Spec §4.B's own illustration of run state carries it —
-    `implement: {state: running, items: {".../phase/1": done, ...}}` — and
-    `fr run adopt` (2026-08-30 §3.E) is the first writer: adopting a plan
-    that is half-implemented has to record WHICH phases are done, or the
-    cursor says `implement` and loses everything that makes the adoption
-    worth having.
-
-    Keys are the plan-relative tail of the §4.D identity grammar
-    (`phase/<n>` for a flat fan-out, `phase/<n>/<member-id>` for a grouped
-    `for_each` with member steps), not a full work-item id: composing the
-    full `<repo>/<spec>/<plan>/phase/<n>` is `fr_dispatch.work_item`'s job
-    and `fr` may not import it (`tests/unit/test_import_direction.py`). The
-    run file already records which plan it is about, in `emitted.plan`, so
-    the tail identifies the item unambiguously within the run.
-
-    Additive and optional, so every run file written without it still
-    parses; no artifact-version bump follows, because the run kind is new in
-    4.0.0 (`fr.artifacts.registry`, `current_version=1`) and no released fr
-    has ever read a run file.
-    """
-
     members: list[str] | None = None
     """Member-step ids of a grouped `for_each` step, recorded at build.
 
@@ -116,31 +344,53 @@ class StepRecord(BaseModel):
     start` from the ordinary case — without it a shape edit inside the nest
     would advance silently against a step list the cursor was never computed
     for. Absent (`None`) on grouped steps of pre-existing run files, where
-    the member check is skipped rather than guessed. Additive and optional,
-    same versioning argument as `items` above.
+    the member check is skipped rather than guessed.
+    """
+
+    units: dict[str, UnitRecord] | None = None
+    """Every unit of this step — its state, every attempt to hold it, and its
+    cost — under ONE key (spec `2026-09-20-unit-record-unification-design.md`
+    §4.A). Replaces `items` (state), `dispatch` (attempts) and the top-level
+    `RunState.accounting` (cost): three key spaces over one identity, kept in
+    step by call sites that each re-derived the join, which is how a unit's
+    state came to drift from its history.
+
+    Three key forms, each with a rule `fr.artifacts.structure.validate_run`
+    enforces (§4.B):
+
+    - `phase/<n>/<member-id>` — a grouped `for_each` member. Carries `state`.
+    - `step/<step-id>` — a flat `kind: agent` step. Carries **no** `state`:
+      `StepRecord.state` above is that fact's one home. The `step/` prefix is
+      load-bearing, not cosmetic — a repo-authored step id may itself contain
+      a `/` (`fr.workflow.check.check_workflow` constrains no characters), so
+      without a namespace the key spaces are not provably disjoint.
+    - `phase/<n>` — a phase fr never dispatches AS a phase: gh#496's
+      `state: manual` marker, or a unit of a flat `for_each` step that
+      `fr run adopt` recorded. Carries `state`; never any attempts.
+
+    Keys are the plan-relative tail of the work-item identity grammar, not a
+    full work-item id: composing `<repo>/<spec>/<plan>/phase/<n>` is
+    `fr_dispatch.work_item`'s job and `fr` may not import it
+    (`tests/unit/test_import_direction.py`). The run file already records
+    which plan it is about, in `emitted.plan`.
+
+    Only `fr.run.units` reads or writes this map; everything else speaks of
+    units, states, attempts and cost through that module. **A shape change**
+    (`current_version=5`, migration `fr.artifacts.run_unit_record`): this is a
+    field REMOVAL on an `extra="forbid"` model, so the prior shape is frozen
+    in `fr.run.legacy` and every migration reads with that, never with this.
     """
 
 
-class PhaseAccounting(BaseModel):
-    """V1 context accounting (fr-goal methodology restoration): what a
-    dispatched `(phase, member)` unit is about to re-read.
+UNIT_RECORD_SCHEMA_VERSION = 5
+"""The `run` artifact version `StepRecord.units` FIRST appears in.
 
-    Sizes, not tokens — no harness offers a token API, so V1 measures the
-    context fr itself assembles (journal, composed handoff, spec + plan
-    bytes) and `fr run status` renders token figures explicitly labeled as
-    estimates. Keyed like `items` (`phase/<n>` flat, `phase/<n>/<member>`
-    grouped). Additive and optional: pre-accounting runs parse with
-    `accounting=None`, same versioning argument as `items`/`members`.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    at: str | None = None
-    journal_entries: int = 0
-    journal_lines: int = 0
-    handoff_chars: int = 0
-    spec_bytes: int = 0
-    plan_bytes: int = 0
+Not a second declaration of the kind's `current_version` — that lives in
+`fr.artifacts.registry` and only there, and may move past this. This says
+which version a cursor must declare before it is allowed to carry `units`, so
+`validate_run` can report the one state that would otherwise go unnoticed: a
+v5 body under an older stamp (the 4 -> 5 migration's crash window, or a bad
+merge), which raises in any fr that believes the stamp."""
 
 
 def current_run_schema_version() -> int:
@@ -185,7 +435,6 @@ class RunState(BaseModel):
     started: str  # ISO 8601; kept as a string for round-trip stability
     cursor: str  # the step id currently active (running/blocked) or next-up
     steps: dict[str, StepRecord]
-    accounting: dict[str, PhaseAccounting] | None = None
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -283,6 +532,43 @@ def archived_run_path(repo_root: Path, run_id: str) -> Path:
     return repo_root / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
 
 
+class _CursorDumper(yaml.SafeDumper):
+    """`SafeDumper`, except a multi-line string asks for a block literal."""
+
+
+def _represent_str(dumper: yaml.SafeDumper, value: str) -> yaml.ScalarNode:
+    # A cursor is git-tracked and read in diffs. The default renders a string
+    # ending in a newline as a quoted scalar folded over three lines — valid
+    # YAML that looks broken — and a failed step's output as one blob of `\n`
+    # escapes. `|` is a HINT: the emitter still falls back to a quoted scalar
+    # for what a block literal cannot carry (a leading space, a space before a
+    # newline, a control character), so the round trip stays exact either way.
+    style = "|" if "\n" in value else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+_CursorDumper.add_representer(str, _represent_str)
+
+
+def dump_cursor_yaml(data: dict[str, Any]) -> str:
+    """The ONE way a run cursor's mapping becomes text.
+
+    Both writers call it — `dump_run_state` and the 4 -> 5 body rewrite
+    (`fr.artifacts.run_unit_record`). A second spelling of these options is how
+    a migrated cursor would restyle itself on its first native save: a diff
+    nobody wrote. A block literal is never folded, whatever the line length —
+    folding is what `>` is for — so `width` stays at the default and no
+    single-line scalar already on disk is re-wrapped by this.
+    """
+    return yaml.dump(
+        data,
+        Dumper=_CursorDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+
+
 def dump_run_state(state: RunState) -> str:
     """Canonical run-state YAML.
 
@@ -293,7 +579,17 @@ def dump_run_state(state: RunState) -> str:
     default back to `None`).
     """
     data = state.model_dump(mode="json", exclude_none=True)
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    # A unit fr never dispatched — an adopted `done` phase, a `manual` marker,
+    # a still-`pending` member — dumps as `{state: …}` and nothing else.
+    # `exclude_none` cannot do it (an empty tuple is not `None`), and padding
+    # every such unit with `attempts: []` would both bury the units that DO
+    # have a history and make a native dump differ from what the 4 -> 5
+    # rewrite writes for the same unit.
+    for record in data["steps"].values():
+        for unit in (record.get("units") or {}).values():
+            if not unit.get("attempts"):
+                unit.pop("attempts", None)
+    return dump_cursor_yaml(data)
 
 
 def parse_run_state(text: str) -> RunState:

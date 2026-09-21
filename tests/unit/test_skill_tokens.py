@@ -13,7 +13,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FR_PLAN = REPO_ROOT / "plugins/super-fr/skills/fr-plan/SKILL.md"
 FR_EXECUTE = REPO_ROOT / "plugins/super-fr/skills/fr-execute/SKILL.md"
+FR_GOAL = REPO_ROOT / "plugins/super-fr/skills/fr-goal/SKILL.md"
 FR_PHASE_EXECUTOR = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"
+FR_PHASE_EXECUTOR_MIRRORS = sorted((REPO_ROOT / ".opencode/agent").glob("fr-phase-executor*.md"))
 
 
 def test_fr_plan_names_the_skeleton_mandate() -> None:
@@ -49,3 +51,79 @@ def test_fr_phase_executor_names_the_handoff_and_the_contract() -> None:
     assert "no-refactor-because" in t
     assert "single writer" in t.lower()
     assert "return" in t.lower() and "reporting channel" in t.lower()
+
+
+# --- The dispatch contract (#428) ------------------------------------------
+#
+# The executor is a leaf on both harnesses (no `Agent` tool on Claude Code,
+# `task: deny` on OpenCode), so a step telling it to dispatch a subagent is
+# unexecutable by construction. `fr plan self-review` errors on such a step at
+# authoring time; these three tests pin the *execution*-time half — the prose
+# contract that refuses the tick — plus the fr-plan guidance that prevents the
+# step being written at all. One assert per load-bearing token.
+
+
+def test_fr_phase_executor_names_the_dispatch_refusal() -> None:
+    """The capability absence AND the consequence: a dispatch step is a
+    BLOCKER that leaves the step unticked, not a deviation that ticks."""
+    t = FR_PHASE_EXECUTOR.read_text()
+    assert "no `Agent` tool" in t
+    assert "task: deny" in t
+    assert "BLOCKER" in t
+    assert "unticked" in t
+
+
+def test_fr_execute_names_the_dispatch_refusal() -> None:
+    """fr-execute carries the same contract: it is the skill an OpenCode or
+    Hermes child loads, so the contract cannot live only in the Claude Code
+    agent file."""
+    t = FR_EXECUTE.read_text()
+    assert "no `Agent` tool" in t
+    assert "task: deny" in t
+    assert "BLOCKER" in t
+    assert "unticked" in t
+
+
+def test_fr_plan_names_outcomes_not_mechanisms() -> None:
+    """Where the error is born: a step naming a tool rots the moment the
+    actor changes, and rots silently."""
+    t = FR_PLAN.read_text()
+    assert "outcomes, not mechanisms" in t
+    assert "#428" in t
+
+
+def test_fr_phase_executor_and_all_opencode_mirrors_carry_the_context_discipline_norm() -> None:
+    """The sixth contract norm (spec §5.B1) and the pre-existing #461 norm
+    ("the return value is the only reporting channel") must both be stated,
+    not implied, in the canonical agent AND all four OpenCode mirrors — #461
+    is closed here by verification, not by new prose (spec §5.D)."""
+    assert len(FR_PHASE_EXECUTOR_MIRRORS) == 4, (
+        f"expected 4 .opencode/agent/fr-phase-executor*.md mirrors, "
+        f"found {[p.name for p in FR_PHASE_EXECUTOR_MIRRORS]}"
+    )
+    for path in (FR_PHASE_EXECUTOR, *FR_PHASE_EXECUTOR_MIRRORS):
+        # Normalized (whitespace-collapsed) because the source prose wraps at
+        # ~90 chars — a literal substring check is brittle to where a line
+        # break happens to fall, the same trap "raw rich output" asserts hit.
+        t = " ".join(path.read_text().lower().split())
+        # Discriminating TOKENS, not whole sentences. The rest of this file
+        # asserts short tokens ("single writer", "no-refactor-because") for a
+        # reason: a long verbatim phrase also fails on an innocuous rewording
+        # that preserves meaning — including the spec's own §5.B1 wording
+        # ("already read *in* this session"), one word different. These four
+        # still go red on deletion or a meaning-changing edit, which is what
+        # a tripwire is for.
+        assert "re-derive" in t, path
+        assert "narrowest" in t, path
+        assert "re-read a file" in t, path
+        assert "verbatim tool output" in t, path
+        assert "return" in t and "reporting channel" in t, path
+
+
+def test_fr_goal_dispatch_brief_asks_for_a_summary_not_pasted_output() -> None:
+    """spec §5.B2: fr-goal's own dispatch-brief guidance must agree with the
+    executor contract it dispatches into — a pass/fail summary and journal
+    ids, never pasted output (#461, closed by verification)."""
+    t = FR_GOAL.read_text()
+    assert "never pasted output" in t.lower()
+    assert "pass/fail summary" in t.lower()

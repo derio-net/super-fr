@@ -25,6 +25,28 @@
 # by the cursor, not by prose. There is deliberately NO trailing single
 # `review` step — it is what the loop replaces. Runs started against the
 # flat shape hit manifest drift (by design) and start a new run.
+#
+# `journal-check` (spec §C, decision D3) is the ONLY machine check that a
+# completed phase was reviewed — not a second one, and not a backstop. Read
+# the loop above literally: `review-phase` dispatches a review, but it is a
+# `kind: agent` step, so it completes on `fr run resolve --state done` and
+# leaves no artifact by itself. An agent that skipped the review entirely
+# resolves it identically to one that did the work. That is #430 exactly.
+# The `kind=review` journal entry is written by the skill prose (SKILL.md
+# §6), and this step is what makes forgetting it FAIL rather than pass
+# silently. It is a `cli` step rather than a line in `deliver`'s prose for
+# the same reason the prose alone was never enough: an obligation enforced
+# by an instruction gets absorbed under load. It sits strictly between
+# `implement` and `deliver` — after `deliver` the PR already exists, so
+# checking there would be too late to matter. Adding this step drifts every
+# run started against the pre-existing shape (`_check_step_drift`, by design
+# — see run_cmd.py). Recovering a stranded run is NOT the one-liner it
+# looks like, verified on this repo's own run: `fr run adopt` REFUSES while
+# a run file exists for the same shape+branch, which is precisely the
+# stranded case, so the old `docs/superpowers/runs/<id>.yaml` must be moved
+# aside first. Adoption then re-dispatches `review-phase` for every
+# completed phase (it keys items on the first group member) and does not
+# carry the old cursor's gate provenance. Correct, but not free.
 workflow: fr-goal
 schema: 1
 description: TDD feature delivery, goal to reviewed PR.
@@ -70,9 +92,49 @@ steps:
         emits: [journal:plan]
       - id: review-phase
         kind: agent
-        skill: superpowers:requesting-code-review
+        # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
+        # Naming only the first left what happens to a review's findings
+        # (verify each; fix it with a test or refute it with reasoning; never
+        # drop it) in one parenthesis of skill prose, i.e. at the implementing
+        # agent's discretion. A list on this step rather than a third member,
+        # because drift compares member IDS: a new one strands every cursor in
+        # flight, which is what adding `journal-check` did.
+        skill:
+          - superpowers:requesting-code-review
+          - superpowers:receiving-code-review
         needs: [spec, plan, journal:plan]
         emits: [journal:plan]
+        # The evidence gate (unit-record-unification spec §4.E), and the
+        # structural half of #430. This step is `kind: agent` and leaves no
+        # artifact of its own, so before this an agent that SKIPPED the review
+        # resolved it identically to one that did the work. Now `fr run
+        # resolve --state done` refuses without
+        # `--evidence review=<journal-entry-id>` and verifies that id against
+        # the plan journal by the same rule `journal-check` below applies — a
+        # `kind=review` entry carrying this phase's `phase=N`. Two gates, one
+        # rule, one verifier: `journal-check` remains the gate for a plan with
+        # no cursor, this one for a plan that has one.
+        #
+        # `findings` is the enforceable half of the second skill, and it is
+        # DERIVED — never passed. Naming a skill cannot prove the skill was
+        # used; what fr can observe is its outcome. So `--state done` is also
+        # refused while any finding filed against this phase is effectively
+        # open in the plan journal (the fold `fr journal check` uses), and fr
+        # records the ids it saw closed, or `none`. It is `journal-check`'s own
+        # rule, moved from once-before-`deliver` to the moment a finding is
+        # cheapest to act on. A finding that belongs to a later phase is filed
+        # against THAT phase and gates its review instead.
+        evidence: [review, findings]
+
+  - id: journal-check
+    kind: cli
+    # `journal:plan` as well as `plan`: the gate reads the plan for which
+    # phases are complete AND the plan journal for which were reviewed.
+    # Declaring only `plan` understated it (review r-p3-f6). Reachability is
+    # unaffected — `journal:*` is not a repo-tracked artifact — so this is
+    # about the manifest telling the truth about its own inputs.
+    needs: [plan, journal:plan]
+    run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
 
   - id: deliver
     kind: agent

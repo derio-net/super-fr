@@ -10,6 +10,7 @@ phase:
   tracking_issue: null
   acceptance:
   - multibackend-isolation-lifecycle
+  tier: standard
 tasks:
 - number: 1
   title: RED — _resolve_default_branch backend branch

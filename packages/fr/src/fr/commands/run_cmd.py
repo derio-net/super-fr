@@ -36,19 +36,30 @@ from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+from fr.isolation import sessions as _sessions
+from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     compose_handoff,
     parse_journal,
+    phase_finding_states,
     resolve_journal_read_path,
+    reviews_phase,
 )
-from fr.run.adopt import AdoptError, adopt_run, plan_phase_numbers
+from fr.run import liveness as _liveness
+from fr.run import units
+from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
+from fr.run.liveness import gate_pending as _gate_pending
+from fr.run.liveness import hold_on as _hold_on
+from fr.run.liveness import next_step_id as _next_step_id
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
-    PhaseAccounting,
+    ContextEstimate,
+    DispatchOutcome,
+    MeasuredTokens,
     RunState,
     RunStateError,
     StepRecord,
@@ -61,6 +72,7 @@ from fr.run.model import (
     validate_run_id,
 )
 from fr.run.provenance import agent_cleared_gates, gates
+from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
 from fr.workflow.check import check_workflow
@@ -115,6 +127,33 @@ def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
     return step
 
 
+def _split_member_id(manifest: WorkflowManifest, step_id: str) -> tuple[str, str] | None:
+    """`(item, member_id)` if `step_id` is a grouped fan-out's COMPOSITE key
+    (`phase/1/implement-phase`), else `None`.
+
+    The composite is the display id and the `items`-map key — what `fr run
+    status` and `advance` both show — but it is deliberately NOT accepted in
+    `--step` (spec §3.B, journal `d2`). Accepting it and splitting it
+    internally was the issue's own option 2 and was declined: it would leave
+    two spellings of one id, and it would hide the `--item` flag from the
+    operator at the exact moment they need to learn it. So this function
+    exists to *recognise* the composite in order to teach the two flags —
+    never to resolve it.
+
+    Recognition is manifest-driven, not shape-of-string: the tail after the
+    last `/` must name a member of some `for_each` group. An id that merely
+    contains a slash is an ordinary not-found id and gets the ordinary
+    message.
+    """
+    if "/" not in step_id:
+        return None
+    item, _, tail = step_id.rpartition("/")
+    for step in manifest.steps:
+        if step.for_each and any(member.id == tail for member in step.steps):
+            return item, tail
+    return None
+
+
 def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | None]:
     """`(step, parent-group)` for a top-level OR member id — members share the
     flattened id space `check_workflow` validates, so resolving one must find
@@ -125,7 +164,92 @@ def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | N
         for member in step.steps:
             if member.id == step_id:
                 return member, step
-    raise RunStateError(f"step {step_id!r} not found in workflow {manifest.workflow!r}")
+    not_found = f"step {step_id!r} not found in workflow {manifest.workflow!r}"
+    split = _split_member_id(manifest, step_id)
+    if split is not None:
+        item, member_id = split
+        raise RunStateError(
+            f"{not_found}.\n"
+            "It is a grouped `for_each` member, which takes two flags:\n"
+            f"  --step {member_id} --item {item}"
+        )
+    raise RunStateError(not_found)
+
+
+def _unit_key(
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    parent: Step | None,
+    item: str | None,
+) -> str:
+    """The UNIT key a `(--step, --item)` pair names (`fr.run.units`) —
+    spec §4.B's two key spaces (`phase/<n>/<member-id>` for a grouped member,
+    `step/<step-id>` for a flat one) computed in exactly ONE place, so
+    `claim`, `_resolve_member` and `advance`'s own flat-step key can never
+    drift apart (P3.T1.S3). `step`/`parent` are `_find_step`'s own return
+    shape — `parent` is `None` for a top-level step, the group for a member.
+
+    Exits 2 (printing to `err_console`) for every input shape that cannot
+    name a unit: a member given no `--item`, a non-member given one, or an
+    `--item` naming a phase this run's recorded plan does not have.
+    """
+    if parent is not None:
+        if item is None:
+            err_console.print(
+                f"[red]{step.id}: a member outcome must address a phase item — "
+                "pass --item phase/<n>[/red]"
+            )
+            raise typer.Exit(2)
+        try:
+            # (agentic, manual) since gh#496 — a `tag: manual` phase is never
+            # dispatched, so only the agentic list can name a unit key.
+            agentic, manual = _group_phases(repo_root, state)
+        except (RunStateError, AdoptError) as e:
+            err_console.print(f"[red]{parent.id}: {e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+        expected = _expected_group_items(parent, agentic)
+        key = f"{item}/{step.id}"
+        if key not in expected:
+            # #496 (spec §3.D.3): a manual phase gets its own message BEFORE
+            # the generic one. "not a phase member — expected phase/<n> for
+            # phases [1,2,3]" reads as a bug in the phase list when phase 4
+            # plainly exists in the plan; the reason it is absent is a
+            # deliberate omission, and the refusal has to say so. It lives
+            # HERE because this is the one place a unit key is validated: it
+            # used to sit in `_resolve_member` behind a call to this function,
+            # which refused first with the generic text — dead on arrival,
+            # and `claim` never had it at all.
+            if _item_phase(item) in manual:
+                err_console.print(
+                    f"[red]{key}: phase {_item_phase(item)} is `tag: manual` and is "
+                    "deliberately never dispatched, so there is no outcome to "
+                    "record.[/red]\n"
+                    "  Its record is the plan's own steps plus the PR's "
+                    '"unimplemented — operator pushes to this PR".',
+                    soft_wrap=True,
+                )
+                raise typer.Exit(2)
+            err_console.print(
+                f"[red]{key}: not a phase member of {parent.id!r} — expected "
+                f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
+            )
+            raise typer.Exit(2)
+        return key
+    if item is not None:
+        if step.steps:
+            members = ", ".join(m.id for m in step.steps)
+            err_console.print(
+                f"[red]{step.id}: a group outcome must address a member step "
+                f"({members}) — pass --step <member> --item phase/<n>[/red]"
+            )
+        else:
+            err_console.print(
+                f"[red]{step.id}: --item is only for members of a grouped "
+                f"`for_each` step — {step.id!r} has no members[/red]"
+            )
+        raise typer.Exit(2)
+    return _liveness.flat_unit_key(step.id)
 
 
 def _emitted_plan(state: RunState) -> str | None:
@@ -136,30 +260,123 @@ def _emitted_plan(state: RunState) -> str | None:
     return None
 
 
-def _group_phases(repo_root: Path, state: RunState) -> list[int]:
-    """Phase numbers the grouped fan-out iterates over — from the plan on
-    disk, the one source of which phases exist. Fail-closed: a group advanced
-    before its plan is recorded (or against an unparseable plan) names what
-    is missing instead of dispatching against a guessed phase list."""
+def _group_phases(repo_root: Path, state: RunState) -> tuple[list[int], list[int]]:
+    """`(agentic, manual)` phase numbers, from the plan on disk — the one
+    source of which phases exist.
+
+    **The filter lives here, above everything else** (#496, spec §3.D.3).
+    `_expected_group_items` is the single place that decides which units
+    exist, and BOTH of `_advance_group`'s refusals read that list: filter a
+    manual phase out any later and a `tag: manual` phase can still be the
+    `running` key an ALREADY RUNNING refusal names, or the unit a
+    `--redispatch` re-briefs.
+
+    The split keys on `tag` alone and never on completion. A ticked
+    front-loaded manual phase waits on nobody (review `r4-f1`) but is still
+    not work this run did, so it is recorded as skipped rather than done —
+    and keeping the predicate completion-free is what lets `advance` and
+    `fr run adopt` write identical markers without either parsing state.
+
+    Fail-closed: a group advanced before its plan is recorded (or against an
+    unparseable plan) names what is missing instead of dispatching against a
+    guessed phase list.
+    """
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
         raise RunStateError(
             "cannot dispatch per-phase members — no plan recorded yet "
             "(resolve the step that emits `plan` first)"
         )
-    return plan_phase_numbers(repo_root, plan_rel)
+    tags = plan_phase_tags(repo_root, plan_rel)
+    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
+    manual = sorted(n for n, tag in tags.items() if tag == "manual")
+    return agentic, manual
+
+
+def _manual_items(manual: list[int]) -> dict[str, str]:
+    """The `phase/<n>: manual` markers for every phase the fan-out skipped.
+
+    Item granularity, in the group's own map, so a deliberate omission is
+    visible in `fr run status` beside everything that WAS dispatched — the
+    alternative (leave them out entirely) is how a skipped phase becomes
+    indistinguishable from a phase nobody noticed.
+    """
+    return {f"phase/{n}": MANUAL_ITEM for n in manual}
+
+
+def _item_phase(item: str) -> int | None:
+    """The phase number a `phase/<n>` item names, or None when it names
+    something else. Structural, not a cast: `--item` is operator input, so
+    `phase/four` and `spec/1` must fall through to the generic refusal rather
+    than raise."""
+    head, _, tail = item.partition("/")
+    return int(tail) if head == "phase" and tail.isdigit() else None
+
+
+def _group_done_line(step_id: str, expected: list[str], manual: list[int]) -> str:
+    """The one completion line for a grouped fan-out.
+
+    Printed from both places a group can complete — `_advance_group` (nothing
+    left to dispatch) and `_resolve_member` (the last member's outcome) — so
+    the count and the manual phases it names cannot drift between them.
+
+    The manual phases are named rather than merely counted: "6 members done"
+    over a 4-phase plan reads as an arithmetic bug until the line says which
+    phase was never dispatched and why. It does NOT say "trailing", though
+    the common case is: after review `r4-f1` a manual phase may legitimately
+    be front-loaded-and-already-complete instead, and deciding which from
+    here would be a second definition of "trailing" beside
+    `fr.plan_ops._trailing_manual_block`.
+    """
+    line = f"{step_id}: done ({len(expected)} members done"
+    if manual:
+        phases = ", ".join(f"phase {n}" for n in manual)
+        line += (
+            f"; {phases} `tag: manual`, never dispatched — the plan's own "
+            "steps and the PR are its record"
+        )
+    return line + ")"
+
+
+def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
+    """The tier phase `phase_n` declares in its header on the plan this run
+    recorded, or `None` when it declares none, no plan is recorded yet, or
+    the plan is unparseable.
+
+    Fail-soft by design (unlike `_group_phases`, which fails closed): this is
+    an observability field, not a dispatch precondition, and refusing to
+    dispatch over an unreadable OPTIONAL tier would be a new failure mode for
+    a field whose whole point is that a phase may legitimately not set it.
+    Mirrors `_accounting_snapshot`'s stance next to it ("observability must
+    not break execution") rather than `_group_phases`'s.
+    """
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        return None
+    from fr.parser import PlanSchemaError, parse
+
+    try:
+        plan = parse(repo_root / plan_rel)
+    except (PlanSchemaError, OSError):
+        return None
+    return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
 
 
 def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     """Every `phase/<n>/<member>` key of a grouped fan-out, in dispatch
     order: phase-major, then member order — implement before review, per
-    phase, never the reverse."""
+    phase, never the reverse.
+
+    `phases` is `_group_phases`'s AGENTIC list: a manual phase produces no
+    expected key at all, so it is neither dispatchable, resolvable, nor
+    countable towards the group's completion.
+    """
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
 
 
 def _accounting_snapshot(
     repo_root: Path, state: RunState, phase_n: int, depends_on: tuple[int, ...] = ()
-) -> PhaseAccounting:
+) -> ContextEstimate:
     """What the dispatched unit is about to re-read (V1 context accounting).
 
     Measured, not metered: journal entries/lines, the composed handoff's
@@ -217,8 +434,11 @@ def _accounting_snapshot(
     handoff_chars = len(
         compose_handoff(entries, phase=phase_n, scope="plan", slug=slug, depends_on=depends_on)
     )
-    return PhaseAccounting(
-        at=_now(),
+    # No `at` here: the estimate is a VALUE (what fr assembled), and when it
+    # was assembled is the caller's to record — `units.with_estimate(..., at=)`
+    # — because in the v5 shape that moment is the attempt's own `dispatched`
+    # rather than a second timestamp beside it.
+    return ContextEstimate(
         journal_entries=len(entries),
         journal_lines=journal_lines,
         handoff_chars=handoff_chars,
@@ -227,10 +447,63 @@ def _accounting_snapshot(
     )
 
 
-def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
-    ids = [s.id for s in manifest.steps]
-    idx = ids.index(step_id)
-    return ids[idx + 1] if idx + 1 < len(ids) else None
+def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
+    """`state` with V2 measured tokens folded into the attempt just CLOSED.
+
+    **Taken when the attempt closes, not when it is dispatched**, and that is
+    a deliberate departure from the plan step's wording (P4.T1.S4 pointed at
+    the advance path, where the V1 sizes are recorded). At dispatch time the
+    transcript does not exist yet, so a measurement taken there is
+    structurally always empty — it would pass a test and read zero from every
+    real run. The figure lands on the same ATTEMPT the estimate does
+    (`Attempt.measured` beside `Attempt.estimate`); only the moment differs.
+
+    Both closers call it: `resolve`, and `claim --abandoned` — an abandoned
+    agent's spend is exactly the spend worth seeing, and before §4.D it was
+    the one spend fr discarded.
+
+    **The window is the attempt's OWN `[dispatched, returned]`** (§4.D). It
+    used to be `[dispatched, now]`, under a docstring asserting *"serial
+    dispatch makes that window hold exactly one dispatch"* — an assumption
+    that is run-wide and temporal rather than per-phase, and that
+    `advance --redispatch` breaks outright: two attempts of one unit put two
+    transcripts in one window, and `select_dispatch` then yields nothing.
+    Selection no longer leans on it. A claimed attempt is matched by its
+    `agent` id, which IS the transcript's filename, so overlap cannot confuse
+    it; the window is the fallback for an attempt nobody claimed.
+
+    Four situations leave `state` untouched, each a fact rather than a
+    shortcut: no attempt at all; no estimate, so no window was ever opened (a
+    flat `kind: agent` step); **`returned is None`**, which covers both an
+    open attempt and every `synthesized` one — a migrated cost carrier fr
+    never dispatched and must never measure; and an attempt that already HAS
+    a measurement, which a later `resolve` over an abandoned attempt must not
+    rewrite.
+
+    Never a gate and never noisy: a harness with no reader, a missing or
+    unreadable transcript, or an unattributable window all leave the cost
+    untouched — `fr run status` reports that absence in band, and the V1
+    estimate stays labeled an estimate.
+    """
+    from fr.run.telemetry import measure_attempt
+
+    attempt = units.last_attempt(state, key)
+    if attempt is None or attempt.estimate is None:
+        return state
+    if attempt.returned is None or attempt.measured is not None:
+        return state
+    measured = measure_attempt(
+        os.environ,
+        session=attempt.session,
+        agent=attempt.agent,
+        start=attempt.dispatched,
+        end=attempt.returned,
+    )
+    if measured is None:
+        return state
+    return units.with_measured(
+        state, step_id, key, MeasuredTokens.model_validate(measured.totals.as_fields())
+    )
 
 
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
@@ -360,21 +633,29 @@ def _complete_step(
     that finally executes the step.
     """
     prior = state.steps.get(step_id)
-    new_record = StepRecord(
-        state=outcome,
-        at=_now(),
-        gate=prior.gate if prior is not None else None,
-        answered_by=answered_by or (prior.answered_by if prior is not None else None),
-        exit=exit_code,
-        stdout=stdout,
-        emitted=dict(emitted) if emitted else None,
-        # A completed grouped step keeps its item history and member list:
-        # `status` still shows what ran, and drift still sees member edits
-        # after the group is done. (Previously items were dropped here, which
-        # is also why an adopted flat fan-out went blind once it completed —
-        # `_fan_out_items` scans every record for exactly this.)
-        items=dict(prior.items) if prior is not None and prior.items else None,
-        members=list(prior.members) if prior is not None and prior.members else None,
+    # The successor is the PRIOR record with the fields completion decides
+    # overwritten — never a record rebuilt from a list of fields to keep.
+    # Finding f7 is why: this used to be `StepRecord(state=…, gate=prior.gate,
+    # members=prior.members, …)`, a hand-maintained carry-forward list, so any
+    # durable field added later was DROPPED at completion by default. The
+    # dispatch history was the one that got caught: the trail gh-503 asked for
+    # ("who was holding this phase, and when") was deleted by the very act of
+    # FINISHING — silently, because only `status`/`check` ever read it — and an
+    # adopted flat fan-out went blind the same way (`_fan_out_items` scans
+    # every record for exactly this). Now `gate`, `members`, `units` and
+    # whatever comes next survive unless a line below says otherwise.
+    completion: dict[str, object] = {
+        "state": outcome,
+        "at": _now(),
+        "answered_by": answered_by or (prior.answered_by if prior is not None else None),
+        "exit": exit_code,
+        "stdout": stdout,
+        "emitted": dict(emitted) if emitted else None,
+    }
+    new_record = (
+        prior.model_copy(update=completion)
+        if prior is not None
+        else StepRecord.model_validate(completion)
     )
     new_state = _with_step(state, step_id, new_record)
     if outcome == "done" and step_id == state.cursor:
@@ -382,16 +663,6 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
-
-
-def _gate_pending(step: Step, record: StepRecord) -> bool:
-    """Is this step still waiting on its operator gate?
-
-    A gate is answered by `fr run resolve` (which records `gate: cleared`),
-    not by the step's lifecycle state — spec §4.A: "a pause. The step ends
-    the turn and the run does not advance until the operator answers."
-    """
-    return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
 
 
 def _gate_degradation_notice() -> str | None:
@@ -535,6 +806,343 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
     return rel.as_posix()
 
 
+# ------------------------------------------------------------------ evidence
+#
+# Spec 2026-09-20-unit-record-unification §4.E. The line this draws is §3's:
+# an obligation's SATISFACTION is control, its CONTENT is journal. The cursor
+# records THAT the review happened and WHERE the evidence is — a journal entry
+# id — exactly as `emitted` records that a spec exists and where, without
+# containing the spec. It never copies a finding.
+
+
+# The obligations fr can check, and the subset it checks BY ITSELF. A derived
+# obligation is never offered on the command line: one satisfied by passing a
+# flag is satisfied by anyone who can type the flag, and `findings` exists
+# precisely because "the review's findings were dealt with" was prose until
+# something other than the agent's word could witness it.
+_VERIFIABLE_EVIDENCE = ("review", "findings")
+_DERIVED_EVIDENCE = frozenset({"findings"})
+
+
+def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
+    """`--evidence name=journal-entry-id` pairs, validated against `step`.
+
+    Same five-rule shape as `_parse_emitted` and for the same reasons — split
+    on the FIRST `=`, neither half empty, no duplicate name, and the name must
+    be one the STEP declares. That last rule is what stops evidence becoming
+    decoration: a name the shape never asked for is verified against nothing,
+    so recording it would put an unverified id on the cursor under a heading
+    that reads as proof.
+    """
+    result: dict[str, str] = {}
+    for pair in pairs:
+        name, sep, value = pair.partition("=")
+        if not sep:
+            raise RunStateError(f"--evidence must be 'name=journal-entry-id', got {pair!r}")
+        name = name.strip()
+        if not name:
+            raise RunStateError(f"--evidence has an empty obligation name: {pair!r}")
+        if not value.strip():
+            raise RunStateError(f"--evidence {name}= has an empty value")
+        if name in result:
+            raise RunStateError(
+                f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
+                "one obligation, one entry"
+            )
+        if not step.evidence:
+            raise RunStateError(
+                f"step {step.id!r} declares no evidence, so --evidence {name}= "
+                "would record an id nothing verified"
+            )
+        if name not in step.evidence:
+            declared = ", ".join(sorted(step.evidence))
+            raise RunStateError(
+                f"step {step.id!r} does not require {name!r} evidence; it declares: {declared}"
+            )
+        if name in _DERIVED_EVIDENCE:
+            raise RunStateError(
+                f"--evidence {name}= is not yours to pass — fr derives {name!r} from the "
+                "plan journal when the unit resolves `done` (every finding filed against "
+                "the phase must be fixed or refuted), and records what it saw"
+            )
+        result[name] = value.strip()
+    return result
+
+
+def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[JournalEntry]]:
+    """`(slug, entries)` of this run's PLAN journal — the one place evidence
+    is verified against. Raises `RunStateError` when the run has not recorded
+    a plan yet, which is fail-closed: a gate that cannot read its source does
+    not know whether it passed."""
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        raise RunStateError(
+            "cannot verify evidence — no plan recorded yet (resolve the step "
+            "that emits `plan` first)"
+        )
+    slug = Path(plan_rel).name
+    path = resolve_journal_read_path(repo_root, "plan", slug)
+    if not path.exists():
+        raise RunStateError(
+            f"cannot verify evidence — the plan journal {path} does not exist. "
+            f"Record the review first: fr journal add --scope plan --slug {slug} "
+            "--kind review --phase <n> ..."
+        )
+    try:
+        return slug, parse_journal(path.read_text())
+    except (JournalParseError, OSError) as e:
+        raise RunStateError(
+            f"cannot verify evidence — plan journal {path} is unreadable: {e}"
+        ) from e
+
+
+def _verified_evidence(
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    *,
+    key: str,
+    phase: int | None,
+    offered: dict[str, str],
+    state_value: str,
+) -> dict[str, str]:
+    """The evidence `key` may be resolved with — or `typer.Exit(2)`.
+
+    Three rules, in this order:
+
+    1. `--state failed` requires nothing. A failed review unit met no
+       obligation, so demanding proof of one would make a failure
+       unreportable — the run would wedge on exactly the outcome the cursor
+       most needs to record.
+    2. Every obligation the step declares must be offered, or the resolve is
+       REFUSED naming the flag. This is gh#430 closed: `review-phase` leaves
+       no artifact of its own, so a skipped review used to resolve identically
+       to one that did the work. Now it cannot reach `done` at all.
+    3. Each offered id is verified against the plan journal with gh#517's OWN
+       rule (`fr.journal.model.reviews_phase`) — a `kind=review` entry
+       carrying `phase=N` for THIS unit's phase. Without that, any id at all
+       satisfies the gate and "skipped" and "passed clean" are the same state
+       again with extra steps.
+
+    Fail-closed on a unit that names no phase (a flat `step/<id>`): `review`
+    evidence is evidence about a PHASE, and fr will say it cannot verify
+    rather than store an id nothing checked.
+    """
+    if not step.evidence:
+        # `_parse_evidence` already refused an offered name the step does not
+        # declare, so there is nothing offered here either — this is the
+        # ordinary, unchanged path every pre-existing shape takes.
+        return {}
+    if state_value != "done" and not offered:
+        return {}
+    # Refuse an obligation fr cannot check BEFORE demanding it. A shape that
+    # asks for something unverifiable is a shape bug, and "you did not pass
+    # --evidence sniff=" would send the operator looking for an entry id that
+    # could never have satisfied it.
+    unverifiable = sorted(name for name in step.evidence if name not in _VERIFIABLE_EVIDENCE)
+    if unverifiable:
+        known = " and ".join(f"`{name}`" for name in _VERIFIABLE_EVIDENCE)
+        err_console.print(
+            f"[red]{key}: cannot verify {unverifiable[0]!r} evidence — {known} are the "
+            "obligations fr knows how to verify (against the plan journal)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if phase is None:
+        err_console.print(
+            f"[red]{key}: cannot verify `{step.evidence[0]}` evidence for a unit that names "
+            "no phase — a review is evidence about a phase, and fr will not record an "
+            "id it checked nothing against[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    missing = (
+        [n for n in step.evidence if n not in offered and n not in _DERIVED_EVIDENCE]
+        if state_value == "done"
+        else []
+    )
+    if missing:
+        owed = ", ".join(missing)
+        err_console.print(
+            f"[red]{key}: refused — step {step.id!r} cannot be done without evidence "
+            f"({owed}).[/red]",
+            soft_wrap=True,
+        )
+        for name in missing:
+            err_console.print(
+                f"  pass --evidence {name}=<journal-entry-id>"
+                + (
+                    f", naming the `kind=review` plan-journal entry recorded for phase {phase}"
+                    if name == "review" and phase is not None
+                    else ""
+                ),
+                markup=False,
+                soft_wrap=True,
+            )
+        err_console.print(
+            "  A review that left no journal entry is a review that did not happen "
+            "(spec §4.E) — `--state failed` needs no evidence.",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # Offered evidence is verified whatever the state. `failed` REQUIRES none,
+    # which is not the same as "anything goes": a failed review that did
+    # produce a journal entry may still name it, and an id nothing checked
+    # must never reach the cursor under either state.
+    derives = state_value == "done" and "findings" in step.evidence
+    if not offered and not derives:
+        return {}
+    try:
+        slug, entries = _plan_journal_entries(repo_root, state)
+    except RunStateError as e:
+        err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    if offered:
+        _verify_review_entry(key, offered["review"], slug=slug, entries=entries, phase=phase)
+    if not derives:
+        return offered
+    return {**offered, "findings": _closed_findings_witness(key, slug, entries, phase)}
+
+
+def _verify_review_entry(
+    key: str, entry_id: str, *, slug: str, entries: list[JournalEntry], phase: int
+) -> None:
+    """`entry_id` is a `kind=review` entry for `phase` — or `typer.Exit(2)`."""
+    found = next((e for e in entries if e.id == entry_id), None)
+    if found is None:
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} names no entry in the plan "
+            f"journal for {slug}[/red]",
+            soft_wrap=True,
+        )
+        err_console.print(
+            f"  fr journal add --scope plan --slug {slug} --kind review --phase {phase} "
+            f'--title "phase {phase} review" '
+            "--body \"<findings raised, by id; or 'no findings'>\"",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not reviews_phase(found, phase):
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
+            + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
+            + f" — evidence must be a `kind=review` entry carrying `phase={phase}`, "
+            "the same rule `fr journal check --require-reviews` applies[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+
+
+def _closed_findings_witness(key: str, slug: str, entries: list[JournalEntry], phase: int) -> str:
+    """The `findings` evidence for `phase` — or `typer.Exit(2)` while any
+    finding filed against it is still open.
+
+    This is `superpowers:receiving-code-review`'s OUTCOME, which is the only
+    part of "was the review received properly" fr can observe: every finding
+    the review raised ends `fixed` or `refuted`, never dropped. It is the check
+    `journal-check` already made once, before `deliver` — moved to the moment a
+    finding is cheapest to act on, while the phase that caused it is still the
+    one in hand.
+
+    The value is the WITNESS, not a token: the ids fr saw closed, in the order
+    they were raised, or `none`. A finding that genuinely belongs to a later
+    phase is filed against THAT phase, and gates that phase's review instead.
+    """
+    states = phase_finding_states(entries, phase)
+    still_open = [fid for fid, st in states.items() if st == "open"]
+    if not still_open:
+        return ",".join(states) or "none"
+    err_console.print(
+        f"[red]{key}: refused — {len(still_open)} finding(s) filed against phase {phase} "
+        f"are still open: {', '.join(still_open)}.[/red]",
+        soft_wrap=True,
+    )
+    err_console.print(
+        "  A review is received, not just requested "
+        "(`superpowers:receiving-code-review`): verify each finding, then fix it with "
+        "a test or refute it with reasoning — never drop it. Close each one:",
+        soft_wrap=True,
+    )
+    for fid in still_open:
+        err_console.print(
+            f"  fr journal resolve --scope plan --slug {slug} --id {fid} --state fixed "
+            '--note "<what changed, and the test that pins it>"',
+            markup=False,
+            soft_wrap=True,
+        )
+    err_console.print(
+        "  (or `--state refuted` with the reasoning, when the finding is wrong). One "
+        f"that belongs to a later phase is filed against that phase, not phase {phase}. "
+        "`--state failed` needs no evidence.",
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+def _evidence_owed(manifest: WorkflowManifest) -> dict[str, tuple[Step, ...]]:
+    """`{top-level step id: (every step under it that declares evidence,)}`.
+
+    A group's members are the realistic case (`implement`'s `review-phase`);
+    a flat step declaring evidence is included so a report can never go quiet
+    about a shape that asks for something it never got.
+    """
+    owed: dict[str, tuple[Step, ...]] = {}
+    for step in manifest.steps:
+        candidates = step.steps or (step,)
+        declaring = tuple(s for s in candidates if s.evidence)
+        if declaring:
+            owed[step.id] = declaring
+    return owed
+
+
+def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str], tuple[str, ...]]:
+    """`{(step id, unit key): obligations it lacks}` for every unit that is
+    `done` under a step which declares evidence it does not carry — spec
+    §4.E's visible debt. Per OBLIGATION, because a shape can grow one: a unit
+    resolved with `review=` before `findings` existed owes `findings` and
+    nothing else, and saying "unevidenced" of it would be as wrong as silence.
+
+    **Never a failure, and never an exit code.** These are reviews resolved
+    before the gate existed; the migration cannot invent evidence for them and
+    does not try. An obligation cannot be enforced backwards in time — doing
+    so would fail every in-flight run on the day the plugin updates.
+
+    Fail-SOFT on a manifest it cannot resolve (drifted, renamed, deleted):
+    this is a report line, and a report that turns `fr run check` into an
+    error is a worse outcome than a report that is silent. The exit code of
+    every caller is unchanged either way.
+    """
+    try:
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError, OSError):
+        return {}
+    out: dict[tuple[str, str], tuple[str, ...]] = {}
+    for step_id, declaring in _evidence_owed(manifest).items():
+        record = state.steps.get(step_id)
+        if record is None:
+            continue
+        for member in declaring:
+            suffix = f"step/{member.id}" if member.id == step_id else f"/{member.id}"
+            for key in units.unit_keys(record):
+                matches = key == suffix if member.id == step_id else key.endswith(suffix)
+                if not matches or units.unit_state(record, key) != "done":
+                    continue
+                held = units.evidence_of(record, key)
+                lacking = tuple(name for name in member.evidence if name not in held)
+                if lacking:
+                    out[(step_id, key)] = lacking
+    return out
+
+
+def _debt_phrase(record: StepRecord, key: str, lacking: tuple[str, ...]) -> str:
+    """How one unit's evidence debt reads — ONE spelling for `status` and
+    `check`. A unit with no evidence at all keeps the sentence it always had."""
+    if not units.evidence_of(record, key):
+        return "unevidenced (predates the evidence gate)"
+    return f"unevidenced: {', '.join(lacking)} (predates that obligation)"
+
+
 def _template_context(state: RunState) -> dict[str, str]:
     ctx = {"run.id": state.run, "run.branch": state.branch}
     for record in state.steps.values():
@@ -594,24 +1202,308 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "workflow": state.workflow,
         "step": step.id,
         "kind": step.kind,
-        "skill": step.skill,
+        "skill": _brief_skill(step),
         "agent": step.agent,
         "needs": list(step.needs),
         "emits": list(step.emits),
         "gate": step.gate,
         "tier": step.tier,
+        "evidence": list(step.evidence),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
     }
 
 
-def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -> dict[str, Any]:
+def _brief_skill(step: Step) -> str | list[str] | None:
+    """`skill` as the brief carries it: exactly what the manifest wrote. One
+    skill is a string — byte-identical to every brief before the list form —
+    and several are a JSON list in the manifest's order, which IS the order to
+    load them in."""
+    return step.skill if step.skill is None or isinstance(step.skill, str) else list(step.skill)
+
+
+def _effective_tier(step: Step, group: Step | None = None) -> str | None:
+    """The tier a unit actually dispatches under: its own `tier:` when set,
+    else its group's — `None` when neither has one. `_build_member_brief`
+    and `_open_dispatch`'s `_advance_group` call site both read this ONE
+    helper (P2.T1.S3) rather than each re-deriving the fallback, which is
+    how the two came to duplicate it in the first place. `group=None` for a
+    flat step, which has none to fall back to."""
+    if step.tier is not None:
+        return step.tier
+    return group.tier if group is not None else None
+
+
+PHASE_TIER_SENTINEL = "from_phase"
+"""`Step.tier`'s one non-tier value — the shipped `fr-goal` shape's marker for
+"this unit's tier is whatever the plan's phase header says".
+
+`Step.tier` is a free `str`, not `PhaseHeader.tier`'s closed
+mechanical/standard/hard Literal, precisely so a shape can say this. The
+*brief* passes the sentinel through verbatim, because there it is an
+instruction to the harness: look the phase up. A dispatch RECORD cannot do
+that — it stores what was actually sent — so `_advance_group` resolves it
+first (finding f4). Handing the sentinel straight to `fr models resolve` can
+only ever miss, which is how every real fr-goal dispatch came to record
+`model: null`."""
+
+
+def _dispatch_tier(repo_root: Path, state: RunState, tier: str | None, phase_n: int) -> str | None:
+    """`tier` with `PHASE_TIER_SENTINEL` replaced by phase `phase_n`'s own
+    tier — what a dispatch RECORD needs, as opposed to what the brief says.
+
+    An unresolvable sentinel becomes `None`, which `_resolved_model` then
+    records as an absent model: the spec §4.A rule that nothing is ever
+    guessed applies to the sentinel exactly as it does to an unbound tier.
+
+    Resolution itself is `_phase_tier`'s, gh#506's function for the same
+    job — that PR landed the sentinel fix for the dispatch BRIEF while this
+    one landed it for the dispatch RECORD, and one reader of the plan's
+    phase header is enough for both."""
+    if tier != PHASE_TIER_SENTINEL:
+        return tier
+    return _phase_tier(repo_root, state, phase_n)
+
+
+def _resolved_model(repo_root: Path, harness: str | None, tier: str | None) -> str | None:
+    """The model bound to `tier` for `harness`, via `fr.models.resolve` —
+    repo config overriding user config, the same rule `fr models resolve`
+    itself uses. `None` when there is no tier, no harness, or no binding for
+    the pair: an unresolved tier leaves `model` absent rather than guessed
+    (spec §4.A / P2.T1.S2).
+
+    `harness` is PASSED IN rather than detected here (finding f8). A tier
+    resolves to a model only *for a harness*, so the two belong to the same
+    record — detecting it privately meant `_open_dispatch` could store a
+    model without naming the harness that chose it, which an orchestrator-run
+    step (never claimed) would never get filled in afterwards.
+
+    `PHASE_TIER_SENTINEL` is refused here as well as resolved upstream in
+    `_dispatch_tier`. Callers with no phase in hand — a flat `kind: agent`
+    step — have nothing to resolve it against, and without this guard a
+    models.yaml that happened to carry a `from_phase:` key would bind it,
+    turning a sentinel into a model name by coincidence."""
+    if tier is None or tier == PHASE_TIER_SENTINEL or harness is None:
+        return None
+    from fr.commands.models_cmd import REPO_MODELS_REL
+    from fr.models import default_models_path, load_models
+    from fr.models import resolve as resolve_model
+
+    repo_cfg = load_models(repo_root / REPO_MODELS_REL)
+    user_cfg = load_models(default_models_path())
+    return resolve_model(harness, tier, repo_cfg=repo_cfg, user_cfg=user_cfg)
+
+
+def _open_dispatch(
+    state: RunState,
+    step_id: str,
+    key: str,
+    *,
+    agent_type: str | None,
+    tier: str | None,
+    repo_root: Path,
+    at: str | None = None,
+) -> RunState:
+    """Append a new attempt opening `key`'s hold under `step_id`.
+
+    `at` is the attempt's `dispatched`, and a caller that also records a
+    context estimate MUST pass the moment it computed that estimate at — taken
+    BEFORE the brief is built. In the v5 shape that one timestamp is both
+    "when fr dispatched this" and the start edge of the attempt's measurement
+    window; letting this function stamp its own `_now()` there would move the
+    window's start AFTER the dispatch it measures, and
+    `units.with_estimate` refuses the mismatch rather than let it pass.
+    Absent, it is stamped here — right for the flat `kind: agent` branch,
+    which records no estimate and still saves before it prints the brief.
+
+    Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
+    from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
+    branch, and only on the actual transition (both call sites already guard
+    on that). Never called from `_gate_pending`: a gated step is marked
+    `blocked`, not `running`, so nothing was dispatched and there is nothing
+    to hold.
+    """
+    from fr.run.telemetry import current_session
+
+    record = state.steps[step_id]
+    # Detected ONCE and both recorded and used (finding f8): the harness is
+    # what turns a tier into a model, so a record that carries the model
+    # without naming it is not self-describing — and an orchestrator-run
+    # step, which nothing ever claims, would never have it filled in later.
+    harness = detect_harness(os.environ)
+    new_record = units.with_attempt_appended(
+        record,
+        key,
+        UnitAttempt(
+            dispatched=at or _now(),
+            agent_type=agent_type,
+            harness=harness,
+            # Only for work fr DISPATCHED to a tier. A tier binding answers
+            # "which model does a dispatched agent of this tier get"; an
+            # attempt with no `agent_type` is the orchestrator running the unit
+            # in its own session, on a model fr cannot see. Such a member still
+            # inherits its group's tier, so resolving it here wrote a model for
+            # work that tier never touched — seven false `claude-opus-5`
+            # reviews in this repo's own archive. `harness` above is different:
+            # fr detects that about its own process. The orchestrator may still
+            # REPORT a model (`claim`/`resolve --model`); fr will not say it
+            # on its behalf.
+            model=_resolved_model(repo_root, harness, tier) if agent_type is not None else None,
+            # Derived from fr's OWN environment, exactly like `harness` — the
+            # agent never reports it (§4.D.1). It is what lets a later session
+            # read the RIGHT transcript directory, and what stops a window
+            # from being borrowed across sessions. `None` for a harness with
+            # no session concept, which reads as "not observable from here"
+            # and never as zero. No hostname beside it: a missing session
+            # directory already says "elsewhere".
+            session=current_session(os.environ),
+        ),
+    )
+    return _with_step(state, step_id, new_record)
+
+
+def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
+    """Should `advance` append a fresh `Attempt` for `key`?
+
+    True when nothing has been recorded for it yet, or its last attempt is
+    CLOSED (`returned` is not `None`) — an abandoned (`fr run claim
+    --abandoned`) or failed-and-retried unit is not currently held, so
+    re-dispatching it opens a NEW hold rather than silently leaving the old,
+    closed one as the only record. False while the last attempt is still
+    OPEN — the unit is currently HELD, which `advance` refuses to dispatch
+    over (`_hold_on`, spec §4.C / gh-499) unless `--redispatch` says so.
+
+    This is the ONE notion of "is the last record open?" in the module:
+    `_held_record` is its read half, and `advance`'s refusal (`_hold_on`),
+    `--redispatch`'s abandon and `resolve`'s close all go through the pair
+    rather than each re-deriving it.
+    """
+    return _held_record(record, key) is None
+
+
+def _held_record(record: StepRecord, key: str) -> UnitAttempt | None:
+    """`key`'s OPEN attempt, or `None` when the unit is free.
+
+    The read half of `_dispatch_needs_open` — same predicate, but handing
+    back the holder so a caller can name it. Delegates to
+    `fr.run.units.open_attempt`, which is where "open = the last attempt,
+    unreturned" is decided; this module keeps the name because every comment
+    and refusal in it is written in terms of the pair."""
+    return units.open_attempt(record, key)
+
+
+def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
+    """Close `key`'s open dispatch: `returned` = now, `outcome` = `outcome`.
+
+    `Attempt` enforces that the two are one fact, so they are written
+    in one `model_copy` and never separately. Callers must have established
+    that the unit IS held (`_held_record` / `_open_dispatch_record`); this
+    helper does not re-derive it, so there is still exactly one place that
+    decides what "open" means."""
+    return units.with_last_attempt_replaced(
+        record,
+        key,
+        units.attempts(record, key)[-1].model_copy(update={"returned": _now(), "outcome": outcome}),
+    )
+
+
+def _claimed_identity(
+    open_record: UnitAttempt,
+    key: str,
+    *,
+    agent: str,
+    harness: str | None,
+    model: str | None,
+) -> UnitAttempt:
+    """`open_record` carrying the orchestrator's reported identity, or refuse.
+
+    Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
+    fallback (decision d2), so a *second* agent id can never be attached to a
+    dispatch by taking the other route. Re-reporting the SAME id is
+    idempotent and may refresh `harness`/`model`; a DIFFERENT one is refused
+    naming both, because two ids on one hold is the two-writers hazard this
+    whole feature exists to make visible."""
+    if open_record.agent is not None and open_record.agent != agent:
+        err_console.print(
+            f"[red]{key}: already claimed by {open_record.agent!r} — refusing to "
+            f"attribute it to {agent!r} as well. The worktree has exactly one "
+            "writer; close the first claim (`fr run resolve ... --state "
+            "done|failed`, or `fr run claim ... --abandoned`) before naming a "
+            "second.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return open_record.model_copy(
+        update={
+            "agent": agent,
+            "harness": harness if harness is not None else open_record.harness,
+            "model": model if model is not None else open_record.model,
+        }
+    )
+
+
+def _close_on_resolve(
+    state: RunState,
+    owner_id: str,
+    key: str,
+    outcome: DispatchOutcome,
+    *,
+    agent: str | None,
+    harness: str | None,
+    model: str | None,
+) -> RunState:
+    """`resolve`'s half of the dispatch pair: close `key`'s open record with
+    `outcome`, optionally attaching a late identity first (spec §4.C).
+
+    **Silent when there is nothing open** — and that is the requirement, not
+    a shortcut. A run `fr run adopt`ed from a plan on disk has no dispatch
+    history at all, and a `gate: operator` step is marked `blocked` without
+    ever being dispatched; neither may start failing to resolve because this
+    feature landed. Nothing is invented for them either: an absent record
+    stays absent rather than being back-filled with a dispatch fr never made.
+
+    A record that is already CLOSED (`claim --abandoned`) is likewise left
+    exactly as it is — `abandoned` is what happened to that attempt, and
+    overwriting it with this resolve's outcome would erase the one fact the
+    operator recorded by hand.
+    """
+    record = state.steps[owner_id]
+    open_record = _held_record(record, key)
+    if open_record is None:
+        return state
+    if agent is not None:
+        open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
+    elif harness is not None or model is not None:
+        open_record = open_record.model_copy(
+            update={
+                "harness": harness if harness is not None else open_record.harness,
+                "model": model if model is not None else open_record.model,
+            }
+        )
+    record = units.with_last_attempt_replaced(record, key, open_record)
+    return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
+
+
+def _build_member_brief(
+    member: Step, group: Step, item: str, state: RunState, resolved_tier: str | None
+) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
     Same keys as the step brief (so a harness parses one shape) plus `group`
-    (the fan-out step's id) and `item` (the `phase/<n>` unit). `tier` and
-    `for_each` fall back to the group's when the member leaves them unset —
-    the common case, where the group declares the dispatch policy once.
+    (the fan-out step's id), `item` (the `phase/<n>` unit) and
+    `resolved_tier`. `tier` and `for_each` fall back to the group's when the
+    member leaves them unset — the common case, where the group declares the
+    dispatch policy once.
+
+    `resolved_tier` is member-only (D5): `tier` keeps the manifest's literal
+    meaning — for the shipped `fr-goal` shape, the sentinel `"from_phase"` —
+    so `resolved_tier` carries what that sentinel actually resolves to for
+    THIS item: the tier declared on the named phase's header, or `None` when
+    the phase declares none (the dispatch-time observable form of phase 2's
+    untiered-plan warning). It has no analogue on the group/flat brief
+    (`_build_brief`, left untouched): a group spans every phase, so there is
+    no single tier to resolve there, and a confidently-wrong value would be
+    worse than an absent one.
     """
     return {
         "run": state.run,
@@ -620,19 +1512,264 @@ def _build_member_brief(member: Step, group: Step, item: str, state: RunState) -
         "group": group.id,
         "item": item,
         "kind": member.kind,
-        "skill": member.skill,
+        "skill": _brief_skill(member),
         "agent": member.agent,
         "needs": list(member.needs),
         "emits": list(member.emits),
         "gate": member.gate,
-        "tier": member.tier if member.tier is not None else group.tier,
+        "tier": _effective_tier(member, group),
+        # The member's OWN, never the group's: an obligation is a property of
+        # the step that carries it, and inheriting it would make every member
+        # of the loop owe the review member's evidence.
+        "evidence": list(member.evidence),
+        "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
     }
 
 
+def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
+    """The exact `fr run resolve` command that records one grouped unit's
+    outcome — the two-flag form `--step <member> --item <head>` that
+    `_split_member_id` teaches when someone reaches for the composite.
+
+    One builder because two surfaces print it for the same act: `advance`
+    pre-empts the #501 error beside every dispatch brief, and (Phase 2) the
+    ALREADY RUNNING refusal names the command that clears it. Spelled
+    separately they would drift, and an operator who was shown two different
+    commands for one outcome has no way to tell which is current.
+
+    **`--state` is a CONCRETE value, never the alternation `done|failed`**
+    (review `r1-f1`). This string is printed under "resolve with:" and is
+    meant to be pasted. In every POSIX shell `|` is a pipe, so pasting
+    `--state done|failed` RUNS the resolve with `--state done` and then fails
+    with `command not found: failed` — exit 127 over a run whose state has
+    already changed. A line that reports failure while having done the thing
+    is the precise defect class this whole PR exists to remove, and the
+    existing operator-gate hint (`--state done`) already set the precedent.
+    A caller that needs to mention the other outcome says so in prose beside
+    the command, outside the pasteable span.
+
+    `item` is None for a TOP-LEVEL step, which has no `--item` to address —
+    the flag is simply omitted. One builder rather than two spellings for the
+    same act: the ALREADY RUNNING refusal (§3.A) prints this for both shapes,
+    and a second inline `f"fr run resolve ..."` is exactly how the two would
+    drift apart.
+    """
+    scope = f" --item {item}" if item is not None else ""
+    return f"fr run resolve {run_id} --step {member_id}{scope} --state {state}"
+
+
+def _dispatched_from_another_session(attempt: UnitAttempt | None) -> bool:
+    """Was `attempt` opened by a session that is NOT this one? (spec §4.D.1)
+
+    A PROOF, never a default. An attempt with no recorded `session` — every
+    one written before the field existed, and every harness with no session
+    concept — is not claimed to be elsewhere, because not knowing where it
+    came from is not the same as knowing it came from somewhere else.
+    """
+    from fr.run.telemetry import dispatched_from_this_session
+
+    if attempt is None or attempt.session is None:
+        return False
+    return not dispatched_from_this_session(os.environ, attempt.session)
+
+
+def _already_running_refusal(
+    step_id: str,
+    subject: str,
+    at: str | None,
+    run_id: str,
+    member_id: str,
+    item: str | None,
+    held: UnitAttempt | None = None,
+) -> str:
+    """The #499 refusal, in one renderer for both call sites (spec §3.A).
+
+    `advance_cmd`'s top-level `agent` branch and `_advance_group`'s grouped
+    member differ only in whether the outstanding unit has an `--item`, so
+    they differ only in this function's last argument. Spelled separately,
+    the operator would eventually be shown two different texts for one
+    situation and have no way to tell which was current.
+
+    Both ways forward are named because both are legitimate: waiting is
+    almost always right, and `--redispatch` is the deliberate escape for a
+    genuinely lost agent. Neither pasteable command carries a shell
+    metacharacter (review `r1-f1`) — the `--state failed` alternative is
+    prose OUTSIDE the command, not an alternation inside it.
+    """
+    # A top-level step IS its own outstanding unit, so naming it twice
+    # ("plan: plan is ALREADY RUNNING") reads as a bug in the message. The
+    # group prefix exists to say WHICH group the unit belongs to; when there
+    # is no group there is nothing to prefix.
+    named = subject if subject == step_id else f"{step_id}: {subject}"
+    # HELD names the agent; RUNNING only names the clock. gh#503 and gh#519
+    # each built this refusal, one from the dispatch record and one from the
+    # `items` map, and the record is strictly the better witness: it knows WHO
+    # is holding the unit, not merely that something is. It is still optional,
+    # because a cursor adopted from disk, or written before the record existed,
+    # has no holder to name — and "ALREADY RUNNING (dispatched <ts>)" is the
+    # honest sentence in that case rather than a fabricated identity.
+    if held is not None:
+        who = _dispatch_holder_label(held)
+        suffix = _dispatch_descriptor_suffix(held, with_agent_type=True)
+        head = f"[red]{named} is ALREADY HELD by {who}{suffix} "
+        head += f"(dispatched {held.dispatched}) — not yet returned.[/red]\n"
+    else:
+        head = f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
+    # §4.D.1: every other refusal fr prints means "someone is working". This
+    # one may mean "that agent died with its host" — the cursor travelled with
+    # the branch and nothing else did — and without saying so the operator
+    # waits forever on a holder nothing here can observe. The escape is named
+    # below already; this only says why to reach for it.
+    if _dispatched_from_another_session(held):
+        head += (
+            "  Dispatched from ANOTHER session: this one cannot see whether that agent is "
+            "alive, and its cost is not observable from here. If it died with its host "
+            "(a run picked up on another machine), close it with the `lost agent` line "
+            "below.\n"
+        )
+    return (
+        head
+        + "  Waiting on that agent — do NOT dispatch again.\n"
+        + f"  resolve it:      {_resolve_hint(run_id, member_id, item)}"
+        "   (or --state failed)\n"
+        f"  lost agent:      fr run claim {run_id} --step {member_id}"
+        + (f" --item {item}" if item else "")
+        + " --abandoned\n"
+        + f"  re-brief anyway: fr run advance {run_id} --redispatch"
+    )
+
+
+def _nothing_running_refusal(subject: str, detail: str, run_id: str) -> str:
+    """`--redispatch` with nothing outstanding (spec §3.A).
+
+    It exits 2 rather than quietly degrading into an ordinary `advance`: the
+    operator reaching for the flag believes an agent is running, and if none
+    is, the mental model is wrong and saying so is the whole point of §3.A.
+    `fr-goal`'s loop never passes the flag, so this strictness costs the
+    normal path nothing.
+
+    Two call sites, one renderer, for the same reason as
+    `_already_running_refusal`: `advance_cmd` catches the step that is not
+    running at all (including every `cli` step, which fr executes inline and
+    so is never `running`), `_advance_group` catches the group that is
+    running with every unit already resolved. `detail` is the only part that
+    differs.
+    """
+    return (
+        f"[red]{subject}: --redispatch, but nothing is running{detail}.[/red]\n"
+        "  --redispatch re-briefs a unit already dispatched; it never starts one.\n"
+        f"  advance normally: fr run advance {run_id}"
+    )
+
+
+def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | None, list[str]]:
+    """`(plan_rel, messages)` — every way this run's plan mis-places a manual
+    phase (spec §3.D.2). Empty when the plan is fine, missing or unparseable.
+
+    The VERDICT half of `_manual_placement_preflight`, split out so the idle
+    reading (`fr run check --idle`, spec 2026-09-20-unit-record-unification
+    §4.G) can ask "would `advance` refuse this group?" without a second
+    definition of the rule — and without printing or exiting.
+
+    It calls `fr.plan_ops._manual_placement_issues` — the authoring gate
+    ITSELF, not a re-implementation of it — so the two points share one
+    definition of "trailing" (`_trailing_manual_block`), one definition of
+    "outstanding", and one message. Spelled twice they would drift, and an
+    operator shown two different texts for one situation has no way to tell
+    which is current.
+    """
+    from fr.parser import PlanSchemaError, parse
+    from fr.plan_ops import _manual_placement_issues
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
+        return None, []
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
+        return plan_rel, []
+    return plan_rel, [i.message for i in _manual_placement_issues(plan) if i.severity == "error"]
+
+
+def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) -> None:
+    """Refuse a whole group whose plan mis-places a manual phase (spec §3.D.2).
+
+    The rule is one invariant — *no manual phase may be outstanding when an
+    agentic phase after it runs* — and `fr plan self-review` is its primary
+    gate, running as fr-goal's `plan-review` `kind: cli` step, where a `cli`
+    step's exit code is its verdict. This is the second enforcement point,
+    for the paths that never pass through the first: a run reached by
+    `fr run adopt`, or driven by a repo-authored shape with no plan-review
+    step, arrives at the fan-out with the plan unchecked.
+
+    Silent when the plan is missing or unparseable: `_group_phases` has
+    already refused the advance for both, naming the cause, and a second
+    refusal here would only mask its message.
+    """
+    plan_rel, messages = _manual_placement_errors(repo_root, state)
+    if not messages:
+        return
+    detail = "\n".join(f"  {message}" for message in messages)
+    err_console.print(
+        f"[red]{step_id}: this plan mis-places a manual phase — refusing to "
+        f"dispatch ANY of it.[/red]\n{detail}\n"
+        f"  re-check it with: fr plan self-review {plan_rel}",
+        # soft_wrap: the last line is a command meant to be pasted, and rich
+        # folds at width 80 whenever stderr is not a tty (`p1-f1`, `r1-f2`).
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
+def _print_member_dispatch(
+    step: Step, member: Step, item: str, state: RunState, resolved_tier: str | None
+) -> None:
+    """The three stdout lines a dispatched grouped unit produces, in the one
+    order that is safe to print them.
+
+    Extracted (P5.T2.S3) because the order is an INVARIANT with two separate
+    reasons behind it, and it had accumulated twelve lines of comment at the
+    tail of an already-long `_advance_group` — which is where a future editor
+    appending "just one more line" would never think to look:
+
+    1. **The JSON brief is last.** `run_cmd` treats it as the line a naive
+       `tail -1` parses off stdout (spec §3.B), so the resolve hint goes
+       BEFORE it, never after — the same ordering constraint the
+       gate-degradation notice in `advance_cmd` carries its own comment for.
+       Nothing printed before it may contain a `{`, or the tests' tolerant
+       `output[output.index("{"):]` lifts the wrong span (`p1-d1`).
+    2. **Every line is `soft_wrap=True`.** rich picks width 80 whenever stdout
+       is not a tty — exactly when a harness is piping it — and folding the
+       brief hands `tail -1` a fragment (`p1-f1`); folding the hint makes a
+       pasteable command unpasteable (`r1-f2`).
+
+    Taking `member` rather than its id keeps the dispatch key spelled once:
+    `item/member.id` is the `items`-map key, the display id and the hint's
+    two flags, and `_resolve_hint` takes (member, item) while
+    `_split_member_id` returns (item, member) — opposite orders that are
+    easy to splat into each other by accident.
+    """
+    console.print(f"{step.id}: dispatch brief ({item}/{member.id})", soft_wrap=True)
+    console.print(
+        f"  resolve with: {_resolve_hint(state.run, member.id, item)}   (or --state failed)",
+        soft_wrap=True,
+    )
+    console.print(
+        json.dumps(_build_member_brief(member, step, item, state, resolved_tier), sort_keys=True),
+        soft_wrap=True,
+    )
+
+
 def _advance_group(
-    repo_root: Path, state: RunState, manifest: WorkflowManifest, step: Step, record: StepRecord
+    repo_root: Path,
+    state: RunState,
+    manifest: WorkflowManifest,
+    step: Step,
+    record: StepRecord,
+    *,
+    redispatch: bool = False,
 ) -> None:
     """Dispatch the next pending `(phase, member)` unit of a grouped step.
 
@@ -643,34 +1780,129 @@ def _advance_group(
     learned members) completes here rather than dispatching thin air.
     """
     try:
-        phases = _group_phases(repo_root, state)
+        agentic, manual = _group_phases(repo_root, state)
     except (RunStateError, AdoptError) as e:
         err_console.print(f"[red]{step.id}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
-    expected = _expected_group_items(step, phases)
-    items = dict(record.items or {})
-    pending = next((key for key in expected if items.get(key) != "done"), None)
+    expected = _expected_group_items(step, agentic)
+    # #496 (spec §3.D.3): the manual markers are merged in HERE, above the
+    # running-check, because `items` is what every branch below reads and
+    # every save below writes — the completion path included. They are never
+    # in `expected`, so they cannot be dispatched, resolved or counted.
+    items = {**units.unit_states(record), **_manual_items(manual)}
+    # #499 (spec §3.A): the pending-picker below is `!= "done"`, which cannot
+    # tell `running` from `pending` — so a second `advance` re-emitted a
+    # byte-identical brief for a unit already dispatched. A `running` key is
+    # the refusal's subject, and it wins over any later pending one: the
+    # group is serial by construction (`_resolve_member` refuses a second
+    # writer), so an outstanding unit is the only thing this step is doing.
+    #
+    # LIFECYCLE, not refusal: `running` answers "which unit is outstanding",
+    # which is what `--redispatch` re-briefs and what its nothing-is-running
+    # refusal is about. Whether an outstanding unit may be briefed AGAIN is a
+    # different question with one answer, `_hold_on` (decision u1) — an
+    # `--abandoned` unit is still `running` here and is not held.
+    running = next((key for key in expected if items.get(key) == "running"), None)
+    hold = _hold_on(record, running, running=True) if running is not None else None
+    if running is not None and hold is not None and not redispatch:
+        # `_split_member_id` returns (item, member); `_resolve_hint` takes
+        # (member, item). Same two strings, opposite order — do not splat one
+        # into the other (phase 1, `p1-d1`).
+        item, _, member_id = running.rpartition("/")
+        err_console.print(
+            _already_running_refusal(
+                step.id,
+                running,
+                record.at,
+                state.run,
+                member_id,
+                item,
+                hold.holder,
+            ),
+            # soft_wrap: the refusal's middle line is a command meant to be
+            # pasted, and rich folds at width 80 whenever stderr is not a tty
+            # — exactly when a harness captures it (`p1-f1`, `r1-f2`).
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if redispatch and running is None:
+        err_console.print(
+            _nothing_running_refusal(
+                step.id, " — every unit of this group is already resolved", state.run
+            ),
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # `--redispatch` re-briefs the OUTSTANDING unit and nothing else: never a
+    # different unit, never a reset to `pending`. Guarded above, so `running`
+    # is not None on that branch.
+    pending = (
+        running if redispatch else next((key for key in expected if items.get(key) != "done"), None)
+    )
     if pending is None:
+        # `_complete_step` copies the PRIOR record's items, so the manual
+        # markers have to be on the record before it runs or a group that
+        # completes here would lose them.
+        if items != units.unit_states(record):
+            state = _with_step(state, step.id, units.with_unit_states(record, items))
         save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
-        console.print(f"{step.id}: done (all {len(expected)} phase members done)")
+        console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
         return
+    # Spec §3.D.2 point 2: the preflight, ONCE, before the first unit of this
+    # group is dispatched — `pending` is known and nothing has been saved yet.
+    # Defence in depth behind `fr plan self-review`, not a substitute for it:
+    # a plan reached via `fr run adopt`, or run under a repo-authored shape,
+    # can arrive here without the authoring gate ever having run.
+    if record.state != "running":
+        _manual_placement_preflight(repo_root, state, step.id)
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
-    snaps = dict(state.accounting or {})
-    snaps[pending] = _accounting_snapshot(repo_root, state, phase_n)
-    items = dict(record.items or {})
+    # Computed HERE, before the brief is built, and WRITTEN below once the
+    # attempt exists. `estimated_at` is the start of the measurement window, so
+    # it has to precede every transcript record of the dispatch it measures;
+    # the write has to follow `_open_dispatch`, because in the v5 shape the
+    # estimate hangs off the attempt. Splitting the two keeps both true.
+    estimate_at = _now()
+    estimate = _accounting_snapshot(repo_root, state, phase_n)
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
     # not still failed.
     items[pending] = "running"
-    if record.state != "running" or record.items != items:
-        record = record.model_copy(update={"state": "running", "at": _now(), "items": items})
+    # `dispatch` reopens independently of `items`/`state`: an `--abandoned`
+    # unit leaves BOTH unchanged (still "running") so its hold looks
+    # unchanged to this comparison, yet its last dispatch record is CLOSED —
+    # exactly the case a fresh hold must open a new record for
+    # (`_dispatch_needs_open`).
+    held = _held_record(record, pending)
+    if held is not None:
+        record = _close_dispatch(record, pending, "abandoned")
         state = _with_step(state, step.id, record)
-    save_run_state(repo_root, state.model_copy(update={"accounting": snaps}))
-    console.print(f"{step.id}: dispatch brief ({pending})", soft_wrap=True)
-    console.print(json.dumps(_build_member_brief(member, step, item, state), sort_keys=True))
+    needs_dispatch = _dispatch_needs_open(record, pending)
+    # `or redispatch`: on a re-dispatch neither the state nor the item map
+    # moves, so without it the record would keep the ORIGINAL dispatch time
+    # and the next ALREADY RUNNING refusal would name the wrong moment.
+    if redispatch or record.state != "running" or units.unit_states(record) != items:
+        record = units.with_unit_states(
+            record.model_copy(update={"state": "running", "at": _now()}), items
+        )
+        state = _with_step(state, step.id, record)
+    if needs_dispatch:
+        state = _open_dispatch(
+            state,
+            step.id,
+            pending,
+            agent_type=member.agent,
+            tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
+            repo_root=repo_root,
+            at=estimate_at,
+        )
+    save_run_state(
+        repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
+    )
+    resolved_tier = _phase_tier(repo_root, state, phase_n)
+    _print_member_dispatch(step, member, item, state, resolved_tier)
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
@@ -705,12 +1937,56 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
     return None
 
 
+def _bind_session(workspace: Path, branch: str, session: str | None, harness: str) -> None:
+    """Attach `session` to the run's workspace — traceability only (#500, spec §3.C.1).
+
+    `fr run start` enters isolation itself, so before this every fr-goal
+    workspace reported `sessions=none` while sibling workspaces entered via
+    `fr isolation up` carried a uuid: the bind hook's verb regex is
+    start-anchored on `fr isolation (up|exec|down)`, which `fr run start`
+    could not match.
+
+    NON-FATAL by design. Bindings are traceability, not enforcement — the
+    `fr-isolation-required` edit gate reads the `.fr-isolation` marker and
+    never a binding — so a bind that fails must never cost the operator a
+    started run. It warns on stderr, naming the branch, and returns.
+
+    `sessions.attach` resolves its state through `_git_common_dir`, so this
+    works whether the run was born in the base clone's workspace or inside
+    the linked worktree.
+    """
+    if not session:
+        return
+    try:
+        _sessions.attach(workspace, branch, session, harness=harness)
+    except IsolationError as e:
+        # soft_wrap: an operator-facing line rich would otherwise fold at 80
+        # columns whenever stderr is not a tty — i.e. exactly when a harness
+        # captures it (journal p1-f1, r1-f2).
+        err_console.print(
+            f"[yellow]warning: could not bind session {session!r} to branch "
+            f"{branch!r}: {e}[/yellow]",
+            soft_wrap=True,
+        )
+        err_console.print(
+            f"  the run is started; bind it later with: fr isolation attach "
+            f"--session {session} --branch {branch} --harness {harness}",
+            soft_wrap=True,
+        )
+
+
 @run_app.command("start")
 def start_cmd(
     workflow: str = typer.Argument(..., help="Workflow shape name (resolved repo > shipped)."),
     branch: str = typer.Option(..., "--branch", help="Branch this run operates on."),
     run_id: str | None = typer.Option(
         None, "--run-id", help="Override the derived run id (default: date + sanitized branch)."
+    ),
+    session: str | None = typer.Option(
+        None, "--session", help="Bind this agent session to the run's workspace (#500)."
+    ),
+    harness: str = typer.Option(
+        "unknown", "--harness", help="claude | hermes | opencode | unknown (with --session)."
     ),
 ) -> None:
     """Start a run: resolve the shape, ensure isolation, write run state in it.
@@ -748,7 +2024,13 @@ def start_cmd(
     try:
         workspace = ensure_run_workspace(repo_root, branch)
     except RunWorkspaceError as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap=True, like every other operator-facing refusal in this
+        # module (p1-f1, r1-f2). This message embeds the repository path, so
+        # rich's fold lands at a different word on every host — on a machine
+        # with long temp paths it broke `is not a linked git worktree` across a
+        # newline mid-phrase. A refusal an operator cannot read, or grep for,
+        # is a bug wherever it appears.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if workspace.resolve() != repo_root.resolve():
@@ -838,6 +2120,11 @@ def start_cmd(
         f"workspace: {workspace} — run every later `fr run` command from there",
         soft_wrap=True,
     )
+    # AFTER `save_run_state` (spec §3.C.1): a bind failure must not be able to
+    # leave a bound workspace with no run in it. The reverse order would make
+    # the failure look like "the session is here" while the cursor the session
+    # was bound for does not exist.
+    _bind_session(workspace, branch, session, harness)
 
 
 @run_app.command("adopt")
@@ -893,12 +2180,20 @@ def adopt_cmd(
     if done:
         console.print(f"  already done: {', '.join(done)}")
     items = _fan_out_items(state)
-    if items:
-        complete = [k for k, v in items.items() if v == "done"]
+    # #496: a `tag: manual` phase is not outstanding work, it is work this run
+    # will never dispatch — counting it in the denominator says "one phase
+    # left to do" about a phase nothing will ever do. Named on its own line
+    # instead of hidden, for the same reason the cursor records it at all.
+    manual = sorted(k for k, v in items.items() if v == MANUAL_ITEM)
+    dispatched = {k: v for k, v in items.items() if v != MANUAL_ITEM}
+    if dispatched:
+        complete = [k for k, v in dispatched.items() if v == "done"]
         # Grouped fan-out keys (`phase/<n>/<member>`) count member outcomes,
         # not phases — label them honestly so "3/3" never reads as reviewed.
-        unit = "phase members" if any(k.count("/") >= 2 for k in items) else "phases"
-        console.print(f"  {len(complete)}/{len(items)} {unit} complete")
+        unit = "phase members" if any(k.count("/") >= 2 for k in dispatched) else "phases"
+        console.print(f"  {len(complete)}/{len(dispatched)} {unit} complete")
+    if manual:
+        console.print(f"  never dispatched (`tag: manual`): {', '.join(manual)}", soft_wrap=True)
     for note in notes:
         console.print(f"  {note}", soft_wrap=True)
     console.print(f"  advance it with: fr run advance {state.run}", soft_wrap=True)
@@ -915,10 +2210,7 @@ def _fan_out_items(state: RunState) -> dict[str, str]:
     fans out, so scanning for the record that carries items needs no knowledge
     of the workflow's step names.
     """
-    for record in state.steps.values():
-        if record.items:
-            return dict(record.items)
-    return {}
+    return units.fan_out_states(state)
 
 
 def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
@@ -941,39 +2233,283 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
         raise typer.Exit(2) from e
 
 
-@run_app.command("status")
-def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Print the cursor and every step's state."""
-    repo_root = resolve_repo_root()
-    state = _load_or_exit(repo_root, run_id)
+def _dispatch_holder_label(attempt: UnitAttempt) -> str:
+    """Who to name for `attempt` — the priority spec §4.B.1/§4.C both rely on.
 
+    `agent_type is None` means an orchestrator-run `kind: agent` step (the
+    manifest's own `agent: null`): that is not a missing value, it is the
+    orchestrator doing the work itself, and it never reports an `agent` id
+    for itself. Only once a unit IS dispatched to an actual agent type does
+    an absent `agent` read as `an unclaimed agent` — the same distinction
+    the gh-499 refusal (`_already_running_refusal`) draws, by calling this.
+    """
+    if attempt.agent_type is None:
+        return "the orchestrator"
+    if attempt.agent is not None:
+        return f"agent {attempt.agent}"
+    return "an unclaimed agent"
+
+
+def _dispatch_descriptor_suffix(attempt: UnitAttempt, *, with_agent_type: bool = False) -> str:
+    """` (harness, model)` — and, for the gh-499 refusal, the agent TYPE first.
+
+    `fr run status` prints one line per attempt and already says which unit it
+    is under, so the type would be noise there. The refusal is read by someone
+    deciding whether to wait, and "what kind of agent has this" is one of the
+    four facts that decision needs (who, what kind, which harness, since when).
+    """
+    agent_type = attempt.agent_type if with_agent_type else None
+    descriptors = [d for d in (agent_type, attempt.harness, attempt.model) if d]
+    return f" ({', '.join(descriptors)})" if descriptors else ""
+
+
+def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
+    """One `Attempt` as a line of `fr run status`/`fr run check`
+    prose — spec §4.C's illustration, cases (a)-(d) of P5.T1.S1."""
+    if attempt.synthesized:
+        # NOT "held by the orchestrator": this attempt has no `agent_type`
+        # because fr never recorded one, and no `returned` for the same reason.
+        return (
+            f"dispatched {attempt.dispatched} — holder not recorded (predates the dispatch record)"
+        )
+    who = _dispatch_holder_label(attempt)
+    suffix = _dispatch_descriptor_suffix(attempt)
+    if attempt.returned is None:
+        if attempt.agent_type is None:
+            return f"held by the orchestrator{suffix} since {attempt.dispatched}"
+        return f"HELD BY {who}{suffix} since {attempt.dispatched}"
+    return f"{who}{suffix} {attempt.dispatched} -> {attempt.returned} {attempt.outcome}"
+
+
+def _estimate_chars(estimate: ContextEstimate) -> int:
+    """The three SIZES fr assembled, summed — what the `~tok est` divides.
+
+    `journal_entries`/`journal_lines` are counts of things, not characters,
+    and adding them here would inflate the estimate by a number with no unit.
+    """
+    return estimate.handoff_chars + estimate.spec_bytes + estimate.plan_bytes
+
+
+def _cost_observable_here(attempt: UnitAttempt) -> bool:
+    """Could THIS session produce a measurement for `attempt` at all? (§4.D.1)
+
+    False only when the attempt names a session and it is not this one — the
+    cursor travelled with the branch and the transcripts did not. An attempt
+    with no recorded session is not claimed to be elsewhere: not knowing is
+    not the same as knowing, and "not measured" is the honest line there.
+    """
+    from fr.run.telemetry import dispatched_from_this_session
+
+    if attempt.session is None:
+        return True
+    return dispatched_from_this_session(os.environ, attempt.session)
+
+
+def _render_attempt_cost(attempt: UnitAttempt, *, indent: str, console: Console) -> None:
+    """One ATTEMPT's cost, printed BENEATH its own holder line (spec §4.D).
+
+    This is gh#514's `_print_accounting` body, moved: it used to render one
+    line per accounted UNIT in a section of its own, which on a redispatched
+    unit showed the retry's figures and left the abandoned agent's spend —
+    exactly the spend worth seeing — nowhere on screen. Under the holder, a
+    figure cannot be read against the wrong attempt.
+
+    **Two numbers, two quantities, and gh#514's wording is kept verbatim
+    because labelling alone did not convey it.** A `~N tok est` is fr's own
+    4-chars-per-token arithmetic over the context it assembled for ONE
+    dispatch. A `measured: N tok` is the harness's own accounting, cumulative
+    across every turn of that dispatch and overwhelmingly `cache_read`,
+    because each turn re-reads the whole accumulated context. On a real unit
+    they differed by ~1,426x, which reads as a broken estimator unless the
+    line says what it counts.
+
+    An absent measurement is PRINTED, not skipped — leaving an estimate alone
+    with nothing beside it is how an estimate comes to be read as a
+    measurement — and the two reasons it can be absent are different facts:
+    a figure that could still arrive, and one this session can never produce.
+    """
+    estimate = attempt.estimate
+    if estimate is None:
+        return
+    chars = _estimate_chars(estimate)
+    console.print(
+        f"{indent}journal {estimate.journal_entries} entries/"
+        f"{estimate.journal_lines} lines, handoff {estimate.handoff_chars} chars, "
+        f"spec+plan {estimate.spec_bytes + estimate.plan_bytes} chars "
+        f"(~{chars // 4} tok est)",
+        soft_wrap=True,
+    )
+    tokens = attempt.measured
+    if tokens is None and not _cost_observable_here(attempt):
+        console.print(
+            f"{indent}not observable from here: this attempt was dispatched from another "
+            f"session, whose transcripts did not travel with the branch — "
+            f"the ~{chars // 4} tok above is an ESTIMATE",
+            soft_wrap=True,
+        )
+        return
+    if tokens is None:
+        console.print(
+            f"{indent}not measured: no transcript figure for this unit — "
+            f"the ~{chars // 4} tok above is an ESTIMATE",
+            soft_wrap=True,
+        )
+        return
+    console.print(
+        f"{indent}measured: {tokens.total} tok billed across the dispatch's turns "
+        f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
+        f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
+        f"— cumulative harness accounting, NOT comparable to the "
+        f"one-dispatch ~{chars // 4} tok estimate above",
+        soft_wrap=True,
+    )
+
+
+def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
+    """Every attempt recorded for `key`, oldest first (case (e)) — each one
+    followed by its own cost."""
+    for attempt in units.attempts(record, key):
+        console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
+        _render_attempt_cost(attempt, indent=f"{indent}  ", console=console)
+
+
+def _render_unit_evidence(
+    record: StepRecord,
+    step_id: str,
+    key: str,
+    unevidenced: Mapping[tuple[str, str], tuple[str, ...]],
+    *,
+    indent: str,
+) -> None:
+    """A unit's evidence, or the fact that it owes some (§4.E).
+
+    `evidence: review=<id>` for what was verified, and a debt line for what the
+    step declares and the unit lacks — both, when a unit was resolved before
+    its step grew an obligation. A unit under a step that declares no evidence
+    prints neither, so `fr run status` is byte-identical for every shape that
+    never opted in.
+    """
+    evidence = units.evidence_of(record, key)
+    if evidence:
+        shown = " ".join(f"{name}={eid}" for name, eid in sorted(evidence.items()))
+        console.print(f"{indent}evidence: {shown}", soft_wrap=True)
+    lacking = unevidenced.get((step_id, key))
+    if lacking:
+        console.print(f"{indent}{_debt_phrase(record, key, lacking)}", soft_wrap=True)
+
+
+def _render_step_and_items(
+    state: RunState,
+    console: Console,
+    unevidenced: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
+) -> None:
+    """The step/items renderer — unchanged in shape from before this phase
+    when a run carries no dispatch data (case (f)): the dispatch lines are
+    additive, never a replacement for the existing `items` line."""
+    owed = unevidenced or {}
+    for step_id, record in state.steps.items():
+        console.print(f"  {step_id}: {record.state}")
+        # Two passes, in this order, because a unit WITH a state renders as
+        # `key: <state>` and one without renders as a bare `key:` — a flat
+        # `kind: agent` step's `step/<id>` unit carries no state at all
+        # (§4.B), and interleaving the two by key would reorder the block.
+        for key in units.unit_keys(record):
+            if units.unit_state(record, key) is not None:
+                console.print(f"    {key}: {units.unit_state(record, key)}")
+                _render_unit_evidence(record, step_id, key, owed, indent="      ")
+                _render_unit_dispatch(record, key, indent="      ", console=console)
+        for key in units.unit_keys(record):
+            if units.unit_state(record, key) is None:
+                console.print(f"    {key}:")
+                _render_unit_evidence(record, step_id, key, owed, indent="      ")
+                _render_unit_dispatch(record, key, indent="      ", console=console)
+
+
+def _print_accounting(state: RunState) -> None:
+    """The cost TOTALS — the closing section of `fr run status`.
+
+    The per-attempt detail it used to hold moved under each holder line
+    (`_render_attempt_cost`), because cost is per ATTEMPT now and a section
+    keyed by unit could only show one attempt's figures. What is left is the
+    arithmetic that is genuinely about the whole run.
+
+    **Totals sum ATTEMPTS**, so a redispatched unit finally contributes both:
+    the abandoned agent's spend is in the figure rather than behind it. The
+    denominator is dispatched ATTEMPTS for the same reason — counting units
+    would report better coverage than there is the moment one unit is
+    redispatched, and an attempt with no estimate at all would vanish from it
+    rather than count against it.
+
+    The closing line says `none` rather than `0 tok` when nothing was
+    measured: a total of zero over no measurements is a number that looks like
+    an answer.
+    """
+    console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
+    total = 0
+    measured_total = 0
+    measured_attempts = 0
+    for _key, attempt in units.accounted_attempts(state):
+        assert attempt.estimate is not None  # `accounted_attempts` is what has one
+        total += _estimate_chars(attempt.estimate)
+        if attempt.measured is not None:
+            measured_total += attempt.measured.total
+            measured_attempts += 1
+    console.print(f"    total: {total} chars (~{total // 4} tok est)")
+    denom = units.dispatched_attempts(state)
+    if measured_attempts:
+        console.print(
+            f"    measured total: {measured_total} tok over {measured_attempts} of "
+            f"{denom} dispatched attempts (the ~tok estimates above are NOT part of this total)",
+            soft_wrap=True,
+        )
+    else:
+        console.print(
+            f"    measured total: none — no transcript figure for any of the "
+            f"{denom} dispatched attempts; every ~tok figure above is an estimate",
+            soft_wrap=True,
+        )
+
+
+def _render_cursor(state: RunState, console: Console) -> None:
+    """The run's own four facts — where it is, and what it is driving."""
     console.print(f"run: {state.run}")
     console.print(f"workflow: {state.workflow}")
     console.print(f"branch: {state.branch}")
     console.print(f"cursor: {state.cursor}")
-    for step_id, record in state.steps.items():
-        console.print(f"  {step_id}: {record.state}")
-        if record.items:
-            for key in sorted(record.items):
-                console.print(f"    {key}: {record.items[key]}")
-    if state.accounting:
-        console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-        total = 0
-        for key in sorted(state.accounting):
-            snap = state.accounting[key]
-            chars = snap.handoff_chars + snap.spec_bytes + snap.plan_bytes
-            total += chars
-            console.print(
-                f"    {key}: journal {snap.journal_entries} entries/"
-                f"{snap.journal_lines} lines, handoff {snap.handoff_chars} chars, "
-                f"spec+plan {snap.spec_bytes + snap.plan_bytes} chars "
-                f"(~{chars // 4} tok est)"
-            )
-        console.print(f"    total: {total} chars (~{total // 4} tok est)")
+
+
+@run_app.command("status")
+def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Print the cursor, every step's state, who is holding each dispatched
+    unit, since when, whether it has returned (spec §4.C) — and what each
+    ATTEMPT cost, beneath its own holder line (§4.D).
+
+    Three sections, and the body is the list of them: `_render_cursor`,
+    `_render_step_and_items` (which delegates one attempt's holder line to
+    `_render_dispatch_attempt` and its cost to `_render_attempt_cost`), and
+    `_print_accounting`'s totals.
+    """
+    repo_root = resolve_repo_root()
+    state = _load_or_exit(repo_root, run_id)
+
+    _render_cursor(state, console)
+    _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
+    if units.accounted_attempts(state):
+        _print_accounting(state)
 
 
 @run_app.command("advance")
-def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+def advance_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    redispatch: bool = typer.Option(
+        False,
+        "--redispatch",
+        help="Re-brief the unit that is already held: close its open dispatch "
+        "`abandoned` and append a fresh one (gh-499). The deliberate escape for "
+        "a genuinely lost agent — the old holder stays in the unit's list, which "
+        "is the forensic trail. Refuses when nothing is outstanding.",
+    ),
+) -> None:
     """Advance the cursor by one step.
 
     `kind: cli` executes directly (exit code + stdout captured; cursor
@@ -982,6 +2518,16 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     gate is unanswered marks `blocked` and executes nothing; an `agent` step
     still prints its brief there, since the gate stops the run, not the
     harness's view of what the step is. `fr run resolve` answers the gate.
+
+    A unit somebody is ALREADY HOLDING is refused — exit 2, and no brief of
+    any kind (gh-499, where an identical second brief read as an instruction
+    to dispatch a second `fr-phase-executor` into the one worktree the first
+    was already writing). `--redispatch` is the deliberate escape.
+    An `agent` step already `running` is REFUSED (#499, spec §3.A) rather
+    than re-briefed: fr-goal dispatches phase executors into one shared
+    isolation worktree, so a second brief means two writers in one tree.
+    `--redispatch` is the deliberate escape, and refuses in turn when
+    nothing is outstanding.
     """
     repo_root = resolve_repo_root()
     try:
@@ -1001,6 +2547,21 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             f"[red]run {state.run!r} has no record for its cursor step "
             f"{state.cursor!r} — workflow {state.workflow!r} changed after "
             "`fr run start`; start a new run[/red]"
+        )
+        raise typer.Exit(2)
+
+    if redispatch and record.state != "running":
+        # Placed before every other branch, including the gate: a `blocked`,
+        # `pending`, `done` or `failed` step has no outstanding dispatch, and
+        # a `cli` step is never `running` at all — fr executes it inline — so
+        # this is also what keeps the flag from becoming a second way to run
+        # a command. Reported rather than silently downgraded (spec §3.A).
+        # LIFECYCLE, not the held-question: "was anything ever dispatched
+        # here" is a fact about the step's state. Whether a dispatched unit
+        # may be briefed again is `_hold_on`'s, below.
+        err_console.print(
+            _nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
+            soft_wrap=True,
         )
         raise typer.Exit(2)
 
@@ -1048,12 +2609,49 @@ def advance_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
     if step.kind == "agent":
         if step.steps:
-            _advance_group(repo_root, state, manifest, step, record)
+            _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
             return
+        # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
+        # call site. This sits AFTER the `_gate_pending` block on purpose — a
+        # gated step is `blocked`, never `running`, and its brief is how the
+        # operator's question gets asked, so the two must not interact.
+        key = _unit_key(repo_root, state, step, None, None)
+        # The same ONE question as the grouped call site (`_hold_on`, decision
+        # u1). `state == "running"` is passed in as a fact about the unit, not
+        # tested here: after `claim --abandoned` the step is still `running`
+        # and must be briefed again.
+        hold = _hold_on(record, key, running=record.state == "running")
+        if hold is not None and not redispatch:
+            err_console.print(
+                # subject == step_id and member_id == step_id: a top-level
+                # step is its own unit, and `item=None` drops `--item` from
+                # the resolve hint. Same renderer as the grouped call site.
+                _already_running_refusal(
+                    step.id, step.id, record.at, state.run, step.id, None, hold.holder
+                ),
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
         brief = _build_brief(step, state)
-        if record.state != "running":
-            new_record = record.model_copy(update={"state": "running", "at": _now()})
-            save_run_state(repo_root, _with_step(state, state.cursor, new_record))
+        held = _held_record(record, key)
+        if held is not None:
+            record = _close_dispatch(record, key, "abandoned")
+            state = _with_step(state, state.cursor, record)
+        needs_dispatch = _dispatch_needs_open(record, key)
+        if redispatch or record.state != "running" or needs_dispatch:
+            if redispatch or record.state != "running":
+                record = record.model_copy(update={"state": "running", "at": _now()})
+                state = _with_step(state, state.cursor, record)
+            if needs_dispatch:
+                state = _open_dispatch(
+                    state,
+                    state.cursor,
+                    key,
+                    agent_type=step.agent,
+                    tier=step.tier,
+                    repo_root=repo_root,
+                )
+            save_run_state(repo_root, state)
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
         return
@@ -1105,6 +2703,10 @@ def _resolve_member(
     item: str | None,
     state_value: Literal["done", "failed"],
     emitted_map: dict[str, str],
+    evidence_map: dict[str, str],
+    agent: str | None = None,
+    harness: str | None = None,
+    model: str | None = None,
 ) -> None:
     """Record one `(phase, member)` outcome on its group's item map.
 
@@ -1114,12 +2716,6 @@ def _resolve_member(
     as a failed step. Whole-group completion (`resolve --step <group>`) stays
     available for harnesses that do not address members.
     """
-    if item is None:
-        err_console.print(
-            f"[red]{member.id}: a member outcome must address a phase item — "
-            "pass --item phase/<n>[/red]"
-        )
-        raise typer.Exit(2)
     grec = state.steps.get(group.id)
     if grec is None:  # pragma: no cover — drift guarantees top-level records
         err_console.print(f"[red]{group.id}: no step record in run {state.run!r}[/red]")
@@ -1136,26 +2732,32 @@ def _resolve_member(
             "the group first, then resolve its members[/red]"
         )
         raise typer.Exit(2)
+    key = _unit_key(repo_root, state, member, group, item)
+    # `_unit_key` already validated `key` against the expected set; recomputed
+    # here (cheap, and already proven readable) only to know when EVERY
+    # expected key is done, which is a different question than "is this ONE
+    # key valid".
     try:
-        phases = _group_phases(repo_root, state)
+        agentic, manual = _group_phases(repo_root, state)
     except (RunStateError, AdoptError) as e:
         err_console.print(f"[red]{group.id}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
-    expected = _expected_group_items(group, phases)
-    key = f"{item}/{member.id}"
-    if key not in expected:
-        err_console.print(
-            f"[red]{key}: not a phase member of {group.id!r} — expected "
-            f"phase/<n> for phases {phases} (from the recorded plan)[/red]"
-        )
-        raise typer.Exit(2)
-    items = dict(grec.items or {})
+    expected = _expected_group_items(group, agentic)
+    # The manual markers are `_advance_group`'s to write (a group can only be
+    # resolved after it was advanced, so they are already here); merged again
+    # only so a cursor written before #496 acquires them on its next resolve
+    # rather than completing with the omission unrecorded.
+    items = {**units.unit_states(grec), **_manual_items(manual)}
     if items.get(key) == "done" and state_value == "done":
         err_console.print(f"[red]{key}: already recorded done[/red]")
         raise typer.Exit(2)
     # One writer at a time: any OTHER outstanding unit means a second writer
     # is active (a finished executor still writing, or the orchestrator
     # alongside it) — resolve the running unit first instead of interleaving.
+    # LIFECYCLE, not the held-question (`_hold_on`): this guards `resolve`
+    # against a second WRITER, and an `--abandoned` unit still counts — it is
+    # unresolved work that must be re-briefed or resolved before another
+    # unit's outcome is recorded over it.
     running = sorted(k for k, v in items.items() if v == "running" and k != key)
     if running:
         err_console.print(
@@ -1163,13 +2765,59 @@ def _resolve_member(
             "has exactly one writer; resolve the running unit first.[/red]"
         )
         raise typer.Exit(2)
+    # The unit must have been BRIEFED — checked AFTER the one-writer refusal
+    # above, so "run `fr run advance`" is only ever said when advance would
+    # actually brief it rather than refuse a held unit. The flat path has always refused a step
+    # that is not running ("advance first"); this path checked the group and
+    # the other units and never the unit itself, so a never-advanced unit went
+    # absent -> done with no attempt: no holder, no cost, and — for a review —
+    # evidence attached to work nothing records anyone being asked to do.
+    # `_close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
+    # cursors), so nothing downstream would ever notice; the check belongs
+    # here, before the write. A unit that is `running` with no record still
+    # resolves — a cursor migrated from before dispatch records existed carries
+    # those; `adopt` itself never writes `running`, only `done` and `pending`.
+    if items.get(key) in (None, "pending"):
+        err_console.print(
+            f"[red]{key}: refused — this unit was never briefed, so there is no dispatch "
+            f"to close and nothing to record an outcome for. `fr run advance "
+            f"{state.run}` briefs the next unit in order — which may be an earlier "
+            f"one than this — and prints its brief; resolve what it briefs.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
+    # the unit exactly as it found it — a half-resolved review is a worse
+    # state than an unresolved one, and is indistinguishable from the skipped
+    # review this gate exists to make impossible.
+    verified = _verified_evidence(
+        repo_root,
+        state,
+        member,
+        key=key,
+        phase=_item_phase(item) if item is not None else None,
+        offered=evidence_map,
+        state_value=state_value,
+    )
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
     updated = _with_step(
         state,
         group.id,
-        grec.model_copy(update={"items": items, "emitted": merged_emitted or None}),
+        units.with_unit_states(grec.model_copy(update={"emitted": merged_emitted or None}), items),
     )
+    if verified:
+        updated = _with_step(
+            updated, group.id, units.with_evidence(updated.steps[group.id], key, verified)
+        )
+    # The dispatch closes BEFORE `_complete_step` runs, so the closed record
+    # is what that rebuild carries forward — and before the `failed` branch
+    # too, because a failed unit's holder returned just as surely as a done
+    # one's did.
+    updated = _close_on_resolve(
+        updated, group.id, key, state_value, agent=agent, harness=harness, model=model
+    )
+    updated = _with_measurement(updated, group.id, key)
     if state_value == "failed":
         save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -1178,7 +2826,7 @@ def _resolve_member(
         save_run_state(
             repo_root, _complete_step(updated, manifest, group.id, "done", emitted=merged_emitted)
         )
-        console.print(f"{group.id}: done (all {len(expected)} phase members done)")
+        console.print(_group_done_line(group.id, expected, manual), soft_wrap=True)
         return
     save_run_state(repo_root, updated)
     console.print(f"{member.id} {item}: done")
@@ -1191,6 +2839,13 @@ def resolve_cmd(
     state_value: str = typer.Option(..., "--state", help="done | failed."),
     emitted: list[str] = typer.Option(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
+    ),
+    evidence: list[str] = typer.Option(
+        [],
+        "--evidence",
+        help="'name=journal-entry-id' proof of an obligation the step declares "
+        "(repeatable). `review=<id>` is verified against the plan journal: it "
+        "must be a `kind=review` entry carrying this unit's `phase=N`.",
     ),
     item: str | None = typer.Option(
         None,
@@ -1205,6 +2860,20 @@ def resolve_cmd(
         "Defaults to `agent`, the weaker claim; recorded only when a gate "
         "is cleared, and reported by `fr run check` and in the PR body.",
     ),
+    agent: str | None = typer.Option(
+        None,
+        "--agent",
+        help="The harness-reported agent/task id that held this unit — the "
+        "LATE fallback for an orchestrator that never called `fr run claim`. "
+        "Applied only to an unclaimed record; one that disagrees with an "
+        "existing claim is refused, naming both.",
+    ),
+    harness: str | None = typer.Option(
+        None, "--harness", help="One of fr.harness's HARNESSES, alongside --agent."
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="The model actually dispatched, alongside --agent."
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -1213,6 +2882,13 @@ def resolve_cmd(
     cursor can move past `running`; `done` advances the cursor, `failed`
     leaves it put (same asymmetry `advance` already has for `cli` steps —
     see `_complete_step`).
+
+    It is also the CLOSING half of the dispatch pair `advance` opened: the
+    unit's open `Attempt` gets `returned` = now and `outcome` =
+    `--state`, which is what stops `advance` refusing the unit as held.
+    `--agent/--harness/--model` attach a late identity to a record nobody
+    claimed — the fallback for an orchestrator that never called
+    `fr run claim`, refused if it disagrees with an existing claim.
 
     It also clears an operator gate (review fix r2-f1), which is what makes
     a `gate: operator` step something other than a permanent dead end — the
@@ -1239,6 +2915,9 @@ def resolve_cmd(
             f"[red]--answered-by must be 'operator' or 'agent', got {answered_by!r}[/red]"
         )
         raise typer.Exit(2)
+    if harness is not None and harness not in HARNESSES:
+        err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
+        raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
     try:
@@ -1251,8 +2930,17 @@ def resolve_cmd(
         # stays refused (rule 3) rather than silently recorded.
         emits_owner = step if parent is None or step.emits else parent
         emitted_map = _parse_emitted(emitted, repo_root, emits_owner)
+        # Against the STEP itself, never a parent: evidence is an obligation of
+        # the step that carries it (the `review-phase` member), and falling
+        # back to the group the way `emits` does would let a member satisfy an
+        # obligation it never declared.
+        evidence_map = _parse_evidence(evidence, step)
     except (RunStateError, WorkflowError, AdoptError) as e:
-        err_console.print(f"[red]{e}[/red]")
+        # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
+        # in a flag pair the operator copy-pastes, and rich folds at width 80
+        # whenever stderr is not a tty — i.e. exactly when a harness captures
+        # it. Same reason every other hint in this module carries it.
+        err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
     if parent is not None:
@@ -1265,6 +2953,10 @@ def resolve_cmd(
             item=item,
             state_value=state_value,  # type: ignore[arg-type]  # validated below
             emitted_map=emitted_map,
+            evidence_map=evidence_map,
+            agent=agent,
+            harness=harness,
+            model=model,
         )
         return
     if item is not None:
@@ -1377,6 +3069,36 @@ def resolve_cmd(
         )
         raise typer.Exit(2)
 
+    flat_key = _unit_key(repo_root, state, step, None, None)
+    # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
+    # verified for it and `_verified_evidence` refuses rather than records.
+    verified = _verified_evidence(
+        repo_root,
+        state,
+        step,
+        key=flat_key,
+        phase=None,
+        offered=evidence_map,
+        state_value=state_value,
+    )
+    if verified:  # pragma: no cover — unreachable while `review` is the only
+        # verifiable obligation and a flat unit names no phase; kept so a
+        # second obligation cannot land here as a silent no-op.
+        state = _with_step(
+            state, step_id, units.with_evidence(state.steps[step_id], flat_key, verified)
+        )
+    # The flat unit's dispatch closes here, keyed through the SAME `_unit_key`
+    # `advance` opened it with and `claim` annotates it by — a `step/<id>` key
+    # computed a second time by hand is the drift phase 3 removed.
+    state = _close_on_resolve(
+        state,
+        step_id,
+        flat_key,
+        state_value,  # type: ignore[arg-type]  # validated above
+        agent=agent,
+        harness=harness,
+        model=model,
+    )
     new_state = _complete_step(
         state,
         manifest,
@@ -1397,18 +3119,395 @@ def resolve_cmd(
     console.print(f"{step_id}: {state_value}")
 
 
+def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
+    """The OPEN (`returned is None`) `Attempt` for `key`, or refuse.
+
+    `fr run claim` annotates a dispatch `fr run advance` already made; it
+    never invents one (spec §4.C) — a unit with no attempts at all, or whose
+    last attempt is already closed, has nothing open to annotate."""
+    open_record = _held_record(record, key)
+    if open_record is None:
+        err_console.print(
+            f"[red]{key}: no open dispatch — nothing to claim. `fr run claim` "
+            "annotates a dispatch `fr run advance` already made; it does not "
+            "invent one. Advance the run first.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return open_record
+
+
+def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) -> None:
+    """Close `key`'s open dispatch as `abandoned`, WITHOUT resolving the step
+    it belongs to (spec §4.C, §1.C).
+
+    The step's `items`/`state` are left exactly as they are — still
+    `running` — so the next `fr run advance` sees the unit as still pending
+    and briefs it again, appending a fresh `Attempt` alongside this
+    now-closed one (`_dispatch_needs_open`). This is the sanctioned recovery
+    for an executor that is never coming back: nothing can retire it from the
+    orchestrator side, so freeing the tree has to be a named operator act.
+
+    It also MEASURES the attempt it closes (§4.D). An agent that produced
+    nothing still burned tokens, and that is the spend most worth seeing —
+    before this, abandoning a unit discarded its cost entirely, and the next
+    `advance`'s estimate overwrote the only trace it had.
+    """
+    record = state.steps[owner_id]
+    _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
+    new_record = _close_dispatch(record, key, "abandoned")
+    closed = _with_measurement(_with_step(state, owner_id, new_record), owner_id, key)
+    save_run_state(repo_root, closed)
+    console.print(
+        f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
+    )
+
+
+def _claim_identity(
+    repo_root: Path,
+    state: RunState,
+    owner_id: str,
+    key: str,
+    *,
+    agent: str,
+    harness: str | None,
+    model: str | None,
+) -> None:
+    """Fill `key`'s open dispatch record with the orchestrator's reported
+    `agent`/`harness`/`model` (spec §3, §4.C).
+
+    Idempotent for the SAME `agent` id (re-claiming just refreshes
+    `harness`/`model` when given again); refuses a DIFFERENT one while the
+    first is still open, naming both — the two-writers hazard this whole
+    feature exists to make visible.
+    """
+    record = state.steps[owner_id]
+    open_record = _open_dispatch_record(record, key)
+    new_record = units.with_last_attempt_replaced(
+        record,
+        key,
+        _claimed_identity(open_record, key, agent=agent, harness=harness, model=model),
+    )
+    save_run_state(repo_root, _with_step(state, owner_id, new_record))
+    console.print(f"{key}: claimed by {agent}", soft_wrap=True)
+
+
+@run_app.command("claim")
+def claim_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    step_id: str = typer.Option(..., "--step", help="Step id (or member id) to claim."),
+    item: str | None = typer.Option(
+        None,
+        "--item",
+        help="Phase item (phase/<n>) this claim is for — required when --step "
+        "names a member of a grouped `for_each` step.",
+    ),
+    agent: str | None = typer.Option(
+        None, "--agent", help="The harness-reported agent/task id claiming this dispatch."
+    ),
+    harness: str | None = typer.Option(
+        None,
+        "--harness",
+        help="One of fr.harness's HARNESSES; defaults to "
+        "fr.harness.detect.detect_harness(), recording nothing when it cannot tell.",
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="The model actually dispatched, if known."
+    ),
+    abandoned: bool = typer.Option(
+        False,
+        "--abandoned",
+        help="Close this dispatch as abandoned WITHOUT resolving its step — the "
+        "sanctioned recovery when an executor is never coming back (spec §1.C), since "
+        "nothing can retire it from the orchestrator side; the step stays `running` so "
+        "the next `fr run advance` briefs the unit again.",
+    ),
+) -> None:
+    """Put the orchestrator's reported identity onto the dispatch `fr run
+    advance` already opened for a unit (spec §3, §4.C) — the `agent`/
+    `harness` half of `Attempt` that only the orchestrator can report,
+    fr itself can only derive `agent_type`/`model` and time its own act.
+
+    Requires an OPEN dispatch record for the unit: a claim annotates a
+    dispatch `fr run advance` made, it does not invent one. Re-claiming the
+    SAME agent id is idempotent; a DIFFERENT one while the first is open is
+    refused, naming both — the two-writers hazard this whole feature exists
+    to make visible. `--abandoned` closes the record instead, for a dispatch
+    that is never returning; see its own help text.
+    """
+    if abandoned and agent is not None:
+        err_console.print(
+            "[red]--abandoned closes a dispatch; it does not also claim one — "
+            "pass --agent or --abandoned, not both[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not abandoned and agent is None:
+        err_console.print(
+            "[red]--agent is required (or pass --abandoned to close without one)[/red]"
+        )
+        raise typer.Exit(2)
+    if harness is not None and harness not in HARNESSES:
+        err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
+        raise typer.Exit(2)
+
+    repo_root = resolve_repo_root()
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+        step, parent = _find_step(manifest, step_id)
+        key = _unit_key(repo_root, state, step, parent, item)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+
+    owner_id = parent.id if parent is not None else step.id
+    if abandoned:
+        _claim_abandon(repo_root, state, owner_id, key)
+        return
+
+    resolved_harness = harness
+    if resolved_harness is None:
+        try:
+            resolved_harness = detect_harness(os.environ)
+        except HarnessError as e:
+            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+    assert agent is not None  # guarded above: not abandoned => agent is required
+    _claim_identity(
+        repo_root, state, owner_id, key, agent=agent, harness=resolved_harness, model=model
+    )
+
+
+def _open_dispatches(state: RunState) -> list[tuple[str, str, UnitAttempt]]:
+    """Every currently-open `(step_id, key, attempt)` in `state` — see
+    `fr.run.liveness.open_attempts`, where it moved so the idle reading and
+    this report walk the same list."""
+    return _liveness.open_attempts(state)
+
+
+IDLE_EXIT_CODE = 3
+"""`fr run check --idle` on an idle run. `check` used 0/1/2 before it; 3 is the
+one code both harness adapters act on, and they act on nothing else."""
+
+
+_IDLE_REPORT_ORDER: tuple[str, ...] = (
+    "idle",
+    "held",
+    "gate",
+    "manual",
+    "failed",
+    "not-advanceable",
+    "finished",
+)
+
+
+def _plan_refusals(
+    repo_root: Path, state: RunState, manifest: WorkflowManifest
+) -> list[_liveness.Refusal]:
+    """The reasons `advance` would refuse that only the plan ON DISK shows —
+    the I/O half `fr.run.liveness.is_idle` (pure) is handed.
+
+    Both are `_advance_group`'s own refusals, asked through its own functions:
+    `_group_phases` (no plan recorded, or an unreadable one) and the
+    manual-placement preflight, which `advance` runs exactly while the group
+    has not started (`record.state != "running"`) — so this does too.
+    """
+    step = next((s for s in manifest.steps if s.id == state.cursor), None)
+    record = state.steps.get(state.cursor)
+    if step is None or record is None or step.kind != "agent" or not step.steps:
+        return []
+    try:
+        _group_phases(repo_root, state)
+    except (RunStateError, AdoptError) as e:
+        return [_liveness.Refusal("not-advanceable", f"{step.id}: {e}")]
+    if record.state == "running":
+        return []
+    _, messages = _manual_placement_errors(repo_root, state)
+    return [_liveness.Refusal("manual", message) for message in messages]
+
+
+def _idle_reading(repo_root: Path, state: RunState) -> _liveness.Idle:
+    """`is_idle` for one run, with everything `advance` would refuse over
+    folded in as *not idle* — an unresolvable or drifted manifest included.
+    Never raises for a state `advance` would merely refuse."""
+    try:
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        return _liveness.Idle(False, "not-advanceable", str(e))
+    return _liveness.is_idle(state, manifest, refusals=_plan_refusals(repo_root, state, manifest))
+
+
+def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
+    """Every readable run whose `branch` is the one checked out here.
+
+    `state.branch`, never "every file in the runs dir": a workspace is a
+    checkout of `main` and carries every cursor merged and not yet archived
+    (`_existing_run_for_workflow` learned this the hard way), and somebody
+    else's advanceable cursor is nobody's stall. An unreadable file is
+    skipped — it is a different problem, and `fr validate artifacts` reports
+    it; here it must not become a reason to act, or to fail.
+    """
+    from fr.run.adopt import current_branch
+
+    branch = current_branch(repo_root)
+    runs_dir = repo_root / RUNS_REL
+    if branch is None or not runs_dir.is_dir():
+        return []
+    found: list[RunState] = []
+    for candidate in sorted(runs_dir.glob("*.yaml")):
+        try:
+            state = parse_run_state(candidate.read_text())
+        except (RunStateError, OSError):
+            continue
+        if state.branch == branch:
+            found.append(state)
+    return found
+
+
+def _stalled_payload(stalled: list[_liveness.StalledAttempt]) -> list[dict[str, Any]]:
+    return [
+        {
+            "step": s.step,
+            "unit": s.unit,
+            "dispatched": s.attempt.dispatched,
+            "age_minutes": s.age_minutes,
+        }
+        for s in stalled
+    ]
+
+
+def _stalled_line(s: _liveness.StalledAttempt) -> str:
+    return (
+        f"{s.step}: {s.unit} has been held for {_liveness.render_age(s.age_minutes)} "
+        f"(dispatched {s.attempt.dispatched}) — reported, never failed: fr cannot "
+        "tell a long phase from a dead agent"
+    )
+
+
+def _check_idle(repo_root: Path, run_id: str | None, stalled_after: int, fmt: str) -> None:
+    """`fr run check --idle` — exit 3 exactly on an idle run (spec §4.G)."""
+    if run_id is not None:
+        candidates = [_load_or_exit(repo_root, run_id)]
+    else:
+        candidates = _runs_on_this_branch(repo_root)
+    readings = [(state, _idle_reading(repo_root, state)) for state in candidates]
+    idle = [(state, reading) for state, reading in readings if reading.idle]
+
+    if not readings or len(idle) > 1:
+        # No run at all is the sixth legitimate stop. MORE than one idle run on
+        # a branch is a state fr-goal never produces (a stranded cursor is not
+        # advanceable), so fr does not guess which one the session meant:
+        # ambiguity is silence.
+        reason = "ambiguous" if idle else "no-run"
+        runs = [state.run for state, _ in idle]
+        if fmt == "json":
+            typer.echo(json.dumps({"idle": False, "reason": reason, "runs": runs}))
+        elif idle:
+            console.print(
+                f"not idle (ambiguous) — {len(runs)} idle runs on this branch "
+                f"({', '.join(runs)}); name one: fr run check <run> --idle",
+                soft_wrap=True,
+                markup=False,
+            )
+        else:
+            console.print("not idle (no-run) — no run on this branch", markup=False)
+        return
+
+    # With nothing idle, REPORT the run most worth reading about: a branch can
+    # carry a delivered run, a stranded one and the live one at once (this
+    # feature's own branch did), and the held run is the one a human means.
+    # Which is reported never changes the exit code — none of these is idle.
+    state, reading = (
+        idle[0]
+        if idle
+        else min(readings, key=lambda pair: _IDLE_REPORT_ORDER.index(pair[1].reason))
+    )
+    now = _dt.datetime.now(_dt.UTC)
+    stalled = _liveness.stalled_attempts(state, now=now, after_minutes=stalled_after)
+    next_command = f"fr run advance {state.run}" if reading.idle else None
+    if fmt == "json":
+        typer.echo(
+            json.dumps(
+                {
+                    "idle": reading.idle,
+                    "reason": reading.reason,
+                    "detail": reading.detail,
+                    "run": state.run,
+                    "cursor": state.cursor,
+                    "position": _liveness.position(state),
+                    "next_command": next_command,
+                    "stalled": _stalled_payload(stalled),
+                }
+            )
+        )
+    else:
+        verdict = "idle" if reading.idle else f"not idle ({reading.reason})"
+        console.print(f"{state.run}: {verdict} — {reading.detail}", soft_wrap=True, markup=False)
+        for s in stalled:
+            console.print(_stalled_line(s), soft_wrap=True, markup=False)
+        if next_command is not None:
+            console.print(f"  next: {next_command}", soft_wrap=True, markup=False)
+    if reading.idle:
+        raise typer.Exit(IDLE_EXIT_CODE)
+
+
 @run_app.command("check")
-def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+def check_cmd(
+    run_id: str | None = typer.Argument(
+        None, help="Run id. Optional with --idle: the runs of the checked-out branch."
+    ),
+    idle: bool = typer.Option(
+        False,
+        "--idle",
+        help="Liveness instead of freshness: exit 3, naming the next command, "
+        "exactly when the run is advanceable and nobody is working on it. Exit 0 "
+        "in every legitimate stop — a pending operator gate, an outstanding "
+        "manual phase, a HELD unit, a failed step, a finished run, no run.",
+    ),
+    stalled_after: int = typer.Option(
+        _liveness.DEFAULT_STALLED_AFTER_MINUTES,
+        "--stalled-after",
+        min=0,
+        help="Report an open attempt older than this many minutes, with its age. "
+        "Never a failure and never an exit code: fr cannot tell a long phase "
+        "from a dead agent.",
+    ),
+    fmt: str = typer.Option("text", "--format", help="text | json (json: with --idle only)."),
+) -> None:
     """Freshness gate: non-zero when the cursor sits on a failed step.
 
     It also REPORTS every operator gate the agent cleared itself (spec
-    §3.D.3) — and does not fail on one. The exit code stays exactly what it
-    was: `check` is a narrow freshness gate, and making an agent-cleared gate
-    non-zero would turn every legitimate non-interactive dispatch red, which
-    is the hard refusal the operator rejected. The enforcement is that the
-    same list rides the delivered PR body, where a human reads it.
+    §3.D.3), every currently open dispatch, how many of those are unclaimed
+    (spec §4.C), and any held past `--stalled-after` — none of it changes the
+    exit code. The exit code stays exactly what it was: `check` is a narrow
+    freshness gate, and making an open or unclaimed dispatch non-zero would
+    turn every ordinary in-flight run red, which is the same hard-refusal
+    shape the operator already rejected for an agent-cleared gate. The
+    enforcement is that the same list rides the delivered PR body, where a
+    human reads it.
+
+    `--idle` asks the OTHER question (gh#518, spec
+    2026-09-20-unit-record-unification §4.G) and owns exit code 3. It is what
+    the Claude Code `Stop` hook and the OpenCode `session.idle` handler run;
+    the answer is `fr.run.liveness.is_idle`'s and nobody else's.
     """
+    if fmt not in ("text", "json"):
+        err_console.print(f"[red]--format must be text or json, not {fmt!r}[/red]")
+        raise typer.Exit(2)
     repo_root = resolve_repo_root()
+    if idle:
+        _check_idle(repo_root, run_id, stalled_after, fmt)
+        return
+    if fmt == "json":
+        err_console.print("[red]--format json is only available with --idle[/red]")
+        raise typer.Exit(2)
+    if run_id is None:
+        err_console.print(
+            "[red]fr run check needs a run id (only --idle can find the run "
+            "of the checked-out branch itself)[/red]"
+        )
+        raise typer.Exit(2)
     state = _load_or_exit(repo_root, run_id)
 
     record = state.steps.get(state.cursor)
@@ -1420,6 +3519,35 @@ def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         console.print(
             f"{gate.step}: operator gate cleared by the agent (answered_by: agent) — "
             "no operator answered it",
+            soft_wrap=True,
+        )
+    open_dispatches = _open_dispatches(state)
+    for step_id, key, held in open_dispatches:
+        console.print(
+            f"{step_id}: {key} is open — {_render_dispatch_attempt(held)}",
+            soft_wrap=True,
+        )
+    unclaimed = [
+        held for _, _, held in open_dispatches if held.agent_type is not None and held.agent is None
+    ]
+    if unclaimed:
+        console.print(
+            f"{len(unclaimed)} unclaimed dispatch(es) — visible debt, not a failure",
+            soft_wrap=True,
+        )
+    # Stalled (§4.G): gh#503's 11.5-hour executor, visible from fr instead of
+    # from the harness's private files. A report and nothing more.
+    for stalled in _liveness.stalled_attempts(
+        state, now=_dt.datetime.now(_dt.UTC), after_minutes=stalled_after
+    ):
+        console.print(_stalled_line(stalled), soft_wrap=True, markup=False)
+    # Reviews resolved before the evidence gate existed (§4.E). Reported, never
+    # failed, and deliberately NOT part of the exit code below: an obligation
+    # cannot be enforced backwards in time, and doing so here would turn every
+    # in-flight run red on the day the plugin updates.
+    for (step_id, key), lacking in _unevidenced_units(repo_root, state).items():
+        console.print(
+            f"{step_id}: {key} is done, {_debt_phrase(state.steps[step_id], key, lacking)}",
             soft_wrap=True,
         )
     if record is not None and record.state == "failed":

@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The trailing-manual invariant, enforced where plans are authored (#496)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - plan-manual-phase-trailing
+tasks:
+- number: 1
+  title: A manual phase must be trailing, or already complete
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED. In `tests/unit/test_plan_ops.py`, add a test that builds a plan
+      `1 agentic, 2 manual (unticked), 3 agentic` and asserts `self_review` returns a
+      `severity="error"` issue naming phase 2. Add two PASS cases from spec 3.D.1:
+      `1,2,3 agentic + 4 manual` and `1 manual (all steps ticked) + 2,3 agentic`. Add a
+      trailing-BLOCK case (`1,2 agentic + 3,4 manual`). Confirm the error case fails today.
+  - id: P4.T1.S2
+    text: |-
+      GREEN. In `fr.plan_ops.self_review`, add the rule: for each `tag: manual` phase that is NOT in
+      the trailing block, if `fr.render.plan_locally_complete(phase)` is False, append a
+      `ReviewIssue(severity="error", ...)` naming the phase and both remedies. Import
+      `plan_locally_complete` rather than re-deriving "is it ticked" — it is the repo's one offline
+      per-phase predicate. Confirm all four cases behave.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR. Extract `_trailing_manual_block(plan) -> set[int]` (the maximal suffix of manual
+      phase numbers) and give it a docstring stating the rule in the spec's words: no manual phase
+      may be outstanding when an agentic phase after it runs. Phase 5's preflight imports it, so
+      the two enforcement points cannot disagree about what "trailing" means.
+- number: 2
+  title: An agentic phase may not depend on a manual one
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED. Add a test where `1,2,3 agentic` and phase 2 declares `depends_on: [4]` with phase 4 the
+      trailing manual phase. Assert a `severity="error"` issue naming both phases. Confirm it fails
+      today — position alone does not catch this (spec 3.D.1).
+  - id: P4.T2.S2
+    text: |-
+      GREEN. Extend the same rule block: for every `tag: agentic` phase, any `depends_on` entry
+      naming a `tag: manual` phase is an error, whatever its position. Confirm green, and confirm
+      the manual-depends-on-agentic direction stays legal (a trailing manual phase may declare
+      backward deps).
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR. Merge Tasks 1 and 2 into one pass over `plan.phases` if they now iterate twice,
+      keeping the two messages distinct. Re-run `uv run pytest tests/unit/test_plan_ops.py -q --no-cov`.
+- number: 3
+  title: The corpus and the suite agree with the new rule
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Run `uv run fr plan self-review` over every live plan folder
+      (`docs/superpowers/plans/*/`) and confirm each still passes — spec 1.4 measured 4/4 live,
+      80/80 archived and 16/16 fixture folders as already compliant, so a failure here means the
+      rule was implemented wrongly, not that a plan is wrong.
+  - id: P4.T3.S2
+    text: |-
+      Run the FULL suite `uv run pytest -q --no-cov`. Spec 4 budgets for this: tests that build a
+      Plan inline (rather than from a fixture folder) may construct a non-trailing manual phase and
+      assert `self_review` passes. Fix each such construction to a compliant shape — do NOT weaken
+      the rule to accommodate a fixture. Record every file touched in the phase journal.
+  - id: P4.T3.S3
+    text: |-
+      GATES + ROW. ruff format, ruff check, mypy, full pytest. Then
+      `uv run fr acceptance set-status --id plan-manual-phase-trailing --status ci
+       --level unit=super-fr:tests/unit/test_plan_ops.py
+       --notes "severity=error in self_review, which fr-goal runs as its plan-review cli step, so a
+       mis-shaped plan fails before phase 1 dispatches. depends_on checked alongside position."`
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T15:57:04+00:00'
+      note: 'RED: 4 inline-built plans in tests/unit/test_plan_ops.py. Error case
+        + front-load case fail today (AssertionError: [] / ''unticked front-load must
+        error first''); the two trailing-block PASS cases are green vacuously.'
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T15:57:34+00:00'
+      note: 'GREEN: self_review now errors on a manual phase that is neither trailing
+        nor plan_locally_complete (imported from fr.render, not re-derived). All four
+        cases behave; tests/unit/test_plan_ops.py 10 passed.'
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T15:58:11+00:00'
+      note: 'REFACTOR: extracted _trailing_manual_block(plan) -> set[int] with a docstring
+        stating the rule in the spec''s words; pinned by three direct tests (maximal
+        suffix {4} for 1a/2m/3a/4m, empty, all-manual). 13 passed.'
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T16:06:26+00:00'
+      note: 'RED: agentic phase 2 depends_on [4] with phase 4 the trailing manual
+        phase. Failed with ''AssertionError: []'' — the position rule is silent on
+        it, exactly as spec 3.D.1 argues. (This step''s tick was lost from an earlier
+        combined command: fr plan edit takes ONE --tick/--note pair, later flags overwrite
+        earlier ones.)'
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T15:58:58+00:00'
+      note: 'GREEN: an agentic phase naming a manual phase in depends_on is an error
+        whatever the positions; the reverse direction stays legal (pinned). 15 passed.'
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T16:00:02+00:00'
+      note: 'REFACTOR: lifted both checks out of self_review into _manual_placement_issues(plan),
+        matching the file''s existing _workflow_issues/_skeleton_issues/_refactor_issues
+        shape; one pass, two distinct messages (POSITION and DEPENDENCY). 15 passed.'
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T16:00:45+00:00'
+      note: 'Swept all 5 live plan folders: ZERO issues from the new rule (this plan
+        included). Two plans exit 1 on the pre-existing skeleton gate — identical
+        count with _manual_placement_issues stubbed out, so not mine. 80 archived
+        plans: those that parse under fr 4.8.0 are clean too.'
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T16:05:32+00:00'
+      note: 'Full suite: 3 failed, 3317 passed, 80 skipped — exactly the three host-specific
+        pre-existing failures from p1-f2 and nothing else. ZERO inline-constructed
+        test plans needed fixing; every manual construction in the suite enumerated
+        in journal p4-d1, including the one non-compliant shape (test_render_deps.py:323)
+        that never reaches self_review and was deliberately left alone.'
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T16:06:00+00:00'
+      note: 'Gates: ruff format (361 unchanged), ruff check all passed, mypy clean
+        over 138 files in the four src trees, pytest 3 failed/3317 passed/80 skipped
+        (the three known host-specific ones). Row plan-manual-phase-trailing: not-implemented
+        → ci; fr acceptance check exits 0, 129 rows OK.'
+  completion:
+    at: '2026-09-20T16:06:32+00:00'
+    note: 'The trailing-manual invariant is enforced in fr.plan_ops.self_review at
+      severity=error: a tag: manual phase must be in the plan''s trailing block or
+      already plan_locally_complete, and no agentic phase may depends_on a manual
+      one. _trailing_manual_block(plan) -> set[int] extracted for phase 5''s preflight.
+      5/5 live plans clean; suite 3 failed (the known three) / 3317 passed.'
+    observed_prs: []

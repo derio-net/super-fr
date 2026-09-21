@@ -8,6 +8,7 @@ phase:
   tracking_issue: null
   acceptance:
   - multibackend-vk-dispatch
+  tier: standard
 tasks:
 - number: 1
   title: RED — pr_observe.py routed through a client instead of raw gh subprocess
