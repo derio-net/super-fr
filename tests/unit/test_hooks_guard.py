@@ -41,7 +41,7 @@ def write_sentinel(
     sentinel_dir: Path,
     repo_root: Path,
     session: str = "sess-1",
-    workspace: str | None = None,
+    workspace: str | list[str] | None = None,
 ) -> Path:
     """Write a session sentinel, optionally STAMPED with a workspace.
 
@@ -52,9 +52,9 @@ def write_sentinel(
     """
     sentinel_dir.mkdir(parents=True, exist_ok=True)
     sentinel = sentinel_dir / f"{session}.json"
-    data: dict[str, str] = {"repo_root": str(repo_root), "skill": "fr-goal"}
+    data: dict[str, object] = {"repo_root": str(repo_root), "skill": "fr-goal"}
     if workspace is not None:
-        data["workspace"] = workspace
+        data["workspaces"] = [workspace] if isinstance(workspace, str) else workspace
     sentinel.write_text(json.dumps(data))
     return sentinel
 
@@ -129,14 +129,17 @@ class TestIsolationGuard:
         result = run_hook(payload("uv run pytest -q", elsewhere), sentinels)
         assert decision(result) is None
 
-    def test_isolation_down_allowed_and_clears_sentinel(self, tmp_path: Path) -> None:
+    def test_isolation_down_allowed_and_leaves_the_sentinel_to_down(self, tmp_path: Path) -> None:
+        """The hook runs BEFORE the command, so it cannot know whether `down`
+        will succeed, or whose workspace it names. `fr isolation down` clears
+        the sentinels of the workspace it actually tore down (review H2)."""
         repo = tmp_path / "repo"
         repo.mkdir()
         sentinels = tmp_path / "sentinels"
         sentinel = write_sentinel(sentinels, repo)
         result = run_hook(payload("fr isolation down --branch feat/x", repo), sentinels)
         assert decision(result) is None
-        assert not sentinel.exists(), "down clears the sentinel"
+        assert sentinel.exists()
 
     def test_deny_message_names_full_breadth(self, tmp_path: Path) -> None:
         # #341 Task 2B: the gate blocks ALL base-repo commands, not just git/gh.
@@ -516,7 +519,7 @@ class TestRunStartEntersIsolation:
         assert decision(run_hook(payload(cmd, repo), sentinels)) is None
 
     def test_starting_a_run_does_not_end_the_pipeline(self, tmp_path: Path) -> None:
-        """`fr isolation down` retires the sentinel; entering must not."""
+        """Entering a pipeline must not end one."""
         repo, sentinels = self._sent(tmp_path)
         run_hook(payload("fr run start fr-goal --branch feat/x", repo), sentinels)
         assert (sentinels / "sess-1.json").is_file()
@@ -1122,49 +1125,36 @@ class TestEnvPrefixedFrCommandsCompose:
         assert decision(result) == "deny"
 
 
-class TestSentinelRetirementMustBeAimedAtThisRepo:
-    """rev2-f2: retiring the sentinel ends the live pipeline. It must be
-    POSITIVELY aimed at this repo, not merely 'not obviously aimed elsewhere'."""
+class TestTheHookNeverRetiresOnDown:
+    """rev2-f2 made hook-side retirement 'positively aimed at this repo'. The
+    adversarial review (H2) found the deeper problem: the hook runs BEFORE the
+    command, so it retired the sentinel for a `down` that then REFUSED (open PR,
+    dirty worktree — #467), for `down --branch <another session's>`, and for
+    `down --help` — each one a live pipeline silently disarmed. `fr isolation
+    down` now retires exactly the sentinels of the workspace it tore down, after
+    it succeeds (`clear_workspace_sentinels`), from whatever cwd it runs in —
+    so the hook has nothing left to do, and every shape below keeps the
+    sentinel. The rev2-f2 negatives are kept: they are the same guarantee."""
 
-    def test_plain_down_retires(self, tmp_path: Path) -> None:
-        """Positive control — the behaviour everything else must not break."""
-        repo_a, _, sentinels, env = pipeline_world(tmp_path)
-        sentinel = sentinels / "sess-1.json"
-        assert sentinel.exists()
-        run_hook(payload("fr isolation down", repo_a), sentinels, env)
-        assert not sentinel.exists(), "a down aimed at this repo still ends the pipeline"
-
-    def test_repo_option_pointing_elsewhere_does_not_retire(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "fr isolation down",
+            "fr isolation down --help",
+            "fr isolation down --branch someone/elses",
+            "fr isolation down --all",
+            "uv run fr isolation down",
+            "fr isolation down --repo {repo_b}",
+            "cd $REPO_B && fr isolation down",
+            "cat >> README.md <<'EOF'\nfr isolation down\nEOF",
+            "cd {repo_b} && fr isolation down",
+        ],
+    )
+    def test_no_down_shape_retires_in_the_hook(self, tmp_path: Path, cmd: str) -> None:
         repo_a, repo_b, sentinels, env = pipeline_world(tmp_path)
         sentinel = sentinels / "sess-1.json"
-        run_hook(payload(f"fr isolation down --repo {repo_b}", repo_a), sentinels, env)
-        assert sentinel.exists(), (
-            "`--repo <other>` is fr's own way to aim `down` elsewhere; it must not "
-            "end THIS session's pipeline"
-        )
-
-    def test_unresolvable_cd_target_does_not_retire(self, tmp_path: Path) -> None:
-        """`cd $VAR && fr isolation down` — the hook performs no expansion, so
-        the target never resolves and the old suppression was skipped."""
-        repo_a, _, sentinels, env = pipeline_world(tmp_path)
-        sentinel = sentinels / "sess-1.json"
-        run_hook(payload("cd $REPO_B && fr isolation down", repo_a), sentinels, env)
         assert sentinel.exists()
-
-    def test_heredoc_merely_quoting_the_command_does_not_retire(self, tmp_path: Path) -> None:
-        """Documenting the escape hatch in a file must not disarm the guard."""
-        repo_a, _, sentinels, env = pipeline_world(tmp_path)
-        sentinel = sentinels / "sess-1.json"
-        run_hook(
-            payload("cat >> README.md <<'EOF'\nfr isolation down\nEOF", repo_a), sentinels, env
-        )
-        assert sentinel.exists()
-
-    def test_other_repo_down_still_does_not_retire(self, tmp_path: Path) -> None:
-        """Pre-existing guarantee from #421 — preserved."""
-        repo_a, repo_b, sentinels, env = pipeline_world(tmp_path)
-        sentinel = sentinels / "sess-1.json"
-        run_hook(payload(f"cd {repo_b} && fr isolation down", repo_a), sentinels, env)
+        run_hook(payload(cmd.format(repo_b=repo_b), repo_a), sentinels, env)
         assert sentinel.exists()
 
 
@@ -1231,3 +1221,49 @@ class TestRelativeCdResolvesAgainstTheSessionCwd:
         assert decision(res) == "deny"
         reason = json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
         assert "no longer exists" in reason and str(repo.resolve()) in reason
+
+
+class TestSentinelIsASetOfWorkspaces:
+    """Review C1: a session may bind more than one workspace of its repo. The
+    sentinel is orphaned only when NONE of them survives — one surviving
+    workspace means the pipeline is live."""
+
+    def _world(self, tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
+        home = tmp_path / "home"
+        repo = _git_repo(tmp_path / "repo")
+        live = home / ".cache" / "fr" / "worktrees" / "repo" / "live"
+        live.parent.mkdir(parents=True)
+        _git(repo, "worktree", "add", "-q", str(live), "-b", "live")
+        return repo, tmp_path / "sentinels", {"HOME": str(home)}, live
+
+    def test_one_live_among_gone_keeps_it_armed(self, tmp_path: Path) -> None:
+        repo, sentinels, env, _ = self._world(tmp_path)
+        sentinel = write_sentinel(
+            sentinels, repo, workspace=["worktrees/repo/gone", "worktrees/repo/live"]
+        )
+        assert decision(run_hook(payload("ls", repo), sentinels, env)) == "deny"
+        assert sentinel.exists()
+
+    def test_all_gone_is_orphaned(self, tmp_path: Path) -> None:
+        repo, sentinels, env, _ = self._world(tmp_path)
+        sentinel = write_sentinel(
+            sentinels, repo, workspace=["worktrees/repo/gone", "worktrees/repo/also-gone"]
+        )
+        assert decision(run_hook(payload("ls", repo), sentinels, env)) is None
+        assert not sentinel.exists()
+
+    def test_empty_list_is_fresh(self, tmp_path: Path) -> None:
+        repo, sentinels, env, _ = self._world(tmp_path)
+        sentinel = write_sentinel(sentinels, repo, workspace=[])
+        assert decision(run_hook(payload("ls", repo), sentinels, env)) == "deny"
+        assert sentinel.exists()
+
+    def test_sentinel_vanishing_mid_read_does_not_block(self, tmp_path: Path) -> None:
+        """Review L3: an unreadable sentinel (deleted between the -f test and
+        the read by another session's `down` or the GC) must not trip `set -e`
+        into a non-zero exit, which the harness treats as a block."""
+        repo, sentinels, env, _ = self._world(tmp_path)
+        sentinel = write_sentinel(sentinels, repo)
+        sentinel.write_text("{truncated")
+        res = run_hook(payload("ls", repo), sentinels, env)
+        assert res.returncode == 0

@@ -63,8 +63,8 @@ def test_stamps_relative_workspace_and_keeps_keys(env: Path) -> None:
     p = _sentinel(env)
     stamp_sentinel_workspace("sess", _wt(env))
     data = json.loads(p.read_text())
-    assert data["workspace"] == "worktrees/repo/feat__x"
-    assert str(env) not in data["workspace"] and not data["workspace"].startswith("/")
+    assert data["workspaces"] == ["worktrees/repo/feat__x"]
+    assert all(str(env) not in w and not w.startswith("/") for w in data["workspaces"])
     assert (
         data["repo_root"].endswith("/src/repo")
         and data["skill"] == "fr-goal"
@@ -86,11 +86,43 @@ def test_worktree_outside_cache_is_not_stamped(env: Path, tmp_path: Path) -> Non
     assert p.read_bytes() == before
 
 
-def test_restamp_on_different_workspace(env: Path) -> None:
+def test_binding_a_second_workspace_adds_it(env: Path) -> None:
+    """A session may bind several workspaces of one repo (`fr isolation exec
+    --branch <other>` rebinds). The stamp is a SET: replacing it let the other
+    workspace's teardown disarm this session's live pipeline (review C1)."""
     p = _sentinel(env)
     stamp_sentinel_workspace("sess", _wt(env))
     stamp_sentinel_workspace("sess", _wt(env, "worktrees/repo/other"))
-    assert json.loads(p.read_text())["workspace"] == "worktrees/repo/other"
+    stamp_sentinel_workspace("sess", _wt(env, "worktrees/repo/third"))
+    stamp_sentinel_workspace("sess", env / ".cache" / "fr" / "worktrees/repo/other")
+    assert json.loads(p.read_text())["workspaces"] == [
+        "worktrees/repo/feat__x",
+        "worktrees/repo/other",
+        "worktrees/repo/third",
+    ]
+
+
+def test_dead_entries_are_pruned_on_stamp(env: Path) -> None:
+    import shutil as _sh
+
+    p = _sentinel(env)
+    gone = _wt(env, "worktrees/repo/gone")
+    stamp_sentinel_workspace("sess", gone)
+    _sh.rmtree(gone)
+    stamp_sentinel_workspace("sess", _wt(env))
+    assert json.loads(p.read_text())["workspaces"] == ["worktrees/repo/feat__x"]
+
+
+def test_symlinked_worktrees_dir_still_stamps(env: Path, tmp_path: Path) -> None:
+    """`~/.cache/fr/worktrees` symlinked to another volume: fr stores the
+    unresolved path, and resolving it first left nothing relative (review L1)."""
+    real = tmp_path / "volume"
+    real.mkdir()
+    (env / ".cache" / "fr").mkdir(parents=True)
+    (env / ".cache" / "fr" / "worktrees").symlink_to(real)
+    p = _sentinel(env)
+    stamp_sentinel_workspace("sess", _wt(env))
+    assert json.loads(p.read_text())["workspaces"] == ["worktrees/repo/feat__x"]
 
 
 def test_malformed_sentinel_left_byte_identical(env: Path) -> None:
@@ -126,7 +158,7 @@ def test_attach_stamps_sentinel(env: Path) -> None:
     )
     p = _sentinel(env)
     sessions.attach(repo, "feat/x", "sess")
-    assert json.loads(p.read_text())["workspace"] == "worktrees/repo/feat__x"
+    assert json.loads(p.read_text())["workspaces"] == ["worktrees/repo/feat__x"]
 
 
 def test_a_foreign_repos_worktree_never_stamps(env: Path) -> None:
@@ -135,7 +167,7 @@ def test_a_foreign_repos_worktree_never_stamps(env: Path) -> None:
     p = _sentinel(env, repo="a")
     stamp_sentinel_workspace("sess", _wt(env, "worktrees/a/feat__a", repo="a"))
     stamp_sentinel_workspace("sess", _wt(env, "worktrees/b/feat__b", repo="b"))
-    assert json.loads(p.read_text())["workspace"] == "worktrees/a/feat__a"
+    assert json.loads(p.read_text())["workspaces"] == ["worktrees/a/feat__a"]
 
 
 def test_unreadable_repo_root_is_not_stamped(env: Path) -> None:
@@ -178,3 +210,18 @@ class TestClearWorkspaceSentinels:
         foreign = _sentinel(env, "foreign", repo="b")
         assert clear_workspace_sentinels(_repo(env), wt, ["foreign"]) == 0
         assert other.exists() and foreign.exists()
+
+    def test_session_with_another_live_workspace_keeps_its_sentinel(self, env: Path) -> None:
+        """Review C1: S bound its own W_S, then `exec --branch <other>` bound W_o
+        too. W_o's teardown names S (bound, stamped) — but S still has a live
+        workspace, so its pipeline is live: drop the entry, keep the sentinel."""
+        import shutil as _sh
+
+        mine = _wt(env)
+        theirs = _wt(env, "worktrees/repo/theirs")
+        p = _sentinel(env)
+        stamp_sentinel_workspace("sess", mine)
+        stamp_sentinel_workspace("sess", theirs)
+        _sh.rmtree(theirs)  # torn down
+        assert clear_workspace_sentinels(_repo(env), theirs, ["sess"]) == 0
+        assert json.loads(p.read_text())["workspaces"] == ["worktrees/repo/feat__x"]

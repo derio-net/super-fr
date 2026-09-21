@@ -49,7 +49,11 @@ dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
 sentinel="$dir/$session_id.json"
 [ -f "$sentinel" ] || exit 0   # no active pipeline for this session
 
-repo_root=$(jq -r '.repo_root // empty' "$sentinel")
+# `|| exit 0`: the sentinel can vanish between the test above and this read
+# (another session's `down`, the 48h GC) or be caught mid-write. Under `set -e`
+# jq's failure would exit non-zero, which the harness treats as a BLOCK — a
+# spurious deny for a pipeline that no longer exists (review L3).
+repo_root=$(jq -r '.repo_root // empty' "$sentinel" 2>/dev/null) || exit 0
 [ -n "$repo_root" ] || exit 0
 
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
@@ -224,23 +228,20 @@ fi
 #
 # NOTE: a different repo has NOT necessarily exited above — a non-workspace
 # repo deliberately falls through so `cd <repo-B> && fr isolation up` can
-# compose. `cd_other_repo` is set in that case, and the retirement test below
-# is what keeps another repo's `down` from ending THIS pipeline. Ordering does
-# not protect the sentinel; that test does. Do not delete it.
+# compose. That is safe for the sentinel because this hook no longer retires it
+# on ANY command it allows (see the `fr isolation` allowance below).
 rest=$(printf '%s' "$command" | head -n 1)
 if [ "${cd_strip:-0}" = 1 ]; then
   rest=$(printf '%s' "$rest" | sed -E 's/^[[:space:]]*cd[[:space:]]+("[^"]+"|'\''[^'\'']+'\''|[^[:space:];&|]+)[[:space:]]*(&&|;)[[:space:]]*//')
 fi
 
 # An `fr …` command is still an `fr …` command behind an env prefix or `uv run`
-# (rev2-f3). `FR_ISOLATION_TARGET=worktree fr isolation up` is THE docker-less
+# (rev2-f3; the strip lives in the lib so the session-bind hook uses the same one). `FR_ISOLATION_TARGET=worktree fr isolation up` is THE docker-less
 # form, and denying it left the deny message recommending a remedy that only
 # worked in repos which already had a devcontainer profile — the #421 defect
 # class one layer out. Stripping only feeds the matchers below: a non-`fr`
 # command behind the same prefix still fails them and is still denied.
-rest=$(printf '%s' "$rest" | sed -E \
-  -e 's/^[[:space:]]*(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)+//' \
-  -e 's/^[[:space:]]*uv[[:space:]]+run[[:space:]]+//')
+rest=$(fr_strip_command_prefix "$rest")   # lib: shared with fr-session-bind.sh
 
 # Bootstrap + read-only fr commands are allowed even from the base-repo cwd:
 # `fr init …` is the host-side scaffold the gate's own error chain points to —
@@ -268,50 +269,24 @@ if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+run[[:space:]]+sta
   exit 0
 fi
 
-# Retiring the sentinel ENDS the live pipeline, so it must be POSITIVELY aimed
-# at this repo; "not obviously aimed elsewhere" is not enough (rev2-f2). Shapes
-# that previously ended the pipeline from a command meant for somewhere else:
-#   * `fr isolation down --repo <other>` — fr's own way to aim `down` elsewhere.
-#     The Python mirror, clear_repo_sentinels(), is careful about exactly this
-#     ("foreign-repo sentinels are left alone"); this guard was not.
-#   * `cd $VAR && fr isolation down` — the hook performs no shell expansion, so
-#     the target never resolved and the cross-repo flag was never set, while the
-#     strip still fired and the match still succeeded.
-#   * any multi-line command, including a heredoc merely quoting the command in
-#     prose — now excluded upstream by the first-line rule.
-# Fails CLOSED: a sentinel that lingers is self-healed when its own stamped
-# workspace is gone (below), whereas a pipeline ended by mistake is not
-# recoverable.
-down_targets_this_repo() {
-  [ -z "${cd_other_repo:-}" ] || return 1
-  if [ -n "${cd_target:-}" ] && [ -z "${rtarget:-}" ]; then return 1; fi
-
-  _repo_opt=$(printf '%s' "$rest" |
-    sed -nE 's/.*--repo[=[:space:]][[:space:]]*("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:]]+)).*/\2\3\4/p')
-  [ -n "$_repo_opt" ] || return 0
-
-  case "$_repo_opt" in "~"*) _repo_opt="$HOME${_repo_opt#\~}" ;; esac
-  _rtop=$(cd "$_repo_opt" 2>/dev/null && pwd -P) || return 1
-  _rtop=$(git -C "$_rtop" rev-parse --show-toplevel 2>/dev/null) || return 1
-  _rtop=$(cd "$_rtop" 2>/dev/null && pwd -P) || return 1
-  [ "$_rtop" = "$rroot" ]
-}
-
+# The isolation lifecycle itself is the one allowed surface. This hook does
+# NOT retire the sentinel on `fr isolation down` — it used to, and that was
+# wrong in a way no amount of aiming could fix (adversarial review H2): the hook
+# runs BEFORE the command, so it ended the pipeline for a `down` that then
+# REFUSED (open PR, dirty worktree, unlanded content — #467), for `down --branch
+# <another session's>`, and for `down --help`. rev2-f2 had already closed the
+# cases aimed at another repo; these were aimed at this one and still wrong.
+# `fr isolation down` retires exactly the sentinels of the workspace it tore
+# down, AFTER it succeeds (`clear_workspace_sentinels`), from whatever cwd it
+# runs in — which removes the #399 reason this hook ever did it.
 if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation([[:space:]]|$)'; then
-  # The isolation lifecycle itself is the one allowed surface; `down` ends the
-  # pipeline, so retire the sentinel (best-effort) — but only when it is this
-  # repo's pipeline being ended.
-  if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+isolation[[:space:]]+down([[:space:]]|$)' &&
-     down_targets_this_repo; then
-    rm -f "$sentinel" || true
-  fi
   exit 0
 fi
 
-# Self-heal (#341 Task 2A, rebuilt for #472/#529): if this session's workspace
-# is gone, the `cd <worktree>` escape below is unsatisfiable and denying is pure
-# deadlock. The decision is PER SENTINEL and reads a RECORDED fact, never a
-# repo-wide count.
+# Self-heal (#341 Task 2A, rebuilt for #472/#529): if every workspace this
+# session bound is gone, the `cd <worktree>` escape below is unsatisfiable and
+# denying is pure deadlock. The decision is PER SENTINEL and reads a RECORDED
+# fact, never a repo-wide count.
 #
 # The count it replaces (`grep -c '^worktree '` == 1, i.e. "no linked worktree
 # survives") was a proxy for a per-session question, and it failed in BOTH
@@ -328,46 +303,52 @@ fi
 # "had one, lost it" is not inferable from `git worktree list`.
 #
 # So the sentinel records it. `fr.isolation.types.stamp_sentinel_workspace`
-# (called from `attach`, the one place a session is bound) writes `workspace`:
-# the worktree path RELATIVE to `${HOME}/.cache/fr`. Three states:
-#   fresh     — no `workspace` key. Armed, never healed. A legacy sentinel and
-#               an unstampable workspace (outside the cache dir) read as fresh:
+# (called from `attach`, the one place a session is bound) adds to `workspaces`
+# every workspace of THIS repo the session binds, each RELATIVE to
+# `${HOME}/.cache/fr`. It is a set because a session may bind more than one
+# (`fr isolation exec --branch <other>` rebinds); judging one replaced stamp let
+# the other workspace's reaping disarm this session's live pipeline (review C1).
+# Three states:
+#   fresh     — no entries. Armed, never healed. A legacy sentinel and an
+#               unstampable workspace (outside the cache dir) read as fresh:
 #               fail-closed, bounded by `fr isolation down` and the 48h GC.
-#   live      — the stamped directory exists AND is a listed linked worktree of
+#   live      — at least one entry exists AND is a listed linked worktree of
 #               this repo. Armed.
-#   orphaned  — stamped, and not that. Retire THIS sentinel only (another
-#               session's is not ours to remove) and allow.
+#   orphaned  — entries, and none of them is. Retire THIS sentinel only
+#               (another session's is not ours to remove) and allow.
 # Both sides of the path comparison are `pwd -P`'d: on macOS `$HOME` and
 # `$TMPDIR` are reached through symlinks, and an unresolved compare reads a
 # live workspace as orphaned — the #529 disarm by another route.
 # A FAILED `git worktree list` (non-git cwd) is unknown, not orphaned: it falls
-# through and denies, as it always has. Companion: clear_repo_sentinels() in
-# fr/isolation/types.py (the eager, explicit lever).
-sentinel_workspace=$(jq -r '.workspace // empty' "$sentinel" 2>/dev/null || true)
-if [ -n "$sentinel_workspace" ]; then
-  if rws=$(cd "$HOME/.cache/fr/$sentinel_workspace" 2>/dev/null && pwd -P); then
-    if wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
-      listed=0
-      while IFS= read -r line; do
-        case "$line" in
-          "worktree "*)
-            wpath=${line#worktree }
-            if rwt=$(cd "$wpath" 2>/dev/null && pwd -P) && [ "$rwt" = "$rws" ]; then
-              listed=1
-              break
-            fi
-            ;;
-        esac
-      done <<< "$wt"   # herestring, not a heredoc: a path with a `$` in it is
-                       # data here, never re-expanded — and the loop must stay
-                       # in THIS shell, so a pipe is not an option ($listed).
-      if [ "$listed" -eq 0 ]; then   # stamped dir survives, but is no workspace
-        rm -f "$sentinel" || true
-        exit 0
-      fi
-    fi
-  else
-    rm -f "$sentinel" || true        # the stamped workspace is gone
+# through and denies, as it always has.
+workspaces=$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+                    | select(type == "string" and . != "")' "$sentinel" 2>/dev/null || true)
+if [ -n "$workspaces" ] && wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
+  listed=""
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*)
+        if rwt=$(cd "${line#worktree }" 2>/dev/null && pwd -P); then
+          listed="$listed$rwt
+"
+        fi
+        ;;
+    esac
+  done <<< "$wt"   # herestring, not a heredoc: a path with a `$` in it is data
+                   # here, never re-expanded — and the loop must stay in THIS
+                   # shell, so a pipe is not an option ($listed).
+  live=0
+  while IFS= read -r ws; do
+    rws=$(cd "$HOME/.cache/fr/$ws" 2>/dev/null && pwd -P) || continue   # gone
+    case "
+$listed" in
+      *"
+$rws
+"*) live=1; break ;;
+    esac
+  done <<< "$workspaces"
+  if [ "$live" -eq 0 ]; then
+    rm -f "$sentinel" || true
     exit 0
   fi
 fi

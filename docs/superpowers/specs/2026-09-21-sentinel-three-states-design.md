@@ -45,16 +45,22 @@ after gc reaps the workspace — fr-goal's post-merge close-out prescribes it fi
 ### 2.A The sentinel records its workspace
 
 The sentinel (`~/.cache/fr/sentinels/<session>.json`) gains an optional
-`workspace` field: the bound worktree path **relative to the fr cache dir**
-(`~/.cache/fr`), e.g. `worktrees/super-fr/fix__x`. Relative, never absolute, so the
+`workspaces` list: every workspace of this repo the session has bound, each **relative
+to the fr cache dir** (`~/.cache/fr`), e.g. `worktrees/super-fr/fix__x`. It is a
+**set**, not one stamp: a session may bind more than one workspace
+(`fr isolation exec --branch <other>` rebinds), and a single replaced stamp let the
+other workspace's teardown disarm this session's live pipeline (review C1). Relative, never absolute, so the
 stamp carries no home path (operator decision). The sentinel's `repo_root`, which the
 hook has always written absolute, is unchanged.
 
 - **Writer:** `fr.isolation.sessions.attach` — the single place a session is bound to a
   workspace (`fr isolation attach`, `up --session`, and the `fr-session-bind.sh` hook all
-  route through it). After binding it stamps `workspace` into that session's sentinel if
-  one exists. It rewrites atomically and preserves every other key. A re-`attach` to a
-  different workspace restamps (a session holds at most one binding).
+  route through it). After binding it adds the worktree to that session's sentinel if
+  one exists, pruning entries whose directory is gone. It rewrites atomically and
+  preserves every other key. The bind hook recognises env-prefixed and `uv run` forms
+  through the same strip the guard uses (one helper in the hook library): without it,
+  `FR_ISOLATION_TARGET=worktree fr isolation up`, the guard's own prescribed command,
+  never bound (review H1).
 - A worktree outside the cache dir (no relative form) is **not stamped**: the sentinel
   stays fresh, i.e. armed — the guard's fail-closed posture.
 - **Only a worktree of the sentinel's own repo stamps it** (git common dirs compared;
@@ -64,10 +70,12 @@ hook has always written absolute, is unchanged.
 - **The stamp survives a pipeline-skill reload.** `fr-pipeline-sentinel.sh` runs on every
   fr-goal / fr-brainstorming / fr-execute load, and fr-goal loads fr-brainstorming *after*
   `fr run start` has bound. The writer therefore carries an existing `workspace` forward
-  when the `repo_root` is unchanged **and** the stamped directory still exists. A dead
+  entries whose directory still exists, when the `repo_root` is unchanged. A dead
   stamp is the previous pipeline's and is dropped: carried forward, it would read as
-  orphaned and retire the new pipeline on its first command. The writer never *sets*
-  the field; only `attach` does. The write is tmp + `mv`.
+  orphaned and retire the new pipeline on its first command. A carried *live* entry
+  cannot disarm a new pipeline in the same session, because healing needs **every**
+  entry gone and the new workspace joins the set when it binds. The writer never *adds*
+  an entry; only `attach` does. The write is tmp + `mv`.
 - A new helper `stamp_sentinel_workspace(session_id, worktree)` in
   `fr/isolation/types.py`, beside `clear_repo_sentinels`, owns the format.
 
@@ -75,9 +83,9 @@ hook has always written absolute, is unchanged.
 
 The count-based heal is **deleted**. In its place, per-sentinel:
 
-1. no `workspace` key → **fresh**: never healed, whatever `git worktree list` says.
-2. `workspace` set: resolve `${HOME}/.cache/fr/<workspace>`; it is **live** iff the
-   directory exists **and** is a listed linked worktree of the repo; else **orphaned**.
+1. no entries → **fresh**: never healed, whatever `git worktree list` says.
+2. entries: **live** iff at least one resolves (`${HOME}/.cache/fr/<entry>`) to a
+   directory that is a listed linked worktree of the repo; else **orphaned**.
    Orphaned → `rm` only this session's sentinel, allow the command.
 3. A failed `git worktree list` (non-git cwd) → treated as live/unknown, deny
    (fail closed, as today).
@@ -115,8 +123,12 @@ A sentinel that is never stamped (no session id from the harness) stays armed un
 
 ### 2.C′ `fr isolation down` clears only its own workspace's sentinels
 
-`down` (single) retires the sentinels stamped with the torn-down worktree or belonging
-to sessions bound to it (`clear_workspace_sentinels`). The previous rule, "zero
+`down` (single) retires, after a **successful** teardown, the sentinels listing the
+torn-down worktree or belonging to sessions bound to it (`clear_workspace_sentinels`).
+A sentinel that still lists another live workspace only loses the entry. The guard no
+longer retires anything on `fr isolation down`: it runs *before* the command, so it
+ended pipelines for a `down` that then refused (open PR, dirty worktree), for
+`--branch <another session's>`, and for `--help` (review H2). The previous rule, "zero
 workspaces remain → clear every sentinel for the repo", is removed: it also retired
 another session's *fresh* sentinel — a pipeline whose workspace did not exist yet —
 which is #472's third mechanism. `down --all` keeps its repo-wide clear on purpose: it
@@ -125,12 +137,23 @@ is the explicit, now explicitly-warned, last resort.
 ### 2.D verify-merge after gc
 
 `fr isolation verify-merge --branch <b>`, when no workspace state exists for the branch,
-no longer errors: it fetches `origin/<default>`, resolves the branch ref (`origin/<b>` first,
-so a stale local branch cannot hide a post-merge push, then local), runs the same content check from the repo root, consults the PR state,
+no longer errors: it fetches `origin/<default>` and `origin/<b>` (a failed fetch of the
+branch is not a verdict — GitHub deletes merged branches), then requires the changes of
+EVERY surviving ref — `origin/<b>` and the local branch gc keeps — to be on the base (a
+post-merge push from another clone lives only on the first, an unpushed commit only on
+the second; review M1), runs the same content check from the repo root, consults the PR state,
 and prints that the workspace was already reaped. `verified` still requires all three
 signals. An unresolvable branch ref exits **2** (usage) with a message naming the ref,
 never 1: fr-goal reads 1 as "not verified, recover", and a typo disproves nothing.
 No `--branch` given and no workspace remains keeps the existing error.
+
+### 2.F Known limits, stated
+
+- The sentinel writer and `attach` both read-modify-rename the same file; a skill load
+  running concurrently with a bind could drop an entry (fresh, i.e. armed). Needs
+  parallel tool calls; not fixed.
+- The 48h GC keys on mtime and nothing refreshes a live sentinel, so a pipeline longer
+  than 48h is disarmed by the next skill load. Pre-existing, unchanged.
 
 ## 3. Non-goals
 

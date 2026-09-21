@@ -144,3 +144,98 @@ repo_root, written by the hook, has always been absolute; only the stamp is cach
 ### adv-7-resolved · finding [fixed] · resolves adv-7: Docstring claimed the username never lands in the sentinel file
 
 Docstring and test now scope the privacy claim to the stamped value.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-c1 created=2026-09-21T19:00:38 phase=1 state=open -->
+### rev2-c1 · finding [open] · Rebinding to another same-repo workspace replaced the stamp; that workspace's teardown then disarmed a live pipeline (phase 1)
+
+Independent review C1: fr isolation exec --branch <other> rebinds via the bind hook; attach restamped the sentinel to the other workspace; its teardown (clear_workspace_sentinels) or reaping (guard orphan heal) retired this session's sentinel while its own workspace was live (#529 class).
+
+<!-- fr:journal kind=finding scope=plan id=rev2-c1-resolved created=2026-09-21T19:00:38 state=fixed resolves=rev2-c1 -->
+### rev2-c1-resolved · finding [fixed] · resolves rev2-c1: Rebinding to another same-repo workspace replaced the stamp; that workspace's teardown then disarmed a live pipeline
+
+Sentinel records a SET (workspaces); orphaned only when none survives; clear_workspace_sentinels drops the entry and deletes only when no other live entry remains. Tests: test_looking_into_another_workspace_does_not_stake_the_pipeline_on_it, TestSentinelIsASetOfWorkspaces, test_session_with_another_live_workspace_keeps_its_sentinel.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-h1 created=2026-09-21T19:00:39 phase=1 state=open -->
+### rev2-h1 · finding [open] · The bind hook ignored env-prefixed and uv run forms, so the guard's own prescribed command never stamped (phase 1)
+
+Independent review H1: FR_ISOLATION_TARGET=worktree fr isolation up (in the guard's deny text) and uv run fr run start (AGENTS.md) never bound, leaving the sentinel fresh and #472 unfixed on docker-less hosts.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-h1-resolved created=2026-09-21T19:00:39 state=fixed resolves=rev2-h1 -->
+### rev2-h1-resolved · finding [fixed] · resolves rev2-h1: The bind hook ignored env-prefixed and uv run forms, so the guard's own prescribed command never stamped
+
+fr_strip_command_prefix moved into the hook lib and used by both the guard and fr-session-bind.sh. test_prefixed_commands_bind_and_stamp drives the real bind hook; verified red against the origin/main bind hook, green after.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-h2 created=2026-09-21T19:00:39 phase=2 state=open -->
+### rev2-h2 · finding [open] · The guard retired the sentinel on any base-clone fr isolation down, before the command ran (phase 2)
+
+Independent review H2 (pre-existing, but contradicting the scoped Python clear): down --help, down --branch <another session's>, and a down that then refused (open PR, dirty worktree) all disarmed a live pipeline.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-h2-resolved created=2026-09-21T19:00:40 state=fixed resolves=rev2-h2 -->
+### rev2-h2-resolved · finding [fixed] · resolves rev2-h2: The guard retired the sentinel on any base-clone fr isolation down, before the command ran
+
+The hook no longer retires on down; fr isolation down clears only its torn-down workspace's sentinels after success. TestTheHookNeverRetiresOnDown (9 shapes).
+
+<!-- fr:journal kind=finding scope=plan id=rev2-m1 created=2026-09-21T19:00:40 phase=3 state=open -->
+### rev2-m1 · finding [open] · verify-merge on a reaped workspace trusted an unfetched origin/<b> and ignored the local branch (phase 3)
+
+Independent review M1: a post-merge push from another clone never reached the local tracking ref, so the content check read verified; unpushed local commits were ignored.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-m1-resolved created=2026-09-21T19:00:41 state=fixed resolves=rev2-m1 -->
+### rev2-m1-resolved · finding [fixed] · resolves rev2-m1: verify-merge on a reaped workspace trusted an unfetched origin/<b> and ignored the local branch
+
+_branch_refs fetches <remote> <b> first (failure = deleted remotely, fall back) and every surviving ref (origin/<b>, local) must have its changes on the base. Three new tests incl. push from a second clone and a deleted remote branch.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-m3 created=2026-09-21T19:00:41 phase=2 state=open -->
+### rev2-m3 · finding [open] · Lifecycle tests stamped directly instead of driving the bind hook (phase 2)
+
+Independent review M3: H1 and C1 were invisible to the suite.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-m3-resolved created=2026-09-21T19:00:41 state=fixed resolves=rev2-m3 -->
+### rev2-m3-resolved · finding [fixed] · resolves rev2-m3: Lifecycle tests stamped directly instead of driving the bind hook
+
+test_sentinel_lifecycle.py drives fr-session-bind.sh -> fr isolation attach for run start, prefixed up, exec --branch <other> and the #421 cross-repo hop.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-l1 created=2026-09-21T19:00:42 phase=1 state=open -->
+### rev2-l1 · finding [open] · A symlinked ~/.cache/fr/worktrees made every workspace unstampable (phase 1)
+
+Independent review L1: resolve() left the path outside the resolved cache root.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-l1-resolved created=2026-09-21T19:00:42 state=fixed resolves=rev2-l1 -->
+### rev2-l1-resolved · finding [fixed] · resolves rev2-l1: A symlinked ~/.cache/fr/worktrees made every workspace unstampable
+
+_cache_relative tries the unresolved path first. test_symlinked_worktrees_dir_still_stamps.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-l3 created=2026-09-21T19:00:43 phase=2 state=open -->
+### rev2-l3 · finding [open] · An unreadable sentinel tripped set -e in the guard, a spurious block (phase 2)
+
+Independent review L3: jq failure on a sentinel deleted or mid-write between the -f test and the read.
+
+<!-- fr:journal kind=finding scope=plan id=rev2-l3-resolved created=2026-09-21T19:00:43 state=fixed resolves=rev2-l3 -->
+### rev2-l3-resolved · finding [fixed] · resolves rev2-l3: An unreadable sentinel tripped set -e in the guard, a spurious block
+
+Read guarded with || exit 0. test_sentinel_vanishing_mid_read_does_not_block.
+
+<!-- fr:journal kind=discovery scope=plan id=rev2-limits created=2026-09-21T19:00:43 -->
+### rev2-limits · discovery · Known limits kept, not fixed: writer/attach race (review L2) and the 48h mtime GC (L4)
+
+L2: fr-pipeline-sentinel.sh and attach both read-modify-rename the sentinel; a skill load concurrent with a bind can drop an entry (the sentinel is then fresh, i.e. armed, never disarmed). Needs parallel tool calls. L4: nothing refreshes a live sentinel, so a pipeline longer than 48h is disarmed by the next skill load (pre-existing design). Both stated in spec 2.F.
+
+<!-- fr:journal kind=discovery scope=plan id=rev2-m2 created=2026-09-21T19:00:44 -->
+### rev2-m2 · discovery · Review M2 (carry-forward stakes a new pipeline on an old workspace) is resolved by the set semantics
+
+With healing requiring EVERY entry gone and the new pipeline's workspace joining the set on bind, a carried live entry can only keep the guard armed longer. Pinned by test_a_second_pipeline_in_the_session_is_not_staked_on_the_first.
+
+<!-- fr:journal kind=review scope=plan id=rev2-p1 created=2026-09-21T19:00:44 phase=1 -->
+### rev2-p1 · review · Phase 1 re-review: independent adversarial pass (phase 1)
+
+An independent reviewer with a fresh context and no stake in the code reviewed the full branch and tried to break it. Its findings against this phase are journaled as rev2-* and fixed with tests. The first review of this phase ('no findings') missed them.
+
+<!-- fr:journal kind=review scope=plan id=rev2-p2 created=2026-09-21T19:00:45 phase=2 -->
+### rev2-p2 · review · Phase 2 re-review: independent adversarial pass (phase 2)
+
+An independent reviewer with a fresh context and no stake in the code reviewed the full branch and tried to break it. Its findings against this phase are journaled as rev2-* and fixed with tests. The first review of this phase ('no findings') missed them.
+
+<!-- fr:journal kind=review scope=plan id=rev2-p3 created=2026-09-21T19:00:45 phase=3 -->
+### rev2-p3 · review · Phase 3 re-review: independent adversarial pass (phase 3)
+
+An independent reviewer with a fresh context and no stake in the code reviewed the full branch and tried to break it. Its findings against this phase are journaled as rev2-* and fixed with tests. The first review of this phase ('no findings') missed them.

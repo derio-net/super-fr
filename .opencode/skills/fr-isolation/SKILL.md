@@ -114,7 +114,7 @@ Worktree + container PERSIST after PR creation (back-loaded manual phases push t
 
 - **Wedged container:** `fr isolation restart [--force]` bounces the devcontainer WITHOUT dropping the worktree/installs — prefer it to
   down+up.
-- **Orphaned pipeline sentinel** (base commands denied, no workspace to `cd` into): the guard heals **per sentinel** — a stamped workspace
-  that is gone retires THAT one and fails open (#472); unstamped (fresh/legacy) stays armed (#529). `down --all` is a repo-wide last resort.
+- **Orphaned pipeline sentinel** (base commands denied, no workspace to `cd` into): the guard heals **per sentinel** — once EVERY workspace
+  the session bound is gone it retires that one and fails open (#472); unbound (fresh/legacy) stays armed (#529). `down --all` is repo-wide.
 - `devcontainer up` failures surface verbatim — missing Docker, a broken profile, an absent secrets file are operator-environment issues:
   report and stop, never work around isolation (no silent degradation to a weaker mode).

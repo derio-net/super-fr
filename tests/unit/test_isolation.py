@@ -2511,6 +2511,73 @@ def test_verify_merge_reaped_prefers_origin_ref_over_a_stale_local_one(
     assert res["verified"] is False and "late.py" in res["missing"]
 
 
+def test_verify_merge_reaped_fetches_the_branch_before_trusting_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review M1: the post-merge push came from ANOTHER clone (a runner's own
+    checkout, another machine), so this repo's `origin/feature` is stale. It
+    must be fetched, or the content check compares stale content and reads
+    verified while the push is missing — the #320 orphan, undetected."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "branch", "-q", "-D", "feature")  # only the stale tracking ref remains
+    other = tmp_path / "other-clone"
+    subprocess.run(
+        ["git", "clone", "-q", "-b", "feature", str(tmp_path / "origin.git"), str(other)],
+        check=True,
+    )
+    _commit(other, "late.py", "late\n", "pushed after the merge, elsewhere")
+    _git(other, "push", "-q", "origin", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr_from", lambda cwd, b: {"state": "MERGED"})
+    res = target.verify_merge_reaped("feature", default_branch="main")
+    assert res["verified"] is False and "late.py" in res["missing"]
+
+
+def test_verify_merge_reaped_checks_unpushed_local_commits_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gc keeps the local branch. A commit on it that never reached origin is
+    work that is not on main either; preferring `origin/<b>` alone hid it."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "local_only.py", "x\n", "never pushed")
+    _git(repo, "checkout", "-q", "main")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr_from", lambda cwd, b: {"state": "MERGED"})
+    res = target.verify_merge_reaped("feature", default_branch="main")
+    assert res["verified"] is False and "local_only.py" in res["missing"]
+
+
+def test_verify_merge_reaped_survives_the_remote_branch_being_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GitHub deletes a merged branch by default here, so the fetch of it
+    FAILS. That is not a verdict: fall back to the refs we still have."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "push", "-q", "origin", "--delete", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr_from", lambda cwd, b: {"state": "MERGED"})
+    res = target.verify_merge_reaped("feature", default_branch="main")
+    assert res["verified"] is True
+
+
 def test_verify_merge_reaped_unresolvable_ref_raises_naming_ref(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     _with_origin(repo)

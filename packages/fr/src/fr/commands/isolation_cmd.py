@@ -587,8 +587,8 @@ def verify_merge(
     not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
     may have orphaned (a commit pushed after the PR merged). With an explicit
     --branch whose workspace gc already reaped, the same check runs from the
-    repo root (branch ref resolved origin first, then local); an unresolvable ref
-    exits 2.
+    repo root, against every ref of the branch that survives (`origin/<b>`
+    after a fresh fetch of it, and the local branch); an unresolvable ref exits 2.
     """
     root = _resolve_repo(repo)
     if branch is None:

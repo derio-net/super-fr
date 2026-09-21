@@ -14,8 +14,13 @@ could see the two defects that lived BETWEEN them (adversarial review of the
   guard then read as orphaned — silently disarming A's live pipeline (#529's
   failure mode by a different route).
 
-So these tests drive the actual sequence: writer hook → stamp → writer hook →
-reap → guard hook, with one HOME and one sentinel dir shared by all of them.
+So these tests drive the actual sequence: writer hook → bind hook (the real
+`fr-session-bind.sh`, which shells out to the real `fr isolation attach`) →
+writer hook → reap → guard hook, with one HOME and one sentinel dir shared by
+all of them. An independent review found the first version of this file still
+called the stamp function directly, and so could not see two more defects that
+lived in the bind path (review H1: prefixed commands never bound; C1: a
+same-repo rebind replaced the stamp).
 """
 
 from __future__ import annotations
@@ -24,10 +29,11 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
-from fr.isolation.types import stamp_sentinel_workspace
+from fr.isolation.types import IsolationState, save_state, stamp_sentinel_workspace
 
 pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
 
@@ -51,6 +57,10 @@ class World:
         self.home.mkdir()
         monkeypatch.setenv("HOME", str(self.home))
         monkeypatch.setenv("FR_SENTINEL_DIR", str(self.sentinels))
+        monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+        # The bind hook calls `fr` from PATH: put THIS checkout's fr first.
+        bindir = str(Path(sys.executable).parent)
+        monkeypatch.setenv("PATH", bindir + os.pathsep + os.environ.get("PATH", ""))
         self.env = {**os.environ}
         self.sentinel = self.sentinels / f"{SESSION}.json"
 
@@ -65,7 +75,32 @@ class World:
         wt = self.home / ".cache" / "fr" / "worktrees" / repo.name / branch.replace("/", "__")
         wt.parent.mkdir(parents=True, exist_ok=True)
         _git(repo, "worktree", "add", "-q", str(wt), "-b", branch)
+        save_state(  # what `fr isolation up` records; `attach` needs it
+            IsolationState(
+                repo_root=repo,
+                branch=branch,
+                worktree=wt,
+                profile="host",
+                created_at="2026-09-21T00:00:00+00:00",
+            )
+        )
         return wt
+
+    def bind(self, command: str, cwd: Path) -> None:
+        """Run the REAL PostToolUse session-bind hook for a Bash command."""
+        payload = {
+            "session_id": SESSION,
+            "cwd": str(cwd),
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }
+        subprocess.run(
+            ["bash", str(HOOKS / "fr-session-bind.sh")],
+            input=json.dumps(payload),
+            text=True,
+            env=self.env,
+            check=True,
+        )
 
     def load_skill(self, skill: str, repo: Path) -> None:
         payload = {
@@ -101,8 +136,8 @@ class World:
             return "allow"
         return str(json.loads(res.stdout)["hookSpecificOutput"]["permissionDecision"])
 
-    def workspace(self) -> str | None:
-        return json.loads(self.sentinel.read_text()).get("workspace")
+    def workspaces(self) -> list[str]:
+        return list(json.loads(self.sentinel.read_text()).get("workspaces", []))
 
 
 @pytest.fixture()
@@ -117,9 +152,10 @@ def test_fr_goal_flow_stamp_survives_the_brainstorming_reload(world: World) -> N
     repo = world.repo("proj")
     world.load_skill("super-fr:fr-goal", repo)
     wt = world.worktree(repo, "feat/x")
-    stamp_sentinel_workspace(SESSION, wt)
+    world.bind("fr run start fr-goal --branch feat/x --harness claude-code", repo)
+    assert world.workspaces() == ["worktrees/proj/feat__x"], "the real bind path stamps"
     world.load_skill("super-fr:fr-brainstorming", repo)
-    assert world.workspace() == "worktrees/proj/feat__x", "reload must keep a LIVE stamp"
+    assert world.workspaces() == ["worktrees/proj/feat__x"], "reload must keep a LIVE stamp"
 
     assert world.guard("ls", repo) == "deny", "live workspace: still armed"
 
@@ -141,11 +177,11 @@ def test_fresh_pipeline_is_not_disarmed_by_its_first_command(world: World) -> No
 def test_binding_another_repo_does_not_disarm_this_pipeline(world: World) -> None:
     repo_a, repo_b = world.repo("a"), world.repo("b")
     world.load_skill("super-fr:fr-goal", repo_a)
-    wt_a = world.worktree(repo_a, "feat/a")
-    stamp_sentinel_workspace(SESSION, wt_a)
-    wt_b = world.worktree(repo_b, "feat/b")
-    stamp_sentinel_workspace(SESSION, wt_b)  # what `cd <B> && fr isolation up` binds
-    assert world.workspace() == "worktrees/a/feat__a", "a foreign repo's worktree never stamps"
+    world.worktree(repo_a, "feat/a")
+    world.bind("fr run start fr-goal --branch feat/a", repo_a)
+    world.worktree(repo_b, "feat/b")
+    world.bind(f"cd {repo_b} && fr isolation up --branch feat/b", repo_a)  # #421's hop
+    assert world.workspaces() == ["worktrees/a/feat__a"], "a foreign repo's worktree never stamps"
     assert world.guard("ls", repo_a) == "deny"
     assert world.sentinel.exists()
 
@@ -162,7 +198,7 @@ def test_a_dead_stamp_does_not_carry_into_a_new_pipeline(world: World) -> None:
     _git(repo, "worktree", "remove", "--force", str(wt))
 
     world.load_skill("super-fr:fr-goal", repo)
-    assert world.workspace() is None
+    assert world.workspaces() == []
     assert world.guard("ls", repo) == "deny"
     assert world.sentinel.exists()
 
@@ -172,5 +208,65 @@ def test_a_pipeline_in_another_repo_starts_fresh(world: World) -> None:
     world.load_skill("super-fr:fr-goal", repo_a)
     stamp_sentinel_workspace(SESSION, world.worktree(repo_a, "feat/a"))
     world.load_skill("super-fr:fr-goal", repo_b)
-    assert world.workspace() is None
+    assert world.workspaces() == []
     assert Path(json.loads(world.sentinel.read_text())["repo_root"]).resolve() == repo_b.resolve()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "FR_ISOLATION_TARGET=worktree fr isolation up --branch feat/x",
+        "uv run fr run start fr-goal --branch feat/x",
+        "env FR_ISOLATION_TARGET=worktree uv run fr isolation up --branch feat/x",
+    ],
+)
+def test_prefixed_commands_bind_and_stamp(world: World, command: str) -> None:
+    """Review H1: the first is literally the command the guard's own deny
+    prescribes on a docker-less host; the second is AGENTS.md's form. Neither
+    bound, so the sentinel stayed fresh and a reaped workspace locked the
+    session out (#472) on exactly the hosts that use the prefix."""
+    repo = world.repo("proj")
+    world.load_skill("super-fr:fr-goal", repo)
+    wt = world.worktree(repo, "feat/x")
+    world.bind(command, repo)
+    assert world.workspaces() == ["worktrees/proj/feat__x"]
+    _git(repo, "worktree", "remove", "--force", str(wt))
+    assert world.guard("ls", repo) == "allow"
+
+
+def test_looking_into_another_workspace_does_not_stake_the_pipeline_on_it(world: World) -> None:
+    """Review C1: `fr isolation exec --branch <other>` rebinds the session. With
+    a single, replaced stamp, the other workspace's reaping read as this
+    session's orphaning and disarmed its live pipeline."""
+    repo = world.repo("proj")
+    world.load_skill("super-fr:fr-goal", repo)
+    mine = world.worktree(repo, "feat/mine")
+    world.bind("fr run start fr-goal --branch feat/mine", repo)
+    theirs = world.worktree(repo, "feat/theirs")
+    world.bind("fr isolation exec --branch feat/theirs -- git log -1", repo)
+    assert set(world.workspaces()) == {"worktrees/proj/feat__mine", "worktrees/proj/feat__theirs"}
+
+    _git(repo, "worktree", "remove", "--force", str(theirs))
+    assert world.guard("ls", repo) == "deny", "mine is still live"
+    assert world.sentinel.exists()
+
+    _git(repo, "worktree", "remove", "--force", str(mine))
+    assert world.guard("ls", repo) == "allow", "now nothing of this session survives"
+
+
+def test_a_second_pipeline_in_the_session_is_not_staked_on_the_first(world: World) -> None:
+    """Review M2: pipeline 1's workspace is still alive (PR open) when the same
+    session starts pipeline 2. The live entry is carried — and pipeline 2's own
+    workspace joins the set when it binds, so pipeline 1's reaping cannot
+    disarm pipeline 2."""
+    repo = world.repo("proj")
+    world.load_skill("super-fr:fr-goal", repo)
+    one = world.worktree(repo, "feat/one")
+    world.bind("fr run start fr-goal --branch feat/one", repo)
+
+    world.load_skill("super-fr:fr-goal", repo)
+    world.worktree(repo, "feat/two")
+    world.bind("fr run start fr-goal --branch feat/two", repo)
+    _git(repo, "worktree", "remove", "--force", str(one))
+    assert world.guard("ls", repo) == "deny"
+    assert world.sentinel.exists()
