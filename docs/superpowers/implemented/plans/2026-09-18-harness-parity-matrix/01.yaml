@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — fr.harness vocabulary, parity.yaml, `fr harness parity`
+    render
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - harness-parity-declared
+  skeleton: true
+tasks:
+- number: 1
+  title: RED — vocabulary, schema and the shipped data file
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_harness_matrix.py.
+      (a) `from fr.harness import HARNESSES, STATES` — HARNESSES is an
+      ordered tuple exactly ("claude-code","opencode","hermes","codex",
+      "copilot-cli"); STATES is a frozenset exactly {"enforced","partial",
+      "advisory","absent","unsupported"}. Assert membership AND exact
+      content — closed sets, same contract as fr.capabilities.CAPABILITIES,
+      so a typo is a validation error not a missing column.
+      (b) `fr.harness.load_matrix()` returns a Matrix parsed from the
+      SHIPPED parity.yaml with no argument, and every row covers every
+      harness in HARNESSES (no partial rows).
+      (c) a row declaring state "partial" or "advisory" without a
+      scope_note raises; one with a scope_note parses.
+      (d) an unknown state or unknown harness key raises.
+      Run pytest; confirm it fails (fr.harness does not exist).
+- number: 2
+  title: GREEN — the module, the model, the data
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/harness/__init__.py exporting
+      HARNESSES (tuple, ordered as above), STATES (frozenset of five),
+      load_matrix, and the model types. Create
+      packages/fr/src/fr/harness/model.py: pydantic models, frozen +
+      extra="forbid" (the closed-world house style — see fr/run/model.py):
+        HarnessState(state: Literal[...five...], scope_note: str|None=None)
+        Surface(id: str, kind: Literal["hook","interaction"],
+                script: str|None=None, summary: str,
+                harnesses: dict[str, HarnessState])
+        Matrix(schema: int = 1, surfaces: tuple[Surface, ...])
+      plus parse_matrix(text|mapping) -> Matrix raising HarnessError with
+      the offending surface id in the message. Validators: every harness
+      key present and drawn from HARNESSES; scope_note REQUIRED when state
+      is "partial" or "advisory"; `script` required iff kind == "hook".
+  - id: P1.T2.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/harness/parity.yaml with all
+      fourteen rows — the ten hook rows (one per shipped script in
+      plugins/super-fr/hooks/*.sh) and the four interaction rows
+      (operator-gate, phase-sequence, subagent-dispatch, status-line).
+      Fill states from spec §3.A/§3.E and from the ACTUAL registration
+      files, not from issue #436's table (which is stale — it lists
+      fr-acceptance-nag as absent on Hermes, but .hermes/config.snippet.yaml
+      registers it on pre_llm_call; declare it `enforced` there). Every
+      codex/copilot-cli cell is `unsupported`. Every `partial`/`advisory`
+      cell carries a scope_note. It lives inside src/fr/ so hatchling's
+      packages=["src/fr"] ships it with no manifest work — the same trick
+      fr/workflows/fr-goal.yaml uses.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: implement load_matrix() reading the packaged parity.yaml via
+      importlib.resources (NOT a repo-relative path — it must resolve from
+      an installed wheel on a pod). Run the Task 1 tests; confirm green.
+- number: 3
+  title: RED/GREEN — `fr harness parity` renders, and the runtime is smoked
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add to tests/unit/test_harness_matrix.py a CliRunner test
+      (match the idiom in tests/unit/test_run_cmd.py or
+      test_workflow_cmd.py): `fr harness parity` exits 0 and its stdout
+      names every harness and at least one known surface id;
+      `--format json` emits parseable JSON whose keys round-trip through
+      parse_matrix; `--harness opencode` prints one column INCLUDING its
+      scope_notes (the whole point of the flag). Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/commands/harness_cmd.py — a typer
+      sub-app `harness` with one command `parity` taking --format
+      (table|json) and --harness. Register it in fr/cli.py next to the
+      other sub-apps. Render with rich (house style). Do NOT add --check
+      yet; that is phase 2. Run the tests; confirm green.
+  - id: P1.T3.S3
+    text: |-
+      SKELETON SMOKE — the point of this phase. Run, from OUTSIDE the
+      repo so no repo-relative path can accidentally satisfy it:
+        cd /tmp && uv run --project <worktree>/packages/fr fr harness parity
+      Confirm the shipped YAML resolves from the package, not the checkout.
+      Then run the full gate once: `uv run ruff format packages/ tests/`,
+      `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src`,
+      `uv run pytest -q --no-cov`. All green before phase 2 starts.
+- number: 4
+  title: REFACTOR + quality gate
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      REFACTOR: fold any duplication between the validators in model.py
+      into one helper; make every HarnessError message name the surface id
+      and the harness key. Re-run ruff + mypy + pytest. Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T13:05:59+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T13:05:59+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-18T13:05:59+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-18T13:06:00+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-18T13:06:00+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-18T13:06:00+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-18T13:06:01+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-18T13:09:47+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T13:14:13+00:00'
+    note: null
+    observed_prs: []

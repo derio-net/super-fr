@@ -1,0 +1,114 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Cost per attempt — by agent id, never borrowed across sessions
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - run-unit-cost-per-attempt
+  - run-abandoned-attempt-is-measured
+  - run-cost-attributed-by-agent-id
+  - run-cost-never-misattributed-across-sessions
+  - run-status-cost-under-holder
+  - run-pickup-on-another-host
+  tier: standard
+tasks:
+- number: 1
+  title: Estimate at open, measurement at close — per attempt
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: the u2 regression, end to end: `advance` -> `claim --abandoned` -> `advance` ->
+      `resolve` leaves TWO attempts, each with its own `estimate`; totals include both.
+      `claim --abandoned` attempts a measurement for the attempt it closes.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: `advance` writes `estimate` on the attempt it opens; `resolve` and
+      `claim --abandoned` write `measured` on the attempt they close, over the window
+      `[attempt.dispatched, attempt.returned]`.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: `_with_measurement`'s docstring asserted "serial dispatch makes that
+      window hold exactly one dispatch". Rewrite it to say what is now true (spec §4.D).
+- number: 2
+  title: Select the transcript by (session, agent); restrict the window
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED, in tests/unit/test_run_telemetry*.py using the captured transcript fixture:
+      a CLAIMED attempt is measured by its agent id even when two dispatches overlap in
+      time; an attempt whose recorded `session` is not the current one and whose session
+      directory is absent yields `not observable` — never zero; the time-window fallback
+      is used ONLY when `attempt.session` equals the current session, so a window that
+      contains exactly one UNRELATED subagent of another session's attempt is refused.
+      Declare the harness in every test (`FR_HARNESS`) — never read it from the machine.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: `advance` records `session` on the attempt (derived from fr's own
+      environment, like `harness`). fr/run/telemetry.py gains a lookup by
+      (session, agent) in the RECORDED session's directory. No hostname is recorded.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: one function decides "which transcript belongs to this attempt"; the
+      window path and the id path must not each re-implement the session check.
+- number: 3
+  title: Status and the refusal say what fr can and cannot see
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: `fr run status` renders each attempt's cost BENEATH its holder line, estimate
+      and measurement labelled as different quantities (gh#514's wording kept); an
+      unobservable cost prints `not observable from here`. The refusal for a holder
+      dispatched from another session says so, and names `claim --abandoned`.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: move gh#514's `_print_accounting` rendering under the unit's attempts;
+      extend `_already_running_refusal` with the other-session sentence.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR: status has four renderers now; each stays a small function and the
+      command body reads as a list of sections. ruff, mypy, run-cli + telemetry tests.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T22:15:59+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T22:16:00+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T22:15:54+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T22:23:36+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T22:23:36+00:00'
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T22:23:37+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T22:27:48+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T22:27:49+00:00'
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T22:34:13+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T22:42:59+00:00'
+    note: null
+    observed_prs: []

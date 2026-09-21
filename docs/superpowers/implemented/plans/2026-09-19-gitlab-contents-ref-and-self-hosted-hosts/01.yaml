@@ -1,0 +1,182 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Request-asserting test harness, and `ref` on `file_exists`
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - gitlab-contents-reads-live
+  skeleton: true
+tasks:
+- number: 1
+  title: 'RED → GREEN: file_exists pins ref=HEAD, asserted on the request'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED. In `tests/unit/test_real_glabclient.py`, add a capturing double
+      above `class TestContentsApi` and one failing test that uses it:
+
+      ```python
+      class _CapturingGlab:
+          """Records the args every `_run_glab` call receives.
+
+          Every contents test in this file mocks `_run_glab` as
+          `lambda args: <json>`, which DISCARDS `args` — which is exactly
+          why gh-486 (a missing, mandatory query parameter) was invisible
+          to a green suite. A test that cannot see the request cannot
+          test the request. Accepts **kwargs so it survives Phase 4
+          adding `host=`.
+          """
+
+          def __init__(self, result: str = "{}") -> None:
+              self.calls: list[list[str]] = []
+              self.result = result
+
+          def __call__(self, args: list[str], **kwargs: object) -> str:
+              self.calls.append(list(args))
+              return self.result
+
+          @property
+          def endpoint(self) -> str:
+              return self.calls[-1][-1]
+
+
+      def test_file_exists_pins_ref_on_the_contents_endpoint(monkeypatch):
+          """GitLab's files endpoint REQUIRES `ref`; without it the real
+          API answers 400 `{"error":"ref is missing, ref is empty"}` and
+          `file_exists` reported that as "absent" (gh-486)."""
+          cap = _CapturingGlab(json.dumps({"content": "eA=="}))
+          monkeypatch.setattr(_glab, "_run_glab", cap)
+          assert RealGlabClient().file_exists("group/proj", "docs/x.md") is True
+          assert cap.endpoint == (
+              "projects/group%2Fproj/repository/files/docs%2Fx.md?ref=HEAD"
+          )
+      ```
+
+      Run it and CONFIRM IT FAILS on the missing `?ref=HEAD`:
+      `uv run pytest tests/unit/test_real_glabclient.py::test_file_exists_pins_ref_on_the_contents_endpoint -q --no-cov`
+      Expected: `AssertionError` comparing the endpoint without the query
+      string. A test that passes here is not testing this bug.
+  - id: P1.T1.S2
+    text: |-
+      GREEN. In `packages/fr/src/fr/real_glabclient.py`, add the module
+      constant below `_MR_URL_RE` and use it in `file_exists`:
+
+      ```python
+      # GitLab's contents endpoint REQUIRES `ref`; GitHub's equivalent does
+      # not, which is why this adapter was written without one (gh-486).
+      # HEAD is the server's own default branch, so one call works on a
+      # `master` instance and a `main` one alike — live-proven 2026-09-19
+      # against a master-default self-hosted instance (spec §2.A).
+      _CONTENTS_REF = "HEAD"
+      ```
+
+      In `file_exists`, the endpoint becomes
+      `f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"`.
+      Re-run the test: it passes. Then run the whole file and confirm the
+      two pre-existing `file_exists` tests still pass (they mock with
+      `lambda args:` and assert only the return value, so they must):
+      `uv run pytest tests/unit/test_real_glabclient.py -q --no-cov`
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR. Fold the two pre-existing arg-blind `file_exists` tests
+      (`test_file_exists_true_on_success`, `test_file_exists_false_on_error`)
+      onto `_CapturingGlab` so no contents test in the file is blind to the
+      request any more — the class of blindness, not just this instance, is
+      what let the bug ship. Keep their assertions; add the endpoint
+      assertion. Then:
+      `uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/`
+      and re-run the file. No behaviour change in this step.
+- number: 2
+  title: 'Skeleton gate: real captured fixtures and a green delivery path'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Add the live-captured glab error strings as a module-level fixture
+      block in `tests/unit/test_real_glabclient.py`, verbatim from the
+      spec §2.A transcript — CAPTURED, never composed (this is the
+      skeleton's external-fixture requirement, and Phase 3's
+      `is_not_found` patterns are pinned against exactly these):
+
+      ```python
+      # Captured live from glab 1.89.0 against a self-hosted GitLab,
+      # 2026-09-19 (spec §2.A). glab writes the API's error body to BOTH
+      # stdout and stderr, so `GlabError.stderr` carries the JSON too —
+      # which is what keeps a propagated error diagnosable.
+      GLAB_STDERR_400_MISSING_REF = (
+          'glab: HTTP 400\n{"error":"ref is missing, ref is empty"}'
+      )
+      GLAB_STDERR_404_FILE = (
+          'glab: 404 File Not Found (HTTP 404)\n{"message":"404 File Not Found"}'
+      )
+      GLAB_STDERR_404_PROJECT = (
+          'glab: 404 Project Not Found (HTTP 404)\n'
+          '{"message":"404 Project Not Found"}'
+      )
+      GLAB_STDERR_404_TREE = (
+          'glab: 404 invalid revision or path Not Found (HTTP 404)\n'
+          '{"message":"404 invalid revision or path Not Found"}'
+      )
+      GLAB_STDERR_UNAUTHENTICATED = "ERROR\n\n  Unauthenticated."
+      ```
+  - id: P1.T2.S2
+    text: |-
+      Prove the delivery path end to end before the expensive phases run —
+      the walking-skeleton gate. Run, and record the actual counts in the
+      step note:
+
+      ```bash
+      uv run ruff format packages/ tests/
+      uv run ruff check packages/ tests/
+      uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+      uv run pytest -q --no-cov
+      ```
+
+      All four must be clean except the KNOWN, INTENDED failure:
+      `fr acceptance check` exits 2 on `multibackend-gitlab-tracking`
+      being `failing` (spec §3 d4). Confirm that is the only red, and that
+      it is red for that reason — if anything else fails, stop and fix it
+      here rather than carrying it into Phase 2.
+      Tick with `fr plan edit --tick P1.T2.S2 --note "<counts>"`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-19T17:01:28+00:00'
+      note: 'Added _CapturingGlab double + test_file_exists_pins_ref_on_the_contents_endpoint;
+        confirmed RED: AssertionError, endpoint missing ?ref=HEAD'
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-19T17:02:08+00:00'
+      note: Added _CONTENTS_REF='HEAD' constant, appended ?ref=HEAD to file_exists's
+        endpoint. Targeted test passes; full file 36/36 passed.
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-19T17:02:39+00:00'
+      note: Folded test_file_exists_true_on_success and test_file_exists_false_on_error
+        onto _CapturingGlab, added endpoint assertions to each. ruff format/check
+        clean. Full file 36/36 passed. No behaviour change.
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-19T17:09:38+00:00'
+      note: Added GLAB_STDERR_400_MISSING_REF / 404_FILE / 404_PROJECT / 404_TREE
+        / UNAUTHENTICATED module-level fixtures verbatim from spec §2.A. ruff format/check
+        clean; test_real_glabclient.py still 36/36.
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-19T17:09:55+00:00'
+      note: 'Gate: ruff format 0 reformatted/354 clean, ruff check all passed, mypy
+        success 137 files, pytest -q --no-cov: 3 failed/3125 passed/80 skipped — the
+        3 failures are pre-existing+unrelated (test_run_workspace.py x2, test_workflow_check.py
+        x1), confirmed via git-stash bisection against pre-phase-1 state and journaled
+        as finding ca6cb2838610. fr acceptance check: exit 2, ONLY multibackend-gitlab-tracking
+        failing, as expected/intended (d4).'
+  completion:
+    at: '2026-09-19T17:10:08+00:00'
+    note: 'Phase 1 complete: file_exists pins ref=HEAD via new _CONTENTS_REF constant,
+      request-asserting _CapturingGlab double added and applied to all file_exists
+      tests, live-captured GLAB_STDERR_* fixtures added for phase 3. Full gate clean
+      except the intended acceptance failure.'
+    observed_prs: []

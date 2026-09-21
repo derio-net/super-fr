@@ -1,0 +1,121 @@
+schema_version: 3
+run: 2026-09-20-fix-434-phases-file-tier
+workflow: fr-goal@1
+branch: fix/434-phases-file-tier
+started: '2026-09-20T10:54:41+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-20T11:30:04+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-20-phases-file-tier-reaches-dispatch-design.md
+  spec-review:
+    state: done
+    at: '2026-09-20T11:31:19+00:00'
+  plan:
+    state: done
+    at: '2026-09-20T11:37:03+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-20-phases-file-tier-reaches-dispatch
+  plan-review:
+    state: done
+    at: '2026-09-20T11:37:04+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
+  implement:
+    state: done
+    at: '2026-09-20T13:01:56+00:00'
+    items:
+      phase/1/implement-phase: done
+      phase/1/review-phase: done
+      phase/2/implement-phase: done
+      phase/2/review-phase: done
+      phase/3/implement-phase: done
+      phase/3/review-phase: done
+      phase/4/implement-phase: done
+      phase/4/review-phase: done
+      phase/5/implement-phase: done
+      phase/5/review-phase: done
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: done
+    at: '2026-09-20T13:03:32+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/506
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-20T11:37:08+00:00'
+    journal_entries: 3
+    journal_lines: 16
+    handoff_chars: 2299
+    spec_bytes: 14596
+    plan_bytes: 27554
+  phase/1/review-phase:
+    at: '2026-09-20T11:52:01+00:00'
+    journal_entries: 6
+    journal_lines: 31
+    handoff_chars: 5171
+    spec_bytes: 14596
+    plan_bytes: 32113
+  phase/2/implement-phase:
+    at: '2026-09-20T11:52:07+00:00'
+    journal_entries: 6
+    journal_lines: 31
+    handoff_chars: 5171
+    spec_bytes: 14596
+    plan_bytes: 32113
+  phase/2/review-phase:
+    at: '2026-09-20T12:14:38+00:00'
+    journal_entries: 11
+    journal_lines: 56
+    handoff_chars: 10106
+    spec_bytes: 14596
+    plan_bytes: 35946
+  phase/3/implement-phase:
+    at: '2026-09-20T12:26:00+00:00'
+    journal_entries: 12
+    journal_lines: 61
+    handoff_chars: 6832
+    spec_bytes: 14596
+    plan_bytes: 37677
+  phase/3/review-phase:
+    at: '2026-09-20T12:28:14+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 8953
+    spec_bytes: 14596
+    plan_bytes: 39088
+  phase/4/implement-phase:
+    at: '2026-09-20T12:28:15+00:00'
+    journal_entries: 14
+    journal_lines: 71
+    handoff_chars: 8953
+    spec_bytes: 14596
+    plan_bytes: 39088
+  phase/4/review-phase:
+    at: '2026-09-20T12:39:21+00:00'
+    journal_entries: 17
+    journal_lines: 86
+    handoff_chars: 12820
+    spec_bytes: 14596
+    plan_bytes: 41971
+  phase/5/implement-phase:
+    at: '2026-09-20T12:39:22+00:00'
+    journal_entries: 17
+    journal_lines: 86
+    handoff_chars: 12721
+    spec_bytes: 14596
+    plan_bytes: 41971
+  phase/5/review-phase:
+    at: '2026-09-20T13:01:56+00:00'
+    journal_entries: 20
+    journal_lines: 101
+    handoff_chars: 14432
+    spec_bytes: 14596
+    plan_bytes: 46064

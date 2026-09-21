@@ -2,10 +2,18 @@
 
 Spec §B.2: the runtime fallback persists the operator's tier→model choice to
 ~/.config/fr/models.yaml so it is chosen once per harness, not once per run.
+
+Spec 2026-09-20-opencode-tier-binding-reaches-dispatch §3.A adds a second
+job to ``set``: a binding must take effect in the run that made it, not just
+get written to config. ``TestModelsSetClosesTheLoop`` below pins that —
+fixtures are seeded from the repo's OWN committed ``.opencode/agent/*.md``
+mirror (never written inline here), same discipline as
+``test_opencode_agents_materialize.py``.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -13,6 +21,9 @@ from fr.cli import app
 from typer.testing import CliRunner
 
 runner = CliRunner()
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MIRROR_DIR = REPO_ROOT / ".opencode" / "agent"
 
 
 @pytest.fixture(autouse=True)
@@ -78,3 +89,110 @@ class TestModelsCmd:
         )
         assert res.exit_code == 0
         assert res.output.strip() == ""
+
+
+def _seed_opencode_agents(config_home: Path) -> Path:
+    agent_dir = config_home / "opencode" / "agent"
+    agent_dir.mkdir(parents=True)
+    for agent_file in MIRROR_DIR.glob("*.md"):
+        shutil.copy(agent_file, agent_dir / agent_file.name)
+    return agent_dir
+
+
+class TestModelsSetClosesTheLoop:
+    """The exact gap #498 reports, at the exact point the operator's answer
+    is made: `fr models set --harness opencode ...` must rewrite the
+    INSTALLED agent file, not just persist config nothing else reads until
+    the next install."""
+
+    def test_set_opencode_binding_rewrites_the_installed_agent_file(self, tmp_path: Path) -> None:
+        agent_dir = _seed_opencode_agents(tmp_path / ".config")
+
+        res = runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "provider/B"],
+        )
+
+        assert res.exit_code == 0, res.output
+        content = (agent_dir / "fr-phase-executor-hard.md").read_text()
+        assert "model: provider/B" in content
+
+    def test_set_names_the_file_it_changed(self, tmp_path: Path) -> None:
+        agent_dir = _seed_opencode_agents(tmp_path / ".config")
+
+        res = runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "provider/B"],
+        )
+
+        assert str(agent_dir / "fr-phase-executor-hard.md") in res.output, (
+            "a silent side effect on a path outside the repo is worse than none — "
+            f"the command must name the file it changed, got: {res.output!r}"
+        )
+
+    def test_set_for_a_different_harness_touches_no_agent_file(self, tmp_path: Path) -> None:
+        agent_dir = _seed_opencode_agents(tmp_path / ".config")
+        before = {p.name: p.read_text() for p in agent_dir.glob("*.md")}
+
+        res = runner.invoke(
+            app,
+            [
+                "models",
+                "set",
+                "--harness",
+                "claude-code",
+                "--tier",
+                "hard",
+                "--model",
+                "claude-opus-4-8",
+            ],
+        )
+
+        assert res.exit_code == 0, res.output
+        after = {p.name: p.read_text() for p in agent_dir.glob("*.md")}
+        assert after == before, "a claude-code binding must not touch any OpenCode agent file"
+
+    def test_set_with_no_opencode_agent_dir_still_succeeds(self, tmp_path: Path) -> None:
+        """An operator who never opted into OpenCode delivery has no
+        <config_home>/opencode/agent/ at all; `fr models set` must not fail
+        for them, and must say plainly there was nothing to update."""
+        res = runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "provider/B"],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert "nothing to update" in res.output.lower()
+
+
+class TestModelsApply:
+    """`fr models apply --harness opencode` — the verb install.sh's delivery
+    step calls instead of reimplementing tier resolution + frontmatter
+    rewriting in bash (spec §3.A)."""
+
+    def test_apply_opencode_materializes_the_current_resolved_config(self, tmp_path: Path) -> None:
+        agent_dir = _seed_opencode_agents(tmp_path / ".config")
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "provider/A"],
+        )
+        # Simulate a rebind that only touched config (as if written by hand,
+        # or by a second process) — `apply` alone must still pick it up.
+        import yaml
+
+        cfg_path = tmp_path / ".config" / "fr" / "models.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text())
+        cfg["opencode"]["hard"] = "provider/B"
+        cfg_path.write_text(yaml.safe_dump(cfg))
+
+        res = runner.invoke(app, ["models", "apply", "--harness", "opencode"])
+
+        assert res.exit_code == 0, res.output
+        content = (agent_dir / "fr-phase-executor-hard.md").read_text()
+        assert "model: provider/B" in content
+        assert "model: provider/A" not in content
+
+    def test_apply_rejects_an_unknown_harness(self, tmp_path: Path) -> None:
+        res = runner.invoke(app, ["models", "apply", "--harness", "bogus-harness"])
+
+        assert res.exit_code != 0, "a typo'd --harness must be refused, not silently no-op"

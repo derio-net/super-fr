@@ -92,7 +92,15 @@ GOOD_JOURNAL = """# Journal
 Body.
 """
 
-GOOD_RUN = """run: 2019-03-04-feat-widget
+RUN_STAMP = f"schema_version: {ARTIFACT_KINDS['run'].current_version}\n"
+"""Built from the registry, never typed. The `run` kind moved past version 1
+when `StepRecord.answered_by` landed, and a fixture carrying a hand-written
+stamp has to be found and edited again on the next bump — while reading as
+"a well-formed run" until someone does."""
+
+GOOD_RUN = (
+    RUN_STAMP
+    + """run: 2019-03-04-feat-widget
 workflow: fr-goal@1
 branch: feat/widget
 started: '2019-03-04T00:00:00'
@@ -103,6 +111,7 @@ steps:
   implement:
     state: running
 """
+)
 
 GOOD_MATRIX = """org: derio-net
 repo: super-fr
@@ -268,19 +277,212 @@ def test_a_cross_reference_that_does_not_resolve_is_caught(tmp_path: Path) -> No
     assert "nonesuch" in "\n".join(str(i) for i in report.issues)
 
 
-def test_a_run_recording_per_phase_items_is_valid(tmp_path: Path) -> None:
-    """`StepRecord.items` is new in Phase 6 on a still-`extra=forbid` model —
-    the validator must accept it, or `fr run adopt`'s own output fails CI."""
+# The run cursor's per-unit map (spec `2026-09-20-unit-record-unification-design.md`
+# §4.A/§4.B). `advance`/`claim`/`resolve`/`adopt` build every key and every
+# record themselves, so a violation below only ever arrives by hand-edit or a
+# bad merge — exactly the threat model `.claude/rules/artifact-versioning.md`
+# names for a git-tracked, hand-editable artifact, which is why these are typed
+# YAML and not captures: they are files fr would never write.
+
+RUN_PATH = "docs/superpowers/runs/2019-03-04-feat-widget.yaml"
+
+
+def _run_with_units(units_yaml: str, *, step: str = "implement") -> str:
+    old = f"  {step}:\n    state: {'done' if step == 'brainstorm' else 'running'}\n"
+    assert old in GOOD_RUN
+    return GOOD_RUN.replace(old, old + "    units:\n" + units_yaml)
+
+
+def _problems(tmp_path: Path, units_yaml: str, *, step: str = "implement") -> str:
     seed_good_repo(tmp_path)
+    _w(tmp_path, RUN_PATH, _run_with_units(units_yaml, step=step))
+    report = validate_repo(tmp_path)
+    return "\n".join(str(i) for i in report.issues)
+
+
+def test_a_run_recording_grouped_units_is_valid(tmp_path: Path) -> None:
+    """The shape `fr run advance` writes: a grouped member carrying a state and
+    an open, claimed attempt — or the validator fails fr's own output in CI."""
+    assert (
+        _problems(
+            tmp_path,
+            "      phase/1/implement-phase:\n"
+            "        state: running\n"
+            "        attempts:\n"
+            "          - dispatched: '2019-03-04T00:00:00'\n"
+            "            agent_type: super-fr:fr-phase-executor\n",
+        )
+        == ""
+    )
+
+
+def test_a_done_unit_with_no_attempts_is_valid(tmp_path: Path) -> None:
+    """What `fr run adopt` writes for a phase it FOUND complete: fr never
+    dispatched it, and an empty history is the honest record of that."""
+    assert _problems(tmp_path, "      phase/1/implement-phase:\n        state: done\n") == ""
+
+
+def test_a_manual_marker_is_valid(tmp_path: Path) -> None:
+    assert _problems(tmp_path, "      phase/7:\n        state: manual\n") == ""
+
+
+def test_a_flat_fan_out_unit_with_a_state_and_no_attempts_is_valid(tmp_path: Path) -> None:
+    """`phase/<n>` is not ONLY gh#496's manual marker. A flat `for_each: phase`
+    step — one with no member steps — records its phases under the same key
+    with an ordinary state, and a real captured cursor carries exactly that
+    (`tests/fixtures/run_cursors/v1/2026-09-09-feat-issue-464.yaml`,
+    `phase/1: pending`). What the two have in common, and what is enforced, is
+    that fr never dispatches a `phase/<n>` unit: see the next test."""
+    assert _problems(tmp_path, "      phase/1:\n        state: pending\n") == ""
+
+
+def test_attempts_on_a_phase_level_unit_are_refused(tmp_path: Path) -> None:
+    """§4.B: `phase/<n>` never has attempts. fr dispatches MEMBERS of a phase
+    (`phase/<n>/<member>`), never the phase; an attempt here claims a dispatch
+    nothing in fr can perform."""
+    problems = _problems(
+        tmp_path,
+        "      phase/7:\n"
+        "        state: manual\n"
+        "        attempts:\n"
+        "          - dispatched: '2019-03-04T00:00:00'\n"
+        "            returned: '2019-03-04T01:00:00'\n"
+        "            outcome: done\n",
+    )
+    assert "phase/7" in problems and "attempts" in problems
+
+
+def test_a_state_on_a_flat_steps_unit_is_refused(tmp_path: Path) -> None:
+    """§4.B: `step/<step-id>` carries NO state — `StepRecord.state` is that
+    fact's one home, and a fact with two homes is what this shape exists to
+    stop. Two homes drift; then `status` and `advance` disagree."""
+    problems = _problems(
+        tmp_path,
+        "      step/brainstorm:\n"
+        "        state: done\n"
+        "        attempts:\n"
+        "          - dispatched: '2019-03-04T00:00:00'\n"
+        "            returned: '2019-03-04T01:00:00'\n"
+        "            outcome: done\n",
+        step="brainstorm",
+    )
+    assert "step/brainstorm" in problems and "state" in problems
+
+
+def test_a_flat_steps_unit_without_a_state_is_valid(tmp_path: Path) -> None:
+    assert (
+        _problems(
+            tmp_path,
+            "      step/brainstorm:\n"
+            "        attempts:\n"
+            "          - dispatched: '2019-03-04T00:00:00'\n"
+            "            returned: '2019-03-04T01:00:00'\n"
+            "            outcome: done\n",
+            step="brainstorm",
+        )
+        == ""
+    )
+
+
+def test_a_grouped_unit_with_no_state_is_refused(tmp_path: Path) -> None:
+    """The mirror image: a grouped member's state has NO other home, so a
+    member without one is a unit nobody can advance past."""
+    problems = _problems(
+        tmp_path,
+        "      phase/1/implement-phase:\n"
+        "        attempts:\n"
+        "          - dispatched: '2019-03-04T00:00:00'\n",
+    )
+    assert "phase/1/implement-phase" in problems and "state" in problems
+
+
+def test_a_unit_that_records_nothing_at_all_is_refused(tmp_path: Path) -> None:
+    """A `step/` unit with no attempts has no state either, so it says nothing."""
+    problems = _problems(tmp_path, "      step/brainstorm: {}\n", step="brainstorm")
+    assert "step/brainstorm" in problems
+
+
+def test_a_run_with_malformed_attempts_fails(tmp_path: Path) -> None:
+    """A bare mapping where a list of attempts belongs is a structural
+    problem, not a shape `RunState` accepts silently."""
+    problems = _problems(
+        tmp_path,
+        "      phase/1/implement-phase:\n"
+        "        state: running\n"
+        "        attempts:\n"
+        "          dispatched: '2019-03-04T00:00:00'\n",
+    )
+    assert "attempts" in problems
+
+
+def test_a_run_with_an_ungrammatical_unit_key_fails(tmp_path: Path) -> None:
+    """A unit key is `step/<id>`, `phase/<n>/<member>` or `phase/<n>` and
+    nothing else."""
+    problems = _problems(tmp_path, "      implement-phase:\n        state: running\n")
+    assert "implement-phase" in problems and "not a unit key" in problems
+
+
+def test_a_run_with_two_open_attempts_for_one_unit_fails(tmp_path: Path) -> None:
+    """At most one open attempt per unit — the invariant the whole
+    double-dispatch refusal rests on (spec §4.B/§4.C). Two open records mean
+    two writers for one worktree, which is the failure #499 describes."""
+    problems = _problems(
+        tmp_path,
+        "      phase/1/implement-phase:\n"
+        "        state: running\n"
+        "        attempts:\n"
+        "          - dispatched: '2019-03-04T00:00:00'\n"
+        "          - dispatched: '2019-03-04T01:00:00'\n",
+    )
+    assert "2 open attempts" in problems
+
+
+def test_a_run_whose_open_attempt_is_not_the_last_fails(tmp_path: Path) -> None:
+    """ "Open" is defined as the LAST element with no `returned`. An earlier
+    element left open means the list is not the ordered history it claims to
+    be, and every reader that takes `[-1]` would report the wrong holder."""
+    problems = _problems(
+        tmp_path,
+        "      phase/1/implement-phase:\n"
+        "        state: running\n"
+        "        attempts:\n"
+        "          - dispatched: '2019-03-04T00:00:00'\n"
+        "          - dispatched: '2019-03-04T01:00:00'\n"
+        "            returned: '2019-03-04T02:00:00'\n"
+        "            outcome: done\n",
+    )
+    assert "LAST" in problems
+
+
+@pytest.mark.parametrize("legacy", ["items", "dispatch"])
+def test_a_legacy_unit_map_on_a_current_cursor_fails_naming_it(tmp_path: Path, legacy: str) -> None:
+    """The live model is v5 ONLY. A v4 map under a current stamp is a file that
+    declares a shape it does not have — reported, never silently read."""
+    seed_good_repo(tmp_path)
+    body = (
+        "      phase/1/implement-phase: done\n"
+        if legacy == "items"
+        else ("      phase/1/implement-phase:\n        - dispatched: '2019-03-04T00:00:00'\n")
+    )
     _w(
         tmp_path,
-        "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
+        RUN_PATH,
         GOOD_RUN.replace(
             "  implement:\n    state: running\n",
-            "  implement:\n    state: running\n    items:\n      phase/1: done\n",
+            f"  implement:\n    state: running\n    {legacy}:\n{body}",
         ),
     )
-    assert validate_repo(tmp_path).ok
+    report = validate_repo(tmp_path)
+    assert not report.ok
+    assert legacy in "\n".join(str(i) for i in report.issues)
+
+
+def test_a_top_level_accounting_map_on_a_current_cursor_fails(tmp_path: Path) -> None:
+    seed_good_repo(tmp_path)
+    _w(tmp_path, RUN_PATH, GOOD_RUN + "accounting:\n  phase/1/implement-phase:\n    at: x\n")
+    report = validate_repo(tmp_path)
+    assert not report.ok
+    assert "accounting" in "\n".join(str(i) for i in report.issues)
 
 
 # --- 3. stamps: unknown fails, newer fails closed -------------------------
@@ -291,7 +493,7 @@ def test_an_unknown_stamp_version_fails(tmp_path: Path) -> None:
     _w(
         tmp_path,
         "docs/superpowers/runs/2019-03-04-feat-widget.yaml",
-        "schema_version: two\n" + GOOD_RUN,
+        GOOD_RUN.replace(RUN_STAMP, "schema_version: two\n"),
     )
     report = validate_repo(tmp_path)
     assert not report.ok

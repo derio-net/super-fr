@@ -1125,6 +1125,36 @@ def test_spec_fully_implemented_cross_repo_slug_row(tmp_path):
     assert implemented, note
 
 
+def test_spec_fully_implemented_degrades_on_a_propagating_glab_error(tmp_path):
+    """The archival probe wraps its `gh.file_exists` calls in `except
+    Exception: pass` — so a propagating (non-404) GlabError degrades the
+    row exactly like an unresolved lookup, not a crash. Pinned so a later
+    refactor can't quietly turn that raise into an uncaught exception
+    (phase 3, gh-486)."""
+    from fr import glab as _glab
+    from fr.migrate import _spec_fully_implemented
+
+    from tests.unit.fakes import FakeGhClient
+
+    spec = tmp_path / "docs" / "superpowers" / "specs" / "2026-05-10-fixture.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(
+        "# Fixture\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        "| Remote plan | `derio-net/other` | `2026-05-10-x` | — |\n"
+    )
+    gh = FakeGhClient()
+
+    def boom(repo: str, path: str) -> bool:
+        raise _glab.GlabError("glab: HTTP 400", stderr="glab: HTTP 400\n")
+
+    gh.file_exists = boom  # type: ignore[method-assign]
+    implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
+    assert implemented is False
+    assert note == "row 'Remote plan' unresolved locally (cross-repo?) — confirm and re-run"
+
+
 def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     """`fr migrate dirs --yes` normalizes refs after relocating the legacy
     tree — the repo converges in one operation."""

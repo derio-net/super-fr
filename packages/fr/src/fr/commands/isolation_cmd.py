@@ -403,7 +403,14 @@ def down(
     branch: str | None = typer.Option(
         None, help="Isolation branch to tear down (default: the single active workspace)."
     ),
-    force: bool = typer.Option(False, "--force", help="Tear down even with an open PR."),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Tear down even when a guard refuses (an open PR, or a reap "
+        "hazard — uncommitted changes, or content not on origin). Removes "
+        "the worktree and fr's record of it; the branch and any landed "
+        "commits stay in the repo, but uncommitted changes do not survive.",
+    ),
     all_: bool = typer.Option(
         False,
         "--all",
@@ -431,8 +438,10 @@ def down(
     `down` from inside a worktree tears down the workspace the operator actually
     has, never a phantom hardcoded default (#399). Mirrors exec/restart/status.
 
-    With --all, ignore --branch: tear down all workspaces (keeping any with an
-    OPEN PR unless --force) and clear this repo's pipeline sentinel(s).
+    With --all, ignore --branch: tear down all workspaces — keeping any that a
+    guard refuses (an open PR, or a reap hazard: uncommitted changes, or
+    content not yet on origin) unless --force — and clear this repo's
+    pipeline sentinel(s).
 
     Bound sessions (spec 2026-09-04 §5.A): every session attached to the
     workspace is unbound; those other than `--session` are named in a warning
@@ -458,8 +467,8 @@ def down(
     except IsolationError as err:
         _fail(err)
         return
-    # Only after a SUCCESSFUL teardown: a refused `down` (open PR) keeps the
-    # workspace, so it keeps its bindings too.
+    # Only after a SUCCESSFUL teardown: a refused `down` (open PR, or a reap
+    # hazard — #467 phase 3) keeps the workspace, so it keeps its bindings too.
     _sessions.detach_all(state)
     # #399: when this was the last workspace, clear the pipeline sentinel(s)
     # eagerly. The bash guard's own clear can't fire here — it exits early when
@@ -474,29 +483,43 @@ def down(
 def _down_all(root: Path, force: bool) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
 
-    A workspace whose PR is still OPEN is KEPT (never silently destroyed) unless
-    --force — that open-PR check is the only IsolationError `down` raises, so
-    "kept" always means an open PR. Sentinels are cleared regardless — `down
-    --all` is the deliberate "end this pipeline" lever, with the guard self-heal
-    as the lazy backstop.
+    A workspace `down` refuses is KEPT (never silently destroyed) unless
+    --force. An open PR is no longer the only reason `down` can refuse
+    (#467 phase 3, spec §3.7): the reap-hazard guard — a dirty worktree, or
+    content that never reached origin — refuses too, with its own message.
+    Each kept workspace's ACTUAL reason (the exception's own text) is
+    reported, not a hardcoded "open PR" clause that would misdescribe a
+    hazard refusal. Sentinels are cleared regardless — `down --all` is the
+    deliberate "end this pipeline" lever, with the guard self-heal as the
+    lazy backstop.
     """
     target = _target_or_exit(root)
     torn: list[str] = []
-    kept: list[str] = []
+    kept: list[tuple[str, str]] = []
     for state in list_states(root):
         try:
             target.down(state, force=force)
             torn.append(state.branch)
-        except IsolationError:
-            kept.append(state.branch)
+        except IsolationError as err:
+            kept.append((state.branch, str(err)))
             continue
         _sessions.detach_all(state)  # kept workspaces keep their bindings
     cleared = clear_repo_sentinels(root)
     summary = f"isolation down --all: {len(torn)} torn down"
     if kept:
-        summary += f", {len(kept)} kept (open PR — rerun with --force): {', '.join(kept)}"
+        summary += f", {len(kept)} kept (rerun with --force to override)"
     summary += f", {cleared} sentinel(s) cleared."
     typer.echo(summary)
+    # Each kept workspace's reason on its OWN lines, never inlined into the
+    # summary (phase-3 review f6). A hazard refusal is multi-line BY DESIGN —
+    # it names the offending paths and the way out — so "; "-joining reasons
+    # into the summary put a separator mid-sentence and buried the sentinel
+    # count at the tail of a paragraph. The message quality IS the product of
+    # this change; a garbled --all undoes it.
+    for branch, reason in kept:
+        typer.echo(f"  kept {branch}:")
+        for line in reason.splitlines():
+            typer.echo(f"    {line}")
 
 
 @isolation_app.command()

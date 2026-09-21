@@ -1,0 +1,147 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The derived check — observe the real registration files, compare, fail on
+    drift
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - harness-parity-derived-check
+tasks:
+- number: 1
+  title: RED — observation of all three harnesses
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: create tests/unit/test_harness_observe.py against
+      fr.harness.observe.observe(repo_root) -> dict[surface_id,
+      dict[harness, Literal["present","absent"]]].
+      (a) claude-code: a tmp_path hooks.json naming two scripts across two
+      events observes those two present, a third absent.
+      (b) hermes: a tmp_path .hermes/config.snippet.yaml — parse it via
+      fr.hermes.snippet_entries, NOT a second yaml walk, so the two cannot
+      disagree about what the snippet says. Assert a script named only
+      there is present.
+      (c) opencode: a tmp_path index.ts containing
+      `// super-fr-parity: fr-isolation-required.sh` observes that script
+      present; one with no marker observes absent. Assert a marker naming
+      a script that does NOT exist on disk is an ERROR, not a pass.
+      (d) observe() on the REAL repo root returns fr-acceptance-nag.sh
+      present for hermes — the live fact #436's table gets wrong, pinned.
+      Confirm red.
+- number: 2
+  title: GREEN — observe.py
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/harness/observe.py. claude-code
+      walks hooks.json's every event -> hooks[].command, taking the
+      basename after ${CLAUDE_PLUGIN_ROOT}/hooks/. hermes calls
+      fr.hermes.snippet_entries(source_root, hooks_install_dir) and takes
+      each command's basename. opencode greps
+      packages/fr-opencode-plugin/src/*.ts for the
+      `// super-fr-parity: <script>` marker — deliberately shallow: the
+      marker IS the declaration, because parsing TypeScript for behaviour
+      would be a parser we then have to maintain (spec §3.B). Raise when a
+      marker names a script absent from plugins/super-fr/hooks/. Run the
+      Task 1 tests; confirm green.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add the marker comments to
+      packages/fr-opencode-plugin/src/index.ts naming
+      fr-isolation-required.sh (the one hook it ports). Run
+      `cd packages/fr-opencode-plugin && bun test` — the CI job
+      opencode-plugin-test covers this package and `uv run pytest` does
+      NOT, so this command is run explicitly as its own step (AGENTS.md).
+- number: 3
+  title: RED/GREEN — check.py, both drift directions, and the row/script pairing
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: create tests/unit/test_harness_check.py against
+      fr.harness.check.check(matrix, observed) -> list[Finding].
+      (a) declared enforced + observed absent -> a finding (the overclaim,
+      the dangerous direction).
+      (b) declared absent + observed present -> a finding (the
+      understatement — the case that is live TODAY).
+      (c) declared partial + observed absent -> a finding: partial REQUIRES
+      the script be observed present.
+      (d) declared advisory + observed present -> a finding: prose cannot
+      be a registration.
+      (e) declared unsupported -> never a finding, on any observation.
+      (f) a matrix in agreement with its observation yields zero findings.
+      Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement check.py per those rules. Each Finding carries
+      surface_id, harness, declared, observed and a one-line message that
+      names the file the operator must edit. Confirm green.
+  - id: P2.T3.S3
+    text: |-
+      RED then GREEN: add tests/unit/test_tripwire_harness_parity.py —
+      THE structural tripwire (#436 acceptance criterion 2). Every
+      plugins/super-fr/hooks/*.sh has a `kind: hook` row whose `script`
+      names it, and every hook row's script exists on disk; the failure
+      message tells the author to add a row to parity.yaml. Also assert
+      check() over the REAL repo returns zero findings — so this repo's
+      own matrix cannot merge stale. Make it pass.
+- number: 4
+  title: '`fr harness parity --check` + REFACTOR'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED/GREEN: add --check to the parity command. It needs the
+      registration files, so outside a super-fr checkout it prints that it
+      cannot check and exits 0 — never inventing a verdict. That is the
+      `fr acceptance check` precedent, verified in spec review: run
+      outside a repo it prints "no docs/acceptance/matrix.yaml ..." and
+      exits 0. Inside, it prints each finding and exits 1 when any exist.
+      CliRunner tests for: clean repo -> exit 0; a monkeypatched drifted
+      matrix -> exit 1 naming the surface; outside a checkout -> exit 0
+      with the declining message.
+  - id: P2.T4.S2
+    text: |-
+      REFACTOR: extract the three per-harness observers behind one small
+      dispatch table so adding codex is one entry, not an if-branch.
+      Re-run ruff + mypy + pytest + bun test. Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-18T13:45:26+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-18T13:46:48+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-18T13:46:48+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-18T13:48:30+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-18T13:49:14+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-18T13:49:15+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-18T13:50:34+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-18T13:55:02+00:00'
+      note: null
+  completion:
+    at: '2026-09-18T13:55:33+00:00'
+    note: null
+    observed_prs: []

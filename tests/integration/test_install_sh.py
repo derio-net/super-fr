@@ -49,8 +49,16 @@ def _run_install(
     fake_home: Path,
     *extra_args: str,
     expect_fail: bool = False,
+    xdg_config_home: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run install.sh with fake HOME, stubbing uv so step 10 is a no-op."""
+    """Run install.sh with fake HOME, stubbing uv so step 10 is a no-op.
+
+    Args:
+        fake_home: The fake home directory to use as $HOME
+        extra_args: Additional arguments to pass to install.sh
+        expect_fail: If True, do not assert on return code
+        xdg_config_home: If provided, set $XDG_CONFIG_HOME to this path (defaults to $HOME/.config)
+    """
     # install.sh preflights `uv` on PATH. setup-uv@v4 on CI installs it to
     # $HOME/.local/bin, which isn't in the hermetic PATH below. Drop an
     # executable stub in $HOME/bin so the preflight passes and step 10's
@@ -62,8 +70,12 @@ def _run_install(
         uv_stub.write_text("#!/bin/sh\nexit 0\n")
         uv_stub.chmod(0o755)
 
+    if xdg_config_home is None:
+        xdg_config_home = fake_home / ".config"
+
     env = {
         "HOME": str(fake_home),
+        "XDG_CONFIG_HOME": str(xdg_config_home),
         "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin",
         # Bypass the main/clean/in-sync gate: integration tests run install.sh
         # from the repo checkout (often detached HEAD on CI), which would

@@ -248,6 +248,14 @@ class TestRoundTrip:
         with pytest.raises(JournalParseError):
             parse_journal(bad)
 
+    def test_duplicate_entry_id_raises(self) -> None:
+        from fr.journal.model import JournalParseError, parse_journal, serialize_entry
+
+        text = "\n".join((serialize_entry(_entry(id="same")), serialize_entry(_entry(id="same"))))
+
+        with pytest.raises(JournalParseError, match="duplicate journal entry id"):
+            parse_journal(text)
+
     def test_body_starting_with_heading_round_trips(self) -> None:
         """F2: a body whose first line is a `### ...` markdown heading survives."""
         from fr.journal.model import parse_journal, serialize_entry
@@ -343,7 +351,7 @@ class TestResolveJournalReadPath:
 class TestHandoff:
     """`compose_handoff` — the curated executor brief (methodology
     restoration): open findings and dependency-relevant entries in full,
-    unrelated fixed history collapsed to one line each, raw pointer always
+    closed findings and unrelated context collapsed to one line each, raw pointer always
     present."""
 
     def _entries(self):
@@ -405,14 +413,36 @@ class TestHandoff:
         assert "actionable anywhere" in out
 
     def test_dependency_scoped_entries_render_in_full(self) -> None:
+        """Dependency scoping survives the state-first collapse — for the two
+        kinds it was ever right for. A decision is never "closed" (it still
+        constrains the phase depending on it), a discovery is a trap paid for
+        once, and an untagged entry is global; all three still render in full.
+        """
         from fr.journal.model import compose_handoff
 
         out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
 
-        assert "relevant history" in out
         assert "why we did it" in out
         assert "trap to avoid" in out
         assert "applies to all" in out
+
+    def test_a_closed_finding_on_a_dependency_phase_collapses(self) -> None:
+        """CHANGED CONTRACT (bounded-executor-handoff P2.T1, spec §5.A1).
+
+        This assertion used to read `assert "relevant history" in out` and sat
+        in `test_dependency_scoped_entries_render_in_full` above: `f-dep` is
+        `fixed`, tagged to phase 1, which phase 2 depends on, so it rendered in
+        full. That test was pinning the defect — measured at ~30k of a real
+        83k handoff — and its failure on this change is the expected result,
+        not a regression. State now decides before phase does: the title stays
+        on the record, the body does not come along.
+        """
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "relevant history" not in out
+        assert "- f-dep · finding [fixed] · Fixed on dep (phase 1)" in out
 
     def test_unrelated_fixed_history_collapses_to_one_line_each(self) -> None:
         from fr.journal.model import compose_handoff
@@ -447,3 +477,270 @@ class TestHandoff:
 
         assert "fr journal render --scope plan --slug s" in out
         assert "Open" not in out
+
+
+class TestReviewedPhases:
+    """`reviewed_phases` — the pure fold `fr journal check --require-reviews`
+    (phase 2) uses to decide which owed phases already have a recorded
+    review. A phase "names" its review by carrying `phase=N` on a `kind=review`
+    entry; an unphased review (the 5 unphased plan-scope review entries
+    already in this repo's journals, spec §B) does not blanket-satisfy every
+    phase, or the gate would be trivially defeated by one undated review."""
+
+    def test_a_phased_review_entry_contributes_its_phase(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=3, title="phase 3 review")]
+        assert reviewed_phases(entries) == {3}
+
+    def test_an_unphased_review_entry_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=None, title="a general review")]
+        assert reviewed_phases(entries) == set()
+
+    def test_a_finding_with_a_phase_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="finding", phase=3, state="open", title="a bug")]
+        assert reviewed_phases(entries) == set()
+
+    def test_empty_entries_gives_empty_set(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        assert reviewed_phases([]) == set()
+
+    def test_two_reviews_of_the_same_phase_give_one_element(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [
+            _entry(kind="review", id="r1", phase=2, title="first pass"),
+            _entry(kind="review", id="r2", phase=2, title="second pass"),
+        ]
+        assert reviewed_phases(entries) == {2}
+
+
+class TestEffectiveFindingStates:
+    """Phase 7 (spec §3.G.1): a finding's state is a FOLD over records in file
+    order, not a field read off its own entry.
+
+    The journal is an audit log, so `fr journal resolve` appends a *resolution
+    record* naming the finding rather than rewriting it — a finding mutated in
+    place would erase that it was ever open. The last record for an id wins.
+    """
+
+    def test_a_journal_with_no_resolution_records_folds_to_each_findings_own_state(
+        self,
+    ) -> None:
+        """Back-compat: every journal written before phase 7 has no resolution
+        record at all, so the fold must agree with the old per-entry read."""
+        from fr.journal.model import effective_finding_states, open_finding_ids
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open"),
+            _entry(kind="finding", id="f2", state="fixed"),
+            _entry(kind="finding", id="f3", state="refuted"),
+            _entry(kind="decision", id="d1", phase=None),
+        ]
+        assert effective_finding_states(entries) == {"f1": "open", "f2": "fixed", "f3": "refuted"}
+        assert open_finding_ids(entries) == ["f1"]
+
+    def test_an_older_journal_file_on_disk_still_folds(self) -> None:
+        """The same property through the real parser, on text in the exact
+        pre-phase-7 shape (no `resolves=` token anywhere)."""
+        from fr.journal.model import effective_finding_states, parse_journal
+
+        text = (
+            "# Journal: legacy\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=old1 created=2026-07-22T10:00:00 "
+            "state=open -->\n### old1 · finding [open] · an old bug\n\nbody\n\n"
+            "<!-- fr:journal kind=discovery scope=plan id=old2 created=2026-07-22T10:01:00 "
+            "-->\n### old2 · discovery · a note\n\nbody\n"
+        )
+        assert effective_finding_states(parse_journal(text)) == {"old1": "open"}
+
+    def test_a_resolution_record_supersedes_the_original_state(self) -> None:
+        from fr.journal.model import effective_finding_states, open_finding_ids
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open", title="a bug"),
+            _entry(
+                kind="finding",
+                id="f1-resolved",
+                state="fixed",
+                resolves="f1",
+                title="resolves f1: superseded by phase 2",
+            ),
+        ]
+        assert effective_finding_states(entries)["f1"] == "fixed"
+        assert open_finding_ids(entries) == []
+        # The original entry is untouched — that it was ever open is the record.
+        assert entries[0].state == "open"
+
+    def test_a_resolution_record_does_not_register_as_a_finding_of_its_own(self) -> None:
+        """A record carrying `resolves` speaks about the target finding, not
+        about itself, or resolving would open a new finding every time."""
+        from fr.journal.model import effective_finding_states
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open"),
+            _entry(kind="finding", id="f1-resolved", state="fixed", resolves="f1"),
+        ]
+        assert set(effective_finding_states(entries)) == {"f1"}
+
+    def test_the_last_record_wins_so_a_resolved_finding_can_be_reopened(self) -> None:
+        from fr.journal.model import effective_finding_states, open_finding_ids
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open"),
+            _entry(kind="finding", id="f1-resolved", state="fixed", resolves="f1"),
+            _entry(kind="finding", id="f1-again", state="open", resolves="f1"),
+        ]
+        assert effective_finding_states(entries)["f1"] == "open"
+        assert open_finding_ids(entries) == ["f1"]
+
+    def test_a_resolution_record_for_an_unknown_finding_still_folds(self) -> None:
+        """A record can only be written by `resolve`, which refuses an unknown
+        id — but a journal spliced by hand must not make the fold crash."""
+        from fr.journal.model import effective_finding_states
+
+        entries = [_entry(kind="finding", id="x-resolved", state="fixed", resolves="ghost")]
+        assert effective_finding_states(entries) == {"ghost": "fixed"}
+
+    def test_open_finding_ids_are_in_first_appearance_order(self) -> None:
+        from fr.journal.model import open_finding_ids
+
+        entries = [
+            _entry(kind="finding", id="b", state="open"),
+            _entry(kind="finding", id="a", state="open"),
+            _entry(kind="finding", id="b-resolved", state="fixed", resolves="b"),
+            _entry(kind="finding", id="b-again", state="open", resolves="b"),
+        ]
+        assert open_finding_ids(entries) == ["b", "a"]
+
+
+class TestResolvesRoundTrip:
+    def test_resolves_survives_serialize_parse(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        e = _entry(kind="finding", id="f1-resolved", state="fixed", resolves="f1", title="r")
+        parsed = parse_journal(serialize_entry(e))
+        assert parsed[0] == e
+        assert parsed[0].resolves == "f1"
+
+    def test_resolves_requires_a_finding_entry(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        with pytest.raises(ValidationError):
+            JournalEntry(
+                kind="decision",
+                scope="plan",
+                id="d1",
+                created="2026-09-18T10:00:00",
+                title="t",
+                resolves="f1",
+            )
+
+    def test_a_record_cannot_resolve_itself(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        with pytest.raises(ValidationError):
+            JournalEntry(
+                kind="finding",
+                scope="plan",
+                id="f1",
+                created="2026-09-18T10:00:00",
+                title="t",
+                state="fixed",
+                resolves="f1",
+            )
+
+
+class TestHandoffReadsEffectiveState:
+    def test_a_resolved_finding_leaves_the_open_findings_section(self) -> None:
+        """A handoff that keeps showing a resolved finding as open is the noise
+        the fold exists to remove; what became of it stays visible."""
+        from fr.journal.model import compose_handoff
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open", phase=9, title="Open elsewhere"),
+            _entry(
+                kind="finding",
+                id="f1-resolved",
+                state="fixed",
+                phase=9,
+                resolves="f1",
+                title="resolves f1: fixed in phase 9",
+            ),
+        ]
+        out = compose_handoff(entries, phase=2, depends_on=(1,), scope="plan", slug="s")
+        assert "## Open findings" not in out
+        assert "resolves f1" in out  # the resolution is still on the record
+
+    def test_a_reopened_finding_returns_to_the_open_findings_section(self) -> None:
+        from fr.journal.model import compose_handoff
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open", phase=9, title="Open elsewhere"),
+            _entry(kind="finding", id="f1-resolved", state="fixed", phase=9, resolves="f1"),
+            _entry(kind="finding", id="f1-again", state="open", phase=9, resolves="f1"),
+        ]
+        out = compose_handoff(entries, phase=2, depends_on=(1,), scope="plan", slug="s")
+        assert "## Open findings" in out
+        assert "Open elsewhere" in out
+
+
+# --- Forward compatibility: an OLDER fr must keep reading a NEWER journal. ---
+
+
+def test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal() -> None:
+    """The property that let phase 7 add `resolves=` with no stamp bump and no
+    migration — and it is load-bearing rather than incidental, which is why it
+    is pinned here.
+
+    `JournalEntry` is `extra="forbid"`, exactly like `RunState`. What keeps an
+    older fr able to read a newer journal is that `parse_journal` constructs the
+    entry from EXPLICITLY NAMED keys rather than splatting `**fields`, so an
+    unknown token stays in the dict and never reaches the model. Verified
+    against a real release rather than by reading: `fr` 4.4.0 renders this
+    repo's phase-7 journal — nine `resolves=` records — at exit 0, while the
+    same test against the `run` kind fails loudly (`schema_version — Extra
+    inputs are not permitted`), because `RunState` is built by parsing the whole
+    mapping. Same closed-world model, opposite outcome, purely construction
+    style.
+
+    Nothing guarded that difference until this test. Refactoring the parser to
+    `JournalEntry(**fields)` is an obvious tidy-up and would silently turn every
+    future optional header field into a breaking change, the first symptom being
+    an older fr raising on a journal it used to read. Under `extra="forbid"`
+    that refactor fails this test immediately, which is the whole point.
+    """
+    from fr.journal.model import parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+        "state=open some_future_field=whatever -->\n"
+        "### f1 · finding [open] · A finding from a newer fr\n"
+        "\n"
+        "Body.\n"
+    )
+    entries = parse_journal(text)
+    assert [e.id for e in entries] == ["f1"]
+    assert entries[0].state == "open"
+    assert entries[0].title == "A finding from a newer fr"
+
+
+def test_an_unknown_token_does_not_disturb_the_effective_state_fold() -> None:
+    """The fold is what `fr journal check` and fr-goal §7's delivery gate read,
+    so an unreadable-to-us token must not make a finding look resolved (or a
+    resolved one look open)."""
+    from fr.journal.model import open_finding_ids, parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-18T00:00:00 "
+        "state=open future=1 -->\n"
+        "### f1 · finding [open] · Still open\n"
+        "\n"
+        "Body.\n"
+    )
+    assert open_finding_ids(parse_journal(text)) == ["f1"]

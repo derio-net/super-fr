@@ -9,6 +9,7 @@ each one re-deriving backend detection itself. See docs/superpowers/specs/
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from fr import _hosts
@@ -17,16 +18,31 @@ from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 
+# Warn-once guard for a DECLARED host fr cannot thread to the resolved
+# backend (gh-486, spec §4.D) — keyed on (host, backend) so a repo that
+# later changes backend gets a fresh warning. Lives here, not in `_hosts`,
+# and is deliberately NOT shared with `_hosts._WARNED_UNKNOWN_HOSTS` (see
+# plan journal no-refactor-because P5.T2): the two warnings key on
+# different things, and coupling them would put hostclient's provenance
+# rule inside `_hosts`, undoing the split spec §4.D introduced.
+_WARNED_DECLARED_HOSTS: set[tuple[str, str]] = set()
 
-def client_for_backend(backend: _hosts.HostBackend) -> GhClient:
+
+def client_for_backend(backend: _hosts.HostBackend, *, host: str | None = None) -> GhClient:
     """Return the `GhClient`-shaped adapter for an already-resolved
     backend. The shared dispatch table `client_for()` and any caller with
     its own backend-resolution path (e.g. `fr_vk.pr_observe`, which
-    resolves from a bare PR URL's hostname via
-    `fr._hosts.backend_for_hostname` rather than a local checkout) both
-    go through this."""
+    resolves from a bare PR URL via `fr._hosts.backend_for_url` rather
+    than a local checkout) both go through this.
+
+    `host` names a self-hosted instance. This function is deliberately
+    PROVENANCE-BLIND: it never reads config and cannot tell a declared
+    `host:` from one derived from a remote or a PR URL, which is exactly
+    why `client_for` — not this — owns the warning about a host fr cannot
+    honour (gh-486; spec §4.D). Only the GitLab adapter threads it; `gh`
+    and `tea` resolve their own hosts (§1 non-goals)."""
     if backend == "gitlab":
-        return RealGlabClient()
+        return RealGlabClient(host=host)
     if backend == "gitea":
         return RealTeaClient()
     return RealGhClient()
@@ -45,5 +61,23 @@ def client_for(repo_root: Path) -> GhClient:
     silently-wrong guess: today's callers all resolve `repo_root` as
     `Path.cwd()`, matching the existing single-repo assumption `fr apply`
     already made before this factory existed.
+
+    Being the only layer that HAS a `repo_root`, this is also the only one
+    that can resolve a self-hosted instance hostname at all — and the only
+    one that can tell a declared `host:` from one derived from the origin
+    remote (`_hosts.declared_host` vs `_hosts.host_for`). That distinction
+    is what spec §4.D's warning rests on, so it must stay here rather than
+    move down into `client_for_backend`.
     """
-    return client_for_backend(_hosts.detect_backend(repo_root))
+    backend = _hosts.detect_backend(repo_root)
+    declared = _hosts.declared_host(repo_root)
+    if declared and backend != "gitlab" and (declared, backend) not in _WARNED_DECLARED_HOSTS:
+        _WARNED_DECLARED_HOSTS.add((declared, backend))
+        print(
+            f"warning: host {declared!r} is declared in "
+            ".devcontainer/fr-profiles.yaml but fr does not thread a host "
+            f'to backend "{backend}" — the CLI\'s own host resolution '
+            "applies instead. See gh-486.",
+            file=sys.stderr,
+        )
+    return client_for_backend(backend, host=_hosts.host_for(repo_root))

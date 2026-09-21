@@ -1,0 +1,162 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Self-review learns the two gates acceptance and skeleton already have
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - plan-self-review-flags-tier-gaps
+  tier: standard
+tasks:
+- number: 1
+  title: The fr_version floor probe for tier
+  steps:
+  - id: P2.T1.S1
+    text: |
+      RED. Add `tests/unit/test_plan_tier_gates.py`. First test: a plan whose
+      phases carry `tier` while `_meta.yaml`'s `fr_version` is the default
+      `>=3.0.0,<5.0.0` must produce a `warn` from `fr plan self-review` naming
+      the under-floored constraint. A second test pins the negative: the same plan
+      with `fr_version: '>=3.12.0,<5.0.0'` produces NO such warning.
+
+      Build the plan with the CLI (`fr plan create --phases-file` with a tier),
+      which phase 1 made possible — this test literally could not have been
+      written before it.
+
+      Run: `uv run pytest tests/unit/test_plan_tier_gates.py -q --no-cov`; expect
+      the first to fail (no such warning exists).
+  - id: P2.T1.S2
+    text: |
+      GREEN. Add `_tier_issues(plan) -> list[ReviewIssue]` to `plan_ops.py` and
+      call it from `self_review` beside `_acceptance_link_issues(plan)` and
+      `_skeleton_issues(plan)`.
+
+      The probe mirrors `_acceptance_link_issues`' 3.7.0 version probe exactly,
+      with 3.12.0 as the floor (`tier` landed in commit 4e04e6e, released 3.12.0):
+      when any phase carries a tier and `plan.meta.fr_version` is set, warn if
+      `SpecifierSet(...).contains("3.11.99", prereleases=True)`, suggesting
+      `'>=3.12.0,<5.0.0'`. Keep the `except InvalidSpecifier: pass` — the parser
+      already fails loud on malformed constraints, so swallowing here avoids a
+      duplicate, worse-worded error.
+
+      `severity="warn"`, never `"error"`: only `error` affects the exit code
+      (`plan_cmd.py:366`), and this must not turn any gate red.
+  - id: P2.T1.S3
+    text: |
+      REFACTOR. The 3.7.0 probe in `_acceptance_link_issues` and this 3.12.0 one
+      are now the same seven lines twice. Extract a shared
+      `_version_floor_issue(...)` helper returning `ReviewIssue | None` and call it
+      from both, so a third field's floor probe is one call.
+
+      Re-run `uv run pytest tests/unit/test_plan_tier_gates.py tests/unit/test_plan_acceptance_links.py -q --no-cov`
+      — the acceptance probe's existing tests are the regression net proving the
+      extraction preserved its behaviour, so they must pass UNCHANGED. Do not edit
+      them to fit the refactor; if they fail, the refactor is wrong.
+- number: 2
+  title: The untiered agentic phase warning
+  steps:
+  - id: P2.T2.S1
+    text: |
+      RED. Two more tests in `test_plan_tier_gates.py`: an AGENTIC phase with no
+      `tier` produces a `warn` naming the phase number and saying the dispatch
+      falls back to the untiered executor; a MANUAL phase with no tier produces
+      NOTHING (manual phases are never dispatched to a model, so a tier on one is
+      meaningless and its absence is not a gap).
+
+      Run; expect the first to fail.
+  - id: P2.T2.S2
+    text: |
+      GREEN. Extend `_tier_issues` with the second gate. The message must say what
+      the operator can do about it, not just that something is missing — name the
+      field, the legal values (from `PHASE_TIERS`), and the consequence
+      (dispatched untiered, inheriting the session model).
+
+      This is #498's fail-visibly doctrine moved to plan time: the untiered
+      fallback is correct behaviour, but it was previously indistinguishable from
+      working tiering at every observable point.
+  - id: P2.T2.S3
+    text: |
+      REFACTOR + verify the accepted blast radius. `severity="warn"` means no exit
+      code changes, but both gates WILL now fire on this repo's own plans — that
+      was disclosed to the operator and accepted (spec D2), and it must be
+      demonstrated rather than assumed.
+
+      Run `uv run fr plan self-review` over every live plan in
+      `docs/superpowers/plans/` and record in the step note, per plan, which of the
+      two warnings fire and that the exit code is still 0. If any plan exits
+      non-zero, STOP — a warn leaked into error severity, and that is a defect in
+      this phase, not a pre-existing condition.
+
+      Then: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T11:54:07+00:00'
+      note: 'Added tests/unit/test_plan_tier_gates.py with 5 tests, scaffolding tiered/untiered
+        plans via the real CLI''s --phases-file. RED confirmed: test_self_review_warns_tier_below_floor
+        and test_self_review_warns_untiered_agentic_phase both fail (AssertionError:
+        expected warn message not found, only the pre-existing skeleton error present).
+        The 3 negative-pinning tests pass trivially since the feature doesn''t exist
+        yet.'
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T11:55:11+00:00'
+      note: 'Added _tier_issues(plan) to plan_ops.py (floor probe only for this step),
+        wired into self_review() beside _acceptance_link_issues/_skeleton_issues.
+        GREEN: 4/5 tests in test_plan_tier_gates.py pass (the 5th, the untiered-agentic-phase
+        warning, is T2''s target and correctly still fails). test_plan_acceptance_links.py''s
+        17 tests pass unchanged.'
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T11:55:45+00:00'
+      note: 'Extracted shared _version_floor_issue(fr_version, probe_version=, message=)
+        in plan_ops.py; _acceptance_link_issues'' 3.7.0 probe and _tier_issues'' 3.12.0
+        probe both call it now. Re-ran tests/unit/test_plan_tier_gates.py tests/unit/test_plan_acceptance_links.py
+        -q --no-cov: 21 passed, 1 failed (test_self_review_warns_untiered_agentic_phase,
+        T2''s target, unaffected by this refactor). All 17 acceptance-link tests (the
+        regression net) pass UNCHANGED, confirming the extraction preserved behaviour.'
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T11:55:56+00:00'
+      note: 'test_self_review_warns_untiered_agentic_phase and test_self_review_silent_for_untiered_manual_phase
+        were already added in test_plan_tier_gates.py during T1.S1. RED confirmed:
+        test_self_review_warns_untiered_agentic_phase fails (AssertionError: expected
+        warn naming phase 1 and tier, only the pre-existing skeleton error present).
+        test_self_review_silent_for_untiered_manual_phase passes trivially (negative
+        pin, feature not yet implemented).'
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T11:56:11+00:00'
+      note: 'Extended _tier_issues with the untiered-agentic-phase warn: any agentic
+        phase with tier is None gets a warn naming the phase number, the consequence
+        (dispatched untiered, inheriting the session model), and the legal values
+        from PHASE_TIERS. Manual phases are skipped entirely. GREEN: all 5 tests in
+        test_plan_tier_gates.py pass, plus the 17-test acceptance-link regression
+        net unchanged (22 passed total).'
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T12:11:27+00:00'
+      note: 'No further code duplication to refactor in _tier_issues. Verification:
+        ran ''fr plan self-review'' over every plan in docs/superpowers/plans/. 2026-07-09-multi-backend-git-host-adapters:
+        8 untiered-agentic-phase warns (phases 1-8) + pre-existing skeleton error,
+        exit=1 (confirmed via git-stash that this plan already exited 1 before phase
+        2, from the skeleton error alone -- unchanged by this phase). 2026-09-04-worktree-traceability:
+        6 untiered-agentic-phase warns (phases 1-6) + pre-existing skeleton error,
+        exit=1 (same pre-existing-exit confirmation). 2026-09-19-opencode-subagent-dispatch:
+        clean, exit=0. 2026-09-20-opencode-tier-binding-reaches-dispatch: clean, exit=0.
+        2026-09-20-phases-file-tier-reaches-dispatch (this plan, floored >=4.2.0):
+        clean, exit=0. No plan''s exit code changed as a result of this phase -- both
+        new gates are warn-only as required. Found and fixed a real regression along
+        the way (see finding p2-f1-shared-fixture): the shared v2_plan_minimal test
+        fixture needed ''tier: standard'' added to stay self-review-clean, same as
+        when skeleton landed. ruff format/check clean, mypy clean (138 files), full
+        suite: 3298 passed, 80 skipped, exactly the 3 known pre-existing failures
+        (test_run_workspace.py x2, test_workflow_check.py x1), no 4th failure.'
+  completion:
+    at: '2026-09-20T12:11:30+00:00'
+    note: null
+    observed_prs: []

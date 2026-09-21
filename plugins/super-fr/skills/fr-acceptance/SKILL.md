@@ -21,7 +21,8 @@ This skill drives the agent-side work; the mechanics live in the CLI.
 `ci` / `scheduled` = automated, cannot drift · `skipped` = verification exists
 but not in CI (warning, backfill owed) · `not-implemented` = nothing yet
 (warning) · `failing` = known red, `fr acceptance check` exits 2 and CI fails.
-Statuses move **explicitly, never silently**. The drift channel is precisely
+Statuses move **explicitly, never silently** — with `fr acceptance set-status`,
+never a hand-edit. The drift channel is precisely
 the hand-tracked claims — when in doubt between ci and skipped, **choose skipped**.
 Do not inflate coverage; the operator audits statuses at review.
 
@@ -43,10 +44,13 @@ Do not inflate coverage; the operator audits statuses at review.
 ## Flip statuses (execution hand-off)
 
 When a plan phase carrying `acceptance: [row-ids]` completes, flip those rows
-up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`), citing the
-test refs that justify the move in `levels` and `notes`. `fr plan edit
---complete-phase` warns on unflipped rows — fix or record why in the
-completion note.
+up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`) with
+`fr acceptance set-status --id <row> --status <new> --notes "<why it moved>"
+--level unit=<repo>:<path>` — one command for the whole transition: it moves
+the row in place, adds the test refs that justify the move, and regenerates the
+three committed reports. `--notes` is required, and an unknown id is refused
+rather than created (that is `add`'s job). `fr plan edit --complete-phase`
+warns on unflipped rows — fix or record why in the completion note.
 
 ## Mid-flight additions (encouraged, then defended)
 

@@ -1,0 +1,104 @@
+schema_version: 2
+phase:
+  number: 7
+  title: The prose, the mirrors, the matrix, the version, the explainer
+  tag: agentic
+  depends_on:
+  - 4
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-holder-recorded
+  - run-dispatch-harness-neutral
+  - run-telemetry-measured-claude-code
+  - run-manual-phase-never-dispatched
+  tier: standard
+tasks:
+- number: 1
+  title: fr-goal ends an iteration on a dispatch
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      Re-cut plugins/super-fr/skills/fr-goal/SKILL.md §5/§6 (spec §4.H): when an executor
+      returns — review, fix, push, then IN THE SAME TURN `fr run advance` and start the
+      next unit; report after that, never instead of it. One sentence of precedence: this
+      skill's autonomy contract outranks an output-style preference. Add `--evidence
+      review=<id>` to the review-phase resolve, and the other-session recovery
+      (`claim --abandoned`). Harness-specific tool names stay inside the scoped
+      per-harness clause. 120-line cap: repack, do not append.
+  - id: P7.T1.S2
+    text: |-
+      Run BOTH mirror generators (scripts/sync-opencode.py, scripts/sync-hermes.py), then
+      both with --check, then the skill tripwires:
+      `uv run pytest tests/unit/test_skill_validation.py tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`.
+  - id: P7.T1.S3
+    text: |-
+      REFACTOR: re-read §5/§6 as an orchestrator that has just received an executor's
+      report. If the next action the text suggests is "summarise", it is still wrong.
+- number: 2
+  title: Matrix and version
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      `uv run fr acceptance set-status` — never a hand-edit, never `add` — for every row
+      whose unit level landed: not-implemented -> ci, with `--level unit=super-fr:<test
+      file>` and `--notes`. Paste test names from a grep, never from memory. Rows that
+      are live-only by nature stay not-implemented, saying so:
+      run-dispatch-harness-neutral, run-pickup-on-another-host, run-idle-reprompt-opencode.
+      Merge gh#519's `run-advance-refuses-running` into `run-dispatch-refuses-second` via
+      notes (one behaviour, one row). Then `uv run fr acceptance check`.
+  - id: P7.T2.S2
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor`; commit manifests +
+      uv.lock together; `bump-version.py --check`.
+- number: 3
+  title: The published explainer, and the final gate
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      docs/explainers/01-fr-goal.md: the per-unit record, cost under the holder, the
+      evidence gate, and the idle guard — in the page's existing voice. Re-derive every
+      `SKILL.md:<lines>` reference as a whole-section range. Regenerate the .html: FIRST
+      re-render the unmodified .md from `/` with `--isolated` and byte-compare against the
+      committed page; only then the real render. If the renderer cannot reproduce the
+      committed page, do NOT hand-edit the .html — say regeneration is owed.
+  - id: P7.T3.S2
+    text: |-
+      Full gate, CLAUDE* unset, bounded waits, exit codes from files: pytest with
+      coverage, ruff format + check, mypy, bump-version --check, acceptance check,
+      validate artifacts, harness parity --check, both sync --check, and `bun test`.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T00:12:45+00:00'
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: '2026-09-21T00:12:45+00:00'
+      note: null
+    P7.T1.S3:
+      state: x
+      ticked_at: '2026-09-21T00:12:46+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-09-21T00:16:42+00:00'
+      note: null
+    P7.T2.S2:
+      state: x
+      ticked_at: '2026-09-21T00:16:59+00:00'
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: '2026-09-21T00:21:22+00:00'
+      note: null
+    P7.T3.S2:
+      state: x
+      ticked_at: '2026-09-21T00:28:10+00:00'
+      note: null
+  completion:
+    at: '2026-09-21T00:28:28+00:00'
+    note: null
+    observed_prs: []

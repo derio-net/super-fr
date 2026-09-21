@@ -93,10 +93,17 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     (allowlist-safe; never mutates)" and was rewriting artifacts and creating
     commits, and `fr validate artifacts` could never report a stale artifact to
     a human because the gate migrated it away first.
+
+    `harness` was added by 2026-09-18 harness-parity-matrix phase 6 (r1-m8),
+    same shape as `validate`: `fr harness parity` is a pure render (no repo,
+    no registration files needed — spec §3.F says it must work on a pod with
+    no super-fr checkout at all), so gating it behind *this* checkout's own
+    stale plan/journal/run artifacts would be the most visibly wrong case —
+    the command's whole point is to work where there is nothing to be stale.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
-        {"migrate", "status", "skills", "isolation", "init", "validate"}
+        {"migrate", "status", "skills", "isolation", "init", "validate", "harness"}
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
     assert trigger.EXEMPTIONS == (
@@ -108,6 +115,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "isolation",
         "init",
         "validate",
+        "harness",
         "FR_SKIP_MIGRATION=1",
     )
 

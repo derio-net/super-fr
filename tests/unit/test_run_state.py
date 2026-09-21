@@ -129,23 +129,437 @@ def test_pending_step_has_no_null_padding_in_dump() -> None:
     assert "null" not in text
 
 
-# --- V1 context accounting (methodology restoration, phase 4) ---
+# --- one record per unit (spec 2026-09-20-unit-record-unification §4.A) -----
+#
+# `items`, `dispatch` and the top-level `accounting` were three key spaces over
+# ONE identity. The live model is the v5 shape only: `StepRecord.units`. What a
+# v4 cursor looks like is `fr.run.legacy`'s business, tested in
+# `test_run_legacy.py` against captured files.
+
+_MEASURED = {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 51315,
+    "cache_read_input_tokens": 200784,
+    "output_tokens": 1927,
+}
 
 
-def test_accounting_round_trips_and_defaults_to_absent() -> None:
-    """Per-item context snapshots ride the run file (additive, defaulted —
-    every pre-accounting run still parses with `accounting=None`)."""
-    from fr.run.model import PhaseAccounting
+def _with_units(state: RunState, step_id: str, units: dict) -> RunState:
+    steps = dict(state.steps)
+    steps[step_id] = steps[step_id].model_copy(update={"units": units})
+    return state.model_copy(update={"steps": steps})
 
-    snap = PhaseAccounting(
-        at="2026-09-09T00:00:01Z",
-        journal_entries=12,
-        journal_lines=180,
-        handoff_chars=2100,
-        spec_bytes=8400,
-        plan_bytes=12500,
+
+def test_a_unit_record_round_trips_with_its_state_attempts_and_cost() -> None:
+    from fr.run.model import Attempt, ContextEstimate, MeasuredTokens, UnitRecord
+
+    held = Attempt(
+        dispatched="2026-09-20T00:00:01Z",
+        agent="add889a7",
+        agent_type="super-fr:fr-phase-executor",
+        harness="claude-code",
+        model="claude-sonnet-5",
+        estimate=ContextEstimate(journal_entries=12, handoff_chars=2100),
     )
-    state = _sample_state().model_copy(update={"accounting": {"phase/1/code": snap}})
-    assert parse_run_state(dump_run_state(state)) == state
-    assert _sample_state().accounting is None
-    assert "accounting" not in dump_run_state(_sample_state())
+    closed = Attempt(
+        dispatched="2026-09-19T00:00:01Z",
+        returned="2026-09-19T01:00:00Z",
+        outcome="abandoned",
+        estimate=ContextEstimate(handoff_chars=10),
+        measured=MeasuredTokens(**_MEASURED),
+    )
+    state = _with_units(
+        _sample_state(),
+        "implement",
+        {"phase/1/code": UnitRecord(state="running", attempts=(closed, held))},
+    )
+
+    text = dump_run_state(state)
+
+    assert "cache_read_input_tokens: 200784" in text
+    assert parse_run_state(text) == state
+    assert dump_run_state(parse_run_state(text)) == text
+    unit = parse_run_state(text).steps["implement"].units["phase/1/code"]
+    assert unit.attempts[0].measured.output_tokens == 1927
+    assert unit.attempts[1].measured is None, "cost is per ATTEMPT — the open one has none yet"
+
+
+def test_units_default_to_absent_and_a_unitless_run_omits_the_key() -> None:
+    assert _sample_state().steps["implement"].units is None
+    assert "units" not in dump_run_state(_sample_state())
+
+
+def test_a_unit_with_no_attempts_dumps_no_attempts_key() -> None:
+    """An adopted `done` unit and a `manual` marker were never dispatched. They
+    dump as `{state: …}` and nothing else — the same bytes the 4 -> 5 rewrite
+    produces for them, so a migrated cursor and a native one agree."""
+    from fr.run.model import UnitRecord
+
+    state = _with_units(
+        _sample_state(),
+        "implement",
+        {"phase/1/code": UnitRecord(state="done"), "phase/7": UnitRecord(state="manual")},
+    )
+    text = dump_run_state(state)
+    assert "attempts" not in text
+    assert parse_run_state(text) == state
+
+
+def test_a_measured_zero_is_not_no_measurement() -> None:
+    from fr.run.model import Attempt, MeasuredTokens
+
+    nothing = Attempt(dispatched="2026-09-20T00:00:01Z")
+    zero = Attempt(
+        dispatched="2026-09-20T00:00:01Z",
+        measured=MeasuredTokens(
+            input_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            output_tokens=0,
+        ),
+    )
+
+    assert nothing.measured is None
+    assert zero.measured is not None and zero.measured.total == 0
+    assert nothing != zero
+
+
+@pytest.mark.parametrize(
+    ("where", "fragment"),
+    [
+        ("step", "    items:\n      phase/1/code: done\n"),
+        (
+            "step",
+            "    dispatch:\n      phase/1/code:\n      - dispatched: '2026-09-20T00:00:01Z'\n",
+        ),
+        ("top", "accounting:\n  phase/1/code:\n    at: '2026-09-09T09:00:01Z'\n"),
+    ],
+)
+def test_the_live_parser_refuses_every_map_the_flip_removed(where: str, fragment: str) -> None:
+    """The live model is v5 ONLY and closed-world: a v4 body is refused, by
+    name, rather than half-read. Reading v4 is `fr.run.legacy`'s job, and
+    getting a v4 file to v5 is the migration's — `fr migrate artifacts`."""
+    head = (
+        "run: r1\nworkflow: fr-goal@1\nbranch: feat/x\nstarted: '2026-09-09T09:00:00Z'\n"
+        "cursor: implement\nsteps:\n  implement:\n    state: running\n"
+    )
+    text = head + fragment
+    with pytest.raises(RunStateError, match=fragment.split(":")[0].strip()):
+        parse_run_state(text)
+
+
+_CAPTURED = sorted(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "run_cursors").glob("v*/*.yaml")
+)
+
+
+@pytest.mark.parametrize("path", _CAPTURED, ids=lambda p: f"{p.parent.name}/{p.name}")
+def test_a_migrated_capture_and_a_native_dump_are_the_same_data(path: Path) -> None:
+    """Every captured cursor, rewritten 4 -> 5, parses with the live model and
+    dumps back to the SAME data — nothing invented by the model (no padded
+    `attempts: []`, no defaulted zeros the rewrite did not write), nothing lost."""
+    import yaml
+    from fr.run.legacy import v4_to_v5
+
+    assert _CAPTURED, "no captured cursors — the glob is wrong, not the fixtures"
+    migrated = v4_to_v5(yaml.safe_load(path.read_text()))
+    state = parse_run_state(yaml.safe_dump(migrated, sort_keys=False))
+    redumped = yaml.safe_load(dump_run_state(state))
+    redumped.pop("schema_version")
+    migrated.pop("schema_version", None)
+    assert redumped == migrated
+
+
+# --- Phase 4: gate provenance + the `run` artifact stamp -------------------
+#
+# `RunState`/`StepRecord` are `extra="forbid"`, so adding `answered_by` is a
+# SHAPE change under `.claude/rules/artifact-versioning.md`. These pin the two
+# halves the rule requires of the model itself: the new field, and the
+# optional defaulted `schema_version` without which the stamp the migration
+# writes would make the file unparseable by the fr that wrote it.
+
+
+def test_step_record_answered_by_defaults_to_absent_and_round_trips() -> None:
+    state = _sample_state()
+    assert state.steps["isolate"].answered_by is None
+
+    cleared = state.steps["isolate"].model_copy(update={"gate": "cleared", "answered_by": "agent"})
+    text = dump_run_state(_with_isolate(state, cleared))
+    assert "answered_by: agent" in text
+    assert parse_run_state(text).steps["isolate"].answered_by == "agent"
+
+
+def _with_isolate(state: RunState, record: StepRecord) -> RunState:
+    steps = dict(state.steps)
+    steps["isolate"] = record
+    return state.model_copy(update={"steps": steps})
+
+
+def test_an_unrecognised_answered_by_fails_loud() -> None:
+    text = """
+run: r
+workflow: fr-goal@1
+branch: b
+started: "2026-08-14T09:00:00Z"
+cursor: a
+steps:
+  a:
+    state: done
+    answered_by: the-cat
+"""
+    with pytest.raises(RunStateError):
+        parse_run_state(text)
+
+
+def test_run_state_accepts_an_optional_defaulted_schema_version() -> None:
+    """Required by `.claude/rules/artifact-versioning.md` in the same PR that
+    moves the kind past version 1: the migration stamps `schema_version` into
+    the file, and `extra="forbid"` would otherwise make that file unreadable
+    by the very fr that wrote it."""
+    # absent -> the pre-framework version, not an error
+    assert parse_run_state(dump_run_state(_sample_state())) is not None
+    state = RunState(
+        run="r",
+        workflow="fr-goal@1",
+        branch="b",
+        started="2026-08-14T09:00:00Z",
+        cursor="a",
+        steps={"a": StepRecord(state="pending")},
+    )
+    assert state.schema_version == 1
+
+    stamped = parse_run_state(
+        "schema_version: 2\nrun: r\nworkflow: fr-goal@1\nbranch: b\n"
+        'started: "2026-08-14T09:00:00Z"\ncursor: a\nsteps:\n  a:\n    state: pending\n'
+    )
+    assert stamped.schema_version == 2
+
+
+def test_the_current_run_schema_version_comes_from_the_artifact_registry() -> None:
+    """One number, one place: the registry is the ONLY module allowed to
+    declare a kind's `current_version`, so fr's own writers read it rather
+    than restating it."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.model import current_run_schema_version
+
+    assert current_run_schema_version() == artifact_kind("run").current_version
+
+
+# --- Attempt (was DispatchRecord; dispatch-holder-identity phase 1) --------
+#
+# spec `2026-09-20-dispatch-holder-identity-design.md` §4.A/§4.B. `dispatched`
+# is the one field fr writes itself (`advance` timestamps its own act);
+# everything else is either derived (`agent_type`, `model`) or a reported
+# claim (`agent`, `harness`, `returned`, `outcome`) — spec §3's seam.
+
+
+def test_dispatch_record_requires_dispatched_and_defaults_the_rest_to_none() -> None:
+    from fr.run.model import Attempt
+
+    record = Attempt(dispatched="2026-09-20T09:00:00Z")
+    assert record.dispatched == "2026-09-20T09:00:00Z"
+    assert record.agent is None
+    assert record.agent_type is None
+    assert record.harness is None
+    assert record.model is None
+    assert record.returned is None
+    assert record.outcome is None
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError, missing field
+        Attempt()  # type: ignore[call-arg]
+
+
+def test_dispatch_record_is_frozen_and_closed_world() -> None:
+    from fr.run.model import Attempt
+
+    record = Attempt(dispatched="2026-09-20T09:00:00Z")
+    with pytest.raises(Exception):  # noqa: B017 — frozen
+        record.agent = "a1"  # type: ignore[misc]
+    with pytest.raises(Exception):  # noqa: B017 — extra="forbid"
+        Attempt(dispatched="2026-09-20T09:00:00Z", bogus="x")  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("outcome", ["done", "failed", "abandoned"])
+def test_dispatch_record_outcome_accepts_every_documented_value(outcome: str) -> None:
+    from fr.run.model import Attempt
+
+    record = Attempt(
+        dispatched="2026-09-20T09:00:00Z",
+        returned="2026-09-20T09:30:00Z",
+        outcome=outcome,  # type: ignore[arg-type]
+    )
+    assert record.outcome == outcome
+
+
+def test_dispatch_record_pairs_returned_and_outcome() -> None:
+    """`outcome` is set exactly when `returned` is — the docstring said so
+    before anything enforced it, and "open" is the state every reader keys on.
+
+    A record with `returned` and no `outcome` reads as still-held to
+    `fr run status` while carrying a return timestamp, and one with `outcome`
+    and no `returned` reads as held forever by an agent that already finished.
+    Both are the double-dispatch hazard wearing a disguise, so the model
+    refuses them rather than leaving the invariant to every caller.
+    """
+    from fr.run.model import Attempt
+
+    # Open: neither half set. Closed: both. Both are fine.
+    assert Attempt(dispatched="2026-09-20T09:00:00Z").returned is None
+    assert (
+        Attempt(
+            dispatched="2026-09-20T09:00:00Z",
+            returned="2026-09-20T09:30:00Z",
+            outcome="done",
+        ).outcome
+        == "done"
+    )
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        Attempt(dispatched="2026-09-20T09:00:00Z", returned="2026-09-20T09:30:00Z")
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        Attempt(dispatched="2026-09-20T09:00:00Z", outcome="done")
+
+
+def test_dispatch_record_outcome_rejects_an_unrecognised_value() -> None:
+    from fr.run.model import Attempt
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        Attempt(dispatched="2026-09-20T09:00:00Z", outcome="cancelled")  # type: ignore[arg-type]
+
+
+def test_dispatch_record_harness_accepts_every_member_of_the_closed_harness_set() -> None:
+    from fr.harness.model import HARNESSES
+    from fr.run.model import Attempt
+
+    for harness in HARNESSES:
+        record = Attempt(dispatched="2026-09-20T09:00:00Z", harness=harness)
+        assert record.harness == harness
+
+
+def test_dispatch_record_harness_rejects_unknown() -> None:
+    from fr.run.model import Attempt
+
+    with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
+        Attempt(dispatched="2026-09-20T09:00:00Z", harness="unknown")
+
+
+# --- multi-line strings render as block literals (PR #508 review) ----------
+#
+# A cursor is git-tracked and read in diffs. `safe_dump`'s default renders a
+# string ending in a newline as a single-quoted scalar folded over three lines
+# (valid YAML that LOOKS broken — the operator asked whether it was), and a
+# failed step's several lines of output as one double-quoted blob of `\n`
+# escapes and continuation backslashes.
+
+
+def _with_stdout(stdout: str) -> RunState:
+    state = _sample_state()
+    steps = dict(state.steps)
+    steps["plan-review"] = StepRecord(state="failed", exit=1, stdout=stdout)
+    return state.model_copy(update={"steps": steps})
+
+
+def test_multi_line_stdout_dumps_as_a_block_literal() -> None:
+    stdout = (
+        "plan self-review: 2 issue(s)\n"
+        " phase 1 task P1.T3 has no refactor step\n"
+        " phase 7 task P7.T2 has no refactor step\n"
+    )
+    text = dump_run_state(_with_stdout(stdout))
+
+    assert "    stdout: |\n" in text
+    assert "      plan self-review: 2 issue(s)\n" in text
+    assert "       phase 7 task P7.T2 has no refactor step\n" in text
+    assert "\\n" not in text
+    assert "\\\n" not in text
+
+
+def test_a_single_trailing_newline_no_longer_folds_a_quoted_scalar() -> None:
+    text = dump_run_state(_with_stdout("self-review passed\n"))
+
+    assert "    stdout: |\n      self-review passed\n" in text
+    assert "'self-review passed" not in text
+
+
+def test_a_single_line_string_is_still_plain() -> None:
+    text = dump_run_state(_with_stdout("self-review passed"))
+
+    assert "    stdout: self-review passed\n" in text
+
+
+# Block style is a HINT to PyYAML's emitter, which falls back to a quoted
+# scalar for anything a block literal cannot carry. Whatever it picks, the
+# string that comes back must be the string that went in — byte for byte,
+# chomping included — and the dump must be a fixed point.
+_AWKWARD = [
+    "one\n",
+    "one\ntwo",
+    "one\ntwo\n",
+    "one\ntwo\n\n",
+    "one\n\n\ntwo\n",
+    "\n",
+    "\n\n",
+    "\nleading blank\n",
+    "  leading spaces\nthen not\n",
+    "trailing space \nnext\n",
+    "tab\there\nnext\n",
+    "crlf\r\nnext\r\n",
+    "# looks like a comment\n- looks like a list\nkey: value\n",
+    "--- \n...\n",
+    "unicode ✓ — dash\nnext\n",
+    "ansi \x1b[31mred\x1b[0m\nnext\n",
+    "'single' and \"double\"\nnext\n",
+    "x" * 200 + "\n" + "y " * 100 + "\n",
+]
+
+
+@pytest.mark.parametrize("stdout", _AWKWARD, ids=[repr(s)[:24] for s in _AWKWARD])
+def test_every_stdout_round_trips_exactly(stdout: str) -> None:
+    state = _with_stdout(stdout)
+    text = dump_run_state(state)
+
+    back = parse_run_state(text)
+
+    assert back.steps["plan-review"].stdout == stdout
+    assert back == state
+    assert dump_run_state(back) == text
+
+
+def test_long_lines_inside_a_block_literal_are_not_folded() -> None:
+    line = "word " * 60 + "end"
+    text = dump_run_state(_with_stdout(f"{line}\nnext\n"))
+
+    assert f"      {line}\n" in text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "v4/2026-09-20-feat-phase-holder-identity.yaml",
+        "v4/2026-09-20-fix-fr-run-cursor-cluster.yaml",
+        "v3/2026-09-20-feat-bounded-executor-handoff.yaml",
+        "v2/2026-09-20-journal-require-reviews-v2.yaml",
+    ],
+)
+def test_the_migration_and_the_native_dump_are_one_writer(tmp_path: Path, name: str) -> None:
+    """Two writers put cursors on disk — `dump_run_state` and the 4 -> 5 body
+    rewrite. If only one learns a style, a cursor restyles itself the first
+    time it is saved after migrating: a diff nobody wrote."""
+    from fr.artifacts.run_unit_record import rewrite_to_unit_records
+
+    fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/run_cursors" / name
+    path = tmp_path / fixture.name
+    path.write_bytes(fixture.read_bytes())
+
+    rewrite_to_unit_records(path)
+    migrated = path.read_text()
+
+    if "phase-holder-identity" in name:  # the one whose `plan-review` printed a line
+        assert "    stdout: |\n      self-review passed\n" in migrated
+    assert "\\n" not in migrated
+    body = "\n".join(ln for ln in migrated.splitlines() if not ln.startswith("schema_version:"))
+    native = dump_run_state(parse_run_state(migrated))
+    native_body = "\n".join(
+        ln for ln in native.splitlines() if not ln.startswith("schema_version:")
+    )
+    assert body == native_body

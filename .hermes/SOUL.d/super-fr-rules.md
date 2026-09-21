@@ -213,10 +213,11 @@ Never create `<repo>/.worktrees/`. fr owns the location
 (`~/.cache/fr/worktrees/<main-checkout>/<branch-slug>`), the state, and the
 session binding (`fr isolation status` shows which sessions hold a workspace).
 
-`claude --worktree <name>` and the `EnterWorktree` tool need no override:
-super-fr's `WorktreeCreate` hook already lands them in fr (subagent worktrees,
-`agent-*`, keep Claude's default shape on purpose). Plain
-`using-git-worktrees` remains for non-fr repos.
+On Claude Code, `claude --worktree <name>` and the `EnterWorktree` tool need
+no override: super-fr's `WorktreeCreate` hook already lands them in fr
+(subagent worktrees, `agent-*`, keep Claude's default shape on purpose).
+OpenCode and Hermes have no such hook — there, the `fr isolation up` above is
+the only route in. Plain `using-git-worktrees` remains for non-fr repos.
 
 # Never `claude -p` for batch LLM work (Org-Wide)
 

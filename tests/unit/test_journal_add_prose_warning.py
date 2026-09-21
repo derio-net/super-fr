@@ -25,6 +25,7 @@ def _add(title: str, body: str, entry_id: str):
             "S",
             "--kind",
             "discovery",
+            "--global",
             "--title",
             title,
             "--body",
@@ -68,11 +69,13 @@ def test_a_clean_entry_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
     assert "warning:" not in result.output
 
 
-def test_an_idempotent_re_add_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
+def test_a_duplicate_id_is_refused_and_prints_no_warning(tmp_path: Path, monkeypatch) -> None:
+    """`add` is create-only since gh-429 (#484): a duplicate id exits 2 before
+    anything is written, so there is nothing to lint and no warning."""
     monkeypatch.chdir(_init_repo(tmp_path))
     _add("Short title", LONG, "e3")
     result = _add("Short title", LONG, "e3")
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
     assert "warning:" not in result.output
 
 

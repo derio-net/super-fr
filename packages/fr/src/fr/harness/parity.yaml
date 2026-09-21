@@ -1,0 +1,227 @@
+# The declared harness-parity matrix — 2026-09-18 harness-parity-matrix
+# spec §3.A/§3.E. States are filled from the ACTUAL registration files, not
+# from issue #436's table (already stale — it lists fr-acceptance-nag as
+# absent on Hermes; .hermes/config.snippet.yaml registers it on
+# pre_llm_call):
+#   - claude-code: plugins/super-fr/hooks/hooks.json
+#   - hermes:      .hermes/config.snippet.yaml
+#   - opencode:    packages/fr-opencode-plugin/src/index.ts
+#
+# Every codex/copilot-cli cell is `unsupported` (spec non-goals — neither
+# harness is supported yet). Every `partial`/`advisory` cell carries a
+# `scope_note`. Phase 2 (`fr.harness.observe`/`check`) is what mechanically
+# re-derives the claude-code/hermes/opencode cells from these files and
+# fails CI on drift — this file is the DECLARATION, not self-checking yet.
+schema: 1
+surfaces:
+  # --- hook rows: one per shipped plugins/super-fr/hooks/*.sh ---------------
+
+  - id: fr-acceptance-nag
+    kind: hook
+    script: fr-acceptance-nag.sh
+    summary: Nags the operator toward `fr acceptance status` at session start.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-isolation-guard
+    kind: hook
+    script: fr-isolation-guard.sh
+    summary: Gates Bash commands to keep a live pipeline inside its own repo/worktree.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes:
+        state: partial
+        scope_note: >-
+          git/gh MUTATIONS only — read-only and unknown commands pass, where the
+          Claude hook denies every base-repo-cwd command. Also marker-based
+          rather than pipeline-sentinel-based (Hermes has no Skill PostToolUse
+          to write a sentinel).
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-isolation-required
+    kind: hook
+    script: fr-isolation-required.sh
+    summary: Edits to tracked source must happen inside an fr-isolation workspace.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: edit/write/patch/multiedit only — bash is ungated (#436)
+      hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-merged-pr-push-guard
+    kind: hook
+    script: fr-merged-pr-push-guard.sh
+    summary: Refuses a push/commit against a branch whose PR already merged.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-phase-executor-guard
+    kind: hook
+    script: fr-phase-executor-guard.sh
+    summary: Refuses dispatching fr-phase-executor into its own fresh worktree (super-fr#420).
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-pipeline-sentinel
+    kind: hook
+    script: fr-pipeline-sentinel.sh
+    summary: Marks a session as running an fr pipeline after a Skill invocation.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-run-idle-guard
+    kind: hook
+    script: fr-run-idle-guard.sh
+    summary: >-
+      Keeps an fr run going: ending a turn on a run that is advanceable with
+      nobody working on it hands back the next command (gh#518). The predicate
+      is `fr run check --idle`; each adapter is as strong as its harness allows.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: >-
+          CONTINUES rather than blocks — OpenCode cannot refuse a stop, so on
+          `session.idle` the plugin sends the next command back into the
+          session (`/session/{id}/prompt_async`). The event and the endpoint
+          were verified in `@opencode-ai/sdk` type definitions on the authoring
+          machine — versions 1.17.15, 1.1.27 and 1.0.23, all three carrying
+          both. 1.18.31 is the opencode BINARY's version, not an SDK copy on
+          disk here; this note said "the installed 1.18.31 SDK types" until
+          phase 6 went looking. That a plugin-originated prompt on idle
+          actually EXECUTES is NOT live-proven (the gh#494 standard) — a green
+          `bun test` does not show it.
+      hermes:
+        state: absent
+        scope_note: >-
+          Hermes' stop events are reportedly observe-only (non-blocking). NOT
+          verified — Hermes is not installed on the authoring machine. With no
+          adapter, fr-goal's prose is all there is on Hermes.
+      codex:
+        state: unsupported
+        scope_note: >-
+          Reportedly has a block-capable stop hook; not installed on the
+          authoring machine, unverified. A block-tier adapter is small once the
+          harness is onboarded — it only has to call `fr run check --idle`.
+      copilot-cli:
+        state: unsupported
+        scope_note: >-
+          Reportedly blocks on `agentStop`. Copilot CLI 1.0.84's hooks system
+          WAS verified installed on the authoring machine; `agentStop`'s
+          blocking semantics were not. A block-tier adapter is small once the
+          harness is onboarded.
+
+  - id: fr-session-bind
+    kind: hook
+    script: fr-session-bind.sh
+    summary: Binds a harness session id to the isolation workspace it is using, on `fr isolation up|exec` and on `fr run start`.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-session-unbind
+    kind: hook
+    script: fr-session-unbind.sh
+    summary: Releases a session's isolation-workspace binding at session end.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-worktree-create
+    kind: hook
+    script: fr-worktree-create.sh
+    summary: Routes a harness's own worktree-creation flow through fr-isolation.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: fr-worktree-remove
+    kind: hook
+    script: fr-worktree-remove.sh
+    summary: Cleans up fr-isolation state when a harness removes its worktree.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: absent}
+      hermes: {state: absent}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  # --- interaction rows (spec §3.E) ------------------------------------------
+
+  - id: operator-gate
+    kind: interaction
+    summary: A `gate operator` run step blocks until a human answers via the harness's own question tool.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: advisory
+        scope_note: "no operator-question tool exists on OpenCode — the gate cannot mechanically block; the measured failure of #436 instance 2"
+      hermes:
+        state: advisory
+        scope_note: delegate_task has no operator-question primitive — the gate is prose only
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: phase-sequence
+    kind: interaction
+    summary: fr run enforces spec/plan before implementation (`implement` declares `needs [spec, plan]`).
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: enforced}
+      hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: subagent-dispatch
+    kind: interaction
+    summary: The pipeline's ability to hand a phase to a subagent for isolated execution. Dispatch is the default wherever a harness has a primitive, at roughly 7x the cost of running the phase inline; fr-goal §5's dispatch clause is the one home for the measured figures and the rule. Every dispatch is now recorded fr-side per unit — `fr run advance` opens a DispatchRecord carrying the agent type, the resolved model and the harness that resolved it, `fr run claim --agent <id>` names the holder in that harness's own id vocabulary, `fr run resolve` closes it — so this row points at observable state in the run cursor (`fr run status`, `fr run check`) instead of resting entirely on the skill prose being followed, and a still-held unit is refused a second dispatch identically on every harness (gh-503, gh-499).
+    harnesses:
+      claude-code: {state: enforced}
+      opencode: {state: enforced}
+      hermes: {state: enforced}
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
+  - id: status-line
+    kind: interaction
+    summary: A harness status line surfaces fr session/branch/isolation state via fr-statusline-segment.sh.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: fr-statusline-segment.sh is harness-neutral (stdin or --cwd) and callable today; no renderer/registration ships for OpenCode
+      hermes:
+        state: partial
+        scope_note: same segment script callable; no renderer/registration ships for Hermes
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}

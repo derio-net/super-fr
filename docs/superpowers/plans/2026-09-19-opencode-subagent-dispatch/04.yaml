@@ -1,0 +1,162 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The prose and the row — correct what actually gates dispatch
+  tag: agentic
+  tier: hard
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - opencode-subagent-dispatch
+tasks:
+- number: 1
+  title: Tool vocabulary and the dispatch clause, red to green
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: (i) beside the existing test_no_tool_name_is_claimed_by_two_harnesses
+      (grep for it), assert `"task" in TOOL_VOCABULARY["opencode"]`; that
+      neighbouring test then guards the collision for free. Comment that
+      scan_prose is case-sensitive, so lowercase `task` — OpenCode's actual tool
+      id — cannot match Claude Code's `Agent` or a capitalised `Task`.
+      (ii) create tests/unit/test_fr_goal_dispatch_prose.py over
+      plugins/super-fr/skills/fr-goal/SKILL.md: the string "no dispatch
+      primitive" is GONE; the text names `fr-phase-executor-<tier>` and
+      `subagent_type`; the cost policy is stated (assert on a multiple AND a
+      direction — e.g. "7" and "inline" within the same clause — not an exact
+      sentence, so ordinary rewording does not fail the test); and
+      `scan_prose(text)` returns NO violations, which is what proves the new
+      `task` mention stayed inside the scoped clause. Run pytest — both fail.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add "task" to TOOL_VOCABULARY["opencode"] in
+      packages/fr/src/fr/harness/__init__.py with a short comment on what it is
+      (the dispatch tool; input {prompt, description, subagent_type, command};
+      resolves the agent by name and carries NO model — the fact that forces
+      agent-per-tier). Then rewrite the OpenCode arm of fr-goal §5's
+      `**Harness — dispatch:**` clause: delete "OpenCode has no dispatch
+      primitive of its own — phases run inline, which is correct behaviour, not
+      a gap." and replace it with the instruction to dispatch
+      `subagent_type: fr-phase-executor-<tier>` (base agent when the phase
+      declares no tier) via the task tool, plus the cost policy in one sentence
+      — ~7x an inline run ($7.59 measured against ~$1), bought for the fastest
+      measured wall clock and real per-phase context isolation. Keep the clause
+      otherwise intact: it already names all three supported harnesses, which is
+      what makes it a valid scoped clause. Do NOT touch the Claude Code or
+      Hermes arms. Run the S1 tests — green.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: re-read the rewritten clause end to end as an OpenCode reader
+      with no context. The tripwire is syntactic — it proves every harness was
+      named, not that each was served. Tighten any arm that name-drops without
+      instructing. If the clause is already clear, record
+      `no-refactor-because: P4.T1` in the plan journal saying so.
+- number: 2
+  title: The parity row, red to green
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: in tests/unit/test_tripwire_harness_parity.py (or a sibling) assert
+      the `subagent-dispatch` row's opencode cell is `enforced` and carries NO
+      scope_note — the retired one blamed a discriminator that does not
+      discriminate (#493), and `enforced` is a state the schema requires no note
+      for. Run pytest — fails.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/harness/parity.yaml set subagent-dispatch's
+      opencode cell to `{state: enforced}` and delete the scope_note entirely.
+      Update the row's `summary` so it carries the default and its price — a
+      reader should meet the policy where they meet the claim. Run the S1 test
+      and `uv run fr harness parity --check` — both green.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: the row summary and the skill clause now both state the cost
+      policy, which is two places one number can drift. Make the row's summary
+      the short form and the skill's the operational one, with neither
+      restating the other's detail, so a future change has an obvious single
+      home. Re-run both tests.
+- number: 3
+  title: Regenerate both mirrors
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      `uv run scripts/sync-opencode.py` AND `uv run scripts/sync-hermes.py`,
+      then `git add` both trees. The skills mirrors are byte-for-byte copies, so
+      the corrected prose must ride into .opencode/skills/ and
+      .hermes/skills/fr/ — otherwise the OpenCode reader keeps being told to run
+      inline by the very copy they read, which is the whole failure this phase
+      exists to end. Confirm `--check` clean on both.
+- number: 4
+  title: Quality gate
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      `uv run fr harness parity --check`; `uv run pytest -q --no-cov`;
+      ruff format; ruff check; `uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-19T23:08:31+00:00'
+      note: 'RED: test_harness_vocabulary gains test_opencodes_dispatch_tool_is_in_the_vocabulary
+        (+ the equality assertion updated); new tests/unit/test_fr_goal_dispatch_prose.py
+        asserts the retracted claim is gone, the clause names subagent_type/fr-phase-executor-<tier>/task,
+        the cost policy carries a multiple AND a direction, and scan_prose(text)==[].
+        5 failed, 11 passed.'
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-19T23:11:23+00:00'
+      note: 'GREEN: TOOL_VOCABULARY[''opencode''] += ''task tool'' (two-word prose
+        form, NOT the bare id — see finding p4-t1-s2-bare-task-token) with the {prompt,description,subagent_type,command}/by-name/no-model
+        comment; fr-goal §5''s OpenCode arm rewritten to dispatch subagent_type: fr-phase-executor-<tier>
+        via the task tool with the cost policy open. Claude Code and Hermes arms untouched.
+        20 passed.'
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-19T23:12:49+00:00'
+      note: 'REFACTOR: arm now states serial dispatch and explains (not asserts) why
+        the tier lives in the agent name; 120-line cap forced two long lines. See
+        journal p4-t1-s3-refactor.'
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-19T23:13:22+00:00'
+      note: 'RED: three tests in test_tripwire_harness_parity.py — the subagent-dispatch
+        opencode cell is ''enforced'', carries NO scope_note, and the row summary
+        states the cost policy (multiple + direction, not a sentence). 3 failed, 6
+        passed.'
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-19T23:13:48+00:00'
+      note: 'GREEN: subagent-dispatch opencode cell -> {state: enforced}, scope_note
+        deleted entirely; summary now carries the default and its price. 38 passed;
+        fr harness parity --check clean.'
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-19T23:14:30+00:00'
+      note: 'REFACTOR: row = short form + explicit pointer to fr-goal §5 as the one
+        home for the figures; clause = the operational form owning $7.59/~$1 and 56.2/77.6/105.2,
+        which the row never repeats. The one token they must share (the multiple)
+        is now PINNED by test_the_row_and_the_clause_state_the_SAME_multiple, and
+        test_the_row_does_not_restate_the_clauses_measured_detail keeps the division
+        from eroding. Drift proven detectable (row 9x vs clause 7x -> mismatch). 15
+        passed.'
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-19T23:14:45+00:00'
+      note: 'Both mirrors regenerated: sync-opencode.py (9 skills, 8 instructions,
+        9 commands, 4 agents) and sync-hermes.py (9 skills, 4 rules); both --check
+        clean. .opencode/skills/fr-goal/SKILL.md and .hermes/skills/fr/fr-goal/SKILL.md
+        now carry ''task tool'' and zero occurrences of ''no dispatch primitive''.'
+    P4.T4.S1:
+      state: x
+      ticked_at: '2026-09-19T23:19:06+00:00'
+      note: 'Gate: fr harness parity --check clean; pytest -q --no-cov --basetemp=/tmp/sb
+        -> 1 failed, 3269 passed, 80 skipped (the single failure is test_workflow_check::test_cli_all_fails_when_nothing_is_discoverable,
+        pre-existing on origin/main, scoped out in r-p1-f4); ruff format 359 files
+        unchanged; ruff check all passed; mypy 137 source files clean.'
+  completion:
+    at: '2026-09-19T23:19:07+00:00'
+    note: null
+    observed_prs: []

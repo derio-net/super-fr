@@ -1,0 +1,85 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Evidence — a review unit cannot reach done without it
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - run-unit-review-evidence
+  - run-review-evidence-cannot-be-faked
+  - run-legacy-reviews-not-retro-failed
+  - workflow-without-evidence-unchanged
+  tier: standard
+tasks:
+- number: 1
+  title: The manifest declares it, resolve enforces it
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: `Step.evidence: tuple[str, ...] = ()` parses; a shape with none resolves
+      exactly as before. With `evidence: [review]` on a member: `resolve --state done`
+      without `--evidence review=<id>` exits 2 naming the flag; an id that is not a
+      `kind=review` entry with `phase=N` for THAT phase (a finding, or another phase's
+      review) is refused; a real one is accepted and stored in `units[k].evidence`;
+      `--state failed` needs none.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: add the field to fr/workflow/model.py; add `--evidence name=id` to
+      `resolve_cmd`; verify with gh#517's own `reviewed_phases` rule from
+      fr/journal/model.py — reuse it, do not write a second notion of "reviewed".
+      Declare `evidence: [review]` on `review-phase` in BOTH copies of the shipped shape
+      (plugins/super-fr/workflows/fr-goal.yaml and packages/fr/src/fr/workflows/fr-goal.yaml).
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR: `uv run pytest tests/unit/test_tripwire_shipped_workflows.py -q --no-cov`
+      and `uv run fr workflow check fr-goal`. `fr journal check --require-reviews` must
+      pass and fail exactly as it did before this phase — it remains the gate for plans
+      with no cursor.
+- number: 2
+  title: Reviews from before the gate are debt, not failures
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: a migrated cursor whose review units are `done` with no evidence: `fr run
+      check` reports each as `done, unevidenced (predates the evidence gate)` and its
+      exit code is UNCHANGED — assert the code explicitly.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: extend check_cmd and the status line for such units.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: ruff, mypy, run-cli and journal test files green.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T22:52:56+00:00'
+      note: 'RED: tests/unit/test_run_evidence.py, 20 failing'
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T22:59:04+00:00'
+      note: 'GREEN: Step.evidence, --evidence on resolve, reviews_phase shared, both
+        shipped shapes'
+    P5.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T23:08:17+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T23:08:18+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T23:08:18+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T23:11:20+00:00'
+      note: 'REFACTOR: ruff/mypy clean; run-cli, journal and shipped-shape suites
+        green'
+  completion:
+    at: '2026-09-20T23:11:26+00:00'
+    note: null
+    observed_prs: []

@@ -78,6 +78,11 @@ class JournalEntry(BaseModel):
     body: str = ""
     # Present ONLY on `finding` entries (fixed | refuted | open).
     state: FindingState | None = None
+    # A RESOLUTION RECORD names the finding it speaks about (spec §3.G.1). The
+    # journal is an audit log: `fr journal resolve` appends one of these rather
+    # than rewriting the finding, because a finding mutated in place erases
+    # that it was ever open. `effective_finding_states` folds them.
+    resolves: str | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -85,6 +90,22 @@ class JournalEntry(BaseModel):
             raise ValueError("a `finding` entry requires a `state` (fixed|refuted|open)")
         if self.kind != "finding" and self.state is not None:
             raise ValueError(f"`state` is only valid on `finding` entries, not `{self.kind}`")
+        if self.resolves is not None:
+            if self.kind != "finding":
+                raise ValueError(
+                    f"`resolves` is only valid on `finding` entries, not `{self.kind}` "
+                    "— a resolution record carries the state it resolves the finding to"
+                )
+            if any(c.isspace() for c in self.resolves) or not self.resolves:
+                raise ValueError(
+                    f"`resolves` must be a non-empty whitespace-free journal id, "
+                    f"got {self.resolves!r}"
+                )
+            if self.resolves == self.id:
+                raise ValueError(
+                    f"entry `{self.id}` cannot resolve itself — a resolution record is a "
+                    "SEPARATE entry naming the finding it closes"
+                )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
         if not self.id or any(c.isspace() for c in self.id):
@@ -132,7 +153,11 @@ def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -
 _DELIM_PREFIX = "<!-- fr:journal "
 _DELIM_SUFFIX = " -->"
 # Header fields serialized into the delimiter comment, in a stable order.
-_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state")
+# `resolves` is appended LAST so every journal written before phase 7 keeps
+# the byte-for-byte header it already has; an fr that predates the field reads
+# the token and ignores it (`parse_journal` names the fields it wants), so an
+# older reader sees a resolution record as an ordinary fixed/refuted finding.
+_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves")
 
 
 def serialize_entry(entry: JournalEntry) -> str:
@@ -172,6 +197,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
     raises ``JournalParseError``.
     """
     entries: list[JournalEntry] = []
+    entry_ids: set[str] = set()
     lines = text.splitlines()
     i = 0
     n = len(lines)
@@ -197,19 +223,32 @@ def parse_journal(text: str) -> list[JournalEntry]:
             block.pop(0)
         while block and block[-1].strip() == "":
             block.pop()
+        # NAMED KEYS, NEVER `JournalEntry(**fields)` — this projection is
+        # load-bearing, not style. `JournalEntry` is `extra="forbid"` (like
+        # `RunState`), so splatting would make every future optional header
+        # token a BREAKING change: an older fr would raise on a journal it used
+        # to read. Because the fields are named here, an unknown token stays in
+        # `fields` and never reaches the model, which is why a real fr 4.4.0
+        # renders a journal full of `resolves=` records at exit 0 while the same
+        # test against the run kind fails loudly. `test_journal_model.py::
+        # test_a_header_token_this_fr_does_not_know_is_ignored_not_fatal` is the
+        # guard; a refactor to `**fields` fails it immediately.
         try:
-            entries.append(
-                JournalEntry(
-                    kind=fields["kind"],  # type: ignore[arg-type]
-                    scope=fields["scope"],  # type: ignore[arg-type]
-                    id=fields["id"],
-                    created=fields["created"],
-                    phase=int(fields["phase"]) if "phase" in fields else None,
-                    title=_title_from_heading(text, fields["id"]),
-                    body="\n".join(block),
-                    state=fields.get("state"),  # type: ignore[arg-type]
-                )
+            entry = JournalEntry(
+                kind=fields["kind"],  # type: ignore[arg-type]
+                scope=fields["scope"],  # type: ignore[arg-type]
+                id=fields["id"],
+                created=fields["created"],
+                phase=int(fields["phase"]) if "phase" in fields else None,
+                title=_title_from_heading(text, fields["id"]),
+                body="\n".join(block),
+                state=fields.get("state"),  # type: ignore[arg-type]
+                resolves=fields.get("resolves"),
             )
+            if entry.id in entry_ids:
+                raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
+            entry_ids.add(entry.id)
+            entries.append(entry)
         except KeyError as e:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
         i = j
@@ -229,9 +268,146 @@ def _title_from_heading(text: str, entry_id: str) -> str:
     return ""
 
 
-def _handoff_line(entry: JournalEntry) -> str:
-    """One-line collapse of an entry: id, kind, state, title, phase."""
-    state_bit = f" [{entry.state}]" if entry.state is not None else ""
+# --- effective finding state (the fold) ----------------------------------
+
+
+def effective_finding_states(entries: list[JournalEntry]) -> dict[str, FindingState]:
+    """Each finding id → the state its LAST record gives it (spec §3.G.1).
+
+    A *record* for a finding is either the finding entry itself or a later
+    resolution record naming it through `resolves`. Entries arrive in file
+    order, which for an append-only journal is chronological, so the fold is a
+    left-to-right overwrite: resolved, then re-opened by a later record, reads
+    open again.
+
+    A record carrying `resolves` speaks about the finding it names and NOT
+    about itself — otherwise resolving one finding would open a new one — so it
+    never contributes its own id to the map. A record naming an id that has no
+    entry still folds (a hand-spliced journal must not crash the gate);
+    `fr journal resolve` refuses to write one.
+
+    A journal with no resolution records — every journal written before this
+    existed — folds to exactly each finding's own `state`.
+    """
+    states: dict[str, FindingState] = {}
+    for e in entries:
+        if e.resolves is not None:
+            if e.state is not None:
+                states[e.resolves] = e.state
+        elif e.kind == "finding" and e.state is not None:
+            states[e.id] = e.state
+    return states
+
+
+def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
+    """Findings whose EFFECTIVE state is open, in first-appearance order.
+
+    First-appearance, not resolution order, so the gate's message stays stable
+    as records accumulate.
+    """
+    states = effective_finding_states(entries)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for e in entries:
+        if e.kind != "finding":
+            continue
+        fid = e.resolves if e.resolves is not None else e.id
+        if fid in seen:
+            continue
+        seen.add(fid)
+        if states.get(fid) == "open":
+            ordered.append(fid)
+    return ordered
+
+
+def phase_finding_states(entries: list[JournalEntry], phase: int) -> dict[str, FindingState]:
+    """Every finding FILED AGAINST `phase` -> its effective state, in
+    first-appearance order.
+
+    The phase is the ORIGINAL entry's, never a resolution record's: a record
+    speaks about the finding it names, and `fr journal resolve` does not ask
+    for a phase. The state is the same fold `fr journal check` gates on
+    (`effective_finding_states`), so `fr run resolve`'s `findings` obligation
+    and the end-of-run gate cannot disagree about what "open" means — one rule,
+    two moments.
+
+    A finding filed with no phase (`--global`) belongs to no review, so it is
+    in no phase's map. It stays `fr journal check`'s business.
+    """
+    states = effective_finding_states(entries)
+    return {
+        e.id: states[e.id]
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.phase == phase and e.id in states
+    }
+
+
+def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
+    """The ONE writer — `fr journal add`, `fr journal resolve`, and any test
+    fixture built through `fr.test_support.build_plan_journal` all land here,
+    so none of them can disagree about separators, the file header, or the
+    serialized shape. A test fixture built by calling this (rather than
+    formatting Markdown by hand) is a CAPTURE of the real serializer's
+    output, not a guess that can drift from it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    block = serialize_entry(entry)
+    if path.exists():
+        prior = path.read_text()
+        sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
+        path.write_text(prior + sep + block)
+    else:
+        path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
+def reviews_phase(entry: JournalEntry, phase: int) -> bool:
+    """Is `entry` a recorded review OF `phase`? (spec §B)
+
+    **The one predicate, and there must never be a second.** Two gates read
+    it: gh#517's `fr journal check --require-reviews` (via `reviewed_phases`
+    below, for a plan with no run cursor) and the evidence gate on
+    `fr run resolve --state done` (for a plan that has one,
+    2026-09-20-unit-record-unification §4.E). A second spelling of "reviewed"
+    is how a `finding` comes to satisfy one gate and not the other — and then
+    "review skipped" and "review passed clean" are the same state again, with
+    extra steps, which is gh#430 verbatim.
+
+    An entry "names" a phase only through `phase=N`: a `review` entry with no
+    `phase` does not count toward ANY phase, and a non-`review` entry (a
+    `finding`, even one tagged with the same `phase=N`) does not count either,
+    however closely findings and reviews are related. This is deliberately
+    narrower than "any activity happened during phase N" — this repo's own
+    journals carry 5 unphased plan-scope `review` entries (spec §B, D2's
+    evidence), predating the `--phase` convention; treating them as blanket
+    cover would let one undated review satisfy every phase a plan ever grows,
+    which is the exact hole these gates exist to close.
+    """
+    return entry.kind == "review" and entry.phase == phase
+
+
+def reviewed_phases(entries: list[JournalEntry]) -> set[int]:
+    """Phase numbers that already have a recorded review (spec §B).
+
+    The fold of `reviews_phase` over `entries` — it holds no rule of its own,
+    so the gate that asks "which phases are reviewed?" and the gate that asks
+    "is THIS entry a review of phase N?" cannot answer differently.
+    """
+    return {e.phase for e in entries if e.phase is not None and reviews_phase(e, e.phase)}
+
+
+def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> str:
+    """One-line collapse of an entry: id, kind, state, title, phase.
+
+    `effective_state` overrides the entry's OWN state for display. A journal is
+    an append-only log, so each record correctly states what was true when it
+    was written and `serialize_entry` must keep printing that — but a handoff
+    reports CURRENT state, and a finding written `open` that a later record
+    closed is not open now. Showing the entry's own field there tells a phase-6
+    executor to chase ten bugs that no longer exist, which is the cost this
+    whole bound exists to remove (super-fr#464). Defaults to the entry's own
+    state so non-finding callers are unaffected.
+    """
+    state = entry.state if effective_state is None else effective_state
+    state_bit = f" [{state}]" if state is not None else ""
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else " (unphased)"
     return f"- {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
 
@@ -246,25 +422,104 @@ def compose_handoff(
 ) -> str:
     """Compose the curated executor handoff for `phase` from parsed `entries`.
 
-    Dependency-scoped, not recency-scoped: an entry is *relevant* when it is
-    open (actionable anywhere), untagged (global), or tagged to this phase or
-    one it depends on. Relevant entries render in full; everything else
-    collapses to one line each, so a phase-10 executor stops re-reading 39
-    fixed findings in full. Empty sections are omitted; the raw-render
-    pointer is always present, so the full file is one command away.
+    **State first, then dependency** — a three-way decision, in this order:
+
+    1. a finding whose EFFECTIVE state is open renders in full, wherever it is
+       tagged: it is actionable anywhere;
+    2. any other finding — effectively `fixed` or `refuted` — collapses to one
+       line, *regardless of phase*: no phase relationship makes a closed bug
+       actionable again. A resolution record collapses with it, with ONE
+       exception: a record that RE-OPENS its target renders in full, because
+       there the "it is history" rationale is simply false and collapsing it
+       drops the only text saying why the finding is live again;
+    3. every non-finding kind (decisions, discoveries, reviews, and the
+       debug-scope kinds) keeps the dependency rule: it renders in full when
+       untagged or tagged to this phase or one it depends on, and collapses
+       otherwise.
+
+    Rule 2 running *ahead of* the dependency test is the bound. Before it, state
+    only routed a finding into `## Open findings`; past that, `{phase,
+    *depends_on}` decided, so a `fixed` finding on a dependency phase rendered
+    in full — and real plans depend on their predecessors, so the old
+    docstring's "a phase-10 executor stops re-reading 39 fixed findings in full"
+    held only for the non-dependency ones. Measured on a real SEVEN-phase
+    journal (the category breakdown is spec §5.A3; §2 has the size-by-phase
+    table), that left 38,020 chars across 30 closed findings inside phase 6's
+    83,132-char handoff, describing bugs that no longer existed — the measured
+    saving is 34,022. Now a closed entry costs O(1) characters however long its
+    body is.
+
+    The collapsed line reports the entry's EFFECTIVE state, not the state its
+    own record carries. The journal is an append-only log, so a record rightly
+    says what was true when it was written; a handoff reports what is true now.
+
+    Decisions and discoveries stay dependency-scoped deliberately: a decision is
+    never "closed" — it still constrains the phase that depends on it — and a
+    discovery is a trap paid for once. Only findings have a lifecycle that makes
+    them historical, so only findings collapse on state.
+
+    Handoff size still GROWS with phase number, and that is not a bug to fix
+    later (spec §5.A3): what remains is decisions and discoveries a later phase
+    genuinely needs, and dropping them is the one failure the handoff contract
+    ("missing anything → STOP, do not guess") exists to prevent.
+
+    Empty sections are omitted; the raw-render pointer is always present, so the
+    full file is one command away.
 
     Pure — no I/O. `fr journal handoff` resolves the journal and the plan's
     `depends_on`, then calls this.
     """
     relevant = {phase, *depends_on}
+    # EFFECTIVE state, not each entry's own: a finding resolved by a later
+    # record has stopped being actionable, and re-showing it in full is the
+    # noise the fold exists to remove. This is the same fold `fr journal check`
+    # gates on (`open_finding_ids`) — deliberately reused rather than
+    # reimplemented, so the handoff and the gate can never disagree about what
+    # is still open. The collapsed line keeps id, title, state and phase, so the
+    # handoff still says both what was found and what became of it.
+    still_open = set(open_finding_ids(entries))
+    # The FULL fold, not just its open subset: the collapsed line reports
+    # effective state, and `refuted` must survive as `refuted`. Reading
+    # `e.state` instead printed the record's own label, so a finding written
+    # `refuted` and later closed by a `fixed` resolution record still read
+    # `[refuted]` — the same defect the phase-2 review fixed in the
+    # open->fixed direction, which only looked fixed because the fallback
+    # happened to say `fixed`.
+    effective = effective_finding_states(entries)
     open_findings: list[str] = []
     context: list[str] = []
     collapsed: list[str] = []
     for e in entries:
-        if e.kind == "finding" and e.state == "open":
-            open_findings.append(serialize_entry(e))
-        elif e.phase is None or e.phase in relevant:
-            context.append(serialize_entry(e))
+        section: list[str]
+        if e.kind == "finding":
+            # STATE first — this is the bound. An open finding is actionable
+            # anywhere; any other finding (fixed, refuted, or a resolution
+            # record) is history, and no phase relationship makes a closed bug
+            # actionable again. `relevant` is never consulted for a finding.
+            # A resolution record is history — UNLESS it re-opens. Re-opening
+            # is a first-class CLI path (`fr journal add --resolves <id>
+            # --state open`), and collapsing one drops the only text saying
+            # why the finding is actionable again, while the original report
+            # still renders in full labelled with its old state. So ask the
+            # fold about the finding this entry SPEAKS FOR: its target when it
+            # resolves one, itself otherwise. Still one fold, and still O(1)
+            # for closed entries, because a re-opened finding is by definition
+            # open.
+            speaks_for = e.resolves if e.resolves is not None else e.id
+            renders_full = speaks_for in still_open
+            section = open_findings
+        else:
+            # Dependency rule, deliberately unchanged: decisions and
+            # discoveries are never "closed" and carry forward value.
+            renders_full = e.phase is None or e.phase in relevant
+            section = context
+        if renders_full:
+            section.append(serialize_entry(e))
+        elif e.kind == "finding":
+            # Display the EFFECTIVE state: this entry reached the collapse
+            # branch, so the fold says it is closed whatever its own field
+            # reads. Ask the fold, never the record.
+            collapsed.append(_handoff_line(e, effective.get(e.id) or e.state))
         else:
             collapsed.append(_handoff_line(e))
     parts = [f"# Handoff (phase {phase})"]

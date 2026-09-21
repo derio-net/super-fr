@@ -23,10 +23,20 @@ change with it.
 
 "Shape" means what a reader must handle: a new required field, a renamed or
 removed one, a changed carrier, a new nesting. Adding an **optional, defaulted**
-field is not a shape change *when no released `fr` can read the file at all*
-(the `run` kind in 4.0.0 — `fr/run/model.py` does not exist on `origin/main`).
-If a released `fr` could read it, it is a shape change: the models are
-`extra="forbid"`, so an old reader does not ignore your new key, it raises.
+field is not a shape change *when no released `fr` can read the file at all* —
+a genuinely narrow exemption, and the example that used to sit here has expired:
+it read "the `run` kind in 4.0.0 — `fr/run/model.py` does not exist on
+`origin/main`", which stopped being true the moment `fr run` shipped. Check the
+claim before relying on it. If a released `fr` could read the file, it IS a
+shape change: the models are `extra="forbid"`, so an old reader does not ignore
+your new key, it raises.
+
+The `run` kind proved this on itself in the 2026-09-18 harness-parity PR.
+Adding an optional, defaulted `StepRecord.answered_by` was treated as a shape
+change, and the live evidence arrived immediately: an `fr` 4.4.0 on `PATH` reads
+a cursor written by the new one and fails with `schema_version — Extra inputs
+are not permitted`. Optional and defaulted buys you nothing against a
+closed-world model held by an older reader.
 
 Related obligation, from the same closed-world models: the first PR that moves
 any kind's `current_version` past 1 must, in that PR, add an optional defaulted
@@ -34,6 +44,52 @@ any kind's `current_version` past 1 must, in that PR, add an optional defaulted
 `PlanMeta` all reject an unknown key, so the stamp the migration writes would
 make the file unparseable by the `fr` that wrote it. (`PlanMeta` is the
 exception that proves it: a plan's stamp *is* its existing `schema_version`.)
+
+## Removing or moving a field freezes the old shape — migrations never read with the live model
+
+**The first migration that removes or moves a field freezes the prior shape as a
+legacy model, and no migration may validate an old file against the live one.**
+
+Every `run` migration up to 3 → 4 "parsed first, refused rather than certified" —
+correctly — but did it with the LIVE `parse_run_state`. That was sound only by
+accident: every change so far had been additive, so the live model happened to
+be a superset of every older shape. The 4 → 5 rewrite (2026-09-20, one record per
+unit) REMOVES `items`, `dispatch` and `accounting` from an `extra="forbid"` model.
+Validated against the live model, a v2 cursor carrying `items` stops parsing, and
+the chain `2 → 3 → 4 → 5` refuses every older cursor **at its first hop** —
+stranding exactly the files the framework exists to carry. Nothing would have
+gone red: a refusal is a per-artifact failure, reported politely, forever.
+
+So, when a change removes or moves a field:
+
+1. **Freeze the prior shape** as its own closed-world model beside the live one
+   (`fr.run.legacy.RunStateV4`, a superset of versions 1–4), with its
+   vocabularies INLINED rather than imported — a frozen reader that follows a
+   live vocabulary stops being a reader of the old version the day the
+   vocabulary moves. Pin its source (`legacy.FROZEN_CLASS_SHA256`,
+   `tests/unit/test_run_legacy.py`): a cursor on someone's unmerged branch is
+   already written, and editing the reader changes what fr believes those bytes
+   mean. A later removal freezes a `…V5` beside it; it does not edit `…V4`.
+2. **Point EVERY hop at it**, not only the new one
+   (`fr.artifacts.run_cursor.cursor_guard`). The old hops are the ones that
+   break, and they break silently.
+   `tests/unit/test_migration_run_unit_record.py::test_no_run_migration_names_the_live_parser`
+   is the tripwire.
+3. **Build the rewrite in memory and write once**, through
+   `fr.artifacts.atomic.write_text_atomic`. A body rewrite can half-write in a
+   way a stamp cannot: every refusal must fire before a byte moves, and a cursor
+   the rewrite cannot convert is left **byte-identical** and reported as that one
+   artifact's failure while the rest migrate.
+4. **Survive your own crash window.** `fn` writes the body and the runner writes
+   the stamp afterwards; a crash in between leaves a new body under an old stamp,
+   which the frozen reader (closed-world, by design) refuses. The rewriting `fn`
+   must recognise a body that is already WHOLLY in the new shape and let the
+   runner finish — the one legitimate use of the live model in a migration,
+   because "is this already v5?" is a question only the v5 model can answer.
+5. **Assert every hop of the chain**, not just its endpoint
+   (`test_the_run_kind_is_reachable_all_the_way_from_version_one_to_five`:
+   `[2, 3, 4, 5]`). It is this repo's only guard against two branches allocating
+   the same version number, which has now happened twice.
 
 ## What the CLI-entry gate will and will not do
 

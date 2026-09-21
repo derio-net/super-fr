@@ -43,12 +43,44 @@ from fr.labels import LabelDef
 # nest arbitrarily, and the dash infix is optional across GitLab versions).
 _MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
 
+# GitLab's contents endpoint REQUIRES `ref`; GitHub's equivalent does
+# not, which is why this adapter was written without one (gh-486).
+# HEAD is the server's own default branch, so one call works on a
+# `master` instance and a `main` one alike — live-proven 2026-09-19
+# against a master-default self-hosted instance (spec §2.A).
+_CONTENTS_REF = "HEAD"
+
 
 class RealGlabClient:
-    """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos."""
+    """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos.
+
+    `host` names a self-hosted instance and is carried into every glab
+    call this client makes (as the child's GITLAB_HOST — see
+    `fr.glab._run_glab`). `None`, the default, leaves glab's own host
+    resolution alone. The client is deliberately dumb about where the
+    host came from: `fr.hostclient.client_for` resolves it from a
+    checkout, `fr_vk.pr_observe` from a bare PR URL, and neither
+    provenance changes what this class does with it (gh-486; spec §4.C).
+    """
+
+    def __init__(self, *, host: str | None = None) -> None:
+        self._host = host
+
+    def _glab(self, args: list[str]) -> str:
+        """Every direct `glab` invocation this class makes goes through
+        here, so the host is applied in exactly ONE place. A method added
+        later cannot forget it — which it could when each call site
+        repeated `host=self._host` by hand."""
+        return _glab._run_glab(args, host=self._host)
+
+    def _api(self, endpoint: str) -> str:
+        """`glab api <endpoint>` — the shape four of the five read paths
+        use. Kept separate from `_glab` only to stop `["api", ...]` being
+        re-spelled at each call site."""
+        return self._glab(["api", endpoint])
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
-        raw = cast("dict[str, Any]", _glab.view_issue(repo, number))
+        raw = cast("dict[str, Any]", _glab.view_issue(repo, number, host=self._host))
         labels_raw = raw.get("labels", []) or []
         labels = [
             lbl["name"] if isinstance(lbl, dict) and "name" in lbl else lbl for lbl in labels_raw
@@ -73,9 +105,7 @@ class RealGlabClient:
         """
         encoded_repo = quote(repo, safe="")
         try:
-            out = _glab._run_glab(
-                ["api", f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests"]
-            )
+            out = self._api(f"projects/{encoded_repo}/issues/{issue_number}/related_merge_requests")
         except _glab.GlabError:
             return []
         nodes = json.loads(out) if out else []
@@ -107,7 +137,7 @@ class RealGlabClient:
             return None
         repo, iid = m.group(1), m.group(2)
         try:
-            out = _glab._run_glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
+            out = self._glab(["mr", "view", iid, "--repo", repo, "--output", "json"])
         except _glab.GlabError:
             return None
         raw = json.loads(out)
@@ -133,6 +163,7 @@ class RealGlabClient:
             number=number,
             add=sorted(add),
             remove=sorted(remove),
+            host=self._host,
         )
 
     def edit_issue_state(
@@ -144,15 +175,15 @@ class RealGlabClient:
         reason: str | None = None,
     ) -> None:
         if state == "CLOSED":
-            _glab.close_issue(repo=repo, number=number)
+            _glab.close_issue(repo=repo, number=number, host=self._host)
             return
         if state == "OPEN":
-            _glab.reopen_issue(repo=repo, number=number)
+            _glab.reopen_issue(repo=repo, number=number, host=self._host)
             return
         raise ValueError(f"unknown issue state: {state!r}")
 
     def edit_issue_body(self, repo: str, number: int, body: str) -> None:
-        _glab.edit_issue_body(repo=repo, number=number, body=body)
+        _glab.edit_issue_body(repo=repo, number=number, body=body, host=self._host)
 
     def create_issue(
         self,
@@ -167,6 +198,7 @@ class RealGlabClient:
             title=title,
             body=body,
             labels=sorted(labels),
+            host=self._host,
         )
 
     def ensure_labels(self, repo: str, labels: list[Any]) -> None:
@@ -182,47 +214,68 @@ class RealGlabClient:
                 color = getattr(lbl, "color", None) or lbl.get("color", "ededed")
                 description = getattr(lbl, "description", None) or lbl.get("description", "")
                 defs.append(LabelDef(name=name, color=color, description=description))
-        _glab.ensure_labels(repo=repo, labels=defs)
+        _glab.ensure_labels(repo=repo, labels=defs, host=self._host)
 
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         """Post a comment via `glab issue note` (glab's name for gh's
         `issue comment` — verified directly against `glab issue --help`)."""
-        _glab._run_glab(["issue", "note", str(number), "--repo", repo, "--message", body])
+        self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
-        projects/:id/repository/files/:path`. Any error reads as
-        "not found" — the safe direction (spec-archival callers leave the
-        spec in place on an unresolved lookup)."""
+        projects/:id/repository/files/:path?ref=HEAD`. A NOT-FOUND reads
+        as absent — the safe direction for spec-archival callers; any
+        other error propagates, because a malformed or unauthorized
+        request is not an absent file (gh-486).
+
+        `ref` is MANDATORY on this endpoint; without it GitLab answers 400
+        and this probe reported that as "absent" (gh-486)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
-            _glab._run_glab(["api", f"projects/{encoded_repo}/repository/files/{encoded_path}"])
+            self._api(
+                f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"
+            )
             return True
-        except _glab.GlabError:
-            return False
+        except _glab.GlabError as exc:
+            if _glab.is_not_found(exc):
+                return False
+            raise
 
     def list_dir(self, repo: str, path: str) -> list[str]:
         """Entry names under `path` via the repository tree endpoint.
-        `[]` on any GlabError — same fail-soft posture as `file_exists`."""
+        `[]` on a NOT-FOUND — same fail-soft posture as `file_exists`;
+        any other error propagates, because a malformed or unauthorized
+        request is not an empty directory (gh-486).
+        `ref` isn't required here (unlike the contents endpoints) — the
+        tree endpoint already defaults to the project's default branch —
+        but is pinned for consistency, live-proven not to regress
+        against a master-default instance 2026-09-19 (spec §2.A)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
         try:
-            out = _glab._run_glab(
-                ["api", f"projects/{encoded_repo}/repository/tree?path={encoded_path}"]
+            out = self._api(
+                f"projects/{encoded_repo}/repository/tree?path={encoded_path}&ref={_CONTENTS_REF}"
             )
-        except _glab.GlabError:
-            return []
+        except _glab.GlabError as exc:
+            if _glab.is_not_found(exc):
+                return []
+            raise
         entries = json.loads(out) if out else []
         return [e["name"] for e in entries if isinstance(e, dict) and "name" in e]
 
     def read_file(self, repo: str, path: str) -> str:
         """Raw file text via the repository files endpoint. GitLab's API
         returns base64-encoded content (unlike GitHub's raw-media-type
-        trick) — decoded here."""
+        trick) — decoded here.
+
+        `ref` is MANDATORY on this endpoint; without it GitLab answers 400
+        and this method raised on every real instance (gh-486)."""
         encoded_repo = quote(repo, safe="")
         encoded_path = quote(path, safe="")
-        out = _glab._run_glab(["api", f"projects/{encoded_repo}/repository/files/{encoded_path}"])
+        out = self._api(
+            f"projects/{encoded_repo}/repository/files/{encoded_path}?ref={_CONTENTS_REF}"
+        )
         data = json.loads(out)
         content = data.get("content", "")
         return base64.b64decode(content).decode("utf-8")

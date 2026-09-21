@@ -58,6 +58,23 @@ def _marker(root: Path, branch: str, *, toplevel: Path | None = None) -> None:
     )
 
 
+def _flat(output: str) -> str:
+    """`output` with every run of whitespace collapsed to one space.
+
+    rich soft-wraps human output to the console's width, and it will break a
+    phrase mid-sentence — so `"not a linked git worktree" in result.output` is
+    an assertion about the terminal as much as about fr. These tests pass on
+    Linux CI only because its tmp paths are short; on a host with longer ones
+    the refusal wraps and the substring vanishes.
+
+    Already root-caused once, for these exact two tests, in the note at
+    `test_harness_matrix.py`'s parity-table tests — which fixed its own
+    assertions and left these. This is the same idiom
+    `test_v2_pickup.py` and `test_plan_acceptance_links.py` already use.
+    """
+    return " ".join(output.split())
+
+
 def _start(repo: Path, shipped: Path, branch: str = "feat/x"):
     return runner_cli.invoke(
         app,
@@ -134,8 +151,32 @@ def test_a_forged_worktree_marker_in_a_plain_directory_is_refused(tmp_path: Path
     result = _start(repo, _shipped(tmp_path))
 
     assert result.exit_code == 2, result.output
-    assert "not a linked git worktree" in result.output
+    assert "not a linked git worktree" in _flat(result.output)
     assert not (repo / "docs" / "superpowers" / "runs").exists()
+
+
+@pytest.mark.parametrize("columns", ["40", "60", "80", "200"])
+def test_a_forged_marker_refusal_survives_any_terminal_width(
+    columns: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal must be assertable at any console width.
+
+    Without this, the test above passes or fails depending on how wide the
+    terminal is and how long `tmp_path` happens to be — it passed on Linux CI
+    (short tmp paths), failed in a devcontainer, and passed again on the host.
+    A security-shaped refusal whose test is decided by `$COLUMNS` is not
+    testing the refusal. Same guard shape as `test_harness_matrix.py`'s
+    parity-table width sweep, which root-caused this fragility and named this
+    file.
+    """
+    monkeypatch.setenv("COLUMNS", columns)
+    repo = tmp_path / "plain"
+    _marker(repo, "feat/x")
+
+    result = _start(repo, _shipped(tmp_path))
+
+    assert result.exit_code == 2, result.output
+    assert "not a linked git worktree" in _flat(result.output)
 
 
 def test_an_external_marker_without_container_evidence_is_refused(tmp_path: Path) -> None:
@@ -155,7 +196,7 @@ def test_an_external_marker_without_container_evidence_is_refused(tmp_path: Path
         assert result.exit_code == 0, result.output  # we ARE in a container
     else:
         assert result.exit_code == 2, result.output
-        assert "container evidence" in result.output
+        assert "container evidence" in _flat(result.output)
 
 
 def test_an_unknown_marker_mode_fails_closed(tmp_path: Path) -> None:
@@ -170,7 +211,7 @@ def test_an_unknown_marker_mode_fails_closed(tmp_path: Path) -> None:
     result = _start(repo, _shipped(tmp_path))
 
     assert result.exit_code == 2, result.output
-    assert "unknown mode" in result.output
+    assert "unknown mode" in _flat(result.output)
 
 
 def test_a_run_started_outside_a_workspace_enters_isolation_first(
@@ -192,7 +233,7 @@ def test_a_run_started_outside_a_workspace_enters_isolation_first(
     assert target.calls == ["feat/x"]
     assert run_path(wt, "r1").is_file()
     assert not run_path(base, "r1").exists()
-    assert str(wt) in result.output
+    assert str(wt) in _flat(result.output)
 
 
 def test_an_existing_workspace_for_the_branch_is_reused_not_re_entered(
@@ -232,7 +273,7 @@ def test_starting_a_run_for_another_branch_from_inside_a_workspace_is_refused(
     result = _start(repo, _shipped(tmp_path), branch="feat/x")
 
     assert result.exit_code == 2
-    assert "feat/other" in result.output
+    assert "feat/other" in _flat(result.output)
     assert not run_path(repo, "r1").exists()
 
 
@@ -272,4 +313,4 @@ def test_isolation_failure_is_a_clean_error_not_a_traceback(
 
     result = _start(base, _shipped(tmp_path))
     assert result.exit_code == 2
-    assert "no devcontainer profile" in result.output
+    assert "no devcontainer profile" in _flat(result.output)

@@ -1,0 +1,131 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Both triggers — fr models set closes the loop, install.sh loses its awk
+  tag: agentic
+  tier: standard
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-tier-binding-reaches-dispatch
+  - opencode-subagent-installer
+tasks:
+- number: 1
+  title: fr models set closes the loop, red to green
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: add to tests/unit/test_models_cmd.py (or create it — grep tests/
+      for `models_cmd` first and put this beside whatever already covers the
+      command). Under a sandboxed HOME and XDG_CONFIG_HOME with agent files
+      seeded from the committed mirror: invoke the `fr models set --harness
+      opencode --tier hard --model <B>` CLI path and assert the INSTALLED
+      agent file now reads `model: <B>` — the exact gap #498 reports, at the
+      exact point the operator's answer is made. Also assert: the command's
+      output NAMES the file it changed (a silent side effect on a path outside
+      the repo is worse than none); `--harness claude-code` touches no agent
+      file at all; and with no agent dir present the command still succeeds
+      and says there was nothing to update. Run pytest — fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in `fr.commands.models_cmd.set_cmd`, after `set_binding`
+      persists, call `materialize_agents(default_config_home(),
+      models_cfg=<the config just written, resolved repo>user exactly as
+      `resolve_cmd` does it>)` and print one line per Change. Keep
+      `fr.models.set_binding` PURE — it is a config writer and must not grow
+      a harness-specific side effect; the command is the right place to
+      orchestrate two effects. Then add the `apply` verb install.sh needs:
+      `fr models apply --harness opencode`, which runs the same materialiser
+      over the current resolved config and reports. Validate `--harness`
+      against a known set so a typo is refused rather than silently doing
+      nothing. Run the S1 tests — green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: `set_cmd`, `apply_cmd` and `resolve_cmd` now all need the
+      same repo>user resolved config. Extract one helper rather than three
+      near-identical `_repo_cfg()`/`load_models` pairs, so a future change to
+      the resolution order cannot apply to two call sites and miss the third.
+      Re-run the unit suite.
+- number: 2
+  title: install.sh drops its awk and calls fr, red to green
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: re-anchor the two unit tests spec-review r2 identified, so each
+      asserts the same PROPERTY against the new call rather than a deleted
+      implementation detail. In tests/unit/test_install_copies_opencode_agents.py:
+      `test_install_runs_agents_delivery_after_fr_cli_install` currently
+      anchors on the comment "# Derive the tier from the filename suffix"
+      (inside the awk block being deleted) — re-anchor it on the delivery
+      block's own stable marker and keep asserting the ordering property
+      against "# 10. fr CLI"; and
+      `test_install_calls_fr_models_resolve_for_agents` asserts the literal
+      "fr models resolve --harness opencode" — it must now assert that
+      delivery goes through `fr models apply --harness opencode` rather than
+      reimplementing resolution in bash. Rename it to say what it now pins.
+      Run pytest: the two fail against the un-edited install.sh, which is the
+      point — they are RED for the change that is about to happen.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in scripts/install.sh, delete the per-agent tier regex, the
+      `fr models resolve` loop and the awk rewrite, and replace the whole
+      block with a plain copy of `.opencode/agent/*.md` into
+      OPENCODE_AGENTS_DIR followed by one `fr models apply --harness opencode`
+      (tolerating a non-zero exit the way the old `|| true` did, so a
+      model-resolution problem never fails the install). Keep the opt-in gate,
+      the ordering after step 10, and the --uninstall removal exactly as they
+      are. Run the S1 tests AND the three PR #495 integration tests in
+      tests/integration/test_install_opencode_agents.py — those three must
+      pass UNCHANGED, which is what proves the behaviour survived the
+      implementation swap.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: with the awk gone the delivery block is three near-identical
+      copy loops (skills, commands, agents) plus one `fr` call. Fold the
+      copying if it reads cleaner; if it does not, record
+      `no-refactor-because: P2.T2` in the plan journal with the reason —
+      phase 3 of the previous plan already judged this same fold not worth it,
+      so re-deciding it rather than inheriting the verdict is the point.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      ruff format; ruff check; mypy; `uv run pytest -q --no-cov
+      --basetemp=/tmp/sb`; `uv run scripts/sync-opencode.py --check`. All
+      green but the one known pre-existing failure.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T07:23:48+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T07:23:53+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T07:23:59+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T07:24:08+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T07:24:14+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T07:25:13+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T07:31:10+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T07:31:34+00:00'
+    note: null
+    observed_prs: []

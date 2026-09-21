@@ -45,6 +45,7 @@ LEGACY_MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/$LEGACY_MARKETPLACE_NAM
 LEGACY_CACHE_BASE="$CLAUDE_DIR/plugins/cache/$LEGACY_MARKETPLACE_NAME"
 OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
 OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"
+OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agent"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
@@ -121,6 +122,15 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       if [ -f "$OPENCODE_COMMANDS_DIR/$skill.md" ]; then
         rm -f "$OPENCODE_COMMANDS_DIR/$skill.md"
         echo "  Removed $OPENCODE_COMMANDS_DIR/$skill.md"
+      fi
+    done
+  fi
+  if [ -d "$OPENCODE_AGENTS_DIR" ]; then
+    for agent_file in "$PLUGIN_ROOT"/.opencode/agent/*.md; do
+      agent="$(basename "$agent_file")"
+      if [ -f "$OPENCODE_AGENTS_DIR/$agent" ]; then
+        rm -f "$OPENCODE_AGENTS_DIR/$agent"
+        echo "  Removed $OPENCODE_AGENTS_DIR/$agent"
       fi
     done
   fi
@@ -524,37 +534,8 @@ if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
   echo "  (see the error above) — fr-goal will fall back to INLINE phase execution." >&2
 fi
 
-# 7b. OpenCode skill + command delivery — opt-in only (OpenCode has no
-# plugin/marketplace concept; it discovers plain SKILL.md files and
-# commands/<name>.md files from its own global dirs).
-# Gate on an explicit opt-in or evidence the operator already uses OpenCode,
-# so installs on machines without it stay untouched.
-if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
-  echo ""
-  echo "Installing skills for OpenCode ($OPENCODE_SKILLS_DIR)..."
-  mkdir -p "$OPENCODE_SKILLS_DIR"
-  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
-    skill="$(basename "$skill_dir")"
-    mkdir -p "$OPENCODE_SKILLS_DIR/$skill"
-    cp "$skill_dir/SKILL.md" "$OPENCODE_SKILLS_DIR/$skill/SKILL.md"
-    echo "  Installed $OPENCODE_SKILLS_DIR/$skill/SKILL.md"
-  done
-  echo ""
-  echo "Installing OpenCode slash commands ($OPENCODE_COMMANDS_DIR)..."
-  mkdir -p "$OPENCODE_COMMANDS_DIR"
-  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
-    skill="$(basename "$skill_dir")"
-    # Copies from the repo's own already-synced, CI-guarded .opencode/commands/
-    # mirror (scripts/sync-opencode.py) rather than regenerating — install.sh
-    # stays bash+jq only, no Python/yaml dependency added here.
-    cp "$PLUGIN_ROOT/.opencode/commands/$skill.md" "$OPENCODE_COMMANDS_DIR/$skill.md"
-    echo "  Installed $OPENCODE_COMMANDS_DIR/$skill.md"
-  done
-else
-  echo ""
-  echo "Skipping OpenCode skill/command delivery (no ~/.config/opencode found; set"
-  echo "OPENCODE_SKILLS_INSTALL=1 to force)."
-fi
+# 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
+# because it now shells out to `fr models apply`.
 
 # 8. VK MCP server at user level
 if [ "$SKIP_MCP" = true ]; then
@@ -656,6 +637,55 @@ else
   echo ""
   echo "  WARNING: uv not found — install fr CLI manually:"
   echo "    uv tool install $PLUGIN_ROOT/packages/fr"
+fi
+
+# 7b. OpenCode skill + command + agent delivery — opt-in only (OpenCode has no
+# plugin/marketplace concept; it discovers plain SKILL.md files and
+# commands/<name>.md files from its own global dirs, and agents from .opencode/agent/).
+# Gate on an explicit opt-in or evidence the operator already uses OpenCode,
+# so installs on machines without it stay untouched.
+# Runs AFTER the fr CLI install above so `fr models apply` is on PATH.
+if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
+  echo ""
+  echo "Installing skills for OpenCode ($OPENCODE_SKILLS_DIR)..."
+  mkdir -p "$OPENCODE_SKILLS_DIR"
+  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+    skill="$(basename "$skill_dir")"
+    mkdir -p "$OPENCODE_SKILLS_DIR/$skill"
+    cp "$skill_dir/SKILL.md" "$OPENCODE_SKILLS_DIR/$skill/SKILL.md"
+    echo "  Installed $OPENCODE_SKILLS_DIR/$skill/SKILL.md"
+  done
+  echo ""
+  echo "Installing OpenCode slash commands ($OPENCODE_COMMANDS_DIR)..."
+  mkdir -p "$OPENCODE_COMMANDS_DIR"
+  for skill_dir in "$PLUGIN_ROOT"/plugins/super-fr/skills/*/; do
+    skill="$(basename "$skill_dir")"
+    # Copies from the repo's own already-synced, CI-guarded .opencode/commands/
+    # mirror (scripts/sync-opencode.py) rather than regenerating — install.sh
+    # stays bash+jq only, no Python/yaml dependency added here.
+    cp "$PLUGIN_ROOT/.opencode/commands/$skill.md" "$OPENCODE_COMMANDS_DIR/$skill.md"
+    echo "  Installed $OPENCODE_COMMANDS_DIR/$skill.md"
+  done
+  echo ""
+  echo "Installing OpenCode agents ($OPENCODE_AGENTS_DIR)..."
+  mkdir -p "$OPENCODE_AGENTS_DIR"
+  for agent_file in "$PLUGIN_ROOT"/.opencode/agent/*.md; do
+    agent="$(basename "$agent_file")"
+    cp "$agent_file" "$OPENCODE_AGENTS_DIR/$agent"
+    echo "  Installed $OPENCODE_AGENTS_DIR/$agent"
+  done
+  # Resolve tier bindings into the files just copied — the single materialiser
+  # `fr.opencode_agents.materialize_agents` also used by `fr models set`
+  # (spec 2026-09-20-opencode-tier-binding-reaches-dispatch §3.A), reached
+  # through the one shell-callable entry point install.sh (bash, no Python
+  # import) can use. Tolerate any failure exactly like the old rewrite's
+  # `|| true` did — an unbound tier, a missing `fr`, or a hand-edited agent
+  # file must never fail the install.
+  fr models apply --harness opencode || true
+else
+  echo ""
+  echo "Skipping OpenCode skill/command/agent delivery (no ~/.config/opencode found; set"
+  echo "OPENCODE_SKILLS_INSTALL=1 to force)."
 fi
 
 # 10b. Hermes Agent delivery — opt-in only (Hermes discovers skills from
