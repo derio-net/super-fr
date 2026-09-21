@@ -1,0 +1,54 @@
+schema_version: 2
+phase:
+  number: 3
+  title: verify-merge answers after gc has reaped the workspace
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - verify-merge-after-gc
+  tier: standard
+tasks:
+- number: 1
+  title: Repo-root fallback for a reaped workspace
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit (next to the existing verify-merge tests — grep for verify_merge) with
+      an explicit --branch and NO state file: (a) branch ref resolvable on origin, changes on
+      origin/main, PR MERGED → exit 0, output says the workspace was already reaped; (b) changes
+      missing → exit 1 naming the missing paths; (c) PR not MERGED → exit 1; (d) neither local
+      nor origin/<b> ref resolves → exit 1 naming the ref, never a traceback; (e) no --branch and
+      no workspace → the existing "run `fr isolation up` first" error unchanged. Use the existing
+      fake Runner/repo fixtures, no network. Fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: LocalWorktreeOps gains verify_merge_reaped(branch, ...) running the same
+      fetch + branch_changes_present + _pr_from from self.repo_root with the branch ref resolved
+      local-then-origin; the CLI's verify-merge calls it when load_state is None and --branch was
+      given. Reuse the reporting code; do not fork the verdict logic (verified still needs all
+      three signals). Green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: unify the CLI's success/failure reporting between the two paths; update the
+      verify-merge --help docstring and the fr-goal SKILL.md post-merge line only if its wording
+      implies a live workspace is required.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
