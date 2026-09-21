@@ -277,6 +277,28 @@ while you are waiting. `fr run status` then shows each phase with its holder and
 since when, and `fr run check` counts dispatches that are still open, or that
 nobody claimed, as visible debt rather than as errors.
 
+That last sentence about timing is true of some harnesses and not others, and
+the first live run on a second one is what showed it. Where dispatching hands
+back an identifier at once and lets the agent work in the background, you claim
+while you wait, exactly as described. Where the dispatch call *blocks* — it
+does not return until the agent has finished, and the identifier comes back
+with the result — there is no moment in between to claim in. The record is
+still opened, the harness and the model are still written down, and a second
+dispatch is still refused; but while the phase is running the honest answer to
+"who is holding this" is *an unclaimed agent on this harness*, and the name
+only arrives afterwards. The tool now says which harness is which, rather than
+describing the better case as if it were the only one.
+
+One more limit on what the record may say. The model written down is the one
+the phase's tier resolves to, and that is a fact about work that was
+*dispatched*. A step the orchestrating agent performs itself — a review it
+does inline, say — was never handed to a tier at all; it runs on whatever
+model that session happens to be using, which the tool cannot see. For a while
+it wrote the tier's model beside those steps anyway, and the archive of this
+very project holds seven reviews credited to a model that did not perform
+them. It now records a model only for work it actually dispatched, and leaves
+the rest blank unless the orchestrator says what it ran on.
+
 The same record doubles as a lock. Ask `fr run advance` to brief a phase whose
 dispatch is still open and it refuses: exit code 2, naming the holder, printing
 no brief at all. That refusal matters more here than it would elsewhere, because
@@ -495,7 +517,7 @@ skips `fr-plan`'s usual section-by-section approval because the reviewed spec
 already records your decisions. Each phase carries its own checklist, tests,
 dependencies, and links to the acceptance criteria it advances
 (`plugins/super-fr/skills/fr-plan/SKILL.md:15-38`,
-`plugins/super-fr/skills/fr-plan/SKILL.md:63-91`).
+`plugins/super-fr/skills/fr-plan/SKILL.md:61-95`).
 
 Reviewing that plan is the shape's one command step, and a good illustration of
 why the distinction between kinds matters. `fr plan self-review` runs against
@@ -504,8 +526,21 @@ moves on; nobody has to judge whether the output "looks fine." The CLI errors on
 defects such as dependency cycles and manual work hidden inside an agentic
 phase; when a local Test Plan and readable acceptance matrix are present, it
 also errors on unknown acceptance IDs, and it checks that a plan naming its own
-workflow shape names one that actually resolves. It warns about unresolved
-local spec references (`packages/fr/src/fr/plan_ops.py:867-1029`). The agent
+workflow shape names one that actually resolves.
+
+Hidden manual work is worth dwelling on, because it has a twin. The agent that
+carries out an agentic phase — the phase executor of step 6 below — is a
+**leaf**: it writes code, but it cannot hand work to another agent, on any of
+the harnesses fr supports. So a step telling it to dispatch a researcher or a
+reviewer of its own has nobody to carry it out. What makes that worse than a
+plain error is what an obedient agent does next: it does the nearest thing it
+can reach, and it ticks the step anyway — recording a finished phase for work
+nobody performed. Self-review therefore errors on such a step at authoring
+time, for the same reason it errors on manual work in an agentic phase: both
+assign work to an actor that cannot do it. The executor is told to refuse as
+well, and to leave the step unticked, because a tick is a claim of performance.
+It warns about unresolved local spec references
+(`packages/fr/src/fr/plan_ops.py:1135-1311`). The agent
 fixes what it reports and advances the run again; there is nothing to record by
 hand, because a command step completes itself.
 

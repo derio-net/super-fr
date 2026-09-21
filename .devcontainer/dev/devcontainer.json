@@ -10,6 +10,9 @@
     "--env-file",
     "${localEnv:HOME}/.config/fr/secrets/super-fr/dev.env"
   ],
+  "containerEnv": {
+    "UV_PROJECT_ENVIRONMENT": ".venv-container"
+  },
   "customizations": {
     "fr": {
       "profile": "dev",

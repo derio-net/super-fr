@@ -1338,7 +1338,17 @@ def _open_dispatch(
             dispatched=at or _now(),
             agent_type=agent_type,
             harness=harness,
-            model=_resolved_model(repo_root, harness, tier),
+            # Only for work fr DISPATCHED to a tier. A tier binding answers
+            # "which model does a dispatched agent of this tier get"; an
+            # attempt with no `agent_type` is the orchestrator running the unit
+            # in its own session, on a model fr cannot see. Such a member still
+            # inherits its group's tier, so resolving it here wrote a model for
+            # work that tier never touched — seven false `claude-opus-5`
+            # reviews in this repo's own archive. `harness` above is different:
+            # fr detects that about its own process. The orchestrator may still
+            # REPORT a model (`claim`/`resolve --model`); fr will not say it
+            # on its behalf.
+            model=_resolved_model(repo_root, harness, tier) if agent_type is not None else None,
             # Derived from fr's OWN environment, exactly like `harness` — the
             # agent never reports it (§4.D.1). It is what lets a later session
             # read the RIGHT transcript directory, and what stops a window
@@ -2753,6 +2763,27 @@ def _resolve_member(
         err_console.print(
             f"[red]{key}: refused — {running[0]} is still running. The worktree "
             "has exactly one writer; resolve the running unit first.[/red]"
+        )
+        raise typer.Exit(2)
+    # The unit must have been BRIEFED — checked AFTER the one-writer refusal
+    # above, so "run `fr run advance`" is only ever said when advance would
+    # actually brief it rather than refuse a held unit. The flat path has always refused a step
+    # that is not running ("advance first"); this path checked the group and
+    # the other units and never the unit itself, so a never-advanced unit went
+    # absent -> done with no attempt: no holder, no cost, and — for a review —
+    # evidence attached to work nothing records anyone being asked to do.
+    # `_close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
+    # cursors), so nothing downstream would ever notice; the check belongs
+    # here, before the write. A unit that is `running` with no record still
+    # resolves — a cursor migrated from before dispatch records existed carries
+    # those; `adopt` itself never writes `running`, only `done` and `pending`.
+    if items.get(key) in (None, "pending"):
+        err_console.print(
+            f"[red]{key}: refused — this unit was never briefed, so there is no dispatch "
+            f"to close and nothing to record an outcome for. `fr run advance "
+            f"{state.run}` briefs the next unit in order — which may be an earlier "
+            f"one than this — and prints its brief; resolve what it briefs.[/red]",
+            soft_wrap=True,
         )
         raise typer.Exit(2)
     # The evidence gate runs BEFORE any write (§4.E). A refusal must leave

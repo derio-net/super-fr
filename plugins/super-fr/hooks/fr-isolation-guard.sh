@@ -230,6 +230,19 @@ if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+(init([[:space:]]|
   exit 0
 fi
 
+# `fr run start` ENTERS isolation, exactly as `fr isolation up` does: it calls
+# ensure_run_workspace before it writes anything, and the run file lands inside
+# the worktree (fr.run.workspace, review fix r2-f5). fr-goal makes it the FIRST
+# action, so denying it from the base clone made the skill's first instruction
+# unexecutable on Claude Code — but only in a repo that already had some linked
+# worktree; with none, the self-heal below retires the sentinel first, which is
+# why this hid. `start` ONLY: `adopt` deliberately writes where it is run, and
+# every other run verb belongs in the workspace `start` prints. It does not
+# retire the sentinel — entering a pipeline is not ending one.
+if printf '%s' "$rest" | grep -Eq '^[[:space:]]*fr[[:space:]]+run[[:space:]]+start([[:space:]]|$)'; then
+  exit 0
+fi
+
 # Retiring the sentinel ENDS the live pipeline, so it must be POSITIVELY aimed
 # at this repo; "not obviously aimed elsewhere" is not enough (rev2-f2). Shapes
 # that previously ended the pipeline from a command meant for somewhere else:

@@ -2069,6 +2069,12 @@ def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> No
     assert units.unit_states(mid.steps["implement"]) == {"phase/1/code": "done"}
     assert mid.cursor == "implement"
 
+    # Each member is BRIEFED before it is resolved. This test used to resolve
+    # `peer-review` straight after `code`, which fr accepted — the defect found
+    # live on PR #508's Test Plan: a `done` unit no `advance` ever opened, so no
+    # write-claim, no holder, no cost (`test_run_resolve_requires_advance.py`).
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0  # peer-review
+
     second = _invoke(
         repo,
         shipped,

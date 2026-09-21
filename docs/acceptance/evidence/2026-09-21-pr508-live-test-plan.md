@@ -129,6 +129,11 @@ was refused and left the cursor untouched.
 
 ## Caveats and findings
 
+**All five were fixed in #527** (4.13.1), each from a reproduced failure and a confirmed root
+cause — trail in `docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md`.
+The text below is what was OBSERVED on 2026-09-21 and is left as written; each entry ends
+with what became of it.
+
 **C1 — on OpenCode the holder's ID is not knowable while the hold matters.** The orchestrator
 reported learning the child session id "only when the task tool returned", from the return
 value's task-id field. So during a phase, "who holds it" is answerable as *harness and model*
@@ -136,6 +141,9 @@ and never as *agent*; and the refusal of item 15 could only be exercised after t
 already returned, where its "not yet returned" is true of the cursor and no longer of the
 world. This is a property of a blocking dispatch tool, not a defect in fr, and the unclaimed
 hold still refuses a second dispatch. The `parity.yaml` claim for this surface should say so.
+*→ #527: it now does — its own row, `dispatch-holder-identity`; the skill and explainer no
+longer describe the better case as the only one. The gap itself (a plugin-side claim on the
+child's first tool call) is recorded there, not built.*
 
 **C2 — `model` is derived, and reads as observed.** fr writes `model` from the tier binding
 (`_resolved_model(repo, harness, tier)`); it does not observe what ran. For a dispatched
@@ -143,22 +151,33 @@ executor that is what was asked for. But OpenCode's `review-phase`, run inline b
 orchestrator, reads `the orchestrator (opencode, <provider>/<model>)` — the model the tier
 WOULD dispatch. In this run the operator confirmed the orchestrator was on that same model,
 so the value was true; the label is still stronger than the evidence behind it.
+*→ #527: worse than a label. This repo's archived #508 cursor credits seven inline reviews to
+a model that did not perform them. fr now derives a model only for work it dispatched.*
 
 **C3 — a unit can be `done` with no attempt at all.** On the Claude Code run `review-phase`
 was resolved without an `advance` ever briefing it, and fr accepted it: the unit has evidence
 and no `attempts`, so no holder and no cost for the review. OpenCode's run advanced first and
 has one. Not covered by any spec rule; recorded, not judged.
+*→ #527: judged a defect. The flat path always refused an unbriefed step; the grouped path
+now does too. The skill never said to `advance` before `review-phase` — which is how this
+run came to do it — and now does.*
 
 **C4 — `fr run start` cannot be fr-goal's first action from the base clone on Claude Code.**
 With the pipeline sentinel live, `fr-isolation-guard.sh` allows only
 `fr init|skills|--version` and `fr isolation …`, so `fr run start`, `fr run start --help` and
 `fr models resolve` are all denied there. The skill calls `fr run start` "the first action"
 that "enters isolation itself". The driving session had to `fr isolation up` first.
+*→ #527: `fr run start`, and only it, is allowed. It had hidden because it bites only when the
+repo already has some linked worktree; otherwise the orphan self-heal retires the sentinel
+first — a separate open defect, recorded in the debug journal.*
 
 **C5 — host and container share one `.venv`.** In the OpenCode run the child's `uv run fr`
 (container, Linux) and the orchestrator's (host, macOS) each deleted and rebuilt the
 worktree's `.venv` on every alternation — 31 packages, ~26 MB downloaded on the container
 side. Unrelated to #508; observed because both sides ran in one transcript.
+*→ #527: uv profiles now set a container-local, per-project environment. Proven live. Only
+newly created containers pick it up; existing ones keep working as before and drain away as
+their branches merge.*
 
 ## What this does not prove
 
