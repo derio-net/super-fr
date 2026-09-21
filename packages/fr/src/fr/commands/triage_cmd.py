@@ -45,7 +45,9 @@ def _scope(repo: str | None, org: str | None) -> Scope:
         raise typer.Exit(code=2)
     if repo is not None:
         if repo.count("/") != 1 or not all(repo.split("/")):
-            err_console.print(f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}")
+            err_console.print(
+                f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}"
+            )
             raise typer.Exit(code=2)
         return Scope(kind="repo", target=repo)
     assert org is not None

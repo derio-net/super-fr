@@ -100,10 +100,15 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     no super-fr checkout at all), so gating it behind *this* checkout's own
     stale plan/journal/run artifacts would be the most visibly wrong case —
     the command's whole point is to work where there is nothing to be stale.
+
+    `triage` was added by 2026-09-21 fr-triage phase 1 (spec §3.F′, r3): it
+    never reads or writes a registered artifact and writes only under its own
+    state directory, so gating it protects nothing and refuses an org triage
+    run from inside some unrelated repo over artifacts it never touches.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
-        {"migrate", "status", "skills", "isolation", "init", "validate", "harness"}
+        {"migrate", "status", "skills", "isolation", "init", "validate", "harness", "triage"}
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
     assert trigger.EXEMPTIONS == (
@@ -116,6 +121,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "init",
         "validate",
         "harness",
+        "triage",
         "FR_SKIP_MIGRATION=1",
     )
 

@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
-
 from fr.cli import app
+from typer.testing import CliRunner
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "triage"
 

@@ -99,18 +99,19 @@ state:
       ticked_at: '2026-09-21T17:12:35+00:00'
       note: null
     P1.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:13:03+00:00'
       note: null
     P1.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:13:50+00:00'
       note: null
     P1.T3.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:19:44+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-09-21T17:19:44+00:00'
+    note: fr triage collect skeleton on captured fixtures behind a Forge seam; triage
+      gate-exempt
     observed_prs: []
