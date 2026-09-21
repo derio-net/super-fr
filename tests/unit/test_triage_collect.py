@@ -9,6 +9,7 @@ reference shape is always the captured one.
 
 from __future__ import annotations
 
+import ast
 import copy
 import json
 from datetime import UTC, datetime
@@ -465,21 +466,111 @@ def test_gh_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
     assert captured[0][captured[0].index("--limit") + 1] == "7"
 
 
-def test_fr_triage_touches_gh_only_in_collect() -> None:
-    """Nothing above collect.py knows gh exists (decision d2, review r-p1-gherror-leak)."""
+def _forbidden_imports(path: Path, package: str) -> list[str]:
+    """Every forge-reaching import in *path*, a module of *package* (review r-p2-seam-ast).
+
+    Forbidden: `import fr.gh`, `from fr import gh` (any alias, any grouping, or
+    its relative spelling), `from fr.gh import ...`, any `subprocess` import, and
+    the same names through `importlib.import_module` / `__import__`.
+    """
+
+    def forge_module(name: str) -> bool:
+        return any(name == m or name.startswith(m + ".") for m in ("fr.gh", "subprocess"))
+
+    def absolute(node: ast.ImportFrom) -> str:
+        if node.level == 0:
+            return node.module or ""
+        parts = package.split(".")
+        base = parts[: len(parts) - (node.level - 1)]
+        return ".".join([*base, *([node.module] if node.module else [])])
+
+    found: list[str] = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
+        if isinstance(node, ast.Import):
+            found += [f"import {a.name}" for a in node.names if forge_module(a.name)]
+        elif isinstance(node, ast.ImportFrom):
+            module = absolute(node)
+            found += [
+                f"from {module} import {a.name}"
+                for a in node.names
+                if forge_module(module) or forge_module(f"{module}.{a.name}")
+            ]
+        elif (
+            isinstance(node, ast.Call)
+            and (
+                (isinstance(node.func, ast.Name) and node.func.id == "__import__")
+                or (isinstance(node.func, ast.Attribute) and node.func.attr == "import_module")
+            )
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+            and forge_module(node.args[0].value)
+        ):
+            found.append(f"dynamic import of {node.args[0].value}")
+    return found
+
+
+def _seam_violations() -> dict[str, list[str]]:
+    """Forge-reaching imports anywhere in fr.triage or the triage command, but collect.py."""
     import fr.commands.triage_cmd as cmd
     import fr.triage as pkg
 
-    sources = {Path(cmd.__file__): Path(cmd.__file__).read_text(encoding="utf-8")}
-    for path in Path(pkg.__file__).parent.glob("*.py"):
-        sources[path] = path.read_text(encoding="utf-8")
-    offenders = [
-        p.name
-        for p, text in sources.items()
-        if p.name != "collect.py"
-        and ("fr.gh" in text or "GhError" in text or "from fr import gh" in text)
-    ]
-    assert offenders == []
+    root = Path(pkg.__file__).parent
+    modules = {Path(cmd.__file__): "fr.commands"}
+    for path in root.rglob("*.py"):
+        rel = path.relative_to(root).parent.parts
+        modules[path] = ".".join(["fr", "triage", *rel])
+    assert len(modules) > 3, "the scan found almost nothing: the walk itself is broken"
+    return {
+        str(path): hits
+        for path, package in modules.items()
+        if path != root / "collect.py" and (hits := _forbidden_imports(path, package))
+    }
+
+
+def test_fr_triage_touches_gh_only_in_collect() -> None:
+    """Nothing above collect.py can reach the forge (decision d2, review r-p2-seam-ast)."""
+    assert _seam_violations() == {}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import fr.gh",
+        "import fr.gh as forge",
+        "from fr import gh",
+        "from fr import gh as g",
+        "from fr import labels, gh",
+        "from fr import (\n    gh,\n)",
+        "from fr.gh import GhError",
+        "from .. import gh",
+        "import subprocess",
+        "import subprocess as sp",
+        "from subprocess import run",
+        "def f():\n    import subprocess",
+        "import importlib\nimportlib.import_module('fr.gh')",
+        "__import__('subprocess')",
+    ],
+)
+def test_the_seam_check_catches_every_spelling_of_a_forge_import(
+    tmp_path: Path, source: str
+) -> None:
+    """Non-vacuity: each forbidden spelling, planted in a module of fr.triage, is caught."""
+    plant = tmp_path / "plant.py"
+    plant.write_text(source + "\n", encoding="utf-8")
+
+    assert _forbidden_imports(plant, "fr.triage") != []
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["from fr import gha", "import fr.ghost", "from fr.triage import model", "from . import stage"],
+)
+def test_the_seam_check_does_not_flag_lookalikes(tmp_path: Path, source: str) -> None:
+    plant = tmp_path / "plant.py"
+    plant.write_text(source + "\n", encoding="utf-8")
+
+    assert _forbidden_imports(plant, "fr.triage") == []
 
 
 # ------------------------------------------------ review r-p2-case

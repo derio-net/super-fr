@@ -15,9 +15,9 @@ from fr.triage.model import (
     Judgements,
     Scope,
     issue_key,
-    normalize_key,
     load_facts,
     load_judgements,
+    normalize_key,
     state_dir,
 )
 
