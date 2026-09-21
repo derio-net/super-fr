@@ -460,3 +460,22 @@ def test_render_classifies_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     render(*_state(tmp_path))
 
     assert len(calls) == 1
+
+
+def test_a_long_repo_label_can_wrap_instead_of_overflowing() -> None:
+    """Review r-p3-num-overflow: in org scope `.num` is `repo#n`, which may be long.
+
+    `overflow-wrap: anywhere` alone is not enough: a `flex: none` item never
+    shrinks below its max-content width, so the label must also be shrinkable.
+    """
+    from fr.triage.render import CSS
+
+    m = re.search(r"^\.num \{([^}]*)\}", CSS, flags=re.M)
+    assert m is not None
+    decls = {
+        k.strip(): v.strip()
+        for k, v in (d.split(":", 1) for d in m.group(1).split(";") if d.strip())
+    }
+    assert decls.get("overflow-wrap") == "anywhere"
+    assert decls.get("min-width") == "0"
+    assert decls.get("flex") == "0 1 auto"

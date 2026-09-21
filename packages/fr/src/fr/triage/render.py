@@ -111,7 +111,8 @@ details.row[data-done="1"] { opacity: .62; }
 details.row > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: flex;
   flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 details.row > summary::-webkit-details-marker { display: none; }
-.num { font-family: var(--mono); color: var(--muted); flex: none; }
+.num { font-family: var(--mono); color: var(--muted); flex: 0 1 auto; min-width: 0;
+  overflow-wrap: anywhere; }
 .title { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag { font-size: .75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px;
