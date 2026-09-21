@@ -9,10 +9,8 @@ reference shape is always the captured one.
 
 from __future__ import annotations
 
-import ast
 import copy
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,18 +27,15 @@ from fr.triage.collect import (
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Scope
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "triage"
-NOW = datetime(2026, 9, 21, 12, 0, tzinfo=UTC)
-SUPER_FR = Scope(kind="repo", target="derio-net/super-fr")
-
-
-def _load(name: str) -> list[dict[str, Any]]:
-    data: list[dict[str, Any]] = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-    return data
-
-
-ISSUES = _load("super-fr-issues.json")
-PRS = _load("super-fr-prs.json")
+from tests.unit.triage_fixtures import (
+    ISSUES,
+    NOW,
+    PRS,
+    SUPER_FR,
+    FakeForge,
+    _super_fr_forge,
+    forbidden_imports,
+)
 
 
 def _captured_pr_with_refs() -> dict[str, Any]:
@@ -66,55 +61,6 @@ def _issue(number: int, *, title: str = "t") -> dict[str, Any]:
     issue["number"] = number
     issue["title"] = title
     return issue
-
-
-class FakeForge:
-    """A Forge serving per-repo canned data and recording every call."""
-
-    def __init__(
-        self,
-        *,
-        issues: dict[str, list[dict[str, Any]]],
-        prs: dict[str, list[dict[str, Any]]],
-        repos: list[dict[str, Any]] | None = None,
-        failing: dict[str, str] | None = None,
-        closed: dict[tuple[str, int], dict[str, Any]] | None = None,
-    ) -> None:
-        self.issues = issues
-        self.prs = prs
-        self.repos = repos or []
-        self.failing = failing or {}
-        self.closed = closed or {}
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
-        self.calls.append(("list_repos", {"owner": owner, "limit": limit}))
-        return self.repos
-
-    def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
-        self.calls.append(("list_issues", {"repo": repo, "state": state, "limit": limit}))
-        if repo in self.failing:
-            raise ForgeError(self.failing[repo])
-        return self.issues[repo]
-
-    def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
-        self.calls.append(("list_prs", {"repo": repo, "state": state, "limit": limit}))
-        return self.prs[repo]
-
-    def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
-        self.calls.append(("view_issue", {"repo": repo, "number": number}))
-        return self.closed[(repo, number)]
-
-    def called(self, name: str) -> list[dict[str, Any]]:
-        return [kw for n, kw in self.calls if n == name]
-
-
-def _super_fr_forge() -> FakeForge:
-    return FakeForge(
-        issues={"derio-net/super-fr": ISSUES},
-        prs={"derio-net/super-fr": PRS},
-        closed={},
-    )
 
 
 # ------------------------------------------------------------ P2.T2 inversion
@@ -466,50 +412,6 @@ def test_gh_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
     assert captured[0][captured[0].index("--limit") + 1] == "7"
 
 
-def _forbidden_imports(path: Path, package: str) -> list[str]:
-    """Every forge-reaching import in *path*, a module of *package* (review r-p2-seam-ast).
-
-    Forbidden: `import fr.gh`, `from fr import gh` (any alias, any grouping, or
-    its relative spelling), `from fr.gh import ...`, any `subprocess` import, and
-    the same names through `importlib.import_module` / `__import__`.
-    """
-
-    def forge_module(name: str) -> bool:
-        return any(name == m or name.startswith(m + ".") for m in ("fr.gh", "subprocess"))
-
-    def absolute(node: ast.ImportFrom) -> str:
-        if node.level == 0:
-            return node.module or ""
-        parts = package.split(".")
-        base = parts[: len(parts) - (node.level - 1)]
-        return ".".join([*base, *([node.module] if node.module else [])])
-
-    found: list[str] = []
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path))):
-        if isinstance(node, ast.Import):
-            found += [f"import {a.name}" for a in node.names if forge_module(a.name)]
-        elif isinstance(node, ast.ImportFrom):
-            module = absolute(node)
-            found += [
-                f"from {module} import {a.name}"
-                for a in node.names
-                if forge_module(module) or forge_module(f"{module}.{a.name}")
-            ]
-        elif (
-            isinstance(node, ast.Call)
-            and (
-                (isinstance(node.func, ast.Name) and node.func.id == "__import__")
-                or (isinstance(node.func, ast.Attribute) and node.func.attr == "import_module")
-            )
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-            and forge_module(node.args[0].value)
-        ):
-            found.append(f"dynamic import of {node.args[0].value}")
-    return found
-
-
 def _seam_violations() -> dict[str, list[str]]:
     """Forge-reaching imports anywhere in fr.triage or the triage command, but collect.py."""
     import fr.commands.triage_cmd as cmd
@@ -524,7 +426,7 @@ def _seam_violations() -> dict[str, list[str]]:
     return {
         str(path): hits
         for path, package in modules.items()
-        if path != root / "collect.py" and (hits := _forbidden_imports(path, package))
+        if path != root / "collect.py" and (hits := forbidden_imports(path, package))
     }
 
 
@@ -559,7 +461,7 @@ def test_the_seam_check_catches_every_spelling_of_a_forge_import(
     plant = tmp_path / "plant.py"
     plant.write_text(source + "\n", encoding="utf-8")
 
-    assert _forbidden_imports(plant, "fr.triage") != []
+    assert forbidden_imports(plant, "fr.triage") != []
 
 
 @pytest.mark.parametrize(
@@ -570,7 +472,7 @@ def test_the_seam_check_does_not_flag_lookalikes(tmp_path: Path, source: str) ->
     plant = tmp_path / "plant.py"
     plant.write_text(source + "\n", encoding="utf-8")
 
-    assert _forbidden_imports(plant, "fr.triage") == []
+    assert forbidden_imports(plant, "fr.triage") == []
 
 
 # ------------------------------------------------ review r-p2-case

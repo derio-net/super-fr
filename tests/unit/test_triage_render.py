@@ -8,8 +8,19 @@ renderer is proven to read the derived `Issue.stage` rather than raw JSON
 
 from __future__ import annotations
 
+import datetime as _dt
+import json
+import re
+from pathlib import Path
+from typing import Any
+
 import pytest
-from fr.triage.render import inline
+from fr.cli import app
+from fr.triage.model import Facts, Judgements, load_facts, load_judgements
+from fr.triage.render import inline, render
+from typer.testing import CliRunner
+
+from tests.unit.triage_fixtures import NOW, SUPER_FR, _super_fr_forge
 
 
 @pytest.mark.parametrize(
@@ -31,18 +42,6 @@ def test_inline_escapes_first_then_allows_only_code_and_bold(text: str, html: st
 
 
 # ------------------------------------------------------------ P3.T3 renderer
-
-import datetime as _dt  # noqa: E402
-import json  # noqa: E402
-import re  # noqa: E402
-import sys  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-from fr.triage.model import Facts, Judgements, load_facts, load_judgements  # noqa: E402
-from fr.triage.render import render  # noqa: E402
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_triage_collect import NOW, SUPER_FR, _super_fr_forge  # noqa: E402
 
 JUDGEMENTS = """schema: 1
 ranked_at: 2026-09-19
@@ -191,11 +190,6 @@ def test_the_page_is_self_contained_and_themed(tmp_path: Path) -> None:
 
 
 # ------------------------------------------------------------- P3.T4 command
-
-from typing import Any  # noqa: E402
-
-from fr.cli import app  # noqa: E402
-from typer.testing import CliRunner  # noqa: E402
 
 
 def _render_cmd(tmp_path: Path, *extra: str) -> Any:
