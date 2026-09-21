@@ -85,3 +85,12 @@ A real closing of the gap exists and is NOT attempted here: fr-opencode-plugin a
 _resolve_member now refuses a unit whose state is absent or `pending` (exit 2, naming `fr run advance <run>`), for `done` and `failed` alike. Placed AFTER the one-writer refusal: my first placement put it before, which replaced "phase/1/code is still running" with advice to run an `advance` that would itself have refused a held unit - two existing tests caught that. A `running` unit with no record (adopted mid-flight) still resolves.
 
 Failing-first: tests/unit/test_run_resolve_requires_advance.py (2 red, 1 control green before the fix; 3 green after). One existing test, test_resolve_member_items_completes_the_group_in_order, ENCODED the defect - it resolved peer-review straight after code - and now takes the write-claim like a real run. The grouped-loop spec (2026-09-09 methodology-restoration, section 5 "write-claim") is why that is a correction and not a weakening: the claim is what `advance` records, so a unit resolved without it never held one. 993 run-related tests green.
+
+<!-- fr:journal kind=finding scope=debug id=c2-fixed created=2026-09-21T14:36:31 state=fixed -->
+### c2-fixed · finding [fixed] · C2 fixed: no model is derived for an attempt fr did not dispatch to a tier
+
+_open_dispatch resolves a model only when the attempt has an agent_type. An orchestrator-run attempt records harness (detected about fr's own process) and no model; status prints "the orchestrator (claude-code)". A model the orchestrator REPORTS through claim/resolve --model is still kept.
+
+Failing-first: tests/unit/test_run_orchestrator_model.py - 2 red on exactly `'claude-opus-5' is None`, 2 controls green (the dispatched executor keeps its tier's model; a reported model survives). 1124 run/model/telemetry tests green after.
+
+Left alone, deliberately: cursors that already carry the false value (a repair would have to guess which unclaimed models were derived; archived cursors are frozen by rule), and provenance on executor attempts (a new Attempt field = a `run` shape change). An executor's derived model is what the dispatch asked for; whether the harness honoured it is observable only from its transcript, which telemetry already reads for tokens - a possible follow-up, not this fix.

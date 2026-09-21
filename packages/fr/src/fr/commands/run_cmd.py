@@ -1338,7 +1338,17 @@ def _open_dispatch(
             dispatched=at or _now(),
             agent_type=agent_type,
             harness=harness,
-            model=_resolved_model(repo_root, harness, tier),
+            # Only for work fr DISPATCHED to a tier. A tier binding answers
+            # "which model does a dispatched agent of this tier get"; an
+            # attempt with no `agent_type` is the orchestrator running the unit
+            # in its own session, on a model fr cannot see. Such a member still
+            # inherits its group's tier, so resolving it here wrote a model for
+            # work that tier never touched — seven false `claude-opus-5`
+            # reviews in this repo's own archive. `harness` above is different:
+            # fr detects that about its own process. The orchestrator may still
+            # REPORT a model (`claim`/`resolve --model`); fr will not say it
+            # on its behalf.
+            model=_resolved_model(repo_root, harness, tier) if agent_type is not None else None,
             # Derived from fr's OWN environment, exactly like `harness` — the
             # agent never reports it (§4.D.1). It is what lets a later session
             # read the RIGHT transcript directory, and what stops a window
