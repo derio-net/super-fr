@@ -1,0 +1,130 @@
+"""Build an on-disk Claude Code session layout from the CAPTURED fixtures.
+
+Shared by `test_run_telemetry.py` (the reader) and `test_run_cli.py` (the
+`fr run resolve` / `fr run status` path), so both exercise the same shape.
+
+Every record here comes from `tests/fixtures/transcripts/`, captured live from
+a real session (see its `NOTE.md`). Nothing is composed from a guess about the
+format: these helpers COPY the captured records and edit only the fields a
+test varies — timestamps, ids, usage numbers. A fixture for an external system
+that was written alongside the parser proves only that the two agree with each
+other.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+FIXTURES = Path(__file__).parents[1] / "fixtures" / "transcripts"
+ORCHESTRATOR = FIXTURES / "claude-code-session.jsonl"
+SUBAGENT = FIXTURES / "claude-code-subagent.jsonl"
+SUBAGENT_META = FIXTURES / "claude-code-subagent.meta.json"
+
+AGENT_ID = "adc0716be5565cc07"
+TOOL_USE_ID = "toolu_014ynBvFpxdbG1PXwxASc1Cu"
+AGENT_TOOL_USE_LINE = 7
+"""Index of the captured `assistant` record whose `Agent` tool_use id matches
+the captured subagent's metadata `toolUseId`."""
+
+
+def records(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def copy_of(value: Any) -> Any:
+    """A deep copy that cannot share structure with the captured fixture."""
+    return json.loads(json.dumps(value))
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
+def session_dir(session: Path) -> Path:
+    return session.with_suffix("")
+
+
+def write_session(
+    root: Path,
+    session_id: str = "sess-1",
+    slug: str = "-home-user-repo",
+    rows: list[dict[str, Any]] | None = None,
+) -> Path:
+    """`<root>/<slug>/<session-id>.jsonl` plus its sibling session directory."""
+    project = root / slug
+    project.mkdir(parents=True, exist_ok=True)
+    session = project / f"{session_id}.jsonl"
+    write_jsonl(session, records(ORCHESTRATOR) if rows is None else rows)
+    session_dir(session).mkdir(exist_ok=True)
+    return session
+
+
+def write_agent(
+    session: Path,
+    agent_id: str = AGENT_ID,
+    *,
+    tool_use_id: str = TOOL_USE_ID,
+    rows: list[dict[str, Any]] | None = None,
+    meta: dict[str, Any] | None = None,
+) -> Path:
+    """One `subagents/agent-<id>.jsonl` + its `agent-<id>.meta.json` companion."""
+    subagents = session_dir(session) / "subagents"
+    transcript = subagents / f"agent-{agent_id}.jsonl"
+    write_jsonl(transcript, records(SUBAGENT) if rows is None else rows)
+    meta_obj = copy_of(json.loads(SUBAGENT_META.read_text()) if meta is None else meta)
+    meta_obj["toolUseId"] = tool_use_id
+    (subagents / f"agent-{agent_id}.meta.json").write_text(json.dumps(meta_obj))
+    return transcript
+
+
+def add_dispatch(
+    session: Path,
+    *,
+    timestamp: str,
+    agent_id: str,
+    tool_use_id: str,
+    usage: dict[str, int],
+) -> Path:
+    """Append ONE more dispatch to an existing session: the orchestrator's
+    `Agent` tool_use record, and the subagent transcript it started.
+
+    Both are COPIES of the captured records with only the fields a test varies
+    re-keyed (timestamp, ids, usage) — the rule this module exists for. Two
+    calls with the SAME `timestamp` build the overlap case: two dispatches
+    inside one window, which no time window can separate and which selection
+    by agent id resolves exactly (spec §4.D).
+    """
+    tool_use = copy_of(records(ORCHESTRATOR)[AGENT_TOOL_USE_LINE])
+    tool_use["timestamp"] = timestamp
+    tool_use["uuid"] = f"uuid-{agent_id}"
+    tool_use["message"]["content"][0]["id"] = tool_use_id
+    with session.open("a") as handle:
+        handle.write(json.dumps(tool_use) + "\n")
+    rows = copy_of(records(SUBAGENT))
+    for row in rows:
+        row["timestamp"] = timestamp
+        row["agentId"] = agent_id
+        if row["type"] == "assistant":
+            row["message"]["usage"] = dict(usage)
+    return write_agent(session, agent_id, tool_use_id=tool_use_id, rows=rows)
+
+
+def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[str, int]) -> Path:
+    """A one-dispatch session whose tool_use lands exactly at `timestamp`.
+
+    Used by the CLI tests, where the window comes from the run cursor's own
+    `at` and cannot be predicted before `fr run advance` writes it.
+    """
+    orchestrator = copy_of(records(ORCHESTRATOR))
+    orchestrator[AGENT_TOOL_USE_LINE]["timestamp"] = timestamp
+    session = write_session(root, session_id=session_id, rows=orchestrator)
+    subagent = copy_of(records(SUBAGENT))
+    for row in subagent:
+        row["timestamp"] = timestamp
+        if row["type"] == "assistant":
+            row["message"]["usage"] = dict(usage)
+    write_agent(session, rows=subagent)
+    return session

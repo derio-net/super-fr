@@ -47,6 +47,13 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         ["git", "-C", str(r), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i"],
         check=True,
     )
+    # A real bare origin (main pushed): the phase-2 unlanded-content guard
+    # fetches origin/<default> on every force=False `down`, so any test that
+    # reaches a live reap through this fixture needs one to exist.
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(r), "remote", "add", "origin", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(r), "push", "-q", "origin", "main"], check=True)
     return r
 
 

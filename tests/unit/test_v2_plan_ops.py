@@ -1605,3 +1605,72 @@ def test_journal_justification_silences_the_refactor_gate(tmp_path):
     )
 
     assert _refactor_issues(plan_dir) == []
+
+
+# --- phase tier carried by `create()` (dispatch-holder-identity, finding f6) ---
+#
+# `PhaseHeader.tier` is the harness-neutral hint fr-goal §5 resolves to a model
+# via `fr models resolve`, and fr-plan's own skill says it "tags each phase a
+# tier". `PhaseSpec` carried no such field, so `fr plan create --phases-file`
+# accepted a `tier:` in the phases file and silently dropped it — every plan it
+# scaffolded was untiered, and every dispatch made from one could only record
+# `model: null`.
+
+
+def _tiered(tmp_path, tier=None):
+    from fr.plan_ops import PhaseSpec, create
+
+    kwargs = {"tier": tier} if tier is not None else {}
+    return create(
+        repo_root=tmp_path,
+        slug="2026-09-20-tiered",
+        spec=None,
+        target_repo="derio-net/test",
+        fr_version=">=4.2.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="Build", tag="agentic", skeleton=True, **kwargs)],
+        prose="# x\n",
+    ).dir
+
+
+def test_create_carries_a_phase_tier_into_the_phase_header(tmp_path):
+    import yaml
+
+    header = yaml.safe_load((_tiered(tmp_path, "hard") / "01.yaml").read_text())["phase"]
+
+    assert header["tier"] == "hard"
+
+
+def test_create_omits_tier_when_unset_so_untiered_plans_stay_byte_stable(tmp_path):
+    """Same rule `acceptance` and `skeleton` already follow — an absent tier
+    must not start emitting `tier: null` into every existing plan."""
+    import yaml
+
+    header = yaml.safe_load((_tiered(tmp_path) / "01.yaml").read_text())["phase"]
+
+    assert "tier" not in header
+
+
+def test_create_refuses_a_tier_outside_the_closed_vocabulary(tmp_path):
+    """`PhaseHeader.tier` is a closed Literal, so an unknown tier would write a
+    plan that `fr.parser.parse` cannot read back — a scaffold that succeeds and
+    produces an unparseable artifact. Refused at create time, naming the valid
+    tiers, which are derived from the Literal rather than re-listed."""
+    from fr.plan_ops import PlanEditError
+    from fr.types import phase_tiers
+
+    with pytest.raises(PlanEditError) as e:
+        _tiered(tmp_path, "turbo")
+
+    assert "turbo" in str(e.value)
+    for tier in phase_tiers():
+        assert tier in str(e.value)
+
+
+def test_a_tiered_plan_parses_back_with_its_tier(tmp_path):
+    """The round-trip that matters: `fr pickup`/`fr run advance` read the tier
+    through `fr.parser.parse`, not off the raw yaml."""
+    from fr.parser import parse
+
+    plan = parse(_tiered(tmp_path, "mechanical"))
+
+    assert plan.phases[0].phase.tier == "mechanical"

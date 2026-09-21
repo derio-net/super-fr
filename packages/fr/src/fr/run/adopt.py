@@ -49,6 +49,7 @@ from pathlib import Path
 
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.render import plan_locally_complete
+from fr.run import units
 from fr.run.model import (
     RunState,
     RunStateError,
@@ -64,6 +65,7 @@ from fr.workflow.resolve import resolve_workflow
 __all__ = [
     "AdoptError",
     "Adoption",
+    "MANUAL_ITEM",
     "PLANS_REL",
     "adopt_run",
     "adoptable_plans",
@@ -71,7 +73,18 @@ __all__ = [
     "default_pr_state",
     "infer_adoption",
     "plan_phase_numbers",
+    "plan_phase_tags",
 ]
+
+MANUAL_ITEM = "manual"
+"""The unit STATE of a phase the run deliberately never dispatched.
+
+Both writers of a group's unit states use this one spelling — `fr run advance`
+(`fr.commands.run_cmd._advance_group`) and adoption's `build_run_state` — so
+a resumed run cannot disagree with a started one about which phases were
+skipped and why (#496, spec §3.D.3). It is a vocabulary, not a field: no
+schema change and no artifact version bump follow from it.
+"""
 
 DEFAULT_WORKFLOW = "fr-goal"
 """The `unit: run` shape a run cursor belongs to, when `--workflow` is absent.
@@ -109,7 +122,26 @@ class Adoption:
     pr: str | None = None
     """PR url, recorded only when it was OBSERVED open."""
     phases: dict[str, str] = field(default_factory=dict)
-    """`phase/<n>` -> `done` | `pending`, for every phase of the plan."""
+    """`phase/<n>` -> `done` | `pending`, for every phase of the plan.
+
+    Lifecycle only. It answers "has this phase's work happened?" and the
+    inference table below reads it for exactly that — a `tag: manual` phase
+    is `pending` until it is ticked, which is why an unticked manual phase
+    still lands the cursor on `implement` rather than declaring the plan
+    finished (2026-08-14 §4.C: `[manual]` is a routing attribute, not a
+    lifecycle state).
+    """
+    manual: tuple[int, ...] = ()
+    """Phase numbers whose `tag` is `manual` — the ROUTING fact, kept apart
+    from the lifecycle one above (#496, spec §3.D.3).
+
+    `build_run_state` records these as `phase/<n>: manual` instead of a
+    `phase/<n>/<member>` item, because the fan-out will never dispatch them.
+    Separate from `phases` on purpose: the two answer different questions and
+    fusing them would make an unticked trailing manual phase look like an
+    unfinished plan to the inference table, or a ticked front-loaded one look
+    like a phase this run implemented.
+    """
     notes: tuple[str, ...] = ()
     """Lines the CLI prints — how a judgement was reached, or could not be."""
 
@@ -152,8 +184,11 @@ def infer_adoption(
         return Adoption(cursor="plan", spec=spec_rel)
 
     phases = _completed_phases(plan)
+    manual = tuple(sorted(p.phase.number for p in plan.phases if p.phase.tag == "manual"))
     if not phases or any(v == "pending" for v in phases.values()):
-        return Adoption(cursor="implement", spec=spec_rel, plan=plan_rel, phases=phases)
+        return Adoption(
+            cursor="implement", spec=spec_rel, plan=plan_rel, phases=phases, manual=manual
+        )
 
     if pr_url is None:
         return Adoption(
@@ -161,6 +196,7 @@ def infer_adoption(
             spec=spec_rel,
             plan=plan_rel,
             phases=phases,
+            manual=manual,
             notes=(
                 "every phase is complete and no PR was named (--pr <url>), so the cursor "
                 "lands on `review`; pass --pr if one is already open.",
@@ -169,7 +205,14 @@ def infer_adoption(
 
     observed = pr_state(pr_url) if pr_state is not None else None
     if observed == "OPEN":
-        return Adoption(cursor="deliver", spec=spec_rel, plan=plan_rel, pr=pr_url, phases=phases)
+        return Adoption(
+            cursor="deliver",
+            spec=spec_rel,
+            plan=plan_rel,
+            pr=pr_url,
+            phases=phases,
+            manual=manual,
+        )
     if observed is None:
         # Fail soft, downward. `pr_status_by_url` returns None for every
         # not-found/error condition — offline, no credentials, a deleted PR —
@@ -180,6 +223,7 @@ def infer_adoption(
             spec=spec_rel,
             plan=plan_rel,
             phases=phases,
+            manual=manual,
             notes=(
                 f"could not determine the state of {pr_url} (offline, or the host "
                 "declined) — the cursor lands on `review`, the last row that is "
@@ -191,6 +235,7 @@ def infer_adoption(
         spec=spec_rel,
         plan=plan_rel,
         phases=phases,
+        manual=manual,
         notes=(f"{pr_url} is {observed}, not open — the cursor lands on `review`.",),
     )
 
@@ -214,21 +259,42 @@ def _fan_out_step(manifest: WorkflowManifest) -> str | None:
     return None
 
 
-def plan_phase_numbers(repo_root: Path, plan_rel: str) -> list[int]:
-    """Sorted phase numbers of the plan at repo-relative `plan_rel`.
+def plan_phase_tags(repo_root: Path, plan_rel: str) -> dict[int, str]:
+    """Phase number -> `phase.tag` for the plan at repo-relative `plan_rel`.
 
-    The grouped `for_each` cursor (`fr.commands.run_cmd`) enumerates its
-    expected `phase/<n>/<member>` items from here — the plan on disk is the
-    one source of which phases exist, so a phase added mid-run is a new item,
-    not a silent skip. Raises `AdoptError` naming the path when the plan
-    cannot be parsed (fail-closed, like every other unreadable-artifact path
-    in this package).
+    The tag-aware source of "which phases exist" (#496, 2026-09-20 spec
+    §3.D.3). `for_each: phase` enumerates the **agentic** ones and records the
+    rest as `phase/<n>: manual`, so the fan-out needs the typed set, not bare
+    numbers — the narrowing that produced #496 was reading this plan for its
+    phase numbers and discarding the tag that was right there.
+
+    Raises `AdoptError` naming the path when the plan cannot be parsed
+    (fail-closed, like every other unreadable-artifact path in this package).
     """
     try:
         plan = parse(repo_root / plan_rel)
     except PlanSchemaError as e:
         raise AdoptError(f"{plan_rel} is not a parseable plan: {e}") from e
-    return sorted(p.phase.number for p in plan.phases)
+    return {p.phase.number: p.phase.tag for p in plan.phases}
+
+
+def plan_phase_numbers(repo_root: Path, plan_rel: str) -> list[int]:
+    """Sorted phase numbers of the plan at repo-relative `plan_rel` — every
+    phase, whatever its tag.
+
+    Delegates to `plan_phase_tags` so there is ONE plan-reading path behind
+    both questions. A caller that wants only the dispatchable phases filters
+    the tags itself rather than re-deriving the phase list; the plan on disk
+    is the one source of which phases exist, so a phase added mid-run is a
+    new item, not a silent skip.
+    """
+    return sorted(plan_phase_tags(repo_root, plan_rel))
+
+
+def _with_unit_states(record: StepRecord, states: dict[str, str]) -> StepRecord:
+    """`record` carrying `states` — a one-line seam so adoption names the
+    accessor layer once and phase 3 changes nothing here."""
+    return units.with_unit_states(record, dict(states))
 
 
 def build_run_state(
@@ -293,6 +359,14 @@ def build_run_state(
         emitted.setdefault(target, {})[artifact] = value
 
     items_step = (group_id or cursor) if adoption.phases else None
+    # #496 (spec §3.D.3): a manual phase is recorded as the flat
+    # `phase/<n>: manual`, never as a member item, because the fan-out will
+    # never dispatch it — `advance` writes exactly this, so a resumed run and
+    # a started one agree. Keyed on `tag` alone, never on completion: a
+    # ticked front-loaded manual phase waits on nobody (review `r4-f1`) but
+    # is still not work this run did, and `done` would claim a dispatch that
+    # never happened.
+    manual = {f"phase/{n}" for n in adoption.manual}
     if grouped and adoption.phases:
         # Adoption reconstructs implement progress, never review outcomes: a
         # ticked-complete phase proves its implement member, so the items key
@@ -300,16 +374,30 @@ def build_run_state(
         # `advance` to dispatch.
         assert group is not None
         first = group.steps[0].id
-        items_map = {f"{key}/{first}": value for key, value in adoption.phases.items()}
+        items_map = {
+            (key if key in manual else f"{key}/{first}"): (MANUAL_ITEM if key in manual else value)
+            for key, value in adoption.phases.items()
+        }
     else:
-        items_map = dict(adoption.phases)
+        items_map = {
+            key: (MANUAL_ITEM if key in manual else value) for key, value in adoption.phases.items()
+        }
 
+    # The unit states go on through `fr.run.units` rather than into a field:
+    # adoption is the FIRST writer of them (2026-08-30 §3.E — a half-implemented
+    # plan has to record WHICH phases are already done, or the cursor says
+    # `implement` and loses everything that made the adoption worth having), and
+    # it writes NO attempts, because fr never dispatched those phases. An empty
+    # history is the honest record of that; inventing an attempt to look uniform
+    # would be the fabrication spec §3 forbids.
     steps = {
-        step.id: StepRecord(
-            state="done" if index < cursor_index else "pending",
-            emitted=emitted.get(step.id) or None,
-            items=dict(items_map) if step.id == items_step else None,
-            members=[m.id for m in step.steps] or None,
+        step.id: _with_unit_states(
+            StepRecord(
+                state="done" if index < cursor_index else "pending",
+                emitted=emitted.get(step.id) or None,
+                members=[m.id for m in step.steps] or None,
+            ),
+            items_map if step.id == items_step else {},
         )
         for index, step in enumerate(manifest.steps)
     }

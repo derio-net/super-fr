@@ -19,7 +19,15 @@ from typing import TYPE_CHECKING
 
 from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
-from fr.run.model import RUNS_REL, RunStateError, archived_run_path, parse_run_state, run_path
+from fr.run.legacy import RunStateV4, parse_run_state_v4
+from fr.run.model import (
+    RUNS_REL,
+    RunState,
+    RunStateError,
+    archived_run_path,
+    parse_run_state,
+    run_path,
+)
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -162,14 +170,37 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
         return None
     target = str(plan_rel).rstrip("/")
     for run_file in sorted(runs_dir.glob("*.yaml")):
-        try:
-            state = parse_run_state(run_file.read_text())
-        except RunStateError:
+        state = _read_any_version(run_file.read_text())
+        if state is None:
             continue
         for record in state.steps.values():
             if record.emitted and record.emitted.get("plan", "").rstrip("/") == target:
                 return state.run
     return None
+
+
+def _read_any_version(text: str) -> RunState | RunStateV4 | None:
+    """`text` as a run cursor of ANY version, or `None` if it is not one.
+
+    A cursor fr has not migrated yet is still a cursor. The live model is the
+    current shape only (`run` 5 removed `items`/`dispatch`/`accounting`), so
+    reading with it alone made every stale cursor look like NO cursor — and
+    `fr migrate artifacts` then offered to adopt plans that already had one.
+    For a cursor the 4 -> 5 rewrite refuses, which stays v4 indefinitely,
+    `--adopt` would have written a second cursor for the same plan.
+
+    `emitted.plan` and `run` are the same facts in every version, so the match
+    falls back to the frozen reader (`fr.run.legacy`). Not a migration, and
+    nothing is written: this only answers "whose cursor is this?".
+    """
+    try:
+        return parse_run_state(text)
+    except RunStateError:
+        pass
+    try:
+        return parse_run_state_v4(text)
+    except RunStateError:
+        return None
 
 
 def _archive_run(repo_root: Path, plan_rel: Path) -> None:

@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 5
 run: 2026-09-20-feat-plan-self-review-dispatch-verb-lint
 workflow: fr-goal@1
 branch: feat/plan-self-review-dispatch-verb-lint
@@ -23,27 +23,28 @@ steps:
     state: done
     at: '2026-09-20T13:10:00+00:00'
     exit: 0
-    stdout: 'self-review passed
-
-      '
+    stdout: |
+      self-review passed
   implement:
     state: done
     at: '2026-09-20T15:33:18+00:00'
-    items:
-      phase/1/implement-phase: running
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-20T13:10:04+00:00'
+          estimate:
+            journal_entries: 1
+            journal_lines: 6
+            handoff_chars: 907
+            spec_bytes: 16911
+            plan_bytes: 25239
+          synthesized: true
   deliver:
     state: done
     at: '2026-09-20T15:45:34+00:00'
     emitted:
       pr: https://github.com/derio-net/super-fr/pull/513
-accounting:
-  phase/1/implement-phase:
-    at: '2026-09-20T13:10:04+00:00'
-    journal_entries: 1
-    journal_lines: 6
-    handoff_chars: 907
-    spec_bytes: 16911
-    plan_bytes: 25239

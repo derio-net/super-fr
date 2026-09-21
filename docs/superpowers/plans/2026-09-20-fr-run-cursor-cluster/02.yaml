@@ -1,0 +1,140 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '`advance` refuses a step that is already running, with `--redispatch` as
+    the escape (#499)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  tier: hard
+  acceptance:
+  - run-advance-refuses-running
+tasks:
+- number: 1
+  title: A grouped member already `running` is refused, not re-briefed
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED. Add `test_advance_refuses_a_running_member`: advance into `implement` so
+      `phase/1/implement-phase` is `running`, then advance again. Assert exit 2, that stderr says
+      `ALREADY RUNNING`, that it names the dispatch timestamp from the group record's `at`, and that
+      stdout contains NO JSON brief. Confirm it FAILS today (a byte-identical brief is re-emitted).
+  - id: P2.T1.S2
+    text: |-
+      GREEN. In `_advance_group`, before choosing `pending`, compute
+      `running = next((k for k in expected if items.get(k) == "running"), None)`. When set, print the
+      refusal (subject, `record.at`, then `_resolve_hint(...)`, then the `--redispatch` line) to
+      `err_console` and `raise typer.Exit(2)`. Nothing is written to the run file on this path.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR. Extract `_already_running_refusal(step_id, key, at, run_id, member_id, item) -> str`
+      so Task 2's top-level case renders the identical shape. Re-run the file; confirm green.
+- number: 2
+  title: A top-level `agent` step already `running` is refused the same way
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED. Add `test_advance_refuses_a_running_top_level_agent_step`: advance to `plan` (agent, no
+      gate) so it is `running`, advance again, assert exit 2 + `ALREADY RUNNING` + no JSON on stdout.
+      Add `test_advance_still_briefs_a_blocked_gated_agent_step`: advance `brainstorm` twice and
+      assert the brief IS still printed both times — the gate stops the run, not the harness's view
+      of the step (spec 3.A). Confirm the first fails and the second already passes.
+  - id: P2.T2.S2
+    text: |-
+      GREEN. In `advance_cmd`'s `step.kind == "agent"` branch (AFTER the `_gate_pending` block, so
+      the gated path is untouched), refuse when `record.state == "running"` using the same renderer,
+      with no `--item` in the hint. Confirm both tests green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR. Fold the two refusal call sites into one helper if they now differ only by the hint
+      arguments; otherwise record `no-refactor-because: P2.T2` in the phase journal with the reason.
+- number: 3
+  title: '`--redispatch` is the deliberate escape, and says so when there is nothing
+    to escape'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED. Add three tests: (a) `--redispatch` on a running member re-emits the brief for THAT unit
+      and leaves every other item untouched; (b) `--redispatch` refreshes the group record's `at` and
+      rewrites only that unit's accounting snapshot; (c) `--redispatch` with nothing outstanding exits
+      2 naming that nothing is running, and does NOT fall through to an ordinary dispatch (spec 3.A).
+      Confirm all three fail (the flag does not exist).
+  - id: P2.T3.S2
+    text: |-
+      GREEN. Add `redispatch: bool = typer.Option(False, "--redispatch", help=...)` to `advance_cmd`,
+      thread it into `_advance_group`, and implement: when set and a unit is running, re-emit that
+      unit's brief; when set and nothing is running, exit 2. The flag never resets an item to
+      `pending`, never selects a different unit, and never applies to a `cli` step.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + GATES. Re-read `advance_cmd` end to end and collapse any duplicated
+      state-transition code the flag introduced. Then run ruff format, ruff check, mypy and
+      `uv run pytest -q --no-cov`; all green. Flip the row:
+      `uv run fr acceptance set-status --id run-advance-refuses-running --status ci
+       --level unit=super-fr:tests/unit/test_run_cli.py
+       --notes "Grouped member and top-level agent step both refuse re-dispatch with exit 2;
+       --redispatch re-briefs only the outstanding unit and exits 2 when none is."`
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T13:57:00+00:00'
+      note: 'RED confirmed: second advance exits 0 and re-prints the identical brief
+        (journal p2-red-t1)'
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T13:57:50+00:00'
+      note: '_advance_group refuses a running expected key before the pending-picker:
+        exit 2, err_console, nothing written'
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T13:58:44+00:00'
+      note: 'Extracted _already_running_refusal(step_id, subject, at, run_id, member_id,
+        item); _resolve_hint widened to item: str|None so the top-level case omits
+        --item from ONE builder. 134 passed.'
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T13:59:42+00:00'
+      note: 'RED: top-level refusal test fails (exit 0 + brief re-emitted); the gated-brief
+        test passes already, pinning the untouched path (journal p2-red-t2)'
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T14:01:05+00:00'
+      note: advance_cmd's agent branch refuses record.state == running AFTER the _gate_pending
+        block, same renderer, no --item. 136 passed (one existing test rewritten —
+        journal p2-f1).
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T14:01:51+00:00'
+      note: 'Folded: both call sites now differ only in arguments (T1.S3 extracted
+        the renderer). Refactor here was the subject line — ''plan: plan is ALREADY
+        RUNNING'' collapses to ''plan is ALREADY RUNNING'' when subject == step_id.'
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T14:02:58+00:00'
+      note: 'RED: 5 redispatch tests fail with ''No such option: --redispatch'' (journal
+        p2-red-t3 — click''s usage exit is also 2, so the message assertions are what
+        hold)'
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T14:05:03+00:00'
+      note: '--redispatch added to advance_cmd and threaded into _advance_group: re-briefs
+        the outstanding unit only, refreshes at, refuses (exit 2) when nothing is
+        running — including every cli step, which is never ''running''. 141 passed.'
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T14:11:59+00:00'
+      note: 'Refactor: extracted _nothing_running_refusal (two call sites, one text);
+        flattened _advance_group''s branch into refuse/refuse/select. Gates: ruff
+        format+check clean, mypy 138 files clean, pytest 3 failed (the known host-specific
+        p1-f2 set) 3303 passed. Row run-advance-refuses-running: not-implemented ->
+        ci.'
+  completion:
+    at: '2026-09-20T14:12:34+00:00'
+    note: advance refuses an already-running agent step at both call sites (exit 2,
+      naming the dispatch time and both ways forward); --redispatch re-briefs only
+      the outstanding unit and refuses when none is. 9 new tests + 2 rewritten (they
+      pinned the bug as contract). Gates green; the only pytest failures are the 3
+      known host-specific ones in p1-f2.
+    observed_prs: []

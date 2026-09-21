@@ -111,3 +111,33 @@ def test_shipped_fr_goal_reviews_inside_the_phase_iteration() -> None:
     assert "review" not in [s.id for s in manifest.steps], (
         "the trailing single review step is replaced by the per-phase member"
     )
+
+
+# ── the review gate is enforced by the cursor, not by prose (phase 3) ──
+#
+# spec §C / decision D3: an obligation enforced only by an instruction gets
+# absorbed (#430). `journal-check` makes `fr run advance` itself refuse to
+# proceed to `deliver` while a phase's review is owed, rather than relying on
+# `deliver`'s skill prose to remember to check.
+
+
+def test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver() -> None:
+    manifest = _shipped_fr_goal()
+
+    assert check_workflow(manifest) == []
+    step_ids = [s.id for s in manifest.steps]
+    assert "journal-check" in step_ids, "the review gate must be a step in the shape"
+
+    step = next(s for s in manifest.steps if s.id == "journal-check")
+    assert step.kind == "cli"
+    assert step.run is not None
+    assert "{{ artifacts.plan }}" in step.run
+    assert "--require-reviews" in step.run
+
+    # ORDER is the whole point: after `deliver`, the PR already exists.
+    implement_index = step_ids.index("implement")
+    journal_check_index = step_ids.index("journal-check")
+    deliver_index = step_ids.index("deliver")
+    assert implement_index < journal_check_index < deliver_index, (
+        f"journal-check must sit strictly between implement and deliver, got order {step_ids}"
+    )

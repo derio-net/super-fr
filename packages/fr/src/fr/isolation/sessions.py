@@ -37,6 +37,21 @@ def session_index_path(session_id: str) -> Path:
     return sessions_dir() / f"{session_id}.json"
 
 
+def idle_guard_path(session_id: str) -> Path:
+    """Where `fr-run-idle-guard.sh` remembers the run position it last acted
+    on for this session — its loop breaker (2026-09-20 unit-record-unification
+    spec §4.G). Beside the index and dying with it, and deliberately NOT
+    `*.json`: `stale_session_indexes` globs those as indexes. The hook spells
+    this path itself (it is bash); `test_run_idle_guard.py` pins the two to
+    each other."""
+    return session_index_path(session_id).with_suffix(".idle-guard")
+
+
+def _drop_index(session_id: str) -> None:
+    session_index_path(session_id).unlink(missing_ok=True)
+    idle_guard_path(session_id).unlink(missing_ok=True)
+
+
 def read_session_index(session_id: str) -> dict[str, Any] | None:
     p = session_index_path(session_id)
     if not p.is_file():
@@ -122,7 +137,7 @@ def detach(session_id: str, repo_root: Path | None = None, branch: str | None = 
     for r, b in dict.fromkeys(targets):
         if _drop_binding(r, b, session_id):
             detached.append(b)
-    session_index_path(session_id).unlink(missing_ok=True)
+    _drop_index(session_id)
     return detached
 
 
@@ -141,7 +156,7 @@ def detach_all(state: IsolationState) -> list[str]:
             and idx.get("branch") == state.branch
             and Path(idx.get("repo_root", "")) == state.repo_root
         ):
-            session_index_path(sid).unlink(missing_ok=True)
+            _drop_index(sid)
     if ids and state_path(state.repo_root, state.branch).is_file():
         save_state(state.model_copy(update={"sessions": []}))
     return ids

@@ -1,0 +1,123 @@
+schema_version: 2
+phase:
+  number: 3
+  title: The flip — one map, run 4 → 5, every old cursor still migrates
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - run-unit-record-migrates
+  - run-legacy-cursors-still-migrate
+  - run-migration-atomic-per-cursor
+  - run-upgrade-mid-run-keeps-holder
+  - run-adopt-writes-unit-records
+  tier: hard
+tasks:
+- number: 1
+  title: Every migration reads with the legacy model
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_migration_runner.py — after the flip, a captured v1, v2 and
+      v3 cursor each migrate all the way to the current version (chain `[2, 3, 4, 5]`,
+      every hop asserted: that assertion is this repo's only guard against two branches
+      allocating one version). A cursor carrying a partial measurement is left
+      BYTE-IDENTICAL and reported as that one artifact's failure while the others migrate.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: switch every existing run migration's "parse first, refuse rather than
+      certify" check (run_provenance, run_telemetry, run_dispatch_holder, and any other
+      module under fr/artifacts/ that calls `parse_run_state`) to
+      `fr.run.legacy.parse_run_state_v4`. Add fr/artifacts/run_unit_record.py: the first
+      BODY-REWRITING run migration, 4 -> 5, wrapping `v4_to_v5`, building the result in
+      memory and writing once through the framework's atomic writer. Register it in
+      fr/artifacts/__init__.py. Do NOT bump the registry yet.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: add the rule to .claude/rules/artifact-versioning.md (it is one of the
+      repo-local-only rules — edit it directly, then run scripts/sync-opencode.py for the
+      .opencode/instructions mirror): the first migration that removes or moves a field
+      freezes the prior shape as a legacy model, and no migration validates an old file
+      against the live one.
+- number: 2
+  title: Flip the model, the accessors and the writers
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: flip the tests first. RunState/StepRecord round-trip in the v5 shape
+      (`units`, no `items`/`dispatch`, no top-level `accounting`); `validate_run` enforces
+      spec §4.B — state on a `step/` unit refused, attempts on a `phase/<n>` manual marker
+      refused, at most one open attempt and it is the last; `fr run adopt` writes a
+      current-version cursor whose complete phases are `done` units with EMPTY attempts.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: replace `items`/`dispatch` on StepRecord with `units`, remove
+      `RunState.accounting`, delete `DispatchRecord`/`PhaseAccounting` from the live
+      module (they live on, frozen, in legacy.py). Re-implement fr/run/units.py over the
+      new shape — phase 2 made it the only place that knows. Carry `units` across
+      `_complete_step` (finding f7: that constructor carries fields forward EXPLICITLY, one at a time, so a
+      new durable field is dropped at completion by default). Bump the `run` kind to
+      `current_version=5` in fr/artifacts/registry.py, and nowhere else.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: `uv run fr migrate artifacts --yes` over this repo's own cursors, commit
+      the result (artifact-versioning.md requires it in the same PR). `_complete_step`
+      should stop being a hand-maintained carry-forward list if it can be a
+      `model_copy(update=…)` without changing behaviour — that trap has bitten once.
+- number: 3
+  title: An in-flight run survives the upgrade
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: end-to-end on a captured v4 cursor with a HELD unit: migrate it, then
+      `fr run advance` still exits 2 and still names the holder; `fr run status` still
+      shows every prior attempt; `fr run check` output is equivalent.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: fix whatever the end-to-end exposes. Full suite with CLAUDE* unset.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: full CI gate as in P1.T3.S2, plus `fr validate artifacts`. Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T21:12:13+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T21:12:14+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T21:12:48+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T21:17:19+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T21:31:17+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T21:33:19+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T21:37:45+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T21:51:18+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T21:51:19+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T21:51:19+00:00'
+    note: null
+    observed_prs: []

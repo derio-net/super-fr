@@ -31,6 +31,7 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
 
 
@@ -1104,6 +1105,33 @@ class ReviewIssue:
         return f"[{self.severity}] {self.message}"
 
 
+def _trailing_manual_block(plan: Plan) -> set[int]:
+    """The numbers of the plan's maximal *suffix* of `tag: manual` phases.
+
+    The invariant this serves (#496, 2026-09-20 spec §3.D.1) is: **no manual
+    phase may be outstanding when an agentic phase after it runs.** A manual
+    phase is therefore valid iff it is in this trailing block, OR is already
+    `fr.render.plan_locally_complete` — the second clause is what keeps
+    fr-goal §3's front-load exception expressible, since that flow ends with
+    the operator ticking the phase's steps before implementation resumes.
+
+    Walks phases in number order from the last one backwards and stops at
+    the first agentic phase, so `1 agentic, 2 manual, 3 agentic, 4 manual`
+    returns `{4}` and not `{2, 4}`. An all-manual plan returns every number;
+    a plan with no manual phases returns the empty set.
+
+    Shared on purpose: `self_review` (the authoring gate) and the `implement`
+    group preflight (the runtime gate, spec §3.D.2) both call this, so the
+    two enforcement points cannot disagree about what "trailing" means.
+    """
+    trailing: set[int] = set()
+    for phase in sorted(plan.phases, key=lambda p: p.phase.number, reverse=True):
+        if phase.phase.tag != "manual":
+            break
+        trailing.add(phase.phase.number)
+    return trailing
+
+
 def self_review(plan: Plan) -> list[ReviewIssue]:
     """Soft lints beyond schema validation."""
     issues: list[ReviewIssue] = []
@@ -1204,6 +1232,14 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                     )
                 )
 
+    # Trailing-manual invariant (#496, 2026-09-20 spec §3.D.1): no manual
+    # phase may be OUTSTANDING when an agentic phase after it runs. Checked
+    # here because "where may a manual phase sit" is a structural invariant
+    # of the plan, so it can be decided before anything is dispatched —
+    # fr-goal runs this as its `plan-review` cli step, whose exit code is
+    # the verdict, so a mis-shaped plan fails before phase 1 ever leaves.
+    issues.extend(_manual_placement_issues(plan))
+
     # The plan's declared workflow shape (spec §4.A.1): it must resolve,
     # and it must be a valid shape. Both are errors — dispatch reads this
     # reference, so an unresolvable or malformed one is a plan that cannot
@@ -1273,6 +1309,89 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
         )
 
     return issues
+
+
+def _manual_placement_issues(plan: Plan) -> list[ReviewIssue]:
+    """Where a manual phase may sit (#496, 2026-09-20 spec §3.D.1).
+
+    One invariant — *no manual phase may be outstanding when an agentic
+    phase after it runs* — with two ways to break it, so one pass over the
+    phases and two distinct `severity="error"` messages:
+
+      POSITION    a manual phase that is neither in the trailing manual
+                  block nor already `plan_locally_complete`, with agentic
+                  work still to come after it.
+      DEPENDENCY  an agentic phase whose `depends_on` names an OUTSTANDING
+                  manual phase, whatever the two positions — position alone
+                  is not the invariant, and a *trailing* manual phase
+                  reintroduces the hazard the moment something agentic waits
+                  on it.
+
+    Both halves key on the same word, *outstanding*, and that is the whole
+    point (review `r4-f1`). An earlier draft made the dependency half
+    unconditional over every manual phase, which read as the stricter and
+    therefore safer choice. It is not: it makes fr-goal §3's **front-load**
+    exception unexpressible, because front-loading is defined by that very
+    dependency — §3 front-loads "only when agentic work depends on it". The
+    canonical front-load shape is `1 [manual] (ticked, the operator's go),
+    2 agentic depends_on [1]`, and the unconditional rule errors on it
+    forever with no remedy that keeps the plan's meaning: "drop the
+    dependency" discards a true fact about the build order, and "make
+    phase 2 manual" abandons the automation. Operator decision `d5` chose
+    "trailing OR already complete" precisely so §3 survived; a dependency on
+    an already-complete manual phase waits on nobody.
+
+    The reverse dependency direction is deliberately legal: a trailing
+    manual phase may declare backward deps on the agentic work it collects.
+    """
+    out: list[ReviewIssue] = []
+    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
+    trailing = _trailing_manual_block(plan)
+    # OUTSTANDING manual phases, not all of them: a manual phase whose steps
+    # are already ticked is work nobody is still owed, so nothing waits on it
+    # (review `r4-f1`). Same predicate the position half uses, so the two
+    # halves cannot disagree about what "outstanding" means.
+    outstanding_manual = {
+        p.phase.number for p in ordered if p.phase.tag == "manual" and not plan_locally_complete(p)
+    }
+    for idx, phase in enumerate(ordered):
+        n = phase.phase.number
+        if phase.phase.tag == "manual":
+            if n in trailing or plan_locally_complete(phase):
+                continue
+            after = next(
+                (p.phase.number for p in ordered[idx + 1 :] if p.phase.tag == "agentic"),
+                None,
+            )
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is `tag: manual` but is neither in the plan's "
+                        f"trailing manual block nor already complete, so agentic "
+                        f"phase {after} would run while a human is still owed work. "
+                        f"Move phase {n} to the end of the plan, or tick its steps "
+                        f"(the operator's go) before the run reaches phase {after}."
+                    ),
+                )
+            )
+            continue
+        for dep in sorted(set(phase.phase.depends_on) & outstanding_manual):
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is agentic but declares depends_on phase {dep}, "
+                        f"which is `tag: manual` and still outstanding — an agentic "
+                        f"phase must never wait on a human, whatever the two "
+                        f"positions. Tick phase {dep}'s steps before the run reaches "
+                        f"phase {n} (fr-goal's front-load: the operator's go), drop "
+                        f"the dependency, or make phase {n} manual and move both into "
+                        f"the plan's trailing manual block."
+                    ),
+                )
+            )
+    return out
 
 
 def _workflow_issues(plan: Plan) -> list[ReviewIssue]:
@@ -1612,7 +1731,7 @@ def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
                         f"phase {n} task {task_id} has no refactor step and no "
                         f"no-refactor-because justification — add a refactor step "
                         f"or record one: `fr journal add --scope plan "
-                        f"--slug {plan.meta.plan} --kind discovery "
+                        f"--slug {plan.meta.plan} --kind discovery --phase {n} "
                         f"--title 'no-refactor-because {task_id}' --body <reason>`."
                     ),
                 )

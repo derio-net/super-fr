@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The obligation code cannot enforce, and the repo's standing rules
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-reap-force-escape
+tasks:
+- number: 1
+  title: --force is operator-requested-and-informed only (decision d3)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: add a prose tripwire asserting that BOTH
+      plugins/super-fr/skills/fr-isolation/SKILL.md (canonical) and
+      .opencode/skills/fr-isolation/SKILL.md (generated mirror) state the
+      --force obligation. Put it beside the repo's existing skill tripwires
+      (tests/unit/test_tripwire_*.py) and match on a stable phrase, not on
+      exact sentence wording that a future edit will churn. Run pytest —
+      fails, the prose does not exist yet.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add the clause to the CANONICAL skill only
+      (plugins/super-fr/skills/fr-isolation/SKILL.md) — never hand-edit the
+      .opencode mirror, AGENTS.md is explicit and a tripwire catches it.
+      It must say two things, because decision d3 said two: an agent may not
+      reach for `--force` on its own initiative, and when it does ask, it
+      first names what would be destroyed. Say plainly that this is prose
+      with no tripwire behind it (nothing can test "an agent decided by
+      itself") — this repo's convention is that rules are enforced by tests,
+      so an unenforced one announces itself rather than borrowing the
+      credibility of the enforced ones. Then run `scripts/sync-opencode.py`
+      (no flag writes) and commit the regenerated mirror. Green.
+- number: 2
+  title: Matrix, version, and the explainer that cannot be regenerated
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Move all four acceptance rows off not-implemented with
+      `fr acceptance set-status --id <row> --status ci --notes "<why it
+      moved>" --level unit=super-fr:<test path>#<test name>` — never a
+      hand-edit, and --notes is required because a status that moved for no
+      recorded reason is the silent change the acceptance-matrix rule
+      forbids. Rows: isolation-reap-preserves-uncommitted (phase 1),
+      -preserves-unlanded (phase 2), -guards-dont-strand and
+      -force-escape (phase 3 + this phase's prose tripwire). Then
+      `fr acceptance check` — it regenerates and verifies all three
+      committed reports; commit them.
+  - id: P4.T2.S2
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` (4.8.0 →
+      4.9.0) — minor because a refusal that did not exist before is
+      user-visible mandatory behavior plus a shipped skill edit, not a fix.
+      Never hand-edit a version-bearing manifest. Commit the changed
+      manifests together with uv.lock, then `uv run --no-project python
+      scripts/bump-version.py --check` and `uv run fr --version` to confirm.
+      Record in the plan journal (kind discovery) the explainers judgement
+      for the PR body: docs/explainers/fr-isolation.html describes the sweep
+      at a level this guard does not falsify, AND it is one of the two pages
+      with no committed .md source (explainers-currency known gap 1), so
+      regeneration is impossible rather than skipped — the PR body must say
+      which of those two it is.
+  - id: P4.T2.S3
+    text: |-
+      FINAL GATE: `scripts/sync-opencode.py --check`; `uv run ruff format
+      packages/ tests/ scripts/`; `uv run ruff check packages/ tests/
+      scripts/`; `uv run mypy packages/fr/src packages/fr-dispatch/src
+      packages/fr-vk/src packages/fr-cncd/src`; `uv run fr validate
+      artifacts`; `uv run fr acceptance check`; `uv run pytest -q --no-cov
+      --basetemp=/tmp/sb`; then the FULL `uv run pytest` once, because CI
+      also gates cov-fail-under=75 and --no-cov hides that. Green against
+      phase 1's recorded baseline, and the coverage gate genuinely met
+      rather than assumed.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T12:38:13+00:00'
+      note: 'RED: tests/unit/test_tripwire_force_operator_only_prose.py added, 9 failures
+        confirming the prose doesn''t exist in any of the three skill mirrors.'
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T12:38:13+00:00'
+      note: 'GREEN: canonical SKILL.md got the d3 obligation clause; scripts/sync-opencode.py
+        and scripts/sync-hermes.py regenerated the mirrors; tripwire passes 9/9.'
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T12:38:59+00:00'
+      note: 'Flipped isolation-reap-preserves-uncommitted and isolation-reap-preserves-unlanded
+        to ci with real test refs; the other two rows (guards-dont-strand, force-escape)
+        were already flipped in phase 3 (journal d-p3-matrix-flipped-early). fr acceptance
+        check: 128 rows OK, exit 0.'
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T12:39:43+00:00'
+      note: 'Version bumped 4.8.0 -> 4.9.0 (minor); bump-version.py --check and fr
+        --version both confirm. Explainers judgement journalled as p4-explainer-cannot-regenerate:
+        fr-isolation.html is not falsified and is sourceless (known gap 1).'
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T12:58:36+00:00'
+      note: 'Full gate: sync-opencode/sync-hermes --check clean; ruff format/check
+        clean; mypy clean; fr validate artifacts clean (33 artifacts); fr acceptance
+        check clean (128 rows OK); pytest --no-cov: 1 failed, 3328 passed, 80 skipped
+        (baseline #463/#489, confirmed twice with different basetemps); full pytest
+        with coverage: same 1 failed/3328 passed/80 skipped, coverage 91.73% (gate
+        75%). One spurious failure seen only when --basetemp was under the long agent
+        scratchpad path (journal p4-basetemp-path-length-false-positive), not reproduced
+        with a short basetemp.'
+  completion:
+    at: '2026-09-20T12:58:40+00:00'
+    note: null
+    observed_prs: []

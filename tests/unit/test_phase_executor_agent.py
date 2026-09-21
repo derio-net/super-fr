@@ -44,3 +44,23 @@ def test_body_names_journal_and_fr_execute() -> None:
     body = AGENT.read_text().split("---\n", 2)[2]
     assert "fr-execute" in body
     assert "fr journal" in body
+
+
+def test_the_journal_example_carries_the_phase_flag() -> None:
+    """The prose that caused the untagged-entry problem, pinned.
+
+    `fr journal add --scope plan` now requires `--phase N` or `--global`
+    (spec §5.A2), and the root cause of the entries that made it necessary was
+    this contract's own example omitting the flag: an executor copies what it
+    is shown. Without this assertion the example can be dropped in a
+    length-trimming edit with every test still green, and executors resume
+    writing entries that render in full at every phase forever — the exact
+    regression path §5.A2 describes. The four `.opencode/agent/*` mirrors are
+    covered by the sync tripwire, so pinning the canonical file is enough.
+    """
+    body = AGENT.read_text()
+    assert "fr journal add --scope plan" in body
+    assert "--phase N" in body, (
+        "the journal example must show --phase N; without it the contract "
+        "instructs executors to run a command that now exits 2"
+    )

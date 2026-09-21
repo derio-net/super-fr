@@ -351,7 +351,7 @@ class TestResolveJournalReadPath:
 class TestHandoff:
     """`compose_handoff` — the curated executor brief (methodology
     restoration): open findings and dependency-relevant entries in full,
-    unrelated fixed history collapsed to one line each, raw pointer always
+    closed findings and unrelated context collapsed to one line each, raw pointer always
     present."""
 
     def _entries(self):
@@ -413,14 +413,36 @@ class TestHandoff:
         assert "actionable anywhere" in out
 
     def test_dependency_scoped_entries_render_in_full(self) -> None:
+        """Dependency scoping survives the state-first collapse — for the two
+        kinds it was ever right for. A decision is never "closed" (it still
+        constrains the phase depending on it), a discovery is a trap paid for
+        once, and an untagged entry is global; all three still render in full.
+        """
         from fr.journal.model import compose_handoff
 
         out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
 
-        assert "relevant history" in out
         assert "why we did it" in out
         assert "trap to avoid" in out
         assert "applies to all" in out
+
+    def test_a_closed_finding_on_a_dependency_phase_collapses(self) -> None:
+        """CHANGED CONTRACT (bounded-executor-handoff P2.T1, spec §5.A1).
+
+        This assertion used to read `assert "relevant history" in out` and sat
+        in `test_dependency_scoped_entries_render_in_full` above: `f-dep` is
+        `fixed`, tagged to phase 1, which phase 2 depends on, so it rendered in
+        full. That test was pinning the defect — measured at ~30k of a real
+        83k handoff — and its failure on this change is the expected result,
+        not a regression. State now decides before phase does: the title stays
+        on the record, the body does not come along.
+        """
+        from fr.journal.model import compose_handoff
+
+        out = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+
+        assert "relevant history" not in out
+        assert "- f-dep · finding [fixed] · Fixed on dep (phase 1)" in out
 
     def test_unrelated_fixed_history_collapses_to_one_line_each(self) -> None:
         from fr.journal.model import compose_handoff
@@ -455,6 +477,47 @@ class TestHandoff:
 
         assert "fr journal render --scope plan --slug s" in out
         assert "Open" not in out
+
+
+class TestReviewedPhases:
+    """`reviewed_phases` — the pure fold `fr journal check --require-reviews`
+    (phase 2) uses to decide which owed phases already have a recorded
+    review. A phase "names" its review by carrying `phase=N` on a `kind=review`
+    entry; an unphased review (the 5 unphased plan-scope review entries
+    already in this repo's journals, spec §B) does not blanket-satisfy every
+    phase, or the gate would be trivially defeated by one undated review."""
+
+    def test_a_phased_review_entry_contributes_its_phase(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=3, title="phase 3 review")]
+        assert reviewed_phases(entries) == {3}
+
+    def test_an_unphased_review_entry_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="review", phase=None, title="a general review")]
+        assert reviewed_phases(entries) == set()
+
+    def test_a_finding_with_a_phase_contributes_nothing(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [_entry(kind="finding", phase=3, state="open", title="a bug")]
+        assert reviewed_phases(entries) == set()
+
+    def test_empty_entries_gives_empty_set(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        assert reviewed_phases([]) == set()
+
+    def test_two_reviews_of_the_same_phase_give_one_element(self) -> None:
+        from fr.journal.model import reviewed_phases
+
+        entries = [
+            _entry(kind="review", id="r1", phase=2, title="first pass"),
+            _entry(kind="review", id="r2", phase=2, title="second pass"),
+        ]
+        assert reviewed_phases(entries) == {2}
 
 
 class TestEffectiveFindingStates:

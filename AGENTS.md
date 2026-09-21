@@ -64,6 +64,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
+    `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
+    the ONE definition of "idle" — a run that is advanceable with nobody
+    working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
+    plus `--stalled-after` (reported, never failed). It also owns the three
+    predicates `advance` shares with it (`gate_pending`, `next_step_id`,
+    `hold_on`). Two adapters call that CLI and re-derive nothing:
+    `plugins/super-fr/hooks/fr-run-idle-guard.sh` (Claude Code `Stop` — BLOCKS;
+    always exits 0, deliberately no `set -e`, because exit 2 from a Stop hook
+    is itself a block and `fr` exits 2 on every refusal) and
+    `packages/fr-opencode-plugin/src/idle.ts` (`session.idle` — CONTINUES; not
+    live-proven, so `partial`). Both act at most once per run `position`.
   - **`fr/tracker`** — the tracker protocol (`model.py`'s `Tracker` Protocol
     + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
     imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one
@@ -141,23 +152,26 @@ tripwire will catch drift anyway:
   `.claude/rules/explainers-currency.md` and
   `.claude/rules/third-party-privacy.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
-- Generated, **on THREE surfaces driven by TWO scripts** — editing one
-  canonical skill can oblige all three, and a green OpenCode pair says nothing
-  about the Hermes one. Two separate PRs found that the hard way within days of
-  each other (gh#434 phase 5: an unexplained "fourth" test failure in a PR that
-  had touched no Hermes file; #428 phase 3: both OpenCode guards green while
-  `test_tripwire_hermes_skills_sync.py` was red). Run BOTH scripts after any
-  canonical skill/rule edit and commit every regenerated mirror:
-  - `.opencode/skills/<name>/SKILL.md` + `.opencode/instructions/*.md`, and the
-    per-tier subagent files
-    `.opencode/agent/<name>{,-mechanical,-standard,-hard}.md` generated from
-    `plugins/super-fr/agents/` — `scripts/sync-opencode.py` (no flag writes;
-    `--check` verifies). Guards: `test_tripwire_opencode_skills_sync.py`,
-    `test_tripwire_opencode_instructions_sync.py`, `test_opencode_agent_mirror.py`
-    — three tests, three surfaces, and the skills guard does NOT cover the
-    agent files.
-  - `.hermes/skills/fr/<name>/SKILL.md` — `scripts/sync-hermes.py`, guarded by
-    `test_tripwire_hermes_skills_sync.py` (with rules/hooks siblings).
+- Generated: `.opencode/skills/<name>/SKILL.md`, `.opencode/instructions/*.md`,
+  **and** the per-tier subagent files
+  `.opencode/agent/<name>{,-mechanical,-standard,-hard}.md` generated from
+  `plugins/super-fr/agents/`. After editing a canonical skill/rule/agent, run
+  `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit the
+  regenerated mirror. THREE guards, three surfaces —
+  `test_tripwire_opencode_skills_sync.py`,
+  `test_tripwire_opencode_instructions_sync.py` and
+  `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
+  files, so an agent-only edit can leave a green skills guard and a red mirror.
+- Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
+  `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
+  one — `scripts/sync-hermes.py` is the second sync, guarded by
+  `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
+  only `sync-opencode.py` leaves that tripwire red, which is how it was found
+  (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
+  touched no Hermes file) — and again, independently, in gh#503 phase 6 (a GREEN
+  targeted tripwire run and a red full suite) and gh#428 phase 3 (both OpenCode
+  guards green while the Hermes one was red). THREE sessions hit the same trap
+  within days; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

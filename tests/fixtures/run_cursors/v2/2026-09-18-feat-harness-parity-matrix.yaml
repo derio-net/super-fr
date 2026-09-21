@@ -1,0 +1,152 @@
+schema_version: 2
+run: 2026-09-18-feat-harness-parity-matrix
+workflow: fr-goal@1
+branch: feat/harness-parity-matrix
+started: '2026-09-18T12:25:26+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-18T12:51:13+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md
+  spec-review:
+    state: done
+    at: '2026-09-18T12:53:03+00:00'
+  plan:
+    state: done
+    at: '2026-09-18T12:58:32+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-18-harness-parity-matrix
+  plan-review:
+    state: done
+    at: '2026-09-18T12:58:32+00:00'
+    exit: 0
+    stdout: 'self-review passed
+
+      '
+  implement:
+    state: done
+    at: '2026-09-18T18:27:08+00:00'
+    items:
+      phase/1/implement-phase: done
+      phase/1/review-phase: done
+      phase/2/implement-phase: done
+      phase/2/review-phase: done
+      phase/3/implement-phase: done
+      phase/3/review-phase: done
+      phase/4/implement-phase: done
+      phase/4/review-phase: done
+      phase/5/implement-phase: done
+      phase/5/review-phase: done
+      phase/6/implement-phase: done
+      phase/6/review-phase: done
+      phase/7/implement-phase: done
+      phase/7/review-phase: done
+    members:
+    - implement-phase
+    - review-phase
+  deliver:
+    state: done
+    at: '2026-09-18T18:27:14+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/481
+accounting:
+  phase/1/implement-phase:
+    at: '2026-09-18T13:41:20+00:00'
+    journal_entries: 26
+    journal_lines: 137
+    handoff_chars: 21696
+    spec_bytes: 19385
+    plan_bytes: 35961
+  phase/1/review-phase:
+    at: '2026-09-18T13:41:32+00:00'
+    journal_entries: 26
+    journal_lines: 137
+    handoff_chars: 21696
+    spec_bytes: 19385
+    plan_bytes: 35961
+  phase/2/implement-phase:
+    at: '2026-09-18T13:41:36+00:00'
+    journal_entries: 26
+    journal_lines: 137
+    handoff_chars: 21696
+    spec_bytes: 19385
+    plan_bytes: 35961
+  phase/2/review-phase:
+    at: '2026-09-18T14:15:19+00:00'
+    journal_entries: 42
+    journal_lines: 217
+    handoff_chars: 35491
+    spec_bytes: 19385
+    plan_bytes: 36152
+  phase/3/implement-phase:
+    at: '2026-09-18T14:15:20+00:00'
+    journal_entries: 42
+    journal_lines: 217
+    handoff_chars: 23579
+    spec_bytes: 19385
+    plan_bytes: 36152
+  phase/3/review-phase:
+    at: '2026-09-18T15:05:03+00:00'
+    journal_entries: 52
+    journal_lines: 297
+    handoff_chars: 36667
+    spec_bytes: 19385
+    plan_bytes: 36301
+  phase/4/implement-phase:
+    at: '2026-09-18T15:05:04+00:00'
+    journal_entries: 52
+    journal_lines: 297
+    handoff_chars: 26303
+    spec_bytes: 19385
+    plan_bytes: 36301
+  phase/4/review-phase:
+    at: '2026-09-18T15:46:47+00:00'
+    journal_entries: 64
+    journal_lines: 373
+    handoff_chars: 43295
+    spec_bytes: 19385
+    plan_bytes: 36471
+  phase/5/implement-phase:
+    at: '2026-09-18T18:26:56+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 65805
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/5/review-phase:
+    at: '2026-09-18T18:27:05+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 65805
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/6/implement-phase:
+    at: '2026-09-18T18:27:06+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 82664
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/6/review-phase:
+    at: '2026-09-18T18:27:06+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 82664
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/7/implement-phase:
+    at: '2026-09-18T18:27:07+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 68564
+    spec_bytes: 23046
+    plan_bytes: 45521
+  phase/7/review-phase:
+    at: '2026-09-18T18:27:08+00:00'
+    journal_entries: 109
+    journal_lines: 729
+    handoff_chars: 68564
+    spec_bytes: 23046
+    plan_bytes: 45521

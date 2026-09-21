@@ -21,6 +21,12 @@ class TestPluginHooks:
         assert [h["command"] for m in events["SessionEnd"] for h in m["hooks"]] == [
             "${CLAUDE_PLUGIN_ROOT}/hooks/fr-session-unbind.sh"
         ]
+        # Stop → the idle guard (2026-09-20 unit-record-unification §4.G, gh#518);
+        # no matcher, and it is the ONLY Stop hook: a second one that blocked
+        # would be a second thing able to keep an operator from ending a turn.
+        assert [h["command"] for m in events["Stop"] for h in m["hooks"]] == [
+            "${CLAUDE_PLUGIN_ROOT}/hooks/fr-run-idle-guard.sh"
+        ]
         # WorktreeCreate / WorktreeRemove → native Claude worktree sessions land
         # in fr (§5.B.3 / §5.B.4); no matcher, every worktree name goes through.
         assert [h["command"] for m in events["WorktreeCreate"] for h in m["hooks"]] == [

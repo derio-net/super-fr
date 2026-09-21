@@ -1,0 +1,158 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the DispatchRecord shape, the 2→3 artifact bump, and this repo's
+    own cursors migrated
+  tag: agentic
+  tier: standard
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-dispatch-holder-recorded
+  skeleton: true
+tasks:
+- number: 1
+  title: The model, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests to tests/unit/test_run_model.py (create it if absent; otherwise
+      extend the existing run-state model tests). Cover, against fr.run.model:
+      (a) DispatchRecord requires `dispatched` and defaults every other field to None;
+      (b) it is frozen and extra="forbid" — an unknown key raises;
+      (c) `outcome` accepts exactly "done" | "failed" | "abandoned" and rejects anything else;
+      (d) `harness` accepts every member of fr.harness.model.HARNESSES and rejects
+          "unknown" — derive the accepted set FROM HARNESSES, never re-list it
+          (the repo's phase_tiers() precedent in fr/types.py);
+      (e) StepRecord.dispatch is `dict[str, list[DispatchRecord]] | None`, defaulting
+          to None, and a StepRecord with no `dispatch` key parses exactly as before;
+      (f) a RunState carrying dispatch round-trips through dump_run_state →
+          parse_run_state unchanged, and dump_run_state still omits `dispatch` entirely
+          when it is None (exclude_none).
+      Run `uv run pytest tests/unit/test_run_model.py -q --no-cov` and paste the failure.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/run/model.py add `DispatchOutcome` (a Literal) and
+      `DispatchRecord` (frozen, extra="forbid", fields per spec §4.A), plus
+      `StepRecord.dispatch: dict[str, list[DispatchRecord]] | None = None`.
+      Validate `harness` against fr.harness.model.HARNESSES with a field_validator that
+      IMPORTS the tuple rather than restating it. Give every field the docstring
+      treatment the neighbouring `answered_by`/`items`/`members` fields have — this
+      module records rationale in docstrings and a bare field would be the odd one out.
+      State in DispatchRecord's docstring which fields fr knows (`dispatched`) and which
+      are reported claims (spec §3), and why the value is a LIST per unit (spec §4.B).
+      Re-run the test file; expect all green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: re-read the new docstrings against spec §3 and §4.B — the seam between
+      "fr knows it" and "the orchestrator says so" must be stated once, precisely, where
+      a reader meets the model. Run `uv run ruff format packages/ tests/` then
+      `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src`; expect clean.
+- number: 2
+  title: The 2→3 migration and the structure validator, red to green
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add tests to tests/unit/test_migration_runner.py and
+      tests/unit/test_validate_artifacts.py covering:
+      (a) artifact_kind("run").current_version == 3;
+      (b) a v2 cursor on disk is stale, and the registered migration stamps it 3 without
+          touching its body (byte-compare everything but the stamp);
+      (c) the migration REFUSES an unreadable/truncated cursor, that refusal is recorded
+          as that one artifact's failure, and every other cursor still migrates — the
+          invariant fr/artifacts/run_provenance.py's docstring spells out;
+      (d) `fr validate artifacts` accepts a v3 cursor carrying `dispatch` and rejects one
+          whose `dispatch` is malformed (e.g. a bare mapping where a list belongs).
+      Run both files; paste the failures.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: bump `current_version` for the `run` kind to 3 in
+      packages/fr/src/fr/artifacts/registry.py — and NOWHERE else
+      (.claude/rules/artifact-versioning.md). Add
+      packages/fr/src/fr/artifacts/run_dispatch_holder.py modelled line-for-line on
+      run_provenance.py: a stamp-only SchemaMigration named "run-dispatch-holder" whose
+      `fn` parses the cursor first and raises rather than certifying a file it cannot
+      read. Register it by importing it in fr/artifacts/__init__.py next to
+      `_run_provenance`, with the same `# noqa: F401  (isort: skip)` comment — a
+      migration nobody imports never runs. Teach the `run` structure validator in
+      fr/artifacts/structure.py about `dispatch`. Re-run both test files; expect green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: check run_dispatch_holder.py's module docstring actually explains why
+      this is stamp-only (the field is optional and absent already means "no dispatch
+      recorded"), not just that it is. Re-run ruff format/check and mypy.
+- number: 3
+  title: 'Dogfood the bump: migrate this repo''s own cursors, and prove CI is green'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Run `uv run fr migrate artifacts` (preview) from the worktree and read what it
+      intends to touch. Then `uv run fr migrate artifacts --yes`. Confirm with
+      `uv run fr validate artifacts` and `git status --short` that only run cursors
+      moved and that this run's own cursor
+      (docs/superpowers/runs/2026-09-20-feat-phase-holder-identity.yaml) is among them.
+      .claude/rules/artifact-versioning.md requires this in the SAME PR as the bump —
+      without it, acceptance-report.yml refuses under CI=true.
+  - id: P1.T3.S2
+    text: |-
+      The skeleton's whole point — prove the delivery path, not just the unit:
+      run the full gate in the background and wait on it with a BOUNDED loop, never an
+      unbounded poll (spec §4.E — the defect this very PR is about):
+      `uv run pytest -q --basetemp=/tmp/sb` (full run, cov-fail-under=75 included),
+      `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run fr acceptance check`, `uv run fr validate artifacts`.
+      Paste each command's tail. Commit the phase.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T11:46:28+00:00'
+      note: 'RED: added tests to tests/unit/test_run_state.py; 10 failed (DispatchRecord
+        missing)'
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T11:46:47+00:00'
+      note: 'GREEN: DispatchRecord/DispatchOutcome + StepRecord.dispatch added to
+        fr/run/model.py; all 24 tests pass'
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T11:46:55+00:00'
+      note: 'REFACTOR: docstrings restate the fr-knows/reported seam per field; ruff
+        format/check + mypy clean'
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T11:56:39+00:00'
+      note: 'RED: added tests to test_migration_runner.py (4 failed: current_version==3,
+        chain reachable 1→3, v2→v3 stamp-only, refuse-unreadable) and test_validate_artifacts.py
+        (2 new tests passed immediately — RunState already accepts dispatch).'
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T11:51:32+00:00'
+      note: 'GREEN: run current_version 2→3, run_dispatch_holder.py migration modelled
+        on run_provenance.py, registered in fr/artifacts/__init__.py.'
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T11:51:38+00:00'
+      note: 'REFACTOR: docstring explains stamp-only rationale; ruff format/check
+        + mypy clean'
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T11:51:52+00:00'
+      note: 'Ran fr migrate artifacts (preview) then --yes: 3 run cursors migrated
+        (2026-09-19-feat-opencode-subagent-dispatch, 2026-09-20-feat-phase-holder-identity
+        — this run''s own cursor, 2026-09-20-fix-opencode-tier-model-reaches-dispatch),
+        stamp-only. fr validate artifacts: 33 checked, all valid. git status shows
+        only run cursors + the intended source/test changes touched.'
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T11:56:12+00:00'
+      note: 'Full gate green: pytest -q --basetemp=/tmp/sb (73s, foreground w/ explicit
+        long timeout, no background children) = 3303 passed/85 skipped/1 failed (pre-existing
+        env-only test_install_bridge_flag_writes_wrapper, journalled p1-preexisting-install-bridge);
+        ruff check clean; mypy clean over all 4 packages; fr acceptance check exit
+        0 (128 rows OK); fr validate artifacts: 33 checked, all valid.'
+  completion:
+    at: '2026-09-20T11:56:50+00:00'
+    note: null
+    observed_prs: []

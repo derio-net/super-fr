@@ -11,7 +11,16 @@
 // shipped hook this plugin ports; `fr.harness.observe` errors if a marker
 // names a script absent from plugins/super-fr/hooks/.
 // super-fr-parity: fr-isolation-required.sh
+//
+// The `event` hook below is the OpenCode half of the idle guard (gh#518) — see
+// ./idle.ts. It CONTINUES an idle run where Claude Code's Stop hook blocks the
+// stop, which is why parity.yaml declares it `partial`, not `enforced`.
+// super-fr-parity: fr-run-idle-guard.sh
+//
+// EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
+// plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
 import { isAbsolute } from "node:path";
+import { createIdleHandler } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit"]);
@@ -23,7 +32,7 @@ function extractFilePath(output: unknown): string | undefined {
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-export async function FrIsolationRequired(_ctx: {
+export async function FrIsolationRequired(ctx: {
   project: unknown;
   client: unknown;
   $: unknown;
@@ -31,6 +40,7 @@ export async function FrIsolationRequired(_ctx: {
   worktree: string;
 }) {
   return {
+    event: createIdleHandler({ client: ctx.client, directory: ctx.worktree || ctx.directory }),
     "tool.execute.before": async (input: { tool: string }, output: unknown) => {
       if (!EDIT_TOOLS.has(input.tool)) return;
 

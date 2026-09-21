@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The obligation in prose — fr-goal §6/§7, fr-debugging, and the mirrors
+  tag: agentic
+  tier: mechanical
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - journal-review-entry-per-phase
+tasks:
+- number: 1
+  title: Canonical skill prose
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md SECTION 6 (review-phase).
+      NOTE THE RENUMBERING: phase 3 inserted a new section 7 (journal-check)
+      and pushed deliver to section 8, so read the file rather than trusting
+      section numbers written before that.
+      After the existing "record each as a plan-scope `finding`" clause, add
+      the review-entry obligation: `fr journal add --scope plan --slug <s>
+      --kind review --phase N` naming the phase and the findings raised (or
+      that none were), and say that the journal-check step fails delivery
+      without it. THE FILE IS AT ITS 120-LINE CAP (a test enforces it), so
+      this must be paid for by tightening prose elsewhere in the same section
+      — NOT by deleting an instruction, a warning or a cross-reference. If you
+      cannot fit it without losing meaning, journal a finding and say so
+      rather than quietly dropping something.
+  - id: P4.T1.S2
+    text: |-
+      Phase 3 already added section 7 (journal-check) describing the
+      cursor-run gate, so the original instruction for this step is PARTLY
+      DONE. What remains: read section 8 (deliver) and reconcile it. It still
+      says `fr journal check --scope plan` clean as something the agent
+      verifies, which is now ALSO a cursor-run step — make the two sections
+      agree rather than describing the same gate twice in two voices, and keep
+      deliver's own `fr journal resolve` guidance intact. Do not re-describe
+      the drift recovery; section 7 already carries it.
+      Also restore the word `deterministic` to section 4's plan-review line if
+      it still fits — phase 3's line-cap trim dropped it (the point being that
+      a cli step's verdict is not a judgement call).
+  - id: P4.T1.S3
+    text: |-
+      Edit plugins/super-fr/skills/fr-debugging/SKILL.md: READ IT FIRST
+      and find where it invokes review. It drives its own fix-PR
+      without the fr-goal cursor, so the gate does not run there
+      automatically — say that plainly and give the same
+      `fr journal add --kind review --phase N` obligation, rather than
+      implying an enforcement that is not wired. A promise of a gate
+      that does not exist is the failure this whole change is about.
+- number: 2
+  title: Mirrors and their tripwires
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py` (no
+      flag writes) and commit the regenerated
+      .opencode/skills/**/SKILL.md mirrors. Then
+      `uv run --no-project python scripts/sync-opencode.py --check` and
+      `uv run pytest -q --no-cov tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py
+      tests/unit/test_tripwire_skill_tool_neutrality.py
+      tests/unit/test_skill_validation.py` — all green. The
+      tool-neutrality scanner is the one most likely to object: it
+      forbids naming a harness-specific tool outside a scoped clause,
+      so keep the new prose tool-neutral (`fr journal add` is a CLI,
+      which is fine).
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      ruff format + ruff check + mypy + `uv run pytest -q --no-cov`,
+      same allowance.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T16:22:31+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T16:22:40+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T16:22:44+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T16:22:44+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T16:22:36+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T16:23:03+00:00'
+    note: null
+    observed_prs: []

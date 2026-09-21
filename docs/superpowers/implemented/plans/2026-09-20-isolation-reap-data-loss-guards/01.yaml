@@ -1,0 +1,124 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the dirty-worktree guard, proved against real git (#435)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-reap-preserves-uncommitted
+  skeleton: true
+tasks:
+- number: 1
+  title: ReapHazard / ReapRefused and the dirty check, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests to tests/unit/test_isolation.py (it already owns the
+      down()/teardown seam — test_down_raises_when_worktree_remove_fails and
+      friends live there; do NOT start a new file for the same seam).
+      Against the existing fake-Runner fixtures, assert:
+      (a) down() on a workspace whose `git status --porcelain` returns
+          non-empty stdout raises `ReapRefused`, the hazard's `kind` is
+          "dirty-worktree", and — the load-bearing assertion —
+          `git worktree remove` NEVER appears in the recorded command list.
+          Asserting only the exception would pass even if the removal ran
+          first and the raise came after; that is exactly the class of test
+          this repo treats as asserting nothing;
+      (b) untracked-only dirt (`?? new-file.md`) refuses too. This is
+          spec §1.3 / decision d1 — the carve-out #435 floated and the
+          operator rejected, because the work #435 lost included a
+          newly-authored (untracked) file;
+      (c) a `git status` that returns NON-ZERO refuses as
+          kind="unverifiable" rather than reading as clean — the #354
+          invariant ("a failed query is not evidence of absence") applied
+          to the working tree;
+      (d) the message names the branch and at least one offending path, and
+          contains the exact escape string `--force`;
+      (e) `down(state, force=True)` on the same dirty workspace tears down
+          normally — the escape still works.
+      Run pytest — fails, ReapRefused does not exist.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/local.py add a frozen
+      `@dataclass ReapHazard(kind: str, detail: str)` and
+      `class ReapRefused(IsolationError)` carrying it, then
+      `Target._reap_hazard(state) -> ReapHazard | None` implementing the
+      dirty check ONLY (content guard is phase 2 — do not reach ahead).
+      Wire it into `_down_worktree_tail` immediately AFTER the existing
+      OPEN-PR guard at local.py:562 and BEFORE `_teardown_container`:
+      `if not force: h = self._reap_hazard(state); if h: raise ReapRefused(h)`.
+      That position is the whole design (spec §3.1) — it is the single waist
+      every reap path already passes through, shared by
+      LocalWorktreeDevcontainerTarget and HostWorktreeTarget, and reached by
+      gc via down(state, force=False). Keep `_reap_hazard` a PURE QUERY:
+      it runs no destructive command, which is what lets phase 3 use it for
+      --dry-run. Export ReapHazard/ReapRefused wherever IsolationError is
+      already exported. Run the S1 tests — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: the detail strings are the operator-facing product of this
+      whole change (spec §3.8), so build them in one named helper rather
+      than inline f-strings at each hazard site — phases 2 and 3 add two
+      more callers and the three messages must stay one voice. Cap the
+      listed paths (first few, then `+N more`) so a 200-file hazard does not
+      produce a wall of text. Re-run tests/unit/test_isolation.py.
+- number: 2
+  title: Skeleton smoke — real git, real worktree, real refusal
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      SKELETON SMOKE (the walking skeleton's minimum runtime, no fakes):
+      add a test that builds a REAL throwaway git repo under tmp_path, makes
+      a real linked worktree from it, writes a real IsolationState, and
+      drives `HostWorktreeTarget` with the REAL subprocess_runner — that mode
+      is docker-less by construction (`_teardown_container` is a no-op,
+      hostworktree.py:84), so this needs no daemon and runs in CI.
+      Dirty the worktree with one tracked edit, call `down(state)`, assert
+      `ReapRefused` AND that the worktree directory still exists on disk.
+      Then `down(state, force=True)` and assert it is gone. There is no `gh`
+      remote, so `_pr` returns None and the OPEN-PR guard is inert — which is
+      what makes this a clean isolation of the new guard. Mark it with
+      whatever marker the repo already uses for real-subprocess tests if one
+      exists; if none does, note that in the journal rather than inventing a
+      marker scheme.
+- number: 3
+  title: Quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Baseline FIRST so later phases can tell a regression from a known
+      failure: run `uv run pytest -q --no-cov --basetemp=/tmp/sb` on a clean
+      tree before any of today's edits are counted, and journal the exact
+      set of pre-existing failures (`fr journal add --scope plan --kind
+      discovery`). Then: `uv run ruff format packages/ tests/`;
+      `uv run ruff check packages/ tests/`; `uv run mypy packages/fr/src
+      packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`;
+      `uv run pytest -q --no-cov --basetemp=/tmp/sb`. Green except that
+      recorded baseline.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T11:21:05+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T11:21:05+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T11:21:45+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T11:21:50+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T11:30:52+00:00'
+      note: null
+  completion:
+    at: '2026-09-20T11:31:16+00:00'
+    note: null
+    observed_prs: []
