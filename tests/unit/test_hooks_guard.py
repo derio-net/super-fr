@@ -259,7 +259,6 @@ class TestBootstrapAllowance:
         assert decision(run_hook(payload("myfr init", repo), sentinels)) == "deny"
 
 
-
 class TestRunStartEntersIsolation:
     """`fr run start` is an ISOLATION-ENTERING command, like `fr isolation up`.
 

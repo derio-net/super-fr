@@ -103,3 +103,14 @@ fr-isolation-guard.sh allows `fr run start` from the base clone, beside the exis
 Failing-first: TestRunStartEntersIsolation in tests/unit/test_hooks_guard.py - 2 red (plain and behind `uv run`), 7 green before and after (advance/resolve/adopt/status, the near-misses `fr run startle` and `fr runs start`, and the sentinel surviving). The original repro - a repo that already has someone else's linked worktree - now allows start and still denies the rest. Hermes' guard blocks only git/gh mutations and never denied this; the OpenCode port does not gate bash. So the fix is this one script.
 
 Still open, by decision not oversight: the #341 self-heal retiring a FRESH pipeline's sentinel in a worktree-less repo (see c4-root-cause).
+
+<!-- fr:journal kind=finding scope=debug id=c5-fixed created=2026-09-21T14:42:05 state=fixed -->
+### c5-fixed · finding [fixed] · C5 fixed: a uv profile keeps uv's project environment out of the bind mount
+
+`fr init scaffold` adds `containerEnv: {UV_PROJECT_ENVIRONMENT: /var/tmp/fr-uv-project-env}` to a profile whose tools include uv, and this repo's dev and admin profiles carry it. `containerEnv`, not `remoteEnv`: it is set on the container itself, so the plain `docker exec` behind `fr isolation exec` sees it. A profile without uv is byte-identical to before (the key is absent, not empty).
+
+Hypothesis tested BEFORE any code: passing the variable by hand on `fr isolation exec` stopped the alternation on both sides. Failing-first: three tests in tests/unit/test_init_scaffold.py (first run was an ImportError, so the constant went in alone and the tests were re-run until they failed on behaviour: KeyError 'containerEnv', and this repo's admin profile lacking it). 495 scaffold/isolation tests green.
+
+Proven live, not only in unit tests: this workspace's container was removed and rebuilt from the committed profile (old container: variable absent; new: present), then the ORIGINAL repro repeated with nothing passed by hand - three container/host alternations, zero "Removed virtual environment" on either side, the container's env created once, the host's .venv link unchanged.
+
+Limits: a container's env is fixed at creation, so an EXISTING workspace keeps thrashing until its container is recreated; and profiles already scaffolded in consumer repos are not rewritten - `fr init migrate` was not extended. Other toolchains with the same shape (a node_modules holding native binaries) are not addressed; only uv was observed.

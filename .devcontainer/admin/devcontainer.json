@@ -10,6 +10,9 @@
     "--env-file",
     "${localEnv:HOME}/.config/fr/secrets/super-fr/admin.env"
   ],
+  "containerEnv": {
+    "UV_PROJECT_ENVIRONMENT": "/var/tmp/fr-uv-project-env"
+  },
   "customizations": {
     "fr": {
       "profile": "admin",

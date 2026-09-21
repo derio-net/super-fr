@@ -502,3 +502,57 @@ def test_cli_backend_flag_rejects_unknown_value(repo: Path) -> None:
     res = scaffold(repo, "--backend", "bitbucket")
     assert res.exit_code == 2
     assert "must be one of github, gitlab, gitea" in res.output
+
+
+# --- a uv project gets its OWN environment inside the container ------------
+#
+# Found live on PR #508's Test Plan. The worktree is bind-mounted, and uv on
+# both sides defaults its project environment to `<project>/.venv` — one path,
+# two operating systems. A venv's interpreter link is valid only on the side
+# that made it, so host and container each found the other's "broken", deleted
+# it and rebuilt (the container re-downloading ~26 MB), on EVERY alternation.
+# fr's exec-bridge discipline mandates that alternation, so under fr it is the
+# normal case; and a host pytest can be running on the venv while it is deleted.
+
+
+def _config(repo: Path, profile: str = "dev") -> dict:
+    return json.loads((repo / ".devcontainer" / profile / "devcontainer.json").read_text())
+
+
+def test_a_uv_profile_keeps_uvs_environment_out_of_the_bind_mount(repo: Path) -> None:
+    from fr.isolation.scaffold import UV_CONTAINER_PROJECT_ENV
+
+    scaffold_profile(repo, "dev", "day-to-day", tools=["uv"], secrets=[], commit=False)
+
+    env = _config(repo)["containerEnv"]
+    assert env == {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
+    # Absolute, and nowhere a workspace is ever mounted: `/workspaces/<name>` is
+    # the devcontainer default, and the scaffold itself mounts at the HOST path.
+    assert UV_CONTAINER_PROJECT_ENV.startswith("/")
+    assert not UV_CONTAINER_PROJECT_ENV.startswith(("/workspaces", "/Users", "/home"))
+    assert "${" not in UV_CONTAINER_PROJECT_ENV
+
+
+def test_a_profile_without_uv_gets_no_container_env(repo: Path) -> None:
+    """Nothing is added for tools that did not ask for it — `containerEnv` is
+    absent, not empty, so a non-uv profile is byte-identical to before."""
+    scaffold_profile(repo, "dev", "day-to-day", tools=["node"], secrets=[], commit=False)
+
+    assert "containerEnv" not in _config(repo)
+
+
+def test_this_repos_own_uv_profiles_carry_it() -> None:
+    """The scaffold fixes the next profile; these are the ones already written.
+    Any profile here that installs the uv feature must separate the env too."""
+    from fr.isolation.scaffold import UV_CONTAINER_PROJECT_ENV
+
+    root = Path(__file__).resolve().parents[2] / ".devcontainer"
+    uv_profiles = [
+        p
+        for p in sorted(root.glob("*/devcontainer.json"))
+        if KNOWN_TOOL_FEATURES["uv"] in json.loads(p.read_text()).get("features", {})
+    ]
+    assert uv_profiles, "expected at least one uv-enabled profile in this repo"
+    for path in uv_profiles:
+        env = json.loads(path.read_text()).get("containerEnv", {})
+        assert env.get("UV_PROJECT_ENVIRONMENT") == UV_CONTAINER_PROJECT_ENV, path
