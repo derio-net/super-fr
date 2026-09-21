@@ -145,59 +145,87 @@ def sentinel_dir() -> Path:
 
 
 _LOCK_STALE_SECONDS = 60.0
-_LOCK_WAIT_SECONDS = 5.0
+_LOCK_WAIT_SECONDS = 60.0
 
 
 @contextmanager
-def _sentinel_lock(sentinel: Path) -> Iterator[None]:
-    """The lock every sentinel writer shares — this module's `attach` stamp and
-    `down` clears, and, in bash, the skill-load hook and the guard's heal
-    (`fr_sentinel_lock` in hooks/lib/fr-isolation-decision.sh; the two MUST
-    agree on the path and the protocol). Each writer read-modify-renames the
-    file; unlocked, one erased the other's update, and a lost workspace entry
-    can fail OPEN — the heal retires a sentinel whose lost workspace is live.
+def _sentinel_lock(sentinel: Path) -> Iterator[bool]:
+    """The lock every sentinel writer shares; yields whether it is HELD.
 
-    The lock is the directory `<sentinel>.lock`: `mkdir` is atomic and is the
-    one primitive both sides have. A lock older than 60s is a dead writer's and
-    is broken; after ~5s of waiting the waiter breaks it regardless, because a
-    sentinel write must never wedge a session (the worst a broken lock buys is
-    the unlocked race this replaced, not a deadlock).
+    Same protocol and path as `fr_sentinel_lock` in
+    hooks/lib/fr-isolation-decision.sh (the skill-load hook and the guard's
+    heal) — the two MUST agree, and that file's comment is the full rationale.
+    In short: `<sentinel>.lock/` holding an `owner` PID; broken only when the
+    holder is dead (or ownerless and older than 60s), NEVER while it lives —
+    the first version broke any lock after ~5s and so let a bind and the
+    guard's heal interleave into deleting a live pipeline's sentinel. A caller
+    that is not handed the lock must take its own fail-closed action rather than
+    write. Release is owner-checked.
     """
     lock = sentinel.with_name(sentinel.name + ".lock")
     held = _acquire(lock)
     try:
-        yield
+        yield held
     finally:
-        if held:
+        if held and _owner(lock) == os.getpid():
             try:
+                (lock / "owner").unlink(missing_ok=True)
                 os.rmdir(lock)
             except OSError:
                 pass
 
 
+def _owner(lock: Path) -> int | None:
+    try:
+        text = (lock / "owner").read_text().strip()
+    except OSError:
+        return None
+    return int(text) if text.isdigit() else None
+
+
+def _abandoned(lock: Path) -> bool:
+    pid = _owner(lock)
+    if pid is None:
+        try:
+            return time.time() - lock.stat().st_mtime > _LOCK_STALE_SECONDS
+        except OSError:
+            return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False  # exists but not ours to signal: alive
+    return False
+
+
 def _acquire(lock: Path) -> bool:
-    """Take `lock`; False only when its directory does not exist (no sentinel
-    dir means no sentinel to protect)."""
+    """Take `lock`, or return False: when a LIVE holder keeps it past the wait
+    budget, or when `mkdir` fails for any reason but "exists" (read-only or
+    full disk, no sentinel dir) — which used to raise out of `attach`."""
     deadline = time.monotonic() + _LOCK_WAIT_SECONDS
     while True:
         try:
             os.mkdir(lock)
-            return True
-        except FileNotFoundError:
-            return False
         except FileExistsError:
             pass
-        try:
-            stale = time.time() - lock.stat().st_mtime > _LOCK_STALE_SECONDS
-        except FileNotFoundError:
-            continue  # released between our mkdir and stat: retry at once
-        if stale or time.monotonic() > deadline:
+        except OSError:
+            return False
+        else:
             try:
+                (lock / "owner").write_text(f"{os.getpid()}\n")
+            except OSError:
+                pass
+            return True
+        if _abandoned(lock):
+            try:
+                (lock / "owner").unlink(missing_ok=True)
                 os.rmdir(lock)
             except OSError:
                 pass
-            deadline = time.monotonic() + _LOCK_WAIT_SECONDS
             continue
+        if time.monotonic() > deadline:
+            return False
         time.sleep(0.05)
 
 
@@ -231,7 +259,9 @@ def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
     rel = _cache_relative(worktree)
     if rel is None:
         return
-    with _sentinel_lock(f):
+    with _sentinel_lock(f) as held:
+        if not held:
+            return  # a live writer holds it: skip the record rather than race it
         try:
             data = json.loads(f.read_text())
         except (OSError, json.JSONDecodeError):
@@ -244,7 +274,10 @@ def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
             return
         kept = [w for w in _workspaces(data) if w == rel or _cache_dir(w).is_dir()]
         data["workspaces"] = kept if rel in kept else [*kept, rel]
-        write_text_atomic(f, json.dumps(data))
+        try:
+            write_text_atomic(f, json.dumps(data))
+        except OSError:
+            pass  # unwritable sentinel dir: stays as it was (armed)
 
 
 def _workspaces(data: dict[str, Any]) -> list[str]:
@@ -307,8 +340,9 @@ def clear_workspace_sentinels(
     ids = set(session_ids)
     removed = 0
     for f in sorted(d.glob("*.json")):
-        with _sentinel_lock(f):
-            removed += _clear_one(f, target, rel, ids)
+        with _sentinel_lock(f) as held:
+            if held:  # a live writer holds it: leave it armed
+                removed += _clear_one(f, target, rel, ids)
     return removed
 
 
@@ -357,7 +391,9 @@ def clear_repo_sentinels(repo_root: Path) -> int:
             continue
         root = data.get("repo_root") if isinstance(data, dict) else None
         if root and str(Path(root).resolve()) == target:
-            with _sentinel_lock(f):
+            with _sentinel_lock(f) as held:
+                if not held:
+                    continue
                 f.unlink(missing_ok=True)
             removed += 1
     return removed

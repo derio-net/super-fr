@@ -107,7 +107,10 @@ command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 # it to be closed or blessed; it is blessed): this is a discipline backstop
 # against habit and momentum, not a security boundary, and a determined prompt
 # was never in scope.
-cd_target=$(printf '%s' "$command" | sed -nE 's/^[[:space:]]*cd[[:space:]]+("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:];&|]+)).*/\2\3\4/p')
+# FIRST LINE only, like everything else here: sed prints a match per line, so
+# a second line that also began with `cd` was glued onto this target, which then
+# resolved nowhere (and was reported as a path that "no longer exists").
+cd_target=$(printf '%s\n' "$command" | head -n 1 | sed -nE 's/^[[:space:]]*cd[[:space:]]+("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:];&|]+)).*/\2\3\4/p')
 if [ -n "$cd_target" ]; then
   case "$cd_target" in "~"*) cd_target="$HOME${cd_target#\~}" ;; esac
   # A relative target is relative to the SESSION's cwd, which is what the shell
@@ -338,8 +341,13 @@ sentinel_workspaces() {
 # (fr_sentinel_lock): the heal deletes, and a bind landing between a read and
 # the delete can turn "orphaned" back into "live" — deciding on a stale read
 # would retire a live pipeline.
-if [ -n "$(sentinel_workspaces)" ]; then
-  fr_sentinel_lock "$sentinel"
+# The guard is the hot path (every Bash call), so it waits at most ~1s (20
+# steps) — a healthy holder keeps the lock for milliseconds. A lock it cannot
+# get means no heal THIS call: the sentinel stays armed (the fail-closed side)
+# and a later call heals. It never breaks a live holder. (At ~5s, a lock left
+# ownerless by a crashed writer cost every Bash call a 5s stall until it aged
+# past 60s — found by re-running the reviewer's reproduction.)
+if [ -n "$(sentinel_workspaces)" ] && fr_sentinel_lock "$sentinel" 20; then
   # Everything the verdict reads is read HERE, under the lock — the entries and
   # the worktree list alike. Listing first and locking second let a workspace
   # created while we waited read as "not listed", i.e. orphaned.
@@ -370,7 +378,10 @@ $rws
       esac
     done <<< "$workspaces"
   fi
-  if [ "$live" -eq 0 ]; then
+  # Compare before delete: still ours? A lock can only be taken from a DEAD
+  # holder, so this holds unless we were presumed dead — and then the read we
+  # decided on may be stale, so we do not act on it.
+  if [ "$live" -eq 0 ] && fr_sentinel_owns "$sentinel"; then
     rm -f "$sentinel" || true
     fr_sentinel_unlock "$sentinel"
     exit 0

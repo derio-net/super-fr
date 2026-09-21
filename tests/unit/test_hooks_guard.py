@@ -1267,3 +1267,33 @@ class TestSentinelIsASetOfWorkspaces:
         sentinel.write_text("{truncated")
         res = run_hook(payload("ls", repo), sentinels, env)
         assert res.returncode == 0
+
+
+class TestOnlyTheFirstLineNamesTheCdTarget:
+    """The guard evaluates only a command's FIRST line (header, and #421), but
+    the leading-`cd` target was extracted from EVERY line: two lines each
+    starting with `cd` produced a two-line "path" that resolved nowhere. The
+    command was denied, and since #534 the denial said that glued path "no
+    longer exists" — a confident, wrong diagnosis (hit live, 2026-09-22)."""
+
+    def test_a_second_cd_line_does_not_join_the_first(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path / "repo")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        wt = tmp_path / "wt"
+        _git(repo, "worktree", "add", "-q", str(wt), "-b", "feat/x")
+        (wt / ".fr-isolation").write_text(
+            json.dumps({"toplevel": str(wt.resolve()), "branch": "feat/x", "mode": "worktree"})
+        )
+        cmd = f"cd {wt} && git status\ncd {tmp_path}/elsewhere && ls"
+        assert decision(run_hook(payload(cmd, repo), sentinels)) is None
+
+    def test_the_gone_message_names_only_the_first_lines_target(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path / "repo")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        env = {"FR_CD_ALLOW_PREFIXES": str(tmp_path / "nonexistent")}
+        gone = tmp_path / "gone"
+        cmd = f"cd {gone} && ls\ncd {tmp_path} && ls"
+        reason = reason_of(run_hook(payload(cmd, repo), sentinels, env))
+        assert f"`{gone}` no longer exists" in reason

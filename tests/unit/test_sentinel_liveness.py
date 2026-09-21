@@ -309,3 +309,152 @@ def test_down_through_the_real_cli_retires_the_sentinel(world: World) -> None:
     assert res.returncode == 0, res.stdout + res.stderr
     assert not wt.exists()
     assert not world.sentinel().exists()
+
+
+# --- review round 2: ownership, bounded failure, parked pipelines ---------------
+
+
+def _own_lock(world: World, pid: int, age: float = 0.0) -> Path:
+    lock = _hold_lock(world)
+    (lock / "owner").write_text(f"{pid}\n")
+    if age:
+        _age(lock, age)
+    return lock
+
+
+def _dead_pid() -> int:
+    p = subprocess.Popen(["true"])
+    p.wait()
+    return p.pid
+
+
+class TestALiveHolderIsNeverBroken:
+    """Review round 2, finding 1 (fail-open, confirmed): waiters used to break
+    ANY lock after ~5s. A guard still inside its heal (a slow `git worktree
+    list`) lost its lock to a bind, the bind wrote a live workspace, and the
+    guard — deciding on its earlier read — deleted the sentinel."""
+
+    def test_the_guard_gives_up_its_heal_rather_than_break_a_live_holder(
+        self, world: World
+    ) -> None:
+        repo = world.repo()
+        done(world.load_skill(repo))
+        gone = world.worktree(repo, "feat/gone")
+        stamp_sentinel_workspace(SESSION, gone)
+        _git(repo, "worktree", "remove", "--force", str(gone))  # orphaned
+        lock = _own_lock(world, os.getpid())  # a live holder
+        started = time.monotonic()
+        out = done(world.guard("ls", repo))
+        assert time.monotonic() - started < 15, "bounded wait on the hot path"
+        assert '"deny"' in out, "no heal without the lock: fail closed"
+        assert world.sentinel().exists()
+        assert (lock / "owner").read_text().strip() == str(os.getpid()), "not broken"
+
+    def test_the_bind_skips_its_record_rather_than_break_a_live_holder(
+        self, world: World, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import fr.isolation.types as t
+
+        monkeypatch.setattr(t, "_LOCK_WAIT_SECONDS", 0.5)
+        repo = world.repo()
+        done(world.load_skill(repo))
+        wt = world.worktree(repo, "feat/x")
+        lock = _own_lock(world, os.getpid())
+        stamp_sentinel_workspace(SESSION, wt)
+        assert world.workspaces() == [], "wrote across a live holder's lock"
+        assert (lock / "owner").read_text().strip() == str(os.getpid())
+
+    def test_a_dead_holders_lock_is_broken_at_once(self, world: World) -> None:
+        repo = world.repo()
+        lock = _own_lock(world, _dead_pid())
+        started = time.monotonic()
+        done(world.load_skill(repo))
+        assert time.monotonic() - started < 3
+        assert world.sentinel().exists() and not lock.exists()
+
+    def test_a_dead_holders_lock_is_broken_by_python_too(self, world: World) -> None:
+        repo = world.repo()
+        done(world.load_skill(repo))
+        wt = world.worktree(repo, "feat/x")
+        _own_lock(world, _dead_pid())
+        started = time.monotonic()
+        stamp_sentinel_workspace(SESSION, wt)
+        assert time.monotonic() - started < 3
+        assert world.workspaces() == ["worktrees/proj/feat__x"]
+
+    def test_releasing_never_removes_someone_elses_lock(self, world: World) -> None:
+        """The skill-load hook released twice (explicitly, then in its EXIT
+        trap); the second could remove a lock another writer had just taken."""
+        repo = world.repo()
+        done(world.load_skill(repo))
+        lock = world.lock()
+        # Whoever holds it after our writer finished must keep it.
+        proc = world.load_skill(repo)
+        done(proc)
+        assert not lock.exists()
+        mine = _own_lock(world, os.getpid())
+        lib = HOOKS / "lib" / "fr-isolation-decision.sh"
+        subprocess.run(
+            ["bash", "-c", f'. "{lib}"; fr_sentinel_unlock "{world.sentinel()}"'],
+            check=True,
+        )
+        assert mine.exists(), "unlock removed a lock it did not own"
+
+
+class TestLockFailureIsBounded:
+    """Review round 2, finding 2 (hang, confirmed): `mkdir` failing for any
+    reason but 'exists' (read-only or full disk, a vanished dir) spun forever
+    in bash and raised in Python."""
+
+    def test_a_read_only_sentinel_dir_neither_hangs_nor_raises(self, world: World) -> None:
+        repo = world.repo()
+        done(world.load_skill(repo))
+        gone = world.worktree(repo, "feat/gone")
+        stamp_sentinel_workspace(SESSION, gone)
+        _git(repo, "worktree", "remove", "--force", str(gone))
+        live = world.worktree(repo, "feat/live")
+        world.sentinels.chmod(0o555)
+        try:
+            started = time.monotonic()
+            done(world.guard("ls", repo), timeout=15)
+            done(world.load_skill(repo), timeout=15)
+            stamp_sentinel_workspace(SESSION, live)  # must not raise
+            assert time.monotonic() - started < 15
+            assert world.sentinel().exists()
+        finally:
+            world.sentinels.chmod(0o755)
+
+
+class TestTheGcSparesAParkedPipeline:
+    """Review round 2, finding 3 (fail-open, confirmed): the activity refresh
+    only protects sessions active within 48h. A pipeline parked over a weekend,
+    workspace still alive, was expired by any other session's skill load — and
+    a resumed session came back unguarded."""
+
+    def test_a_sentinel_with_a_live_workspace_is_never_expired(self, world: World) -> None:
+        repo = world.repo()
+        done(world.load_skill(repo))
+        wt = world.worktree(repo, "feat/x")
+        stamp_sentinel_workspace(SESSION, wt)
+        _age(world.sentinel(), HOURS_49 * 3)
+        done(world.load_skill(repo, session="other"))
+        assert world.sentinel().exists()
+
+    def test_one_whose_workspaces_are_all_gone_still_expires(self, world: World) -> None:
+        repo = world.repo()
+        done(world.load_skill(repo))
+        wt = world.worktree(repo, "feat/x")
+        stamp_sentinel_workspace(SESSION, wt)
+        _git(repo, "worktree", "remove", "--force", str(wt))
+        _age(world.sentinel(), HOURS_49)
+        done(world.load_skill(repo, session="other"))
+        assert not world.sentinel().exists()
+
+    def test_abandoned_lock_dirs_are_collected(self, world: World) -> None:
+        repo = world.repo()
+        lock = _own_lock(world, _dead_pid(), age=HOURS_49)
+        (world.sentinels / "zzz.json.lock").mkdir()
+        _age(world.sentinels / "zzz.json.lock", HOURS_49)
+        done(world.load_skill(repo, session="other"))
+        assert not (world.sentinels / "zzz.json.lock").exists()
+        assert not lock.exists()
