@@ -89,24 +89,24 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T18:34:58+00:00'
       note: null
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T18:36:16+00:00'
       note: null
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T18:36:17+00:00'
       note: null
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T18:36:47+00:00'
       note: null
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T18:36:48+00:00'
       note: null
     P4.T3.S1:
       state: ' '
