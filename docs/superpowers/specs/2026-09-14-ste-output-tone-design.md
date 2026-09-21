@@ -203,8 +203,8 @@ New module `packages/fr/src/fr/prose_lint.py`:
 
 **`fr journal add`** (`packages/fr/src/fr/commands/journal_cmd.py`). After it
 writes a new entry, lint the title and the body. Print at most five warnings
-to stderr, each on one line and labelled `title:` or `body:`, then `… N more`. The exit code does not change. An idempotent
-re-add writes nothing and lints nothing.
+to stderr, each on one line and labelled `title:` or `body:`, then `… N more`. The exit code does not change. A duplicate id
+is refused (exit 2) before anything is written, so it lints nothing.
 
 **`fr plan self-review`** (`packages/fr/src/fr/plan_ops.py`). New
 `_prose_issues(plan)`, called from `self_review`. It lints:
@@ -249,9 +249,9 @@ The shared-block markers stay: the tests use them to find the text.
 - `docs/acceptance/matrix.yaml` — `hermes-rules-soul-block` names four shipped
   rules again.
 
-The rule was never released. `main` shipped 4.4.0 from a different PR (#473),
-without this rule. No consumer machine has it, so no uninstall cleanup is
-needed.
+The rule was never released: it existed only on this branch, and no release of
+`main` up to 4.12.0 carried it. No consumer machine has it, so no uninstall
+cleanup is needed.
 
 ### F. Tests (new)
 
@@ -261,7 +261,7 @@ needed.
   - a filler word is found, and a quoted filler word is ignored;
   - a 25-word sentence passes, and a 26-word sentence warns.
 - `tests/unit/test_journal_add_prose_warning.py`: a long body prints a warning
-  and exits 0; a clean entry prints nothing; an idempotent re-add prints
+  and exits 0; a clean entry prints nothing; a duplicate id is refused (exit 2) and prints
   nothing; output stops after five lines.
 - `tests/unit/test_self_review_prose.py`: warnings for a pending step, for
   `_prose.md` and for the spec; a ticked step is exempt; prose warnings do not
@@ -273,9 +273,9 @@ needed.
 
 ### G. Release
 
-Minor bump to **4.5.0**: new warnings, a new opt-in style, and changed skill
-behaviour. `main` already released 4.4.0 (#473), so this branch needs its own
-bump.
+Minor bump to **4.13.0**: new warnings, a new opt-in style, and changed skill
+behaviour. `main` reached 4.12.0 while this branch was open, so this branch
+takes the next minor.
 
 ## 6. Risks and mitigations
 
@@ -311,8 +311,8 @@ Post-merge (operator-driven):
    sure that they arrive as one table, not a paragraph for each row.
 4. Run Appendix A over that session. Compare words per tool call and the
    end-of-turn share with the baseline in §2.
-5. In any fr repo, run `fr journal add` with a body that has a 30-word
-   sentence. Make sure that a warning prints and the exit code is 0.
+5. In any fr repo, run `fr journal add --scope spec --slug <any> --kind
+   discovery --title x --body '<a 30-word sentence>'`. Make sure that a warning prints and the exit code is 0.
 6. If a check fails, record the reply text or the output in a follow-up issue.
 
 ## Implementation Plans
