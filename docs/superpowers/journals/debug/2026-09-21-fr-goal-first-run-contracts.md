@@ -69,3 +69,18 @@ plan_ops._skeleton_issues errors when the first agentic phase is marked skeleton
 ### 5d28090b6b92 · finding [fixed] · C1 fixed: the operator gate on Claude Code is verified from the transcript, and degrades loudly where it cannot be
 
 telemetry.operator_answered_since(env, since): True/False when the session transcript is read (an AskUserQuestion tool_use at/after the gate's block time, paired to a tool_result whose toolUseResult is an object with non-empty answers), None when unobservable. resolve (_gate_provenance, decided before any write): answered → answered_by operator (derived, whatever was claimed); observed-unanswered → exit 2 naming both ways forward; --no-questions requires --reason, records agent, writes decision gate-no-questions-<step> to the spec journal the resolve emits; unobservable on claude-code → claim stands with a 'could not verify' warning. advance: _gate_degradation_notice now treats claude-code 'enforced' as true only when the transcript is readable, otherwise prints the STOP notice. Fixture captured live (tests/fixtures/transcripts/claude-code-askuserquestion.jsonl, NOTE.md updated). fr-goal §1 + Harness — questions clause updated (gate-provenance tripwire kept green), parity.yaml operator-gate summary states the mechanism. 8 new tests (5 telemetry, 5 CLI incl. degrade); existing no-notice test now supplies a readable transcript.
+
+<!-- fr:journal kind=finding scope=debug id=6b2eb8b4214d created=2026-09-21T19:04:36 state=fixed -->
+### 6b2eb8b4214d · finding [fixed] · C6 fixed: review-phase requires reviewer=<agent-id> of a separate, dispatched context
+
+_VERIFIABLE_EVIDENCE gains reviewer and tests; _PHASE_EVIDENCE scopes the phase requirement. _verify_reviewer refuses the phase's implementer (any dispatched agent on phase/N/* units) and, via telemetry.subagent_dispatched_since (attribute_dispatches pairing), an id this session never dispatched after the review unit opened; unobservable → recorded + 'could not verify'. Shipped fr-goal.yaml review-phase evidence [review, reviewer, findings] (wheel copy re-synced). fr-goal §6 rewritten; the stale '--model <the model you are running on>' clause (obsolete since C3) removed. tests/unit/test_run_evidence_separate_context.py: 10 tests, verified all-red with run_cmd.py stashed.
+
+<!-- fr:journal kind=finding scope=debug id=63047473d3b0 created=2026-09-21T19:04:36 state=fixed -->
+### 63047473d3b0 · finding [fixed] · C5 fixed: deliver requires tests=<log> of a suite the orchestrator ran during delivery
+
+_verify_tests_log: log must exist and be non-empty; telemetry.orchestrator_ran_since — a main-thread Bash tool_use naming the log since deliver opened, whose tool_result is not is_error; unobservable → log must be newer than the unit, warned. Witness recorded as <path>@<sha256[:12]>. Shipped deliver evidence [tests]; fr-goal §8 says run the suite yourself. Captured fixture tests/fixtures/transcripts/claude-code-bash.jsonl (paths redacted).
+
+<!-- fr:journal kind=finding scope=debug id=59d50a841f71 created=2026-09-21T19:04:37 state=fixed -->
+### 59d50a841f71 · finding [fixed] · C7 fixed: fr-phase-executor granted Skill; tripwire keeps skill-naming agents capable
+
+tools: + Skill. sync-opencode _TOOL_PERMISSIONS maps Skill → None (OpenCode default; mirrors byte-identical, no diff). tests/unit/test_tripwire_agent_skill_capability.py: any canonical agent whose body names a skill must carry Skill — red with the tools edit stashed. CROSS-PR NOTE: PR #532 widens the neutrality scan to agent files including frontmatter; with Skill on the tools: line its scan flags line 13. Fix belongs in #532's test (skip the tools: frontmatter line — a Claude Code allowlist the sync translates, not prose); whichever PR merges second must carry it.

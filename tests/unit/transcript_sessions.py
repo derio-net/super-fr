@@ -22,6 +22,11 @@ ORCHESTRATOR = FIXTURES / "claude-code-session.jsonl"
 SUBAGENT = FIXTURES / "claude-code-subagent.jsonl"
 SUBAGENT_META = FIXTURES / "claude-code-subagent.meta.json"
 QUESTION = FIXTURES / "claude-code-askuserquestion.jsonl"
+BASH = FIXTURES / "claude-code-bash.jsonl"
+"""Captured 2026-09-21 from the same live session (local and scratchpad paths
+redacted): line 0 a main-thread `assistant` record whose `Bash` tool_use runs
+a test suite into a log file (`.../c1.log`), line 1 its `tool_result`
+(`is_error: false`)."""
 """Captured 2026-09-21 from a live Claude Code 2.1.278 session (local paths
 redacted to `/home/user`): line 0 is the `assistant` record carrying an
 `AskUserQuestion` tool_use, line 1 the `user` record carrying its tool_result,
@@ -159,3 +164,11 @@ def asked_at(
     return write_session(
         root, session_id=session_id, rows=[*records(ORCHESTRATOR), question, answer]
     )
+
+
+def ran_at(root: Path, timestamp: str, *, session_id: str) -> Path:
+    """A session whose captured orchestrator `Bash` exchange lands at `timestamp`."""
+    call, result = copy_of(records(BASH))
+    call["timestamp"] = timestamp
+    result["timestamp"] = timestamp
+    return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])

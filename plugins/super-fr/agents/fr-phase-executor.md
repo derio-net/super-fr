@@ -10,7 +10,7 @@ description: >
   context. NOT a general-purpose agent and NOT for parallel work — it operates
   on the shared feature branch one phase at a time (parallel phase execution is
   `fr apply --to <runner>`'s job).
-tools: Read, Edit, Write, Bash, Grep, Glob
+tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 ---
 
 # fr-phase-executor

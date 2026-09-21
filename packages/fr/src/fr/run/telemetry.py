@@ -667,6 +667,91 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
     return False
 
 
+def _this_session(env: Mapping[str, str]) -> Path | None:
+    """This process's own Claude Code session transcript, or `None` when there
+    is none to read — another harness included. The shared front half of the
+    three "did X happen in this session?" predicates."""
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    try:
+        return claude_code_session(env)
+    except (OSError, HarnessError):
+        return None
+
+
+def subagent_dispatched_since(env: Mapping[str, str], agent_id: str, since: str) -> bool | None:
+    """Did THIS session dispatch the subagent `agent_id` at or after `since`?
+
+    The separate-context review check (2026-09-21 debug journal C6): a review
+    unit's `reviewer=<agent-id>` evidence must name a subagent that actually
+    ran, and ran after the review unit opened — not the orchestrator's own
+    context, which is where the #497 run's "review" was written. Attribution is
+    `attribute_dispatches`', the same pairing token measurement already trusts.
+    `None` when unobservable.
+    """
+    start = parse_timestamp(since)
+    session = _this_session(env)
+    if start is None or session is None or not session.is_file():
+        return None
+    for dispatch in attribute_dispatches(session):
+        if dispatch.agent_id == agent_id and (
+            dispatch.started is None or dispatch.started >= start
+        ):
+            return True
+    return False
+
+
+def orchestrator_ran_since(env: Mapping[str, str], needle: str, since: str) -> bool | None:
+    """Did the orchestrator itself run a `Bash` command naming `needle` at or
+    after `since`, to completion (`is_error` not true)?
+
+    The verification-before-completion check (debug journal C5): `deliver`'s
+    `tests=<log>` evidence must be a suite the ORCHESTRATOR ran during delivery,
+    not a subagent's report relayed as its own — which is how the #497 run said
+    "verified locally". Main-thread records only. `None` when unobservable.
+    """
+    start = parse_timestamp(since)
+    session = _this_session(env)
+    if start is None or session is None:
+        return None
+    records = _read_records(session)
+    if records is None:
+        return None
+    ran: set[str] = set()
+    for record in records:
+        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        if stamp is None or stamp < start:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            command = block.get("input", {}).get("command") if isinstance(block, Mapping) else None
+            if (
+                block.get("type") == "tool_use"
+                and block.get("name") == "Bash"
+                and isinstance(command, str)
+                and needle in command
+                and isinstance(block.get("id"), str)
+            ):
+                ran.add(block["id"])
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") in ran
+                and block.get("is_error") is not True
+            ):
+                return True
+    return False
+
+
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
 """Harness key -> reader. Deliberately not a fallback-to-Claude-Code default:
 an unlisted harness measures NOTHING, which `fr run status` then says out loud,

@@ -925,8 +925,20 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
 # flag is satisfied by anyone who can type the flag, and `findings` exists
 # precisely because "the review's findings were dealt with" was prose until
 # something other than the agent's word could witness it.
-_VERIFIABLE_EVIDENCE = ("review", "findings")
+_VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests")
 _DERIVED_EVIDENCE = frozenset({"findings"})
+# Evidence ABOUT A PHASE — meaningless on a flat `step/<id>` unit, refused
+# there rather than recorded unchecked. `tests` is the one that is not: it is
+# delivery's evidence, on the flat `deliver` unit (debug journal C5).
+_PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
+_EVIDENCE_HINTS = {
+    "review": "<journal-entry-id>, naming the `kind=review` plan-journal entry "
+    "recorded for phase {phase}",
+    "reviewer": "<agent-id>, naming the dispatched reviewer subagent (a separate "
+    "context, not phase {phase}'s implementer) by the id its dispatch returned",
+    "tests": "<path-to-log>, naming the output file of the full suite you ran "
+    "yourself, in this session, during this unit",
+}
 
 
 def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
@@ -1053,9 +1065,10 @@ def _verified_evidence(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    if phase is None:
+    phase_scoped = [n for n in step.evidence if n in _PHASE_EVIDENCE]
+    if phase is None and phase_scoped:
         err_console.print(
-            f"[red]{key}: cannot verify `{step.evidence[0]}` evidence for a unit that names "
+            f"[red]{key}: cannot verify `{phase_scoped[0]}` evidence for a unit that names "
             "no phase — a review is evidence about a phase, and fr will not record an "
             "id it checked nothing against[/red]",
             soft_wrap=True,
@@ -1075,17 +1088,12 @@ def _verified_evidence(
         )
         for name in missing:
             err_console.print(
-                f"  pass --evidence {name}=<journal-entry-id>"
-                + (
-                    f", naming the `kind=review` plan-journal entry recorded for phase {phase}"
-                    if name == "review" and phase is not None
-                    else ""
-                ),
+                f"  pass --evidence {name}={_EVIDENCE_HINTS[name].format(phase=phase)}",
                 markup=False,
                 soft_wrap=True,
             )
         err_console.print(
-            "  A review that left no journal entry is a review that did not happen "
+            "  Work that left no evidence is work that did not happen "
             "(spec §4.E) — `--state failed` needs no evidence.",
             soft_wrap=True,
         )
@@ -1094,19 +1102,133 @@ def _verified_evidence(
     # which is not the same as "anything goes": a failed review that did
     # produce a journal entry may still name it, and an id nothing checked
     # must never reach the cursor under either state.
+    verified = dict(offered)
+    attempt = units.last_attempt(state, key)
+    opened = attempt.dispatched if attempt is not None else None
+    if "reviewer" in offered:
+        assert phase is not None  # phase-scoped, refused above otherwise
+        _verify_reviewer(key, offered["reviewer"], state, phase=phase, opened=opened)
+    if "tests" in offered:
+        verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     derives = state_value == "done" and "findings" in step.evidence
-    if not offered and not derives:
-        return {}
+    if "review" not in offered and not derives:
+        return verified
+    assert phase is not None  # `review`/`findings` are phase-scoped, refused above otherwise
     try:
         slug, entries = _plan_journal_entries(repo_root, state)
     except RunStateError as e:
         err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
-    if offered:
+    if "review" in offered:
         _verify_review_entry(key, offered["review"], slug=slug, entries=entries, phase=phase)
     if not derives:
-        return offered
-    return {**offered, "findings": _closed_findings_witness(key, slug, entries, phase)}
+        return verified
+    return {**verified, "findings": _closed_findings_witness(key, slug, entries, phase)}
+
+
+def _verify_reviewer(
+    key: str, agent_id: str, state: RunState, *, phase: int, opened: str | None
+) -> None:
+    """`agent_id` is a SEPARATE context that reviewed this phase — or exit 2.
+
+    2026-09-21 debug journal C6 (operator decision: separate-context review).
+    The `review=<entry-id>` gate proved an entry EXISTS; on the #497 run the
+    orchestrator typed that entry itself, reviewing nothing — #430 one layer
+    down. So a review also names the subagent that did it, and fr checks two
+    things: it is not the agent that IMPLEMENTED this phase (a context marking
+    its own work), and — where the transcript is readable — this session really
+    dispatched it after the review unit opened. Unobservable: warned, recorded
+    as claimed, never silently.
+    """
+    from fr.run.telemetry import subagent_dispatched_since
+
+    implementers = {
+        a.agent
+        for record in state.steps.values()
+        for unit_key in (record.units or {})
+        if unit_key.startswith(f"phase/{phase}/")
+        for a in units.attempts(record, unit_key)
+        if a.agent_type is not None and a.agent is not None
+    }
+    if agent_id in implementers:
+        err_console.print(
+            f"[red]{key}: --evidence reviewer={agent_id} is the agent that IMPLEMENTED phase "
+            f"{phase} — a review must come from a separate context, not the one whose work "
+            "it judges. Dispatch a reviewer subagent and name its id.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    observed = subagent_dispatched_since(os.environ, agent_id, opened) if opened else None
+    if observed is False:
+        err_console.print(
+            f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
+            f"dispatched since the review opened at {opened}. The review must be done by "
+            "a dispatched reviewer (a separate context), and named by the id its dispatch "
+            "returned.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if observed is None:
+        err_console.print(
+            f"[yellow]{key}: could not verify reviewer {agent_id!r} — no readable transcript "
+            "for this session; recorded as claimed, unverified.[/yellow]",
+            soft_wrap=True,
+        )
+
+
+def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
+    """`log` is a suite the ORCHESTRATOR ran during this unit — or exit 2.
+    Returns the recorded witness, `<path>@<sha256[:12]>`.
+
+    2026-09-21 debug journal C5: `deliver` resolved `done` 28 seconds after it
+    opened with nothing but a PR url, and the PR said "verified locally" on the
+    executor's word. Now the unit names the log of a suite run during delivery:
+    it must exist and be non-empty, and — where the transcript is readable — a
+    main-thread `Bash` call naming it must have run to completion since the unit
+    opened. Unobservable: the file must at least be newer than the unit, and it
+    says it could not verify who ran it.
+    """
+    import hashlib
+
+    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
+
+    path = Path(log) if Path(log).is_absolute() else repo_root / log
+    try:
+        data = path.read_bytes()
+    except OSError:
+        data = b""
+    if not data:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
+            "yourself, write its output to a file, and name that file.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    observed = orchestrator_ran_since(os.environ, path.name, opened) if opened else None
+    if observed is False:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: no command of YOURS naming {path.name!r} "
+            f"ran to completion since this unit opened at {opened}. A subagent's report is "
+            "not verification — run the suite in this session and name its log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if observed is None:
+        opened_at = parse_timestamp(opened)
+        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
+        if opened_at is not None and modified < opened_at:
+            err_console.print(
+                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
+                "it is not a run of the code being delivered.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        err_console.print(
+            f"[yellow]{key}: could not verify who ran {log} — no readable transcript for "
+            "this session; recorded as a fresh log, unverified.[/yellow]",
+            soft_wrap=True,
+        )
+    return f"{log}@{hashlib.sha256(data).hexdigest()[:12]}"
 
 
 def _verify_review_entry(

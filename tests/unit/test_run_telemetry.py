@@ -855,3 +855,58 @@ def test_unobservable_is_none_never_false(tmp_path: Path) -> None:
         is None
     )
     assert operator_answered_since({"FR_HARNESS": "opencode"}, "2026-09-21T16:00:00+00:00") is None
+
+
+# --- separate-context review and orchestrator-run tests (debug C6 / C5) ---
+
+
+def test_a_subagent_dispatched_after_the_window_opened_is_observed(tmp_path: Path) -> None:
+    from fr.run.telemetry import subagent_dispatched_since
+
+    from tests.unit.transcript_sessions import dispatched_at
+
+    root = tmp_path / "projects"
+    dispatched_at(root, "2026-09-21T16:05:00.000Z", session_id="s-r", usage={})
+    env = _question_env(root, "s-r")
+    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:00:00+00:00") is True
+    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:10:00+00:00") is False
+    assert subagent_dispatched_since(env, "someone-else", "2026-09-21T16:00:00+00:00") is False
+
+
+def test_subagent_dispatch_is_unobservable_without_a_transcript(tmp_path: Path) -> None:
+    from fr.run.telemetry import subagent_dispatched_since
+
+    env = _question_env(tmp_path, "missing")
+    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:00:00+00:00") is None
+
+
+def test_an_orchestrator_command_naming_the_log_is_observed(tmp_path: Path) -> None:
+    """The captured command writes its suite output to `.../c1.log`."""
+    from fr.run.telemetry import orchestrator_ran_since
+
+    from tests.unit.transcript_sessions import ran_at
+
+    root = tmp_path / "projects"
+    ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-b")
+    env = _question_env(root, "s-b")
+    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:00:00+00:00") is True
+    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:10:00+00:00") is False
+    assert orchestrator_ran_since(env, "other.log", "2026-09-21T16:00:00+00:00") is False
+    assert orchestrator_ran_since(_question_env(tmp_path, "gone"), "c1.log", "2026-01-01") is None
+
+
+def test_an_orchestrator_command_that_errored_does_not_count(tmp_path: Path) -> None:
+    """A tool_result with `is_error: true` did not run to completion."""
+    import json
+
+    from fr.run.telemetry import orchestrator_ran_since
+
+    from tests.unit.transcript_sessions import ran_at
+
+    root = tmp_path / "projects"
+    session = ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-e")
+    rows = [json.loads(line) for line in session.read_text().splitlines()]
+    rows[-1]["message"]["content"][0]["is_error"] = True
+    session.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    env = _question_env(root, "s-e")
+    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:00:00+00:00") is False
