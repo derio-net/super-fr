@@ -13,6 +13,7 @@ phase:
   tracking_issue: null
   acceptance:
   - superpowers-worktree-skill-routed-to-fr
+  tier: mechanical
 tasks:
 - number: 1
   title: RED — tripwire + install assertions

@@ -11,6 +11,7 @@ phase:
   acceptance:
   - multibackend-gitlab-tracking
   - multibackend-gitea-tracking
+  tier: standard
 tasks:
 - number: 1
   title: RED — client_for() factory tests

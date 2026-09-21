@@ -8,6 +8,7 @@ phase:
   tracking_issue: null
   acceptance:
   - session-workspace-binding
+  tier: hard
 tasks:
 - number: 1
   title: RED — state model + fr.isolation.sessions library

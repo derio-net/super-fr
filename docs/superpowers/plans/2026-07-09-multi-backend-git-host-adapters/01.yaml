@@ -5,6 +5,7 @@ phase:
   tag: agentic
   depends_on: []
   tracking_issue: null
+  tier: hard
 tasks:
 - number: 1
   title: RED — tests for fr._hosts.detect_backend
