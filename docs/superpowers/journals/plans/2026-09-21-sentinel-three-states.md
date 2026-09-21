@@ -69,3 +69,78 @@ phase 4 ran both sync scripts; --check green; full suite green (re-run by orches
 ### rev-p4 · review · Phase 4 review (phase 4)
 
 No findings. Re-ran full pytest (4069 passed, 92.35% cov), acceptance check, bump-version --check independently; 3 rows at ci, mirrors synced, 4.13.1 -> 4.13.2.
+
+<!-- fr:journal kind=discovery scope=plan id=d8ac-correction created=2026-09-21T18:45:37 -->
+### d8ac-correction · discovery · Correction: d8ac0b68f6bc was closed 'refuted' but is VALID, deferred to https://github.com/derio-net/super-fr/issues/535
+
+The explainer really is stale. It was closed as refuted only because the journal has no deferred state and the gate needs it closed; 'refuted' claims the finding was wrong, which it was not. Tracked in https://github.com/derio-net/super-fr/issues/535.
+
+<!-- fr:journal kind=finding scope=plan id=adv-1 created=2026-09-21T18:45:37 phase=1 state=open -->
+### adv-1 · finding [open] · A pipeline-skill reload erased the stamp, so #472 was not fixed in fr-goal's own flow (phase 1)
+
+fr-pipeline-sentinel.sh rewrote the sentinel from scratch on every fr-goal/fr-brainstorming/fr-execute load. fr-goal's order (skill, run start binds+stamps, fr-brainstorming loads) left it fresh for good; a reaped workspace then locked the session out. Reproduced in a sandbox.
+
+<!-- fr:journal kind=finding scope=plan id=adv-1-resolved created=2026-09-21T18:45:37 state=fixed resolves=adv-1 -->
+### adv-1-resolved · finding [fixed] · resolves adv-1: A pipeline-skill reload erased the stamp, so #472 was not fixed in fr-goal's own flow
+
+Writer carries a stamp across reloads only for the same repo_root AND a still-existing workspace (a dead stamp is the previous pipeline's and would retire the new one: #529 again). Atomic tmp+mv. tests/unit/test_sentinel_lifecycle.py drives the real hooks.
+
+<!-- fr:journal kind=finding scope=plan id=adv-2 created=2026-09-21T18:45:38 phase=1 state=open -->
+### adv-2 · finding [open] · Binding to another repo restamped this repo's sentinel and silently disarmed its live pipeline (phase 1)
+
+attach stamped any worktree it bound. After cd <B> && fr isolation up (allowed by #421), repo A's sentinel named B's worktree, the guard read it as orphaned and deleted it while A's workspace was live. Reproduced.
+
+<!-- fr:journal kind=finding scope=plan id=adv-2-resolved created=2026-09-21T18:45:38 state=fixed resolves=adv-2 -->
+### adv-2-resolved · finding [fixed] · resolves adv-2: Binding to another repo restamped this repo's sentinel and silently disarmed its live pipeline
+
+stamp_sentinel_workspace stamps only a worktree whose git common dir matches the sentinel's repo_root; unknown ownership = foreign. Tests in test_sentinel_workspace_stamp.py and test_sentinel_lifecycle.py.
+
+<!-- fr:journal kind=finding scope=plan id=adv-3 created=2026-09-21T18:45:39 phase=2 state=open -->
+### adv-3 · finding [open] · fr isolation down still cleared every session's sentinel once zero workspaces remained (#472 third mechanism) (phase 2)
+
+The PR claimed Closes #472 while down's clear_repo_sentinels still removed strangers' FRESH sentinels, disarming pipelines that had not created a workspace yet.
+
+<!-- fr:journal kind=finding scope=plan id=adv-3-resolved created=2026-09-21T18:45:39 state=fixed resolves=adv-3 -->
+### adv-3-resolved · finding [fixed] · resolves adv-3: fr isolation down still cleared every session's sentinel once zero workspaces remained (#472 third mechanism)
+
+down now calls clear_workspace_sentinels: only sentinels stamped with the torn-down worktree or of sessions bound to it. down --all stays repo-wide on purpose (explicit, warned last resort). Test: test_down_of_last_workspace_spares_another_sessions_fresh_sentinel.
+
+<!-- fr:journal kind=finding scope=plan id=adv-4 created=2026-09-21T18:45:40 phase=2 state=open -->
+### adv-4 · finding [open] · External-mode checkouts would be denied every command once the count heal was gone (phase 2)
+
+A preparer's primary checkout with a mode:external marker has no linked worktree and nothing to stamp, so its sentinel is fresh forever. The count heal had been clearing it by accident.
+
+<!-- fr:journal kind=finding scope=plan id=adv-4-resolved created=2026-09-21T18:45:40 state=fixed resolves=adv-4 -->
+### adv-4-resolved · finding [fixed] · resolves adv-4: External-mode checkouts would be denied every command once the count heal was gone
+
+Guard allows when the pipeline repo's own toplevel carries a VALID marker (same predicate as the edit gate: worktree mode cannot pass in a primary checkout, external needs container evidence). TestPipelineRepoThatIsItselfTheWorkspace.
+
+<!-- fr:journal kind=finding scope=plan id=adv-5 created=2026-09-21T18:45:40 phase=2 state=open -->
+### adv-5 · finding [open] · Relative cd targets resolved against the hook process's cwd, not the session's (phase 2)
+
+cd tests && ... was judged by whatever tests/ sat beside the hook's own cwd; the gone-path branch and the transition allowance could both misjudge.
+
+<!-- fr:journal kind=finding scope=plan id=adv-5-resolved created=2026-09-21T18:45:41 state=fixed resolves=adv-5 -->
+### adv-5-resolved · finding [fixed] · resolves adv-5: Relative cd targets resolved against the hook process's cwd, not the session's
+
+cd_target anchored to the resolved session cwd once, where it is parsed. TestRelativeCdResolvesAgainstTheSessionCwd.
+
+<!-- fr:journal kind=finding scope=plan id=adv-6 created=2026-09-21T18:45:41 phase=3 state=open -->
+### adv-6 · finding [open] · verify-merge exited 1 (not verified - recover) for an unresolvable branch ref (phase 3)
+
+fr-goal reads exit 1 as a disproved merge and prescribes cherry-pick/fresh PR; a typo'd branch disproves nothing.
+
+<!-- fr:journal kind=finding scope=plan id=adv-6-resolved created=2026-09-21T18:45:42 state=fixed resolves=adv-6 -->
+### adv-6-resolved · finding [fixed] · resolves adv-6: verify-merge exited 1 (not verified - recover) for an unresolvable branch ref
+
+Unresolvable ref exits 2 via _fail. test_verify_merge_reaped_unresolvable_ref_exits_2_no_traceback.
+
+<!-- fr:journal kind=finding scope=plan id=adv-7 created=2026-09-21T18:45:42 phase=1 state=open -->
+### adv-7 · finding [open] · Docstring claimed the username never lands in the sentinel file (phase 1)
+
+repo_root, written by the hook, has always been absolute; only the stamp is cache-relative. The unit test asserted the overclaim.
+
+<!-- fr:journal kind=finding scope=plan id=adv-7-resolved created=2026-09-21T18:45:43 state=fixed resolves=adv-7 -->
+### adv-7-resolved · finding [fixed] · resolves adv-7: Docstring claimed the username never lands in the sentinel file
+
+Docstring and test now scope the privacy claim to the stamped value.

@@ -1166,3 +1166,68 @@ class TestSentinelRetirementMustBeAimedAtThisRepo:
         sentinel = sentinels / "sess-1.json"
         run_hook(payload(f"cd {repo_b} && fr isolation down", repo_a), sentinels, env)
         assert sentinel.exists()
+
+
+class TestPipelineRepoThatIsItselfTheWorkspace:
+    """External mode: a preparer's checkout (k8s pod, image build) is a PRIMARY
+    checkout carrying a `mode: external` marker — the pipeline's "base repo" IS
+    its isolation workspace, so there is no linked worktree to cut and nothing to
+    stamp. The count heal used to retire such a sentinel on the first command
+    (zero linked worktrees — #529's bug, doing accidental good here); a sentinel
+    that is correctly never healed would instead deny every command in the one
+    checkout the session has. The marker, validated exactly as the edit gate
+    validates it, is what says this repo is already isolated.
+    """
+
+    def _pod(self, tmp_path: Path, mode: str) -> tuple[Path, Path]:
+        repo = _fr_enable(_git_repo(tmp_path / "checkout"))
+        (repo / ".fr-isolation").write_text(
+            json.dumps({"toplevel": str(repo.resolve()), "branch": "feat/x", "mode": mode})
+        )
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        return repo, sentinels
+
+    def test_valid_external_marker_allows_and_keeps_the_sentinel(self, tmp_path: Path) -> None:
+        repo, sentinels = self._pod(tmp_path, "external")
+        env = {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}
+        assert decision(run_hook(payload("git status", repo), sentinels, env)) is None
+        assert (sentinels / "sess-1.json").exists(), "allowed, not retired"
+
+    def test_external_marker_without_container_evidence_is_denied(self, tmp_path: Path) -> None:
+        repo, sentinels = self._pod(tmp_path, "external")
+        env = {"KUBERNETES_SERVICE_HOST": ""}
+        if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+            pytest.skip("running inside a container: evidence is ambient")
+        assert decision(run_hook(payload("git status", repo), sentinels, env)) == "deny"
+
+    def test_worktree_marker_copied_into_the_base_clone_is_denied(self, tmp_path: Path) -> None:
+        repo, sentinels = self._pod(tmp_path, "worktree")
+        assert decision(run_hook(payload("git status", repo), sentinels)) == "deny"
+
+
+class TestRelativeCdResolvesAgainstTheSessionCwd:
+    """The hook process's own cwd is not the session's. A relative `cd` target
+    was resolved against the former, so the verdict depended on where the
+    harness happened to launch the hook. Run from THIS checkout (which has a
+    `tests/` dir and a valid `.fr-isolation` marker when it is an fr worktree),
+    `cd tests && …` from a session in a repo WITHOUT one must be judged as the
+    missing path it is."""
+
+    def test_relative_target_missing_from_the_session_cwd_is_gone(self, tmp_path: Path) -> None:
+        repo = _git_repo(tmp_path / "repo")
+        sentinels = tmp_path / "sentinels"
+        write_sentinel(sentinels, repo)
+        env = {"FR_CD_ALLOW_PREFIXES": str(tmp_path / "nonexistent")}
+        assert (REPO_ROOT / "tests").is_dir() and not (repo / "tests").exists()
+        res = subprocess.run(
+            ["bash", str(SCRIPT)],
+            input=json.dumps(payload("cd tests && ls", repo)),
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            env={**os.environ, "FR_SENTINEL_DIR": str(sentinels), **env},
+        )
+        assert decision(res) == "deny"
+        reason = json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "no longer exists" in reason and str(repo.resolve()) in reason

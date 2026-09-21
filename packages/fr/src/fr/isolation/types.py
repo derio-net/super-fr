@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -147,27 +148,86 @@ def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
     never healed; an absent key IS fresh), *live* (`workspace` names a
     surviving linked worktree) or *orphaned* (`workspace` names one that is
     gone — the guard heals it). The value is RELATIVE to `~/.cache/fr`, so the
-    username never lands in the file. A worktree outside that dir is not
+    stamp itself carries no home path (the sentinel's `repo_root`, written by
+    the hook, always has). A worktree outside that dir is not
     stamped (stays fresh, i.e. armed); a missing or malformed sentinel is left
     untouched. Other keys are preserved; the write is atomic.
+
+    Only a worktree OF THE SENTINEL'S OWN REPO stamps it. A session holding a
+    pipeline in repo A may enter repo B's isolation (`cd <B> && fr isolation
+    up`, #421), and the bind that follows calls this with B's worktree. Stamping
+    it would make the guard find A's sentinel naming a workspace A does not
+    list — orphaned — and retire A's live pipeline without a word: #529's
+    silent disarm by another route. Unknown ownership (unreadable repo) is
+    treated as foreign, so the sentinel keeps whatever it had.
     """
     if not session_id or "/" in session_id or session_id in (".", ".."):
         return
     f = sentinel_dir() / f"{session_id}.json"
     if not f.is_file():
         return
-    try:
-        rel = Path(worktree).resolve().relative_to((_home() / ".cache" / "fr").resolve())
-    except ValueError:
+    rel = _cache_relative(worktree)
+    if rel is None:
         return
     try:
         data = json.loads(f.read_text())
     except (OSError, json.JSONDecodeError):
         return
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or not isinstance(data.get("repo_root"), str):
         return
-    data["workspace"] = rel.as_posix()
+    if _git_common_dir(Path(data["repo_root"])).resolve() != (
+        _git_common_dir(Path(worktree)).resolve()
+    ):
+        return
+    data["workspace"] = rel
     write_text_atomic(f, json.dumps(data))
+
+
+def _cache_relative(worktree: Path) -> str | None:
+    """`worktree` relative to `~/.cache/fr` (posix), or None when outside it."""
+    try:
+        rel = Path(worktree).resolve().relative_to((_home() / ".cache" / "fr").resolve())
+    except ValueError:
+        return None
+    return rel.as_posix()
+
+
+def clear_workspace_sentinels(
+    repo_root: Path, worktree: Path, session_ids: Iterable[str] = ()
+) -> int:
+    """Retire the sentinels whose pipeline lived in `worktree`; return the count.
+
+    Called by `fr isolation down` after a successful teardown. A sentinel is
+    retired when it names `repo_root` AND either its stamp is this worktree or
+    its session was bound to it (`session_ids` — covers a sentinel that was
+    never stamped, e.g. one written before stamping existed). Everything else
+    is left alone, in particular another session's FRESH sentinel: the old
+    "zero workspaces remain → clear the repo" rule removed exactly that, and a
+    pipeline whose workspace does not exist yet was silently disarmed by a
+    stranger's teardown (#472, third mechanism). Malformed files are skipped.
+    """
+    d = sentinel_dir()
+    if not d.is_dir():
+        return 0
+    target = str(Path(repo_root).resolve())
+    rel = _cache_relative(worktree)
+    ids = set(session_ids)
+    removed = 0
+    for f in sorted(d.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        root = data.get("repo_root")
+        if not root or str(Path(root).resolve()) != target:
+            continue
+        stamped_here = rel is not None and data.get("workspace") == rel
+        if stamped_here or f.stem in ids:
+            f.unlink(missing_ok=True)
+            removed += 1
+    return removed
 
 
 def clear_repo_sentinels(repo_root: Path) -> int:

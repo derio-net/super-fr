@@ -14,7 +14,8 @@
 #
 # Optional `workspace` field: written later by `fr isolation attach`
 # (stamp_sentinel_workspace) — the bound worktree RELATIVE to ~/.cache/fr, never
-# absolute. Absent = fresh (armed); this writer never sets it.
+# absolute. Absent = fresh (armed). This writer never SETS it, but it does
+# carry a live one across a skill reload (below).
 
 set -eu
 
@@ -52,11 +53,39 @@ mkdir -p "$dir"
 # GC: sentinels self-expire with their sessions (48h = 2880 min).
 find "$dir" -name '*.json' -mmin +2880 -delete 2>/dev/null || true
 
+sentinel="$dir/$session_id.json"
+
+# Carry a LIVE stamp across a reload. fr-goal loads, `fr run start` binds (and
+# stamps), then fr-goal invokes fr-brainstorming — which re-runs this hook. A
+# from-scratch rewrite erased the stamp, the sentinel read as fresh forever, and
+# a reaped workspace locked the session out exactly as #472 describes. Carried
+# only when BOTH hold, because a stamp is a claim about one pipeline:
+#   * same repo_root — a pipeline in another repo starts fresh;
+#   * the stamped directory still exists — a dead stamp is the PREVIOUS
+#     pipeline's, and carrying it would read as orphaned and retire this new
+#     pipeline on its first command (#529 again).
+# Only `attach` ever SETS the field; this writer can only keep or drop it.
+workspace=""
+if [ -f "$sentinel" ]; then
+  prev_root=$(jq -r '.repo_root // empty' "$sentinel" 2>/dev/null || true)
+  prev_ws=$(jq -r '.workspace // empty' "$sentinel" 2>/dev/null || true)
+  if [ -n "$prev_ws" ] && [ "$prev_root" = "$repo_root" ] &&
+     [ -d "$HOME/.cache/fr/$prev_ws" ]; then
+    workspace=$prev_ws
+  fi
+fi
+
+# tmp + mv: the guard reads this file on every Bash call, and a half-written
+# sentinel parses as no repo_root — an unguarded command.
+tmp="$sentinel.tmp.$$"
 jq -n \
   --arg repo_root "$repo_root" \
   --arg skill "$skill" \
   --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{repo_root: $repo_root, skill: $skill, started_at: $started_at}' \
-  > "$dir/$session_id.json"
+  --arg workspace "$workspace" \
+  '{repo_root: $repo_root, skill: $skill, started_at: $started_at}
+   + (if $workspace == "" then {} else {workspace: $workspace} end)' \
+  > "$tmp"
+mv -f "$tmp" "$sentinel"
 
 exit 0

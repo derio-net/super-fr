@@ -601,17 +601,44 @@ def test_down_no_branch_multiple_workspaces_exits_2(repo: Path, fake_run: list) 
 def test_down_clears_sentinel_when_last_workspace_removed(
     repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # #399: bare `down` of the LAST workspace clears the pipeline sentinel, so
+    # #399: `down` of the session's workspace clears ITS pipeline sentinel, so
     # the Bash gate stops reporting 'fr pipeline active'. The guard's own clear
     # never fires here — it exits early when `down` runs from the worktree cwd
-    # (the prescribed workflow), so the Python command must clear eagerly.
+    # (the prescribed workflow), so the Python command must clear eagerly. The
+    # session is BOUND (as the session-bind hook binds every real `up`): that
+    # binding, not "zero workspaces remain", is what names the sentinel (#472).
     _push_origin(repo)  # force=False down() below needs a real origin to fetch
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
     sdir = _sentinel(tmp_path, repo, monkeypatch)
-    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "feat/only", "--session", "sess"],
+    )
     assert (sdir / "sess.json").exists()
     res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/only"])
     assert res.exit_code == 0, res.output
-    assert not (sdir / "sess.json").exists(), "sentinel cleared when zero workspaces remain"
+    assert not (sdir / "sess.json").exists(), "the bound session's sentinel is cleared"
+
+
+def test_down_of_last_workspace_spares_another_sessions_fresh_sentinel(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #472, third mechanism: "zero workspaces remain → clear every sentinel for
+    # the repo" also removed a session whose pipeline had simply not created its
+    # workspace yet — silently disarming its guard. Only the torn-down
+    # workspace's own sentinels go.
+    _push_origin(repo)
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    _sentinel(tmp_path, repo, monkeypatch, session="fresh-other")
+    runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "feat/only", "--session", "sess"],
+    )
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/only"])
+    assert res.exit_code == 0, res.output
+    assert not (sdir / "sess.json").exists()
+    assert (sdir / "fresh-other.json").exists(), "a stranger's fresh pipeline stays armed"
 
 
 def test_down_keeps_sentinel_when_other_workspaces_remain(
@@ -801,13 +828,17 @@ def test_verify_merge_reaped_pr_not_merged_exits_1(
     assert "OPEN" in res.output
 
 
-def test_verify_merge_reaped_unresolvable_ref_exits_1_no_traceback(
+def test_verify_merge_reaped_unresolvable_ref_exits_2_no_traceback(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Exit 2, not 1: fr-goal reads 1 as "NOT verified — recover (cherry-pick /
+    # fresh PR)". A branch name that resolves nowhere (a typo, or no such
+    # branch) is a question verify-merge could not ask, not a merge it disproved;
+    # sending the operator to recover a merge that may be fine is the wrong cue.
     res = _invoke_reaped(
         repo, monkeypatch, _ReapedStub(err="cannot resolve branch ref 'feat/r' (neither)")
     )
-    assert res.exit_code == 1
+    assert res.exit_code == 2
     assert "feat/r" in res.output
     assert res.exception is None or isinstance(res.exception, SystemExit)
 

@@ -3226,11 +3226,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_hooks_guard.py#L199,unit=super-fr:tests/unit/test_sentinel_workspace_stamp.py
+      - super-fr:tests/unit/test_sentinel_lifecycle.py
     status: ci
-    notes: 'Tests pass: three-state heal replaces count-based self-heal; fresh never
-      healed, orphaned healed only for this session regardless of other sessions'' worktrees,
-      live stays denied, legacy unstamped stays armed, pwd -P both sides for symlinked
-      HOME.'
+    notes: Adversarial review added end-to-end coverage over the REAL hooks (writer
+      -> stamp -> reload -> reap -> guard), a foreign-repo bind, and down sparing a
+      stranger's fresh sentinel.
   - id: guard-denial-truthful
     capability: Isolation state
     acceptance: 'Guard denial messages convey the true state: cd target gone says the

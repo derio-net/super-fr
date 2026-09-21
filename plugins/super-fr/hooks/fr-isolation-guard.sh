@@ -64,6 +64,20 @@ case "$rcwd/" in
   *) exit 0 ;;          # worktree, /tmp, elsewhere — allowed
 esac
 
+# The pipeline's repo may ITSELF be the isolation workspace: external mode, where
+# a preparer (k8s operator, image build) hands over a PRIMARY checkout carrying a
+# `mode: external` marker. There is no linked worktree to cut and nothing to
+# stamp, so its sentinel is fresh for good — and a fresh sentinel is never
+# healed (#529). The count heal used to retire it on the first command, by
+# accident; without this, every command in the only checkout the session has
+# would be denied. Validated by the SAME predicate the edit gate trusts: a
+# `worktree`-mode marker cannot pass in a primary checkout, and an `external`
+# one needs live container evidence, so a marker copied into a host's base
+# clone never opens it. Allowed, not retired: the pipeline is still live.
+if fr_isolation_marker_valid "$rroot"; then
+  exit 0
+fi
+
 command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 
 # Transition allowance (#279): a command LEADING with `cd <dir>` whose
@@ -84,6 +98,14 @@ command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 cd_target=$(printf '%s' "$command" | sed -nE 's/^[[:space:]]*cd[[:space:]]+("([^"]+)"|'\''([^'\'']+)'\''|([^[:space:];&|]+)).*/\2\3\4/p')
 if [ -n "$cd_target" ]; then
   case "$cd_target" in "~"*) cd_target="$HOME${cd_target#\~}" ;; esac
+  # A relative target is relative to the SESSION's cwd, which is what the shell
+  # will `cd` from — not to this hook process's cwd, which the harness chooses.
+  # Resolved against the latter, `cd tests && …` was judged by whichever
+  # `tests/` the hook happened to be launched beside (it could even land in an
+  # fr worktree and be admitted outright). Anchored once, here, so every use
+  # below — the transition allowance, `down`'s aim, the gone-path message —
+  # agrees on which directory the command means.
+  case "$cd_target" in /*) ;; *) cd_target="$rcwd/$cd_target" ;; esac
   if rtarget=$(cd "$cd_target" 2>/dev/null && pwd -P); then
     case "$rtarget/" in
       # Back into the base repo — guard still applies, but the `fr …`

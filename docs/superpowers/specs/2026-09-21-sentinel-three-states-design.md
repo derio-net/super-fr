@@ -4,7 +4,7 @@
   [#529](https://github.com/derio-net/super-fr/issues/529),
   [#432](https://github.com/derio-net/super-fr/issues/432)
 - **Date:** 2026-09-21
-- **Status:** designed
+- **Status:** designed; revised after adversarial review (see plan journal `adv-*`)
 
 ## 1. Problem
 
@@ -47,7 +47,8 @@ after gc reaps the workspace — fr-goal's post-merge close-out prescribes it fi
 The sentinel (`~/.cache/fr/sentinels/<session>.json`) gains an optional
 `workspace` field: the bound worktree path **relative to the fr cache dir**
 (`~/.cache/fr`), e.g. `worktrees/super-fr/fix__x`. Relative, never absolute, so the
-username never lands in the file (operator decision).
+stamp carries no home path (operator decision). The sentinel's `repo_root`, which the
+hook has always written absolute, is unchanged.
 
 - **Writer:** `fr.isolation.sessions.attach` — the single place a session is bound to a
   workspace (`fr isolation attach`, `up --session`, and the `fr-session-bind.sh` hook all
@@ -56,6 +57,17 @@ username never lands in the file (operator decision).
   different workspace restamps (a session holds at most one binding).
 - A worktree outside the cache dir (no relative form) is **not stamped**: the sentinel
   stays fresh, i.e. armed — the guard's fail-closed posture.
+- **Only a worktree of the sentinel's own repo stamps it** (git common dirs compared;
+  unreadable = foreign). A session holding a pipeline in repo A may enter repo B's
+  isolation (#421); stamping B's worktree into A's sentinel would read as orphaned and
+  silently retire A's live pipeline.
+- **The stamp survives a pipeline-skill reload.** `fr-pipeline-sentinel.sh` runs on every
+  fr-goal / fr-brainstorming / fr-execute load, and fr-goal loads fr-brainstorming *after*
+  `fr run start` has bound. The writer therefore carries an existing `workspace` forward
+  when the `repo_root` is unchanged **and** the stamped directory still exists. A dead
+  stamp is the previous pipeline's and is dropped: carried forward, it would read as
+  orphaned and retire the new pipeline on its first command. The writer never *sets*
+  the field; only `attach` does. The write is tmp + `mv`.
 - A new helper `stamp_sentinel_workspace(session_id, worktree)` in
   `fr/isolation/types.py`, beside `clear_repo_sentinels`, owns the format.
 
@@ -69,6 +81,15 @@ The count-based heal is **deleted**. In its place, per-sentinel:
    Orphaned → `rm` only this session's sentinel, allow the command.
 3. A failed `git worktree list` (non-git cwd) → treated as live/unknown, deny
    (fail closed, as today).
+4. **The pipeline repo is itself a workspace** — its own toplevel carries a marker that
+   validates under the edit gate's predicate (external mode: a preparer's primary
+   checkout plus container evidence) → allow, sentinel kept. Such a checkout has no
+   linked worktree and nothing to stamp; the count heal used to clear its sentinel by
+   accident, and without this it would be denied every command. A `worktree`-mode marker
+   cannot validate in a primary checkout, so a host base clone is never opened by it.
+
+A relative `cd <target>` is anchored to the session's cwd where the target is parsed,
+not to the hook process's cwd, so every later use of it judges the same directory.
 
 Consequences: #529 — a fresh sentinel is never healed. #472 — an orphaned sentinel
 heals regardless of other sessions' worktrees, and only this session's sentinel is
@@ -92,20 +113,29 @@ A sentinel that is never stamped (no session id from the harness) stays armed un
 - Hardening `down --all` itself (blast-radius listing, pre-PR shield) is out of scope;
   filed as a follow-up.
 
+### 2.C′ `fr isolation down` clears only its own workspace's sentinels
+
+`down` (single) retires the sentinels stamped with the torn-down worktree or belonging
+to sessions bound to it (`clear_workspace_sentinels`). The previous rule, "zero
+workspaces remain → clear every sentinel for the repo", is removed: it also retired
+another session's *fresh* sentinel — a pipeline whose workspace did not exist yet —
+which is #472's third mechanism. `down --all` keeps its repo-wide clear on purpose: it
+is the explicit, now explicitly-warned, last resort.
+
 ### 2.D verify-merge after gc
 
 `fr isolation verify-merge --branch <b>`, when no workspace state exists for the branch,
-no longer errors: it fetches `origin/<default>`, resolves the branch ref (local, else
-`origin/<b>`), runs the same content check from the repo root, consults the PR state,
+no longer errors: it fetches `origin/<default>`, resolves the branch ref (`origin/<b>` first,
+so a stale local branch cannot hide a post-merge push, then local), runs the same content check from the repo root, consults the PR state,
 and prints that the workspace was already reaped. `verified` still requires all three
-signals; an unresolvable branch ref is **not verified** with a message naming the ref.
+signals. An unresolvable branch ref exits **2** (usage) with a message naming the ref,
+never 1: fr-goal reads 1 as "not verified, recover", and a typo disproves nothing.
 No `--branch` given and no workspace remains keeps the existing error.
 
 ## 3. Non-goals
 
-- `down --all` behaviour; the OpenCode/Hermes guards (they have no sentinel heal); the
-  sentinel writer `fr-pipeline-sentinel.sh` (a fresh sentinel is exactly its existing
-  output — the absence of `workspace` *is* the fresh state).
+- `down --all` behaviour (#533); the OpenCode/Hermes guards (they have no sentinel
+  heal); the stale published explainer (#535 — no committed source).
 
 ## 4. Test Plan
 
@@ -114,7 +144,12 @@ with other sessions' worktrees present, only this sentinel removed; live stays d
 legacy unstamped stays armed; non-git fails closed; cd-target-gone message; standard
 message no longer says `down --all` without warning), `attach` stamping (relative path,
 preserves keys, restamp, outside-cache not stamped, no sentinel = no-op), verify-merge
-fallback (reaped workspace verified / not verified / unresolvable ref).
+fallback (reaped workspace verified / not verified / unresolvable ref exits 2), `down`
+sparing a stranger's fresh sentinel, the self-isolated (external) repo allowed, relative
+`cd` anchored to the session cwd, and — end to end over the REAL hooks
+(`tests/unit/test_sentinel_lifecycle.py`) — the stamp surviving fr-goal's
+fr-brainstorming reload, a foreign-repo bind never disarming the pipeline, and a dead
+stamp never carrying into a new pipeline.
 Post-merge — operator-driven: none required (no deployed surface).
 
 ## Implementation Plans

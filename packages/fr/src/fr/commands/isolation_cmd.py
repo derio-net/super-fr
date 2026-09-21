@@ -28,6 +28,7 @@ from fr.isolation.types import (
     IsolationState,
     Target,
     clear_repo_sentinels,
+    clear_workspace_sentinels,
     list_states,
     load_state,
 )
@@ -469,14 +470,16 @@ def down(
         return
     # Only after a SUCCESSFUL teardown: a refused `down` (open PR, or a reap
     # hazard — #467 phase 3) keeps the workspace, so it keeps its bindings too.
+    bound = [b.session_id for b in state.sessions] + ([session] if session else [])
     _sessions.detach_all(state)
-    # #399: when this was the last workspace, clear the pipeline sentinel(s)
-    # eagerly. The bash guard's own clear can't fire here — it exits early when
-    # `down` runs from the worktree cwd (the prescribed workflow), so the guard
-    # would keep reporting 'fr pipeline active'. Mirrors `down --all`'s eager
-    # clear (clear_repo_sentinels), scoped to "zero workspaces remain".
-    if not list_states(root):
-        clear_repo_sentinels(root)
+    # #399: clear the pipeline sentinel(s) eagerly. The bash guard's own clear
+    # can't fire here — it exits early when `down` runs from the worktree cwd
+    # (the prescribed workflow), so the guard would keep reporting 'fr pipeline
+    # active'. Scoped to THIS workspace's pipelines — sentinels stamped with it,
+    # or of sessions bound to it — never "every sentinel once zero workspaces
+    # remain": that also retired a stranger's FRESH pipeline, one whose
+    # workspace did not exist yet, and disarmed its guard (#472).
+    clear_workspace_sentinels(root, state.worktree, bound)
     typer.echo(f"isolation down: {state.branch} cleaned up.")
 
 
@@ -585,7 +588,7 @@ def verify_merge(
     may have orphaned (a commit pushed after the PR merged). With an explicit
     --branch whose workspace gc already reaped, the same check runs from the
     repo root (branch ref resolved origin first, then local); an unresolvable ref
-    exits 1.
+    exits 2.
     """
     root = _resolve_repo(repo)
     if branch is None:
@@ -614,8 +617,10 @@ def verify_merge(
         try:
             res = _worktree_ops(target).verify_merge_reaped(branch, default_branch=default_branch)
         except IsolationError as err:
-            typer.echo(f"error: {err}", err=True)
-            raise typer.Exit(1) from err
+            # Exit 2 (usage), never 1: 1 means "not verified — recover", and an
+            # unresolvable ref disproves nothing about the merge.
+            _fail(err)
+            return
     else:
         res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
     note = " (workspace already reaped; checked from the repo root)" if reaped else ""
