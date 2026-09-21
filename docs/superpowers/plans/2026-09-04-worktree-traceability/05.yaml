@@ -8,6 +8,7 @@ phase:
   tracking_issue: null
   acceptance:
   - statusline-shows-bound-workspace
+  tier: mechanical
 tasks:
 - number: 1
   title: RED — golden tests for the three session shapes

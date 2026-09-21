@@ -8,6 +8,7 @@ phase:
   tracking_issue: null
   acceptance:
   - multibackend-scaffold
+  tier: mechanical
 tasks:
 - number: 1
   title: RED — devcontainer scaffold backend-conditional CLI install
