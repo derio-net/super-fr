@@ -495,7 +495,7 @@ skips `fr-plan`'s usual section-by-section approval because the reviewed spec
 already records your decisions. Each phase carries its own checklist, tests,
 dependencies, and links to the acceptance criteria it advances
 (`plugins/super-fr/skills/fr-plan/SKILL.md:15-38`,
-`plugins/super-fr/skills/fr-plan/SKILL.md:63-91`).
+`plugins/super-fr/skills/fr-plan/SKILL.md:61-95`).
 
 Reviewing that plan is the shape's one command step, and a good illustration of
 why the distinction between kinds matters. `fr plan self-review` runs against
@@ -504,8 +504,21 @@ moves on; nobody has to judge whether the output "looks fine." The CLI errors on
 defects such as dependency cycles and manual work hidden inside an agentic
 phase; when a local Test Plan and readable acceptance matrix are present, it
 also errors on unknown acceptance IDs, and it checks that a plan naming its own
-workflow shape names one that actually resolves. It warns about unresolved
-local spec references (`packages/fr/src/fr/plan_ops.py:867-1029`). The agent
+workflow shape names one that actually resolves.
+
+Hidden manual work is worth dwelling on, because it has a twin. The agent that
+carries out an agentic phase — the phase executor of step 6 below — is a
+**leaf**: it writes code, but it cannot hand work to another agent, on any of
+the harnesses fr supports. So a step telling it to dispatch a researcher or a
+reviewer of its own has nobody to carry it out. What makes that worse than a
+plain error is what an obedient agent does next: it does the nearest thing it
+can reach, and it ticks the step anyway — recording a finished phase for work
+nobody performed. Self-review therefore errors on such a step at authoring
+time, for the same reason it errors on manual work in an agentic phase: both
+assign work to an actor that cannot do it. The executor is told to refuse as
+well, and to leave the step unticked, because a tick is a claim of performance.
+It warns about unresolved local spec references
+(`packages/fr/src/fr/plan_ops.py:1135-1311`). The agent
 fixes what it reports and advances the run again; there is nothing to record by
 hand, because a command step completes itself.
 

@@ -1,0 +1,50 @@
+schema_version: 5
+run: 2026-09-20-feat-plan-self-review-dispatch-verb-lint
+workflow: fr-goal@1
+branch: feat/plan-self-review-dispatch-verb-lint
+started: '2026-09-20T10:54:41+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-20T13:03:58+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+  spec-review:
+    state: done
+    at: '2026-09-20T13:05:47+00:00'
+  plan:
+    state: done
+    at: '2026-09-20T13:09:59+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-20-agentic-dispatch-verb-lint
+  plan-review:
+    state: done
+    at: '2026-09-20T13:10:00+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-20T15:33:18+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-20T13:10:04+00:00'
+          estimate:
+            journal_entries: 1
+            journal_lines: 6
+            handoff_chars: 907
+            spec_bytes: 16911
+            plan_bytes: 25239
+          synthesized: true
+  deliver:
+    state: done
+    at: '2026-09-20T15:45:34+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/513

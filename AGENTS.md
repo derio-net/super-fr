@@ -141,8 +141,8 @@ code you are testing.
 
 ## Skills/rules: canonical source vs. generated mirrors
 
-Never hand-edit a generated file — `scripts/sync-opencode.py` overwrites it
-and a CI tripwire will catch drift anyway:
+Never hand-edit a generated file — the sync scripts overwrite it and a CI
+tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
@@ -152,20 +152,26 @@ and a CI tripwire will catch drift anyway:
   `.claude/rules/explainers-currency.md` and
   `.claude/rules/third-party-privacy.md` (still *sources*, edit them
   directly; the list lives in `sync-opencode.py`'s `REPO_LOCAL_ONLY_RULES`).
-- Generated: `.opencode/skills/<name>/SKILL.md` and
-  `.opencode/instructions/*.md`. After editing a canonical skill/rule, run
-  `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
-  the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
-  `test_tripwire_opencode_instructions_sync.py` fail on drift.
+- Generated: `.opencode/skills/<name>/SKILL.md`, `.opencode/instructions/*.md`,
+  **and** the per-tier subagent files
+  `.opencode/agent/<name>{,-mechanical,-standard,-hard}.md` generated from
+  `plugins/super-fr/agents/`. After editing a canonical skill/rule/agent, run
+  `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit the
+  regenerated mirror. THREE guards, three surfaces —
+  `test_tripwire_opencode_skills_sync.py`,
+  `test_tripwire_opencode_instructions_sync.py` and
+  `test_opencode_agent_mirror.py`: the skills tripwire does NOT cover the agent
+  files, so an agent-only edit can leave a green skills guard and a red mirror.
 - Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
   `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
   one — `scripts/sync-hermes.py` is the second sync, guarded by
   `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
   only `sync-opencode.py` leaves that tripwire red, which is how it was found
   (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
-  touched no Hermes file) — and again, independently, in gh#503 phase 6, where
-  the symptom was a GREEN targeted tripwire run and a red full suite. Two
-  sessions hit the same trap a day apart; run BOTH after any skill edit.
+  touched no Hermes file) — and again, independently, in gh#503 phase 6 (a GREEN
+  targeted tripwire run and a red full suite) and gh#428 phase 3 (both OpenCode
+  guards green while the Hermes one was red). THREE sessions hit the same trap
+  within days; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

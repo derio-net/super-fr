@@ -53,6 +53,45 @@ def test_fr_phase_executor_names_the_handoff_and_the_contract() -> None:
     assert "return" in t.lower() and "reporting channel" in t.lower()
 
 
+# --- The dispatch contract (#428) ------------------------------------------
+#
+# The executor is a leaf on both harnesses (no `Agent` tool on Claude Code,
+# `task: deny` on OpenCode), so a step telling it to dispatch a subagent is
+# unexecutable by construction. `fr plan self-review` errors on such a step at
+# authoring time; these three tests pin the *execution*-time half — the prose
+# contract that refuses the tick — plus the fr-plan guidance that prevents the
+# step being written at all. One assert per load-bearing token.
+
+
+def test_fr_phase_executor_names_the_dispatch_refusal() -> None:
+    """The capability absence AND the consequence: a dispatch step is a
+    BLOCKER that leaves the step unticked, not a deviation that ticks."""
+    t = FR_PHASE_EXECUTOR.read_text()
+    assert "no `Agent` tool" in t
+    assert "task: deny" in t
+    assert "BLOCKER" in t
+    assert "unticked" in t
+
+
+def test_fr_execute_names_the_dispatch_refusal() -> None:
+    """fr-execute carries the same contract: it is the skill an OpenCode or
+    Hermes child loads, so the contract cannot live only in the Claude Code
+    agent file."""
+    t = FR_EXECUTE.read_text()
+    assert "no `Agent` tool" in t
+    assert "task: deny" in t
+    assert "BLOCKER" in t
+    assert "unticked" in t
+
+
+def test_fr_plan_names_outcomes_not_mechanisms() -> None:
+    """Where the error is born: a step naming a tool rots the moment the
+    actor changes, and rots silently."""
+    t = FR_PLAN.read_text()
+    assert "outcomes, not mechanisms" in t
+    assert "#428" in t
+
+
 def test_fr_phase_executor_and_all_opencode_mirrors_carry_the_context_discipline_norm() -> None:
     """The sixth contract norm (spec §5.B1) and the pre-existing #461 norm
     ("the return value is the only reporting channel") must both be stated,

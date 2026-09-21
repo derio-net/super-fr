@@ -3086,3 +3086,71 @@ rows:
       phase filter dropped, partial debt silenced) each fail the suite, and the shipped-shape
       integration walk fails when the gate is disabled. Enforces that findings END closed,
       not that the review was rigorous.'
+  - id: goal-agentic-dispatch-purity
+    capability: fr-goal-methodology
+    acceptance: An agentic phase step instructing a subagent dispatch fails fr plan
+      self-review with error severity, naming both escapes (name the outcome, or move
+      it to a [manual] phase)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py
+    status: ci
+    notes: 'Moved not-implemented → ci: #428 shipped the lint, so this acceptance is
+      now executed on every PR rather than merely described. test_v2_plan_ops.py::test_self_review_errors_on_dispatch_verb_in_agentic_step
+      pins error severity across the parametrized dispatch shapes, and ::test_plan_self_review_cli_exits_1_and_names_both_escapes
+      pins the CLI verdict end to end — exit 1 with both escapes named (name the outcome,
+      or move it to a [manual] phase). Mirrors the #252 agentic-purity gate: work assigned
+      to an actor that cannot perform it. fr-phase-executor''s grant has no Agent (OpenCode:
+      task: deny), so a dispatch step is unexecutable by construction and no PreToolUse
+      hook can see it — no tool call is ever made.'
+  - id: goal-dispatch-lint-precision
+    capability: fr-goal-methodology
+    acceptance: The dispatch-verb lint produces zero errors across every agentic step
+      of every plan folder already in the repo
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_dispatch_lint_corpus.py
+    status: ci
+    notes: 'Moved not-implemented → ci: the corpus harness now re-measures the SHIPPED
+      detector over every plan folder this repo has written, on every PR. test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans
+      scores 0 over 82 plans / 2113 agentic steps; ::test_the_patterns_score_zero_on_every_corpus_step_ticked_or_not
+      closes the gate''s ticked-step exemption, which covers the large majority of the
+      corpus; and ::test_the_corpus_was_actually_read floors plans, steps and per-root
+      coverage so a silently-degraded reader cannot pass green on a corpus of zero.
+      The brainstorm''s smaller 43 plans / 1444 steps figure was the same two roots
+      read with enforce_fr_version=True — the delta is the VERSION GATE, not root coverage
+      (38 archived plans carry an fr_version ceiling a 4.x fr can never satisfy; the
+      live root alone is only 5 plans / 134 steps). Stated because an earlier version
+      of this note said ''active-roots count'', which would send a future maintainer
+      to widen the wrong thing. #428''s literal pattern list scored 237 false positives
+      on bare ''dispatch'' alone, 16.7% of steps — super-fr is a repo about dispatch.
+      Any future widening that would break super-fr''s own plans now fails here, in
+      CI, instead of in an operator''s run.'
+  - id: goal-executor-refuses-tick
+    capability: fr-goal phase executor dispatch
+    acceptance: A phase executor facing a dispatch step it has no tool for reports a
+      BLOCKER and leaves the step unticked
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-20-agentic-dispatch-verb-lint-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_tokens.py
+    status: skipped
+    notes: 'Moved not-implemented → skipped, NOT ci, deliberately: verification now
+      exists but it is prose-level only, and calling that ci would be an overclaim.
+      test_skill_tokens.py::test_fr_phase_executor_names_the_dispatch_refusal and ::test_fr_execute_names_the_dispatch_refusal
+      pin that the BLOCKER-not-a-tick contract is PRESENT on both surfaces — the canonical
+      agent file and the fr-execute skill. They cannot show an executor OBEYED it: that
+      behaviour is agent-side and not unit-testable, and the only thing that could demonstrate
+      it is a live run against a plan containing a dispatch step — which #428''s lint
+      now refuses to let anyone author. So the enforcement is a pair: the lint stops
+      the step being written (executably pinned by goal-agentic-dispatch-purity and
+      goal-dispatch-lint-precision) and this prose catches a step that predates the
+      lint or arrives from outside. On Hermes the prose IS the whole enforcement — nothing
+      there denies a further delegate_task — which is why the contract lives in the
+      skill and not only in the Claude Code agent file. Backfill owed: a live executor
+      run against a pre-lint dispatch step.'
