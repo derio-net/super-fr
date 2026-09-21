@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
+from fr.triage.stage import Stage, derive_stage
 
 SCHEMA = 1
 
@@ -103,6 +104,11 @@ class Issue(_Strict):
     @property
     def key(self) -> str:
         return issue_key(self.repo, self.number)
+
+    @property
+    def stage(self) -> Stage:
+        """Derived from the facts on every read, never stored (spec §3.E)."""
+        return derive_stage(self, self.prs)
 
 
 class Skipped(_Strict):

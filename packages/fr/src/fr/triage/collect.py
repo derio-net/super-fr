@@ -16,6 +16,7 @@ from typing import Any, Protocol
 
 from fr import gh
 from fr.triage.model import Facts, Issue, PullRequest, Scope, Truncation
+from fr.triage.stage import pr_rank
 
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
@@ -96,15 +97,6 @@ def _in_scope(ref: IssueRef, scope: Scope) -> bool:
     return owner == scope.owner.lower()
 
 
-def _pr_rank(pr: PullRequest) -> int:
-    """Lower is more advanced: merged, open non-draft, open draft, closed unmerged."""
-    if pr.state == "MERGED":
-        return 0
-    if pr.state == "OPEN":
-        return 2 if pr.is_draft else 1
-    return 3
-
-
 def invert(
     prs: Iterable[tuple[PullRequest, list[IssueRef]]], scope: Scope
 ) -> dict[IssueRef, list[PullRequest]]:
@@ -119,7 +111,7 @@ def invert(
             if _in_scope(ref, scope):
                 links.setdefault(ref, []).append(pr)
     for linked in links.values():
-        linked.sort(key=lambda p: (_pr_rank(p), -p.number))
+        linked.sort(key=lambda p: (pr_rank(p), -p.number))
     return links
 
 
