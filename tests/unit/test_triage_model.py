@@ -200,3 +200,55 @@ def test_pattern_ids_go_through_the_same_normaliser_as_keys(tmp_path: Path) -> N
     j = load_judgements(_write(tmp_path / "judgements.yaml", text))
 
     assert j.patterns[0].ids == ["super-fr#435"]
+
+
+# ------------------------------------------------ review r-p2-schema-strict
+
+
+def _facts_doc(**over: object) -> dict[str, object]:
+    doc: dict[str, object] = {
+        "schema": 1,
+        "scope": "example-org",
+        "kind": "org",
+        "collected_at": "2026-09-21T00:00:00+00:00",
+        "repos": ["example-org/alpha", "example-org/beta"],
+        "issues": [],
+        "skipped": [{"repo": "example-org/beta", "reason": "HTTP 403"}],
+        "warnings": [],
+    }
+    doc.update(over)
+    return doc
+
+
+@pytest.mark.parametrize("value", ["true", "1.0"])
+def test_a_schema_equal_to_1_but_not_the_int_1_is_refused_in_judgements(
+    tmp_path: Path, value: str
+) -> None:
+    path = _write(
+        tmp_path / "judgements.yaml", JUDGEMENTS_YAML.replace("schema: 1", f"schema: {value}")
+    )
+
+    with pytest.raises(TriageError, match=str(path)) as exc:
+        load_judgements(path)
+    assert "schema" in str(exc.value)
+
+
+@pytest.mark.parametrize("value", [True, 1.0])
+def test_a_schema_equal_to_1_but_not_the_int_1_is_refused_in_facts(
+    tmp_path: Path, value: object
+) -> None:
+    path = _write(tmp_path / "facts.json", json.dumps(_facts_doc(schema=value)))
+
+    with pytest.raises(TriageError, match=str(path)) as exc:
+        load_facts(path)
+    assert "schema" in str(exc.value)
+
+
+# ------------------------------------------------ review r-p2-repos-doc
+
+
+def test_collected_is_the_scope_minus_the_skipped_repos(tmp_path: Path) -> None:
+    facts = load_facts(_write(tmp_path / "facts.json", json.dumps(_facts_doc())))
+
+    assert facts.repos == ["example-org/alpha", "example-org/beta"]
+    assert facts.collected == ["example-org/alpha"]

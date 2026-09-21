@@ -157,6 +157,13 @@ class Truncation(_Strict):
 
 
 class Facts(_Strict):
+    """What `collect` read from the forge for one scope.
+
+    `repos` is the SCOPE: every repo `collect` set out to read, including the
+    ones it then skipped. It is not the repos collected — for that, and for any
+    "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
+    """
+
     schema_: Literal[1] = Field(1, alias="schema")
     scope: str
     kind: ScopeKind
@@ -166,6 +173,12 @@ class Facts(_Strict):
     skipped: list[Skipped] = []
     unviewed: list[Unviewed] = []
     warnings: list[Truncation] = []
+
+    @property
+    def collected(self) -> list[str]:
+        """The repos actually read: `repos` minus the `skipped` ones, in scope order."""
+        skipped = {s.repo for s in self.skipped}
+        return [r for r in self.repos if r not in skipped]
 
     def to_json(self) -> dict[str, Any]:
         """The `facts.json` document, with `schema` spelled as on disk."""
@@ -249,10 +262,11 @@ class Judgements(_Strict):
 def _check_schema(path: Path, data: object) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TriageError(f"{path}: expected a mapping at the top level")
-    if data.get("schema") != SCHEMA:
-        raise TriageError(
-            f"{path}: unsupported schema {data.get('schema')!r} (this fr reads schema {SCHEMA})"
-        )
+    value = data.get("schema")
+    # `type(...) is int`, not `==`: True == 1 == 1.0, and pydantic's Literal[1]
+    # accepts all three, so `schema: true` would otherwise load (r-p2-schema-strict).
+    if type(value) is not int or value != SCHEMA:
+        raise TriageError(f"{path}: unsupported schema {value!r} (this fr reads schema {SCHEMA})")
     return data
 
 

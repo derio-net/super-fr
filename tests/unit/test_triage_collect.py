@@ -368,9 +368,7 @@ def test_every_failed_view_is_recorded_as_unviewed_never_dropped(reason: str) ->
 
     forge.view_issue = view_issue  # type: ignore[method-assign]
 
-    facts = collect_facts(
-        forge, SUPER_FR, now=NOW, judged=["super-fr#99999", "Super-FR#430"]
-    )
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#99999", "Super-FR#430"])
 
     assert "super-fr#99999" not in {i.key for i in facts.issues}
     assert [(u.key, u.reason) for u in facts.unviewed] == [("super-fr#99999", reason)]

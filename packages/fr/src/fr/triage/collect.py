@@ -21,6 +21,7 @@ from fr.triage.model import (
     SCHEMA,
     Facts,
     Issue,
+    IssueState,
     PullRequest,
     Scope,
     Skipped,
@@ -163,12 +164,12 @@ def invert(
     return links
 
 
-def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: str) -> Issue:
+def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: IssueState) -> Issue:
     return Issue(
         repo=repo,
         number=raw["number"],
         title=raw["title"],
-        state=state,  # type: ignore[arg-type]
+        state=state,
         labels=[label["name"] for label in raw.get("labels") or []],
         url=raw["url"],
         created_at=raw.get("createdAt"),
@@ -260,7 +261,7 @@ def collect_facts(
             # recorded, never dropped: `check` must not call it orphaned (r-p2-unviewed).
             unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
             continue
-        state = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
+        state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
     return Facts(
         schema=SCHEMA,

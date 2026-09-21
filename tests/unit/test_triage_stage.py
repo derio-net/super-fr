@@ -60,6 +60,8 @@ CLOSED_PR = _pr(13, state="CLOSED")
         (_issue(), [CLOSED_PR], "backlog"),
         # A PR outranks the blocked label: blocked means "no PR".
         (_issue(labels=["blocked"]), [DRAFT], "pr-draft"),
+        # Review r-p2-blocked: an abandoned (closed, unmerged) PR does not unblock.
+        (_issue(labels=["blocked"]), [CLOSED_PR], "blocked"),
     ],
 )
 def test_derive_stage(issue: Issue, prs: list[PullRequest], stage: str) -> None:
