@@ -3,7 +3,7 @@ run: 2026-09-20-unit-record-unification-r2
 workflow: fr-goal@1
 branch: feat/phase-holder-identity
 started: '2026-09-20T20:31:03+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -264,6 +264,20 @@ steps:
         evidence:
           review: rev-p7
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-21T00:31:39+00:00'
+    exit: 0
+    stdout: ''
   deliver:
-    state: pending
+    state: done
+    at: '2026-09-21T00:34:04+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/508
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-21T00:31:39+00:00'
+          harness: claude-code
+          session: 804646ff-3618-47b5-9860-bf5f37f52c96
+          returned: '2026-09-21T00:34:04+00:00'
+          outcome: done
