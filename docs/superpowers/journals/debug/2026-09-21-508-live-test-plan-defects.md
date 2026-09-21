@@ -1,0 +1,158 @@
+# Journal: 2026-09-21-508-live-test-plan-defects
+
+<!-- fr:journal kind=repro scope=debug id=c4-repro created=2026-09-21T14:22:00 -->
+### c4-repro · repro · C4: guard denies fr run start from the base clone iff the repo already has a linked worktree
+
+C4. With a pipeline sentinel live and the session cwd in the base clone, fr-isolation-guard.sh denies `fr run start <shape> --branch <b>` (also `uv run fr run start`, `fr run start --help`, `fr models resolve`), while fr-goal calls `fr run start` "the first action" that "enters isolation itself".
+
+Repro (tests/unit/test_hooks_guard.py harness, real script): git repo + sentinel + ONE pre-existing linked worktree of any branch -> deny. The same repo with NO linked worktree -> allow, because the #341 orphan self-heal sees exactly one `worktree ` line, deletes the sentinel and exits 0. So the live report ("denied") and a fresh-repo trial ("allowed") are both true; the variable is whether the repo already has some worktree, anyone's. This repo had eight.
+
+<!-- fr:journal kind=root-cause scope=debug id=c4-root-cause created=2026-09-21T14:22:00 -->
+### c4-root-cause · root-cause · C4: the guard's allowlist predates fr run start becoming an isolation-entering command
+
+C4 root cause: the guard's fr allowlist is `fr init|skills|--version` plus `fr isolation ...`, written when `fr isolation up` was the only command that enters isolation. Review fix r2-f5 later made `fr run start` enter isolation ITSELF (fr.run.workspace.ensure_run_workspace is called before anything is written; it is the only run verb that does - `adopt` deliberately does not) and the skill was rewritten to make it the first action. The allowlist never learned the second isolation-entering command. One concept, "commands that enter isolation", spelled in two places that drifted.
+
+Adjacent, NOT fixed here, recorded so it is not rediscovered: the same self-heal that masked this in a fresh repo means that in a repo with no linked worktree the FIRST base-clone command of a new pipeline - any command - deletes the sentinel, and the bash guard is then inert for the rest of that session. The heal cannot tell "outlived all worktrees" from "has not created one yet". Closing it needs a way to tell a fresh sentinel from an orphaned one (age, or a workspace-seen flag): a design decision, not a bug fix.
+
+<!-- fr:journal kind=repro scope=debug id=c3-repro created=2026-09-21T14:23:04 -->
+### c3-repro · repro · C3: a grouped unit resolves done without ever being advanced
+
+C3. `fr run resolve <run> --step <member> --item phase/<n> --state done` succeeds for a grouped unit that `fr run advance` never briefed. Live: on the Claude Code proof run, review-phase ended `done` with evidence and NO attempts - no holder, no cost - while the OpenCode run, which advanced first, has one.
+
+Repro (tests/unit/test_run_cli.py helpers, one-phase grouped shape): advance; resolve code done; then, with no second advance, resolve peer-review done -> rc=0, "implement: done (2 members done)". The unit went from absent straight to done.
+
+<!-- fr:journal kind=root-cause scope=debug id=c3-root-cause created=2026-09-21T14:23:04 -->
+### c3-root-cause · root-cause · C3: _resolve_member checks the group and the other units, never the unit itself
+
+C3 root cause: _resolve_member guards the GROUP's state (must be running/blocked) and refuses while any OTHER unit is running (one writer), but has no precondition on the unit it is resolving. The flat-step path has one - resolve_cmd refuses "not running or blocked ... advance first" - so the two paths disagree about the same rule, and the grouped one is the newer code. _close_on_resolve is then "silent when there is nothing open", deliberately (adopted runs, gate steps), so nothing downstream notices: the unit is done, attempts is empty, and status prints a done unit with no holder line.
+
+Not a reason to make _close_on_resolve loud: its silence is load-bearing for adopted cursors. The missing check belongs where the flat path has it - before the write.
+
+<!-- fr:journal kind=repro scope=debug id=c2-repro created=2026-09-21T14:24:15 -->
+### c2-repro · repro · C2: orchestrator-run units record the tier's model, which is sometimes false
+
+C2. An orchestrator-run unit records a `model` fr never observed. Live (OpenCode proof run): review-phase, run inline, reads "the orchestrator (opencode, <provider>/<model>)" - the standard tier's binding. There the operator confirmed the orchestrator happened to be on that model, so the value was true by coincidence.
+
+It is not always true, and this repo's own archive proves it: docs/superpowers/implemented/runs/2026-09-20-unit-record-unification-r2.yaml records all 7 review-phase attempts as `model: claude-opus-5`, no agent_type, unclaimed. Every one of those reviews was performed inline by the orchestrator, which was running claude-fable-5-1. Seven false records, on main.
+
+<!-- fr:journal kind=root-cause scope=debug id=c2-root-cause created=2026-09-21T14:24:16 -->
+### c2-root-cause · root-cause · C2: _open_dispatch derives a model for attempts that were never dispatched to a tier
+
+C2 root cause: _open_dispatch writes `model=_resolved_model(repo, harness, tier)` for EVERY attempt it opens. A tier binding answers "which model does a DISPATCHED agent of this tier get". For an attempt with an agent_type that is what the dispatch asked for. For an attempt with agent_type None - which _attempt_holder renders as "the orchestrator" - nothing was dispatched to a tier: the unit runs in the orchestrator's own session, on a model fr has no way to see. review-phase inherits the group's `tier: from_phase` through _effective_tier, so the phase's tier resolves and a model is written for work that tier never touched.
+
+Finding f8 (the #508 run) reasoned about exactly this site and got half of it: it made `harness` self-describing on orchestrator-run attempts ("which nothing ever claims") and did not notice that the model beside it was being derived for a dispatch that did not happen.
+
+Scope of the fix, stated: stop deriving a model where there is no agent_type; an orchestrator can still REPORT one (claim/resolve --model). NOT in scope: marking provenance (derived vs reported) on executor attempts - that is a new Attempt field, which is a `run` shape change with a version bump and migration - and rewriting cursors that already carry the false value (a repair would be guessing which unclaimed models were derived; archived cursors are frozen by rule).
+
+<!-- fr:journal kind=repro scope=debug id=c5-repro created=2026-09-21T14:26:49 -->
+### c5-repro · repro · C5: host and container delete and rebuild one shared .venv on every alternation
+
+C5. Alternating `uv run` between the host and the devcontainer deletes and rebuilds the worktree's `.venv` every time.
+
+Repro, deterministic, in this fix workspace, with a control:
+  1. container: `fr isolation exec -- uv run fr --version` -> "Ignoring existing virtual environment linked to non-existent Python interpreter", "Removed virtual environment at: .venv", re-downloads mypy/ruff/pygments/pydantic-core (~26 MB), installs 31 packages. `.venv/bin/python` now links into the container's uv-managed CPython.
+  2. host: `uv run fr --version` -> the same three lines, rebuilds for the host interpreter.
+  3. host again -> no removal (control).
+
+fr-isolation's exec-bridge discipline mandates exactly this alternation (orchestrator on the host, commands through `fr isolation exec`), so under fr it is the normal case, not an edge. Beyond the cost: a host pytest running while the container rebuilds `.venv` is running on an environment being deleted under it.
+
+<!-- fr:journal kind=root-cause scope=debug id=c5-root-cause created=2026-09-21T14:26:49 -->
+### c5-root-cause · root-cause · C5: the scaffold emits a uv-enabled bind-mounted profile with one project env for two operating systems
+
+C5 root cause: the worktree is bind-mounted into the container, and uv on both sides defaults its project environment to `<project>/.venv` - one path, two operating systems. A venv's interpreter link is only valid on the side that made it, so each side finds the other's venv broken and replaces it. Nothing sets UV_PROJECT_ENVIRONMENT on either side.
+
+The source is `fr init scaffold`, not this repo's two profiles: KNOWN_TOOL_FEATURES knows `uv` and emits the uv feature into a bind-mounted profile, so every repo scaffolded with `--tool uv` inherits it. This repo's committed dev/admin profiles are instances.
+
+<!-- fr:journal kind=repro scope=debug id=c1-repro created=2026-09-21T14:26:49 -->
+### c1-repro · repro · C1: on OpenCode the holder's agent id arrives only when the blocking dispatch returns
+
+C1. On OpenCode the dispatch holder's agent id is not knowable while the unit is held. Live: the orchestrator learned the child session id "only when the task tool returned", from the return value's task-id field; status from INSIDE the child read "HELD BY an unclaimed agent (opencode, <model>)". The claim, and the item-15 second-advance refusal, could only be exercised after the child had already returned.
+
+What is wrong is what fr SAYS, in two places. parity.yaml `subagent-dispatch` declares `opencode: {state: enforced}` and its summary says `fr run claim --agent <id>` names the holder "identically on every harness". fr-goal section 5 says "The moment a dispatch goes out, name its holder" - an instruction an OpenCode orchestrator cannot follow, because its dispatch tool blocks.
+
+<!-- fr:journal kind=root-cause scope=debug id=c1-root-cause created=2026-09-21T14:26:50 -->
+### c1-root-cause · root-cause · C1: a parity cell and a skill instruction asserted from Claude Code's dispatch shape, never observed on OpenCode
+
+C1 root cause: the claim protocol was designed and live-verified on a harness whose dispatch returns an id immediately and runs the child in the background (Claude Code), then declared for a harness whose dispatch BLOCKS and returns the id with the result (OpenCode). "enforced" was asserted from the unit tests of the record, not from a run; the first live OpenCode run is what showed the id arrives too late to answer "who holds it right now". Same defect class as the OpenCode SDK-version claim corrected in #508: a parity cell asserted rather than observed.
+
+What still holds, and must not be lost in the correction: the OPEN record refuses a second dispatch on OpenCode exactly as elsewhere, and harness + model are recorded at dispatch. Only the agent id is late.
+
+A real closing of the gap exists and is NOT attempted here: fr-opencode-plugin already distinguishes child sessions (idle.ts isTopLevel) and sees a sessionID on every tool call, so it could claim on the child's first tool call. That is a new plugin behaviour plus a new CLI affordance (claim "the one open unclaimed unit"), and it cannot be live-verified from a Claude Code session. Recorded as the follow-up; this fix makes the declaration true.
+
+<!-- fr:journal kind=finding scope=debug id=c3-fixed created=2026-09-21T14:33:30 state=fixed -->
+### c3-fixed · finding [fixed] · C3 fixed: a grouped unit must be briefed before it can be resolved
+
+_resolve_member now refuses a unit whose state is absent or `pending` (exit 2, naming `fr run advance <run>`), for `done` and `failed` alike. Placed AFTER the one-writer refusal: my first placement put it before, which replaced "phase/1/code is still running" with advice to run an `advance` that would itself have refused a held unit - two existing tests caught that. A `running` unit with no record (adopted mid-flight) still resolves.
+
+Failing-first: tests/unit/test_run_resolve_requires_advance.py (2 red, 1 control green before the fix; 3 green after). One existing test, test_resolve_member_items_completes_the_group_in_order, ENCODED the defect - it resolved peer-review straight after code - and now takes the write-claim like a real run. The grouped-loop spec (2026-09-09 methodology-restoration, section 5 "write-claim") is why that is a correction and not a weakening: the claim is what `advance` records, so a unit resolved without it never held one. 993 run-related tests green.
+
+<!-- fr:journal kind=finding scope=debug id=c2-fixed created=2026-09-21T14:36:31 state=fixed -->
+### c2-fixed · finding [fixed] · C2 fixed: no model is derived for an attempt fr did not dispatch to a tier
+
+_open_dispatch resolves a model only when the attempt has an agent_type. An orchestrator-run attempt records harness (detected about fr's own process) and no model; status prints "the orchestrator (claude-code)". A model the orchestrator REPORTS through claim/resolve --model is still kept.
+
+Failing-first: tests/unit/test_run_orchestrator_model.py - 2 red on exactly `'claude-opus-5' is None`, 2 controls green (the dispatched executor keeps its tier's model; a reported model survives). 1124 run/model/telemetry tests green after.
+
+Left alone, deliberately: cursors that already carry the false value (a repair would have to guess which unclaimed models were derived; archived cursors are frozen by rule), and provenance on executor attempts (a new Attempt field = a `run` shape change). An executor's derived model is what the dispatch asked for; whether the harness honoured it is observable only from its transcript, which telemetry already reads for tokens - a possible follow-up, not this fix.
+
+<!-- fr:journal kind=finding scope=debug id=c4-fixed created=2026-09-21T14:38:04 state=fixed -->
+### c4-fixed · finding [fixed] · C4 fixed: the bash guard treats fr run start as the isolation-entering command it is
+
+fr-isolation-guard.sh allows `fr run start` from the base clone, beside the existing `fr init|skills|--version` allowance. It does not retire the sentinel. `start` only: `adopt` deliberately writes where it is run, and every other run verb stays gated and belongs in the workspace `start` prints. `fr models resolve` stays gated too - fr-goal runs it after `start`, from the workspace.
+
+Failing-first: TestRunStartEntersIsolation in tests/unit/test_hooks_guard.py - 2 red (plain and behind `uv run`), 7 green before and after (advance/resolve/adopt/status, the near-misses `fr run startle` and `fr runs start`, and the sentinel surviving). The original repro - a repo that already has someone else's linked worktree - now allows start and still denies the rest. Hermes' guard blocks only git/gh mutations and never denied this; the OpenCode port does not gate bash. So the fix is this one script.
+
+Still open, by decision not oversight: the #341 self-heal retiring a FRESH pipeline's sentinel in a worktree-less repo (see c4-root-cause).
+
+<!-- fr:journal kind=finding scope=debug id=c5-fixed created=2026-09-21T14:42:05 state=fixed -->
+### c5-fixed · finding [fixed] · C5 fixed: a uv profile keeps uv's project environment out of the bind mount
+
+`fr init scaffold` adds `containerEnv: {UV_PROJECT_ENVIRONMENT: /var/tmp/fr-uv-project-env}` to a profile whose tools include uv, and this repo's dev and admin profiles carry it. `containerEnv`, not `remoteEnv`: it is set on the container itself, so the plain `docker exec` behind `fr isolation exec` sees it. A profile without uv is byte-identical to before (the key is absent, not empty).
+
+Hypothesis tested BEFORE any code: passing the variable by hand on `fr isolation exec` stopped the alternation on both sides. Failing-first: three tests in tests/unit/test_init_scaffold.py (first run was an ImportError, so the constant went in alone and the tests were re-run until they failed on behaviour: KeyError 'containerEnv', and this repo's admin profile lacking it). 495 scaffold/isolation tests green.
+
+Proven live, not only in unit tests: this workspace's container was removed and rebuilt from the committed profile (old container: variable absent; new: present), then the ORIGINAL repro repeated with nothing passed by hand - three container/host alternations, zero "Removed virtual environment" on either side, the container's env created once, the host's .venv link unchanged.
+
+Limits: a container's env is fixed at creation, so an EXISTING workspace keeps thrashing until its container is recreated; and profiles already scaffolded in consumer repos are not rewritten - `fr init migrate` was not extended. Other toolchains with the same shape (a node_modules holding native binaries) are not addressed; only uv was observed.
+
+<!-- fr:journal kind=finding scope=debug id=c1-fixed created=2026-09-21T14:44:52 state=fixed -->
+### c1-fixed · finding [fixed] · C1 fixed: fr states when a holder becomes nameable per harness, instead of describing the best case as the only one
+
+What fr SAYS now matches what was observed; fr's behaviour did not change, because it was not wrong.
+
+- parity.yaml gains its own interaction row, `dispatch-holder-identity`: claude-code enforced; opencode partial, with the live observation in its scope_note and what still holds (the unclaimed record refuses; harness and model are recorded at dispatch); hermes partial, saying plainly that when delegate_task yields its handle has not been observed. Its own row because dispatch IS enforced on OpenCode - one row could not say both. subagent-dispatch's summary points at it.
+- fr-goal no longer says "The moment a dispatch goes out, name its holder" - unfollowable where the dispatch call blocks. It says to claim as soon as the harness tells you who it is, and that a blocking dispatch is claimed when the call returns, before resolving. Both mirrors regenerated; the skill stays at 117 lines.
+- The explainer made the same unconditional claim in its own words; amended, with the C2 limit beside it. Baseline re-render byte-identical first; page diff is 20 lines added, 0 removed.
+
+Failing-first: tests/unit/test_parity_dispatch_holder.py, 7 red (no such row; no such prose in the skill or either mirror). One of my own assertions was too narrow ("not observed" vs the note's "has not been observed") and was corrected - the note said the right thing.
+
+NOT done, and it is the real closing of the gap: fr-opencode-plugin already tells child sessions from top-level ones (idle.ts isTopLevel) and sees a sessionID on every tool call, so it could claim on the child's first tool call. That needs a new CLI affordance (claim "the one open unclaimed unit") and cannot be live-verified from a Claude Code session. Recorded in the parity cell itself so it is found by whoever reads the limitation.
+
+<!-- fr:journal kind=discovery scope=debug id=c5-correction created=2026-09-21T15:02:33 -->
+### c5-correction · discovery · C5 correction: fr isolation exec is devcontainer exec, and the env path is relative
+
+CORRECTION to c5-fixed and c5-root-cause above. Two statements there are wrong, both caught by independent review:
+
+1. "the plain `docker exec` behind `fr isolation exec`" - false. `fr isolation exec` runs `devcontainer exec --workspace-folder ... --config ...` (fr/isolation/local.py). I asserted a mechanism without reading the function. `containerEnv` is still the right key, for a better reason than the one I gave: it is set on the container, so every process sees it - devcontainer exec, the postCreateCommand and a raw docker exec alike - whereas remoteEnv reaches only what the devcontainer CLI launches. The live proof stands on what was measured (the variable present in `docker inspect`, the alternation quiet), not on the explanation.
+
+2. The path. c5-fixed says /var/tmp/fr-uv-project-env. Review pointed out that an absolute UV_PROJECT_ENVIRONMENT is ONE directory shared by every project in the container. Its claim that packages get destroyed did NOT reproduce - probed in the container with two independent projects, `uv run` alternating: 0 uninstalls. What did reproduce is worse in a quieter way: project a could import a package only project b declared, i.e. tests passing on an undeclared dependency. The value is now the RELATIVE `.venv-container`, which uv resolves per project. Re-proven live: container rebuilt from the committed profile, three alternations, zero deletions, host .venv untouched, and git does not see the directory (uv writes its own `.gitignore: *` inside). It stays on the bind mount - as fast as .venv was before this fix, slower than the absolute path would have been.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-21T15:02:34 -->
+### review-1 · review · Independent review: 11 findings, 10 fixed, 1 refuted-as-by-design
+
+Reviewed by an independent reviewer dispatched through superpowers:requesting-code-review, with no session history - the diff, this journal and a list of specific holes to look for. Findings handled through superpowers:receiving-code-review: each verified against the code or by experiment before acting. Verdict: no Critical, no legitimate flow broken by any of the five fixes. Eleven findings.
+
+FIXED, each red-first where behavioural:
+ r1 (Important) fr-goal never told the orchestrator to `advance` before review-phase - the prose that PRODUCED C3 live, and would have tripped the new refusal once per phase. The skill and both mirrors now say so; token-tested.
+ r2 the refusal promised `advance` "opens the unit"; it briefs the NEXT unit in order, which may be an earlier one. Reworded, asserted.
+ r3 the matrix row claimed no unit ever ends done without a record. Narrowed to the member-resolve path: a whole-group resolve and an adopted done unit still do, by design.
+ r4 a comment said "adopted mid-flight"; adopt never writes `running`. Corrected.
+ r6 nothing asked the orchestrator to report its own model, so after C2 the field would simply never be filled. The skill now asks for --model on the review resolve.
+ r7 the actual live trigger (a repo that already has a linked worktree) was unpinned. Test added; it fails when the allowance is removed.
+ r8 (Important) the `docker exec` rationale was false - see the correction entry.
+ r9 (Important for consumer repos) shared absolute env. "Destroys packages" REFUTED by experiment; cross-project contamination FOUND by the same experiment. Switched to a relative path and re-proven live.
+ r10 a test that compared a constant to literal prefixes could not fail; replaced by one about relativity. The scaffold row's sentence now says what CI verifies.
+ r11 `claude-code: enforced` on the new parity row repeated the very defect the row exists to correct - nameable is not enforced. Now `advisory` with a note.
+
+NOT CHANGED, with reasoning:
+ r5 a repo-authored `kind: agent` step with a tier and a skill but no `agent:` now records no model. By design: `agent_type None` already means "the orchestrator" everywhere (_dispatch_holder_label); a shape that dispatches such a step to a subagent should name the agent. No shipped shape does this.
