@@ -28,3 +28,163 @@ from fr.triage.render import inline
 )
 def test_inline_escapes_first_then_allows_only_code_and_bold(text: str, html: str) -> None:
     assert inline(text) == html
+
+
+# ------------------------------------------------------------ P3.T3 renderer
+
+import datetime as _dt  # noqa: E402
+import json  # noqa: E402
+import re  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from fr.triage.model import Facts, Judgements, load_facts, load_judgements  # noqa: E402
+from fr.triage.render import render  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_triage_collect import NOW, SUPER_FR, _super_fr_forge  # noqa: E402
+
+JUDGEMENTS = """schema: 1
+ranked_at: 2026-09-19
+tiers:
+  - {n: 1, title: Data loss, description: Work destroyed with no prompt or salvage.}
+  - {n: 2, title: Silent wrongness, description: "The failure looks like **success**."}
+issues:
+  "super-fr#529": {tier: 1, theme: isolation, cx: S, verified: true,
+                   detail: "`self_heal()` retires a **fresh** one <img src=x onerror=alert(3)>"}
+  "super-fr#333": {tier: 2, theme: secrets, cx: M, detail: "waits on upstream"}
+patterns:
+  - {title: Remote fact justifies local destruction, ids: ["super-fr#529"], body: "`gc` trusts it"}
+"""
+
+
+def _state(tmp_path: Path, *, hostile: bool = False) -> tuple[Facts, Judgements]:
+    """Captured facts written to disk and read back through the model loaders."""
+    from fr.triage.collect import collect_facts
+
+    facts = collect_facts(_super_fr_forge(), SUPER_FR, now=NOW)
+    doc = facts.to_json()
+    if hostile:
+        doc["issues"][0]["title"] = "<script>alert(1)</script>"
+        doc["issues"][0]["body"] = "before </script><script>alert(2)</script> after"
+        doc["issues"][0]["labels"] = ['"><svg onload=alert(4)>']
+    (tmp_path / "facts.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tmp_path / "judgements.yaml").write_text(JUDGEMENTS, encoding="utf-8")
+    return load_facts(tmp_path / "facts.json"), load_judgements(tmp_path / "judgements.yaml")
+
+
+def _sections(page: str) -> list[str]:
+    return re.findall(r'<section class="tier\b[^"]*"[^>]*data-tier="([^"]+)"', page)
+
+
+def _row(page: str, key: str) -> str:
+    m = re.search(rf'<details class="row"[^>]*data-key="{re.escape(key)}"[^>]*>', page)
+    assert m is not None, f"no row for {key}"
+    return m.group(0)
+
+
+def _section_of(page: str, key: str) -> str:
+    idx = page.index(f'data-key="{key}"')
+    found: list[str] = re.findall(
+        r'<section class="tier\b[^"]*"[^>]*data-tier="([^"]+)"', page[:idx]
+    )
+    return found[-1]
+
+
+def test_an_unranked_issue_renders_in_the_first_tier_labelled_not_yet_triaged(
+    tmp_path: Path,
+) -> None:
+    page = render(*_state(tmp_path))
+
+    assert _sections(page)[0] == "unranked"
+    assert _section_of(page, "super-fr#535") == "unranked"
+    first = page[page.index('data-tier="unranked"') : page.index('data-tier="1"')]
+    assert "not yet triaged" in first
+    assert "fr-triage" in first
+
+
+def test_a_judged_issue_renders_in_its_own_tier_with_its_data_attributes(
+    tmp_path: Path,
+) -> None:
+    page = render(*_state(tmp_path))
+
+    assert _sections(page) == ["unranked", "1", "2"]
+    assert _section_of(page, "super-fr#529") == "1"
+    assert _section_of(page, "super-fr#333") == "2"
+    row = _row(page, "super-fr#529")
+    for attr in ('data-tier="1"', 'data-cx="S"', 'data-theme="isolation"', "data-stage="):
+        assert attr in row
+
+
+def test_stage_comes_from_the_model_not_from_facts_json(tmp_path: Path) -> None:
+    """r-p2-render-model: stage is derived, never on disk — yet every row carries it."""
+    facts, judgements = _state(tmp_path)
+    page = render(facts, judgements)
+
+    assert '"stage"' not in (tmp_path / "facts.json").read_text(encoding="utf-8")
+    for issue in facts.issues:
+        assert f'data-stage="{issue.stage}"' in _row(page, issue.key)
+    assert 'data-stage="pr-draft"' in _row(page, "super-fr#529")
+    assert 'data-stage="blocked"' in _row(page, "super-fr#333")
+
+
+def test_hostile_facts_render_inert_and_never_inside_a_script(tmp_path: Path) -> None:
+    page = render(*_state(tmp_path, hostile=True))
+
+    assert "<script>alert(1)" not in page
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+    assert "</script><script>alert(2)" not in page
+    assert "<img src=x" not in page and "<svg onload" not in page
+    assert "<code>self_heal()</code>" in page and "<strong>fresh</strong>" in page
+    scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", page, flags=re.S | re.I)
+    assert len(scripts) == 1, "exactly one script element: the viewer's"
+    for needle in ("alert", "super-fr#", "Explainer", "isolation"):
+        assert needle not in scripts[0]
+
+
+def test_two_renders_are_byte_identical_whatever_the_clock_says(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    facts, judgements = _state(tmp_path)
+
+    def at(moment: _dt.datetime) -> str:
+        class Frozen(_dt.datetime):
+            @classmethod
+            def now(cls, tz: _dt.tzinfo | None = None) -> Frozen:
+                return cls.fromtimestamp(moment.timestamp(), tz)
+
+            @classmethod
+            def today(cls) -> Frozen:
+                return cls.fromtimestamp(moment.timestamp())
+
+        monkeypatch.setattr(_dt, "datetime", Frozen)
+        monkeypatch.setattr("time.time", lambda: moment.timestamp())
+        return render(facts, judgements)
+
+    first = at(_dt.datetime(2020, 1, 1, tzinfo=_dt.UTC))
+    second = at(_dt.datetime(2031, 6, 30, 23, 59, tzinfo=_dt.UTC))
+    assert first == second
+
+
+def test_render_reads_no_clock() -> None:
+    """The structural half of determinism: render.py imports neither clock."""
+    source = (Path(render.__code__.co_filename)).read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(import|from)\s+(time|datetime)\b", source, flags=re.M)
+
+
+def test_the_page_carries_collected_at_and_ranked_at(tmp_path: Path) -> None:
+    facts, judgements = _state(tmp_path)
+    page = render(facts, judgements)
+
+    assert facts.collected_at in page
+    assert "2026-09-19" in page and "ranked" in page
+
+
+def test_the_page_is_self_contained_and_themed(tmp_path: Path) -> None:
+    page = render(*_state(tmp_path))
+
+    assert "--accent: #2F6F5E" in page
+    assert "@media (prefers-color-scheme: dark)" in page
+    assert "IBM Plex Sans" in page and "system-ui" in page
+    assert 'name="viewport"' in page
+    assert "localStorage" in page and "try" in page
