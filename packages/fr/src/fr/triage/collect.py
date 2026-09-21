@@ -209,7 +209,8 @@ def collect_facts(
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
     In org scope a repo whose lists fail is recorded under `skipped` and the
-    rest still collect; in repo scope the one repo failing is the error.
+    rest still collect; in repo scope the one repo failing is the error, and
+    in org scope so is collecting no repo at all (review r-p2-empty).
     Each *judged* key no longer open costs one `view_issue`, so the extra
     calls are bounded by the judgements, never by the backlog.
     """
@@ -234,6 +235,14 @@ def collect_facts(
             warnings.append(Truncation(source="prs", target=repo, limit=pr_limit))
         raw_issues.extend((repo, i) for i in issues)
         parsed_prs.extend(parse_prs(repo, prs))
+    if not collected:
+        # Nothing to show is an error, never an empty board: an empty facts.json
+        # would render as a clean backlog (spec §3.C, review r-p2-empty). Repo
+        # scope already raised above; this is org scope.
+        if skipped:
+            reasons = "; ".join(f"{s.repo}: {s.reason}" for s in skipped)
+            raise ForgeError(f"no repo of {scope.owner} could be read — {reasons}")
+        raise ForgeError(f"{scope.owner} has no non-archived repos to triage")
     links = invert(parsed_prs, scope)
 
     def linked(repo: str, number: int) -> list[PullRequest]:

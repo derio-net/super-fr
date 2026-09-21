@@ -180,3 +180,20 @@ def test_an_unviewed_judgement_is_reported_verbatim_and_still_writes(
     assert "[rate limit] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["unviewed"] == [{"key": "super-fr#430", "reason": "[rate limit] [/red]"}]
+
+
+def test_org_scope_with_every_repo_skipped_exits_2_with_the_reasons(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r-p2-empty: an empty board would look like a clean backlog."""
+    forge = _Forge(fail_with="[no access] [/red]")
+    forge.list_repos = lambda *, owner, limit: [  # type: ignore[method-assign]
+        {"name": "beta", "isArchived": False}
+    ]
+
+    result = _run(monkeypatch, forge, "--org", "example-org", "--dir", str(tmp_path))
+
+    assert result.exit_code == 2
+    assert "example-org/beta" in result.output
+    assert "[no access] [/red]" in result.output
+    assert not (tmp_path / "facts.json").exists()

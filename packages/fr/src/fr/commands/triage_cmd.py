@@ -9,7 +9,8 @@ it never reads or writes a registered artifact (spec §3.F′).
 
 Exit codes: 0 success (skipped repos and truncation warnings are reported,
 not failed); 2 usage (not exactly one of --repo/--org), an unreadable
-judgements.yaml, or a forge failure in repo scope.
+judgements.yaml, a forge failure in repo scope, or an org scope in which
+no repo could be read (review r-p2-empty).
 """
 
 from __future__ import annotations

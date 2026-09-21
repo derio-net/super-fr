@@ -500,3 +500,34 @@ def test_a_judged_key_differing_only_by_case_is_not_held_twice() -> None:
 
     assert [i.key for i in facts.issues] == ["repo#5"]
     assert forge.called("view_issue") == []
+
+
+# ------------------------------------------------ review r-p2-empty
+
+
+def test_org_scope_with_every_repo_skipped_is_an_error_naming_each_reason() -> None:
+    forge = _org_forge(
+        failing={
+            "example-org/alpha": "HTTP 403",
+            "example-org/beta": "issues are disabled",
+            "example-org/gamma": "HTTP 502",
+        }
+    )
+
+    with pytest.raises(ForgeError) as exc:
+        collect_facts(forge, ORG, now=NOW)
+
+    message = str(exc.value)
+    for repo, reason in [
+        ("example-org/alpha", "HTTP 403"),
+        ("example-org/beta", "issues are disabled"),
+        ("example-org/gamma", "HTTP 502"),
+    ]:
+        assert f"{repo}: {reason}" in message
+
+
+def test_org_scope_with_no_repos_at_all_is_an_error_not_a_clean_board() -> None:
+    forge = FakeForge(repos=[{"name": "old", "isArchived": True}], issues={}, prs={})
+
+    with pytest.raises(ForgeError, match="example-org"):
+        collect_facts(forge, ORG, now=NOW)
