@@ -532,6 +532,43 @@ def archived_run_path(repo_root: Path, run_id: str) -> Path:
     return repo_root / IMPLEMENTED_RUNS_REL / f"{run_id}.yaml"
 
 
+class _CursorDumper(yaml.SafeDumper):
+    """`SafeDumper`, except a multi-line string asks for a block literal."""
+
+
+def _represent_str(dumper: yaml.SafeDumper, value: str) -> yaml.ScalarNode:
+    # A cursor is git-tracked and read in diffs. The default renders a string
+    # ending in a newline as a quoted scalar folded over three lines — valid
+    # YAML that looks broken — and a failed step's output as one blob of `\n`
+    # escapes. `|` is a HINT: the emitter still falls back to a quoted scalar
+    # for what a block literal cannot carry (a leading space, a space before a
+    # newline, a control character), so the round trip stays exact either way.
+    style = "|" if "\n" in value else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+_CursorDumper.add_representer(str, _represent_str)
+
+
+def dump_cursor_yaml(data: dict) -> str:
+    """The ONE way a run cursor's mapping becomes text.
+
+    Both writers call it — `dump_run_state` and the 4 -> 5 body rewrite
+    (`fr.artifacts.run_unit_record`). A second spelling of these options is how
+    a migrated cursor would restyle itself on its first native save: a diff
+    nobody wrote. A block literal is never folded, whatever the line length —
+    folding is what `>` is for — so `width` stays at the default and no
+    single-line scalar already on disk is re-wrapped by this.
+    """
+    return yaml.dump(
+        data,
+        Dumper=_CursorDumper,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+
+
 def dump_run_state(state: RunState) -> str:
     """Canonical run-state YAML.
 
@@ -552,7 +589,7 @@ def dump_run_state(state: RunState) -> str:
         for unit in (record.get("units") or {}).values():
             if not unit.get("attempts"):
                 unit.pop("attempts", None)
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    return dump_cursor_yaml(data)
 
 
 def parse_run_state(text: str) -> RunState:

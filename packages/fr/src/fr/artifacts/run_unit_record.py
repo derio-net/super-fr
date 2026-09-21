@@ -103,7 +103,7 @@ def rewrite_to_unit_records(path: Path) -> None:
     before every command, and must not drag the run models in with it.
     """
     from fr.run.legacy import RunMigrationError, parse_run_state_v4, v4_to_v5
-    from fr.run.model import RunStateError
+    from fr.run.model import RunStateError, dump_cursor_yaml
 
     try:
         text = path.read_text()
@@ -131,10 +131,7 @@ def rewrite_to_unit_records(path: Path) -> None:
 
     if converted == data:
         return
-    write_text_atomic(
-        path,
-        yaml.safe_dump(converted, sort_keys=False, allow_unicode=True, default_flow_style=False),
-    )
+    write_text_atomic(path, dump_cursor_yaml(converted))
 
 
 RUN_UNIT_RECORD_MIGRATION = SchemaMigration(

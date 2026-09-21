@@ -40,68 +40,68 @@ steps:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:04+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 15382
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
       phase/2/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:05+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 27154
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
       phase/3/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:06+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 31133
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
       phase/4/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:06+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 25623
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
       phase/5/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:07+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 15585
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
       phase/6/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:50:08+00:00'
-          synthesized: true
           estimate:
             journal_entries: 48
             journal_lines: 533
             handoff_chars: 16587
             spec_bytes: 12378
             plan_bytes: 34103
+          synthesized: true
   journal-check:
     state: done
     at: '2026-09-20T16:50:09+00:00'

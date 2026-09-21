@@ -23,9 +23,8 @@ steps:
     state: done
     at: '2026-09-20T13:30:27+00:00'
     exit: 0
-    stdout: 'self-review passed
-
-      '
+    stdout: |
+      self-review passed
   implement:
     state: done
     at: '2026-09-20T17:13:02+00:00'
@@ -37,65 +36,65 @@ steps:
         state: done
         attempts:
         - dispatched: '2026-09-20T13:30:36+00:00'
-          synthesized: true
           estimate:
             journal_entries: 5
             journal_lines: 26
             handoff_chars: 2369
             spec_bytes: 18657
             plan_bytes: 36765
+          synthesized: true
       phase/1/review-phase:
         state: done
       phase/2/implement-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T13:53:11+00:00'
-          synthesized: true
           estimate:
             journal_entries: 11
             journal_lines: 89
             handoff_chars: 11791
             spec_bytes: 18657
             plan_bytes: 39425
+          synthesized: true
       phase/2/review-phase:
         state: done
       phase/3/implement-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T15:30:48+00:00'
-          synthesized: true
           estimate:
             journal_entries: 18
             journal_lines: 189
             handoff_chars: 12677
             spec_bytes: 18657
             plan_bytes: 44414
+          synthesized: true
       phase/3/review-phase:
         state: done
       phase/4/implement-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T15:53:43+00:00'
-          synthesized: true
           estimate:
             journal_entries: 25
             journal_lines: 264
             handoff_chars: 13613
             spec_bytes: 18657
             plan_bytes: 46597
+          synthesized: true
       phase/4/review-phase:
         state: done
       phase/5/implement-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:16:28+00:00'
-          synthesized: true
           estimate:
             journal_entries: 30
             journal_lines: 313
             handoff_chars: 22007
             spec_bytes: 19701
             plan_bytes: 49654
+          synthesized: true
       phase/7:
         state: manual
       phase/5/review-phase:
@@ -104,13 +103,13 @@ steps:
         state: done
         attempts:
         - dispatched: '2026-09-20T16:49:45+00:00'
-          synthesized: true
           estimate:
             journal_entries: 34
             journal_lines: 494
             handoff_chars: 46041
             spec_bytes: 19701
             plan_bytes: 49845
+          synthesized: true
       phase/6/review-phase:
         state: done
   deliver:

@@ -23,9 +23,8 @@ steps:
     state: done
     at: '2026-09-20T11:41:03+00:00'
     exit: 0
-    stdout: 'self-review passed
-
-      '
+    stdout: |
+      self-review passed
   implement:
     state: done
     at: '2026-09-20T14:31:19+00:00'
@@ -37,35 +36,35 @@ steps:
         state: done
         attempts:
         - dispatched: '2026-09-20T11:41:03+00:00'
-          synthesized: true
           estimate:
             journal_entries: 3
             journal_lines: 16
             handoff_chars: 967
             spec_bytes: 22783
             plan_bytes: 30440
+          synthesized: true
       phase/1/review-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T12:00:11+00:00'
-          synthesized: true
           estimate:
             journal_entries: 4
             journal_lines: 21
             handoff_chars: 1966
             spec_bytes: 22783
             plan_bytes: 32238
+          synthesized: true
       phase/2/implement-phase:
         state: done
         attempts:
         - dispatched: '2026-09-20T12:09:39+00:00'
-          synthesized: true
           estimate:
             journal_entries: 10
             journal_lines: 51
             handoff_chars: 8810
             spec_bytes: 23207
             plan_bytes: 32704
+          synthesized: true
       phase/2/review-phase:
         state: done
         attempts:

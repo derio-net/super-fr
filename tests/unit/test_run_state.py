@@ -441,3 +441,125 @@ def test_dispatch_record_harness_rejects_unknown() -> None:
 
     with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
         Attempt(dispatched="2026-09-20T09:00:00Z", harness="unknown")
+
+
+# --- multi-line strings render as block literals (PR #508 review) ----------
+#
+# A cursor is git-tracked and read in diffs. `safe_dump`'s default renders a
+# string ending in a newline as a single-quoted scalar folded over three lines
+# (valid YAML that LOOKS broken — the operator asked whether it was), and a
+# failed step's several lines of output as one double-quoted blob of `\n`
+# escapes and continuation backslashes.
+
+
+def _with_stdout(stdout: str) -> RunState:
+    state = _sample_state()
+    steps = dict(state.steps)
+    steps["plan-review"] = StepRecord(state="failed", exit=1, stdout=stdout)
+    return state.model_copy(update={"steps": steps})
+
+
+def test_multi_line_stdout_dumps_as_a_block_literal() -> None:
+    stdout = (
+        "plan self-review: 2 issue(s)\n"
+        " phase 1 task P1.T3 has no refactor step\n"
+        " phase 7 task P7.T2 has no refactor step\n"
+    )
+    text = dump_run_state(_with_stdout(stdout))
+
+    assert "    stdout: |\n" in text
+    assert "      plan self-review: 2 issue(s)\n" in text
+    assert "       phase 7 task P7.T2 has no refactor step\n" in text
+    assert "\\n" not in text
+    assert "\\\n" not in text
+
+
+def test_a_single_trailing_newline_no_longer_folds_a_quoted_scalar() -> None:
+    text = dump_run_state(_with_stdout("self-review passed\n"))
+
+    assert "    stdout: |\n      self-review passed\n" in text
+    assert "'self-review passed" not in text
+
+
+def test_a_single_line_string_is_still_plain() -> None:
+    text = dump_run_state(_with_stdout("self-review passed"))
+
+    assert "    stdout: self-review passed\n" in text
+
+
+# Block style is a HINT to PyYAML's emitter, which falls back to a quoted
+# scalar for anything a block literal cannot carry. Whatever it picks, the
+# string that comes back must be the string that went in — byte for byte,
+# chomping included — and the dump must be a fixed point.
+_AWKWARD = [
+    "one\n",
+    "one\ntwo",
+    "one\ntwo\n",
+    "one\ntwo\n\n",
+    "one\n\n\ntwo\n",
+    "\n",
+    "\n\n",
+    "\nleading blank\n",
+    "  leading spaces\nthen not\n",
+    "trailing space \nnext\n",
+    "tab\there\nnext\n",
+    "crlf\r\nnext\r\n",
+    "# looks like a comment\n- looks like a list\nkey: value\n",
+    "--- \n...\n",
+    "unicode ✓ — dash\nnext\n",
+    "ansi \x1b[31mred\x1b[0m\nnext\n",
+    "'single' and \"double\"\nnext\n",
+    "x" * 200 + "\n" + "y " * 100 + "\n",
+]
+
+
+@pytest.mark.parametrize("stdout", _AWKWARD, ids=[repr(s)[:24] for s in _AWKWARD])
+def test_every_stdout_round_trips_exactly(stdout: str) -> None:
+    state = _with_stdout(stdout)
+    text = dump_run_state(state)
+
+    back = parse_run_state(text)
+
+    assert back.steps["plan-review"].stdout == stdout
+    assert back == state
+    assert dump_run_state(back) == text
+
+
+def test_long_lines_inside_a_block_literal_are_not_folded() -> None:
+    line = "word " * 60 + "end"
+    text = dump_run_state(_with_stdout(f"{line}\nnext\n"))
+
+    assert f"      {line}\n" in text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "v4/2026-09-20-feat-phase-holder-identity.yaml",
+        "v4/2026-09-20-fix-fr-run-cursor-cluster.yaml",
+        "v3/2026-09-20-feat-bounded-executor-handoff.yaml",
+        "v2/2026-09-20-journal-require-reviews-v2.yaml",
+    ],
+)
+def test_the_migration_and_the_native_dump_are_one_writer(tmp_path: Path, name: str) -> None:
+    """Two writers put cursors on disk — `dump_run_state` and the 4 -> 5 body
+    rewrite. If only one learns a style, a cursor restyles itself the first
+    time it is saved after migrating: a diff nobody wrote."""
+    from fr.artifacts.run_unit_record import rewrite_to_unit_records
+
+    fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/run_cursors" / name
+    path = tmp_path / fixture.name
+    path.write_bytes(fixture.read_bytes())
+
+    rewrite_to_unit_records(path)
+    migrated = path.read_text()
+
+    if "phase-holder-identity" in name:  # the one whose `plan-review` printed a line
+        assert "    stdout: |\n      self-review passed\n" in migrated
+    assert "\\n" not in migrated
+    body = "\n".join(ln for ln in migrated.splitlines() if not ln.startswith("schema_version:"))
+    native = dump_run_state(parse_run_state(migrated))
+    native_body = "\n".join(
+        ln for ln in native.splitlines() if not ln.startswith("schema_version:")
+    )
+    assert body == native_body

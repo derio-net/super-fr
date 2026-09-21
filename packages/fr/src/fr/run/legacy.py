@@ -344,6 +344,12 @@ def _attach_cost(unit: dict[str, Any], key: str, snapshot: dict[str, Any]) -> No
     last["estimate"] = estimate
     if measured is not None:
         last["measured"] = measured
+    if "synthesized" in last:
+        # Key order is part of what lands on disk. The live model declares
+        # `synthesized` after the cost fields, so a rewrite that leaves it
+        # ahead of them is reordered by the cursor's first native save — a
+        # diff nobody wrote, on every migrated cursor.
+        last["synthesized"] = last.pop("synthesized")
 
 
 def _measured_or_none(key: str, snapshot: dict[str, Any]) -> dict[str, int] | None:
