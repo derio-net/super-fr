@@ -3232,10 +3232,12 @@ rows:
       and a repo whose issues cannot be read is reported rather than aborting the board
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm. Target ci: org-scope collect test with a failing repo
-      (Test Plan 2).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py
+    status: ci
+    notes: Org-scope collect with a failing repo recorded under skipped, plus cross-repo
+      PR links keyed on the reference's repository (spec §3.C, review r2).
   - id: triage-unranked-visible
     capability: Backlog triage
     acceptance: 'An issue with no ranking is never silently absent: it renders first,
@@ -3252,10 +3254,12 @@ rows:
       is derived from forge facts on every collect, never hand-set
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Born at brainstorm; decision d3. Target ci: one case per stage (Test Plan
-      3).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_stage.py
+    status: ci
+    notes: 'One case per row of spec §3.E: the six derived stages closed, merged, pr-ready,
+      pr-draft, blocked and backlog, plus a closed issue with an open PR staying closed.'
   - id: triage-untrusted-text-inert
     capability: Backlog triage
     acceptance: 'A board over an org''s issues is safe to open: titles, bodies and labels
