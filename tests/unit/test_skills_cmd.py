@@ -66,3 +66,11 @@ def test_no_direct_click_import_in_src() -> None:
         if re.search(r"^\s*(import click|from click)", p.read_text(), re.MULTILINE)
     ]
     assert not offenders, f"direct click imports: {offenders}"
+
+
+def test_skills_lists_fr_triage_with_its_verbs(capsys: pytest.CaptureFixture[str]) -> None:
+    """fr-triage ships with the `fr triage` engine, so `fr skills` names both."""
+    skills_cmd.skills()
+    out = capsys.readouterr().out
+    assert re.search(r"^\s*fr-triage\b", out, re.MULTILINE), out
+    assert "fr triage {collect,check,render}" in out

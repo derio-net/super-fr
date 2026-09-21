@@ -33,6 +33,7 @@ from fr.isolation.types import (
     resolve_profile,
     save_state,
 )
+from fr.plan_validator_wrapper import REPAIR_COMMAND
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -1334,8 +1335,7 @@ class LocalWorktreeDevcontainerTarget:
         if result.returncode != 0 or not line:
             raise IsolationError(
                 "plan repo has scripts/validate-plans.sh in the working tree but not in "
-                f"{ref}; run `bash ~/.claude/plugins/marketplaces/derio-net--super-fr/scripts/"
-                "install-validator-wrapper.sh` if needed, commit it to the isolation start "
+                f"{ref}; run `{REPAIR_COMMAND}` if needed, commit it to the isolation start "
                 "ref, then retry `fr isolation up`."
             )
         mode = line.split(maxsplit=1)[0]
@@ -1354,8 +1354,7 @@ class LocalWorktreeDevcontainerTarget:
         if not wrapper.is_file() or not (wrapper.stat().st_mode & 0o111):
             raise IsolationError(
                 f"existing isolation worktree {worktree} is missing executable "
-                "scripts/validate-plans.sh; run `bash ~/.claude/plugins/marketplaces/"
-                "derio-net/scripts/install-validator-wrapper.sh`, commit it on the worktree "
+                f"scripts/validate-plans.sh; run `{REPAIR_COMMAND}`, commit it on the worktree "
                 "branch, then retry `fr isolation up`."
             )
 
