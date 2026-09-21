@@ -355,8 +355,9 @@ strong{font-weight:600;color:#f2ecdd}.lead-in{color:var(--paper-dim)}
         knowing edit to the base clone.</p></div>
       <div class="esc"><div class="k">.fr-isolation-allow</div><p>A root glob-list for operator-managed paths
         (data, caches, memory) that legitimately live outside isolation.</p></div>
-      <div class="esc"><div class="k">self-heal</div><p>If no linked worktree survives, the companion Bash
-        guard fails <em>open</em> and clears its stale sentinel — never a deadlock.</p></div>
+      <div class="esc"><div class="k">self-heal</div><p>The Bash guard's sentinel records every workspace
+        your session bound. Until one exists, and while any survives, it stays armed; once they're <em>all</em>
+        gone, it retires and lets you through — never a deadlock.</p></div>
     </div>
   </div>
 </section>
