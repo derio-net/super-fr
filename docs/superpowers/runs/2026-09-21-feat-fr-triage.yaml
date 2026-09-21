@@ -3,13 +3,23 @@ run: 2026-09-21-feat-fr-triage
 workflow: fr-goal@1
 branch: feat/fr-triage
 started: '2026-09-21T16:47:13+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-21T16:47:24+00:00'
+    state: done
+    at: '2026-09-21T17:03:11+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-21-fr-triage-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-21T17:03:11+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-21T17:03:11+00:00'
+          harness: claude-code
+          session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
   plan:
     state: pending
   plan-review:

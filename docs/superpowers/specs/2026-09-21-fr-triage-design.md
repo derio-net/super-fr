@@ -76,10 +76,13 @@ Exactly one of `--repo OWNER/REPO` or `--org OWNER`. The scope names a directory
 
 | flag | scope | directory |
 |---|---|---|
-| `--repo derio-net/super-fr` | `derio-net--super-fr` | `$XDG_CACHE_HOME/fr/triage/derio-net--super-fr/` |
-| `--org derio-net` | `derio-net` | `$XDG_CACHE_HOME/fr/triage/derio-net/` |
+| `--repo derio-net/super-fr` | `derio-net--super-fr` | `$HOME/.cache/fr/triage/derio-net--super-fr/` |
+| `--org derio-net` | `derio-net` | `$HOME/.cache/fr/triage/derio-net/` |
 
-`$XDG_CACHE_HOME` defaults to `~/.cache`. The `<owner>--<repo>` form mirrors the marketplace
+`$HOME/.cache/fr` is fr's existing cache root — worktrees, sentinels, session bindings and the
+gc lock all live there, resolved through `fr.isolation.types._home()`. Triage joins that tree
+rather than honouring `XDG_CACHE_HOME`, which nothing else in `fr` reads; splitting fr's cache
+across two roots would be worse than either (spec-review `r1`). The `<owner>--<repo>` form mirrors the marketplace
 naming convention in `AGENTS.md`, so a scope name is never ambiguous between a repo and an org.
 `--dir <path>` overrides the location for an operator who wants the state in git.
 
@@ -106,6 +109,13 @@ have been cut short. `--pr-limit` raises the PR window for a repo with a long me
 The PR list is inverted into issue → PRs. This direction is deliberate: verified live on
 2026-09-21, `closingIssuesReferences` on a PR reliably names the issues it closes, while the
 per-issue `closedByPullRequestsReferences` is the expensive direction.
+
+**The inversion keys on the reference's own repository, never the PR's** (spec-review `r2`).
+Each reference carries `repository.owner.login` and `repository.name`, and a PR in one repo can
+close an issue in another. Keying on the PR's repo would attach an org's cross-repo PRs to
+whatever same-numbered issue sat in the wrong repo — a plausible, wrong board. A reference whose
+repository is outside the scope is dropped: in repo scope that means any other repo, in org scope
+any other owner.
 
 Org scope enumerates repos with the existing `fr.gh.list_repos(owner=)`, which already excludes
 archived repos. A repo whose issue list fails — issues disabled, no access — is recorded under
@@ -179,6 +189,25 @@ preference.
 It exits 0 in every case. The sets are the work queue for the skill, not a failure. `--json`
 emits them for machine use.
 
+**Every forge-sourced string `check` prints goes through `rich.markup.escape`** (spec-review
+`r7`). Issue titles are arbitrary text, and rich parses `[...]` as markup, so a title like
+`[manual] …` would silently lose its prefix and one containing `[/red]` would raise
+`MarkupError`. That is exactly #525's defect class, open in ~44 existing sites. This command must
+not become the 45th.
+
+### F′. Exempt from the migration gate, on the list's own criterion
+
+`fr.artifacts.trigger.READ_ONLY_COMMANDS` holds the commands that "promise not to mutate the
+repo's artifacts" — `status`, `skills`, `isolation`, `init`, `validate`, `harness`. `triage`
+meets that promise strictly: it never reads or writes a registered artifact, and every file it
+writes is under its own state directory (spec-review `r3`).
+
+Leaving it gated would refuse an agent's triage — commonly an org triage run from inside some
+unrelated repo — over stale artifacts the command never touches. That refusal protects nothing.
+The gate exists so that no command proceeds *over* a stale artifact, and triage cannot. The list
+is pinned by `test_the_exemption_list_is_exactly_these_things`, so this argument lands as a diff
+to that test, which is the rule's intended cost for widening it.
+
 ### G. `render` — deterministic, self-contained, safe
 
 One HTML file, following `fr.acceptance.report`'s pattern: a pure Python renderer, inline CSS,
@@ -241,10 +270,16 @@ It drives `collect → check → judge the unranked → render --open`, and trea
    inversion, the most-advanced-PR rule, body truncation, both `--limit` values actually passed,
    and the possibly-truncated warning when a list returns exactly its limit.
 2. Unit, `collect` in org scope: a repo whose issue list fails lands in `skipped` with its reason,
-   and the other repos still collect.
+   and the other repos still collect. A PR in repo A whose `closingIssuesReferences` names an
+   issue in repo B attaches to **B's** issue, not to A's same-numbered one, and a reference to a
+   repo outside the scope is dropped (`r2`).
 3. Unit, stage derivation: one case per row of §3.E, including "a merged PR naming a still-open
    issue" → `merged`.
-4. Unit, `check`: the unranked, settled and orphaned sets, and exit 0 in every case.
+4. Unit, `check`: the unranked, settled and orphaned sets, and exit 0 in every case. An issue
+   titled `[manual] x [/red]` prints verbatim and does not raise (`r7`).
+4a. Unit: `triage` is in `READ_ONLY_COMMANDS`, and the pinned exemption-list test is updated
+   with the argument from §3.F′ (`r3`). The state directory is `$HOME/.cache/fr/triage/<scope>`
+   under a sandboxed `HOME` (`r1`).
 5. Unit, `render`: an unranked issue renders in the first tier; a judged one renders in its own
    tier.
 6. Unit, `render`: an issue title of `<script>alert(1)</script>` and a body containing
