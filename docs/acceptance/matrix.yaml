@@ -3378,3 +3378,14 @@ rows:
     notes: 'Written as an open record plus a tracked_by token so released fr (verified:
       4.13.2) reads it without error and fails closed. Motivated by super-fr#535''s
       finding being mislabelled refuted.'
+  - id: down-all-blast-radius
+    capability: Isolation guard
+    acceptance: fr isolation down --all shows what it will tear down and refuses to
+      tear down another session's workspace without --yes
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-sentinel-three-states-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: 'Split from #432; #533.'

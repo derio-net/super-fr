@@ -421,12 +421,25 @@ def down(
     session: str | None = typer.Option(
         None,
         "--session",
-        help="The calling session; excluded from the still-attached warning.",
+        help="The calling session; excluded from the still-attached warning, "
+        "and (with --all) from the --yes confirmation.",
     ),
     worktree: Path | None = typer.Option(
         None,
         "--worktree",
         help="Resolve the workspace by its worktree path (WorktreeRemove hooks).",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="With --all: list what would be torn down or kept (and which "
+        "sessions are bound to each); change nothing.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="With --all: confirm tearing down workspaces bound to a session "
+        "other than --session (refused with exit 2 otherwise).",
     ),
 ) -> None:
     """Stop the container, remove the worktree, drop the state.
@@ -442,19 +455,25 @@ def down(
     With --all, ignore --branch: tear down all workspaces — keeping any that a
     guard refuses (an open PR, or a reap hazard: uncommitted changes, or
     content not yet on origin) unless --force — and clear this repo's
-    pipeline sentinel(s).
+    pipeline sentinel(s). It first prints its blast radius (per workspace:
+    tear down or keep-and-why, plus bound sessions); --dry-run stops there.
+    Tearing down a workspace bound to a session other than --session (any
+    bound session, without --session) needs --yes, else exit 2 (#533).
 
     Bound sessions (spec 2026-09-04 §5.A): every session attached to the
     workspace is unbound; those other than `--session` are named in a warning
     (never a refusal — liveness is unknowable here).
     """
+    if dry_run and not all_:
+        # A dry run that silently acted would be the worst possible failure.
+        _fail(IsolationError("--dry-run is only supported with --all."))
     if worktree is not None:
         state = _resolve_by_worktree(worktree)
         root = state.repo_root
     else:
         root = _resolve_repo(repo)
         if all_:
-            _down_all(root, force=force)
+            _down_all(root, force=force, session=session, dry_run=dry_run, yes=yes)
             return
         state = _resolve_single(root, branch)
     others = [b.session_id for b in state.sessions if b.session_id != session]
@@ -483,8 +502,37 @@ def down(
     typer.echo(f"isolation down: {state.branch} cleaned up.")
 
 
-def _down_all(root: Path, force: bool) -> None:
+def _down_refusal(target: Target, state: IsolationState, force: bool) -> str | None:
+    """Read-only prediction of whether `target.down` would refuse `state`.
+
+    `--force` bypasses every guard, so nothing is kept. A target without the
+    probe (test doubles) is predicted to proceed; the live `down` still has
+    the final word and a refusal there is reported as kept."""
+    if force:
+        return None
+    probe = getattr(target, "down_refusal", None)
+    return probe(state) if probe is not None else None
+
+
+def _sessions_text(state: IsolationState) -> str:
+    return ", ".join(b.session_id for b in state.sessions) or "none"
+
+
+def _down_all(
+    root: Path,
+    force: bool,
+    session: str | None = None,
+    dry_run: bool = False,
+    yes: bool = False,
+) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
+
+    Blast radius first (#533): every workspace is classified (tear down, or
+    keep and why) by the same guards `down` enforces, and printed with its
+    bound sessions BEFORE anything is touched. `--dry-run` stops there.
+    Tearing down a workspace bound to any session other than `--session` is
+    refused (exit 2, nothing changed) unless `--yes` — non-interactive by
+    design, since agents and CI are the callers.
 
     A workspace `down` refuses is KEPT (never silently destroyed) unless
     --force. An open PR is no longer the only reason `down` can refuse
@@ -497,9 +545,41 @@ def _down_all(root: Path, force: bool) -> None:
     lazy backstop.
     """
     target = _target_or_exit(root)
+    plan = [(state, _down_refusal(target, state, force)) for state in list_states(root)]
+    header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
+    typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
+    for state, refusal in plan:
+        if refusal is None:
+            typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
+        else:
+            first = refusal.splitlines()[0] if refusal else ""
+            typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
+    foreign = [
+        (state.branch, [b.session_id for b in state.sessions if b.session_id != session])
+        for state, refusal in plan
+        if refusal is None
+    ]
+    foreign = [(branch, sids) for branch, sids in foreign if sids]
+    foreign_text = "; ".join(f"{branch} (sessions: {', '.join(s)})" for branch, s in foreign)
+    if dry_run:
+        if foreign:
+            typer.echo(f"would require --yes — bound to another session: {foreign_text}")
+        typer.echo("dry run: nothing changed.")
+        return
+    if foreign and not yes:
+        _fail(
+            IsolationError(
+                "down --all would tear down workspace(s) bound to another session: "
+                f"{foreign_text}. Nothing was changed. Re-run with --yes to confirm, "
+                "or `fr isolation down --branch <b>` for just your own."
+            )
+        )
     torn: list[str] = []
     kept: list[tuple[str, str]] = []
-    for state in list_states(root):
+    for state, refusal in plan:
+        if refusal is not None:
+            kept.append((state.branch, refusal))
+            continue
         try:
             target.down(state, force=force)
             torn.append(state.branch)

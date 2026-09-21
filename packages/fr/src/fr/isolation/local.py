@@ -811,6 +811,27 @@ class LocalWorktreeDevcontainerTarget:
         self._down_worktree_tail(state, force)
         self._spawn_gc()
 
+    def _open_pr_refusal(self, state: IsolationState) -> str | None:
+        """The open-PR guard's refusal text, or None when no PR is open."""
+        pr = self._pr(state)
+        if pr and pr.get("state") == "OPEN":
+            return (
+                f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
+                "the operator may push to it. Re-run with --force to tear down anyway."
+            )
+        return None
+
+    def down_refusal(self, state: IsolationState) -> str | None:
+        """PURE QUERY (#533): the reason a non-forced `down` would refuse this
+        workspace, or None if it would proceed. Asks the SAME two guards, in
+        the same order, that `_down_worktree_tail` enforces — so `down --all`'s
+        blast-radius listing predicts rather than guesses."""
+        open_pr = self._open_pr_refusal(state)
+        if open_pr is not None:
+            return open_pr
+        hazard = self._reap_hazard(state)
+        return hazard.detail if hazard is not None else None
+
     def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
         """PR guard → reap-hazard guard → environment teardown → verified
         worktree removal → marker + state retirement. Shared with
@@ -818,12 +839,9 @@ class LocalWorktreeDevcontainerTarget:
         difference is `_teardown_container`, which the host-worktree mode
         overrides to a no-op (no docker), so both guards, the post-condition
         verification, and the marker/state cleanup stay identical across modes."""
-        pr = self._pr(state)
-        if pr and pr.get("state") == "OPEN" and not force:
-            raise IsolationError(
-                f"PR for {state.branch} is still open ({pr.get('url', '?')}) — "
-                "the operator may push to it. Re-run with --force to tear down anyway."
-            )
+        open_pr = self._open_pr_refusal(state)
+        if open_pr is not None and not force:
+            raise IsolationError(open_pr)
         if not force:
             hazard = self._reap_hazard(state)
             if hazard is not None:
