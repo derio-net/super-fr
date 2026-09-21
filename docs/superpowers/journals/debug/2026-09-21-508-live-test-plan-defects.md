@@ -94,3 +94,12 @@ _open_dispatch resolves a model only when the attempt has an agent_type. An orch
 Failing-first: tests/unit/test_run_orchestrator_model.py - 2 red on exactly `'claude-opus-5' is None`, 2 controls green (the dispatched executor keeps its tier's model; a reported model survives). 1124 run/model/telemetry tests green after.
 
 Left alone, deliberately: cursors that already carry the false value (a repair would have to guess which unclaimed models were derived; archived cursors are frozen by rule), and provenance on executor attempts (a new Attempt field = a `run` shape change). An executor's derived model is what the dispatch asked for; whether the harness honoured it is observable only from its transcript, which telemetry already reads for tokens - a possible follow-up, not this fix.
+
+<!-- fr:journal kind=finding scope=debug id=c4-fixed created=2026-09-21T14:38:04 state=fixed -->
+### c4-fixed · finding [fixed] · C4 fixed: the bash guard treats fr run start as the isolation-entering command it is
+
+fr-isolation-guard.sh allows `fr run start` from the base clone, beside the existing `fr init|skills|--version` allowance. It does not retire the sentinel. `start` only: `adopt` deliberately writes where it is run, and every other run verb stays gated and belongs in the workspace `start` prints. `fr models resolve` stays gated too - fr-goal runs it after `start`, from the workspace.
+
+Failing-first: TestRunStartEntersIsolation in tests/unit/test_hooks_guard.py - 2 red (plain and behind `uv run`), 7 green before and after (advance/resolve/adopt/status, the near-misses `fr run startle` and `fr runs start`, and the sentinel surviving). The original repro - a repo that already has someone else's linked worktree - now allows start and still denies the rest. Hermes' guard blocks only git/gh mutations and never denied this; the OpenCode port does not gate bash. So the fix is this one script.
+
+Still open, by decision not oversight: the #341 self-heal retiring a FRESH pipeline's sentinel in a worktree-less repo (see c4-root-cause).
