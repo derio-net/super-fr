@@ -197,3 +197,82 @@ def test_org_scope_with_every_repo_skipped_exits_2_with_the_reasons(
     assert "example-org/beta" in result.output
     assert "[no access] [/red]" in result.output
     assert not (tmp_path / "facts.json").exists()
+
+
+# ------------------------------------------------ review r-p3-softwrap
+#
+# rich hard-wraps at the terminal width, which splits a forge or judgement
+# string across lines and breaks verbatim output. Every print of such text uses
+# soft_wrap=True. tests/conftest.py pins COLUMNS=200 for the whole suite, so
+# these tests narrow it to 40 themselves, or they would prove nothing.
+
+
+@pytest.fixture
+def narrow(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLUMNS", "40")
+
+
+LONG = (
+    "[denied] the forge refused this request for a reason long enough that rich "
+    "would split it across two lines at eighty columns"
+)
+
+
+def _judged_430(tmp_path: Path) -> None:
+    (tmp_path / "judgements.yaml").write_text(
+        'schema: 1\ntiers: [{n: 1, title: T}]\nissues:\n  "super-fr#430": {tier: 1}\n',
+        encoding="utf-8",
+    )
+
+
+def test_a_long_skipped_reason_prints_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, narrow: None
+) -> None:
+    result = _run(
+        monkeypatch, _Forge(fail_with=LONG), "--org", "example-org", "--dir", str(tmp_path)
+    )
+
+    assert result.exit_code == 0, result.output
+    assert LONG in result.output
+
+
+def test_a_long_unviewed_reason_prints_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, narrow: None
+) -> None:
+    _judged_430(tmp_path)
+    forge = _Forge()
+
+    def view_issue(*, repo: str, number: int) -> dict[str, Any]:
+        raise ForgeError(LONG)
+
+    forge.view_issue = view_issue  # type: ignore[method-assign]
+    result = _run(monkeypatch, forge, "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
+
+    assert result.exit_code == 0, result.output
+    assert LONG in result.output
+
+
+def test_a_long_forge_error_prints_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, narrow: None
+) -> None:
+    result = _run(
+        monkeypatch, _Forge(fail_with=LONG), "--repo", "derio-net/super-fr", "--dir", str(tmp_path)
+    )
+
+    assert result.exit_code == 2
+    assert LONG in result.output
+
+
+@pytest.mark.parametrize("command", ["check", "render"])
+def test_an_unreadable_state_file_error_prints_on_one_line(
+    tmp_path: Path, command: str, narrow: None
+) -> None:
+    """_load_state's TriageError quotes the state file's path; it must not be split."""
+    (tmp_path / "facts.json").write_text("{}", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app, ["triage", command, "--repo", "derio-net/super-fr", "--dir", str(tmp_path)]
+    )
+
+    assert result.exit_code == 2
+    assert f"{tmp_path / 'facts.json'}: " in result.output

@@ -72,13 +72,16 @@ def _scope(repo: str | None, org: str | None) -> Scope:
     if repo is not None:
         if repo.count("/") != 1 or not all(repo.split("/")):
             err_console.print(
-                f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}"
+                f"[red]error:[/red] --repo must be OWNER/REPO, got {escape(repr(repo))}",
+                soft_wrap=True,
             )
             raise typer.Exit(code=2)
         return Scope(kind="repo", target=repo)
     assert org is not None
     if not org or "/" in org:
-        err_console.print(f"[red]error:[/red] --org must be an OWNER, got {escape(repr(org))}")
+        err_console.print(
+            f"[red]error:[/red] --org must be an OWNER, got {escape(repr(org))}", soft_wrap=True
+        )
         raise typer.Exit(code=2)
     return Scope(kind="org", target=org)
 
@@ -86,17 +89,21 @@ def _scope(repo: str | None, org: str | None) -> Scope:
 def _report(facts: Facts) -> None:
     """Print what the forge could not give; every forge-sourced string escaped (r7)."""
     for s in facts.skipped:
-        err_console.print(f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}")
+        err_console.print(
+            f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}", soft_wrap=True
+        )
     for u in facts.unviewed:
         err_console.print(
             f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "
-            "(judged, but the forge would not show it; not treated as orphaned)"
+            "(judged, but the forge would not show it; not treated as orphaned)",
+            soft_wrap=True,
         )
     for w in facts.warnings:
         err_console.print(
             f"[yellow]warning:[/yellow] the {w.source} list for {escape(w.target)} returned "
             f"exactly its limit ({w.limit}), so it is possibly truncated"
-            + (" — raise it with --pr-limit" if w.source == "prs" else "")
+            + (" — raise it with --pr-limit" if w.source == "prs" else ""),
+            soft_wrap=True,
         )
 
 
@@ -119,7 +126,7 @@ def collect_command(
             make_forge(), scope, now=datetime.now(UTC), judged=judged, pr_limit=pr_limit
         )
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}")
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
@@ -128,7 +135,7 @@ def collect_command(
     )
     _report(facts)
     n_open = sum(1 for i in facts.issues if i.state == "open")
-    console.print(f"wrote {out} ({n_open} open issues)", markup=False)
+    console.print(f"wrote {out} ({n_open} open issues)", markup=False, soft_wrap=True)
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
@@ -155,7 +162,7 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
             else Judgements.model_validate({"schema": 1})
         )
     except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}")
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
         raise typer.Exit(code=2) from exc
     return target_dir, facts, judgements
 
@@ -201,6 +208,6 @@ def render_command(
     target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
     out = target_dir / "triage.html"
     out.write_text(render(facts, judgements), encoding="utf-8")
-    console.print(f"wrote {out} ({len(facts.issues)} issues)", markup=False)
+    console.print(f"wrote {out} ({len(facts.issues)} issues)", markup=False, soft_wrap=True)
     if open_:
         webbrowser.open(out.resolve().as_uri())
