@@ -131,8 +131,13 @@ readable repo.
 
 **A judged issue that could not be viewed is recorded, not dropped** (review `r-p2-unviewed`).
 `view_issue` fails for a deleted issue, and also for a rate limit, a 5xx or a token without access.
-Only the forge can tell those apart, and it does not. So every failure is recorded under
-`unviewed` with its key and reason. `check` reports those separately, and never as orphaned. A repo whose issue list fails — issues disabled, no access — is recorded under
+The forge's reply does distinguish them, but only as prose (`Could not resolve to an issue…` for a
+missing one), and fr does not classify on error strings, which are brittle. So every failure is
+recorded under `unviewed` with its reason verbatim. `check` reports it as unreachable, never as
+orphaned, and the skill tells the agent to confirm a not-found reason before recommending removal
+(the GREEN run and the phase-4 review showed this sentence originally overstated the forge).
+
+A repo whose issue list fails — issues disabled, no access — is recorded under
 `skipped` with its reason and the collection continues. One unreadable repo never aborts the
 board.
 
@@ -204,11 +209,19 @@ preference.
 - **unranked** — in `facts`, with no judgement. These are the rows the board silently lacked.
 - **settled** — judged, and now `closed` or `merged`. Kept and rendered as done; listed so the
   agent can note what shipped.
-- **orphaned** — a judgement whose issue collect could not find at all, such as a deleted issue
-  or a typo'd key. A judgement is **not** orphaned when its issue is in `unviewed` (the forge
-  failed to answer) or when its repo is in `skipped`. Those are reported as **unreachable**, with
-  the reason, because pruning a judgement over a transient failure would destroy the ranking
-  (review `r-p2-unviewed`).
+- **orphaned** — a judgement whose key names **no repo collect read**: a typo'd or renamed repo,
+  or one outside the scope. That is its only meaning, which makes it the only set an agent may act
+  on without asking the forge again.
+- **unreachable** — a judgement collect could not settle either way, reported with its reason:
+  its issue is in `unviewed` (the forge would not show it, including a deleted issue or a typo'd
+  number, whose reason says so), its repo is in `skipped`, or its key names a collected repo but
+  was added after the last collect (reason: "judged after the last collect"). Pruning on any of
+  these would destroy a ranking over a transient failure or stale facts (reviews `r-p2-unviewed`,
+  phase-4 C1 and C2).
+
+A deleted issue is therefore unreachable, not orphaned. An earlier draft said the opposite, and
+it was wrong: collect views every judged key in a collected repo, so a deleted issue always
+reaches `unviewed`. Only a key whose repo was never read can be absent without a recorded reason.
 
 It exits 0 in every case. The sets are the work queue for the skill, not a failure. `--json`
 emits them for machine use.

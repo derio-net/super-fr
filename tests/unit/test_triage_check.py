@@ -90,10 +90,13 @@ def test_a_judged_issue_now_closed_or_merged_is_settled(how: str) -> None:
     assert result.unranked == [] and result.orphaned == []
 
 
-def test_a_judgement_found_nowhere_is_orphaned() -> None:
-    result = classify(_facts([_issue(1)]), _judgements("super-fr#1", "super-fr#404"))
+def test_a_judgement_naming_no_collected_repo_is_orphaned() -> None:
+    # A typo'd repo name. (This used super-fr#404 as "a deleted issue", but a real
+    # collect VIEWS a judged key in a collected repo, so a deleted issue lands in
+    # unviewed -> unreachable. The old state could not arise from collect — C1/C2.)
+    result = classify(_facts([_issue(1)]), _judgements("super-fr#1", "super-fx#404"))
 
-    assert result.orphaned == ["super-fr#404"]
+    assert result.orphaned == ["super-fx#404"]
     assert result.unreachable == []
 
 
@@ -115,10 +118,29 @@ def test_a_judgement_in_a_skipped_repo_is_unreachable_not_orphaned() -> None:
             "skipped": [Skipped(repo="derio-net/beta", reason="issues disabled").model_dump()],
         }
     )
-    result = classify(facts, _judgements("beta#4", "alpha#5"))
+    result = classify(facts, _judgements("beta#4", "gamma#5"))
 
-    assert result.orphaned == ["alpha#5"]
+    # gamma is no repo collect read, so gamma#5 is the one genuine orphan here.
+    # (This test used alpha#5 as its orphan, but alpha IS collected: it was
+    # asserting the defect the next test pins — phase-4 review C2.)
+    assert result.orphaned == ["gamma#5"]
     assert [(u.key, u.reason) for u in result.unreachable] == [("beta#4", "issues disabled")]
+
+
+def test_a_key_in_a_collected_repo_absent_from_the_facts_is_unreachable_not_orphaned() -> None:
+    """Phase-4 review C2: `check` reads the LAST collect's facts.
+
+    A key in a collected repo that collect never viewed was judged AFTER that
+    collect, so its absence is evidence about the facts, not about the issue.
+    Calling it orphaned invited the agent to prune a live judgement. Orphaned
+    now means exactly one thing: the key names no repo collect read.
+    """
+    result = classify(_facts([_issue(1)]), _judgements("super-fr#1", "super-fr#77", "super-fx#5"))
+
+    assert result.orphaned == ["super-fx#5"]
+    assert [u.key for u in result.unreachable] == ["super-fr#77"]
+    assert "after the last collect" in result.unreachable[0].reason
+    assert "fr triage collect" in result.unreachable[0].reason
 
 
 def test_keys_compare_through_the_one_normaliser() -> None:
@@ -142,7 +164,7 @@ JUDGED = """schema: 1
 tiers: [{n: 1, title: Data loss}]
 issues:
   "super-fr#3": {tier: 1}
-  "super-fr#404": {tier: 1}
+  "super-fx#404": {tier: 1}
   "super-fr#7": {tier: 1}
 """
 
@@ -179,7 +201,7 @@ def test_check_json_emits_the_four_sets(tmp_path: Path) -> None:
     data = json.loads(result.output)
     assert [i["key"] for i in data["unranked"]] == ["super-fr#1"]
     assert [i["key"] for i in data["settled"]] == ["super-fr#3"]
-    assert data["orphaned"] == ["super-fr#404"]
+    assert data["orphaned"] == ["super-fx#404"]
     assert data["unreachable"] == [{"key": "super-fr#7", "reason": "HTTP 502"}]
 
 

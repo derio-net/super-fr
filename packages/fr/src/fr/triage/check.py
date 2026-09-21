@@ -4,11 +4,15 @@ Pure: facts and judgements in, sets out. The command only formats them.
 
 - **unranked** — an open issue with no judgement;
 - **settled** — judged, and now `closed` or `merged`;
-- **orphaned** — a judgement whose issue collect could not find at all;
-- **unreachable** — a judgement whose issue the forge would not show
-  (`Facts.unviewed`) or whose repo was `Facts.skipped`. Never orphaned: pruning
-  a judgement over a transient failure would destroy the ranking
-  (review r-p2-check-sets).
+- **orphaned** — a judgement whose key names no repo collect read: a typo'd or
+  renamed repo, or one outside the scope. That is the ONLY meaning, so it is the
+  only set whose members are safe to fix or remove without asking the forge again;
+- **unreachable** — a judgement collect could not settle either way: the forge
+  would not show its issue (`Facts.unviewed`, whose reason may say the issue does
+  not exist — a deleted issue or a typo'd number), its repo was `Facts.skipped`,
+  or its key names a collected repo but was added after the last collect. Never
+  orphaned: pruning a judgement over a transient failure, or over stale facts,
+  would destroy the ranking (reviews r-p2-check-sets, phase-4 C1/C2).
 
 Every key comparison goes through `fr.triage.model.normalize_key` (or
 `issue_key`, which is built on it). There is no second normaliser here.
@@ -22,6 +26,13 @@ from typing import Any
 from fr.triage.model import Facts, Issue, Judgements, issue_key, normalize_key
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
+
+JUDGED_AFTER_COLLECT = "judged after the last collect; run `fr triage collect` again to settle it"
+"""Reason for a key in a collected repo that the last collect never viewed.
+
+`check` reads the facts of the LAST collect, and collect only views the judged
+keys it knew about. A key added since is absent because the facts predate it,
+which says nothing about whether its issue exists (phase-4 review C2)."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +70,9 @@ def _unreachable_reason(key: str, facts: Facts) -> str | None:
         for s in facts.skipped:
             if issue_key(s.repo, int(number)) == key:
                 return s.reason
+        for repo in facts.collected:
+            if issue_key(repo, int(number)) == key:
+                return JUDGED_AFTER_COLLECT
     return None
 
 

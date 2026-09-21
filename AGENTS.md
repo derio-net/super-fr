@@ -106,8 +106,11 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
     touches a registered artifact), so the migration gate never refuses it.
     `check` reports four sets and always exits 0: unranked, settled,
-    orphaned (the only prune candidate) and unreachable (the forge failed to
-    answer or the repo was skipped — never prune those).
+    orphaned (the key names no repo collect read — the only set safe to act
+    on without the forge) and unreachable (the forge would not show the issue,
+    the repo was skipped, or the key was judged after the last collect). A
+    DELETED issue is unreachable, not orphaned: collect views every judged key
+    in a collected repo, so its failure is always recorded.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)

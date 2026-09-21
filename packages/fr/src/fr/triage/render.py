@@ -380,7 +380,11 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
     notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
     notes += [f"Skipped {esc(s.repo)}: {esc(s.reason)}" for s in facts.skipped]
     notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
-    notes += [f"Orphaned judgement {esc(k)}: its issue was not found." for k in result.orphaned]
+    notes += [
+        f"Orphaned judgement {esc(k)}: it names no repo this collect read"
+        " (a typo or a renamed repo)."
+        for k in result.orphaned
+    ]
     notes_html = (
         '<ul class="notes">' + "".join(f"<li>{n}</li>" for n in notes) + "</ul>" if notes else ""
     )

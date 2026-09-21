@@ -19,7 +19,7 @@ things. Route every triage through it. Your ranking goes into a file, never only
 
 Everything lives in one state directory, `$HOME/.cache/fr/triage/<scope>/`, where scope is
 `owner--repo` for `--repo OWNER/REPO` or `owner` for `--org OWNER`, lowercased (`--dir D`
-overrides it).
+overrides it). Pass the same `--repo`/`--org`, and `--dir` if you use it, to every command.
 
 | File | Written by | Holds |
 |---|---|---|
@@ -32,22 +32,27 @@ forge on every collect. Never set one, and never write facts yourself.
 
 ## The loop (a re-run of it is the sync)
 
-1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If it warns that a list
-   returned exactly its limit, re-run with a larger `--pr-limit` before judging anything.
+1. **Collect.** `fr triage collect --repo OWNER/REPO` (or `--org OWNER`). If it warns that the
+   **PR list** hit its limit, re-run once with `--pr-limit 1000`; if it still warns, go on and say
+   so in your report. An issue- or repo-list warning has no flag: go on, and say rows may be missing.
 2. **Check.** `fr triage check --repo OWNER/REPO [--json]` prints four sets and always exits 0:
    - **unranked**: open, with no judgement. This is your work queue.
    - **settled**: judged, now closed or merged. Report what shipped; keep the judgement.
-   - **orphaned**: a judgement whose issue the forge no longer has (deleted, or a typo'd key).
-     The only candidate for removal, and only after you confirm the key is not a typo.
-   - **unreachable**: the forge failed to answer, or the repo was skipped. **Never prune an
-     unreachable judgement.** It is a transient failure, not a verdict.
-3. **Judge the unranked.** Read each one from `facts.json` and the code, and add it to
-   `judgements.yaml`. Leave existing judgements alone unless their facts changed.
+   - **orphaned**: the key names no repo collect read (a typo'd or renamed repo). Fix the key,
+     or remove it if the repo is gone. This is the only set you may act on without the forge.
+   - **unreachable**: collect could not settle it, and the reason is printed. A rate limit, a 5xx
+     or lost access is transient: **never prune on it**. "Judged after the last collect" means
+     collect again. A reason saying the issue does not exist is a deleted issue or a typo'd
+     number: confirm with `gh issue view`, then fix the number or recommend removing it.
+3. **Judge the unranked.** Read each from `facts.json` (bodies stop at 2,000 characters, so use
+   `gh issue view` when one is cut off) and the code, and add it to `judgements.yaml`; on a first
+   run, create the file with `schema: 1` and your `tiers` first. Leave existing judgements alone,
+   but compare every new issue against ALL of them: its likeliest duplicate is an old issue.
 4. **Render.** `fr triage render --repo OWNER/REPO --open` writes `triage.html` and opens it.
    Unranked issues render first, so an incomplete triage is visible on the board itself.
 
-To sync later, run the same loop. `check` names exactly what arrived, shipped or vanished since
-the last triage, so a refresh costs the delta, not the backlog.
+To sync later, run the same loop. `check` names exactly what arrived, shipped or could not be
+found since the last triage, so a refresh costs the delta, not the backlog.
 
 ## judgements.yaml
 
@@ -71,7 +76,8 @@ patterns:
   - {title: Remote state justifies local destruction, ids: ["super-fr#435"], body: "…"}
 ```
 
-Keys are case-insensitive, so two keys differing only by case are refused as a conflict.
+Set `ranked_at` to today whenever you add or change a judgement; the board shows it. Keys are
+case-insensitive, so two keys differing only by case are refused as a conflict.
 `detail`, `note` and pattern `body` interpret exactly two inline forms, `` `code` `` and
 `**bold**`; everything else is shown as literal text.
 
