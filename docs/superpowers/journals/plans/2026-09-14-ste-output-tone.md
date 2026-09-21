@@ -369,3 +369,8 @@ The repo has no commit-message lint and the release tag comes from pyproject.tom
 ### r8-i1-pr-body · finding [fixed] · I1 PR 474 still advertised the deleted forced style (phase 8)
 
 The deliver step ran at phase 4, before the 2026-09-15 reframe, so the body claimed a forced output style, a shipped rule, a phase-executor line and release 4.4.0. Fixed by running deliver again: the title and body are rebuilt from the durable journal and the current diff.
+
+<!-- fr:journal kind=discovery scope=plan id=merge-main-4-12 created=2026-09-21T09:59:48 -->
+### merge-main-4-12 · discovery · Merged origin/main at 4.12.0 into the branch
+
+Seventeen commits landed on main while the PR was open. The operator chose a merge over a rebase, so every branch commit and the SHAs this journal cites stay intact. Generated files took main and were regenerated. Two tests main had fixed the same way took main. fr-goal took main and got the contract and the row table again, at 120 lines. journal_cmd took main and got the warning hook again. The matrix merged by row id. The run cursor migrated to schema 5. The version moved to 4.13.0.
