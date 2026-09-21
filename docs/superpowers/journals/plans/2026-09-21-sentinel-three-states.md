@@ -29,3 +29,13 @@ The published page (https://derio-net.github.io/super-fr) says: 'self-heal — I
 ### 9fb4c022ffb2 · finding [open] · Skill mirrors are stale on purpose until P4.T1.S2 runs BOTH sync scripts
 
 Phase 2 edited plugins/super-fr/skills/fr-isolation/SKILL.md (the orphaned-sentinel recovery bullet), and the dispatch brief reserves the sync scripts for phase 4. So test_tripwire_opencode_skills_sync.py and test_tripwire_hermes_skills_sync.py are RED on this branch by design, and a full-suite run in phase 3 will show exactly two unexplained failures. Do not re-diagnose them: P4.T1.S2 runs scripts/sync-opencode.py AND scripts/sync-hermes.py (both — AGENTS.md records three sessions that ran only the first) and commits .opencode/skills/ + .hermes/skills/. The skill is back at exactly 120 lines, the cap test_skill_validation.py enforces.
+
+<!-- fr:journal kind=review scope=plan id=rev-p2 created=2026-09-21T17:25:33 phase=2 -->
+### rev-p2 · review · Phase 2 review (phase 2)
+
+Read guard diff vs spec 2.B/2.C. Findings raised: d8ac0b68f6bc (explainers page describes count heal). No logic defects: per-sentinel decision, pwd -P both sides, failed worktree list denies, only this sentinel removed, cd-target-gone branch precedes cross-repo branches, down --all only as warned last resort.
+
+<!-- fr:journal kind=finding scope=plan id=d8ac0b68f6bc-resolved created=2026-09-21T17:25:40 state=refuted resolves=d8ac0b68f6bc -->
+### d8ac0b68f6bc-resolved · finding [refuted] · resolves d8ac0b68f6bc: docs/explainers/fr-isolation.html still describes the count-based self-heal, and this repo cannot regenerate it
+
+docs/explainers/fr-isolation.html has no committed .md source (explainers-currency known gap 1) and hand-editing a rendered page is forbidden; a patch bump does not trigger the rule. Disclosed in the PR body: the published page still describes the count heal.
