@@ -2430,23 +2430,20 @@ rows:
       OpenCode, each recording its own harness and agent id
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-20-dispatch-holder-identity-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'LIVE-ONLY BY NATURE - stays not-implemented, re-confirmed at phase 7 (the
-      phase that closes this plan) rather than left unexamined. The claim is that two
-      DIFFERENT harnesses produce the same record shape, each recording its own harness
-      and agent id. No unit test can be that: a fixture asserting it would only assert
-      that fr writes what fr writes, and the harness value in such a fixture is one
-      fr itself put there. Deliberately left red when its three sibling rows moved to
-      ci in phase 6 - the unit tests that gate those rows say nothing about this one,
-      and flipping it on their evidence would report a live claim as verified.
-
-      What closes it: post-merge Test Plan items 13 and 14 - a real /fr-goal run on
-      Claude Code recording harness=claude-code with a real subagent task id, and the
-      same run shape on OpenCode recording harness=opencode with a child session id
-      - transcripts in the PR. Half of that is already true incidentally (this plan''s
-      own run cursor carries harness claude-code with real per-attempt agent ids), but
-      one harness is not parity.'
+    levels:
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-21-pr508-live-test-plan.md
+    status: skipped
+    notes: 'not-implemented -> skipped on 2026-09-21: driven live post-merge on the
+      installed fr 4.12.0, one throwaway one-phase /fr-goal per harness (Claude Code
+      and OpenCode; ids and the OpenCode model redacted in the evidence file). Both
+      wrote the same attempt keys, each DETECTING its own harness with no --harness
+      flag, and both refused a second advance with exit 2 naming the holder. skipped,
+      not ci: a manual live run no CI job can repeat. The run surfaced five defects
+      (C1-C5 in the evidence file), all fixed in #527 - notably that on OpenCode the
+      child session id is only returned when the blocking task tool returns, which fr
+      now states in the dispatch-holder-identity parity row. run-pickup-on-another-host
+      and run-idle-reprompt-opencode were NOT exercised and stay not-implemented.'
   - id: run-advance-refuses-running
     capability: Run state
     acceptance: An operator re-entering the loop cold is told to wait rather than handed
