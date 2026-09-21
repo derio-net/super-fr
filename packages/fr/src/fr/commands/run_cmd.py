@@ -2755,6 +2755,25 @@ def _resolve_member(
             "has exactly one writer; resolve the running unit first.[/red]"
         )
         raise typer.Exit(2)
+    # The unit must have been BRIEFED — checked AFTER the one-writer refusal
+    # above, so "run `fr run advance`" is only ever said when advance would
+    # actually brief it rather than refuse a held unit. The flat path has always refused a step
+    # that is not running ("advance first"); this path checked the group and
+    # the other units and never the unit itself, so a never-advanced unit went
+    # absent -> done with no attempt: no holder, no cost, and — for a review —
+    # evidence attached to work nothing records anyone being asked to do.
+    # `_close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
+    # cursors), so nothing downstream would ever notice; the check belongs
+    # here, before the write. A unit that is `running` with no record (adopted
+    # mid-flight) still resolves: it was briefed, just not by this cursor.
+    if items.get(key) in (None, "pending"):
+        err_console.print(
+            f"[red]{key}: refused — this unit was never briefed, so there is no dispatch "
+            f"to close and nothing to record an outcome for. Run `fr run advance "
+            f"{state.run}` first: it opens the unit and prints its brief.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
