@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
@@ -1673,3 +1674,105 @@ def test_add_resolves_refuses_an_id_not_in_this_journal(tmp_path: Path, monkeypa
     assert res.exit_code == 2, res.output
     assert "typoed-id" in res.output
     assert "reopen" not in _journal_file(root, "s").read_text()
+
+
+class TestResolveDeferred:
+    """`--state deferred --tracked-by <issue>`: a finding that is VALID but not
+    this change's to fix. With only fixed | refuted available, such findings
+    were closed as "refuted" to satisfy the gate — which says the finding was
+    wrong when it was not (super-fr#535 was closed that way, then corrected by
+    hand). A deferral must name where the work lives, so it cannot become a
+    quiet way to drop a finding."""
+
+    def _open(self, root: Path, monkeypatch) -> None:
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+
+    def _resolve(self, *args: str):
+        return runner.invoke(
+            app, ["journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1", *args]
+        )
+
+    def test_deferred_requires_tracked_by(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve("--state", "deferred", "--note", "later")
+        assert res.exit_code == 2
+        assert "--tracked-by" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    def test_tracked_by_is_only_for_a_deferral(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "fixed", "--tracked-by", "#9", "--note", "x")
+        assert res.exit_code == 2
+        assert "deferred" in res.output
+
+    @pytest.mark.parametrize("ref", ["", "soon", "#", "#12 later", "issue 12"])
+    def test_tracked_by_must_name_an_issue(self, tmp_path: Path, monkeypatch, ref: str) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "deferred", "--tracked-by", ref, "--note", "x")
+        assert res.exit_code == 2, res.output
+
+    @pytest.mark.parametrize(
+        "ref",
+        ["#535", "derio-net/super-fr#535", "https://github.com/derio-net/super-fr/issues/535"],
+    )
+    def test_a_deferral_closes_the_gate_and_says_where_it_went(
+        self, tmp_path: Path, monkeypatch, ref: str
+    ) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "deferred", "--tracked-by", ref, "--note", "valid; later")
+        assert res.exit_code == 0, res.output
+
+        entries = parse_journal(_journal_file(root, "S").read_text())
+        record = next(e for e in entries if e.resolves == "f1")
+        # Written as `open` + a token: an older fr ignores the token and reads the
+        # finding as still open (fails closed), never as closed and never as a
+        # parse error. The in-memory fold is what reads it as deferred.
+        assert record.state == "open" and record.tracked_by == ref
+
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert check.exit_code == 0, check.output
+        assert "deferred" in check.output and ref in check.output, "said, not hidden"
+
+        render = runner.invoke(
+            app, ["journal", "render", "--scope", "plan", "--slug", "S", "--section", "findings"]
+        )
+        assert f"[deferred → {ref}]" in render.output
+
+    def test_a_later_record_still_wins(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        self._resolve("--state", "deferred", "--tracked-by", "#9", "--note", "later")
+        reopen = runner.invoke(
+            app,
+            [
+                "journal",
+                "add",
+                "--scope",
+                "plan",
+                "--slug",
+                "S",
+                "--kind",
+                "finding",
+                "--title",
+                "back in scope",
+                "--state",
+                "open",
+                "--resolves",
+                "f1",
+                "--phase",
+                "1",
+            ],
+        )
+        assert reopen.exit_code == 0, reopen.output
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert check.exit_code == 1, "re-opened after a deferral: open again"
+        self._resolve("--state", "fixed", "--note", "done after all")
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert check.exit_code == 0

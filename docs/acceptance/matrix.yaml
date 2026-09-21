@@ -3363,3 +3363,18 @@ rows:
     notes: 'Tests pass: verify-merge --branch works on reaped workspace (no state file)
       by fetching origin, resolving ref (local then origin/branch), checking changes
       on origin/main, verifying PR merged.'
+  - id: journal-deferred-finding
+    capability: Journal
+    acceptance: A valid finding that belongs to another change is closed as deferred
+      with the issue that carries it — never recorded as refuted — and the gate says
+      so rather than hiding it
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gh-429-journal-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: 'Written as an open record plus a tracked_by token so released fr (verified:
+      4.13.2) reads it without error and fails closed. Motivated by super-fr#535''s
+      finding being mislabelled refuted.'
