@@ -3216,3 +3216,47 @@ rows:
       path is shared by every project in a container, and a probe showed project a importing
       a package only b declared. Existing containers must be recreated; profiles already
       scaffolded in consumer repos are not rewritten.'
+  - id: sentinel-three-state-guard
+    capability: Isolation state
+    acceptance: The guard decides pipeline sentinel state from its fields (fresh/live/orphaned),
+      not a worktree count, ending count-based self-heal false negatives (#472) and
+      false positives (#529)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#L199,unit=super-fr:tests/unit/test_sentinel_workspace_stamp.py
+    status: ci
+    notes: 'Tests pass: three-state heal replaces count-based self-heal; fresh never
+      healed, orphaned healed only for this session regardless of other sessions'' worktrees,
+      live stays denied, legacy unstamped stays armed, pwd -P both sides for symlinked
+      HOME.'
+  - id: guard-denial-truthful
+    capability: Isolation state
+    acceptance: 'Guard denial messages convey the true state: cd target gone says the
+      path no longer exists and points at recovery options; standard denial points first
+      at status/up, deprecates unconditional down --all (#432)'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.C
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#L362
+    status: ci
+    notes: 'Tests pass in TestDenialsSayTheTrueThing: cd <nonexistent path> says ''no
+      longer exists'' with recovery options; standard denial points at status/up first,
+      only warns about down --all effects.'
+  - id: verify-merge-after-gc
+    capability: Isolation state
+    acceptance: 'After gc has reaped a workspace, fr isolation verify-merge --branch
+      still works without state: it fetches origin, resolves the branch ref, verifies
+      the merge, and reports the workspace was already reaped'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py#L777
+    status: ci
+    notes: 'Tests pass: verify-merge --branch works on reaped workspace (no state file)
+      by fetching origin, resolving ref (local then origin/branch), checking changes
+      on origin/main, verifying PR merged.'
