@@ -39,7 +39,9 @@ issues:
   "super-fr#4":  {tier: 2, cx: L}
   "super-fr#5":  {tier: 2, cx: "-"}
 patterns:
-  - {title: A fact about remote state used to justify local destruction, ids: ["super-fr#435"], body: "x"}
+  - title: A fact about remote state used to justify local destruction
+    ids: ["super-fr#435"]
+    body: "x"
 """
 
 

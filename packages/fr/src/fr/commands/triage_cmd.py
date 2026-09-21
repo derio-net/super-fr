@@ -76,5 +76,7 @@ def collect_command(
         raise typer.Exit(code=2) from exc
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
-    out.write_text(json.dumps(facts, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    console.print(f"wrote {out} ({len(facts['issues'])} open issues)", markup=False)
+    out.write_text(
+        json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    console.print(f"wrote {out} ({len(facts.issues)} open issues)", markup=False)
