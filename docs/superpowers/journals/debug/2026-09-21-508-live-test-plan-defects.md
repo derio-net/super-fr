@@ -114,3 +114,16 @@ Hypothesis tested BEFORE any code: passing the variable by hand on `fr isolation
 Proven live, not only in unit tests: this workspace's container was removed and rebuilt from the committed profile (old container: variable absent; new: present), then the ORIGINAL repro repeated with nothing passed by hand - three container/host alternations, zero "Removed virtual environment" on either side, the container's env created once, the host's .venv link unchanged.
 
 Limits: a container's env is fixed at creation, so an EXISTING workspace keeps thrashing until its container is recreated; and profiles already scaffolded in consumer repos are not rewritten - `fr init migrate` was not extended. Other toolchains with the same shape (a node_modules holding native binaries) are not addressed; only uv was observed.
+
+<!-- fr:journal kind=finding scope=debug id=c1-fixed created=2026-09-21T14:44:52 state=fixed -->
+### c1-fixed · finding [fixed] · C1 fixed: fr states when a holder becomes nameable per harness, instead of describing the best case as the only one
+
+What fr SAYS now matches what was observed; fr's behaviour did not change, because it was not wrong.
+
+- parity.yaml gains its own interaction row, `dispatch-holder-identity`: claude-code enforced; opencode partial, with the live observation in its scope_note and what still holds (the unclaimed record refuses; harness and model are recorded at dispatch); hermes partial, saying plainly that when delegate_task yields its handle has not been observed. Its own row because dispatch IS enforced on OpenCode - one row could not say both. subagent-dispatch's summary points at it.
+- fr-goal no longer says "The moment a dispatch goes out, name its holder" - unfollowable where the dispatch call blocks. It says to claim as soon as the harness tells you who it is, and that a blocking dispatch is claimed when the call returns, before resolving. Both mirrors regenerated; the skill stays at 117 lines.
+- The explainer made the same unconditional claim in its own words; amended, with the C2 limit beside it. Baseline re-render byte-identical first; page diff is 20 lines added, 0 removed.
+
+Failing-first: tests/unit/test_parity_dispatch_holder.py, 7 red (no such row; no such prose in the skill or either mirror). One of my own assertions was too narrow ("not observed" vs the note's "has not been observed") and was corrected - the note said the right thing.
+
+NOT done, and it is the real closing of the gap: fr-opencode-plugin already tells child sessions from top-level ones (idle.ts isTopLevel) and sees a sessionID on every tool call, so it could claim on the child's first tool call. That needs a new CLI affordance (claim "the one open unclaimed unit") and cannot be live-verified from a Claude Code session. Recorded in the parity cell itself so it is found by whoever reads the limitation.

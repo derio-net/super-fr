@@ -353,6 +353,26 @@ an identity that only arrives on the way back cannot answer a question you have
 while you are waiting. <code>fr run status</code> then shows each phase with its holder and
 since when, and <code>fr run check</code> counts dispatches that are still open, or that
 nobody claimed, as visible debt rather than as errors.</p>
+<p>That last sentence about timing is true of some harnesses and not others, and
+the first live run on a second one is what showed it. Where dispatching hands
+back an identifier at once and lets the agent work in the background, you claim
+while you wait, exactly as described. Where the dispatch call <em>blocks</em> — it
+does not return until the agent has finished, and the identifier comes back
+with the result — there is no moment in between to claim in. The record is
+still opened, the harness and the model are still written down, and a second
+dispatch is still refused; but while the phase is running the honest answer to
+"who is holding this" is <em>an unclaimed agent on this harness</em>, and the name
+only arrives afterwards. The tool now says which harness is which, rather than
+describing the better case as if it were the only one.</p>
+<p>One more limit on what the record may say. The model written down is the one
+the phase's tier resolves to, and that is a fact about work that was
+<em>dispatched</em>. A step the orchestrating agent performs itself — a review it
+does inline, say — was never handed to a tier at all; it runs on whatever
+model that session happens to be using, which the tool cannot see. For a while
+it wrote the tier's model beside those steps anyway, and the archive of this
+very project holds seven reviews credited to a model that did not perform
+them. It now records a model only for work it actually dispatched, and leaves
+the rest blank unless the orchestrator says what it ran on.</p>
 <p>The same record doubles as a lock. Ask <code>fr run advance</code> to brief a phase whose
 dispatch is still open and it refuses: exit code 2, naming the holder, printing
 no brief at all. That refusal matters more here than it would elsewhere, because
