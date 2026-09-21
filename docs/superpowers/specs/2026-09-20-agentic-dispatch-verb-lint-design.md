@@ -121,11 +121,19 @@ work looked complete and the step was ticked.
 
 Recorded in `docs/superpowers/journals/specs/2026-09-20-agentic-dispatch-verb-lint.md`.
 
-- **d1-scope** — ship #428 items **1, 2 and 4**. Item 3
-  (`fr journal check --require-reviews`) is a new CLI surface and stays open as
-  its own issue. Rationale: a gate that errors without saying what to write
-  instead is half a fix, so the executor contract (2) and the fr-plan guidance
-  (4) are what make the lint (1) actionable.
+- **d1-scope** — ship #428 items **1, 2 and 4**. Rationale: a gate that errors
+  without saying what to write instead is half a fix, so the executor contract
+  (2) and the fr-plan guidance (4) are what make the lint (1) actionable.
+
+  **Item 3 has since shipped elsewhere and should not be filed as an issue.**
+  The decision deferred it as "a new CLI surface"; while this branch was in
+  flight, gh-503 (`One record per unit`, in 4.12.0) built it in a more general
+  form. `UnitRecord.evidence` maps an obligation name to a journal entry id
+  verified when the unit resolves, `_VERIFIABLE_EVIDENCE = ("review",
+  "findings")` is the closed vocabulary, and the shipped `fr-goal.yaml`
+  manifest declares `evidence: [review, findings]` on `review-phase`. That is
+  exactly #428 item 3's ask — a completed phase with no `review`-kind journal
+  entry cannot resolve — without a bespoke `--require-reviews` flag.
 - **d2-precision** — precision-first, **single error tier**. No warn tier
   (~240 warnings on this repo would train authors to ignore the output) and no
   per-step suppression marker (every super-fr plan touching dispatch would need
@@ -135,6 +143,17 @@ Recorded in `docs/superpowers/journals/specs/2026-09-20-agentic-dispatch-verb-li
   Rejected: a spec-scope override in the shape of `skeleton-override-<slug>` —
   more machinery, and it would let an agentic phase keep a step the executor
   still cannot perform, which is the defect itself.
+
+  **Narrowed after the fact, by a gate that shipped mid-flight.** #496 (also in
+  4.12.0) added `_manual_placement_issues`: no manual phase may be outstanding
+  when an agentic phase after it runs. So "a `[manual]` phase" is no longer
+  precise enough — it must be the plan's **trailing** manual phase, or one
+  already ticked (fr-goal §3's front-load shape). Demonstrated on the merged
+  code: a dispatch step moved into a mid-plan manual phase with agentic work
+  after it simply swaps this gate's error for #496's, which is not a remedy.
+  The lint's message, the fr-plan bullet and the CLI test all say TRAILING
+  now, and the test pins both issue numbers so the two gates cannot drift back
+  into contradicting each other.
 - **d4-tiers** — `claude-code/standard` rebound `claude-sonnet-5` →
   `claude-opus-5`; `hard` already `claude-opus-5`, `mechanical` already
   `claude-sonnet-5`. All three tiers bound, so no phase dispatch in this run
@@ -260,9 +279,15 @@ phase 3 (agentic) step P3.T1.S2 tells the phase executor to dispatch a
 subagent (matched 'Dispatch `blog-craft:post-researcher`') — fr-phase-executor
 has no Agent tool (OpenCode: task: deny) and cannot dispatch anything, so this
 step is unexecutable by construction (#428). Name the OUTCOME instead ("gather
-file:line-cited evidence following <protocol>"), or move the dispatch into a
-[manual] phase.
+file:line-cited evidence following <protocol>"), or move the dispatch into the
+plan's TRAILING [manual] phase — a mid-plan [manual] phase with agentic work
+after it trades this error for the #496 placement one.
 ```
+
+The escape names the **trailing** phase deliberately; see d3. Pointing an author
+at "a `[manual]` phase" was correct when this spec was written and stopped being
+correct when #496's placement gate shipped, which is the ordinary hazard of one
+gate's remedy being another gate's input.
 
 **The precision claim is pinned in CI, not asserted.** A corpus test asserts
 **zero** hits over every plan folder under `docs/superpowers/plans/` and

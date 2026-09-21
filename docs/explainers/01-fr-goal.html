@@ -584,11 +584,7 @@ skips <code>fr-plan</code>'s usual section-by-section approval because the revie
 already records your decisions. Each phase carries its own checklist, tests,
 dependencies, and links to the acceptance criteria it advances
 (<code>plugins/super-fr/skills/fr-plan/SKILL.md:15-38</code>,
-<<<<<<< HEAD
-<code>plugins/super-fr/skills/fr-plan/SKILL.md:61-83</code>).</p>
-=======
-<code>plugins/super-fr/skills/fr-plan/SKILL.md:63-91</code>).</p>
->>>>>>> origin/main
+<code>plugins/super-fr/skills/fr-plan/SKILL.md:61-95</code>).</p>
 <p>Reviewing that plan is the shape's one command step, and a good illustration of
 why the distinction between kinds matters. <code>fr plan self-review</code> runs against
 the plan the previous step emitted, and its exit code decides whether the run
@@ -609,7 +605,7 @@ time, for the same reason it errors on manual work in an agentic phase: both
 assign work to an actor that cannot do it. The executor is told to refuse as
 well, and to leave the step unticked, because a tick is a claim of performance.
 It warns about unresolved local spec references
-(<code>packages/fr/src/fr/plan_ops.py:1079-1245</code>). The agent
+(<code>packages/fr/src/fr/plan_ops.py:1135-1311</code>). The agent
 fixes what it reports and advances the run again; there is nothing to record by
 hand, because a command step completes itself.</p>
 <h3>5. Separate work only a human can do (manual phases)</h3>

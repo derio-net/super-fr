@@ -1226,8 +1226,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
                             f"task: deny) and cannot dispatch anything, so this step "
                             f"is unexecutable by construction (#428). Name the "
                             f'OUTCOME instead ("gather file:line-cited evidence '
-                            f'following <protocol>"), or move the dispatch into a '
-                            f"[manual] phase."
+                            f'following <protocol>"), or move the dispatch into '
+                            f"the plan's TRAILING [manual] phase — a mid-plan "
+                            f"[manual] phase with agentic work after it trades this "
+                            f"error for the #496 placement one."
                         ),
                     )
                 )

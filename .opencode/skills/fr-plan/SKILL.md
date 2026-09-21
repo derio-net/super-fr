@@ -75,8 +75,8 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence following
   `<protocol>`", never "dispatch `<agent>`". A step naming the actor or the tool rots *silently*
   the moment either changes — the phase executor is a leaf, not an orchestrator, so it does the
-  nearest thing it can and ticks. `fr plan self-review` errors on a dispatch verb in an agentic
-  step (#428); genuine orchestrator-level dispatch belongs in a `[manual]` phase.
+  nearest thing it can and ticks. Self-review errors on a dispatch verb in an agentic step
+  (#428); real dispatch belongs in the TRAILING `[manual]` phase, never a mid-plan one (#496).
 - **Acceptance linkage:** a phase that advances a matrix row carries `acceptance: [row-ids]` in its
   header. `fr plan self-review` errors when the spec has a Test Plan but zero linked rows (matrix
   present) and on unknown ids. Planning may ADD rows (`fr acceptance add`, origin = spec) when

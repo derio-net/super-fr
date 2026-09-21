@@ -410,3 +410,13 @@ Found by the post-rebase full suite: a FOURTH failure beyond the three known one
 Worth noting the contrast with p4-status-claims-merged, because they look like the same defect and are not: this tripwire consults origin/main before using the word merged, so it correctly does NOT fire on this branch's own locally-complete-but-unmerged plan. It is the well-built version of the signal. fr status's sweep is the one that asserts a merge it never observed. The tripwire's design is what the status line should copy.
 
 Resolution is one housekeeping command by whoever owns that plan — fr archive 2026-09-20-phases-file-tier-reaches-dispatch — in its own PR. Surfaced to the operator rather than acted on.
+
+<!-- fr:journal kind=finding scope=plan id=5661437b7bff-resolved created=2026-09-21T14:31:37 state=fixed resolves=5661437b7bff -->
+### 5661437b7bff-resolved · finding [fixed] · resolves 5661437b7bff: Three unit tests already fail on this branch's base, before phase 1 touched anything
+
+Fixed ON MAIN, not by this branch. All three now pass after merging 4.8.1 -> 4.12.0: test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_directory_is_refused, ::test_an_external_marker_without_container_evidence_is_refused and test_workflow_check.py::test_cli_all_fails_when_nothing_is_discoverable. Verified by running exactly those three plus the tripwire on the merged tree: 47 passed. The root causes this finding recorded (rich wrap x long pytest tmp-root; the shape resolver's unneutralised marketplace-clone fallback) were real and were addressed upstream while this branch was in flight. Recording the resolution rather than deleting the finding: the analysis is what let this PR distinguish inherited red from its own, for four phases.
+
+<!-- fr:journal kind=finding scope=plan id=origin-main-tripwire-red-resolved created=2026-09-21T14:31:38 state=fixed resolves=origin-main-tripwire-red -->
+### origin-main-tripwire-red-resolved · finding [fixed] · resolves origin-main-tripwire-red: origin/main is red on test_no_merged_but_unarchived_plans — inherited, not caused here
+
+Fixed ON MAIN by #512, which archived 2026-09-20-phases-file-tier-reaches-dispatch — the merged-but-unarchived plan this finding named. test_tripwire_unarchived_plans.py::test_no_merged_but_unarchived_plans passes on the merged tree. The finding's contrast still stands and is worth keeping: this tripwire consults origin/main before using the word merged, which is why it never fired on this branch's own locally-complete plan, while fr status's sweep (p4-status-claims-merged, still open) asserts a merge it never observed.

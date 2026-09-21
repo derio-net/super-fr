@@ -1010,6 +1010,14 @@ def test_plan_self_review_cli_exits_1_and_names_both_escapes(tmp_path, monkeypat
         "[manual] phase",
         "Name the OUTCOME",
         "#428",
+        # The escape must name the TRAILING manual phase. #496 (shipped in
+        # 4.12.0) errors on a mid-plan manual phase with agentic work after
+        # it, so "move it into a [manual] phase" — the message as first
+        # written — hands the author a plan that fails the sibling gate.
+        # Demonstrated: make the dispatch step's phase manual mid-plan and
+        # self-review swaps #428's error for #496's.
+        "TRAILING",
+        "#496",
     ):
         assert token in flat, f"{token!r} missing from:\n{flat}"
     # The MATCHED TEXT, not the raw pattern — an author reading

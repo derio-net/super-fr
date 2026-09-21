@@ -68,6 +68,10 @@ the same capability boundary as #420, read from the other side).
 
 ## Contract — the worktree has exactly one writer
 
+How you work. The two refusals above are a different kind of rule — what you
+*are*, and therefore what you cannot be asked to do — and they are settled
+before you start; these are the disciplines that hold while you run.
+
 - **Single writer.** Phases run serially on one shared branch; "phase complete"
   releases the worktree, orchestrator included. Never write while another writer
   holds it.
