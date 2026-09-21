@@ -1,0 +1,69 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Neutral agent body + tripwire covers agents
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - harness-tool-neutrality
+  skeleton: true
+  tier: standard
+tasks:
+- number: 1
+  title: Red — widen the tripwire to agents and the flag
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add optional extra_tools param to scan_prose (packages/fr/src/fr/harness/prose.py) with a unit test in the existing prose tests
+  - id: P1.T1.S2
+    text: |-
+      Extend test_tripwire_skill_tool_neutrality.py to scan plugins/super-fr/agents/*.md and .opencode/agent/*.md (not-empty guard per tree), passing extra_tools={'isolation: "worktree"': 'claude-code'}; run it and see it fail on the agent files
+- number: 2
+  title: Green — scoped clauses in the canonical agent, regenerate mirrors
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Rewrite the agent description neutrally and turn the second-worktree paragraph and the no-Agent-tool sentence into Harness — dispatch isolation / Harness — no dispatch clauses naming Claude Code, OpenCode and Hermes; reword the Long commands mention neutrally
+  - id: P1.T2.S2
+    text: |-
+      Run scripts/sync-opencode.py and scripts/sync-hermes.py; commit regenerated mirrors; tripwire, mirror and agent tests pass
+- number: 3
+  title: Ship it
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Update matrix row harness-tool-neutrality (set-status with notes and the agent-tree evidence) and regenerate reports
+  - id: P1.T3.S2
+    text: |-
+      Patch version bump via scripts/bump-version.py; ruff format, ruff check, mypy, full pytest green
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T14:46:49+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-21T14:46:49+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-21T14:46:50+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-21T14:46:50+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-21T14:47:22+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-21T15:01:30+00:00'
+      note: null
+  completion:
+    at: '2026-09-21T15:01:31+00:00'
+    note: null
+    observed_prs: []

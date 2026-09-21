@@ -1,0 +1,99 @@
+schema_version: 5
+run: 2026-09-21-fix-497-agent-tool-neutrality
+workflow: fr-goal@1
+branch: fix/497-agent-tool-neutrality
+started: '2026-09-21T14:40:55+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-21T14:42:19+00:00'
+    answered_by: agent
+    emitted:
+      spec: docs/superpowers/specs/2026-09-21-agent-body-tool-neutrality-design.md
+  spec-review:
+    state: done
+    at: '2026-09-21T14:42:25+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-21T14:42:19+00:00'
+          harness: claude-code
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-21T14:42:25+00:00'
+          outcome: done
+  plan:
+    state: done
+    at: '2026-09-21T14:43:13+00:00'
+    emitted:
+      plan: docs/superpowers/plans/agent-body-tool-neutrality
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-21T14:42:25+00:00'
+          harness: claude-code
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-21T14:43:13+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-21T14:43:14+00:00'
+    exit: 0
+    stdout: "[warn] a phase marks the skeleton but fr_version '>=3.0.0,<5.0.0' admits\
+      \ a \npre-skeleton fr — floor it at '>=4.2.0,<5.0.0'.\n[warn] phases carry a\
+      \ tier but fr_version '>=3.0.0,<5.0.0' admits a pre-tier fr \n— floor it at\
+      \ '>=3.12.0,<5.0.0'.\n"
+  implement:
+    state: done
+    at: '2026-09-21T15:02:25+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T14:43:20+00:00'
+          agent: a7f7752732ccd28a8
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: opus
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-21T15:02:04+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 3
+            journal_lines: 16
+            handoff_chars: 802
+            spec_bytes: 3597
+            plan_bytes: 2607
+          measured:
+            input_tokens: 158
+            cache_creation_input_tokens: 406895
+            cache_read_input_tokens: 4740006
+            output_tokens: 27037
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T15:02:05+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-21T15:02:25+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 6
+            journal_lines: 31
+            handoff_chars: 2541
+            spec_bytes: 3597
+            plan_bytes: 2756
+        evidence:
+          review: 713c7b8d4b35
+          findings: 940066a17abd
+  journal-check:
+    state: done
+    at: '2026-09-21T15:02:25+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: pending
