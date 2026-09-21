@@ -75,9 +75,9 @@ fr init scaffold --repo . --profile deploy --purpose "prod deploys" --secret DEP
     --secret-provider infisical --infisical-project <id> --infisical-env prod --infisical-path /fr/<repo>/deploy
 ```
 
-For a non-GitHub repo, pass `--backend`/`--host` on EVERY profile call for
-that repo (repo-level, but scaffold reads it fresh per call):
-`fr init scaffold ... --backend gitlab --host gitlab.mycorp.com`.
+For a non-GitHub repo, pass `--backend` on every profile call for that repo.
+`--host` is OPTIONAL for GitLab (derived from the remote, override-only);
+`gh`/`tea` aren't host-threaded (gh-486), so fr warns on next use, not here.
 `--secret-provider infisical` (on-demand via `fr isolation exec --secret KEY`; devcontainer mode only)
 writes the `infisical:` block instead of an env-file mount and installs the CLI in-container. Identity
 side, which fr cannot set: a READ-ONLY Universal-Auth identity scoped to that project/path with a SHORT
