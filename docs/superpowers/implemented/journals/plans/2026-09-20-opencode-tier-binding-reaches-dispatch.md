@@ -146,3 +146,14 @@ Phase 4 is `tag: manual`: the operator, post-merge, clears the opencode tier bin
 fr-goal §5 forbids dispatching a phase executor for a manual phase, so nothing was dispatched and the steps stay unticked. The PR marks it "unimplemented — operator pushes to this PR".
 
 As in the gh#494 run, `fr run advance` built a `phase/4/implement-phase` dispatch brief anyway — `for_each: phase` does not consult the phase`s `tag`. That is issue #496, filed from that run; this is its second observed instance, in a plan whose manual phase would have handed a subagent a PAID model run and a real consumer install. Both members are resolved `done` because the cursor has only done|failed, and this entry is the record of what `done` means here.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-live-evidence created=2026-09-21T19:58:22 phase=4 -->
+### p4-live-evidence · discovery · Phase 4 driven live: an answer given mid-run reached the dispatched agent — but the question was never asked (phase 4)
+
+Post-merge, one-shot, 2026-09-21, OpenCode + github-copilot/gpt-5.6-terra, same run as the gh#494 phase-6 evidence. The operator`s real config was snapshotted first and restored afterwards, verified byte-identical (85 files).
+
+THE CLAIM HOLDS. The `opencode` tiers were cleared and install.sh run while UNBOUND, so all three tier agents were installed with no `model:`. After the run all three read `model: github-copilot/gpt-5.6-terra` — nothing else could have written those lines, since only `fr models set` during the run touched them. And the dispatch used it: opencode.db child `ses_f3b00175…` ran as `fr-phase-executor-mechanical` on `github-copilot/gpt-5.6-terra`, the answered model. That is gh#498`s acceptance — an answer given inside the run that asked for it reaches the agent OpenCode dispatches — proven end to end, including the tier (the plan phase declared `mechanical`, and exactly that agent ran: decision d1`s path, not d2`s untiered fallback).
+
+THE STEP`S PRECONDITION DID NOT HAPPEN AS WRITTEN, and the tick records that rather than hiding it. P4.T1.S1 says "answer the model-per-tier question when it is asked". It was not asked: turn 1`s batch asked only about output punctuation and the test script, and the transcript shows turn 1 never ran `fr models resolve` at all — the condition the question is gated on was never evaluated. The binding was supplied in the operator`s turn-2 answer. So the mechanism is proven and the elicitation is not; filed as #538. On the positive side, the model WAITED at the gate instead of answering its own (#436`s measured failure on this harness did not recur).
+
+A second fr defect from the cross-check is #537: fr`s own cursor recorded the wrong holder session (inherited CLAUDE_* env) and could not name the tier that ran.

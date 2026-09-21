@@ -4,11 +4,19 @@
 # When fr-goal / fr-brainstorming / fr-execute is invoked, write a
 # session-keyed sentinel naming the base repo. The companion PreToolUse hook
 # (fr-isolation-guard.sh) denies base-repo-cwd Bash commands while the
-# sentinel lives. Cleared by `fr isolation down` (guard-observed), by the
-# guard's self-heal when no worktree survives, by `fr isolation down --all`
-# (clear_repo_sentinels() in fr/isolation/types.py — the Python mirror of this
-# writer's contract), and by the 48h GC below. See #265/#341; same philosophy
+# sentinel lives. Cleared by a successful `fr isolation down` of this session's
+# workspace (clear_workspace_sentinels() in fr/isolation/types.py), by the
+# guard's self-heal when EVERY workspace this session bound is gone (a
+# per-sentinel fact, not a count of the repo's worktrees — #472/#529), by
+# `fr isolation down --all` (clear_repo_sentinels(), repo-wide by design), and
+# by the 48h GC below. See #265/#341; same philosophy
 # as agent-worktree-required.sh, extended from the Agent tool to inline Bash.
+#
+# Optional `workspaces` list: added to by `fr isolation attach`
+# (stamp_sentinel_workspace) — each workspace this session bound in this repo,
+# RELATIVE to ~/.cache/fr, never absolute. Absent/empty = fresh (armed). This
+# writer never ADDS an entry, but it carries the live ones across a skill
+# reload (below).
 
 set -eu
 
@@ -46,11 +54,47 @@ mkdir -p "$dir"
 # GC: sentinels self-expire with their sessions (48h = 2880 min).
 find "$dir" -name '*.json' -mmin +2880 -delete 2>/dev/null || true
 
+sentinel="$dir/$session_id.json"
+
+# Carry the LIVE part of the stamp across a reload. fr-goal loads, `fr run
+# start` binds (and stamps), then fr-goal invokes fr-brainstorming — which
+# re-runs this hook. A from-scratch rewrite erased the stamp, the sentinel read
+# as fresh forever, and a reaped workspace locked the session out exactly as
+# #472 describes. Carried only when BOTH hold, because a stamp is a claim about
+# this repo's pipeline:
+#   * same repo_root — a pipeline in another repo starts fresh;
+#   * the entry's directory still exists — a dead entry is a PREVIOUS
+#     pipeline's, and carried alone it would read as orphaned and retire this
+#     new pipeline on its first command (#529 again).
+# Carrying a live entry into a NEW pipeline in the same session cannot disarm
+# it: the guard heals only when NO entry survives, and the new pipeline's own
+# workspace is added to the set when it binds.
+# Only `attach` ever ADDS an entry; this writer can only keep or drop them.
+carried="[]"
+if [ -f "$sentinel" ]; then
+  prev_root=$(jq -r '.repo_root // empty' "$sentinel" 2>/dev/null || true)
+  if [ "$prev_root" = "$repo_root" ]; then
+    while IFS= read -r ws; do
+      [ -n "$ws" ] && [ -d "$HOME/.cache/fr/$ws" ] || continue
+      carried=$(printf '%s' "$carried" | jq -c --arg w "$ws" '. + [$w]')
+    done <<EOF_WS
+$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+         | select(type == "string")' "$sentinel" 2>/dev/null || true)
+EOF_WS
+  fi
+fi
+
+# tmp + mv: the guard reads this file on every Bash call, and a half-written
+# sentinel parses as no repo_root — an unguarded command.
+tmp="$sentinel.tmp.$$"
 jq -n \
   --arg repo_root "$repo_root" \
   --arg skill "$skill" \
   --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{repo_root: $repo_root, skill: $skill, started_at: $started_at}' \
-  > "$dir/$session_id.json"
+  --argjson workspaces "$carried" \
+  '{repo_root: $repo_root, skill: $skill, started_at: $started_at}
+   + (if ($workspaces | length) == 0 then {} else {workspaces: $workspaces} end)' \
+  > "$tmp"
+mv -f "$tmp" "$sentinel"
 
 exit 0

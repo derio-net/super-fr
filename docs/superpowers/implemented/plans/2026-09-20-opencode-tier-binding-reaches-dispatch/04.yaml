@@ -27,10 +27,16 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-21T17:58:23+00:00'
+      note: 'Live 2026-09-21: installed unbound, then all tier agents materialised
+        to github-copilot/gpt-5.6-terra during the run; opencode.db child ran fr-phase-executor-mechanical
+        on that model. CAVEAT: the tier question was never asked (turn 1 never ran
+        fr models resolve) — the answer came as the operator''s turn 2. Mechanism
+        proven, elicitation not: #538. Journal p4-live-evidence.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-21T17:58:23+00:00'
+    note: 'gh#498''s own acceptance, run live 2026-09-21: an answer given mid-run
+      reached the dispatched agent. The question that should have elicited it was
+      never asked — #538. See journal p4-live-evidence.'
     observed_prs: []

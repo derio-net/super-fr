@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
 from pydantic import BaseModel, Field
+
+from fr.artifacts.atomic import write_text_atomic
 
 
 def _home() -> Path:
@@ -131,8 +134,139 @@ def sentinel_dir() -> Path:
     session ({"repo_root": ...}); fr-isolation-guard.sh reads it to gate
     base-repo commands. `$FR_SENTINEL_DIR` overrides the default (both hooks
     honour the same env var).
+
+    A sentinel may carry an optional `workspaces` list (see
+    `stamp_sentinel_workspace`): the workspaces the session bound in this repo,
+    each relative to `~/.cache/fr`.
     """
     return Path(os.environ.get("FR_SENTINEL_DIR", str(_home() / ".cache" / "fr" / "sentinels")))
+
+
+def stamp_sentinel_workspace(session_id: str, worktree: Path) -> None:
+    """Record a bound workspace in this session's sentinel, if one exists.
+
+    A sentinel is in one of three states, decided from its `workspaces` list:
+    *fresh* (absent or empty — armed, never healed), *live* (at least one entry
+    names a surviving linked worktree of the repo) or *orphaned* (entries exist
+    and NONE survives — the guard retires it). It is a SET because a session may
+    bind more than one workspace of its repo (`fr isolation exec --branch
+    <other>` rebinds): a single, replaced stamp let the other workspace's
+    teardown disarm this session's live pipeline (adversarial review C1).
+    Entries are RELATIVE to `~/.cache/fr`, so they carry no home path (the
+    sentinel's `repo_root`, written by the hook, always has). This call adds
+    `worktree` if absent and prunes entries whose directory is gone — a dead
+    entry never changes the verdict, so dropping it only keeps the file small.
+
+    Not stamped (the sentinel keeps what it had): a worktree outside the cache
+    dir; a missing or malformed sentinel; and a worktree of ANOTHER repo. A
+    session holding a pipeline in repo A may enter repo B's isolation (`cd <B>
+    && fr isolation up`, #421); B's worktree in A's sentinel could never be
+    listed by A, and would read as orphaned once A's own entries went. Unknown
+    ownership (unreadable repo) is treated as foreign. The write is atomic.
+    """
+    if not session_id or "/" in session_id or session_id in (".", ".."):
+        return
+    f = sentinel_dir() / f"{session_id}.json"
+    if not f.is_file():
+        return
+    rel = _cache_relative(worktree)
+    if rel is None:
+        return
+    try:
+        data = json.loads(f.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict) or not isinstance(data.get("repo_root"), str):
+        return
+    if _git_common_dir(Path(data["repo_root"])).resolve() != (
+        _git_common_dir(Path(worktree)).resolve()
+    ):
+        return
+    kept = [w for w in _workspaces(data) if w == rel or _cache_dir(w).is_dir()]
+    data["workspaces"] = kept if rel in kept else [*kept, rel]
+    write_text_atomic(f, json.dumps(data))
+
+
+def _workspaces(data: dict[str, Any]) -> list[str]:
+    raw = data.get("workspaces")
+    return [w for w in raw if isinstance(w, str) and w] if isinstance(raw, list) else []
+
+
+def _cache_root() -> Path:
+    return _home() / ".cache" / "fr"
+
+
+def _cache_dir(rel: str) -> Path:
+    return _cache_root() / rel
+
+
+def _cache_relative(worktree: Path) -> str | None:
+    """`worktree` relative to `~/.cache/fr` (posix), or None when outside it.
+
+    The UNRESOLVED path is tried first: fr stores worktrees as
+    `~/.cache/fr/worktrees/...` literally, and when `worktrees` is itself a
+    symlink to another volume the resolved path is no longer under the cache
+    (review L1). The resolved form covers a symlinked HOME the other way round.
+    """
+    for wt, root in (
+        (Path(worktree), _cache_root()),
+        (Path(worktree).resolve(), _cache_root().resolve()),
+    ):
+        try:
+            rel = wt.relative_to(root)
+        except ValueError:
+            continue
+        if ".." not in rel.parts and rel.parts:
+            return rel.as_posix()
+    return None
+
+
+def clear_workspace_sentinels(
+    repo_root: Path, worktree: Path, session_ids: Iterable[str] = ()
+) -> int:
+    """Retire the sentinels whose pipeline lived in `worktree`; return the count.
+
+    Called by `fr isolation down` after a SUCCESSFUL teardown (the bash guard,
+    which runs before the command, no longer retires anything on `down` —
+    review H2). A sentinel naming `repo_root` is affected when `worktree` is in
+    its `workspaces` or its session was bound to it (`session_ids`, which covers
+    a sentinel that was never stamped). An affected sentinel loses that entry,
+    and is removed only if NO other workspace of its survives — a session that
+    also holds a live workspace still has a live pipeline (review C1).
+
+    Everything else is left alone, in particular another session's FRESH
+    sentinel: the old "zero workspaces remain → clear the repo" rule removed
+    exactly that, silently disarming a pipeline whose workspace did not exist
+    yet (#472, third mechanism). Malformed files are skipped.
+    """
+    d = sentinel_dir()
+    if not d.is_dir():
+        return 0
+    target = str(Path(repo_root).resolve())
+    rel = _cache_relative(worktree)
+    ids = set(session_ids)
+    removed = 0
+    for f in sorted(d.glob("*.json")):
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        root = data.get("repo_root")
+        if not isinstance(root, str) or str(Path(root).resolve()) != target:
+            continue
+        entries = _workspaces(data)
+        if not ((rel is not None and rel in entries) or f.stem in ids):
+            continue
+        survivors = [w for w in entries if w != rel and _cache_dir(w).is_dir()]
+        if survivors:
+            data["workspaces"] = survivors
+            write_text_atomic(f, json.dumps(data))
+            continue
+        f.unlink(missing_ok=True)
+        removed += 1
+    return removed
 
 
 def clear_repo_sentinels(repo_root: Path) -> int:
@@ -141,8 +275,10 @@ def clear_repo_sentinels(repo_root: Path) -> int:
     The explicit "drop session state" lever behind `fr isolation down --all`
     (#341 Task 2A). Foreign-repo sentinels are left alone; a malformed /
     unreadable file is skipped, never removed (it isn't ours to interpret). The
-    guard's own self-heal (fail open + clear when no worktree survives) is the
-    lazy backstop; this is the eager path.
+    guard's own self-heal (fail open + clear when THIS session's stamped
+    workspace is gone — see `stamp_sentinel_workspace`) is the lazy, per-session
+    backstop; this is the eager, repo-wide path, and the difference is the
+    blast radius: `--all` retires every session's sentinel for the repo.
     """
     d = sentinel_dir()
     if not d.is_dir():
