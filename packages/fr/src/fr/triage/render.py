@@ -22,7 +22,7 @@ import html
 import re
 from typing import TYPE_CHECKING
 
-from fr.triage.check import classify
+from fr.triage.check import CheckResult, classify
 
 if TYPE_CHECKING:
     from fr.triage.model import Facts, Issue, Judgement, Judgements
@@ -351,8 +351,7 @@ def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[s
     )
 
 
-def _masthead(facts: Facts, judgements: Judgements) -> str:
-    result = classify(facts, judgements)
+def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
     open_n = sum(1 for i in facts.issues if i.state == "open")
     in_flight = sum(1 for i in facts.issues if i.stage in IN_FLIGHT)
     ranked = judgements.ranked_at.isoformat() if judgements.ranked_at else "never"
@@ -401,6 +400,7 @@ def _patterns(judgements: Judgements) -> str:
 def render(facts: Facts, judgements: Judgements) -> str:
     """The board for *facts* and *judgements*: same inputs, same bytes."""
     show_repo = facts.kind == "org"
+    result = classify(facts, judgements)  # the one classification, shared below
     patterns_by_key: dict[str, list[str]] = {}
     for p in judgements.patterns:
         for key in p.ids:
@@ -427,7 +427,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
             "sev-u",
             UNRANKED_TITLE,
             UNRANKED_DESC,
-            [row(i, None, "unranked") for i in classify(facts, judgements).unranked],
+            [row(i, None, "unranked") for i in result.unranked],
         )
     ]
     for pos, tier in enumerate(sorted(judgements.tiers, key=lambda t: t.n)):
@@ -446,7 +446,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>Backlog triage · {esc(facts.scope)}</title>\n"
         f"{FONTS}\n<style>{CSS}</style>\n</head>\n<body>\n<main>\n"
-        f"{_masthead(facts, judgements)}\n{FILTER_BAR}\n"
+        f"{_masthead(facts, judgements, result)}\n{FILTER_BAR}\n"
         + "\n".join(sections)
         + f"\n{_patterns(judgements)}\n"
         "<footer>Rendered by <code>fr triage render</code> from facts.json and "

@@ -443,3 +443,20 @@ def test_hostile_pattern_ids_render_escaped_even_past_the_loader(tmp_path: Path)
     assert PAYLOAD_RAW not in page
     assert PAYLOAD_ESCAPED in page
     assert not any(t == "img" for t, _ in _elements(page))
+
+
+def test_render_classifies_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """One classify() per render, shared by masthead and tiers (review r-p3-classify-twice)."""
+    import fr.triage.render as mod
+
+    calls: list[int] = []
+    real = mod.classify
+
+    def counting(facts: Facts, judgements: Judgements) -> Any:
+        calls.append(1)
+        return real(facts, judgements)
+
+    monkeypatch.setattr(mod, "classify", counting)
+    render(*_state(tmp_path))
+
+    assert len(calls) == 1
