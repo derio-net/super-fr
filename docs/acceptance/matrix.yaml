@@ -3086,3 +3086,64 @@ rows:
       phase filter dropped, partial debt silenced) each fail the suite, and the shipped-shape
       integration walk fails when the gate is disabled. Enforces that findings END closed,
       not that the review was rigorous.'
+  - id: run-resolve-requires-briefing
+    capability: Run cursor
+    acceptance: A grouped unit cannot be resolved until fr run advance has briefed it,
+      so no unit ends done without a dispatch record naming its holder and cost
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#L51
+      - super-fr:tests/unit/test_run_resolve_requires_advance.py#L66
+    status: ci
+    notes: 'Found live on PR #508''s post-merge Test Plan (C3): review-phase resolved
+      done with no advance, leaving a done unit with no attempt. The grouped path now
+      holds the rule the flat path always had. Red first; one existing test had encoded
+      the defect and was corrected.'
+  - id: run-model-only-for-dispatched-work
+    capability: Run cursor
+    acceptance: fr records a model only for work it dispatched to a tier; a unit the
+      orchestrator runs itself records no model unless the orchestrator reports one
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_orchestrator_model.py#L70
+      - super-fr:tests/unit/test_run_orchestrator_model.py#L87
+    status: ci
+    notes: 'C2. Not a labelling quibble: this repo''s archived #508 cursor credits seven
+      inline reviews to a model that did not perform them. Cursors already carrying
+      the false value are left alone - a repair would be guessing, and archives are
+      frozen.'
+  - id: guard-run-start-enters-isolation
+    capability: Isolation
+    acceptance: fr-goal's first action, fr run start, is allowed from the base clone
+      while a pipeline is live, and every other run verb stays gated to the workspace
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#L281
+      - super-fr:tests/unit/test_hooks_guard.py#L309
+    status: ci
+    notes: 'C4. Only bit in a repo that already had some linked worktree; with none
+      the #341 self-heal retires the sentinel first, which is why it hid. That self-heal
+      retiring a FRESH pipeline''s sentinel is a separate open defect, recorded in the
+      debug journal.'
+  - id: scaffold-uv-env-outside-bind-mount
+    capability: Isolation
+    acceptance: A scaffolded uv profile keeps uv's project environment inside the container,
+      so alternating between host and fr isolation exec never deletes the other side's
+      environment
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py#L522
+      - super-fr:tests/unit/test_init_scaffold.py#L544
+    status: ci
+    notes: 'C5. Also proven live, which no CI job repeats: container rebuilt from the
+      committed profile, three host/container alternations, zero deletions. Existing
+      containers must be recreated; profiles already scaffolded in consumer repos are
+      not rewritten.'
