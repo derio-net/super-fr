@@ -746,6 +746,7 @@ def _gate_provenance(
     no_questions: bool,
     reason: str | None,
     emitted: Mapping[str, str],
+    state: RunState,
 ) -> AnsweredBy:
     """Who cleared this operator gate — OBSERVED where fr can see it, refused
     where the observation contradicts the resolve (2026-09-21 debug journal C1).
@@ -774,6 +775,22 @@ def _gate_provenance(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    # Review r1-5: "on the record" means a journal the PR body reads — the spec
+    # this resolve emits, else one an earlier step already emitted. With
+    # neither there is nowhere durable for the reason, so the bypass is refused
+    # rather than printed to a stderr nobody keeps.
+    spec_for_reason = emitted.get("spec") or next(
+        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
+        None,
+    )
+    if no_questions and not (spec_for_reason and spec_for_reason.endswith(".md")):
+        err_console.print(
+            f"[red]{step_id}: --no-questions has nowhere to record its reason — this "
+            "resolve emits no spec and the run has none yet. Pass the spec with "
+            "`--emitted spec=<path>`, or ask the operator.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     observed = operator_answered_since(os.environ, record.at) if record.at else None
     if observed is True and not no_questions:
         return "operator"
@@ -788,16 +805,25 @@ def _gate_provenance(
         )
         raise typer.Exit(2)
     if no_questions:
-        spec = emitted.get("spec")
-        if spec and spec.endswith(".md"):
-            slug = spec_journal_slug(Path(spec).name[: -len(".md")])
+        assert spec_for_reason is not None  # refused above otherwise
+        slug = spec_journal_slug(Path(spec_for_reason).name[: -len(".md")])
+        target = journal_path(repo_root, "spec", slug)
+        entry_id = f"gate-no-questions-{step_id}"
+        try:
+            already = target.is_file() and any(
+                e.id == entry_id for e in parse_journal(target.read_text())
+            )
+        except JournalParseError:
+            already = False
+        # Review r1-6: a retry after a later refusal must not log it twice.
+        if not already:
             append_journal_entry(
-                journal_path(repo_root, "spec", slug),
+                target,
                 slug,
                 JournalEntry(
                     kind="decision",
                     scope="spec",
-                    id=f"gate-no-questions-{step_id}",
+                    id=entry_id,
                     # `fr journal add`'s own stamp shape (local, second precision).
                     created=_dt.datetime.now().replace(microsecond=0).isoformat(),
                     title=f"Operator gate `{step_id}` cleared without asking",
@@ -925,6 +951,7 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
 # flag is satisfied by anyone who can type the flag, and `findings` exists
 # precisely because "the review's findings were dealt with" was prose until
 # something other than the agent's word could witness it.
+PHASE_EXECUTOR_AGENT = "super-fr:fr-phase-executor"
 _VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests")
 _DERIVED_EVIDENCE = frozenset({"findings"})
 # Evidence ABOUT A PHASE — meaningless on a flat `step/<id>` unit, refused
@@ -1140,7 +1167,7 @@ def _verify_reviewer(
     dispatched it after the review unit opened. Unobservable: warned, recorded
     as claimed, never silently.
     """
-    from fr.run.telemetry import subagent_dispatched_since
+    from fr.run.telemetry import subagent_dispatch_since
 
     implementers = {
         a.agent
@@ -1158,7 +1185,16 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = subagent_dispatched_since(os.environ, agent_id, opened) if opened else None
+    observed = subagent_dispatch_since(os.environ, agent_id, opened) if opened else None
+    if observed and observed.agent_type == PHASE_EXECUTOR_AGENT:
+        # Review r1-11: a phase executor is an IMPLEMENTER by construction —
+        # any phase's — so it is never the separate context a review needs.
+        err_console.print(
+            f"[red]{key}: --evidence reviewer={agent_id} is a {PHASE_EXECUTOR_AGENT} "
+            "dispatch — an implementer, not a reviewer. Dispatch a reviewer subagent.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if observed is False:
         err_console.print(
             f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
@@ -1190,9 +1226,9 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     """
     import hashlib
 
-    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
+    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
-    path = Path(log) if Path(log).is_absolute() else repo_root / log
+    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
     try:
         data = path.read_bytes()
     except OSError:
@@ -1204,18 +1240,26 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = orchestrator_ran_since(os.environ, path.name, opened) if opened else None
-    if observed is False:
+    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
+    windows = orchestrator_wrote_since(os.environ, path, opened) if opened else None
+    # One second of slack either side: the cursor stamps at second precision,
+    # and a filesystem's mtime may round (review r1-1).
+    slack = _dt.timedelta(seconds=1)
+    if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
+        why = (
+            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it)"
+            if not windows
+            else "its bytes were not written by the command of yours that names it"
+        )
         err_console.print(
-            f"[red]{key}: --evidence tests={log}: no command of YOURS naming {path.name!r} "
-            f"ran to completion since this unit opened at {opened}. A subagent's report is "
-            "not verification — run the suite in this session and name its log.[/red]",
+            f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
+            f"{opened}. A subagent's report is not verification — run the suite in this "
+            "session, writing its output to the log you name.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    if observed is None:
+    if windows is None:
         opened_at = parse_timestamp(opened)
-        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
         if opened_at is not None and modified < opened_at:
             err_console.print(
                 f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
@@ -1228,7 +1272,14 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             "this session; recorded as a fresh log, unverified.[/yellow]",
             soft_wrap=True,
         )
-    return f"{log}@{hashlib.sha256(data).hexdigest()[:12]}"
+    # Review r1-8: the witness lands in a git-tracked cursor, so it names the
+    # log repo-relative, or by basename when it lives outside the repo — never
+    # an absolute path carrying someone's home directory.
+    try:
+        shown = str(path.relative_to(repo_root.resolve()))
+    except ValueError:
+        shown = path.name
+    return f"{shown}@{hashlib.sha256(data).hexdigest()[:12]}"
 
 
 def _verify_review_entry(
@@ -3291,6 +3342,14 @@ def resolve_cmd(
 
     # Decided ONCE, before either branch writes a byte: a refused gate leaves
     # the cursor exactly as it was (debug journal C1).
+    if (no_questions or reason is not None) and not _clears_gate(step, record, state_value):
+        # Review r1-7: silently ignored flags read as honoured ones.
+        err_console.print(
+            f"[red]{step_id}: --no-questions/--reason only apply to a resolve that clears "
+            "an operator gate, and this one clears none.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     gate_by: AnsweredBy | None = (
         _gate_provenance(
             repo_root,
@@ -3300,6 +3359,7 @@ def resolve_cmd(
             no_questions=no_questions,
             reason=reason,
             emitted=emitted_map,
+            state=state,
         )
         if _clears_gate(step, record, state_value)
         else None
@@ -3387,9 +3447,9 @@ def resolve_cmd(
         offered=evidence_map,
         state_value=state_value,
     )
-    if verified:  # pragma: no cover — unreachable while `review` is the only
-        # verifiable obligation and a flat unit names no phase; kept so a
-        # second obligation cannot land here as a silent no-op.
+    if verified:
+        # Reached by `deliver`'s `tests` evidence (debug journal C5) — the first
+        # obligation a flat unit can carry, since `review` needs a phase.
         state = _with_step(
             state, step_id, units.with_evidence(state.steps[step_id], flat_key, verified)
         )

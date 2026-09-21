@@ -3451,6 +3451,71 @@ def test_an_unobservable_gate_degrades_loudly_instead_of_refusing(tmp_path: Path
     assert load_run_state(repo, "r1").steps["brainstorm"].answered_by == "agent"
 
 
+def test_no_questions_with_nowhere_to_record_the_reason_is_refused(tmp_path: Path) -> None:
+    """Review r1-5: without a spec to journal it on, the reason would only reach
+    stderr — "on the record" in name only. Refused, and the gate stays shut."""
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+    argv = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+
+    result = _invoke_measurable(
+        repo, shipped, [*argv, "--no-questions", "--reason", "why"], root, "s-g"
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "nowhere to record its reason" in " ".join(result.stderr.split())
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+
+def test_the_no_questions_decision_is_logged_once(tmp_path: Path) -> None:
+    """Review r1-6: the entry id is stable, so a retry cannot log it twice."""
+    from fr.journal.model import journal_path, parse_journal
+
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+    journal = journal_path(repo, "spec", "2026-09-21-x")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(
+        "# Journal: 2026-09-21-x\n\n"
+        "<!-- fr:journal kind=decision scope=spec id=gate-no-questions-brainstorm "
+        "created=2026-09-21T00:00:00 -->\n"
+        "### gate-no-questions-brainstorm · decision · an earlier attempt\n\nfirst\n"
+    )
+
+    result = _invoke_measurable(
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "again"], root, "s-g"
+    )
+
+    assert result.exit_code == 0, result.output
+    ids = [e.id for e in parse_journal(journal.read_text())]
+    assert ids == ["gate-no-questions-brainstorm"]
+
+
+def test_gate_flags_on_a_resolve_that_clears_no_gate_are_refused(tmp_path: Path) -> None:
+    """Review r1-7: silently ignored flags read as honoured ones."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "plan", "--state", "done", "--no-questions",
+         "--reason", "x"],
+    )  # fmt: skip
+
+    assert result.exit_code == 2, result.output
+    assert "clears none" in " ".join(result.output.split())
+
+
 def test_a_resolve_that_clears_no_gate_records_no_provenance(tmp_path: Path) -> None:
     """`answered_by` is a property of a GATE, not of a resolve — the same
     shape as `gate: cleared` itself. An ungated agent step records `None`

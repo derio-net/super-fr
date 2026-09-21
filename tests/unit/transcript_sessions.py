@@ -124,11 +124,20 @@ def add_dispatch(
     return write_agent(session, agent_id, tool_use_id=tool_use_id, rows=rows)
 
 
-def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[str, int]) -> Path:
+def dispatched_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    usage: dict[str, int],
+    agent_type: str | None = None,
+) -> Path:
     """A one-dispatch session whose tool_use lands exactly at `timestamp`.
 
     Used by the CLI tests, where the window comes from the run cursor's own
     `at` and cannot be predicted before `fr run advance` writes it.
+    `agent_type` re-keys the captured metadata's `agentType` (the capture is a
+    `super-fr:fr-phase-executor`; a reviewer test needs a reviewer).
     """
     orchestrator = copy_of(records(ORCHESTRATOR))
     orchestrator[AGENT_TOOL_USE_LINE]["timestamp"] = timestamp
@@ -138,7 +147,11 @@ def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[st
         row["timestamp"] = timestamp
         if row["type"] == "assistant":
             row["message"]["usage"] = dict(usage)
-    write_agent(session, rows=subagent)
+    meta = None
+    if agent_type is not None:
+        meta = json.loads(SUBAGENT_META.read_text())
+        meta["agentType"] = agent_type
+    write_agent(session, rows=subagent, meta=meta)
     return session
 
 
@@ -166,9 +179,25 @@ def asked_at(
     )
 
 
-def ran_at(root: Path, timestamp: str, *, session_id: str) -> Path:
-    """A session whose captured orchestrator `Bash` exchange lands at `timestamp`."""
+CAPTURED_LOG = "/tmp/scratchpad/c1.log"
+"""The (redacted) path the captured `Bash` command writes its suite output to."""
+
+
+def ran_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    until: str | None = None,
+    log: Path | None = None,
+) -> Path:
+    """A session whose captured orchestrator `Bash` exchange runs from
+    `timestamp` to `until` (default: the same instant), writing `log` (default:
+    the captured path). Only the timestamps and that one path are varied."""
     call, result = copy_of(records(BASH))
     call["timestamp"] = timestamp
-    result["timestamp"] = timestamp
+    result["timestamp"] = until or timestamp
+    if log is not None:
+        block = call["message"]["content"][0]
+        block["input"]["command"] = block["input"]["command"].replace(CAPTURED_LOG, str(log))
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])

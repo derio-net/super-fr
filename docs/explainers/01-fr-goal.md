@@ -201,7 +201,9 @@ The same rule, *evidence you did not write yourself*, governs the two other
 places a run could vouch for its own work. A phase's review has to name the
 separate reviewer that performed it, and never the agent that wrote the code.
 Delivery has to name the log of a test run the orchestrator did itself, not a
-report it received from a helper.
+report it received from a helper. The tool can confirm who wrote that log and
+when; it cannot confirm the command was a real test suite. That check is aimed
+at a relayed "all green", not at deliberate forgery.
 
 **A step declares what it needs and what it emits.** Artifacts are named —
 `spec`, `plan`, `pr` — so a later step can find the specification an earlier

@@ -190,6 +190,16 @@ def _fr(root: Path, argv: list[str]):
     )
 
 
+def _fresh_suite_log(root: Path) -> str:
+    """A suite log written AFTER `deliver` opened — the `tests=` evidence the
+    shipped shape now owes (debug journal 2026-09-21 C5). The transcript is
+    sandboxed in tests, so fr takes the unobservable path: fresh, recorded,
+    and said to be unverified."""
+    log = root / "suite.log"
+    log.write_text("n passed\n")
+    return "suite.log"
+
+
 def _record_review(root: Path, slug: str, n: int) -> str:
     """Write the `kind=review` plan-journal entry phase `n`'s review owes, and
     return its id — the evidence `review-phase` now cannot be resolved `done`
@@ -459,7 +469,12 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
         for member in ("implement-phase", "review-phase"):
             _fr(root, ["run", "advance", "g1"])
             evidence = (
-                ["--evidence", f"review={_record_review(root, slug, n)}"]
+                [
+                    "--evidence",
+                    f"review={_record_review(root, slug, n)}",
+                    "--evidence",
+                    f"reviewer=reviewer-{n}",
+                ]  # separate context, debug C6
                 if member == "review-phase"
                 else []
             )
@@ -609,7 +624,12 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
                 )
                 assert bare.exit_code == 2, bare.output
                 assert "--evidence review=" in " ".join(bare.output.split())
-                extra = ["--evidence", f"review={_record_review(root, slug, n)}"]
+                extra = [
+                    "--evidence",
+                    f"review={_record_review(root, slug, n)}",
+                    "--evidence",
+                    f"reviewer=reviewer-{n}",
+                ]  # debug C6
                 # The `findings` half, live on the SHIPPED shape too (PR #508
                 # review): a review that RAISED something is not done until it
                 # is fixed or refuted — through the real `fr journal`, so the
@@ -727,6 +747,9 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
                 "done",
                 "--emitted",
                 "pr=https://example.com/pr/1",
+                # debug C5: the suite the orchestrator ran during delivery.
+                "--evidence",
+                f"tests={_fresh_suite_log(root)}",
             ],
         ).exit_code
         == 0
@@ -837,7 +860,12 @@ def test_a_phases_file_tier_reaches_the_dispatch_brief(tmp_path: Path, monkeypat
             f"the {member} brief: {brief!r}"
         )
         extra = (
-            ["--evidence", f"review={_record_review(root, slug, 1)}"]
+            [
+                "--evidence",
+                f"review={_record_review(root, slug, 1)}",
+                "--evidence",
+                "reviewer=reviewer-1",
+            ]  # debug C6
             if member == "review-phase"
             else []
         )

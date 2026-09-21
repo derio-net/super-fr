@@ -38,6 +38,9 @@ from tests.unit.test_run_cli import (
 from tests.unit.test_run_evidence import PLAN_SLUG, _journal
 from tests.unit.transcript_sessions import AGENT_ID, dispatched_at, ran_at, write_session
 
+REVIEWER = "general-purpose"
+"""A reviewer's agent type — anything but a phase executor."""
+
 _SHAPE = """
 workflow: grouped
 schema: 1
@@ -74,6 +77,13 @@ def _later(stamp: str) -> str:
     at = parse_timestamp(stamp)
     assert at is not None
     return at.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S") + ".999Z"
+
+
+def _soon() -> str:
+    """A transcript stamp comfortably after anything a test does next."""
+    from datetime import UTC, datetime, timedelta
+
+    return (datetime.now(UTC) + timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _run(repo: Path, shipped: Path, argv: list[str], root: Path | None, session: str):
@@ -140,12 +150,27 @@ def test_a_reviewer_this_session_dispatched_is_accepted(tmp_path: Path) -> None:
     root = tmp_path / "projects"
     write_session(root, session_id="s-x")
     repo, shipped, opened = _at_the_review(tmp_path, root=root)
-    dispatched_at(root, _later(opened), session_id="s-x", usage={})
+    dispatched_at(root, _later(opened), session_id="s-x", usage={}, agent_type=REVIEWER)
 
     result = _review(repo, shipped, root, "s-x", "review=rev-p1", f"reviewer={AGENT_ID}")
 
     assert result.exit_code == 0, result.output
     assert _review_evidence(repo) == {"review": "rev-p1", "reviewer": AGENT_ID}
+
+
+def test_a_phase_executor_dispatch_is_never_a_reviewer(tmp_path: Path) -> None:
+    """Review r1-11: an executor is an implementer by construction — of ANY
+    phase — so even one this session really dispatched is refused. The capture
+    is exactly that: a `super-fr:fr-phase-executor` dispatch."""
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, opened = _at_the_review(tmp_path, root=root)
+    dispatched_at(root, _later(opened), session_id="s-x", usage={})
+
+    result = _review(repo, shipped, root, "s-x", "review=rev-p1", f"reviewer={AGENT_ID}")
+
+    assert result.exit_code == 2, result.output
+    assert "an implementer, not a reviewer" in _squash(result.output)
 
 
 def test_a_reviewer_nobody_dispatched_is_refused(tmp_path: Path) -> None:
@@ -180,7 +205,9 @@ def _at_deliver(tmp_path: Path, *, root: Path | None = None, session: str = "s-d
         # The review needs its own observed reviewer on this path too.
         opened = units.last_attempt(load_run_state(repo, "r1"), "phase/1/peer-review")
         assert opened is not None
-        dispatched_at(root_, _later(opened.dispatched), session_id=session, usage={})
+        dispatched_at(
+            root_, _later(opened.dispatched), session_id=session, usage={}, agent_type=REVIEWER
+        )
         reviewer = AGENT_ID
     else:
         reviewer = "r-9"
@@ -228,8 +255,8 @@ def test_a_suite_the_orchestrator_ran_is_accepted_with_its_hash(tmp_path: Path) 
     root = tmp_path / "projects"
     write_session(root, session_id="s-d")
     repo, shipped, opened = _at_deliver(tmp_path, root=root)
-    ran_at(root, _later(opened), session_id="s-d")
     (repo / "c1.log").write_text("291 passed in 45.99s\n")
+    ran_at(root, _later(opened), session_id="s-d", until=_soon(), log=repo / "c1.log")
 
     result = _deliver(repo, shipped, root, "s-d", "tests=c1.log")
 
@@ -250,7 +277,44 @@ def test_a_log_no_command_of_the_orchestrator_produced_is_refused(tmp_path: Path
     result = _deliver(repo, shipped, root, "s-d", "tests=c1.log")
 
     assert result.exit_code == 2, result.output
-    assert "no command of YOURS" in _squash(result.output)
+    assert "no command of YOURS wrote it" in _squash(result.output)
+
+
+def test_a_log_whose_bytes_postdate_the_command_is_refused(tmp_path: Path) -> None:
+    """Review r1-1: a command naming the log is not enough — the bytes on disk
+    must have been written inside that command's run window. Overwriting the
+    log afterwards (with a green someone else reported) is caught."""
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-d")
+    repo, shipped, opened = _at_deliver(tmp_path, root=root)
+    log = repo / "c1.log"
+    log.write_text("real output\n")
+    ran_at(root, _later(opened), session_id="s-d", until=_later(opened), log=log)
+    later = time.time() + 120
+    os.utime(log, (later, later))
+
+    result = _deliver(repo, shipped, root, "s-d", "tests=c1.log")
+
+    assert result.exit_code == 2, result.output
+    assert "not written by the command" in _squash(result.output)
+
+
+def test_the_tests_witness_never_carries_an_absolute_path(tmp_path: Path) -> None:
+    """Review r1-8: the witness lands in a git-tracked cursor. A log inside the
+    repo is recorded repo-relative; one outside it (a scratchpad under someone's
+    home) by basename only."""
+    repo, shipped, _ = _at_deliver(tmp_path)
+    outside = tmp_path / "home" / "someone" / "scratch"
+    outside.mkdir(parents=True)
+    (outside / "suite.log").write_text("ok\n")
+
+    result = _deliver(repo, shipped, None, "s-d", f"tests={outside / 'suite.log'}")
+
+    assert result.exit_code == 0, result.output
+    record = load_run_state(repo, "r1").steps["deliver"]
+    witness = units.evidence_of(record, "step/deliver")["tests"]
+    assert witness.startswith("suite.log@"), witness
+    assert "someone" not in witness
 
 
 def test_unobservable_needs_a_fresh_log_and_says_it_could_not_verify(tmp_path: Path) -> None:

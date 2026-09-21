@@ -861,52 +861,145 @@ def test_unobservable_is_none_never_false(tmp_path: Path) -> None:
 
 
 def test_a_subagent_dispatched_after_the_window_opened_is_observed(tmp_path: Path) -> None:
-    from fr.run.telemetry import subagent_dispatched_since
+    from fr.run.telemetry import subagent_dispatch_since
 
     from tests.unit.transcript_sessions import dispatched_at
 
     root = tmp_path / "projects"
     dispatched_at(root, "2026-09-21T16:05:00.000Z", session_id="s-r", usage={})
     env = _question_env(root, "s-r")
-    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:00:00+00:00") is True
-    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:10:00+00:00") is False
-    assert subagent_dispatched_since(env, "someone-else", "2026-09-21T16:00:00+00:00") is False
+    found = subagent_dispatch_since(env, AGENT_ID, "2026-09-21T16:00:00+00:00")
+    assert found and found.agent_id == AGENT_ID
+    # The capture IS a phase executor — the caller refuses that as a reviewer.
+    assert found.agent_type == "super-fr:fr-phase-executor"
+    assert subagent_dispatch_since(env, AGENT_ID, "2026-09-21T16:10:00+00:00") is False
+    assert subagent_dispatch_since(env, "someone-else", "2026-09-21T16:00:00+00:00") is False
 
 
-def test_subagent_dispatch_is_unobservable_without_a_transcript(tmp_path: Path) -> None:
-    from fr.run.telemetry import subagent_dispatched_since
+def test_subagent_dispatch_is_unobservable_without_a_readable_transcript(tmp_path: Path) -> None:
+    """Review r1-3: an unreadable transcript is `None`, never `False` — "could
+    not read it" must not become "nobody was dispatched" and refuse a review."""
+    from fr.run.telemetry import subagent_dispatch_since
 
-    env = _question_env(tmp_path, "missing")
-    assert subagent_dispatched_since(env, AGENT_ID, "2026-09-21T16:00:00+00:00") is None
+    since = "2026-09-21T16:00:00+00:00"
+    assert subagent_dispatch_since(_question_env(tmp_path, "missing"), AGENT_ID, since) is None
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="s-bad")
+    session.write_text("not json\n{half")
+    assert subagent_dispatch_since(_question_env(root, "s-bad"), AGENT_ID, since) is None
 
 
-def test_an_orchestrator_command_naming_the_log_is_observed(tmp_path: Path) -> None:
-    """The captured command writes its suite output to `.../c1.log`."""
-    from fr.run.telemetry import orchestrator_ran_since
-
+def _bash_env(tmp_path: Path, **kw: object) -> dict[str, str]:
     from tests.unit.transcript_sessions import ran_at
 
     root = tmp_path / "projects"
-    ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-b")
-    env = _question_env(root, "s-b")
-    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:00:00+00:00") is True
-    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:10:00+00:00") is False
-    assert orchestrator_ran_since(env, "other.log", "2026-09-21T16:00:00+00:00") is False
-    assert orchestrator_ran_since(_question_env(tmp_path, "gone"), "c1.log", "2026-01-01") is None
+    ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-b", **kw)  # type: ignore[arg-type]
+    return _question_env(root, "s-b")
 
 
-def test_an_orchestrator_command_that_errored_does_not_count(tmp_path: Path) -> None:
-    """A tool_result with `is_error: true` did not run to completion."""
+def test_a_command_that_writes_the_log_yields_its_run_window(tmp_path: Path) -> None:
+    """The captured command writes its suite output to the (redacted) log."""
+    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
+
+    from tests.unit.transcript_sessions import CAPTURED_LOG
+
+    env = _bash_env(tmp_path, until="2026-09-21T16:09:00.000Z")
+    windows = orchestrator_wrote_since(env, Path(CAPTURED_LOG), "2026-09-21T16:00:00+00:00")
+    assert windows == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+    assert orchestrator_wrote_since(env, Path(CAPTURED_LOG), "2026-09-21T16:06:00+00:00") == []
+    assert orchestrator_wrote_since(env, Path("/tmp/other.log"), "2026-01-01T00:00:00+00:00") == []
+    gone = _question_env(tmp_path, "gone")
+    assert orchestrator_wrote_since(gone, Path(CAPTURED_LOG), "2026-01-01T00:00:00+00:00") is None
+
+
+def test_a_command_that_only_reads_the_log_does_not_count(tmp_path: Path) -> None:
+    """Review r1-1: before, any command MENTIONING the log's name passed —
+    `cat c1.log`, `ls c1.log`. Only a write names the log as its output."""
     import json
 
-    from fr.run.telemetry import orchestrator_ran_since
+    from fr.run.telemetry import orchestrator_wrote_since
 
-    from tests.unit.transcript_sessions import ran_at
+    env = _bash_env(tmp_path)
+    session = next((tmp_path / "projects").glob("*/s-b.jsonl"))
+    rows = [json.loads(line) for line in session.read_text().splitlines()]
+    rows[-2]["message"]["content"][0]["input"]["command"] = "cat /tmp/scratchpad/c1.log"
+    session.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    since = "2026-09-21T16:00:00+00:00"
+    assert orchestrator_wrote_since(env, Path("/tmp/scratchpad/c1.log"), since) == []
 
-    root = tmp_path / "projects"
-    session = ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-e")
+
+def test_a_writing_command_that_errored_does_not_count(tmp_path: Path) -> None:
+    import json
+
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import CAPTURED_LOG
+
+    env = _bash_env(tmp_path)
+    session = next((tmp_path / "projects").glob("*/s-b.jsonl"))
     rows = [json.loads(line) for line in session.read_text().splitlines()]
     rows[-1]["message"]["content"][0]["is_error"] = True
     session.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    env = _question_env(root, "s-e")
-    assert orchestrator_ran_since(env, "c1.log", "2026-09-21T16:00:00+00:00") is False
+    since = "2026-09-21T16:00:00+00:00"
+    assert orchestrator_wrote_since(env, Path(CAPTURED_LOG), since) == []
+
+
+def test_a_malformed_tool_input_never_raises(tmp_path: Path) -> None:
+    """Review r1-9: the module's contract is "never raises"."""
+    import json
+
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import CAPTURED_LOG
+
+    env = _bash_env(tmp_path)
+    session = next((tmp_path / "projects").glob("*/s-b.jsonl"))
+    rows = [json.loads(line) for line in session.read_text().splitlines()]
+    rows[-2]["message"]["content"][0]["input"] = "not a mapping"
+    rows[-2]["message"]["content"].append("not a block either")
+    session.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    since = "2026-09-21T16:00:00+00:00"
+    assert orchestrator_wrote_since(env, Path(CAPTURED_LOG), since) == []
+
+
+# --- `<synthetic>` is not a model (review r1-2) ----------------------------
+
+
+def _synthetic(row: dict) -> dict:
+    """A harness-written filler record: Claude Code emits main-thread assistant
+    records with `"model": "<synthetic>"` and all-zero usage (observed twice in
+    this operator's own transcripts). Derived from a captured record."""
+    row = copy_of(row)
+    row["message"]["model"] = "<synthetic>"
+    row["message"]["usage"] = {
+        k: 0
+        for k in (
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_input_tokens",
+            "cache_read_input_tokens",
+        )
+    }
+    return row
+
+
+def test_a_synthetic_record_is_never_the_orchestrators_model(tmp_path: Path) -> None:
+    from fr.run.telemetry import orchestrator_model
+
+    root = tmp_path / "projects"
+    rows = records(ORCHESTRATOR)
+    last = next(r for r in reversed(rows) if r.get("type") == "assistant")
+    write_session(root, session_id="s-syn", rows=[*rows, _synthetic(last)])
+    assert orchestrator_model(_question_env(root, "s-syn")) == "claude-opus-5"
+
+
+def test_a_synthetic_record_never_joins_the_served_models(tmp_path: Path) -> None:
+    rows = records(SUBAGENT)
+    first = next(r for r in rows if r.get("type") == "assistant")
+    path = tmp_path / "agent.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in [*rows, _synthetic(first)]))
+    totals = read_claude_code(path)
+    assert totals is not None
+    assert totals.served_models == ("claude-sonnet-5",)

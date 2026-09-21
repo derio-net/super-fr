@@ -288,7 +288,9 @@ advisory rather than implying it is enforced.</p>
 places a run could vouch for its own work. A phase's review has to name the
 separate reviewer that performed it, and never the agent that wrote the code.
 Delivery has to name the log of a test run the orchestrator did itself, not a
-report it received from a helper.</p>
+report it received from a helper. The tool can confirm who wrote that log and
+when; it cannot confirm the command was a real test suite. That check is aimed
+at a relayed "all green", not at deliberate forgery.</p>
 <p><strong>A step declares what it needs and what it emits.</strong> Artifacts are named —
 <code>spec</code>, <code>plan</code>, <code>pr</code> — so a later step can find the specification an earlier
 step wrote, and so the tool can tell whether the inputs a step depends on

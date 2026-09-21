@@ -3243,8 +3243,8 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L127
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L151
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L137
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L176
     status: ci
     notes: C6. The review evidence gate proved an entry existed; on the first post-#508
       run the orchestrator typed it about work nobody reviewed. Unobservable harnesses
@@ -3257,8 +3257,8 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L226
-      - super-fr:tests/unit/test_run_evidence_separate_context.py#L242
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L253
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L269
     status: ci
     notes: C5. deliver resolved in 28s on a PR url and the executor's word ('verified
       locally'). The log is hashed onto the cursor.
@@ -3283,7 +3283,7 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_cli.py#L5549
+      - super-fr:tests/unit/test_run_cli.py#L5614
       - super-fr:tests/unit/test_isolation_sessions_cmd.py#L205
     status: ci
     notes: C4. The bind hook matched only a leading bare 'fr', and this repo mandates

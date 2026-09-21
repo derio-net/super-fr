@@ -74,10 +74,11 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, TypeGuard
 
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
@@ -212,6 +213,19 @@ def _usage_of(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return usage if isinstance(usage, Mapping) else None
 
 
+def _is_real_model(model: object) -> TypeGuard[str]:
+    """A model id a request was actually served by — not a harness placeholder.
+
+    Claude Code writes main-thread `assistant` records with `"model":
+    "<synthetic>"` and an all-zero `usage` (e.g. a "No response requested."
+    filler) — observed twice in this operator's own transcripts (review of
+    debug journal 2026-09-21 C3). Such a record served nothing, so its "model"
+    must never be recorded as the one that ran a unit. Placeholders are
+    angle-bracketed; real ids never are.
+    """
+    return isinstance(model, str) and bool(model) and not model.startswith("<")
+
+
 def read_claude_code(path: Path) -> UsageTotals | None:
     """Summed usage for one Claude Code transcript, or `None` for *no
     measurement* (the file is missing, unreadable, or holds no record).
@@ -233,7 +247,7 @@ def read_claude_code(path: Path) -> UsageTotals | None:
         seen += 1
         # `_usage_of` already proved `message` is a Mapping.
         model = record["message"].get("model")
-        if isinstance(model, str) and model and model not in served:
+        if _is_real_model(model) and model not in served:
             served.append(model)
         for key in USAGE_KEYS:
             value = usage.get(key)
@@ -591,7 +605,7 @@ def orchestrator_model(env: Mapping[str, str]) -> str | None:
         if _usage_of(record) is None:
             continue
         model = record["message"].get("model")
-        if isinstance(model, str) and model:
+        if _is_real_model(model):
             return model
     return None
 
@@ -679,36 +693,72 @@ def _this_session(env: Mapping[str, str]) -> Path | None:
         return None
 
 
-def subagent_dispatched_since(env: Mapping[str, str], agent_id: str, since: str) -> bool | None:
-    """Did THIS session dispatch the subagent `agent_id` at or after `since`?
+def subagent_dispatch_since(
+    env: Mapping[str, str], agent_id: str, since: str
+) -> Dispatch | Literal[False] | None:
+    """The dispatch of subagent `agent_id` by THIS session at or after `since`
+    — or `False` when the transcript was read and holds none, `None` when it
+    could not be read.
 
     The separate-context review check (2026-09-21 debug journal C6): a review
     unit's `reviewer=<agent-id>` evidence must name a subagent that actually
     ran, and ran after the review unit opened — not the orchestrator's own
     context, which is where the #497 run's "review" was written. Attribution is
     `attribute_dispatches`', the same pairing token measurement already trusts.
-    `None` when unobservable.
+    The dispatch is returned (not a bool) so the caller can judge its
+    `agent_type`. A dispatch whose start cannot be dated proves nothing about
+    the window and does not count. An unreadable transcript is `None`, never
+    `False`: "could not read it" is not "nobody was dispatched" (review r1-3).
     """
     start = parse_timestamp(since)
     session = _this_session(env)
-    if start is None or session is None or not session.is_file():
+    if start is None or session is None or _read_records(session) is None:
         return None
     for dispatch in attribute_dispatches(session):
-        if dispatch.agent_id == agent_id and (
-            dispatch.started is None or dispatch.started >= start
+        if (
+            dispatch.agent_id == agent_id
+            and dispatch.started is not None
+            and dispatch.started >= start
         ):
+            return dispatch
+    return False
+
+
+_WRITE_TARGET = re.compile(r"""(?:>>?|\btee(?:\s+-a)?)\s*(["']?)([^\s;&|'"<>]+)\1""")
+"""A shell redirect or `tee` and the path it writes. Deliberately syntactic: it
+answers "did this command claim to WRITE that file", which a `cat` or `ls` of
+the log — accepted before review r1-1 — does not."""
+
+
+def _writes(command: str, log: Path) -> bool:
+    for _quote, target in _WRITE_TARGET.findall(command):
+        if Path(target).is_absolute():
+            if Path(target) == log:
+                return True
+        elif str(log).endswith("/" + target.lstrip("./")) or log.name == target:
             return True
     return False
 
 
-def orchestrator_ran_since(env: Mapping[str, str], needle: str, since: str) -> bool | None:
-    """Did the orchestrator itself run a `Bash` command naming `needle` at or
-    after `since`, to completion (`is_error` not true)?
+def orchestrator_wrote_since(
+    env: Mapping[str, str], log: Path, since: str
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """The run windows `(tool_use, tool_result)` of every main-thread `Bash`
+    command, issued at or after `since`, that WROTE `log` (a `>`, `>>` or `tee`
+    naming it) and ran to completion (`is_error` not true). `[]` when the
+    transcript holds none; `None` when it cannot be read.
 
     The verification-before-completion check (debug journal C5): `deliver`'s
-    `tests=<log>` evidence must be a suite the ORCHESTRATOR ran during delivery,
-    not a subagent's report relayed as its own — which is how the #497 run said
-    "verified locally". Main-thread records only. `None` when unobservable.
+    `tests=<log>` must be a suite the ORCHESTRATOR ran during delivery, not a
+    subagent's report relayed as its own — how the #497 run said "verified
+    locally". The caller also requires the file's mtime to fall INSIDE one of
+    these windows, which ties the bytes on disk to that command.
+
+    BE HONEST ABOUT THE LIMIT (review r1-1): this proves the orchestrator
+    produced the log, in this session, during delivery. It cannot prove the
+    command was a real test suite — `echo ok > log` passes. That is forgery,
+    not the drift this gate closes (relaying someone else's green), and
+    closing it needs a per-repo test-runner declaration fr does not have.
     """
     start = parse_timestamp(since)
     session = _this_session(env)
@@ -717,7 +767,7 @@ def orchestrator_ran_since(env: Mapping[str, str], needle: str, since: str) -> b
     records = _read_records(session)
     if records is None:
         return None
-    ran: set[str] = set()
+    issued: dict[str, _dt.datetime] = {}
     for record in records:
         if record.get("type") != "assistant" or record.get("isSidechain") is True:
             continue
@@ -727,29 +777,35 @@ def orchestrator_ran_since(env: Mapping[str, str], needle: str, since: str) -> b
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
-            command = block.get("input", {}).get("command") if isinstance(block, Mapping) else None
+            if not isinstance(block, Mapping):
+                continue
+            tool_input = block.get("input")
+            command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
             if (
                 block.get("type") == "tool_use"
                 and block.get("name") == "Bash"
                 and isinstance(command, str)
-                and needle in command
                 and isinstance(block.get("id"), str)
+                and _writes(command, log)
             ):
-                ran.add(block["id"])
+                issued[block["id"]] = stamp
+    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
+        done = parse_timestamp(record.get("timestamp"))
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
             if (
                 isinstance(block, Mapping)
                 and block.get("type") == "tool_result"
-                and block.get("tool_use_id") in ran
+                and block.get("tool_use_id") in issued
                 and block.get("is_error") is not True
+                and done is not None
             ):
-                return True
-    return False
+                windows.append((issued[block["tool_use_id"]], done))
+    return windows
 
 
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}

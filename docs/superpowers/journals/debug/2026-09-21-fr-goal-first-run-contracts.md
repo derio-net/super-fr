@@ -84,3 +84,78 @@ _verify_tests_log: log must exist and be non-empty; telemetry.orchestrator_ran_s
 ### 59d50a841f71 · finding [fixed] · C7 fixed: fr-phase-executor granted Skill; tripwire keeps skill-naming agents capable
 
 tools: + Skill. sync-opencode _TOOL_PERMISSIONS maps Skill → None (OpenCode default; mirrors byte-identical, no diff). tests/unit/test_tripwire_agent_skill_capability.py: any canonical agent whose body names a skill must carry Skill — red with the tools edit stashed. CROSS-PR NOTE: PR #532 widens the neutrality scan to agent files including frontmatter; with Skill on the tools: line its scan flags line 13. Fix belongs in #532's test (skip the tools: frontmatter line — a Claude Code allowlist the sync translates, not prose); whichever PR merges second must carry it.
+
+<!-- fr:journal kind=finding scope=debug id=r1-1 created=2026-09-21T19:18:58 state=fixed -->
+### r1-1 · finding [fixed] · review r1-1: tests= evidence was satisfiable by any command mentioning the log's basename
+
+Fixed: telemetry.orchestrator_wrote_since returns the (tool_use, tool_result) windows of main-thread Bash commands that WRITE the log (>, >>, tee naming it, absolute path equal or relative suffix); _verify_tests_log requires the log's mtime inside one window (1s slack). cat/ls refused; bytes written after the command refused. Stated limit (skill §8, explainer, docstring): fr proves who wrote the log and when, not that it was a real suite — 'echo ok > log' is forgery, out of reach without a per-repo runner declaration. Tests: test_a_command_that_only_reads_the_log_does_not_count, test_a_log_whose_bytes_postdate_the_command_is_refused.
+
+<!-- fr:journal kind=finding scope=debug id=r1-2 created=2026-09-21T19:18:58 state=fixed -->
+### r1-2 · finding [fixed] · review r1-2: <synthetic> recorded as a model
+
+Fixed: telemetry._is_real_model (TypeGuard) rejects angle-bracketed placeholders in orchestrator_model and read_claude_code. Verified real: 2 transcripts in this operator's project hold main-thread <synthetic> records with zero usage. Tests: test_a_synthetic_record_is_never_the_orchestrators_model, test_a_synthetic_record_never_joins_the_served_models.
+
+<!-- fr:journal kind=finding scope=debug id=r1-3 created=2026-09-21T19:18:59 state=fixed -->
+### r1-3 · finding [fixed] · review r1-3: unreadable transcript read as 'not dispatched'
+
+Fixed: subagent_dispatch_since returns None when _read_records fails. Test: test_subagent_dispatch_is_unobservable_without_a_readable_transcript.
+
+<!-- fr:journal kind=finding scope=debug id=r1-4 created=2026-09-21T19:18:59 state=refuted -->
+### r1-4 · finding [refuted] · review r1-4: an operator answering in plain chat is refused
+
+Refuted by the operator's decision: the chosen design (AskUserQuestion, 2026-09-21) was verification of an ANSWERED QUESTION in the transcript. fr-goal §1's Harness clause already routes the batch through the question tool on Claude Code; a chat prompt is indistinguishable from any other operator message (including the original request), so accepting it would re-open the exact bypass C1 closed. The refusal names the tool and the recorded --no-questions path.
+
+<!-- fr:journal kind=finding scope=debug id=r1-5 created=2026-09-21T19:19:00 state=fixed -->
+### r1-5 · finding [fixed] · review r1-5: --no-questions reason lost when no spec emitted
+
+Fixed: the reason goes to the spec emitted by this resolve, else one already emitted on the run; with neither, --no-questions is refused before anything is written. Test: test_no_questions_with_nowhere_to_record_the_reason_is_refused.
+
+<!-- fr:journal kind=finding scope=debug id=r1-6 created=2026-09-21T19:19:00 state=fixed -->
+### r1-6 · finding [fixed] · review r1-6: gate-no-questions journal write not idempotent
+
+Fixed: skipped when the entry id already exists. Test: test_the_no_questions_decision_is_logged_once.
+
+<!-- fr:journal kind=finding scope=debug id=r1-7 created=2026-09-21T19:19:00 state=fixed -->
+### r1-7 · finding [fixed] · review r1-7: --no-questions/--reason silently ignored off-gate
+
+Fixed: refused (exit 2) on a resolve that clears no gate. Test: test_gate_flags_on_a_resolve_that_clears_no_gate_are_refused.
+
+<!-- fr:journal kind=finding scope=debug id=r1-8 created=2026-09-21T19:19:01 state=fixed -->
+### r1-8 · finding [fixed] · review r1-8: absolute log path could leak a home dir into the tracked cursor
+
+Fixed: witness is repo-relative, or basename when outside the repo. Test: test_the_tests_witness_never_carries_an_absolute_path.
+
+<!-- fr:journal kind=finding scope=debug id=r1-9 created=2026-09-21T19:19:01 state=fixed -->
+### r1-9 · finding [fixed] · review r1-9: orchestrator_ran_since could raise on a malformed tool input
+
+Fixed in its replacement orchestrator_wrote_since: every block Mapping-guarded, input type-checked. Test: test_a_malformed_tool_input_never_raises.
+
+<!-- fr:journal kind=finding scope=debug id=r1-10 created=2026-09-21T19:19:02 state=fixed -->
+### r1-10 · finding [fixed] · review r1-10: stale 'pragma: no cover — unreachable' on flat-unit evidence
+
+Fixed: comment now says deliver's tests evidence reaches it; pragma dropped.
+
+<!-- fr:journal kind=finding scope=debug id=r1-11 created=2026-09-21T19:19:02 state=fixed -->
+### r1-11 · finding [fixed] · review r1-11: reviewer agent type unchecked; undated dispatch accepted
+
+Fixed: a super-fr:fr-phase-executor dispatch is refused as a reviewer; a dispatch with no start timestamp no longer counts. Test: test_a_phase_executor_dispatch_is_never_a_reviewer (the capture itself is an executor).
+
+<!-- fr:journal kind=finding scope=debug id=r1-12 created=2026-09-21T19:19:02 state=fixed -->
+### r1-12 · finding [fixed] · review r1-12: in-flight runs and unobservable harnesses not documented
+
+Fixed in the PR body (fr-goal is at its 120-line cap): runs started under 4.13 owe reviewer=/tests= at their next review/deliver; on OpenCode/Hermes reviewer ids are checked only against the implementer set and recorded as unverified.
+
+<!-- fr:journal kind=finding scope=debug id=r1-13 created=2026-09-21T19:19:03 state=fixed -->
+### r1-13 · finding [fixed] · review r1-13: claude-code-bash.jsonl provenance undocumented
+
+Fixed: section added to tests/fixtures/transcripts/claude-code-session.NOTE.md.
+
+<!-- fr:journal kind=review scope=debug id=5bc62af4e18a created=2026-09-21T19:19:03 -->
+### 5bc62af4e18a · review · Review of fix/fr-goal-first-run-contracts by a separately dispatched reviewer
+
+Reviewer: a general-purpose subagent dispatched via superpowers:requesting-code-review (separate context), over origin/main..45fa88cc. Verdict: with fixes. Findings r1-1..r1-13 (5 important, 8 minor): 12 fixed with tests, r1-4 refuted by the operator's C1 decision. The orchestrator's own full-suite run before the review also caught 6 failures (3 integration tests walking the shipped shape now needing reviewer=/tests=; a prose tripwire pinning the --model self-report, which was wrongly dropped and is restored, scoped to harnesses where fr cannot observe the model).
+
+<!-- fr:journal kind=discovery scope=debug id=0b93f5e1638d created=2026-09-21T19:19:42 -->
+### 0b93f5e1638d · discovery · fr acceptance check does not validate #L anchors
+
+Inserting tests above a cited test shifted 5 of this branch's new rows' #L refs onto blank lines or unrelated statements, and fr acceptance check still reported 185 rows OK. Corrected by hand (line numbers only). Not fixed here (out of scope): the check could require the anchored line to be a def/decorator, the same staleness the report-sync tripwire already guards for prose.
