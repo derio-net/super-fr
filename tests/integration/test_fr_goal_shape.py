@@ -199,9 +199,22 @@ def _record_review(root: Path, slug: str, n: int) -> str:
     out = _fr(
         root,
         [
-            "journal", "add", "--scope", "plan", "--slug", slug, "--kind", "review",
-            "--phase", str(n), "--id", eid, "--title", f"phase {n} review",
-            "--body", "no findings",
+            "journal",
+            "add",
+            "--scope",
+            "plan",
+            "--slug",
+            slug,
+            "--kind",
+            "review",
+            "--phase",
+            str(n),
+            "--id",
+            eid,
+            "--title",
+            f"phase {n} review",
+            "--body",
+            "no findings",
         ],  # fmt: skip
     )
     assert out.exit_code == 0, out.output
@@ -582,8 +595,17 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
                 # and only a real `kind=review` entry for THIS phase moves it.
                 bare = _fr(
                     root,
-                    ["run", "resolve", "r1", "--step", member,
-                     "--item", f"phase/{n}", "--state", "done"],  # fmt: skip
+                    [
+                        "run",
+                        "resolve",
+                        "r1",
+                        "--step",
+                        member,
+                        "--item",
+                        f"phase/{n}",
+                        "--state",
+                        "done",
+                    ],  # fmt: skip
                 )
                 assert bare.exit_code == 2, bare.output
                 assert "--evidence review=" in " ".join(bare.output.split())

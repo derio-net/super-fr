@@ -503,3 +503,82 @@ The dispatch brief for review-phase now carries evidence: [review], so an orches
 REVIEW DECISION on the one change the executor flagged. It rewrote gh#517's test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed, because the cursor-side gate makes that test's original state unreachable: every phase a cursor walks already has its review by the time journal-check runs. UPHELD. That is the two gates composing, not one replacing the other — the cursor gate fires strictly earlier; journal-check keeps the cases no cursor ever saw (plans with no cursor, and a plan that grows a phase after the group completed, which is the rewritten scenario). Checked the adopt path specifically, since it bit this branch today: fr run adopt leaves review units PENDING, never done (test_adopt_of_an_all_complete_plan_lands_on_the_group_with_review_pending), so an adopted run meets the same evidence gate at resolve time, and 'done, unevidenced' can only come from a MIGRATED pre-gate cursor — which check reports as debt with its exit code unchanged (seen live: phases 1-4 of this run).
 
 Three fail-closed choices accepted as made: a flat step declaring review evidence is refused (a review is evidence about a phase); an obligation other than 'review' is refused at resolve time; a group's evidence is not inherited by its members. The manifest-drift test is the right one — it adds the field mid-flight and asserts the next refusal is for MISSING EVIDENCE, not drift — and it is mutation-verified.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-stop-hook-verified created=2026-09-21T01:56:17 phase=6 -->
+### p6-stop-hook-verified · discovery · The Claude Code Stop hook contract, verified on the 2.1.278 binary: what was captured live, what was only read from the schema, what is still the operator's (phase 6) (phase 6)
+
+**What phase 6 could and could not verify about a Claude Code `Stop` hook — on the binary, per gh#494.** The spec asserted `stop_hook_active` and `{"decision": "block"}` from memory. Installed binary: Claude Code **2.1.278**.
+
+**Verified LIVE** — two one-off headless turns (`claude -p … --settings <file> --tools "" --model haiku`; a single one-off is what `no-claude-p-batch` permits), with a `Stop` hook registered through `--settings`:
+
+1. The hook's stdin is one compact JSON object: `session_id`, `transcript_path`, `cwd`, `prompt_id`, `permission_mode`, `hook_event_name: "Stop"`, **`stop_hook_active`** (a JSON boolean, `false` on a turn's first stop), `last_assistant_message`, **`background_tasks`** and **`session_crons`** (both `[]`).
+2. Printing `{"decision": "block", "reason": …}` on stdout and **exiting 0** DOES keep the turn from ending, and the reason reaches the model: the probe's reason said "reply with exactly the single word: again", and the session's final output was `again`.
+3. The `Stop` of that continuation carries **`stop_hook_active: true`**.
+
+Both inputs are captured in `tests/fixtures/hooks/` (SHA-256 pinned in `NOTE.md` and in `tests/integration/test_run_idle_guard.py`). Redaction, stated: the operator's home-directory name was replaced by text substitution; nothing else was touched.
+
+**Read from the binary's own embedded schema, NOT exercised:** `background_tasks` is described there as *"in-flight background work … lets hooks distinguish 'session is done' from 'session is paused waiting for background work to wake it'"* — which is exactly §4.G's "held" case seen from the harness's side, and the spec did not know it existed. The hook output schema is `decision: enum[approve, block]` + optional `reason`. And the binary **caps consecutive Stop-hook blocks itself**: `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, default 8, after which it overrides the hook and ends the turn with a warning that names `stop_hook_active`. That is a third brake the guard did not have to build.
+
+**NOT verified, and left to the operator's Test Plan item 17:** that a hook registered through a **plugin's `hooks.json`** receives the same input (the probe used `--settings`); what `background_tasks` looks like while a background subagent really is running (the populated shape in the hook's tests is composed from the schema and is labelled so); anything about an interactive session.
+
+**What the guard does with it.** Proceeds only on a payload that says `hook_event_name: "Stop"`, `stop_hook_active: false` *literally*, no `agent_id`, and empty `background_tasks` / `session_crons`. A build that drops or renames `stop_hook_active` therefore SILENCES the guard rather than removing a brake from it.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-liveness-surface created=2026-09-21T01:56:18 phase=6 -->
+### p6-liveness-surface · discovery · The liveness surface phase 7 inherits: is_idle, exit 3, position, what 'manual' means as a stop, and the one deviation from is_idle(state, manifest) (phase 6) (phase 6)
+
+**The liveness surface phase 7 inherits.**
+
+**The predicate.** `fr/run/liveness.py`: `is_idle(state, manifest, *, refusals=()) -> Idle(idle, reason, detail)` — pure. `reason` is one of `idle | gate | manual | held | failed | finished | not-advanceable`; only `idle` means act. It mirrors `fr run advance` branch for branch ("idle" is precisely "`advance` would do something and nobody asked it to"), and to make that one definition rather than two, `gate_pending`, `next_step_id`, `hold_on`/`Hold` were MOVED there from `run_cmd.py`, which re-imports them under their old private names. `_unit_key`'s flat key now comes from `liveness.flat_unit_key`. `_manual_placement_preflight` was split into a verdict half (`_manual_placement_errors`) and the refusal that prints it.
+
+**Not quite `is_idle(state, manifest)` — and why.** Two of `advance`'s refusals are visible only in the plan ON DISK: an unreadable/unrecorded plan, and the manual-placement preflight. A pure function cannot read them, so the CLI computes them (`_plan_refusals`, through `advance`'s own `_group_phases` and the shared verdict half) and hands them in as `refusals`.
+
+**What "a `tag: manual` phase" means as a stop.** NOT "the plan has a manual phase": the default is a TRAILING manual phase, which never stops a run, and keying on the `phase/<n>: manual` marker would have silenced the guard for nearly every plan. The stop is fr-goal's FRONT-LOAD — `1 [manual], 2 agentic depends_on [1]`, operator's go not yet given — where `advance` refuses the whole group. With the shipped shape that usually surfaces earlier, as a FAILED `plan-review` (stop 4); the `manual` reason is what an adopted or repo-authored run sees.
+
+**The CLI.** `fr run check [RUN] --idle [--format json] [--stalled-after N]`. Exit **3** iff idle, else 0 (2 only for an explicit run id that cannot be read, or a bad `--format`). With `--idle`, a FAILED cursor exits **0**, not 1: `--idle` asks a different question, and the spec lists a failed step among the legitimate stops. Without `--idle` nothing about the exit code changed. `RUN` is optional only with `--idle`: it then reads the runs whose `state.branch` is the checked-out branch — never "every file in the runs dir", because a workspace carries every merged-and-unarchived cursor (this worktree held five). More than one IDLE run on a branch is `ambiguous` and is silence. JSON: `{idle, reason, detail, run, cursor, position, next_command, stalled[]}`; no run: `{idle: false, reason: "no-run", runs: []}`.
+
+**`position`** is an opaque 16-hex token over run id, cursor, step state, gate, and each unit's (state, attempt count). No timestamp enters it, so a failing `advance` that only re-stamps a record does not look like progress — that is the trap the loop breaker exists for.
+
+**Stalled.** `--stalled-after` (default 120) adds `<step>: <unit> has been held for 11h30m (dispatched …) — reported, never failed: fr cannot tell a long phase from a dead agent` to plain `fr run check` too, so it rides the PR body. Never an exit code; an unparseable `dispatched` is skipped, not raised.
+
+**Phase 5's warning, honoured and tested both ways:** `unevidenced` debt neither stops an idle run from being idle nor makes a held run look idle; a `synthesized` attempt is never a hold.
+
+**Live on this run's own cursor:** `uv run fr run check --idle` → exit 0, `2026-09-20-unit-record-unification-r2: not idle (held) — implement: phase/6/implement-phase is held`. This branch carries TWO runs (the delivered gh#508 one, now stranded by drift, and `-r2`), which is what found the reporting-order bug: the first draft reported the stranded run and said nothing about the held one.
+
+**For SKILL.md (phase 7):** the guard's block reason and the OpenCode nudge both tell the model how to get OUT ("if you are stopping on purpose, just stop again — this acts once per run position"). Prose that tells the orchestrator to *obey* the guard must not contradict that.
+
+<!-- fr:journal kind=decision scope=plan id=p6-guard-design created=2026-09-21T01:56:18 phase=6 -->
+### p6-guard-design · decision · fr-run-idle-guard.sh: always exit 0, no set -e, remember-before-block — and the four holes mutation testing found (phase 6) (phase 6)
+
+**`fr-run-idle-guard.sh` — the design decisions that are not in the spec.**
+
+1. **It always exits 0, and has NO `set -e`** — deliberately unlike every other hook in the directory. On Claude Code exit 2 from a Stop hook IS a block, and `fr` exits 2 for every refusal it makes, the artifact-migration gate included. Under `set -e` one unguarded call would turn "fr declined to answer" into "the operator cannot end the turn". An `EXIT` trap forces 0; blocking is said on stdout only.
+2. **Session → worktree from the binding, never the payload's `cwd`.** An orchestrator sits in the base clone and reaches the worktree through `fr isolation exec`. Keyed on `worktree` alone (the file says `harness: "claude"`, `fr.harness` says `claude-code`).
+3. **Remember first, block second — and only if the memory took.** The position is written to `<sessions-dir>/<session>.idle-guard` and READ BACK before the block is printed. If it cannot be written the guard does not block at all: the loop breaker is what makes blocking safe, so without it there is no block. `fr isolation detach` / `detach_all` now delete that file with the binding (`sessions.idle_guard_path`); it is deliberately not `*.json`, which gc globs as indexes.
+4. **A 20-second watchdog** (`FR_IDLE_GUARD_TIMEOUT`), as a subshell because stock macOS has no `timeout(1)`; every child's stdio is detached, the lesson `fr-session-unbind.sh` already paid for.
+5. **The block reason tells the model how to stop anyway.**
+
+**The guard is only as live as the `fr` on PATH.** It calls `fr`, like every hook here. AGENTS.md already warns that the PATH `fr` can be older than a worktree's artifacts; such an `fr` exits 2 (unknown `--idle`, or a cursor it cannot read) and the guard is silent. Correct, but it means an out-of-date global install silently disables it. Not fixed here.
+
+**Mutation-verified, every mutant printed APPLIED.** Predicate: 11 mutants. Hook: 12. OpenCode handler: 10. Four survivors were found and each was a real hole:
+- the two halves of "held" (`open_attempts` walk, `hold_on`'s recordless fallback) each covered for the other, so NEITHER was tested — now each has a test that only it can pass;
+- the hook checked `idle == true` twice, so dropping either check changed nothing — collapsed to one guard;
+- TS: a session lookup that comes back `{error}` (the SDK's default, non-throwing shape) was treated as top-level under mutation and nothing noticed, because only the THROWING case was tested and the catch-all silenced it;
+- TS: a non-string `position` was only silent by accident (`Map.get(undefined) === undefined`).
+
+<!-- fr:journal kind=discovery scope=plan id=p6-opencode-not-live-proven created=2026-09-21T01:56:18 phase=6 -->
+### p6-opencode-not-live-proven · discovery · OpenCode: a green bun test does not prove a plugin-originated prompt on idle executes — the row stays partial (phase 6) (phase 6)
+
+**A green `bun test` does NOT prove the OpenCode adapter works, and the parity row says so.**
+
+What is shown: `createIdleHandler` (`packages/fr-opencode-plugin/src/idle.ts`), driven with a FAKE client and a stub `fr`, sends exactly one `promptAsync` per run position on `session.idle`, is silent otherwise, leaves child sessions alone and never throws. 50 tests, 10 mutants killed.
+
+What is NOT shown: that a prompt a plugin sends on `session.idle` actually EXECUTES in a live OpenCode session — that the event fires for a TUI session at the moment a turn ends, that `client.session.promptAsync` is callable from inside an `event` hook, that the injected text is acted on, or that it does not collide with the operator typing. None of that is reachable from `bun test`. By the gh#494 standard the row is therefore `opencode: partial` with a scope_note saying so, and acceptance row `run-idle-reprompt-opencode` stays `not-implemented`.
+
+**One discrepancy with the brief, recorded rather than smoothed over.** The brief and the spec say the event and endpoint were verified "in the installed OpenCode 1.18.31 SDK types". The installed `opencode` BINARY is 1.18.31; the `@opencode-ai/sdk` type copies this phase could find on the machine are **1.17.15** (plus 1.1.27 and 1.0.23 elsewhere). All of them carry `EventSessionIdle { properties: { sessionID } }`, `Session.parentID`, and `session.promptAsync` → `/session/{id}/prompt_async` with `body.parts` and `query.directory`, so the design is unaffected — but "1.18.31 SDK types" is not what is on disk.
+
+**Export discipline.** OpenCode calls every export of a plugin module as a plugin, so `src/index.ts` exports plugins only; the handler lives in `src/idle.ts` and is wired as the existing plugin's `event` hook. The thin re-export in `.opencode/plugins/` did not change. TypeScript was NOT type-checked: CI's `opencode-plugin-test` job runs `bun test` only, and this worktree has no `node_modules`.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f-head-fails-format-check created=2026-09-21T01:56:19 phase=6 state=fixed -->
+### p6-f-head-fails-format-check · finding [fixed] · HEAD failed CI's ruff format --check: two misplaced fmt: skip comments from phase 5 (phase 6) (phase 6)
+
+`HEAD` (`4062e2a`, phase 5's review commit) FAILS `ruff format --check`, which `.github/workflows/ci.yml`'s `lint` job runs: `tests/integration/test_fr_goal_shape.py` carries two `# fmt: skip` comments on the closing `]` of a multi-line list, where ruff does not honour them, so it wants both lists exploded. Found because phase 6's first `ruff format` touched a file this phase never edited. Fixed by accepting ruff's formatting (no behaviour change; the now-inert `# fmt: skip` comments were left in place). Phase 5's reported gates list `ruff` but evidently ran `ruff check`, not `ruff format --check`.

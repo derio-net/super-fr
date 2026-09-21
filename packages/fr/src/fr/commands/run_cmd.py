@@ -27,7 +27,7 @@ import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal
 
 import typer
 from rich.console import Console
@@ -46,8 +46,12 @@ from fr.journal.model import (
     resolve_journal_read_path,
     reviews_phase,
 )
+from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
+from fr.run.liveness import gate_pending as _gate_pending
+from fr.run.liveness import hold_on as _hold_on
+from fr.run.liveness import next_step_id as _next_step_id
 from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
@@ -244,7 +248,7 @@ def _unit_key(
                 f"`for_each` step — {step.id!r} has no members[/red]"
             )
         raise typer.Exit(2)
-    return f"step/{step.id}"
+    return _liveness.flat_unit_key(step.id)
 
 
 def _emitted_plan(state: RunState) -> str | None:
@@ -501,12 +505,6 @@ def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
     )
 
 
-def _next_step_id(manifest: WorkflowManifest, step_id: str) -> str | None:
-    ids = [s.id for s in manifest.steps]
-    idx = ids.index(step_id)
-    return ids[idx + 1] if idx + 1 < len(ids) else None
-
-
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
     """The manifest this run was started against — name AND schema version.
 
@@ -664,16 +662,6 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
-
-
-def _gate_pending(step: Step, record: StepRecord) -> bool:
-    """Is this step still waiting on its operator gate?
-
-    A gate is answered by `fr run resolve` (which records `gate: cleared`),
-    not by the step's lifecycle state — spec §4.A: "a pause. The step ends
-    the turn and the run does not advance until the operator answers."
-    """
-    return step.gate == "operator" and record.gate != "cleared" and record.state != "done"
 
 
 def _gate_degradation_notice() -> str | None:
@@ -1300,44 +1288,6 @@ def _held_record(record: StepRecord, key: str) -> UnitAttempt | None:
     return units.open_attempt(record, key)
 
 
-class _Hold(NamedTuple):
-    """Why `advance` will not brief a unit again (`_hold_on`)."""
-
-    holder: UnitAttempt | None
-    """The open record — or `None` for a unit that is `running` with no
-    record at all, where there is a hold to respect but nobody to name."""
-
-
-def _hold_on(record: StepRecord, key: str, *, running: bool) -> _Hold | None:
-    """Is `key` held — must `advance` refuse to brief it again? Decision u1
-    (spec 2026-09-20-unit-record-unification §4.C), and the ONLY function
-    that answers it; both refusal call sites ask here and nowhere else.
-
-    **The dispatch record is the witness.** A unit is held iff its last record
-    is open (`_held_record`). `running` is deliberately NOT part of that
-    answer: `fr run claim --abandoned` closes the record and leaves the unit
-    `running` on purpose, so a refusal keyed on state never lifts and a lost
-    executor can never be re-briefed — the defect gh#508 and gh#519 produced
-    between them by each building this refusal off a different map.
-
-    **`running` is consulted in exactly one case: there is no record at
-    all.** A cursor written before the record existed (`run` 2 -> 3 -> 4 are
-    stamp-only migrations) or adopted from disk has running units with no
-    attempts. No witness is not the same as a witness saying "free", so there
-    gh#519's state-based refusal stands, and the caller words it `ALREADY
-    RUNNING (dispatched <at>)` because there is no holder to name. A unit
-    with ANY record, even a closed one, never reaches this branch. (An attempt
-    the 4 -> 5 migration SYNTHESIZED to carry an old cost snapshot is not a
-    record in this sense — `units.dispatch_recorded` — so a migrated in-flight
-    cursor is refused, and retried, exactly as it was the day before.)
-    """
-    held = _held_record(record, key)
-    if held is not None:
-        return _Hold(held)
-    never_recorded = not units.dispatch_recorded(record, key)
-    return _Hold(None) if running and never_recorded else None
-
-
 def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
     """Close `key`'s open dispatch: `returned` = now, `outcome` = `outcome`.
 
@@ -1610,6 +1560,35 @@ def _nothing_running_refusal(subject: str, detail: str, run_id: str) -> str:
     )
 
 
+def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | None, list[str]]:
+    """`(plan_rel, messages)` — every way this run's plan mis-places a manual
+    phase (spec §3.D.2). Empty when the plan is fine, missing or unparseable.
+
+    The VERDICT half of `_manual_placement_preflight`, split out so the idle
+    reading (`fr run check --idle`, spec 2026-09-20-unit-record-unification
+    §4.G) can ask "would `advance` refuse this group?" without a second
+    definition of the rule — and without printing or exiting.
+
+    It calls `fr.plan_ops._manual_placement_issues` — the authoring gate
+    ITSELF, not a re-implementation of it — so the two points share one
+    definition of "trailing" (`_trailing_manual_block`), one definition of
+    "outstanding", and one message. Spelled twice they would drift, and an
+    operator shown two different texts for one situation has no way to tell
+    which is current.
+    """
+    from fr.parser import PlanSchemaError, parse
+    from fr.plan_ops import _manual_placement_issues
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
+        return None, []
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
+        return plan_rel, []
+    return plan_rel, [i.message for i in _manual_placement_issues(plan) if i.severity == "error"]
+
+
 def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) -> None:
     """Refuse a whole group whose plan mis-places a manual phase (spec §3.D.2).
 
@@ -1621,31 +1600,14 @@ def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) 
     `fr run adopt`, or driven by a repo-authored shape with no plan-review
     step, arrives at the fan-out with the plan unchecked.
 
-    It calls `fr.plan_ops._manual_placement_issues` — the authoring gate
-    ITSELF, not a re-implementation of it — so the two points share one
-    definition of "trailing" (`_trailing_manual_block`), one definition of
-    "outstanding", and one message. Spelled twice they would drift, and an
-    operator shown two different texts for one situation has no way to tell
-    which is current.
-
     Silent when the plan is missing or unparseable: `_group_phases` has
     already refused the advance for both, naming the cause, and a second
     refusal here would only mask its message.
     """
-    from fr.parser import PlanSchemaError, parse
-    from fr.plan_ops import _manual_placement_issues
-
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
+    plan_rel, messages = _manual_placement_errors(repo_root, state)
+    if not messages:
         return
-    try:
-        plan = parse(repo_root / plan_rel)
-    except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
-        return
-    issues = [i for i in _manual_placement_issues(plan) if i.severity == "error"]
-    if not issues:
-        return
-    detail = "\n".join(f"  {issue.message}" for issue in issues)
+    detail = "\n".join(f"  {message}" for message in messages)
     err_console.print(
         f"[red]{step_id}: this plan mis-places a manual phase — refusing to "
         f"dispatch ANY of it.[/red]\n{detail}\n"
@@ -3184,34 +3146,234 @@ def claim_cmd(
 
 
 def _open_dispatches(state: RunState) -> list[tuple[str, str, UnitAttempt]]:
-    """Every currently-open `(step_id, key, DispatchRecord)` in `state`,
-    steps in cursor order and keys sorted within a step.
+    """Every currently-open `(step_id, key, attempt)` in `state` — see
+    `fr.run.liveness.open_attempts`, where it moved so the idle reading and
+    this report walk the same list."""
+    return _liveness.open_attempts(state)
 
-    Reuses `_held_record` — the one notion of "is this unit held" in the
-    module — rather than re-deriving "the last attempt is open" here."""
-    open_dispatches: list[tuple[str, str, UnitAttempt]] = []
-    for step_id, record in state.steps.items():
-        for key in units.unit_keys(record):
-            held = _held_record(record, key)
-            if held is not None:
-                open_dispatches.append((step_id, key, held))
-    return open_dispatches
+
+IDLE_EXIT_CODE = 3
+"""`fr run check --idle` on an idle run. `check` used 0/1/2 before it; 3 is the
+one code both harness adapters act on, and they act on nothing else."""
+
+
+_IDLE_REPORT_ORDER: tuple[str, ...] = (
+    "idle",
+    "held",
+    "gate",
+    "manual",
+    "failed",
+    "not-advanceable",
+    "finished",
+)
+
+
+def _plan_refusals(
+    repo_root: Path, state: RunState, manifest: WorkflowManifest
+) -> list[_liveness.Refusal]:
+    """The reasons `advance` would refuse that only the plan ON DISK shows —
+    the I/O half `fr.run.liveness.is_idle` (pure) is handed.
+
+    Both are `_advance_group`'s own refusals, asked through its own functions:
+    `_group_phases` (no plan recorded, or an unreadable one) and the
+    manual-placement preflight, which `advance` runs exactly while the group
+    has not started (`record.state != "running"`) — so this does too.
+    """
+    step = next((s for s in manifest.steps if s.id == state.cursor), None)
+    record = state.steps.get(state.cursor)
+    if step is None or record is None or step.kind != "agent" or not step.steps:
+        return []
+    try:
+        _group_phases(repo_root, state)
+    except (RunStateError, AdoptError) as e:
+        return [_liveness.Refusal("not-advanceable", f"{step.id}: {e}")]
+    if record.state == "running":
+        return []
+    _, messages = _manual_placement_errors(repo_root, state)
+    return [_liveness.Refusal("manual", message) for message in messages]
+
+
+def _idle_reading(repo_root: Path, state: RunState) -> _liveness.Idle:
+    """`is_idle` for one run, with everything `advance` would refuse over
+    folded in as *not idle* — an unresolvable or drifted manifest included.
+    Never raises for a state `advance` would merely refuse."""
+    try:
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except (RunStateError, WorkflowError, AdoptError) as e:
+        return _liveness.Idle(False, "not-advanceable", str(e))
+    return _liveness.is_idle(state, manifest, refusals=_plan_refusals(repo_root, state, manifest))
+
+
+def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
+    """Every readable run whose `branch` is the one checked out here.
+
+    `state.branch`, never "every file in the runs dir": a workspace is a
+    checkout of `main` and carries every cursor merged and not yet archived
+    (`_existing_run_for_workflow` learned this the hard way), and somebody
+    else's advanceable cursor is nobody's stall. An unreadable file is
+    skipped — it is a different problem, and `fr validate artifacts` reports
+    it; here it must not become a reason to act, or to fail.
+    """
+    from fr.run.adopt import current_branch
+
+    branch = current_branch(repo_root)
+    runs_dir = repo_root / RUNS_REL
+    if branch is None or not runs_dir.is_dir():
+        return []
+    found: list[RunState] = []
+    for candidate in sorted(runs_dir.glob("*.yaml")):
+        try:
+            state = parse_run_state(candidate.read_text())
+        except (RunStateError, OSError):
+            continue
+        if state.branch == branch:
+            found.append(state)
+    return found
+
+
+def _stalled_payload(stalled: list[_liveness.StalledAttempt]) -> list[dict[str, Any]]:
+    return [
+        {
+            "step": s.step,
+            "unit": s.unit,
+            "dispatched": s.attempt.dispatched,
+            "age_minutes": s.age_minutes,
+        }
+        for s in stalled
+    ]
+
+
+def _stalled_line(s: _liveness.StalledAttempt) -> str:
+    return (
+        f"{s.step}: {s.unit} has been held for {_liveness.render_age(s.age_minutes)} "
+        f"(dispatched {s.attempt.dispatched}) — reported, never failed: fr cannot "
+        "tell a long phase from a dead agent"
+    )
+
+
+def _check_idle(repo_root: Path, run_id: str | None, stalled_after: int, fmt: str) -> None:
+    """`fr run check --idle` — exit 3 exactly on an idle run (spec §4.G)."""
+    if run_id is not None:
+        candidates = [_load_or_exit(repo_root, run_id)]
+    else:
+        candidates = _runs_on_this_branch(repo_root)
+    readings = [(state, _idle_reading(repo_root, state)) for state in candidates]
+    idle = [(state, reading) for state, reading in readings if reading.idle]
+
+    if not readings or len(idle) > 1:
+        # No run at all is the sixth legitimate stop. MORE than one idle run on
+        # a branch is a state fr-goal never produces (a stranded cursor is not
+        # advanceable), so fr does not guess which one the session meant:
+        # ambiguity is silence.
+        reason = "ambiguous" if idle else "no-run"
+        runs = [state.run for state, _ in idle]
+        if fmt == "json":
+            typer.echo(json.dumps({"idle": False, "reason": reason, "runs": runs}))
+        elif idle:
+            console.print(
+                f"not idle (ambiguous) — {len(runs)} idle runs on this branch "
+                f"({', '.join(runs)}); name one: fr run check <run> --idle",
+                soft_wrap=True,
+                markup=False,
+            )
+        else:
+            console.print("not idle (no-run) — no run on this branch", markup=False)
+        return
+
+    # With nothing idle, REPORT the run most worth reading about: a branch can
+    # carry a delivered run, a stranded one and the live one at once (this
+    # feature's own branch did), and the held run is the one a human means.
+    # Which is reported never changes the exit code — none of these is idle.
+    state, reading = (
+        idle[0]
+        if idle
+        else min(readings, key=lambda pair: _IDLE_REPORT_ORDER.index(pair[1].reason))
+    )
+    now = _dt.datetime.now(_dt.UTC)
+    stalled = _liveness.stalled_attempts(state, now=now, after_minutes=stalled_after)
+    next_command = f"fr run advance {state.run}" if reading.idle else None
+    if fmt == "json":
+        typer.echo(
+            json.dumps(
+                {
+                    "idle": reading.idle,
+                    "reason": reading.reason,
+                    "detail": reading.detail,
+                    "run": state.run,
+                    "cursor": state.cursor,
+                    "position": _liveness.position(state),
+                    "next_command": next_command,
+                    "stalled": _stalled_payload(stalled),
+                }
+            )
+        )
+    else:
+        verdict = "idle" if reading.idle else f"not idle ({reading.reason})"
+        console.print(f"{state.run}: {verdict} — {reading.detail}", soft_wrap=True, markup=False)
+        for s in stalled:
+            console.print(_stalled_line(s), soft_wrap=True, markup=False)
+        if next_command is not None:
+            console.print(f"  next: {next_command}", soft_wrap=True, markup=False)
+    if reading.idle:
+        raise typer.Exit(IDLE_EXIT_CODE)
 
 
 @run_app.command("check")
-def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+def check_cmd(
+    run_id: str | None = typer.Argument(
+        None, help="Run id. Optional with --idle: the runs of the checked-out branch."
+    ),
+    idle: bool = typer.Option(
+        False,
+        "--idle",
+        help="Liveness instead of freshness: exit 3, naming the next command, "
+        "exactly when the run is advanceable and nobody is working on it. Exit 0 "
+        "in every legitimate stop — a pending operator gate, an outstanding "
+        "manual phase, a HELD unit, a failed step, a finished run, no run.",
+    ),
+    stalled_after: int = typer.Option(
+        _liveness.DEFAULT_STALLED_AFTER_MINUTES,
+        "--stalled-after",
+        min=0,
+        help="Report an open attempt older than this many minutes, with its age. "
+        "Never a failure and never an exit code: fr cannot tell a long phase "
+        "from a dead agent.",
+    ),
+    fmt: str = typer.Option("text", "--format", help="text | json (json: with --idle only)."),
+) -> None:
     """Freshness gate: non-zero when the cursor sits on a failed step.
 
     It also REPORTS every operator gate the agent cleared itself (spec
-    §3.D.3), every currently open dispatch, and how many of those are
-    unclaimed (spec §4.C) — none of it changes the exit code. The exit code
-    stays exactly what it was: `check` is a narrow freshness gate, and
-    making an open or unclaimed dispatch non-zero would turn every ordinary
-    in-flight run red, which is the same hard-refusal shape the operator
-    already rejected for an agent-cleared gate. The enforcement is that the
-    same list rides the delivered PR body, where a human reads it.
+    §3.D.3), every currently open dispatch, how many of those are unclaimed
+    (spec §4.C), and any held past `--stalled-after` — none of it changes the
+    exit code. The exit code stays exactly what it was: `check` is a narrow
+    freshness gate, and making an open or unclaimed dispatch non-zero would
+    turn every ordinary in-flight run red, which is the same hard-refusal
+    shape the operator already rejected for an agent-cleared gate. The
+    enforcement is that the same list rides the delivered PR body, where a
+    human reads it.
+
+    `--idle` asks the OTHER question (gh#518, spec
+    2026-09-20-unit-record-unification §4.G) and owns exit code 3. It is what
+    the Claude Code `Stop` hook and the OpenCode `session.idle` handler run;
+    the answer is `fr.run.liveness.is_idle`'s and nobody else's.
     """
+    if fmt not in ("text", "json"):
+        err_console.print(f"[red]--format must be text or json, not {fmt!r}[/red]")
+        raise typer.Exit(2)
     repo_root = resolve_repo_root()
+    if idle:
+        _check_idle(repo_root, run_id, stalled_after, fmt)
+        return
+    if fmt == "json":
+        err_console.print("[red]--format json is only available with --idle[/red]")
+        raise typer.Exit(2)
+    if run_id is None:
+        err_console.print(
+            "[red]fr run check needs a run id (only --idle can find the run "
+            "of the checked-out branch itself)[/red]"
+        )
+        raise typer.Exit(2)
     state = _load_or_exit(repo_root, run_id)
 
     record = state.steps.get(state.cursor)
@@ -3239,6 +3401,12 @@ def check_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
             f"{len(unclaimed)} unclaimed dispatch(es) — visible debt, not a failure",
             soft_wrap=True,
         )
+    # Stalled (§4.G): gh#503's 11.5-hour executor, visible from fr instead of
+    # from the harness's private files. A report and nothing more.
+    for stalled in _liveness.stalled_attempts(
+        state, now=_dt.datetime.now(_dt.UTC), after_minutes=stalled_after
+    ):
+        console.print(_stalled_line(stalled), soft_wrap=True, markup=False)
     # Reviews resolved before the evidence gate existed (§4.E). Reported, never
     # failed, and deliberately NOT part of the exit code below: an obligation
     # cannot be enforced backwards in time, and doing so here would turn every

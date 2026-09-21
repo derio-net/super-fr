@@ -2532,22 +2532,49 @@ rows:
       legitimate stop
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#518''s artifact half: exit 3 exactly when the cursor is advanceable,
-      no gate is pending, nothing is held and nothing failed. Six legitimate-stop cases
-      each get their own test, because a false positive here blocks an operator''s turn.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_idle.py#L81
+      - super-fr:tests/unit/test_run_idle.py#L90
+      - super-fr:tests/unit/test_run_idle.py#L125
+      - super-fr:tests/unit/test_run_idle.py#L139
+      - super-fr:tests/unit/test_run_idle.py#L159
+      - super-fr:tests/unit/test_run_idle.py#L173
+      - super-fr:tests/unit/test_run_idle.py#L195
+      - super-fr:tests/unit/test_run_idle.py#L205
+    status: ci
+    notes: 'gh#518''s artifact half. fr run check --idle exits 3 exactly when the run
+      is advanceable with nobody working on it (fr.run.liveness.is_idle, pure; it mirrors
+      fr run advance branch for branch) and 0 in each legitimate stop, ONE TEST APIECE:
+      pending operator gate, outstanding front-loaded manual phase, HELD unit, failed
+      step, finished run, no run. Also pinned: the gh#518 shape itself (a unit resolved,
+      the group still running, nothing held), an abandoned unit is idle, unevidenced
+      review debt is not a stop either way, a synthesized attempt is never a hold, a
+      cursor inherited from another branch is never this session''s run, two idle runs
+      on one branch is ambiguity and ambiguity is silence. Mutation-verified, 11 mutants
+      each printed APPLIED; two survivors found and fixed (the two halves of ''held''
+      covered for one another, so neither was tested).'
   - id: run-idle-stop-guard
     capability: Harness parity
     acceptance: On Claude Code, ending a turn on an idle run is blocked with the next
       command
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: The enforcing artifact gh#518 said did not exist. enforced on claude-code
-      only; absent elsewhere with a scope_note, per the parity rule. Fail-open by design.
-      Live is Test Plan item 17.
+    levels:
+      int:
+      - super-fr:tests/integration/test_run_idle_guard.py#L231
+      - super-fr:tests/integration/test_run_idle_guard.py#L242
+      - super-fr:tests/integration/test_run_idle_guard.py#L257
+    status: ci
+    notes: 'plugins/super-fr/hooks/fr-run-idle-guard.sh, registered under Stop. Integration:
+      the hook, as a subprocess, runs the REAL fr from the checkout against a real linked
+      worktree and blocks an idle stop with a reason naming fr run advance <run> and
+      the worktree; it finds the run through the session binding, never the payload''s
+      cwd. Payloads are CAPTURED from Claude Code 2.1.278 (tests/fixtures/hooks/, SHA-256
+      pinned): stop_hook_active is present, and decision:block + exit 0 was shown live
+      to block and to reach the model. enforced on claude-code only. NOT verified: delivery
+      through a plugin''s hooks.json (the probe registered via --settings) and an interactive
+      session — that is Test Plan item 17, still owed.'
   - id: run-unit-record-migrates
     capability: Run cursor
     acceptance: A v4 cursor's items, dispatch and accounting migrate into one unit map
@@ -2762,31 +2789,65 @@ rows:
       fails the check
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: gh#503's 11.5-hour executor made visible from fr. Never a failure, because
-      fr cannot tell a long phase from a dead agent and must not kill a legitimate one.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_idle.py#L421
+      - super-fr:tests/unit/test_run_idle.py#L433
+      - super-fr:tests/unit/test_run_idle.py#L461
+    status: ci
+    notes: 'gh#503''s 11.5-hour executor made visible from fr: an open attempt older
+      than --stalled-after (default 120 minutes) is reported with its age by plain fr
+      run check (so it rides the PR body) and by --idle --format json. The exit code
+      is asserted unchanged literally, in every mode, and a stalled unit still reads
+      as HELD, never idle. A legitimate 58-minute phase is not reported at the default;
+      an unparseable dispatch time is skipped, never raised. Mutation-verified (threshold
+      made always-true fails).'
   - id: run-idle-guard-never-wedges
     capability: Harness parity
     acceptance: The idle Stop guard stays silent when no run is bound to the session
       and fails open on any fr error
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: The worst outcome of this whole spec is an operator who cannot end a turn.
-      A guard that wedges a session over its own bug is worse than the stall it prevents.
+    levels:
+      int:
+      - super-fr:tests/integration/test_run_idle_guard.py#L332
+      - super-fr:tests/integration/test_run_idle_guard.py#L373
+      - super-fr:tests/integration/test_run_idle_guard.py#L388
+      - super-fr:tests/integration/test_run_idle_guard.py#L428
+      - super-fr:tests/integration/test_run_idle_guard.py#L438
+      - super-fr:tests/integration/test_run_idle_guard.py#L464
+      - super-fr:tests/integration/test_run_idle_guard.py#L477
+      - super-fr:tests/integration/test_run_idle_guard.py#L598
+    status: ci
+    notes: 'The worst outcome of this spec is an operator who cannot end a turn. The
+      hook ALWAYS exits 0 (an EXIT trap, and deliberately no set -e: fr exits 2 on every
+      refusal and exit 2 from a Stop hook IS a block). Silent, exit 0, on: no binding
+      for the session, fr missing, jq missing, fr erroring, the migration gate refusing,
+      an fr too old for --idle, fr killed, fr hanging (20s watchdog, test bounded),
+      exit 3 with no/garbage/non-object output, a complete answer that says not idle,
+      idle JSON under exit 0, a missing position or next command, an unusable binding,
+      an unusable payload, a subagent''s stop. Every stub case asserts the stub was
+      reached, so none passes by never looking. Mutation-verified, 12 mutants.'
   - id: run-idle-guard-allows-waiting
     capability: Harness parity
     acceptance: Ending a turn while a dispatched executor is still working is allowed
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_idle.py#L159
+      int:
+      - super-fr:tests/integration/test_run_idle_guard.py#L293
+      - super-fr:tests/integration/test_run_idle_guard.py#L579
+    status: ci
     notes: 'The subtle legitimate stop: on Claude Code a background executor''s return
       arrives as a notification, so a turn that ends while a unit is HELD is correct.
-      Separated from run-idle-detected because it is the case most likely to be got
-      wrong.'
+      Pinned at both levels: the predicate says held (unit), and the hook is silent
+      against the real fr with a unit dispatched (int). A second, harness-side witness
+      was found on the 2.1.278 binary and is honoured too: a non-empty background_tasks
+      or session_crons in the Stop payload means the session is paused and will be woken,
+      so the guard does not act. That field''s POPULATED shape was read from the binary''s
+      schema, not captured — stated in tests/fixtures/hooks/NOTE.md.'
   - id: run-cost-attributed-by-agent-id
     capability: Run cursor
     acceptance: A claimed attempt's cost is selected by its agent id, so overlapping
@@ -2850,23 +2911,43 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
     levels: {}
     status: not-implemented
-    notes: 'Verified on the installed OpenCode 1.18.31: session.idle is in the SDK types
-      and /session/{id}/prompt_async is callable by a plugin''s client. Cannot BLOCK
-      a stop, only continue — a weaker tier, declared as such. Stays partial in parity.yaml
-      until a live run proves a plugin-originated prompt on idle executes (the gh#494
-      standard).'
+    notes: 'STAYS not-implemented, deliberately. The handler exists (packages/fr-opencode-plugin/src/idle.ts,
+      wired as the plugin''s event hook) and bun test covers it — 50 tests, 10 mutants
+      killed: one promptAsync per run position on session.idle, silent otherwise, child
+      sessions left alone, never throws. But every one of those tests drives a FAKE
+      client. That a plugin-originated prompt on session.idle actually EXECUTES in a
+      live OpenCode session is not shown by any of them, and that is the claim this
+      row makes. By the gh#494 standard it needs a live run; until then parity.yaml
+      says opencode: partial. Cannot BLOCK a stop, only continue — a weaker tier, declared
+      as such. Note: the opencode binary here is 1.18.31 but the SDK type copies found
+      on the machine are 1.17.15; both session.idle and /session/{id}/prompt_async are
+      in them.'
   - id: run-idle-guard-acts-once-per-position
     capability: Harness parity
     acceptance: The idle guard acts at most once per cursor position, so a failing advance
       cannot trap a session in a loop
     origin:
     - super-fr:docs/superpowers/specs/2026-09-20-unit-record-unification-design.md
-    levels: {}
-    status: not-implemented
-    notes: A guard that always blocks is a trap when advance keeps failing or the model
-      keeps stopping. Host-local memory of the last position acted on, plus Claude Code's
-      stop_hook_active as a second independent brake. Without this the never-wedges
-      claim is false in exactly the case that matters.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_idle.py#L361
+      - super-fr:tests/unit/test_run_idle.py#L380
+      int:
+      - super-fr:tests/integration/test_run_idle_guard.py#L485
+      - super-fr:tests/integration/test_run_idle_guard.py#L499
+      - super-fr:tests/integration/test_run_idle_guard.py#L510
+      - super-fr:tests/integration/test_run_idle_guard.py#L548
+    status: ci
+    notes: 'The loop breaker. fr emits an opaque position (run, cursor, step state,
+      gate, each unit''s state and attempt count — no timestamp, so a failing advance
+      that only re-stamps a record is not progress). The hook remembers the position
+      it last acted on beside the session binding, WRITES AND READS IT BACK before blocking,
+      and does not block at all if it cannot: a second stop at the same position passes,
+      and it acts again once the cursor moves. Independent brakes: stop_hook_active
+      must be literally false (the CAPTURED continuation payload is let through with
+      no memory at all; a build that drops the field silences the guard rather than
+      un-braking it), and Claude Code''s own CLAUDE_CODE_STOP_HOOK_BLOCK_CAP (default
+      8, read from the binary). fr isolation detach deletes the memory with the binding.'
   - id: journal-review-entry-per-phase
     capability: journal
     acceptance: 'A completed phase leaves a machine-readable trace that it was code-reviewed:

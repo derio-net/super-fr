@@ -89,42 +89,79 @@ tasks:
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:23:05+00:00'
+      note: 'RED: tests/unit/test_run_idle.py — 27 tests, first fails on ''No such
+        option: --idle''. Six legitimate stops one test apiece (+ a failed-UNIT variant);
+        manual-phase stop = the front-load shape advance''s preflight refuses.'
     P6.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:31:55+00:00'
+      note: 'GREEN: check_cmd gains --idle / --stalled-after / --format json; exit
+        3 only on idle. run id optional with --idle (runs of the checked-out branch,
+        by state.branch). 29 tests green.'
     P6.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:31:56+00:00'
+      note: 'REFACTOR: fr/run/liveness.py — is_idle(state, manifest, *, refusals=())
+        is pure; gate_pending/next_step_id/hold_on MOVED there from run_cmd (re-imported
+        under their old names) so advance and the idle reading share one definition.
+        Mutation-verified, 11 mutants, each printed APPLIED; two survivors found and
+        fixed (the two halves of ''held'' covered for each other).'
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:40:20+00:00'
+      note: 'VERIFIED ON THE BINARY (Claude Code 2.1.278): two one-off headless turns
+        with a Stop hook registered via --settings. Input carries stop_hook_active
+        (bool), background_tasks, session_crons; {decision: block, reason} on stdout
+        + exit 0 DOES block and the reason reaches the model; the continuation''s
+        Stop carries stop_hook_active: true. Both inputs captured to tests/fixtures/hooks/
+        (home dir name redacted, stated in NOTE.md). Not verified: plugin-registered
+        hooks.json delivery, a populated background_tasks, interactive sessions. RED:
+        tests/integration/test_run_idle_guard.py, 46 failed / 3 passed (the capture
+        pins).'
     P6.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:48:09+00:00'
+      note: 'GREEN: plugins/super-fr/hooks/fr-run-idle-guard.sh registered under Stop.
+        Always exits 0 (EXIT trap; NO set -e — fr exits 2 on every refusal and exit
+        2 IS a block). Blocks only on rc==3 AND parsed idle==true AND position+next_command,
+        at a position not yet acted on; memory written BEFORE blocking and verified.
+        Brakes: stop_hook_active must be literally false; background_tasks/session_crons
+        non-empty = silence. 20s watchdog. 52 tests; 12 mutants, each printed APPLIED
+        — one survivor (idle-true) traced to a redundant double guard, collapsed to
+        one and re-killed. fr isolation detach/detach_all now delete the memory file.'
     P6.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:54:37+00:00'
+      note: 'parity.yaml row fr-run-idle-guard: claude-code enforced; opencode partial;
+        hermes absent (observe-only lead, NOT verified, not installed); codex + copilot-cli
+        unsupported with the block-tier note. fr harness parity --check FAILED on
+        it until the OpenCode marker landed (the gate can fail), then passed.'
     P6.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:51:24+00:00'
+      note: 'RED: packages/fr-opencode-plugin/test/idle.test.ts — bun test fails on
+        ''Cannot find module ../src/idle''. SDK note: the installed opencode BINARY
+        is 1.18.31; the SDK type copies found on this machine are 1.17.15 (and 1.1.27
+        / 1.0.23), not 1.18.31 — all carry EventSessionIdle {properties.sessionID}
+        and session.promptAsync -> /session/{id}/prompt_async.'
     P6.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-20T23:54:37+00:00'
+      note: 'GREEN: packages/fr-opencode-plugin/src/idle.ts (createIdleHandler) wired
+        as the plugin''s event hook beside tool.execute.before; index.ts exports plugins
+        only. Verdict is fr''s; TS parses exit 3 + idle===true + string position/next_command
+        and nothing else.'
     P6.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-21T00:01:31+00:00'
+      note: 'bun test 50 pass / 0 fail; 10 TS mutants killed (two survivors found
+        and fixed first). observe.py needed NO change — the OpenCode marker comment
+        is the registration. Journalled plainly (p6-opencode-not-live-proven): the
+        row stays partial and run-idle-reprompt-opencode stays not-implemented, because
+        a green bun test does not show a plugin-originated prompt on idle executes.'
   completion:
-    at: null
+    at: '2026-09-21T00:01:31+00:00'
     note: null
     observed_prs: []

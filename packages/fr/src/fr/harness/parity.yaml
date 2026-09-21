@@ -90,6 +90,44 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: fr-run-idle-guard
+    kind: hook
+    script: fr-run-idle-guard.sh
+    summary: >-
+      Keeps an fr run going: ending a turn on a run that is advanceable with
+      nobody working on it hands back the next command (gh#518). The predicate
+      is `fr run check --idle`; each adapter is as strong as its harness allows.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: >-
+          CONTINUES rather than blocks — OpenCode cannot refuse a stop, so on
+          `session.idle` the plugin sends the next command back into the
+          session (`/session/{id}/prompt_async`). The event and the endpoint
+          were verified in the installed 1.18.31 SDK types; that a
+          plugin-originated prompt on idle actually EXECUTES is NOT live-proven
+          (the gh#494 standard) — a green `bun test` does not show it.
+      hermes:
+        state: absent
+        scope_note: >-
+          Hermes' stop events are reportedly observe-only (non-blocking). NOT
+          verified — Hermes is not installed on the authoring machine. With no
+          adapter, fr-goal's prose is all there is on Hermes.
+      codex:
+        state: unsupported
+        scope_note: >-
+          Reportedly has a block-capable stop hook; not installed on the
+          authoring machine, unverified. A block-tier adapter is small once the
+          harness is onboarded — it only has to call `fr run check --idle`.
+      copilot-cli:
+        state: unsupported
+        scope_note: >-
+          Reportedly blocks on `agentStop`. Copilot CLI 1.0.84's hooks system
+          WAS verified installed on the authoring machine; `agentStop`'s
+          blocking semantics were not. A block-tier adapter is small once the
+          harness is onboarded.
+
   - id: fr-session-bind
     kind: hook
     script: fr-session-bind.sh

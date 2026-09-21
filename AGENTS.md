@@ -64,6 +64,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
+    `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
+    the ONE definition of "idle" — a run that is advanceable with nobody
+    working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
+    plus `--stalled-after` (reported, never failed). It also owns the three
+    predicates `advance` shares with it (`gate_pending`, `next_step_id`,
+    `hold_on`). Two adapters call that CLI and re-derive nothing:
+    `plugins/super-fr/hooks/fr-run-idle-guard.sh` (Claude Code `Stop` — BLOCKS;
+    always exits 0, deliberately no `set -e`, because exit 2 from a Stop hook
+    is itself a block and `fr` exits 2 on every refusal) and
+    `packages/fr-opencode-plugin/src/idle.ts` (`session.idle` — CONTINUES; not
+    live-proven, so `partial`). Both act at most once per run `position`.
   - **`fr/tracker`** — the tracker protocol (`model.py`'s `Tracker` Protocol
     + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
     imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one
