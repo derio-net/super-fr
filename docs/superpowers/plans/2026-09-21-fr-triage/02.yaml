@@ -160,10 +160,12 @@ state:
       ticked_at: '2026-09-21T17:35:20+00:00'
       note: null
     P2.T5.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-21T17:40:44+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-09-21T17:40:45+00:00'
+    note: Full facts model, derived stages, cross-repo links, org scope with skipped
+      repos and judged-but-closed issues; all seven r-p1 findings fixed; gate green
+      (4106 passed, 80 skipped).
     observed_prs: []
