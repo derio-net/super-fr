@@ -124,7 +124,10 @@ def test_pr_limit_widens_the_window_and_a_full_list_warns(
 
     assert result.exit_code == 0, result.output
     assert forge.pr_limits == [n]
-    assert "possibly truncated" in result.output
+    assert (
+        f"the PR list for derio-net/super-fr returned exactly its limit ({n}), so it may be "
+        "cut short; raise it with --pr-limit"
+    ) in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["warnings"] == [{"source": "prs", "target": "derio-net/super-fr", "limit": n}]
 

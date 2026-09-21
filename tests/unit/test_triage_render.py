@@ -479,3 +479,64 @@ def test_a_long_repo_label_can_wrap_instead_of_overflowing() -> None:
     assert decls.get("overflow-wrap") == "anywhere"
     assert decls.get("min-width") == "0"
     assert decls.get("flex") == "0 1 auto"
+
+
+# ------------------------------------------------------ review r-p3-copy
+
+
+@pytest.mark.parametrize(
+    ("n", "text"), [(0, "0 repos"), (1, "1 repo"), (2, "2 repos"), (37, "37 repos")]
+)
+def test_counts_pluralise(n: int, text: str) -> None:
+    from fr.triage.render import plural
+
+    assert plural(n, "repo") == text
+
+
+def _with_repos(n: int) -> Callable[[dict[str, Any]], None]:
+    def edit(doc: dict[str, Any]) -> None:
+        doc["repos"] = [f"derio-net/r{i}" for i in range(n)]
+
+    return edit
+
+
+def test_one_collected_repo_is_one_repo_not_one_repos(tmp_path: Path) -> None:
+    page = render(*_state_with(tmp_path, facts_edit=_with_repos(1)))
+
+    assert '<span class="count"><b>1</b> repo</span>' in page
+    assert "1</b> repos" not in page
+
+
+def test_two_collected_repos_are_repos(tmp_path: Path) -> None:
+    page = render(*_state_with(tmp_path, facts_edit=_with_repos(2)))
+
+    assert '<span class="count"><b>2</b> repos</span>' in page
+
+
+def _warned(source: str, target: str) -> Callable[[dict[str, Any]], None]:
+    def edit(doc: dict[str, Any]) -> None:
+        doc["warnings"] = [{"source": source, "target": target, "limit": 200}]
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "words", "fix"),
+    [
+        ("prs", "derio-net/super-fr", "PR list", "raise it with --pr-limit"),
+        ("issues", "derio-net/super-fr", "issue list", "no flag raises this limit"),
+        ("repos", "derio-net", "repo list", "no flag raises this limit"),
+    ],
+)
+def test_a_truncation_note_names_its_list_in_plain_words_and_its_remedy(
+    tmp_path: Path, source: str, target: str, words: str, fix: str
+) -> None:
+    page = render(*_state_with(tmp_path, facts_edit=_warned(source, target)))
+    notes = re.search(r'<ul class="notes">(.*?)</ul>', page, flags=re.S)
+
+    assert notes is not None
+    assert f"The {words} for {target} returned exactly its limit (200)" in notes.group(1)
+    assert fix in notes.group(1)
+    assert f"The {source} list" not in notes.group(1)
+    if source != "prs":
+        assert "--" not in notes.group(1), "no flag exists for this list: none may be named"

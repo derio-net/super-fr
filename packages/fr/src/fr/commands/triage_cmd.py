@@ -39,7 +39,7 @@ from fr.triage.model import (
     load_judgements,
     state_dir,
 )
-from fr.triage.render import render
+from fr.triage.render import plural, render
 
 console = Console()
 err_console = Console(stderr=True)
@@ -100,9 +100,7 @@ def _report(facts: Facts) -> None:
         )
     for w in facts.warnings:
         err_console.print(
-            f"[yellow]warning:[/yellow] the {w.source} list for {escape(w.target)} returned "
-            f"exactly its limit ({w.limit}), so it is possibly truncated"
-            + (" — raise it with --pr-limit" if w.source == "prs" else ""),
+            f"[yellow]warning:[/yellow] {w.describe(escape(w.target))}",
             soft_wrap=True,
         )
 
@@ -135,7 +133,7 @@ def collect_command(
     )
     _report(facts)
     n_open = sum(1 for i in facts.issues if i.state == "open")
-    console.print(f"wrote {out} ({n_open} open issues)", markup=False, soft_wrap=True)
+    console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
@@ -208,6 +206,8 @@ def render_command(
     target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
     out = target_dir / "triage.html"
     out.write_text(render(facts, judgements), encoding="utf-8")
-    console.print(f"wrote {out} ({len(facts.issues)} issues)", markup=False, soft_wrap=True)
+    console.print(
+        f"wrote {out} ({plural(len(facts.issues), 'issue')})", markup=False, soft_wrap=True
+    )
     if open_:
         webbrowser.open(out.resolve().as_uri())

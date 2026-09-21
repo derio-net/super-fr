@@ -155,6 +155,23 @@ class Truncation(_Strict):
     target: str  # the repo (issues, prs) or owner (repos) listed
     limit: int
 
+    def describe(self, target: str) -> str:
+        """One plain-words sentence (no final stop) for this warning, naming its remedy.
+
+        *target* is `self.target` already escaped for wherever it prints; CLI and
+        board share this wording (review r-p3-copy). Only the PR list has a flag;
+        the issue and repo lists have none, and the sentence says so rather than
+        inventing one.
+        """
+        remedy = "raise it with --pr-limit" if self.source == "prs" else "no flag raises this limit"
+        return (
+            f"the {_LIST_WORDS[self.source]} for {target} returned exactly its limit "
+            f"({self.limit}), so it may be cut short; {remedy}"
+        )
+
+
+_LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
+
 
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.

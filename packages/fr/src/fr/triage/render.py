@@ -238,6 +238,16 @@ UNRANKED_DESC = (
 )
 
 
+def noun(n: int, word: str) -> str:
+    """*word* as a count of *n* needs it: `repo` for one, `repos` otherwise."""
+    return word if n == 1 else f"{word}s"
+
+
+def plural(n: int, word: str) -> str:
+    """`1 repo`, `2 repos` (review r-p3-copy)."""
+    return f"{n} {noun(n, word)}"
+
+
 def esc(s: str) -> str:
     return html.escape(s, quote=True)
 
@@ -256,6 +266,10 @@ def inline(text: str) -> str:
         return "<strong>" + _CODE.sub(r"<code>\1</code>", m.group(2)) + "</strong>"
 
     return _INLINE.sub(tag, esc(text))
+
+
+def _capitalise(s: str) -> str:
+    return s[:1].upper() + s[1:]
 
 
 def _safe_url(url: str) -> str | None:
@@ -361,13 +375,9 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
         ("unranked", len(result.unranked)),
         ("in flight", in_flight),
         ("settled", len(result.settled)),
-        ("repos", len(facts.collected)),
+        (noun(len(facts.collected), "repo"), len(facts.collected)),
     ]
-    notes = [
-        f"The {w.source} list for {esc(w.target)} returned exactly its limit ({w.limit}), "
-        "so it may be truncated."
-        for w in facts.warnings
-    ]
+    notes = [_capitalise(w.describe(esc(w.target))) + "." for w in facts.warnings]
     notes += [f"Skipped {esc(s.repo)}: {esc(s.reason)}" for s in facts.skipped]
     notes += [f"Unreachable judgement {esc(u.key)}: {esc(u.reason)}" for u in result.unreachable]
     notes += [f"Orphaned judgement {esc(k)}: its issue was not found." for k in result.orphaned]
