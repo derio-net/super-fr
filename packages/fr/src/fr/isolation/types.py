@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -18,6 +19,17 @@ def _home() -> Path:
 
 class IsolationError(Exception):
     """User-facing isolation failure; CLI maps it to exit 2."""
+
+
+# Shared by the two docker-less targets (host-worktree, external): `--secret`
+# is devcontainer-only (spec 2026-06-15, re-integration addendum). `{mode}` is
+# filled with the refusing mode's name.
+SECRET_NEEDS_DEVCONTAINER = (
+    "--secret requires devcontainer isolation mode — this workspace runs in "
+    "{mode} mode, where the environment already carries its own credentials and "
+    "fr has no container boundary to inject into. Drop --secret, or unset "
+    "FR_ISOLATION_TARGET and `fr isolation up` a devcontainer workspace."
+)
 
 
 class SessionBinding(BaseModel):
@@ -239,7 +251,12 @@ class Target(Protocol):
         no_fetch: bool = False,
     ) -> IsolationState: ...
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int: ...
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
+        """Run `argv` in the workspace. `keys` names the declared secrets the
+        command needs (`fr isolation exec --secret KEY`); empty keeps every
+        mode's plain passthrough. Only the devcontainer target honours a
+        non-empty `keys` — the other modes refuse (re-integration addendum)."""
+        ...
 
     def restart(self, state: IsolationState, force: bool = False) -> str: ...
 

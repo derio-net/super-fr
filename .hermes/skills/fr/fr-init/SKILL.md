@@ -51,18 +51,16 @@ Cover, with scan-informed recommended options:
    hostname too (`--host`) if self-hosted — drives which CLI
    (`gh`/`glab`/`tea`) gets installed and which CI template
    `fr acceptance init` picks.
-2. **Profiles wanted** — one `dev` default, or split (e.g. `readonly` for
-   review/exploration vs `admin` with deploy credentials)? Profiles differ
-   by CREDENTIALS first, tools second — same binaries, different env-files
-   is the normal shape.
+2. **Profiles wanted** — one `dev` default, or split (e.g. `readonly` for review/exploration
+   vs `admin` with deploy credentials)? Profiles differ by CREDENTIALS first, tools second —
+   same binaries, different env-files is the normal shape.
 3. **Tools** — confirm the scan's toolchain list; surface what CI installs
    that local work also needs (kubectl, terraform, docker-in-docker...).
-4. **Credentials per profile** — which env KEYS each profile expects
-   (names only, never values). **Do NOT ask for a host-forge token by
-   default:** push, PR/MR creation, and every `fr`-driven `gh`/`glab`/`tea`
-   call run on the authenticated HOST (fr-isolation's credential boundary)
-   — the container needs none for the standard pipeline. Offer it only
-   for an explicit in-container-writes profile (e.g. `admin`).
+4. **Credentials per profile** — which env KEYS each profile expects (names only, never values),
+   ambient (`env-file`, the default) or fetched on demand (`infisical`). **Do NOT ask for a
+   host-forge token by default:** push, PR/MR creation and every `fr`-driven `gh`/`glab`/`tea` call
+   run on the authenticated HOST (fr-isolation's credential boundary) — the container needs none.
+   A non-default profile may declare *other* in-container credentials, never a forge token.
 5. **Working patterns** — test/build/run commands worth recording in the
    profile's purpose/notes so future runs know the repo's verbs.
 
@@ -71,44 +69,46 @@ Cover, with scan-informed recommended options:
 ```bash
 fr init scaffold --repo . --profile dev --purpose "day-to-day development" \
     --tool uv --tool node --default
-fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
-    --secret GH_TOKEN --secret KUBECONFIG_B64
+fr init scaffold --repo . --profile admin --purpose "in-cluster deploys" \
+    --secret KUBECONFIG_B64 --secret REGISTRY_TOKEN
+fr init scaffold --repo . --profile deploy --purpose "prod deploys" --secret DEPLOY_KEY \
+    --secret-provider infisical --infisical-project <id> --infisical-env prod --infisical-path /fr/<repo>/deploy
 ```
 
 For a non-GitHub repo, pass `--backend` on every profile call for that repo.
 `--host` is OPTIONAL for GitLab (derived from the remote, override-only);
 `gh`/`tea` aren't host-threaded (gh-486), so fr warns on next use, not here.
+`--secret-provider infisical` (on-demand via `fr isolation exec --secret KEY`; devcontainer mode only)
+writes the `infisical:` block instead of an env-file mount and installs the CLI in-container. Identity
+side, which fr cannot set: a READ-ONLY Universal-Auth identity scoped to that project/path with a SHORT
+token TTL; export `FR_INFISICAL_CLIENT_ID` / `FR_INFISICAL_CLIENT_SECRET` on the host.
 
 Each call writes:
 
 - `.devcontainer/<profile>/devcontainer.json` — committed by scaffold; base
   image + the backend's CLI (github-cli feature for GitHub; a versioned,
   checksummed `glab`/`tea` binary install for GitLab/Gitea — no official
-  devcontainer feature exists for either) + mapped tool features + vk
-  installed in postCreate + `--env-file` pointing at the host secrets path.
+  devcontainer feature exists for either) + mapped tool features + fr installed in postCreate
+  + `--env-file` pointing at the host secrets path (infisical: a token-dir mount instead).
 - `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile,
   purpose, expected secret keys, notes for tools without a feature mapping,
-  and the repo-level `backend`/`host` keys (github is the implicit default
-  and not written explicitly).
-- `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
-  placeholders per secret key. Existing operator values are never
-  overwritten; re-runs only append missing placeholders.
+  the repo-level `backend`/`host` keys (github is the implicit default and not written
+  explicitly), and per-profile `secret_provider` / `infisical:` coordinates when set.
+- `~/.config/fr/secrets/<repo>/<profile>.env` — host-only (env-file profiles); commented
+  placeholders per secret key. Existing operator values are never overwritten.
 
 Unknown tools land in the profile's notes — wire them into
 `postCreateCommand` by editing the devcontainer.json, and say so.
 
 ## 4. Hand back
 
-- Tell the operator which placeholders to fill (`~/.config/fr/secrets/<repo>/<profile>.env`)
-  before the first `fr isolation up` — an empty env-file is normal for a default profile (the
-  standard pipeline needs only the host's own CLI auth to be green: `gh auth status` for
-  GitHub, `glab auth status` for GitLab, `tea login` for Gitea).
-- `fr init scaffold` already **committed** the `.devcontainer/` files (scoped
-  commit on the current branch — `main` during bootstrap), so the profile is in
-  the committed tree that `fr isolation up` checks out. No separate commit step
-  — and the agent couldn't do one anyway (base-repo `git commit` is gate-denied).
-  Pass `--no-commit` only if you want to stage/commit them yourself (e.g. to open
-  a PR in a repo that blocks direct pushes to `main`).
+- Tell the operator which placeholders to fill (`~/.config/fr/secrets/<repo>/<profile>.env`) before
+  the first `fr isolation up` — an empty env-file is normal for a default profile (the standard pipeline
+  needs only the host's own CLI auth: `gh auth status`, `glab auth status`, or `tea login`).
+- `fr init scaffold` already **committed** the `.devcontainer/` files (scoped commit on the
+  current branch — `main` during bootstrap), so the profile is in the committed tree that
+  `fr isolation up` checks out. No separate commit step — and the agent couldn't do one anyway
+  (base-repo `git commit` is gate-denied). Pass `--no-commit` only to stage/commit them yourself.
 - If a run was paused on this init, resume it: `fr isolation up` now works.
 
 ## Multi-profile principles

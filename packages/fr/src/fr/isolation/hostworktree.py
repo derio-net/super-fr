@@ -14,12 +14,18 @@ enforcement.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
-from fr.isolation.types import IsolationError, IsolationState, save_state
+from fr.isolation.types import (
+    SECRET_NEEDS_DEVCONTAINER,
+    IsolationError,
+    IsolationState,
+    save_state,
+)
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
 
@@ -48,10 +54,15 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         self._spawn_gc()
         return state
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int:
+    def exec(self, state: IsolationState, argv: list[str], keys: Sequence[str] = ()) -> int:
         """Plain subprocess in the worktree, host env inherited — the argv is run
         verbatim (no `devcontainer exec` wrapper). capture=False streams output
-        live, matching the local target's exec passthrough contract."""
+        live, matching the local target's exec passthrough contract.
+
+        `--secret` is devcontainer-only (re-integration addendum): refuse before
+        running anything rather than wrap a command outside a container."""
+        if keys:
+            raise IsolationError(SECRET_NEEDS_DEVCONTAINER.format(mode="host-worktree"))
         return self.run(argv, cwd=state.worktree, capture=False).returncode
 
     def restart(self, state: IsolationState, force: bool = False) -> str:

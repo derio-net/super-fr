@@ -10,9 +10,8 @@ description: >
 
 # fr-isolation
 
-A workspace contract, not just a worktree: a git worktree OUTSIDE the repo
-(`~/.cache/fr/worktrees/<main-checkout>/<branch>`), commands in the profile's
-devcontainer, base repo untouched while the run is live. Plain shell, any agent or human.
+A workspace contract, not just a worktree: a git worktree OUTSIDE the repo (`~/.cache/fr/worktrees/<main-checkout>/<branch>`),
+commands in the profile's devcontainer, base repo untouched while the run is live. Plain shell, any agent or human.
 
 **Announce at start:** "I'm using fr-isolation to run this work isolated."
 
@@ -26,14 +25,13 @@ devcontainer, base repo untouched while the run is live. Plain shell, any agent 
 - **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO profile, no secrets provisioning. A host-level
   declaration, never a per-call flag.
 - **external** (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout — `up --branch`
-  ensures the branch in place; restart/stats refuse, gc reports (the container's owner runs both).
-- Any other value fails closed naming `devcontainer|worktree`.
+  ensures the branch in place; restart/stats refuse, gc reports (the container's owner runs both). Any other value fails closed.
 
 ## Lifecycle
 
 ```bash
 fr isolation up --branch <b> [--profile <name>] [--session <id>] [--print-path]  # worktree + container; --print-path: last stdout line = path
-fr isolation exec --branch <b> -- CMD ...                                         # every build/test/run
+fr isolation exec --branch <b> [--secret KEY ...] -- CMD ...                      # every build/test/run; --secret: on-demand injection
 fr isolation status [--branch ...] [--session <id>] [--format json] [--stats] [--push-check]  # state + bound sessions
 fr isolation attach|detach --session <id> [--repo <path>] [--branch ...]         # bind/unbind a harness session
 fr isolation restart [--branch ...] [--force]                                     # bounce a wedged container, worktree kept
@@ -43,32 +41,34 @@ fr isolation gc [--repo <path>] [--dry-run] [--format json]                     
 
 - `up` (devcontainer mode) resolves the profile (flag → repo default from
   `.devcontainer/fr-profiles.yaml` → sole profile), creates the worktree under the
-  MAIN checkout's name (even from inside another worktree), ensures the host
-  secrets env-file, starts the container with the base repo's `.git` mounted at
-  the same absolute path. One profile per run — change = `down --force` + `up`.
-- **Cold-start base (#322):** a NEW branch is cut from freshly-fetched
-  `origin/<default>`, never the base repo's HEAD; reuse keeps that branch's tip.
-  `--base <ref>` = `<ref>` verbatim, no fetch (`--base HEAD` forks the checkout);
-  `--no-fetch` = LOCAL `origin/<default>`. No remote / fetch fails / ref missing
-  → local HEAD with a `WARNING`; the run never aborts.
+  MAIN checkout's name (even from inside another worktree), runs the secret provider's
+  host prep (env-file: ensure it; infisical: the 0700 token dir), starts the container with
+  the base `.git` mounted at the same absolute path. One profile per run — `down --force` + `up`.
+- **Cold-start base (#322):** a NEW branch is cut from freshly-fetched `origin/<default>`,
+  never the base repo's HEAD; reuse keeps that branch's tip. `--base <ref>` = `<ref>` verbatim,
+  no fetch (`--base HEAD` forks the checkout); `--no-fetch` = LOCAL `origin/<default>`. No remote
+  / fetch fails / ref missing → local HEAD with a `WARNING`; the run never aborts.
 
 ## Exec-bridge discipline
 
 - EVERY build/test/lint/run command goes through `fr isolation exec -- ...`; file
   edits happen in the worktree directly (host-visible), execution in-container.
 - Credential boundary (devcontainer mode): the container sees only the profile's
-  env-file (`~/.config/fr/secrets/<repo>/<profile>.env`), NO SSH identity (#377).
-  ALL git-host I/O (push/fetch, PR/MR creation, `gh`/`glab`/`tea` reads in
-  `status`/`down`/`gc`) runs on the HOST outside `exec`; `status --push-check` previews.
-- Pre-push guard (#320): a push to a branch whose PR is `MERGED`/`CLOSED` is
-  denied by `fr-merged-pr-push-guard.sh` — cherry-pick onto `main` or a fresh PR.
+  env-file (`~/.config/fr/secrets/<repo>/<profile>.env`), NO SSH identity (#377). ALL git-host
+  I/O (push/fetch, PR/MR creation, `gh`/`glab`/`tea` reads in `status`/`down`/`gc`) runs on the
+  HOST outside `exec`; `status --push-check` previews.
+- **`exec --secret KEY` (devcontainer mode ONLY; `secret_provider: infisical`):** on-demand,
+  path-scoped — that one exec runs under `infisical run`; the value is never printed or on any argv;
+  a short-TTL token rides a per-exec 0600 file in a bind-mounted 0700 dir, removed when the command
+  returns or aborts. An undeclared KEY exits 2 before any mint; the docker-less modes refuse too.
+- Pre-push guard (#320): a push to a branch whose PR is `MERGED`/`CLOSED` is denied by
+  `fr-merged-pr-push-guard.sh` — cherry-pick onto `main` or a fresh PR.
 - The harness resets cwd to base each call, so host-side git/gh is compound `cd
   <worktree> && …`; the guard allows a leading `cd` under `~/.cache/fr/worktrees`
   / temp (#279); `/add-dir` (#281) persists a bare `cd`. Never run base commands.
-- `up` writes a gitignored `.fr-isolation` marker (`mode` records the mode) that
-  the `fr-isolation-required` PreToolUse hook reads to ALLOW edits; tracked files
-  in an fr-enabled base clone are blocked (`FR_BASE_OK=1` / `.fr-isolation-allow`
-  escape). `down` removes it. See that rule (#328).
+- `up` writes a gitignored `.fr-isolation` marker (`mode` recorded) the
+  `fr-isolation-required` edit gate reads to ALLOW edits; tracked files in an fr-enabled base
+  clone are blocked (`FR_BASE_OK=1` / `.fr-isolation-allow` escape). `down` removes it (#328).
 
 ## Session bindings (traceability)
 
