@@ -3,7 +3,7 @@ run: 2026-09-21-feat-fr-triage
 workflow: fr-goal@1
 branch: feat/fr-triage
 started: '2026-09-21T16:47:13+00:00'
-cursor: plan
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -23,21 +23,48 @@ steps:
           returned: '2026-09-21T17:04:42+00:00'
           outcome: done
   plan:
-    state: running
-    at: '2026-09-21T17:04:42+00:00'
+    state: done
+    at: '2026-09-21T17:08:51+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-21-fr-triage
     units:
       step/plan:
         attempts:
         - dispatched: '2026-09-21T17:04:42+00:00'
           harness: claude-code
           session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
+          returned: '2026-09-21T17:08:51+00:00'
+          outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-21T17:08:52+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
-    state: pending
+    state: running
+    at: '2026-09-21T17:08:57+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/5:
+        state: manual
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-21T17:08:57+00:00'
+          agent: adafd1d40223ba34f
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5
+          session: 59580c5a-b79e-43ab-83b7-80ff4750b0c7
+          estimate:
+            journal_entries: 8
+            journal_lines: 41
+            handoff_chars: 1247
+            spec_bytes: 17716
+            plan_bytes: 26264
   journal-check:
     state: pending
   deliver:
