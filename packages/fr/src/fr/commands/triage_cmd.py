@@ -7,8 +7,9 @@ directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). The engine lives in
 Gate-exempt: `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` because
 it never reads or writes a registered artifact (spec §3.F′).
 
-Exit codes: 0 success; 2 usage (not exactly one of --repo/--org) or a forge
-failure.
+Exit codes: 0 success (skipped repos and truncation warnings are reported,
+not failed); 2 usage (not exactly one of --repo/--org), an unreadable
+judgements.yaml, or a forge failure in repo scope.
 """
 
 from __future__ import annotations
@@ -21,9 +22,9 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from fr.gh import GhError
-from fr.triage.collect import Forge, GhForge, collect_facts
-from fr.triage.model import Scope, state_dir
+from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
+from fr.triage.errors import TriageError
+from fr.triage.model import Facts, Scope, load_judgements, state_dir
 
 console = Console()
 err_console = Console(stderr=True)
@@ -58,6 +59,18 @@ def _scope(repo: str | None, org: str | None) -> Scope:
     return Scope(kind="org", target=org)
 
 
+def _report(facts: Facts) -> None:
+    """Print what the forge could not give; every forge-sourced string escaped (r7)."""
+    for s in facts.skipped:
+        err_console.print(f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}")
+    for w in facts.warnings:
+        err_console.print(
+            f"[yellow]warning:[/yellow] the {w.source} list for {escape(w.target)} returned "
+            f"exactly its limit ({w.limit}), so it is possibly truncated"
+            + (" — raise it with --pr-limit" if w.source == "prs" else "")
+        )
+
+
 @triage_app.command("collect")
 def collect_command(
     repo: str | None = typer.Option(None, "--repo", help="Triage one repo: OWNER/REPO."),
@@ -65,18 +78,27 @@ def collect_command(
     dir_override: Path | None = typer.Option(
         None, "--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."
     ),
+    pr_limit: int = typer.Option(
+        PR_LIMIT, "--pr-limit", min=1, help="PRs listed per repo (the PR -> issue window)."
+    ),
 ) -> None:
     """Read the forge and write facts.json for the scope."""
     scope = _scope(repo, org)
     target_dir = state_dir(scope, dir_override)
+    judgements = target_dir / "judgements.yaml"
     try:
-        facts = collect_facts(make_forge(), scope, now=datetime.now(UTC))
-    except GhError as exc:
-        err_console.print(f"[red]error:[/red] gh failed: {escape(str(exc))}")
+        judged = list(load_judgements(judgements).issues) if judgements.exists() else []
+        facts = collect_facts(
+            make_forge(), scope, now=datetime.now(UTC), judged=judged, pr_limit=pr_limit
+        )
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
         json.dumps(facts.to_json(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    console.print(f"wrote {out} ({len(facts.issues)} open issues)", markup=False)
+    _report(facts)
+    n_open = sum(1 for i in facts.issues if i.state == "open")
+    console.print(f"wrote {out} ({n_open} open issues)", markup=False)

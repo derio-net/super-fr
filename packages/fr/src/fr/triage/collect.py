@@ -10,12 +10,14 @@ is a second class, not an edit to the collector.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Protocol
 
 from fr import gh
-from fr.triage.model import Facts, Issue, PullRequest, Scope, Truncation
+from fr.triage.errors import ForgeError
+from fr.triage.model import SCHEMA, Facts, Issue, PullRequest, Scope, Skipped, Truncation
 from fr.triage.stage import pr_rank
 
 ISSUE_LIMIT = 1000
@@ -39,28 +41,63 @@ class Forge(Protocol):
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]: ...
 
 
+GH_MISSING = (
+    "gh (the GitHub CLI) was not found on PATH: install it from https://cli.github.com "
+    "and run `gh auth login`"
+)
+
+
+@contextmanager
+def _forge_errors() -> Iterator[None]:
+    """Translate every way a `gh` call fails into triage's own `ForgeError`."""
+    try:
+        yield
+    except gh.GhError as exc:
+        raise ForgeError(str(exc)) from exc
+    except FileNotFoundError as exc:  # subprocess could not exec `gh` at all
+        raise ForgeError(GH_MISSING) from exc
+
+
 class GhForge:
-    """`Forge` backed by `fr.gh` (the `gh` CLI)."""
+    """`Forge` backed by `fr.gh` (the `gh` CLI). Raises only `ForgeError`."""
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
-        return gh.list_repos(owner=owner)
+        # Archived repos included: the caller counts the raw list against its limit
+        # before dropping them, or a full list with archived repos would not warn.
+        with _forge_errors():
+            return gh.list_repos(owner=owner, limit=limit, include_archived=True)
 
     def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
-        return gh.list_issues(repo=repo, state=state, limit=limit)
+        with _forge_errors():
+            return gh.list_issues(repo=repo, state=state, limit=limit)
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
-        return gh.list_prs(repo=repo, state=state, limit=limit)
+        with _forge_errors():
+            return gh.list_prs(repo=repo, state=state, limit=limit)
 
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
-        return gh.view_issue(repo, number)
+        with _forge_errors():
+            return gh.view_issue(repo, number)
 
 
-def scope_repos(forge: Forge, scope: Scope) -> list[str]:
-    """The `OWNER/REPO` slugs in *scope*, sorted."""
+def scope_repos(
+    forge: Forge, scope: Scope, *, repo_limit: int = REPO_LIMIT
+) -> tuple[list[str], list[Truncation]]:
+    """The non-archived `OWNER/REPO` slugs in *scope*, sorted, plus any truncation.
+
+    `list_repos` returns archived repos too, so a list that came back exactly
+    at its limit is detected on the raw count (review r-p1-repo-cap).
+    """
     if scope.kind == "repo":
-        return [scope.target]
-    repos = forge.list_repos(owner=scope.owner, limit=REPO_LIMIT)
-    return sorted(f"{scope.owner}/{r['name']}" for r in repos)
+        return [scope.target], []
+    raw = forge.list_repos(owner=scope.owner, limit=repo_limit)
+    warnings = (
+        [Truncation(source="repos", target=scope.owner, limit=repo_limit)]
+        if len(raw) == repo_limit
+        else []
+    )
+    repos = sorted(f"{scope.owner}/{r['name']}" for r in raw if not r.get("isArchived", False))
+    return repos, warnings
 
 
 def _ref(owner: str, name: str, number: int) -> IssueRef:
@@ -115,19 +152,37 @@ def invert(
     return links
 
 
-def _open_issue(repo: str, raw: dict[str, Any], prs: list[PullRequest]) -> Issue:
+def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: str) -> Issue:
     return Issue(
         repo=repo,
         number=raw["number"],
         title=raw["title"],
-        state="open",
+        state=state,  # type: ignore[arg-type]
         labels=[label["name"] for label in raw.get("labels") or []],
         url=raw["url"],
         created_at=raw.get("createdAt"),
         updated_at=raw.get("updatedAt"),
+        closed_at=raw.get("closedAt"),
         body=(raw.get("body") or "")[:BODY_LIMIT],
         prs=prs,
     )
+
+
+def _judged_elsewhere(
+    judged: Iterable[str], open_keys: set[str], repos: list[str]
+) -> list[tuple[str, int]]:
+    """(repo, number) for each judgement key not in the open set, in a collected repo.
+
+    A key naming no collected repo is left for `check` to call orphaned.
+    """
+    by_name = {repo.split("/", 1)[1].lower(): repo for repo in repos}
+    wanted: list[tuple[str, int]] = []
+    for key in sorted(set(judged) - open_keys):
+        name, _, number = key.rpartition("#")
+        repo = by_name.get(name.lower())
+        if repo is not None and number.isdigit():
+            wanted.append((repo, int(number)))
+    return wanted
 
 
 def collect_facts(
@@ -135,32 +190,61 @@ def collect_facts(
     scope: Scope,
     *,
     now: datetime,
+    judged: Iterable[str] = (),
     issue_limit: int = ISSUE_LIMIT,
     pr_limit: int = PR_LIMIT,
+    repo_limit: int = REPO_LIMIT,
 ) -> Facts:
-    """Build the facts for *scope*: two bulk calls per repo, inverted."""
-    repos = scope_repos(forge, scope)
-    warnings: list[Truncation] = []
+    """Build the facts for *scope*: two bulk calls per repo, inverted.
+
+    In org scope a repo whose lists fail is recorded under `skipped` and the
+    rest still collect; in repo scope the one repo failing is the error.
+    Each *judged* key no longer open costs one `view_issue`, so the extra
+    calls are bounded by the judgements, never by the backlog.
+    """
+    repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
+    skipped: list[Skipped] = []
+    collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
     parsed_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     for repo in repos:
-        issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
+        try:
+            issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
+            prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
+        except ForgeError as exc:
+            if scope.kind == "repo":
+                raise
+            skipped.append(Skipped(repo=repo, reason=str(exc)))
+            continue
+        collected.append(repo)
         if len(issues) == issue_limit:
             warnings.append(Truncation(source="issues", target=repo, limit=issue_limit))
-        prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
         if len(prs) == pr_limit:
             warnings.append(Truncation(source="prs", target=repo, limit=pr_limit))
         raw_issues.extend((repo, i) for i in issues)
         parsed_prs.extend(parse_prs(repo, prs))
     links = invert(parsed_prs, scope)
+
+    def linked(repo: str, number: int) -> list[PullRequest]:
+        owner, name = repo.split("/", 1)
+        return links.get(_ref(owner, name, number), [])
+
+    out = [_issue(repo, i, linked(repo, i["number"]), state="open") for repo, i in raw_issues]
+    open_keys = {i.key for i in out}
+    for repo, number in _judged_elsewhere(judged, open_keys, collected):
+        try:
+            raw = forge.view_issue(repo=repo, number=number)
+        except ForgeError:
+            continue  # deleted or unreadable: `check` reports the judgement as orphaned
+        state = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
+        out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
     return Facts(
+        schema=SCHEMA,
         scope=scope.name,
         kind=scope.kind,
         collected_at=now.isoformat(timespec="seconds"),
         repos=repos,
-        issues=[
-            _open_issue(repo, i, links.get(_ref(*repo.split("/", 1), i["number"]), []))
-            for repo, i in raw_issues
-        ],
+        issues=out,
+        skipped=skipped,
         warnings=warnings,
     )

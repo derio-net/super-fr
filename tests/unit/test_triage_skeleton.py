@@ -30,7 +30,7 @@ class FixtureForge:
         self.issues = _load("super-fr-issues.json")
         self.prs = _load("super-fr-prs.json")
 
-    def list_repos(self, *, owner: str) -> list[dict[str, Any]]:
+    def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
         return [{"name": "super-fr", "isArchived": False}]
 
     def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]:

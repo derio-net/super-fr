@@ -219,3 +219,234 @@ def test_a_reference_outside_the_scope_is_dropped(scope: Scope, owner: str, name
     links = invert(parse_prs("example-org/alpha", [stray]), scope)
 
     assert links == {}
+
+
+# ------------------------------------------------- P2.T4 org scope, skipped
+
+
+def _org_forge(**kw: Any) -> FakeForge:
+    """example-org with three fictional repos, one issue each, no PRs."""
+    names = ["alpha", "beta", "gamma"]
+    return FakeForge(
+        repos=[{"name": n, "isArchived": False} for n in names],
+        issues={f"example-org/{n}": [_issue(i + 1, title=n)] for i, n in enumerate(names)},
+        prs={f"example-org/{n}": [] for n in names},
+        **kw,
+    )
+
+
+ORG = Scope(kind="org", target="example-org")
+
+
+def test_a_repo_whose_issue_list_fails_is_skipped_and_the_rest_collect() -> None:
+    forge = _org_forge(failing={"example-org/beta": "issues are disabled for this repository"})
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    assert [(s.repo, s.reason) for s in facts.skipped] == [
+        ("example-org/beta", "issues are disabled for this repository")
+    ]
+    assert sorted(i.repo for i in facts.issues) == ["example-org/alpha", "example-org/gamma"]
+    # Nothing more is asked of a skipped repo.
+    assert "example-org/beta" not in {kw["repo"] for kw in forge.called("list_prs")}
+
+
+def test_a_repo_whose_pr_list_fails_is_skipped_too() -> None:
+    forge = _org_forge()
+    real = forge.list_prs
+
+    def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, Any]]:
+        if repo == "example-org/gamma":
+            raise ForgeError("HTTP 403")
+        return real(repo=repo, state=state, limit=limit)
+
+    forge.list_prs = list_prs  # type: ignore[method-assign]
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    assert [(s.repo, s.reason) for s in facts.skipped] == [("example-org/gamma", "HTTP 403")]
+    assert sorted(i.repo for i in facts.issues) == ["example-org/alpha", "example-org/beta"]
+
+
+def test_in_repo_scope_a_failing_repo_is_an_error_not_an_empty_board() -> None:
+    forge = FakeForge(issues={}, prs={}, failing={"derio-net/super-fr": "no access"})
+
+    with pytest.raises(ForgeError, match="no access"):
+        collect_facts(forge, SUPER_FR, now=NOW)
+
+
+def test_the_repo_list_is_asked_for_its_limit_and_archived_repos_are_dropped() -> None:
+    forge = _org_forge()
+    forge.repos = [*forge.repos, {"name": "old", "isArchived": True}]
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    assert REPO_LIMIT == 200
+    assert forge.called("list_repos") == [{"owner": "example-org", "limit": 200}]
+    assert facts.repos == ["example-org/alpha", "example-org/beta", "example-org/gamma"]
+    assert facts.warnings == []
+
+
+def test_a_repo_list_returning_exactly_its_limit_warns_even_with_archived_repos() -> None:
+    # The warning counts what the forge returned, BEFORE archived repos are dropped:
+    # 200 returned, 5 of them archived, is still a list that may have been cut short.
+    names = [f"repo-{n:03d}" for n in range(REPO_LIMIT)]
+    forge = FakeForge(
+        repos=[{"name": n, "isArchived": i < 5} for i, n in enumerate(names)],
+        issues={f"example-org/{n}": [] for n in names},
+        prs={f"example-org/{n}": [] for n in names},
+    )
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    assert len(facts.repos) == REPO_LIMIT - 5
+    assert [(w.source, w.target, w.limit) for w in facts.warnings] == [
+        ("repos", "example-org", REPO_LIMIT)
+    ]
+
+
+# ------------------------------------------------ P2.T4 judged but closed
+
+
+def _closed_view(number: int) -> dict[str, Any]:
+    """What `gh issue view --json number,title,body,labels,state,url,closedAt` returns."""
+    return {
+        "number": number,
+        "title": f"closed #{number}",
+        "body": "x" * 3000,
+        "labels": [{"name": "bug"}],
+        "state": "CLOSED",
+        "url": f"https://github.com/derio-net/super-fr/issues/{number}",
+        "closedAt": "2026-09-20T10:00:00Z",
+    }
+
+
+def test_a_judged_issue_no_longer_open_is_viewed_and_appears_closed() -> None:
+    forge = _super_fr_forge()
+    forge.closed = {("derio-net/super-fr", 430): _closed_view(430)}
+    open_key = f"super-fr#{ISSUES[0]['number']}"
+
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#430", open_key])
+
+    assert forge.called("view_issue") == [{"repo": "derio-net/super-fr", "number": 430}]
+    closed = next(i for i in facts.issues if i.key == "super-fr#430")
+    assert closed.state == "closed"
+    assert closed.stage == "closed"
+    assert closed.closed_at == "2026-09-20T10:00:00Z"
+    assert closed.url == "https://github.com/derio-net/super-fr/issues/430"
+    assert len(closed.body) == BODY_LIMIT
+    # Its PRs come from the same inversion as the open issues'.
+    assert [p.number for p in closed.prs] == [508, 517]
+
+
+def test_no_view_for_open_keys_or_keys_outside_the_scope() -> None:
+    forge = _super_fr_forge()
+
+    collect_facts(
+        forge,
+        SUPER_FR,
+        now=NOW,
+        judged=[f"super-fr#{i['number']}" for i in ISSUES] + ["other-repo#1"],
+    )
+
+    assert forge.called("view_issue") == []
+
+
+def test_a_judged_issue_the_forge_cannot_find_is_left_out() -> None:
+    forge = _super_fr_forge()  # no closed issues: view_issue raises KeyError -> ForgeError
+
+    def view_issue(*, repo: str, number: int) -> dict[str, Any]:
+        raise ForgeError("Could not resolve to an issue")
+
+    forge.view_issue = view_issue  # type: ignore[method-assign]
+
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#99999"])
+
+    assert "super-fr#99999" not in {i.key for i in facts.issues}  # check calls it orphaned
+
+
+def test_org_scope_views_a_judged_closed_issue_in_its_own_repo() -> None:
+    forge = _org_forge()
+    forge.closed = {("example-org/beta", 40): {**_closed_view(40), "url": "u"}}
+
+    facts = collect_facts(forge, ORG, now=NOW, judged=["beta#40"])
+
+    assert forge.called("view_issue") == [{"repo": "example-org/beta", "number": 40}]
+    assert "beta#40" in {i.key for i in facts.issues}
+
+
+# ------------------------------------------------------------ P2.T4 GhForge
+
+
+def test_gh_forge_raises_the_triage_forge_error_not_gh_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr import gh
+    from fr.triage.collect import GhForge
+
+    def boom(args: list[str]) -> str:
+        raise gh.GhError("HTTP 404: Not Found", stderr="HTTP 404", returncode=1)
+
+    monkeypatch.setattr(gh, "_run_gh", boom)
+
+    for call in (
+        lambda f: f.list_repos(owner="example-org", limit=200),
+        lambda f: f.list_issues(repo="example-org/alpha", state="open", limit=1000),
+        lambda f: f.list_prs(repo="example-org/alpha", state="all", limit=200),
+        lambda f: f.view_issue(repo="example-org/alpha", number=1),
+    ):
+        with pytest.raises(ForgeError, match="HTTP 404") as exc:
+            call(GhForge())
+        assert not isinstance(exc.value, gh.GhError)
+
+
+def test_gh_forge_with_no_gh_binary_raises_a_one_line_forge_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.collect import GhForge
+
+    monkeypatch.setenv("PATH", str(tmp_path))  # an empty dir: no gh anywhere
+
+    with pytest.raises(ForgeError) as exc:
+        GhForge().list_issues(repo="example-org/alpha", state="open", limit=1000)
+
+    message = str(exc.value)
+    assert "\n" not in message
+    assert "gh" in message and "install" in message.lower()
+
+
+def test_gh_forge_asks_gh_for_archived_repos_too_so_the_limit_is_countable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr import gh
+    from fr.triage.collect import GhForge
+
+    captured: list[list[str]] = []
+
+    def fake(args: list[str]) -> str:
+        captured.append(args)
+        return json.dumps([{"name": "a", "isArchived": False}, {"name": "b", "isArchived": True}])
+
+    monkeypatch.setattr(gh, "_run_gh", fake)
+
+    repos = GhForge().list_repos(owner="example-org", limit=7)
+
+    assert [r["name"] for r in repos] == ["a", "b"]
+    assert captured[0][captured[0].index("--limit") + 1] == "7"
+
+
+def test_fr_triage_touches_gh_only_in_collect() -> None:
+    """Nothing above collect.py knows gh exists (decision d2, review r-p1-gherror-leak)."""
+    import fr.commands.triage_cmd as cmd
+    import fr.triage as pkg
+
+    sources = {Path(cmd.__file__): Path(cmd.__file__).read_text(encoding="utf-8")}
+    for path in Path(pkg.__file__).parent.glob("*.py"):
+        sources[path] = path.read_text(encoding="utf-8")
+    offenders = [
+        p.name
+        for p, text in sources.items()
+        if p.name != "collect.py"
+        and ("fr.gh" in text or "GhError" in text or "from fr import gh" in text)
+    ]
+    assert offenders == []

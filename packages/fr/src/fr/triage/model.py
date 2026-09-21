@@ -25,7 +25,7 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-SCHEMA = 1
+SCHEMA: Literal[1] = 1
 
 ScopeKind = Literal["repo", "org"]
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
