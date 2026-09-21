@@ -20,6 +20,10 @@
 
 set -eu
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$SCRIPT_DIR/lib/fr-isolation-decision.sh"   # fr_sentinel_lock / _unlock
+
 input=$(cat)
 
 tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty')
@@ -55,6 +59,12 @@ mkdir -p "$dir"
 find "$dir" -name '*.json' -mmin +2880 -delete 2>/dev/null || true
 
 sentinel="$dir/$session_id.json"
+
+# Read-carry-write under the lock every sentinel writer shares (see the lib):
+# `attach` adding a workspace between our read and our rename would otherwise be
+# erased by the rename.
+fr_sentinel_lock "$sentinel"
+trap 'fr_sentinel_unlock "$sentinel"' EXIT   # set -e must not strand the lock
 
 # Carry the LIVE part of the stamp across a reload. fr-goal loads, `fr run
 # start` binds (and stamps), then fr-goal invokes fr-brainstorming — which
@@ -96,5 +106,6 @@ jq -n \
    + (if ($workspaces | length) == 0 then {} else {workspaces: $workspaces} end)' \
   > "$tmp"
 mv -f "$tmp" "$sentinel"
+fr_sentinel_unlock "$sentinel"
 
 exit 0

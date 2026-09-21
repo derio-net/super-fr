@@ -49,6 +49,14 @@ dir="${FR_SENTINEL_DIR:-$HOME/.cache/fr/sentinels}"
 sentinel="$dir/$session_id.json"
 [ -f "$sentinel" ] || exit 0   # no active pipeline for this session
 
+# Liveness: every Bash call this session makes — from the base clone, the
+# worktree or anywhere — refreshes the sentinel's mtime, so its age means "time
+# since this session last did anything". The 48h GC (fr-pipeline-sentinel.sh)
+# keys on that age; without this refresh it deleted a LIVE pipeline's sentinel
+# once 48h passed with no skill load or bind, and the guard silently switched
+# off. `-c`: never create — a sentinel retired since the test above stays gone.
+touch -c "$sentinel" 2>/dev/null || true
+
 # `|| exit 0`: the sentinel can vanish between the test above and this read
 # (another session's `down`, the 48h GC) or be caught mid-write. Under `set -e`
 # jq's failure would exit non-zero, which the harness treats as a BLOCK — a
@@ -321,36 +329,53 @@ fi
 # live workspace as orphaned — the #529 disarm by another route.
 # A FAILED `git worktree list` (non-git cwd) is unknown, not orphaned: it falls
 # through and denies, as it always has.
-workspaces=$(jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
-                    | select(type == "string" and . != "")' "$sentinel" 2>/dev/null || true)
-if [ -n "$workspaces" ] && wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
-  listed=""
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*)
-        if rwt=$(cd "${line#worktree }" 2>/dev/null && pwd -P); then
-          listed="$listed$rwt
+sentinel_workspaces() {
+  jq -r '(.workspaces // []) | if type == "array" then .[] else empty end
+         | select(type == "string" and . != "")' "$sentinel" 2>/dev/null || true
+}
+# Unlocked peek first: a fresh sentinel (the common case) never takes the lock.
+# The decision itself is made UNDER the lock shared with every other writer
+# (fr_sentinel_lock): the heal deletes, and a bind landing between a read and
+# the delete can turn "orphaned" back into "live" — deciding on a stale read
+# would retire a live pipeline.
+if [ -n "$(sentinel_workspaces)" ]; then
+  fr_sentinel_lock "$sentinel"
+  # Everything the verdict reads is read HERE, under the lock — the entries and
+  # the worktree list alike. Listing first and locking second let a workspace
+  # created while we waited read as "not listed", i.e. orphaned.
+  workspaces=$(sentinel_workspaces)
+  live=1   # unknown (non-git repo, or emptied/retired while we waited): no heal
+  if [ -n "$workspaces" ] && wt=$(git -C "$rroot" worktree list --porcelain 2>/dev/null); then
+    listed=""
+    while IFS= read -r line; do
+      case "$line" in
+        "worktree "*)
+          if rwt=$(cd "${line#worktree }" 2>/dev/null && pwd -P); then
+            listed="$listed$rwt
 "
-        fi
-        ;;
-    esac
-  done <<< "$wt"   # herestring, not a heredoc: a path with a `$` in it is data
-                   # here, never re-expanded — and the loop must stay in THIS
-                   # shell, so a pipe is not an option ($listed).
-  live=0
-  while IFS= read -r ws; do
-    rws=$(cd "$HOME/.cache/fr/$ws" 2>/dev/null && pwd -P) || continue   # gone
-    case "
+          fi
+          ;;
+      esac
+    done <<< "$wt"   # herestring, not a heredoc: a path with a `$` in it is
+                     # data here, never re-expanded — and the loop must stay in
+                     # THIS shell, so a pipe is not an option ($listed).
+    live=0
+    while IFS= read -r ws; do
+      rws=$(cd "$HOME/.cache/fr/$ws" 2>/dev/null && pwd -P) || continue   # gone
+      case "
 $listed" in
-      *"
+        *"
 $rws
 "*) live=1; break ;;
-    esac
-  done <<< "$workspaces"
+      esac
+    done <<< "$workspaces"
+  fi
   if [ "$live" -eq 0 ]; then
     rm -f "$sentinel" || true
+    fr_sentinel_unlock "$sentinel"
     exit 0
   fi
+  fr_sentinel_unlock "$sentinel"
 fi
 
 if [ -n "${cd_target:-}" ] && ! [ -d "$cd_target" ]; then

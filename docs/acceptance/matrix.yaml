@@ -3328,10 +3328,12 @@ rows:
       unit:
       - super-fr:tests/unit/test_hooks_guard.py#L199,unit=super-fr:tests/unit/test_sentinel_workspace_stamp.py
       - super-fr:tests/unit/test_sentinel_lifecycle.py
+      - super-fr:tests/unit/test_sentinel_liveness.py
     status: ci
-    notes: Adversarial review added end-to-end coverage over the REAL hooks (writer
-      -> stamp -> reload -> reap -> guard), a foreign-repo bind, and down sparing a
-      stranger's fresh sentinel.
+    notes: 'Liveness closed: the guard refreshes an active session''s sentinel so the
+      48h GC only expires abandoned ones, and every sentinel writer shares one mkdir
+      lock (a lost workspace entry could fail open). End-to-end down through the real
+      CLI added.'
   - id: guard-denial-truthful
     capability: Isolation state
     acceptance: 'Guard denial messages convey the true state: cd target gone says the

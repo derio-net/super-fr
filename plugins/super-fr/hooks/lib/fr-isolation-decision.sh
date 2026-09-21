@@ -281,6 +281,37 @@ fr_strip_command_prefix() {
     -e 's/^[[:space:]]*uv[[:space:]]+run[[:space:]]+//'
 }
 
+# fr_sentinel_lock <sentinel-path> / fr_sentinel_unlock <sentinel-path>
+#   One lock for every writer of a pipeline sentinel: the skill-load hook, the
+#   guard's heal, and (in Python, fr.isolation.types._sentinel_lock — same
+#   protocol, same path) `attach` and `down`'s clear. Each read-modify-renames
+#   the file; unlocked, one erased the other's update, and a lost workspace entry
+#   can fail OPEN (the heal retires a sentinel whose lost workspace is live).
+#   The lock is the directory `<sentinel>.lock`: `mkdir` is atomic and is the
+#   one primitive bash on macOS (no flock by default) and Python both have.
+#   A lock older than 60s is a dead writer's and is broken; after ~5s of waiting
+#   the waiter breaks it anyway — a sentinel write must not wedge the session,
+#   and the worst a broken lock buys is the pre-lock race, not a deadlock.
+#   Always returns 0.
+fr_sentinel_lock() {
+  _fr_lk="$1.lock"
+  _fr_tries=0
+  while ! mkdir "$_fr_lk" 2>/dev/null; do
+    _fr_tries=$((_fr_tries + 1))
+    if [ -n "$(find "$_fr_lk" -maxdepth 0 -mmin +1 2>/dev/null)" ] || [ "$_fr_tries" -ge 100 ]; then
+      rmdir "$_fr_lk" 2>/dev/null || true
+      _fr_tries=0
+      continue
+    fi
+    sleep 0.05
+  done
+  return 0
+}
+
+fr_sentinel_unlock() {
+  rmdir "$1.lock" 2>/dev/null || true
+}
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
 # An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts
