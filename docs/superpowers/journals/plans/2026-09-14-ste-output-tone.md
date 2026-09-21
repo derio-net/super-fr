@@ -374,3 +374,8 @@ The deliver step ran at phase 4, before the 2026-09-15 reframe, so the body clai
 ### merge-main-4-12 · discovery · Merged origin/main at 4.12.0 into the branch
 
 Seventeen commits landed on main while the PR was open. The operator chose a merge over a rebase, so every branch commit and the SHAs this journal cites stay intact. Generated files took main and were regenerated. Two tests main had fixed the same way took main. fr-goal took main and got the contract and the row table again, at 120 lines. journal_cmd took main and got the warning hook again. The matrix merged by row id. The run cursor migrated to schema 5. The version moved to 4.13.0.
+
+<!-- fr:journal kind=discovery scope=plan id=merge-main-4-14 created=2026-09-21T23:28:22 -->
+### merge-main-4-14 · discovery · Merged origin/main at 4.14.3 into the branch
+
+Seventeen more commits landed on main. Main fixed the same Rich-markup bug in the self-review print with escape; the merge keeps that fix and adds soft wrap. Every other overlapping file merged by itself and was verified. The version moved to 4.15.0.

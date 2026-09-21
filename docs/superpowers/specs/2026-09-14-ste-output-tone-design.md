@@ -250,7 +250,7 @@ The shared-block markers stay: the tests use them to find the text.
   rules again.
 
 The rule was never released: it existed only on this branch, and no release of
-`main` up to 4.12.0 carried it. No consumer machine has it, so no uninstall
+`main` up to 4.14.3 carried it. No consumer machine has it, so no uninstall
 cleanup is needed.
 
 ### F. Tests (new)
@@ -273,8 +273,8 @@ cleanup is needed.
 
 ### G. Release
 
-Minor bump to **4.13.0**: new warnings, a new opt-in style, and changed skill
-behaviour. `main` reached 4.12.0 while this branch was open, so this branch
+Minor bump to **4.15.0**: new warnings, a new opt-in style, and changed skill
+behaviour. `main` reached 4.14.3 while this branch was open, so this branch
 takes the next minor.
 
 ## 6. Risks and mitigations
