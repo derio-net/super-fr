@@ -37,7 +37,7 @@ fr isolation exec --branch <b> -- CMD ...                                       
 fr isolation status [--branch ...] [--session <id>] [--format json] [--stats] [--push-check]  # state + bound sessions
 fr isolation attach|detach --session <id> [--repo <path>] [--branch ...]         # bind/unbind a harness session
 fr isolation restart [--branch ...] [--force]                                     # bounce a wedged container, worktree kept
-fr isolation down --branch <b> | --worktree <path> | --all [--force]              # teardown (verifies + reaps); --all clears sentinel(s)
+fr isolation down --branch <b> | --worktree <path> | --all [--dry-run] [--yes] [--force]  # teardown; --all lists blast radius first
 fr isolation gc [--repo <path>] [--dry-run] [--format json]                       # reconcile fr-owned workspaces, ALL three modes
 ```
 
@@ -115,6 +115,6 @@ Worktree + container PERSIST after PR creation (back-loaded manual phases push t
 - **Wedged container:** `fr isolation restart [--force]` bounces the devcontainer WITHOUT dropping the worktree/installs — prefer it to
   down+up.
 - **Orphaned pipeline sentinel** (base commands denied, no workspace to `cd` into): the guard heals **per sentinel** — once EVERY workspace
-  the session bound is gone it retires that one and fails open (#472); unbound (fresh/legacy) stays armed (#529). `down --all` is repo-wide.
+  the session bound is gone it retires that one and fails open (#472); unbound (fresh/legacy) stays armed (#529). `down --all` is repo-wide: `--dry-run` first; another session's workspace needs `--yes`.
 - `devcontainer up` failures surface verbatim — missing Docker, a broken profile, an absent secrets file are operator-environment issues:
   report and stop, never work around isolation (no silent degradation to a weaker mode).

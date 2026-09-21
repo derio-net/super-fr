@@ -977,12 +977,144 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     # Phase-3 review f6: each reason gets its OWN lines. A hazard refusal is
     # multi-line by design, so inlining reasons into the summary put a "; "
     # separator mid-sentence and pushed the sentinel count to the tail of a
-    # paragraph. The summary line must stay a summary.
-    first = res.output.splitlines()[0]
+    # paragraph. The summary line must stay a summary. (#533: the blast-radius
+    # plan now precedes it, so locate the summary rather than assume line 0.)
+    first = next(
+        line for line in res.output.splitlines() if line.startswith("isolation down --all:")
+    )
     assert first.endswith("sentinel(s) cleared."), first
     assert "uncommitted.txt" not in first
     assert "  kept feat/dirty:" in res.output
     assert "  kept feat/openpr:" in res.output
+
+
+# --- #533: `down --all` shows its blast radius and confirms cross-session teardown ---
+
+
+def _two_workspaces(repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """feat/clean (tear-down candidate) + feat/dirty (hazard → kept), a live
+    pipeline sentinel, and a real origin so the hazard guard can answer."""
+    _push_origin(repo)
+    sdir = _sentinel(tmp_path, repo, monkeypatch)
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/clean"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/dirty"])
+    from fr.isolation.types import list_states
+
+    dirty = next(s for s in list_states(repo.resolve()) if s.branch == "feat/dirty")
+    (dirty.worktree / "uncommitted.txt").write_text("scratch\n")
+    return sdir
+
+
+def _attach(repo: Path, branch: str, session: str) -> None:
+    res = runner.invoke(
+        app,
+        ["isolation", "attach", "--repo", str(repo), "--branch", branch, "--session", session],
+    )
+    assert res.exit_code == 0, res.output
+
+
+def _branches(repo: Path) -> set[str]:
+    from fr.isolation.types import list_states
+
+    return {s.branch for s in list_states(repo.resolve())}
+
+
+def test_down_all_dry_run_lists_blast_radius_and_changes_nothing(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sdir = _two_workspaces(repo, monkeypatch, tmp_path)
+    _attach(repo, "feat/clean", "sess-other")
+    _attach(repo, "feat/dirty", "sess-dirty")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--dry-run"])
+    assert res.exit_code == 0, res.output
+    assert _branches(repo) == {"feat/clean", "feat/dirty"}, "dry run tore nothing down"
+    assert (sdir / "sess.json").exists(), "dry run cleared no sentinel"
+    out = res.output
+    assert "tear down feat/clean" in out
+    assert "keep feat/dirty" in out and "uncommitted" in out
+    assert "sess-other" in out and "sess-dirty" in out, "bound sessions are named"
+    assert "nothing changed" in out.lower()
+    # It would need --yes for real (feat/clean belongs to another session).
+    assert "--yes" in out
+
+
+def test_down_all_refuses_other_sessions_workspace_without_yes(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sdir = _two_workspaces(repo, monkeypatch, tmp_path)
+    _attach(repo, "feat/clean", "sess-other")
+
+    res = runner.invoke(
+        app, ["isolation", "down", "--repo", str(repo), "--all", "--session", "sess-me"]
+    )
+    assert res.exit_code == 2, res.output
+    assert _branches(repo) == {"feat/clean", "feat/dirty"}, "refusal changed nothing"
+    assert (sdir / "sess.json").exists(), "refusal cleared no sentinel"
+    assert "feat/clean" in res.output and "sess-other" in res.output
+    assert "--yes" in res.output
+
+    res = runner.invoke(
+        app,
+        ["isolation", "down", "--repo", str(repo), "--all", "--session", "sess-me", "--yes"],
+    )
+    assert res.exit_code == 0, res.output
+    assert _branches(repo) == {"feat/dirty"}, "--yes tears down; the hazard is still kept"
+
+
+def test_down_all_refuses_any_bound_workspace_when_no_session_given(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_workspaces(repo, monkeypatch, tmp_path)
+    _attach(repo, "feat/clean", "sess-x")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 2, res.output
+    assert "sess-x" in res.output
+    assert "feat/clean" in _branches(repo)
+
+
+def test_down_all_own_session_or_kept_workspace_needs_no_yes(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # feat/clean is bound ONLY to the caller; feat/dirty is bound to someone
+    # else but will be KEPT (hazard) — neither needs --yes.
+    _two_workspaces(repo, monkeypatch, tmp_path)
+    _attach(repo, "feat/clean", "sess-me")
+    _attach(repo, "feat/dirty", "sess-other")
+
+    res = runner.invoke(
+        app, ["isolation", "down", "--repo", str(repo), "--all", "--session", "sess-me"]
+    )
+    assert res.exit_code == 0, res.output
+    assert _branches(repo) == {"feat/dirty"}
+
+
+def test_down_dry_run_without_all_refuses_and_changes_nothing(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_workspaces(repo, monkeypatch, tmp_path)
+    res = runner.invoke(
+        app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/clean", "--dry-run"]
+    )
+    assert res.exit_code == 2, res.output
+    assert "--all" in res.output
+    assert "feat/clean" in _branches(repo)
+
+
+def test_down_all_prints_plan_before_the_summary(
+    repo: Path, fake_run: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_workspaces(repo, monkeypatch, tmp_path)
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
+    assert res.exit_code == 0, res.output
+    lines = res.output.splitlines()
+    summary = next(i for i, ln in enumerate(lines) if ln.startswith("isolation down --all:"))
+    plan_clean = next(i for i, ln in enumerate(lines) if "tear down feat/clean" in ln)
+    plan_dirty = next(i for i, ln in enumerate(lines) if "keep feat/dirty" in ln)
+    assert plan_clean < summary and plan_dirty < summary, res.output
+    assert "sessions: none" in res.output
 
 
 def test_down_single_hazard_refusal_keeps_bindings_and_sentinel(
