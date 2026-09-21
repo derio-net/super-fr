@@ -450,3 +450,21 @@ def test_fr_triage_touches_gh_only_in_collect() -> None:
         and ("fr.gh" in text or "GhError" in text or "from fr import gh" in text)
     ]
     assert offenders == []
+
+
+# ------------------------------------------------ review r-p2-case
+
+
+def test_a_judged_key_differing_only_by_case_is_not_held_twice() -> None:
+    """The reviewer's repro: open issue #5 judged as `Repo#5` appeared twice."""
+    scope = Scope(kind="repo", target="o/repo")
+    forge = FakeForge(
+        issues={"o/repo": [_issue(5)]},
+        prs={"o/repo": []},
+        closed={("o/repo", 5): {**_closed_view(5), "url": "u"}},
+    )
+
+    facts = collect_facts(forge, scope, now=NOW, judged=["Repo#5"])
+
+    assert [i.key for i in facts.issues] == ["repo#5"]
+    assert forge.called("view_issue") == []

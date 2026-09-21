@@ -37,6 +37,17 @@ TruncatedList = Literal["repos", "issues", "prs"]
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
 
 
+def normalize_key(key: str) -> str:
+    """The canonical form of a judgement key: lowercase (spec §3.D, review r-p2-case).
+
+    GitHub repo names are case-insensitive, so `Super-FR#5` and `super-fr#5`
+    are one issue. EVERY key — built by `issue_key`, loaded from
+    `judgements.yaml`, passed to `collect` — goes through here, and `check` and
+    `render` compare through it too. One function, so no two readers disagree.
+    """
+    return key.lower()
+
+
 @dataclass(frozen=True)
 class Scope:
     """What is being triaged: one repo, or every non-archived repo of an owner."""
@@ -46,8 +57,12 @@ class Scope:
 
     @property
     def name(self) -> str:
-        """Directory-safe scope name: `<owner>--<repo>` or `<owner>` (spec §3.B)."""
-        return self.target.replace("/", "--")
+        """Directory-safe scope name: `<owner>--<repo>` or `<owner>` (spec §3.B).
+
+        Lowercase, so `--repo Derio-Net/Super-FR` names the same state
+        directory as `--repo derio-net/super-fr` (review r-p2-case).
+        """
+        return self.target.replace("/", "--").lower()
 
     @property
     def owner(self) -> str:
@@ -66,8 +81,8 @@ def state_dir(scope: Scope, override: Path | None = None) -> Path:
 
 
 def issue_key(repo: str, number: int) -> str:
-    """The judgement key for `OWNER/REPO` issue *number*: `<repo-name>#<number>`."""
-    return f"{repo.split('/', 1)[-1]}#{number}"
+    """The judgement key for `OWNER/REPO` issue *number*: `<repo-name>#<number>`, normalised."""
+    return normalize_key(f"{repo.split('/', 1)[-1]}#{number}")
 
 
 class _Strict(BaseModel):
@@ -170,13 +185,27 @@ class Judgements(_Strict):
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
 
-    @field_validator("issues")
+    @field_validator("issues", mode="before")
     @classmethod
-    def _keys_are_repo_hash_number(cls, v: dict[str, Judgement]) -> dict[str, Judgement]:
-        bad = [k for k in v if not KEY_RE.match(k)]
+    def _keys_are_repo_hash_number(cls, v: object) -> object:
+        """Validate the key grammar, then normalise; a case-only collision is a conflict."""
+        if not isinstance(v, dict):
+            return v  # pydantic reports the wrong type
+        bad = [k for k in v if not isinstance(k, str) or not KEY_RE.match(k)]
         if bad:
             raise ValueError(f"judgement keys must be '<repo-name>#<number>', got {bad!r}")
-        return v
+        out: dict[str, object] = {}
+        seen: dict[str, str] = {}
+        for key, value in v.items():
+            canon = normalize_key(key)
+            if canon in seen:
+                raise ValueError(
+                    f"judgement keys {seen[canon]!r} and {key!r} conflict: keys are "
+                    "case-insensitive, so they name the same issue"
+                )
+            seen[canon] = key
+            out[canon] = value
+        return out
 
     @model_validator(mode="after")
     def _tiers_are_declared(self) -> Judgements:

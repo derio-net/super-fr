@@ -17,7 +17,16 @@ from typing import Any, Protocol
 
 from fr import gh
 from fr.triage.errors import ForgeError
-from fr.triage.model import SCHEMA, Facts, Issue, PullRequest, Scope, Skipped, Truncation
+from fr.triage.model import (
+    SCHEMA,
+    Facts,
+    Issue,
+    PullRequest,
+    Scope,
+    Skipped,
+    Truncation,
+    normalize_key,
+)
 from fr.triage.stage import pr_rank
 
 ISSUE_LIMIT = 1000
@@ -177,9 +186,9 @@ def _judged_elsewhere(
     """
     by_name = {repo.split("/", 1)[1].lower(): repo for repo in repos}
     wanted: list[tuple[str, int]] = []
-    for key in sorted(set(judged) - open_keys):
+    for key in sorted({normalize_key(k) for k in judged} - open_keys):
         name, _, number = key.rpartition("#")
-        repo = by_name.get(name.lower())
+        repo = by_name.get(name)
         if repo is not None and number.isdigit():
             wanted.append((repo, int(number)))
     return wanted

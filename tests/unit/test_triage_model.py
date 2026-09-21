@@ -14,6 +14,8 @@ from fr.triage.errors import TriageError
 from fr.triage.model import (
     Judgements,
     Scope,
+    issue_key,
+    normalize_key,
     load_facts,
     load_judgements,
     state_dir,
@@ -143,3 +145,38 @@ def test_dir_overrides_the_default_for_both_scopes(
     override = tmp_path / "elsewhere"
 
     assert state_dir(scope, override) == override
+
+
+# ------------------------------------------------ review r-p2-case
+
+
+def test_normalize_key_lowercases_a_judgement_key() -> None:
+    assert normalize_key("Super-FR#435") == "super-fr#435"
+    assert normalize_key("super-fr#435") == "super-fr#435"
+
+
+def test_issue_key_is_constructed_lowercase() -> None:
+    assert issue_key("Derio-Net/Super-FR", 5) == "super-fr#5"
+
+
+def test_scope_name_is_lowercase_so_typed_case_names_one_state_dir() -> None:
+    assert Scope(kind="repo", target="Derio-Net/Super-FR").name == "derio-net--super-fr"
+    assert Scope(kind="org", target="Derio-Net").name == "derio-net"
+
+
+def test_judgement_keys_are_lowercased_on_load(tmp_path: Path) -> None:
+    text = JUDGEMENTS_YAML.replace('"super-fr#435"', '"Super-FR#435"')
+    j = load_judgements(_write(tmp_path / "judgements.yaml", text))
+
+    assert "super-fr#435" in j.issues
+    assert "Super-FR#435" not in j.issues
+
+
+def test_two_judgement_keys_differing_only_by_case_are_a_conflict(tmp_path: Path) -> None:
+    text = JUDGEMENTS_YAML.replace('"super-fr#1":  {tier: 2, cx: XS}', '"Super-FR#435": {tier: 2}')
+    path = _write(tmp_path / "judgements.yaml", text)
+
+    with pytest.raises(TriageError, match=str(path)) as exc:
+        load_judgements(path)
+    assert "conflict" in str(exc.value)
+    assert "Super-FR#435" in str(exc.value)
