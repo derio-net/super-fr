@@ -379,8 +379,8 @@ standard it is a **lead, not a fact**, so what could be checked on the authoring
 
 | harness | capability tier | basis |
 |---|---|---|
-| Claude Code | **block** — `Stop` hook returns `decision: "block"` + reason | known; exercised in the plan's hook phase |
-| OpenCode 1.18.31 | **re-prompt** — cannot block a stop, can continue the session | **verified installed:** `session.idle` event in the SDK types, and a `/session/{id}/prompt_async` endpoint a plugin's `client` can call |
+| Claude Code 2.1.278 | **block** — `Stop` hook prints `{"decision":"block","reason":…}` and exits 0 | **verified live in phase 6** with two headless turns: the reason reached the model, and the continuation's Stop carried `stop_hook_active: true`. Inputs captured under `tests/fixtures/hooks/` |
+| OpenCode (binary 1.18.31) | **re-prompt** — cannot block a stop, can continue the session | `session.idle` and `/session/{id}/prompt_async` **verified in the `@opencode-ai/sdk` type definitions on this machine — which are versions 1.17.15, 1.1.27 and 1.0.23, NOT 1.18.31** as this table first claimed; all three carry both, so the design holds. Not live-proven |
 | Copilot CLI 1.0.84 | reportedly block (`agentStop`) | hooks system **verified installed** (`hooks` keyed by event; a user hook already exists here); the event's blocking semantics are not |
 | Codex CLI, Agy | reportedly block | not installed here — unverified |
 | Hermes | reportedly **observe** only (non-blocking stop events) | not installed here — unverified; the repo already registers `pre_tool_call` / `pre_llm_call` hooks on it |
@@ -403,6 +403,21 @@ Both shipped adapters find the run through the session binding (gh#500, already 
 stay silent in every legitimate case — a pending operator gate, a manual phase, a **held**
 unit (a turn that ends while a background executor works is *correct*), a failed step, a
 finished run, no run at all — and fail open on any error.
+
+**Two things only the binary could tell us** (phase 6 read them from Claude Code's embedded
+hook schema; the spec's author did not know either):
+
+- The Stop input carries **`background_tasks`**, documented there as the way to tell "the
+  session is done" from "paused, waiting for background work". The guard treats a non-empty
+  list as a second reason for silence, beside fr's own open attempt. Its shape while a
+  subagent is really running was NOT exercised — that test payload is composed from the
+  schema and labelled so; the live case is Test Plan item 17.
+- Claude Code **caps consecutive Stop-hook blocks itself** (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`,
+  default 8) — a third brake, which fr did not have to build and does not rely on.
+
+Two costs, stated: the guard calls the `fr` on PATH, so a stale global `fr` exits 2 and
+silently DISABLES it (safe, but invisible — the skill prose must say so); and it adds one
+`fr` start-up, roughly two seconds, to every turn end of a session that has a binding.
 
 **The loop breaker.** A guard that always blocks can trap a session: `advance` keeps
 failing, or the model keeps stopping, and the hook keeps refusing. (The operator's survey
