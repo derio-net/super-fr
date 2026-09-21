@@ -3170,8 +3170,9 @@ rows:
       an unclaimed record names no holder - so this row claims the member path only.'
   - id: run-model-only-for-dispatched-work
     capability: Run cursor
-    acceptance: fr records a model only for work it dispatched to a tier; a unit the
-      orchestrator runs itself records no model unless the orchestrator reports one
+    acceptance: fr resolves a tier's model only for work it dispatched to that tier;
+      a unit the orchestrator runs itself never carries a tier's model - it records
+      the orchestrator's OBSERVED model, or none when unobservable
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
@@ -3179,10 +3180,11 @@ rows:
       - super-fr:tests/unit/test_run_orchestrator_model.py#L70
       - super-fr:tests/unit/test_run_orchestrator_model.py#L87
     status: ci
-    notes: 'C2. Not a labelling quibble: this repo''s archived #508 cursor credits seven
-      inline reviews to a model that did not perform them. Cursors already carrying
-      the false value are left alone - a repair would be guessing, and archives are
-      frozen.'
+    notes: 'C2 of the #508 defects. Refined 2026-09-21 (debug journal 2026-09-21-fr-goal-first-run-contracts,
+      C3): the orchestrator''s model is no longer invisible - its session transcript
+      names it - so an orchestrator-run unit now records the model fr OBSERVES there;
+      what this row forbids, a tier''s model on work the tier never touched, is unchanged.
+      The seven false archived reviews stay as they are (archives are frozen). See run-records-observed-models.'
   - id: guard-run-start-enters-isolation
     capability: Isolation
     acceptance: fr-goal's first action, fr run start, is allowed from the base clone
@@ -3216,3 +3218,102 @@ rows:
       path is shared by every project in a container, and a probe showed project a importing
       a package only b declared. Existing containers must be recreated; profiles already
       scaffolded in consumer repos are not rewritten.'
+  - id: run-gate-verified-from-transcript
+    capability: Run cursor
+    acceptance: On Claude Code an operator gate clears only with an answered question
+      in the session transcript since it paused, or an explicit recorded bypass with
+      a reason; where the transcript is unreadable the gate announces itself advisory
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L3348
+      - super-fr:tests/unit/test_run_cli.py#L3368
+      - super-fr:tests/unit/test_run_cli.py#L3406
+      - super-fr:tests/unit/test_run_cli.py#L416
+    status: ci
+    notes: 'C1. The first fr-goal run after #508 cleared its brainstorm gate unasked
+      on Claude Code while parity.yaml called the gate enforced - which also suppressed
+      the only warning. Verification reads a captured AskUserQuestion shape (tests/fixtures/transcripts).'
+  - id: run-review-by-a-separate-context
+    capability: Run cursor
+    acceptance: A phase review names the separate reviewer that performed it; the phase's
+      own implementer, or a reviewer this session never dispatched, is refused
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L127
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L151
+    status: ci
+    notes: C6. The review evidence gate proved an entry existed; on the first post-#508
+      run the orchestrator typed it about work nobody reviewed. Unobservable harnesses
+      record the id as claimed and say so.
+  - id: run-deliver-needs-an-orchestrator-test-run
+    capability: Run cursor
+    acceptance: Delivery names the log of a full test run the orchestrator itself performed
+      during delivery; a missing, stale, or someone-else's log is refused
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L226
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L242
+    status: ci
+    notes: C5. deliver resolved in 28s on a PR url and the executor's word ('verified
+      locally'). The log is hashed onto the cursor.
+  - id: plan-skeleton-is-not-the-whole-plan
+    capability: fr-goal-methodology
+    acceptance: A plan whose only agentic phase is the walking skeleton fails self-review
+      unless an operator override records why
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1554
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1567
+    status: ci
+    notes: C2. A one-phase plan carried the whole change under the skeleton marker,
+      so the per-phase implement/review loop ran once.
+  - id: isolation-session-bound-without-flags
+    capability: isolation-traceability
+    acceptance: Starting a run or entering isolation binds the calling session to the
+      workspace whenever the session is knowable, however fr was launched
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L5549
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py#L205
+    status: ci
+    notes: C4. The bind hook matched only a leading bare 'fr', and this repo mandates
+      'uv run fr', so fr-goal workspaces read sessions=none and the Stop idle guard
+      was inert.
+  - id: run-records-observed-models
+    capability: Run cursor
+    acceptance: The run records the model it observed serving each unit - the served
+      model over a claimed alias, the orchestrator's own model for units it ran - and
+      warns when the orchestrator strays from a bound orchestrator model
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L2531
+      - super-fr:tests/unit/test_run_cli.py#L2582
+      - super-fr:tests/unit/test_run_cli.py#L2611
+    status: ci
+    notes: C3. The cursor stored 'opus' (the claim) while the transcript fr already
+      read said claude-opus-5; the whole fr-goal run's orchestrator was claude-sonnet-5
+      and nothing recorded it. Record + warn, never block.
+  - id: agent-skill-instructions-are-executable
+    capability: Conventions
+    acceptance: An agent whose body tells it to use a skill is granted the tool to load
+      one
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#L49
+    status: ci
+    notes: C7. fr-phase-executor was told to implement via superpowers:test-driven-development
+      / fr-execute with no Skill tool; its 79-record transcript shows zero skill loads.
