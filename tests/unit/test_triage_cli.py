@@ -156,3 +156,27 @@ def test_a_bad_judgements_file_exits_2_naming_it(
 
     assert result.exit_code == 2
     assert "judgements.yaml" in result.output
+
+
+def test_an_unviewed_judgement_is_reported_verbatim_and_still_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r-p2-unviewed: a failed view is said out loud, never silently dropped."""
+    (tmp_path / "judgements.yaml").write_text(
+        'schema: 1\ntiers: [{n: 1, title: T}]\nissues:\n  "super-fr#430": {tier: 1}\n',
+        encoding="utf-8",
+    )
+    forge = _Forge()
+
+    def view_issue(*, repo: str, number: int) -> dict[str, Any]:
+        raise ForgeError("[rate limit] [/red]")
+
+    forge.view_issue = view_issue  # type: ignore[method-assign]
+
+    result = _run(monkeypatch, forge, "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
+
+    assert result.exit_code == 0, result.output
+    assert "super-fr#430" in result.output
+    assert "[rate limit] [/red]" in result.output
+    facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
+    assert facts["unviewed"] == [{"key": "super-fr#430", "reason": "[rate limit] [/red]"}]

@@ -25,6 +25,8 @@ from fr.triage.model import (
     Scope,
     Skipped,
     Truncation,
+    Unviewed,
+    issue_key,
     normalize_key,
 )
 from fr.triage.stage import pr_rank
@@ -240,11 +242,15 @@ def collect_facts(
 
     out = [_issue(repo, i, linked(repo, i["number"]), state="open") for repo, i in raw_issues]
     open_keys = {i.key for i in out}
+    unviewed: list[Unviewed] = []
     for repo, number in _judged_elsewhere(judged, open_keys, collected):
         try:
             raw = forge.view_issue(repo=repo, number=number)
-        except ForgeError:
-            continue  # deleted or unreadable: `check` reports the judgement as orphaned
+        except ForgeError as exc:
+            # Deleted, rate-limited, 5xx or no access — indistinguishable here, so
+            # recorded, never dropped: `check` must not call it orphaned (r-p2-unviewed).
+            unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
+            continue
         state = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
     return Facts(
@@ -255,5 +261,6 @@ def collect_facts(
         repos=repos,
         issues=out,
         skipped=skipped,
+        unviewed=unviewed,
         warnings=warnings,
     )

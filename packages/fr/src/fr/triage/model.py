@@ -131,6 +131,18 @@ class Skipped(_Strict):
     reason: str
 
 
+class Unviewed(_Strict):
+    """A judged issue whose `view_issue` failed (review r-p2-unviewed).
+
+    A deleted issue, a rate limit, a 5xx and a token without access all fail
+    the same way, and only the forge could tell them apart. So none of them is
+    dropped: `check` reports these as unreachable, never as orphaned.
+    """
+
+    key: str  # normalised judgement key
+    reason: str
+
+
 class Truncation(_Strict):
     """A list that returned exactly its limit, so it may have been cut short."""
 
@@ -147,6 +159,7 @@ class Facts(_Strict):
     repos: list[str]
     issues: list[Issue]
     skipped: list[Skipped] = []
+    unviewed: list[Unviewed] = []
     warnings: list[Truncation] = []
 
     def to_json(self) -> dict[str, Any]:

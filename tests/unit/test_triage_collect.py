@@ -352,17 +352,49 @@ def test_no_view_for_open_keys_or_keys_outside_the_scope() -> None:
     assert forge.called("view_issue") == []
 
 
-def test_a_judged_issue_the_forge_cannot_find_is_left_out() -> None:
-    forge = _super_fr_forge()  # no closed issues: view_issue raises KeyError -> ForgeError
+@pytest.mark.parametrize(
+    "reason", ["Could not resolve to an issue", "HTTP 502", "API rate limit exceeded"]
+)
+def test_every_failed_view_is_recorded_as_unviewed_never_dropped(reason: str) -> None:
+    """Review r-p2-unviewed: a rate limit must not make a live judgement look orphaned."""
+    forge = _super_fr_forge()
+    forge.closed = {("derio-net/super-fr", 430): _closed_view(430)}
+    real = forge.view_issue
 
     def view_issue(*, repo: str, number: int) -> dict[str, Any]:
-        raise ForgeError("Could not resolve to an issue")
+        if number == 99999:
+            raise ForgeError(reason)
+        return real(repo=repo, number=number)
 
     forge.view_issue = view_issue  # type: ignore[method-assign]
 
-    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#99999"])
+    facts = collect_facts(
+        forge, SUPER_FR, now=NOW, judged=["super-fr#99999", "Super-FR#430"]
+    )
 
-    assert "super-fr#99999" not in {i.key for i in facts.issues}  # check calls it orphaned
+    assert "super-fr#99999" not in {i.key for i in facts.issues}
+    assert [(u.key, u.reason) for u in facts.unviewed] == [("super-fr#99999", reason)]
+    # The view that succeeded is unaffected.
+    assert "super-fr#430" in {i.key for i in facts.issues}
+
+
+def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
+    from fr.triage.model import load_facts
+
+    forge = _super_fr_forge()
+
+    def view_issue(*, repo: str, number: int) -> dict[str, Any]:
+        raise ForgeError("HTTP 502")
+
+    forge.view_issue = view_issue  # type: ignore[method-assign]
+    facts = collect_facts(forge, SUPER_FR, now=NOW, judged=["super-fr#99999"])
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(facts.to_json()), encoding="utf-8")
+
+    loaded = load_facts(path)
+
+    assert facts.to_json()["schema"] == 1
+    assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
 def test_org_scope_views_a_judged_closed_issue_in_its_own_repo() -> None:

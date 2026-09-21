@@ -63,6 +63,11 @@ def _report(facts: Facts) -> None:
     """Print what the forge could not give; every forge-sourced string escaped (r7)."""
     for s in facts.skipped:
         err_console.print(f"[yellow]skipped[/yellow] {escape(s.repo)}: {escape(s.reason)}")
+    for u in facts.unviewed:
+        err_console.print(
+            f"[yellow]unviewed[/yellow] {escape(u.key)}: {escape(u.reason)} "
+            "(judged, but the forge would not show it; not treated as orphaned)"
+        )
     for w in facts.warnings:
         err_console.print(
             f"[yellow]warning:[/yellow] the {w.source} list for {escape(w.target)} returned "
