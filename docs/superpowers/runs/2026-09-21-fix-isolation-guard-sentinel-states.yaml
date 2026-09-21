@@ -3,7 +3,7 @@ run: 2026-09-21-fix-isolation-guard-sentinel-states
 workflow: fr-goal@1
 branch: fix/isolation-guard-sentinel-states
 started: '2026-09-21T14:40:57+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -44,8 +44,8 @@ steps:
       \ tier but fr_version '>=3.0.0,<5.0.0' admits a pre-tier fr \n— floor it at\
       \ '>=3.12.0,<5.0.0'.\n"
   implement:
-    state: running
-    at: '2026-09-21T15:25:48+00:00'
+    state: done
+    at: '2026-09-21T15:49:46+00:00'
     members:
     - implement-phase
     - review-phase
@@ -131,7 +131,7 @@ steps:
           review: rev-p2
           findings: d8ac0b68f6bc
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-21T15:25:48+00:00'
           agent: a4f3b97b1bcdd393c
@@ -139,12 +139,77 @@ steps:
           harness: claude-code
           model: sonnet
           session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+          returned: '2026-09-21T15:32:26+00:00'
+          outcome: done
           estimate:
             journal_entries: 8
             journal_lines: 41
             handoff_chars: 2343
             spec_bytes: 6785
             plan_bytes: 10543
+          measured:
+            input_tokens: 48
+            cache_creation_input_tokens: 72269
+            cache_read_input_tokens: 1078773
+            output_tokens: 9345
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T15:32:27+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+          returned: '2026-09-21T15:32:27+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 12
+            journal_lines: 61
+            handoff_chars: 3418
+            spec_bytes: 6785
+            plan_bytes: 10629
+        evidence:
+          review: rev-p3
+          findings: f-p3-ref
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T15:32:28+00:00'
+          agent: a36dd0ff2d2fd8aba
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: haiku
+          session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+          returned: '2026-09-21T15:49:45+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 12
+            journal_lines: 61
+            handoff_chars: 5134
+            spec_bytes: 6785
+            plan_bytes: 10629
+          measured:
+            input_tokens: 1138
+            cache_creation_input_tokens: 374057
+            cache_read_input_tokens: 9429105
+            output_tokens: 14856
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-21T15:49:46+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+          returned: '2026-09-21T15:49:46+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 14
+            journal_lines: 71
+            handoff_chars: 4830
+            spec_bytes: 6785
+            plan_bytes: 10715
+        evidence:
+          review: rev-p4
+          findings: none
   journal-check:
     state: pending
   deliver:

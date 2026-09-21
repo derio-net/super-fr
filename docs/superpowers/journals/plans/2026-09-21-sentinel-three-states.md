@@ -59,3 +59,13 @@ origin/<b> resolved before local; test added
 ### rev-p3 · review · Phase 3 review (phase 3)
 
 Raised f-p3-ref (fixed with test). Verdict logic shared via _verdict, not forked; no --branch keeps old error; unresolvable ref exits 1.
+
+<!-- fr:journal kind=finding scope=plan id=9fb4c022ffb2-resolved created=2026-09-21T17:49:45 state=fixed resolves=9fb4c022ffb2 -->
+### 9fb4c022ffb2-resolved · finding [fixed] · resolves 9fb4c022ffb2: Skill mirrors are stale on purpose until P4.T1.S2 runs BOTH sync scripts
+
+phase 4 ran both sync scripts; --check green; full suite green (re-run by orchestrator)
+
+<!-- fr:journal kind=review scope=plan id=rev-p4 created=2026-09-21T17:49:45 phase=4 -->
+### rev-p4 · review · Phase 4 review (phase 4)
+
+No findings. Re-ran full pytest (4069 passed, 92.35% cov), acceptance check, bump-version --check independently; 3 rows at ci, mirrors synced, 4.13.1 -> 4.13.2.
