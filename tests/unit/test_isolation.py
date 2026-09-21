@@ -2469,6 +2469,33 @@ def test_verify_merge_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert res["pr_state"] == "MERGED"
 
 
+def test_verify_merge_reaped_resolves_origin_ref_and_verifies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "branch", "-q", "-D", "feature")  # only origin/feature remains
+    _git(repo, "fetch", "-q", "origin")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr_from", lambda cwd, b: {"state": "MERGED"})
+    res = target.verify_merge_reaped("feature", default_branch="main")
+    assert res["verified"] is True and res["reaped"] is True
+    monkeypatch.setattr(target, "_pr_from", lambda cwd, b: {"state": "OPEN"})
+    assert target.verify_merge_reaped("feature", default_branch="main")["verified"] is False
+
+
+def test_verify_merge_reaped_unresolvable_ref_raises_naming_ref(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _with_origin(repo)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    with pytest.raises(IsolationError, match="ghost-branch"):
+        target.verify_merge_reaped("ghost-branch")
+
+
 def test_verify_merge_orphan_not_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = make_repo(tmp_path)
     _git(repo, "checkout", "-q", "-b", "feature")

@@ -742,12 +742,80 @@ def test_verify_merge_cmd_not_verified_exits_1(
     assert "fix2.py" in res.output
 
 
-def test_verify_merge_cmd_no_workspace_exits_2(repo: Path, fake_run: list) -> None:
-    res = runner.invoke(
-        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "ghost"]
+class _ReapedStub:
+    def __init__(self, result: dict | None = None, err: str | None = None) -> None:
+        self._result, self._err = result, err
+
+    def verify_merge_reaped(self, branch, default_branch: str = "main") -> dict:
+        if self._err:
+            from fr.isolation.types import IsolationError
+
+            raise IsolationError(self._err)
+        assert self._result is not None
+        return self._result
+
+
+def _reaped_res(**kw) -> dict:
+    base = {
+        "branch": "feat/r",
+        "verified": True,
+        "changes_present": True,
+        "missing": [],
+        "pr_state": "MERGED",
+        "fetched": True,
+    }
+    return {**base, **kw}
+
+
+def _invoke_reaped(repo: Path, monkeypatch: pytest.MonkeyPatch, stub) -> object:
+    monkeypatch.setattr(isolation_cmd, "_target", lambda root: stub)
+    return runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/r"]
     )
+
+
+def test_verify_merge_reaped_verified(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    res = _invoke_reaped(repo, monkeypatch, _ReapedStub(_reaped_res()))
+    assert res.exit_code == 0, res.output
+    assert "already reaped" in res.output
+    assert "✓" in res.output
+
+
+def test_verify_merge_reaped_changes_missing_exits_1(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub = _ReapedStub(_reaped_res(verified=False, changes_present=False, missing=["a.py"]))
+    res = _invoke_reaped(repo, monkeypatch, stub)
+    assert res.exit_code == 1
+    assert "a.py" in res.output
+    assert "already reaped" in res.output
+
+
+def test_verify_merge_reaped_pr_not_merged_exits_1(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    res = _invoke_reaped(
+        repo, monkeypatch, _ReapedStub(_reaped_res(verified=False, pr_state="OPEN"))
+    )
+    assert res.exit_code == 1
+    assert "OPEN" in res.output
+
+
+def test_verify_merge_reaped_unresolvable_ref_exits_1_no_traceback(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    res = _invoke_reaped(
+        repo, monkeypatch, _ReapedStub(err="cannot resolve branch ref 'feat/r' (neither)")
+    )
+    assert res.exit_code == 1
+    assert "feat/r" in res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit)
+
+
+def test_verify_merge_cmd_no_branch_no_workspace_exits_2(repo: Path, fake_run: list) -> None:
+    res = runner.invoke(app, ["isolation", "verify-merge", "--repo", str(repo)])
     assert res.exit_code == 2
-    assert "no isolation workspace" in res.output
+    assert "fr isolation up" in res.output
 
 
 def test_up_forwards_base_and_no_fetch(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

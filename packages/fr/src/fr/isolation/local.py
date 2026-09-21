@@ -574,15 +574,65 @@ class LocalWorktreeDevcontainerTarget:
         STOPs (and the caller inspects which signal is missing) when not
         verified.
         """
+        return self._verdict(
+            state.worktree, state.branch, default_branch, remote, pr=self._pr(state)
+        )
+
+    def verify_merge_reaped(
+        self,
+        branch: str,
+        default_branch: str = "main",
+        remote: str = "origin",
+    ) -> dict[str, Any]:
+        """`verify_merge` for a branch whose workspace gc already reaped.
+
+        No state file and no worktree, so the same fetch + content check +
+        PR-state verdict runs from the repo root, with the branch ref resolved
+        local-then-`<remote>/<branch>`. Raises IsolationError naming the ref
+        when neither resolves. `verified` still needs all three signals."""
+        ref = self._resolve_branch_ref(branch, remote)
+        pr = self._pr_from(self.repo_root, branch)
+        res = self._verdict(self.repo_root, branch, default_branch, remote, pr=pr, ref=ref)
+        res["reaped"] = True
+        return res
+
+    def _resolve_branch_ref(self, branch: str, remote: str) -> str:
+        for cand in (branch, f"{remote}/{branch}"):
+            probe = self.run(
+                ["git", "rev-parse", "--verify", "--quiet", f"{cand}^{{commit}}"],
+                cwd=self.repo_root,
+            )
+            if probe.returncode == 0:
+                return cand
+        # the remote-tracking ref may simply be stale: try one targeted fetch
+        self.run(["git", "fetch", remote, branch], cwd=self.repo_root)
+        probe = self.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{remote}/{branch}^{{commit}}"],
+            cwd=self.repo_root,
+        )
+        if probe.returncode == 0:
+            return f"{remote}/{branch}"
+        raise IsolationError(
+            f"cannot resolve branch ref {branch!r} (neither local nor {remote}/{branch})."
+        )
+
+    def _verdict(
+        self,
+        cwd: Path,
+        branch: str,
+        default_branch: str,
+        remote: str,
+        pr: dict[str, Any] | None,
+        ref: str | None = None,
+    ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
-        fetch = self.run(["git", "fetch", remote, default_branch], cwd=state.worktree)
+        fetch = self.run(["git", "fetch", remote, default_branch], cwd=cwd)
         fetched = fetch.returncode == 0
-        res = branch_changes_present(self.run, state.worktree, state.branch, base_ref)
-        pr = self._pr(state)
+        res = branch_changes_present(self.run, cwd, ref or branch, base_ref)
         pr_state = pr.get("state") if pr else None
         verified = res.changes_present and pr_state == "MERGED" and fetched
         return {
-            "branch": state.branch,
+            "branch": branch,
             "verified": verified,
             "changes_present": res.changes_present,
             "missing": res.missing,

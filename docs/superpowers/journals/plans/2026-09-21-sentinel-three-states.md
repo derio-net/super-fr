@@ -39,3 +39,8 @@ Read guard diff vs spec 2.B/2.C. Findings raised: d8ac0b68f6bc (explainers page 
 ### d8ac0b68f6bc-resolved · finding [refuted] · resolves d8ac0b68f6bc: docs/explainers/fr-isolation.html still describes the count-based self-heal, and this repo cannot regenerate it
 
 docs/explainers/fr-isolation.html has no committed .md source (explainers-currency known gap 1) and hand-editing a rendered page is forbidden; a patch bump does not trigger the rule. Disclosed in the PR body: the published page still describes the count heal.
+
+<!-- fr:journal kind=discovery scope=plan id=ccd8ff87c958 created=2026-09-21T17:30:03 phase=3 -->
+### ccd8ff87c958 · discovery · P3: verify-merge reaped fallback landed (phase 3)
+
+LocalWorktreeDevcontainerTarget.verify_merge_reaped + shared _verdict (verify_merge delegates; verdict logic not forked). Ref resolved local, origin/<b>, one targeted fetch, else IsolationError naming ref -> CLI exit 1. Old 'ghost branch exits 2' test replaced: explicit --branch with no state is now the reaped path. SKILL.md fr-goal line left as is (does not imply live workspace).

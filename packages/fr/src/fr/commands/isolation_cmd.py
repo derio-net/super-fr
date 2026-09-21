@@ -582,7 +582,10 @@ def verify_merge(
 
     Squash/rebase/merge-safe: checks content presence on `origin/<default>`,
     not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
-    may have orphaned (a commit pushed after the PR merged).
+    may have orphaned (a commit pushed after the PR merged). With an explicit
+    --branch whose workspace gc already reaped, the same check runs from the
+    repo root (branch ref resolved local, then origin); an unresolvable ref
+    exits 1.
     """
     root = _resolve_repo(repo)
     if branch is None:
@@ -598,22 +601,28 @@ def verify_merge(
         state = states[0] if states else None
     else:
         state = load_state(root, branch)
+    reaped = False
     if state is None:
-        _fail(
-            IsolationError(
-                f"no isolation workspace for branch {branch!r}."
-                if branch is not None
-                else "no isolation workspace — run `fr isolation up` first."
-            )
-        )
-        return
+        if branch is None:
+            _fail(IsolationError("no isolation workspace — run `fr isolation up` first."))
+            return
+        reaped = True
     target = _target_or_exit(root)
     _refuse_external(target, "verify-merge")
-    res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+    if state is None:
+        assert branch is not None
+        try:
+            res = _worktree_ops(target).verify_merge_reaped(branch, default_branch=default_branch)
+        except IsolationError as err:
+            typer.echo(f"error: {err}", err=True)
+            raise typer.Exit(1) from err
+    else:
+        res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+    note = " (workspace already reaped; checked from the repo root)" if reaped else ""
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
-            f"origin/{default_branch}, PR MERGED."
+            f"origin/{default_branch}, PR MERGED.{note}"
         )
         return
     reasons = []
@@ -624,7 +633,7 @@ def verify_merge(
     if res["pr_state"] != "MERGED":
         reasons.append(f"PR state is {res['pr_state']} (expected MERGED)")
     typer.echo(
-        f"verify-merge: {res['branch']} ✗ NOT verified — {'; '.join(reasons)}. "
+        f"verify-merge: {res['branch']} ✗ NOT verified{note} — {'; '.join(reasons)}. "
         "Do NOT declare done; recover (cherry-pick onto the base branch / open a fresh PR).",
         err=True,
     )
