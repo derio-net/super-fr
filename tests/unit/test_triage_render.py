@@ -188,3 +188,57 @@ def test_the_page_is_self_contained_and_themed(tmp_path: Path) -> None:
     assert "IBM Plex Sans" in page and "system-ui" in page
     assert 'name="viewport"' in page
     assert "localStorage" in page and "try" in page
+
+
+# ------------------------------------------------------------- P3.T4 command
+
+from typing import Any  # noqa: E402
+
+from fr.cli import app  # noqa: E402
+from typer.testing import CliRunner  # noqa: E402
+
+
+def _render_cmd(tmp_path: Path, *extra: str) -> Any:
+    return CliRunner().invoke(
+        app, ["triage", "render", "--repo", "derio-net/super-fr", "--dir", str(tmp_path), *extra]
+    )
+
+
+def test_render_writes_triage_html_and_exits_0(tmp_path: Path) -> None:
+    facts, judgements = _state(tmp_path)
+    result = _render_cmd(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    out = tmp_path / "triage.html"
+    assert out.read_text(encoding="utf-8") == render(facts, judgements)
+
+
+def test_render_open_hands_the_file_uri_to_webbrowser_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state(tmp_path)
+    opened: list[str] = []
+    monkeypatch.setattr("webbrowser.open", lambda url, *a, **k: opened.append(url) or True)
+    result = _render_cmd(tmp_path, "--open")
+
+    assert result.exit_code == 0, result.output
+    assert opened == [(tmp_path / "triage.html").resolve().as_uri()]
+
+
+def test_render_without_judgements_renders_everything_unranked(tmp_path: Path) -> None:
+    _state(tmp_path)
+    (tmp_path / "judgements.yaml").unlink()
+    result = _render_cmd(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    page = (tmp_path / "triage.html").read_text(encoding="utf-8")
+    assert _sections(page) == ["unranked"]
+    assert _section_of(page, "super-fr#529") == "unranked"
+
+
+def test_render_without_facts_names_the_collect_command(tmp_path: Path) -> None:
+    result = _render_cmd(tmp_path)
+
+    assert result.exit_code != 0
+    assert "fr triage collect --repo derio-net/super-fr" in result.output
+    assert not (tmp_path / "triage.html").exists()

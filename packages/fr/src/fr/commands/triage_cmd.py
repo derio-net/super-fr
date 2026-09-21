@@ -1,8 +1,10 @@
 """`fr triage` CLI — backlog triage (spec 2026-09-21-fr-triage-design).
 
 `collect` reads the forge and writes `facts.json` under the scope's state
-directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). The engine lives in
-`fr.triage`; this module only parses flags and does I/O.
+directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). `check` reports the
+four sets (unranked, settled, orphaned, unreachable) and always exits 0.
+`render` writes `triage.html`, and `--open` hands it to `webbrowser`. The
+engine lives in `fr.triage`; this module only parses flags and does I/O.
 
 Gate-exempt: `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` because
 it never reads or writes a registered artifact (spec §3.F′).
@@ -10,14 +12,17 @@ it never reads or writes a registered artifact (spec §3.F′).
 Exit codes: 0 success (skipped repos and truncation warnings are reported,
 not failed); 2 usage (not exactly one of --repo/--org), an unreadable
 judgements.yaml, a forge failure in repo scope, or an org scope in which
-no repo could be read (review r-p2-empty).
+no repo could be read (review r-p2-empty); for check/render, a missing
+facts.json (the message names the collect command) or an unreadable state file.
 """
 
 from __future__ import annotations
 
 import json
+import webbrowser
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -34,6 +39,7 @@ from fr.triage.model import (
     load_judgements,
     state_dir,
 )
+from fr.triage.render import render
 
 console = Console()
 err_console = Console(stderr=True)
@@ -43,6 +49,15 @@ triage_app = typer.Typer(
     help="Backlog triage: collect forge facts, check judgements, render a board.",
     no_args_is_help=True,
 )
+
+
+# One option set for --repo/--org/--dir, shared by collect, check and render.
+RepoOpt = Annotated[str | None, typer.Option("--repo", help="Triage one repo: OWNER/REPO.")]
+OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
+DirOpt = Annotated[
+    Path | None,
+    typer.Option("--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."),
+]
 
 
 def make_forge() -> Forge:
@@ -87,11 +102,9 @@ def _report(facts: Facts) -> None:
 
 @triage_app.command("collect")
 def collect_command(
-    repo: str | None = typer.Option(None, "--repo", help="Triage one repo: OWNER/REPO."),
-    org: str | None = typer.Option(None, "--org", help="Triage every repo of OWNER."),
-    dir_override: Path | None = typer.Option(
-        None, "--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."
-    ),
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
     pr_limit: int = typer.Option(
         PR_LIMIT, "--pr-limit", min=1, help="PRs listed per repo (the PR -> issue window)."
     ),
@@ -129,7 +142,8 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
     if not facts_path.exists():
         err_console.print(
             f"[red]error:[/red] no facts at {escape(str(facts_path))}; run "
-            f"`fr triage collect --{scope.kind} {escape(scope.target)}` first"
+            f"`fr triage collect --{scope.kind} {escape(scope.target)}` first",
+            soft_wrap=True,
         )
         raise typer.Exit(code=2)
     judgements_path = target_dir / "judgements.yaml"
@@ -148,11 +162,9 @@ def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, J
 
 @triage_app.command("check")
 def check_command(
-    repo: str | None = typer.Option(None, "--repo", help="Triage one repo: OWNER/REPO."),
-    org: str | None = typer.Option(None, "--org", help="Triage every repo of OWNER."),
-    dir_override: Path | None = typer.Option(
-        None, "--dir", help="State directory (default: $HOME/.cache/fr/triage/<scope>/)."
-    ),
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit the four sets as JSON."),
 ) -> None:
     """Report unranked, settled, orphaned and unreachable. Always exits 0."""
@@ -163,16 +175,32 @@ def check_command(
         return
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
-        console.print(f"  {escape(i.key)}  {escape(i.title)}")
+        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")
     for i in result.settled:
-        console.print(f"  {escape(i.key)}  {i.stage}  {escape(i.title)}")
+        console.print(f"  {escape(i.key)}  {i.stage}  {escape(i.title)}", soft_wrap=True)
     console.print(f"[bold]orphaned[/bold] ({len(result.orphaned)}) — judged, found nowhere")
     for key in result.orphaned:
-        console.print(f"  {escape(key)}")
+        console.print(f"  {escape(key)}", soft_wrap=True)
     console.print(
         f"[bold]unreachable[/bold] ({len(result.unreachable)}) — judged, the forge would "
         "not show it; not orphaned"
     )
     for u in result.unreachable:
-        console.print(f"  {escape(u.key)}  {escape(u.reason)}")
+        console.print(f"  {escape(u.key)}  {escape(u.reason)}", soft_wrap=True)
+
+
+@triage_app.command("render")
+def render_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+    open_: bool = typer.Option(False, "--open", help="Open the board in a browser."),
+) -> None:
+    """Write triage.html from facts.json and judgements.yaml."""
+    target_dir, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    out = target_dir / "triage.html"
+    out.write_text(render(facts, judgements), encoding="utf-8")
+    console.print(f"wrote {out} ({len(facts.issues)} issues)", markup=False)
+    if open_:
+        webbrowser.open(out.resolve().as_uri())
