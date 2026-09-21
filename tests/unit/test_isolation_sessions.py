@@ -141,6 +141,28 @@ def test_detach_all_clears_every_session(tmp_path: Path, repo: Path) -> None:
     assert x is not None and x.sessions == []
 
 
+# (f2) the idle guard's memory lives BESIDE the binding and dies with it
+def test_the_idle_guards_memory_dies_with_the_binding(tmp_path: Path, repo: Path) -> None:
+    """`fr-run-idle-guard.sh` (2026-09-20 unit-record-unification §4.G)
+    remembers, per session, the run position it last acted on. That is state
+    ABOUT a binding; it must not outlive one, or a recycled session id would
+    inherit a stranger's "already acted here" and stay silent."""
+    _workspace(tmp_path, repo, "feat/x")
+    for session_id in ("sess-1", "sess-2"):
+        state = sessions.attach(repo, "feat/x", session_id)
+        sessions.idle_guard_path(session_id).write_text("0123456789abcdef\n")
+    assert sessions.idle_guard_path("sess-1").parent == _index_file(tmp_path, "sess-1").parent
+    # not `*.json`: gc globs those as INDEXES and would call this one unparseable
+    assert sessions.idle_guard_path("sess-1").suffix != ".json"
+
+    sessions.detach("sess-1")
+    assert not sessions.idle_guard_path("sess-1").exists()
+    assert sessions.idle_guard_path("sess-2").exists()
+
+    sessions.detach_all(state)
+    assert not sessions.idle_guard_path("sess-2").exists()
+
+
 # (g) stale index detection — pure classification
 def test_stale_session_indexes(tmp_path: Path, repo: Path) -> None:
     gone = _workspace(tmp_path, repo, "feat/gone")

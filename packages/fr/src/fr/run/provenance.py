@@ -113,7 +113,8 @@ def _gated_steps(steps: tuple[Step, ...]) -> tuple[Step, ...]:
     `StepRecord`: both builders key `RunState.steps` on top-level ids only
     (`run_cmd.py`'s `{s.id: StepRecord(...) for s in manifest.steps}` and the
     identical comprehension in `adopt.py`), and member progress lives in the
-    group's `record.items` under `phase/<n>/<member>`. So a walk that descended
+    group's own UNITS (`fr.run.units`) under `phase/<n>/<member>`. So a walk
+    that descended
     into members could only ever look up records that do not exist — and the
     test covering it passed solely because it hand-built a member-keyed state no
     fr code path writes. A green test over an impossible state is worse than no

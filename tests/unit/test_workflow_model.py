@@ -268,3 +268,44 @@ def test_flat_steps_default_to_no_members() -> None:
     so every existing manifest is the degenerate case."""
     manifest = parse_manifest(FULL_MANIFEST)
     assert all(s.steps == () for s in manifest.steps)
+
+
+# --- `skill:` may name several, in order (PR #508 review) ------------------
+#
+# A review is requested AND received — two skills, one step. Until a step could
+# say so, the second lived in a parenthesis of skill prose, which is to say at
+# the implementing agent's discretion. A second member step would have said it
+# too, and stranded every cursor in flight: drift compares member IDS.
+
+
+def _one_step(skill_yaml: str) -> str:
+    return f"workflow: w\nschema: 1\nunit: run\nsteps:\n  - id: s\n    kind: agent\n{skill_yaml}"
+
+
+def test_skill_accepts_a_list_and_keeps_its_order() -> None:
+    manifest = parse_manifest(_one_step("    skill: [a:request, a:receive]\n"))
+
+    assert manifest.steps[0].skill == ("a:request", "a:receive")
+    assert manifest.steps[0].skills == ("a:request", "a:receive")
+
+
+def test_a_single_skill_is_still_a_plain_string() -> None:
+    """Every manifest already written, and every brief already parsed."""
+    manifest = parse_manifest(_one_step("    skill: a:request\n"))
+
+    assert manifest.steps[0].skill == "a:request"
+    assert manifest.steps[0].skills == ("a:request",)
+
+
+def test_no_skill_is_no_skills() -> None:
+    assert parse_manifest(_one_step("")).steps[0].skills == ()
+
+
+@pytest.mark.parametrize(
+    "skill_yaml",
+    ["    skill: []\n", "    skill: [a:x, a:x]\n", "    skill: [a:x, '']\n", "    skill: ''\n"],
+    ids=["empty-list", "duplicate", "blank-item", "blank-string"],
+)
+def test_a_skill_list_that_says_nothing_is_refused(skill_yaml: str) -> None:
+    with pytest.raises(WorkflowError):
+        parse_manifest(_one_step(skill_yaml))

@@ -80,6 +80,38 @@ def write_agent(
     return transcript
 
 
+def add_dispatch(
+    session: Path,
+    *,
+    timestamp: str,
+    agent_id: str,
+    tool_use_id: str,
+    usage: dict[str, int],
+) -> Path:
+    """Append ONE more dispatch to an existing session: the orchestrator's
+    `Agent` tool_use record, and the subagent transcript it started.
+
+    Both are COPIES of the captured records with only the fields a test varies
+    re-keyed (timestamp, ids, usage) — the rule this module exists for. Two
+    calls with the SAME `timestamp` build the overlap case: two dispatches
+    inside one window, which no time window can separate and which selection
+    by agent id resolves exactly (spec §4.D).
+    """
+    tool_use = copy_of(records(ORCHESTRATOR)[AGENT_TOOL_USE_LINE])
+    tool_use["timestamp"] = timestamp
+    tool_use["uuid"] = f"uuid-{agent_id}"
+    tool_use["message"]["content"][0]["id"] = tool_use_id
+    with session.open("a") as handle:
+        handle.write(json.dumps(tool_use) + "\n")
+    rows = copy_of(records(SUBAGENT))
+    for row in rows:
+        row["timestamp"] = timestamp
+        row["agentId"] = agent_id
+        if row["type"] == "assistant":
+            row["message"]["usage"] = dict(usage)
+    return write_agent(session, agent_id, tool_use_id=tool_use_id, rows=rows)
+
+
 def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[str, int]) -> Path:
     """A one-dispatch session whose tool_use lands exactly at `timestamp`.
 

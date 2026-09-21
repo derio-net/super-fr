@@ -351,15 +351,28 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 2: `StepRecord.answered_by` — gate provenance (spec
             # `2026-09-18-harness-parity-matrix-design` §3.D.2), migration
             # `fr.artifacts.run_provenance`.
-            # 3: `PhaseAccounting`'s four measured token fields — V2 telemetry
+            # 3: the accounting snapshot's four measured token fields — V2 telemetry
             # (spec `2026-09-20-bounded-executor-handoff-design` §5.C),
             # migration `fr.artifacts.run_telemetry`.
-            # Both are shape changes for the same reason: `RunState` is
+            # 4: `StepRecord.dispatch` — the dispatch-holder record (spec
+            # `2026-09-20-dispatch-holder-identity-design` §4.A/§4.D),
+            # migration `fr.artifacts.run_dispatch_holder`. It is 3 -> 4
+            # rather than 2 -> 3 because gh#506's telemetry migration took
+            # 3 first: two branches bumped the same kind in parallel, and a
+            # kind has exactly one linear history, so the later one stacks.
+            # All three are shape changes for the same reason: `RunState` is
             # `extra="forbid"`, so a cursor carrying the new keys RAISES for an
             # fr that predates them rather than ignoring them, whatever
             # "optional and defaulted" suggests. `RunState.schema_version`
             # exists so the stamp a migration writes stays readable.
-            current_version=3,
+            # 5: `StepRecord.units` — one record per unit (spec
+            # `2026-09-20-unit-record-unification-design` §4.A/§4.F), migration
+            # `fr.artifacts.run_unit_record`. The first run migration that
+            # REWRITES A BODY, and the first change that REMOVES fields
+            # (`items`, `dispatch`, top-level `accounting`) — which is why the
+            # v1-v4 shape is frozen in `fr.run.legacy` and every hop of the
+            # chain reads with that, never with the live model.
+            current_version=5,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

@@ -1,0 +1,112 @@
+schema_version: 5
+run: 2026-09-20-journal-require-reviews-v2
+workflow: fr-goal@1
+branch: feat/journal-require-reviews
+started: '2026-09-20T16:49:38+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    emitted:
+      spec: docs/superpowers/specs/2026-09-20-journal-require-reviews-design.md
+  spec-review:
+    state: done
+  plan:
+    state: done
+    emitted:
+      plan: docs/superpowers/plans/2026-09-20-journal-require-reviews
+  plan-review:
+    state: done
+  implement:
+    state: done
+    at: '2026-09-20T16:50:08+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+      phase/2/implement-phase:
+        state: done
+      phase/3/implement-phase:
+        state: done
+      phase/4/implement-phase:
+        state: done
+      phase/5/implement-phase:
+        state: done
+      phase/6/implement-phase:
+        state: done
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:04+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 15382
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:05+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 27154
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:06+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 31133
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:06+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 25623
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:07+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 15585
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+      phase/6/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-20T16:50:08+00:00'
+          estimate:
+            journal_entries: 48
+            journal_lines: 533
+            handoff_chars: 16587
+            spec_bytes: 12378
+            plan_bytes: 34103
+          synthesized: true
+  journal-check:
+    state: done
+    at: '2026-09-20T16:50:09+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: running
+    at: '2026-09-20T16:50:17+00:00'

@@ -14,13 +14,59 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 from pathlib import Path
 
 import pytest
 from fr.cli import app
+from fr.run import units
 from fr.run.model import load_run_state
 from fr_dispatch.work_item import run_item_id
 from typer.testing import CliRunner
+
+# --- reading a cursor by MEANING, never by storage ---------------------------
+#
+# These tests were written against three maps (`StepRecord.items`,
+# `StepRecord.dispatch`, top-level `RunState.accounting`) that the v5 cursor
+# folds into one (`StepRecord.units`, spec 2026-09-20-unit-record-unification
+# §4.A). What they ASSERT did not change — "this unit is running", "this unit
+# has one attempt, claimed", "this unit's snapshot measured 100 output tokens"
+# — so they read through `fr.run.units`, the one module that knows the shape,
+# and the next shape change leaves this file alone.
+
+
+def _attempts_by_unit(record) -> dict[str, list] | None:
+    """`{unit key: [attempt, ...]}` for every unit of `record` that has any
+    attempt, or `None` when none does — what `record.dispatch` used to be."""
+    found = {
+        key: list(units.attempts(record, key))
+        for key in units.unit_keys(record)
+        if units.attempts(record, key)
+    }
+    return found or None
+
+
+class _Snapshot:
+    """One unit's cost, flattened the way the v4 `PhaseAccounting` read: the
+    five V1 sizes, the four V2 figures (`None` when unmeasured), and `at`."""
+
+    def __init__(self, state, key: str) -> None:
+        estimate = units.estimate_of(state, key)
+        assert estimate is not None
+        measured = units.measured_of(state, key)
+        self.at = units.estimated_at(state, key)
+        for name in type(estimate).model_fields:
+            setattr(self, name, getattr(estimate, name))
+        for name in units.MeasuredTokens.model_fields:
+            setattr(self, name, None if measured is None else getattr(measured, name))
+        self.measured_tokens = None if measured is None else measured.total
+
+
+def _accounting(state) -> dict[str, _Snapshot]:
+    """`{unit key: snapshot}` for every unit with a recorded cost, key-sorted."""
+    return {key: _Snapshot(state, key) for key in units.accounted_keys(state)}
+
 
 runner_cli = CliRunner()
 
@@ -429,9 +475,18 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     assert brief["tier"] == "from_phase"
 
 
-def test_advance_agent_step_brief_is_re_emitted_idempotently_while_running(
+def test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing(
     tmp_path: Path, monkeypatch
 ) -> None:
+    """This test used to be `..._brief_is_re_emitted_idempotently_while_running`
+    and asserted `exit_code == 0` on the second advance — i.e. it PINNED the
+    behaviour gh-499 reported as the double-dispatch hazard. Phase 4 inverts
+    the expectation: the second advance refuses (exit 2).
+
+    Everything the old test actually protected is kept, because none of it
+    changed: `advance` still executes nothing for an `agent` step (the
+    `_boom` monkeypatch is the structural half of `no-claude-p-batch`), and
+    the step is still left `running` — a refusal writes no state at all."""
     import fr.commands.run_cmd as run_cmd
 
     def _boom(*args, **kwargs):
@@ -443,10 +498,14 @@ def test_advance_agent_step_brief_is_re_emitted_idempotently_while_running(
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the test above
     _invoke(repo, shipped, ["run", "advance", "r1"])
+    before = load_run_state(repo, "r1")
+
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
-    assert result.exit_code == 0, result.output
-    state = load_run_state(repo, "r1")
-    assert state.steps["plan"].state == "running"
+
+    assert result.exit_code == 2, result.output
+    assert "ALREADY HELD" in result.output
+    assert load_run_state(repo, "r1") == before  # a refusal writes nothing
+    assert load_run_state(repo, "r1").steps["plan"].state == "running"
 
 
 # --- fr run resolve — the only way an agent step's cursor can move (spec §4.B,
@@ -1822,13 +1881,46 @@ steps:
 _FIXTURE_PLAN = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
 
-def _started_grouped_with_plan(repo: Path, shipped: Path) -> str:
+def _started_grouped_with_plan(
+    repo: Path,
+    shipped: Path,
+    plan_rel: str | None = None,
+    *,
+    phase_tier: str | None = None,
+    strip_tier: bool = False,
+) -> str:
     """Start against the grouped shape and resolve `plan` with a real
-    one-phase plan on disk, so the group can enumerate its items."""
+    one-phase plan on disk, so the group can enumerate its items.
+
+    `phase_tier` writes a `tier:` into the copied fixture's phase header —
+    what the shipped `fr-goal` shape's `tier: from_phase` sentinel points at.
+    """
     import shutil
 
-    slug = "2026-05-09-fixture-minimal"
-    shutil.copytree(_FIXTURE_PLAN, repo / "docs" / "superpowers" / "plans" / slug)
+    if plan_rel is not None:
+        # gh#519 shape: the caller already wrote the plan (e.g. `_plan_with_tags`
+        # for its manual-phase coverage) and just wants it resolved onto the run.
+        slug = plan_rel.rstrip("/").rsplit("/", 1)[-1]
+        plan_dir = repo / plan_rel
+    else:
+        slug = "2026-05-09-fixture-minimal"
+        plan_dir = repo / "docs" / "superpowers" / "plans" / slug
+        shutil.copytree(_FIXTURE_PLAN, plan_dir)
+    # SET, never append: the shared fixture carries its OWN `tier: standard`
+    # (gh#506 added one), so inserting a second key leaves a duplicate that
+    # PyYAML silently resolves to the LAST occurrence — the fixture's value,
+    # not the one the test asked for. That is the duplicate-key hazard
+    # `.claude/rules/artifact-versioning.md` names, and it is exactly what
+    # made two tests here assert against a tier they had not chosen.
+    # `phase_tier=None` leaves the fixture alone (what most callers want);
+    # `strip_tier=True` removes it, so "this phase declares no tier" is
+    # actually true when a test says so.
+    if phase_tier is not None or strip_tier:
+        phase_yaml = plan_dir / "01.yaml"
+        header = [ln for ln in phase_yaml.read_text().split("\n") if not ln.startswith("  tier:")]
+        if phase_tier is not None:
+            header.insert(header.index("  tag: agentic") + 1, f"  tier: {phase_tier}")
+        phase_yaml.write_text("\n".join(header))
     _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # plan running + brief
     result = _invoke(
@@ -1974,7 +2066,7 @@ def test_resolve_member_items_completes_the_group_in_order(tmp_path: Path) -> No
     assert first.exit_code == 0, first.output
     mid = load_run_state(repo, "r1")
     assert mid.steps["implement"].state == "running"
-    assert mid.steps["implement"].items == {"phase/1/code": "done"}
+    assert units.unit_states(mid.steps["implement"]) == {"phase/1/code": "done"}
     assert mid.cursor == "implement"
 
     second = _invoke(
@@ -2209,7 +2301,7 @@ def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.journal_entries == 2
     assert snap.journal_lines == len(journal.read_text().splitlines())
     assert snap.handoff_chars > 0
@@ -2217,18 +2309,72 @@ def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
     assert snap.plan_bytes > 0
 
 
+def test_the_attempt_is_dispatched_at_the_moment_its_estimate_was_assembled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ONE timestamp (spec 2026-09-20-unit-record-unification §4.F). The
+    estimate is assembled BEFORE the brief is built and the attempt is opened
+    AFTER it; the attempt's `dispatched` doubles as the start of its
+    measurement window, so it must be the EARLIER moment. If `_open_dispatch`
+    stamped its own clock instead, the window would start after the dispatch
+    it measures — invisibly, because at one-second resolution the two moments
+    are almost always the same string.
+
+    So the clock is made to TICK on every read: each `_now()` call returns a
+    later second. With the two moments wired apart, `units.with_estimate`
+    refuses the mismatch and this `advance` fails."""
+    import datetime as dt
+
+    import fr.commands.run_cmd as run_cmd
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    ticks = iter(range(10_000))
+    start = dt.datetime(2026, 9, 20, 9, 0, 0, tzinfo=dt.UTC)
+    reads: list[str] = []
+
+    def ticking() -> str:
+        moment = (start + dt.timedelta(seconds=next(ticks))).isoformat()
+        reads.append(moment)
+        return moment
+
+    monkeypatch.setattr(run_cmd, "_now", ticking)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    (attempt,) = units.attempts(state.steps["implement"], "phase/1/code")
+    assert attempt.estimate is not None
+    assert units.estimated_at(state, "phase/1/code") == attempt.dispatched
+    assert len(reads) > 1, "the clock was read once — this test cannot tell moments apart"
+    assert attempt.dispatched == reads[0], (
+        "`dispatched` must be the FIRST moment this advance read — before the estimate was "
+        f"assembled and before the brief — not a later one (reads: {reads})"
+    )
+
+
 def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
-    """Re-dispatching the same unit (advance while running) refreshes the one
-    snapshot rather than stacking them."""
+    """Re-dispatching the same unit refreshes the one snapshot rather than
+    stacking them.
+
+    The re-dispatch is `--redispatch` since phase 4: a bare second `advance`
+    on a held unit now REFUSES (gh-499) and never reaches the snapshot at
+    all, which would have left this test passing for a reason that has
+    nothing to do with what it asserts."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
     _seed_journal(repo, shipped)
     _invoke(repo, shipped, ["run", "advance", "r1"])
-    _invoke(repo, shipped, ["run", "advance", "r1"])
+    second = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
 
-    accounting = load_run_state(repo, "r1").accounting
+    assert second.exit_code == 0, second.output
+    accounting = _accounting(load_run_state(repo, "r1"))
 
     assert list(accounting) == ["phase/1/code"]
 
@@ -2292,7 +2438,14 @@ def _transcript_stamp(at: str) -> str:
 def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) -> None:
     """End to end: advance dispatches (and stamps the window's start), the
     harness writes its transcript, resolve reads it back into the SAME
-    accounting record the V1 sizes live in."""
+    accounting record the V1 sizes live in.
+
+    The UNCLAIMED path, so the window is what selects — and since phase 4 the
+    window is offered only for an attempt THIS session dispatched (§4.D.1),
+    the `advance` has to declare the same session the `resolve` does. It used
+    to be a bare `_invoke`, which passed only because the authoring machine
+    was itself a Claude Code session whose id leaked through `os.environ`.
+    """
     from tests.unit.transcript_sessions import dispatched_at
 
     repo = _repo(tmp_path)
@@ -2300,10 +2453,10 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     _write_shape(shipped, "grouped", _GROUPED_SHAPE)
     _started_grouped_with_plan(repo, shipped)
     _seed_journal(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
-    at = load_run_state(repo, "r1").accounting["phase/1/code"].at
-    assert at is not None
     root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
+    at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
+    assert at is not None
     dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
 
     result = _invoke_measurable(
@@ -2315,7 +2468,7 @@ def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) 
     )
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.input_tokens == 2
     assert snap.cache_creation_input_tokens == 2000
     assert snap.cache_read_input_tokens == 40000
@@ -2345,10 +2498,180 @@ def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) 
     )
 
     assert result.exit_code == 0, result.output
-    snap = load_run_state(repo, "r1").accounting["phase/1/code"]
+    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
     assert snap.measured_tokens is None
     assert snap.input_tokens is None
     assert snap.handoff_chars > 0, "the V1 estimate survives the missing measurement"
+
+
+# --- cost is per ATTEMPT: a redispatch never overwrites the abandoned spend
+# --- (decision u2, spec §1.B / §4.D, phase 4) -----------------------------
+
+_USAGE_FIRST = {
+    "input_tokens": 3,
+    "cache_creation_input_tokens": 30,
+    "cache_read_input_tokens": 300,
+    "output_tokens": 3000,
+}
+_USAGE_SECOND = {
+    "input_tokens": 7,
+    "cache_creation_input_tokens": 70,
+    "cache_read_input_tokens": 700,
+    "output_tokens": 7000,
+}
+FIRST_TOTAL = 2 * (3 + 30 + 300 + 3000)
+SECOND_TOTAL = 2 * (7 + 70 + 700 + 7000)
+"""The captured subagent fixture has TWO assistant records, so a correct
+reader doubles each figure. The two dispatches are deliberately far apart in
+size: a test where both attempts cost the same cannot tell a swap from a
+match."""
+
+_SAME_INSTANT = "2026-09-20T11:30:00.000Z"
+"""Both subagent transcripts are written at the SAME instant on purpose. No
+time window can separate two dispatches that overlap, and gh#514's
+`select_dispatch` returns NOTHING for an ambiguous window — so every figure
+these tests assert can only have come from selection by AGENT ID."""
+
+
+def _redispatched_unit(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """The u2 regression, run end to end: advance -> claim -> `--abandoned`
+    -> advance -> claim -> resolve, with a real transcript for each attempt.
+
+    Returns `(repo, shipped, transcript root)`. Every invocation declares its
+    session (`CLAUDE_CODE_SESSION_ID`) rather than inheriting the authoring
+    machine's: this phase is ABOUT session identity, so a test that reads it
+    off the environment proves nothing on any other machine.
+    """
+    from tests.unit.transcript_sessions import add_dispatch, write_session
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+
+    def call(argv: list[str]) -> None:
+        result = _invoke_measurable(repo, shipped, argv, root, "sess-1")
+        assert result.exit_code == 0, result.output
+
+    unit = ["--step", "code", "--item", "phase/1"]
+    call(["run", "advance", "r1"])
+    call(["run", "claim", "r1", *unit, "--agent", "a1f1"])
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="a1f1",
+        tool_use_id="toolu_first",
+        usage=_USAGE_FIRST,
+    )
+    call(["run", "claim", "r1", *unit, "--abandoned"])
+    call(["run", "advance", "r1"])
+    call(["run", "claim", "r1", *unit, "--agent", "b2e2"])
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="b2e2",
+        tool_use_id="toolu_second",
+        usage=_USAGE_SECOND,
+    )
+    call(["run", "resolve", "r1", *unit, "--state", "done"])
+    return repo, shipped, root
+
+
+def test_each_attempt_of_a_redispatched_unit_carries_its_own_cost(tmp_path: Path) -> None:
+    """Spec §1.B's live defect, pinned: the v4 shape APPENDED the attempt and
+    OVERWROTE the unit's one cost snapshot, so fr kept an abandoned agent's
+    identity and discarded its spend.
+
+    Two attempts, two estimates, two measurements, neither borrowed."""
+    repo, _shipped, _root = _redispatched_unit(tmp_path)
+
+    first, second = _dispatch_of(repo, "implement", "phase/1/code")
+
+    assert (first.outcome, second.outcome) == ("abandoned", "done")
+    assert first.agent == "a1f1" and second.agent == "b2e2"
+    assert first.estimate is not None, "the abandoned attempt keeps its own estimate"
+    assert second.estimate is not None
+    assert first.measured is not None and first.measured.total == FIRST_TOTAL
+    assert second.measured is not None and second.measured.total == SECOND_TOTAL
+
+
+def test_claim_abandoned_measures_the_attempt_it_closes(tmp_path: Path) -> None:
+    """The spend most worth seeing is the spend that produced nothing (§4.D).
+
+    Measured AT the abandon, not later: the assertion is made before the
+    second `advance` exists, so nothing but `claim --abandoned` can have
+    written it."""
+    from tests.unit.transcript_sessions import add_dispatch, write_session
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    session = write_session(root, session_id="sess-1")
+    unit = ["--step", "code", "--item", "phase/1"]
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
+    _invoke_measurable(
+        repo, shipped, ["run", "claim", "r1", *unit, "--agent", "a1f1"], root, "sess-1"
+    )
+    add_dispatch(
+        session,
+        timestamp=_SAME_INSTANT,
+        agent_id="a1f1",
+        tool_use_id="toolu_first",
+        usage=_USAGE_FIRST,
+    )
+
+    result = _invoke_measurable(
+        repo, shipped, ["run", "claim", "r1", *unit, "--abandoned"], root, "sess-1"
+    )
+
+    assert result.exit_code == 0, result.output
+    (only,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert only.outcome == "abandoned"
+    assert only.measured is not None and only.measured.total == FIRST_TOTAL
+
+
+def test_advance_records_the_session_that_dispatched_the_attempt(tmp_path: Path) -> None:
+    """`session` is derived from fr's OWN environment when the attempt opens,
+    the same way `harness` is (§4.D.1) — it is never reported by the agent."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_measurable(
+        repo, shipped, ["run", "advance", "r1"], tmp_path / "projects", "sess-7"
+    )
+
+    assert result.exit_code == 0, result.output
+    (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert opened.session == "sess-7"
+    assert opened.harness == "claude-code"
+
+
+def test_an_attempt_opened_by_a_harness_with_no_session_records_none(tmp_path: Path) -> None:
+    """No session concept, no session — never a guess, and never this
+    process's own id borrowed for a harness that did not report one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "advance", "r1"],
+        {"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": None},
+    )
+
+    assert result.exit_code == 0, result.output
+    (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert opened.session is None
 
 
 _TWO_UNIT_RUN = """\
@@ -2386,9 +2709,24 @@ accounting:
 
 
 def _write_run(repo: Path, text: str, run_id: str = "r9") -> Path:
+    """Write the v4-shaped cursor `text` — THROUGH the real 4 -> 5 rewrite.
+
+    `_TWO_UNIT_RUN` is typed in the v4 shape on purpose and stays that way: it
+    is a pre-dispatch-record cursor (cost, no attempts), which is what most
+    real cursors are, and running it through `fr.run.legacy.v4_to_v5` means
+    every `fr run status` assertion below is made about a MIGRATED cursor —
+    synthesized attempts and all — rather than about a v5 file typed to look
+    like one.
+    """
+    import yaml
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.legacy import v4_to_v5
+
+    data = v4_to_v5(yaml.safe_load(text))
+    data = {"schema_version": artifact_kind("run").current_version, **data}
     path = repo / "docs" / "superpowers" / "runs" / f"{run_id}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
     return path
 
 
@@ -2417,15 +2755,17 @@ def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
     assert "not measured: no transcript figure for this unit" in flat
     assert "tok est" in flat
     # and each belongs to the right unit — ordering ties figure to key without
-    # depending on where rich decided to wrap
-    band = flat.split("accounting (context sizes")[-1]
+    # depending on where rich decided to wrap. Since phase 4 the figures sit
+    # BENEATH their own attempt inside the steps block rather than in an
+    # accounting section of their own, so the ordering is read over the whole
+    # output; the keys still bracket their figures.
     assert (
-        band.index("phase/1/code")
-        < band.index("measured: 21051 tok")
-        < band.index("phase/2/code")
-        < band.index("not measured:")
+        flat.index("phase/1/code")
+        < flat.index("measured: 21051 tok")
+        < flat.index("phase/2/code")
+        < flat.index("not measured:")
     )
-    assert "measured total: 21051 tok over 1 of 2 dispatched units" in flat
+    assert "measured total: 21051 tok over 1 of 2 dispatched attempts" in flat
 
 
 def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> None:
@@ -2439,7 +2779,7 @@ def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> 
     flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
 
     assert "measured total: none" in flat
-    assert "no transcript figure for any of the 2 dispatched units" in flat
+    assert "no transcript figure for any of the 2 dispatched attempts" in flat
     assert "tok est" in flat
     assert "measured: 21051" not in flat
 
@@ -2465,7 +2805,7 @@ def test_status_renders_a_measured_zero_as_a_measurement(tmp_path: Path) -> None
         "measured: 0 tok billed across the dispatch's turns "
         "(in 0, cache-create 0, cache-read 0, out 0)" in flat
     )
-    assert "measured total: 0 tok over 1 of 2 dispatched units" in flat
+    assert "measured total: 0 tok over 1 of 2 dispatched attempts" in flat
 
 
 def test_status_says_a_measured_figure_came_from_a_transcript(tmp_path: Path) -> None:
@@ -2508,6 +2848,112 @@ def test_status_says_the_measured_figure_is_not_the_estimate(tmp_path: Path) -> 
     assert "NOT comparable to the one-dispatch" in flat
 
 
+# --- status says what fr can and cannot see (spec §4.D / §4.D.1, phase 4) --
+
+
+def test_status_renders_each_attempts_cost_beneath_its_own_holder(tmp_path: Path) -> None:
+    """EVERY attempt, not just the last. The v4 shape rendered one cost line
+    per unit, so a redispatched unit showed the retry's figures and the
+    abandoned agent's spend was nowhere on screen.
+
+    Ordering is the assertion that ties a figure to a holder without
+    depending on where rich decided to wrap."""
+    repo, shipped, root = _redispatched_unit(tmp_path)
+
+    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
+
+    assert (
+        flat.index("agent a1f1")
+        < flat.index(f"measured: {FIRST_TOTAL} tok")
+        < flat.index("agent b2e2")
+        < flat.index(f"measured: {SECOND_TOTAL} tok")
+    ), flat
+    # the two quantities stay labelled as different quantities (gh#514)
+    assert flat.count("NOT comparable to the one-dispatch") == 2
+    assert "tok est" in flat
+
+
+def test_status_totals_include_the_abandoned_attempts_spend(tmp_path: Path) -> None:
+    """Totals sum ATTEMPTS. A denominator of units would report better
+    coverage than there is the moment one unit is redispatched."""
+    repo, shipped, root = _redispatched_unit(tmp_path)
+
+    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
+
+    # 3 dispatched attempts, not 2: the flat `plan` step opened one of its
+    # own, and a denominator that quietly omitted it would report better
+    # coverage than there is.
+    assert (
+        f"measured total: {FIRST_TOTAL + SECOND_TOTAL} tok over 2 of 3 dispatched attempts" in flat
+    )
+
+
+def test_status_says_a_cost_from_another_session_is_not_observable_from_here(
+    tmp_path: Path,
+) -> None:
+    """§4.D.1: the cursor travelled with the branch; the transcripts did not.
+
+    An absent figure that could still arrive ("not measured") and one this
+    session can never produce ("not observable from here") are different
+    facts, and an operator deciding whether to wait needs the difference."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    elsewhere = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-b"))
+    here = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-a"))
+
+    assert "not observable from here" in elsewhere
+    assert "not observable from here" not in here, (
+        "the SAME attempt read from the session that dispatched it is merely unmeasured"
+    )
+    assert "not measured: no transcript figure" in here
+
+
+def test_advance_refusing_another_sessions_holder_says_it_cannot_see_it(tmp_path: Path) -> None:
+    """The second host's first move (§4.D.1). Without this sentence the
+    operator waits on an agent that died with its host — the refusal names a
+    holder, and every other refusal fr prints means "someone is working"."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-b")
+
+    assert result.exit_code == 2, result.output
+    flat = _flat(result)
+    assert "ANOTHER session" in flat
+    assert "not observable from here" in flat
+    assert "fr run claim r1 --step code --item phase/1 --abandoned" in flat
+
+
+def test_advance_refusing_its_own_sessions_holder_says_nothing_about_sessions(
+    tmp_path: Path,
+) -> None:
+    """The ordinary case must not acquire the scary sentence: this session's
+    own agent is alive as far as anything here knows."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    root = tmp_path / "projects"
+    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    result = _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
+
+    assert result.exit_code == 2, result.output
+    flat = _flat(result)
+    assert "is ALREADY HELD by" in flat
+    assert "ANOTHER session" not in flat
+
+
 # --- write-claim: one writer at a time (phase 5, contract runtime) ---
 
 
@@ -2520,7 +2966,7 @@ def test_advance_marks_the_dispatched_unit_running(tmp_path: Path) -> None:
     _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
 
     state = load_run_state(repo, "r1")
-    assert state.steps["implement"].items == {"phase/1/code": "running"}
+    assert units.unit_states(state.steps["implement"]) == {"phase/1/code": "running"}
 
 
 def test_resolve_while_another_unit_is_running_is_refused(tmp_path: Path) -> None:
@@ -2879,3 +3325,2606 @@ def test_gates_never_renders_blank_on_a_pre_provenance_cursor(tmp_path: Path) ->
     assert "brainstorm" in result.output
     assert "provenance not recorded" in result.output
     assert "predates" in result.output
+
+
+# --- dispatch record: opened exactly when `advance` moves a unit to
+# `running` — spec §4.B.1 (Phase 2) ---
+
+_FLAT_AGENT_COLLISION_SHAPE = """
+workflow: flat-agent-collision
+schema: 1
+unit: run
+steps:
+  - id: phase/1/implement-phase
+    kind: agent
+    agent: super-fr:fr-phase-executor
+    tier: standard
+"""
+"""Spec review finding r1: nothing in `check_workflow` stops a step id that
+LOOKS like a grouped member's `items` key. A flat step literally named
+`phase/1/implement-phase` is the adversarial case the `step/` prefix exists
+for — without it this step's dispatch key would collide with a grouped
+member's."""
+
+
+def _write_repo_models(repo: Path, text: str) -> None:
+    path = repo / "docs" / "superpowers" / "models.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_advance_grouped_member_opens_a_dispatch_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (a): a grouped member's record is keyed like its `items` entry,
+    `agent_type` is the member's own `agent:`, and `model` is the resolved
+    tier binding.
+
+    The tier is bound under a REAL tier name (`fr.types.PhaseHeader.tier`'s
+    closed vocabulary), reached through the shape's `from_phase` sentinel and
+    the plan phase header — not under a models.yaml key literally called
+    `from_phase`, which no operator would ever write and which made this
+    assertion pass while real dispatches recorded `model: null` (finding f4).
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    # DECLARED, not ambient: a tier resolves to a model only for a harness, and
+    # this process is itself a Claude Code session, so without this the
+    # assertion below would be about the machine rather than about fr (f11).
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+    _write_repo_models(repo, "claude-code:\n  hard: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
+    assert dispatch is not None
+    assert list(dispatch) == ["phase/1/code"]
+    records = dispatch["phase/1/code"]
+    assert len(records) == 1
+    record = records[0]
+    assert record.dispatched
+    assert record.agent_type == "super-fr:fr-phase-executor"
+    assert record.model == "claude-opus-5"
+    assert record.returned is None
+    assert record.outcome is None
+
+
+def test_advance_records_the_harness_it_detected_to_resolve_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record must name the harness its `model` binding came from.
+
+    `_resolved_model` already calls `detect_harness` — a tier resolves to a
+    model only *for a harness* — and then discarded it, so a record could
+    carry `model: claude-opus-5` with `harness: null` while fr knew perfectly
+    well which harness picked that model at that moment (finding f8). An
+    orchestrator-run step is never claimed, so nothing would ever fill it in
+    afterwards either.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+    _write_repo_models(repo, "claude-code:\n  hard: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
+    assert record.model == "claude-opus-5"
+    assert record.harness == "claude-code", "the model's own harness must be recorded with it"
+
+
+def test_advance_records_no_harness_when_detection_is_inconclusive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is guessed — an undetectable harness stays absent, the same
+    rule an unbound tier follows (spec §4.A)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    for key in ("FR_HARNESS", "CLAUDECODE", "CLAUDE_PLUGIN_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("fr.commands.run_cmd.detect_harness", lambda _env: None)
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="hard")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    record = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"][0]
+    assert record.harness is None
+    assert record.model is None
+
+
+def test_advance_resolves_the_from_phase_sentinel_against_the_plan_phase_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`tier: from_phase` is a SENTINEL, not a tier (finding f4).
+
+    Both `implement` and `implement-phase` carry it in the shipped `fr-goal`
+    shape, and `fr.types.PhaseHeader.tier`'s vocabulary is
+    mechanical/standard/hard — so handing `from_phase` to `fr models resolve`
+    can only ever miss, and every real fr-goal dispatch recorded
+    `model: null`. That is the field dead exactly where #503's cost-attribution
+    motivation needs it. The record resolves the sentinel against the plan's
+    own phase header; the BRIEF deliberately does not (see the test below),
+    because there the sentinel is an instruction to the harness.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")  # declared, not ambient (f11)
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, phase_tier="standard")
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n  hard: claude-opus-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
+    assert records[0].model == "claude-sonnet-5"
+    # The brief still carries the sentinel verbatim — it tells the harness to
+    # look the phase up, which is a different job from recording what was sent.
+    assert '"tier": "from_phase"' in result.output
+
+
+def test_advance_records_no_model_when_the_phase_header_has_no_tier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unresolvable sentinel leaves `model` absent rather than guessed —
+    the same rule as an unbound tier (spec §4.A)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped, strip_tier=True)
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])["phase/1/code"]
+    assert records[0].model is None
+
+
+def test_advance_grouped_member_does_not_reopen_a_dispatch_record_while_still_running(
+    tmp_path: Path,
+) -> None:
+    """Since phase 4 the second `advance` never gets as far as the dispatch
+    map: it is REFUSED (gh-499). The assertion below is unchanged and still
+    the one that matters — no second record for a unit already held —
+    but the exit code is now asserted too, so this test cannot pass merely
+    because `advance` silently did nothing."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    second = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert second.exit_code == 2, second.output
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
+    assert dispatch is not None
+    assert len(dispatch["phase/1/code"]) == 1
+
+
+def test_advance_flat_agent_step_opens_a_dispatch_record_under_the_step_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Case (b) / review r1: the flat key carries the literal `step/`
+    prefix, asserted against a step id that itself reads like a grouped
+    member's key — `phase/1/implement-phase` — so the two key spaces are
+    provably disjoint rather than merely disjoint by convention."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("FR_HARNESS", "claude-code")  # declared, not ambient (f11)
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _write_repo_models(repo, "claude-code:\n  standard: claude-sonnet-5\n")
+    _invoke(
+        repo,
+        shipped,
+        ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["phase/1/implement-phase"])
+    assert dispatch is not None
+    assert list(dispatch) == ["step/phase/1/implement-phase"]
+    record = dispatch["step/phase/1/implement-phase"][0]
+    assert record.agent_type == "super-fr:fr-phase-executor"
+    assert record.model == "claude-sonnet-5"
+    assert record.returned is None
+
+
+def test_advance_does_not_reopen_a_dispatch_record_while_still_running(
+    tmp_path: Path,
+) -> None:
+    """The flat-step twin of the test above, refused the same way."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    second = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert second.exit_code == 2, second.output
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"])
+    assert dispatch is not None
+    assert len(dispatch["step/brainstorm"]) == 1
+
+
+def test_advance_onto_a_gated_agent_step_opens_no_dispatch_record(tmp_path: Path) -> None:
+    """Case (c): a gate marks the step `blocked`, never `running` — nothing
+    was dispatched, so nothing is held (spec §4.B.1)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "blocked"
+    assert _attempts_by_unit(state.steps["brainstorm"]) is None
+
+
+def test_advance_orchestrator_run_agent_step_opens_a_dispatch_record_with_no_agent_type(
+    tmp_path: Path,
+) -> None:
+    """Case (d): a `spec-review`-shaped step (`kind: agent`, no `agent:`)
+    still opens a record — the orchestrator is doing the work itself, and
+    #499's complaint is precisely that this state goes unrecorded otherwise."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"])
+    assert dispatch is not None
+    record = dispatch["step/brainstorm"][0]
+    assert record.dispatched
+    assert record.agent_type is None
+    assert record.model is None  # `brainstorm` here carries no `tier:`
+    assert record.returned is None
+    assert record.outcome is None
+
+
+# --- `fr run claim` — the reported identity, idempotent, single-writer, and
+# abandonable (spec §4.C, Phase 3) ---
+
+
+def _dispatch_of(repo: Path, step_id: str, key: str) -> list:
+    dispatch = _attempts_by_unit(load_run_state(repo, "r1").steps[step_id])
+    assert dispatch is not None
+    return dispatch[key]
+
+
+def test_claim_fills_agent_harness_model_on_the_open_record(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # opens the dispatch record
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.agent == "add889a73824c8413"
+    assert record.harness == "claude-code"
+    assert record.model == "claude-opus-5"
+    assert record.returned is None
+    assert record.outcome is None
+
+
+def test_claim_refuses_a_unit_with_no_open_record(tmp_path: Path) -> None:
+    """A claim annotates a dispatch `fr run advance` already made; it does
+    not invent one — no `advance` was ever run here."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no open dispatch" in result.output
+
+
+def test_claim_is_idempotent_for_the_same_agent(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    claim_argv = [
+        "run",
+        "claim",
+        "r1",
+        "--step",
+        "phase/1/implement-phase",
+        "--agent",
+        "a1",
+        "--harness",
+        "claude-code",
+    ]
+
+    first = _invoke(repo, shipped, claim_argv)
+    second = _invoke(repo, shipped, claim_argv)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    records = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")
+    assert len(records) == 1
+    assert records[0].agent == "a1"
+
+
+def test_claim_refuses_a_different_agent_while_the_first_is_open(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a2"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "a1" in result.output
+    assert "a2" in result.output
+
+
+def test_claim_omitted_harness_uses_detect_harness(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+        {"CLAUDECODE": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.harness == "claude-code"
+
+
+def test_claim_records_no_harness_when_detection_returns_none(tmp_path: Path) -> None:
+    """No invented `"unknown"` member (review finding r4) — an undetectable
+    harness leaves the field absent, exactly like an unbound tier leaves
+    `model` absent.
+
+    `advance` runs undetectable too, not just `claim`: since finding f8 the
+    record is BORN with the harness `advance` detected, so leaving `advance`
+    on the ambient environment would have this test assert against a field
+    `claim` never touched."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {})
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+        {},
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.harness is None
+
+
+def test_claim_refuses_an_unknown_harness_value(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "a1",
+            "--harness",
+            "carrier-pigeon",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "carrier-pigeon" in result.output
+
+
+def test_claim_resolves_a_grouped_members_unit_key(tmp_path: Path) -> None:
+    """The shared `_unit_key` path — `--step code --item phase/1` names the
+    same key `advance` opened under `implement`'s `dispatch`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--agent",
+            "a1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.agent == "a1"
+
+
+def test_claim_agent_required_without_abandoned(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "claim", "r1", "--step", "phase/1/implement-phase"])
+
+    assert result.exit_code == 2, result.output
+    assert "--agent" in result.output
+
+
+# --- `--abandoned`: closing a dispatch without resolving the step (spec
+# §4.C, §1.C, Phase 3 Task 2) ---
+
+
+def test_claim_abandoned_sets_returned_and_outcome(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")[0]
+    assert record.returned is not None
+    assert record.outcome == "abandoned"
+
+
+def test_claim_abandoned_leaves_the_flat_steps_state_running(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    state = load_run_state(repo, "r1")
+    assert state.steps["phase/1/implement-phase"].state == "running"
+
+
+def test_claim_abandoned_leaves_the_grouped_members_item_running(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert units.unit_states(state.steps["implement"]) == {"phase/1/code": "running"}
+    assert state.steps["implement"].state == "running"
+
+
+def test_advance_after_abandon_briefs_again_and_appends_a_second_record(
+    tmp_path: Path,
+) -> None:
+    """The next `advance` sees the unit as still pending (`items`/`state`
+    untouched by `--abandoned`) and re-briefs it, appending a SECOND
+    `DispatchRecord` — the first stays in the list, closed."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "dispatch brief" in result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 2
+    assert records[0].outcome == "abandoned"
+    assert records[0].returned is not None
+    assert records[1].returned is None
+    assert records[1].outcome is None
+
+
+def test_advance_after_abandon_briefs_a_flat_step_again_too(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")
+    assert len(records) == 2
+    assert records[0].outcome == "abandoned"
+    assert records[1].returned is None
+
+
+def test_claim_abandoned_refuses_when_no_open_record(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--abandoned"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "no open dispatch" in result.output
+
+
+def test_claim_abandoned_refuses_combined_with_agent(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "a1",
+            "--abandoned",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--abandoned" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — `advance` refuses a HELD unit (gh-499), `--redispatch` is the
+# deliberate escape, and `resolve` closes the dispatch record (spec §4.C).
+#
+# gh-499's complaint is precisely that a brief looks like an instruction to
+# act when the correct action is to wait, and that the usual
+# two-agents-one-tree protection is unavailable here BY DESIGN: fr-goal
+# dispatches phase executors into the isolation worktree that already exists,
+# and `isolation: "worktree"` is forbidden for them (gh-420). So a refusal
+# that fires when it should not wedges a live run, and one that stays silent
+# reproduces the double-dispatch. Both directions are tested.
+# ---------------------------------------------------------------------------
+
+
+def _squash(output: str) -> str:
+    """rich soft-wraps a refusal at the terminal's width, so a substring
+    assertion over raw `result.output` is an assertion about `COLUMNS`. Same
+    idiom `test_run_workspace.py` and `test_v2_pickup.py` already use."""
+    return " ".join(output.split())
+
+
+def test_advance_refuses_a_held_unit_and_prints_no_brief(tmp_path: Path) -> None:
+    """Case (a): exit 2 and NOT ONE character of the JSON brief.
+
+    The absence is the assertion — printing the brief alongside a refusal
+    would leave the harness exactly the instruction-to-act gh-499 says must
+    not be there."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+    assert first.exit_code == 0, first.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "ALREADY HELD" in _squash(result.output)
+    assert "{" not in result.output  # no brief, of any shape
+    assert "dispatch brief" not in result.output
+
+
+def test_the_refusal_names_the_holder_agent_type_harness_and_dispatch_time(
+    tmp_path: Path,
+) -> None:
+    """Case (b): who is holding it, what kind of agent, on which harness, and
+    since when — the four facts an operator needs to decide whether to wait."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+        ],
+    )
+    dispatched = _dispatch_of(repo, "implement", "phase/1/code")[0].dispatched
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert "add889a73824c8413" in flat
+    assert "super-fr:fr-phase-executor" in flat
+    assert "claude-code" in flat
+    assert dispatched in flat
+    assert "not yet returned" in flat
+
+
+def test_the_refusal_says_an_unclaimed_agent_when_nobody_claimed(tmp_path: Path) -> None:
+    """Case (c): fr knows a brief went out even when nobody said who took it,
+    so the refusal still fires — an unclaimed hold is still a hold."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "an unclaimed agent" in _squash(result.output)
+
+
+def test_the_refusal_prints_all_three_ways_forward(tmp_path: Path) -> None:
+    """Case (d): spec §4.C's three escapes, each a copy-pastable command
+    carrying this unit's own `--step`/`--item`. A refusal an operator cannot
+    act on is a wedge."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    # `--state done`, not `done|failed`: the line is meant to be pasted, and `|`
+    # is a pipe in every POSIX shell (gh#519 r1-f1 — this test pinned the defect).
+    assert "fr run resolve r1 --step code --item phase/1 --state done" in flat
+    assert "done|failed" not in flat
+    assert "fr run claim r1 --step code --item phase/1 --abandoned" in flat
+    assert "fr run advance r1 --redispatch" in flat
+
+
+def test_advance_does_not_refuse_when_the_last_record_is_closed(tmp_path: Path) -> None:
+    """Case (e): the refusal keys off `_dispatch_needs_open` — the ONE notion
+    of "currently held" phase 3 already wrote — so a unit whose last attempt
+    is CLOSED is not held and briefs normally. Here the close is
+    `claim --abandoned`; the failed-and-retried route is covered once
+    `resolve` closes records too
+    (`test_advance_re_briefs_a_failed_unit_whose_record_resolve_closed`)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "ALREADY HELD" not in result.output
+    assert _brief_of(result.output)["item"] == "phase/1"
+
+
+def test_a_flat_agent_step_is_refused_the_same_way(tmp_path: Path) -> None:
+    """The flat and grouped paths share ONE message function, so they cannot
+    drift: the same four facts and the same three escapes, with `--item`
+    absent because a flat unit has none."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    # Named by its STEP id — what `--step` takes — never by the internal
+    # `step/<id>` unit key, which no command accepts.
+    assert "phase/1/implement-phase is ALREADY HELD by an unclaimed agent" in flat
+    assert "step/phase/1/implement-phase" not in flat
+    assert "super-fr:fr-phase-executor" in flat
+    assert "fr run resolve r1 --step phase/1/implement-phase --state done" in flat
+    assert "done|failed" not in flat
+    assert "fr run claim r1 --step phase/1/implement-phase --abandoned" in flat
+    assert "fr run advance r1 --redispatch" in flat
+    assert "--item" not in flat
+    assert "{" not in result.output
+
+
+# --- `--redispatch`: the deliberate escape, not a second mode (P4.T2) -------
+
+
+def test_redispatch_closes_the_holder_abandoned_and_appends_a_fresh_record(
+    tmp_path: Path,
+) -> None:
+    """Case (a) + review finding r2: the old holder's id stays in the list.
+
+    Overwriting the record would lose the one thing gh-503 asked for — who
+    was holding this tree when we took it away from them — so the abandon
+    and the new dispatch are two elements, oldest first."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--agent", "lost-one"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 2
+    assert records[0].agent == "lost-one"  # the forensic trail, intact
+    assert records[0].outcome == "abandoned"
+    assert records[0].returned is not None
+    assert records[1].agent is None  # the new hold is unclaimed until claimed
+    assert records[1].returned is None
+    assert records[1].outcome is None
+
+
+def test_redispatch_prints_the_brief_and_exits_zero(tmp_path: Path) -> None:
+    """Case (b): the escape must actually get the operator a brief — a
+    `--redispatch` that only closed the record would trade one wedge for
+    another."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert "ALREADY HELD" not in result.output
+    brief = _brief_of(result.output)
+    assert brief["step"] == "code"
+    assert brief["item"] == "phase/1"
+
+
+def test_redispatch_on_a_never_dispatched_unit_is_refused_and_records_nothing(
+    tmp_path: Path,
+) -> None:
+    """Case (c): an escape, not a second mode — and not a second way to START.
+
+    gh#508 first built this as "exactly a plain advance"; gh#519 SPECIFIED the
+    opposite (its spec §3.A: "`--redispatch` with nothing outstanding exits
+    2"), published it in the explainer and cited it in the acceptance matrix.
+    The two tests asserted opposite exit codes for one command on one fixture,
+    so one had to yield, and the specified, documented behaviour is the one
+    kept. What this test still owns is the half gh#519's sibling
+    (`test_redispatch_with_nothing_outstanding_is_refused`) does not look at:
+    the DISPATCH map. A refused `--redispatch` must not leave a record behind
+    — not an open one (a hold nobody has) and not an invented closed one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert "{" not in result.stdout, result.stdout
+    assert not _attempts_by_unit(load_run_state(repo, "r1").steps["implement"])
+
+
+def test_redispatch_after_an_abandon_does_not_close_the_closed_record_again(
+    tmp_path: Path,
+) -> None:
+    """The other no-op shape: the last record is already CLOSED, so there is
+    nothing held. `--redispatch` appends the one new hold a plain advance
+    would, not a third element."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+    abandoned_at = _dispatch_of(repo, "implement", "phase/1/code")[0].returned
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 2
+    assert records[0].returned == abandoned_at  # untouched
+
+
+def test_redispatch_works_on_a_flat_agent_step_too(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "lost-one"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "phase/1/implement-phase", "step/phase/1/implement-phase")
+    assert len(records) == 2
+    assert records[0].agent == "lost-one"
+    assert records[0].outcome == "abandoned"
+    assert records[1].returned is None
+    assert load_run_state(repo, "r1").steps["phase/1/implement-phase"].state == "running"
+
+
+def test_redispatch_leaves_the_run_artifact_structurally_valid(tmp_path: Path) -> None:
+    """`--redispatch` APPENDS, and `fr.artifacts.structure.validate_run`
+    enforces at most one open record per unit AND that the open one is the
+    LAST element — so an abandon-then-append that got the order wrong would
+    write an artifact `fr validate artifacts` refuses."""
+    from fr.artifacts.structure import validate_run
+    from fr.run.model import run_path
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+    _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert validate_run(run_path(repo, "r1")) == []
+
+
+# --- `resolve` closes the dispatch record, and accepts a late identity
+# (spec §4.C, decision d2 — P4.T3) ---------------------------------------
+
+
+def test_resolve_closes_a_grouped_members_record_with_the_state_as_outcome(
+    tmp_path: Path,
+) -> None:
+    """Case (a), member half. `returned` and `outcome` are one fact
+    (`DispatchRecord` enforces it), and the outcome IS `--state` — there is
+    no third vocabulary for how a dispatch ended."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.returned is not None
+    assert record.outcome == "done"
+
+
+def test_resolve_failed_closes_the_record_with_outcome_failed(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "failed"],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.outcome == "failed"
+    assert record.returned is not None
+
+
+def test_resolve_closes_a_flat_agent_steps_record(tmp_path: Path) -> None:
+    """Case (a), flat half — the same `_unit_key` mapping, so the flat and
+    grouped key spaces stay the one thing phase 3 made them."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    (repo / "s.md").write_text("# spec\n")
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=s.md",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "brainstorm", "step/brainstorm")[0]
+    assert record.returned is not None
+    assert record.outcome == "done"
+
+
+def test_resolve_fills_an_unclaimed_record_with_a_late_identity(tmp_path: Path) -> None:
+    """Case (b) / decision d2: an orchestrator that never called `claim` can
+    still say who held the unit, at the one moment it certainly knows —
+    when the agent hands back."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+            "--agent",
+            "late-one",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.agent == "late-one"
+    assert record.harness == "claude-code"
+    assert record.model == "claude-opus-5"
+    assert record.outcome == "done"
+
+
+def test_resolve_refuses_an_agent_that_disagrees_with_the_claim(tmp_path: Path) -> None:
+    """Case (c): two ids on one hold is the two-writers hazard, and taking
+    the `resolve` route instead of the `claim` route must not be a way
+    around the refusal. Both ids are named — the operator has to be able to
+    tell which one is wrong."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--agent", "holder-a"],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+            "--agent",
+            "stranger-b",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert "holder-a" in flat
+    assert "stranger-b" in flat
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.agent == "holder-a"
+    assert record.returned is None  # refused, so NOT closed either
+
+
+def test_resolve_accepts_the_same_agent_it_was_claimed_by(tmp_path: Path) -> None:
+    """The idempotent half of (c): re-reporting the id already on the record
+    is agreement, not conflict."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--agent", "holder-a"],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+            "--agent",
+            "holder-a",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    record = _dispatch_of(repo, "implement", "phase/1/code")[0]
+    assert record.agent == "holder-a"
+    assert record.outcome == "done"
+
+
+def test_resolve_a_gated_step_with_no_dispatch_record_still_works(tmp_path: Path) -> None:
+    """Case (d): a gated step is marked `blocked`, never dispatched, so it
+    has no record at all. `resolve` must close nothing and succeed —
+    a run adopted from disk is the same shape, and it must not start
+    failing because this feature landed."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    (repo / "s.md").write_text("# spec\n")
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"]) is None
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=s.md",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["brainstorm"].state == "done"
+    assert _attempts_by_unit(state.steps["brainstorm"]) is None  # nothing invented
+
+
+def test_resolve_after_an_abandon_leaves_the_closed_record_alone(tmp_path: Path) -> None:
+    """The other half of (d): there IS a record, but it is already closed.
+    `resolve` must not re-close it with a second timestamp and a different
+    outcome — `abandoned` is what happened to that attempt."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--abandoned"],
+    )
+    before = _dispatch_of(repo, "implement", "phase/1/code")[0]
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+
+    assert result.exit_code == 0, result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 1
+    assert records[0] == before
+
+
+def test_resolve_still_refuses_while_another_unit_is_running(tmp_path: Path) -> None:
+    """The phase-5 "one writer at a time" refusal in `_resolve_member` is a
+    DIFFERENT check — another UNIT is outstanding, not this one's holder —
+    and both must survive. Pinned here because closing the dispatch record
+    touches the same function."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "peer-review", "--item", "phase/1", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "still running" in _squash(result.output)
+    assert _dispatch_of(repo, "implement", "phase/1/code")[0].returned is None
+
+
+def test_advance_re_briefs_a_failed_unit_whose_record_resolve_closed(tmp_path: Path) -> None:
+    """P4.T1.S1(e)'s other route, now reachable: `resolve --state failed`
+    closes the record, so the unit is no longer HELD and a retry briefs it
+    again — appending a second attempt rather than being refused."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "failed"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "ALREADY HELD" not in result.output
+    records = _dispatch_of(repo, "implement", "phase/1/code")
+    assert len(records) == 2
+    assert records[0].outcome == "failed"
+    assert records[1].returned is None
+
+
+def test_completing_a_step_does_not_erase_its_dispatch_history(tmp_path: Path) -> None:
+    """`_complete_step` rebuilds the `StepRecord` from scratch and carries
+    `items`/`members` forward by hand — `dispatch` has to ride along too, or
+    the forensic trail gh-503 asked for is deleted by the very act of
+    finishing: the group's whole per-phase history would vanish at the
+    moment its last member resolves."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches peer-review
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "peer-review",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].state == "done"  # the group completed
+    dispatch = _attempts_by_unit(state.steps["implement"])
+    assert dispatch is not None, "completing the group deleted its dispatch history"
+    assert sorted(dispatch) == ["phase/1/code", "phase/1/peer-review"]
+    assert dispatch["phase/1/code"][0].outcome == "done"
+    assert dispatch["phase/1/peer-review"][0].outcome == "done"
+
+
+def test_resolve_refuses_an_unknown_harness_value(tmp_path: Path) -> None:
+    """Same closed vocabulary `claim` validates against — one of
+    `fr.harness`'s HARNESSES or nothing, never an invented fifth name."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "code",
+            "--item",
+            "phase/1",
+            "--state",
+            "done",
+            "--agent",
+            "a1",
+            "--harness",
+            "carrier-pigeon",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "carrier-pigeon" in _squash(result.output)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — `fr run status` renders the holder; `fr run check` reports the
+# open/unclaimed debt (spec §4.C, §4.B.1). Case letters follow P5.T1.S1.
+# ---------------------------------------------------------------------------
+
+
+def test_status_renders_held_by_and_the_claimed_identity(tmp_path: Path) -> None:
+    """Case (a): a held (open) unit prints `HELD BY <agent> (<harness>,
+    <model>) since <dispatched>`, indented under the unit's own line."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(
+        r"^ {6}HELD BY agent add889a73824c8413 \(claude-code, claude-opus-5\) since \S+$",
+        result.output,
+        re.MULTILINE,
+    ), result.output
+
+
+def test_status_renders_an_unclaimed_open_dispatch(tmp_path: Path) -> None:
+    """Case (d): nobody has called `claim` yet — `an unclaimed agent`, not a
+    guess and not a blank."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(
+        r"^ {6}HELD BY an unclaimed agent( \([^)]+\))? since \S+$", result.output, re.MULTILINE
+    ), result.output
+
+
+def test_status_renders_a_settled_dispatch(tmp_path: Path) -> None:
+    """Case (b): a closed record prints `<agent> (<harness>, <model>)
+    <dispatched> -> <returned> <outcome>`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "claim",
+            "r1",
+            "--step",
+            "phase/1/implement-phase",
+            "--agent",
+            "add889a73824c8413",
+            "--harness",
+            "claude-code",
+            "--model",
+            "claude-opus-5",
+        ],
+    )
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+    assert result.exit_code == 0, result.output
+
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert status.exit_code == 0, status.output
+    assert re.search(
+        r"^ {6}agent add889a73824c8413 \(claude-code, claude-opus-5\) "
+        r"\S+ -> \S+ done$",
+        status.output,
+        re.MULTILINE,
+    ), status.output
+
+
+def test_status_renders_held_by_the_orchestrator(tmp_path: Path) -> None:
+    """Case (c): `agent_type: None` (an orchestrator-run `kind: agent` step,
+    spec §4.B.1) renders `held by the orchestrator`, not a missing value."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    # FR_HARNESS pinned so the descriptor is deterministic: since finding f8
+    # the record carries the harness `advance` detected, and this process IS a
+    # Claude Code session, so the ambient environment would otherwise decide
+    # what this assertion sees.
+    _invoke_as_harness(
+        repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "claude-code"}
+    )  # brainstorm: agent_type None
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert re.search(
+        r"^ {6}held by the orchestrator \(claude-code\) since \S+$", result.output, re.MULTILINE
+    ), result.output
+
+
+def test_status_shows_every_record_of_a_unit_oldest_first(tmp_path: Path) -> None:
+    """Case (e): a `--redispatch`ed unit keeps every attempt, oldest first —
+    the abandoned holder's line printed before the fresh, unclaimed one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "code", "--item", "phase/1", "--agent", "lost-one"],
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    lines = [
+        line
+        for line in result.output.splitlines()
+        if "lost-one" in line or "unclaimed agent" in line
+    ]
+    assert len(lines) == 2, result.output
+    assert "lost-one" in lines[0] and "abandoned" in lines[0]
+    assert "unclaimed agent" in lines[1]
+
+
+def test_status_output_is_byte_identical_for_a_run_with_no_dispatch_data(tmp_path: Path) -> None:
+    """Case (f): a run whose steps never opened a dispatch record — every
+    step here is `kind: cli` — renders exactly as it did before this phase."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == (
+        "run: r1\n"
+        "workflow: cli-only@1\n"
+        "branch: b\n"
+        "cursor: hello\n"
+        "  hello: pending\n"
+        "  bye: pending\n"
+    )
+
+
+# --- `fr run check` reports open dispatches and counts unclaimed ones -------
+
+
+def test_check_reports_an_open_dispatch_with_its_claimed_holder(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "claim", "r1", "--step", "phase/1/implement-phase", "--agent", "a1"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "step/phase/1/implement-phase" in result.output
+    assert "agent a1" in result.output
+
+
+def test_check_counts_an_unclaimed_open_dispatch_as_debt_not_a_failure(tmp_path: Path) -> None:
+    """An unclaimed dispatch is visible debt, the same nagging shape
+    `answered_by` already has (spec §4.C) — it must NOT change the exit code."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # opens, never claimed
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output  # the exit code IS the contract
+    assert "1 unclaimed dispatch" in result.output
+
+
+def test_check_does_not_count_a_closed_dispatch_as_open_or_unclaimed(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "flat-agent-collision", _FLAT_AGENT_COLLISION_SHAPE)
+    _invoke(
+        repo, shipped, ["run", "start", "flat-agent-collision", "--branch", "b", "--run-id", "r1"]
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "unclaimed" not in result.output
+    assert "step/phase/1/implement-phase" not in result.output
+
+
+def test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaimed(
+    tmp_path: Path,
+) -> None:
+    """An orchestrator-run step (`agent_type: None`) never carries an `agent`
+    by design — it must not inflate the unclaimed count every single run."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "check", "r1"])
+
+    assert result.exit_code == 0, result.output
+    assert "held by the orchestrator" in result.output
+    assert "unclaimed dispatch" not in result.output
+
+
+# ------------------------------------------------------------------------
+
+
+# Grafted from gh#519 (fr run cursor cluster) when that branch was folded
+
+
+# into this one: its coverage for #496 manual phases, #499's refusal, #500
+
+
+# session binding and #501 composite ids. Kept whole rather than rewritten.
+
+
+# ------------------------------------------------------------------------
+
+
+_SHIPPED_FR_GOAL = (
+    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+)
+
+
+_BACKDATED = "2026-01-01T00:00:00+00:00"
+
+
+def _backdate(repo: Path, step_id: str) -> str:
+    """Rewind a step record's `at` so a refresh is observable.
+
+    `_now()` has second resolution, so two `advance`s in one test run land on
+    the same timestamp far more often than not — asserting "`at` moved" would
+    be a coin flip. Backdating makes the claim deterministic.
+    """
+    from fr.run.model import save_run_state
+
+    state = load_run_state(repo, "r1")
+    record = state.steps[step_id].model_copy(update={"at": _BACKDATED})
+    save_run_state(repo, state.model_copy(update={"steps": {**state.steps, step_id: record}}))
+    return _BACKDATED
+
+
+def _drive_the_group(repo: Path, shipped: Path) -> list[str]:
+    """advance → resolve until the group stops briefing, returning every
+    stdout it produced along the way.
+
+    The assertion that matters is over the WHOLE transcript — "no brief was
+    ever built for phase 4" is a claim about every dispatch the run made, not
+    about the one a single `advance` happened to emit.
+    """
+    outputs: list[str] = []
+    for _ in range(20):
+        advanced = _invoke(repo, shipped, ["run", "advance", "r1"])
+        outputs.append(advanced.output)
+        assert advanced.exit_code == 0, advanced.output
+        if "{" not in advanced.output:
+            return outputs  # the group completed instead of briefing a unit
+        brief = _brief_of(advanced.output)
+        resolved = _invoke(
+            repo,
+            shipped,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                brief["step"],
+                "--item",
+                brief["item"],
+                "--state",
+                "done",
+            ],
+        )
+        outputs.append(resolved.output)
+        assert resolved.exit_code == 0, resolved.output
+        if "implement: done" in resolved.output:
+            return outputs  # the last member's resolve completed the group
+    raise AssertionError("the group never completed")
+
+
+def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
+    """Drive the REAL shipped `fr-goal` manifest to its `implement` group.
+
+    #501 is a message about `fr-goal`'s own ids (`phase/1/implement-phase`,
+    workflow `'fr-goal'`), so the fixture is the shipped file itself rather
+    than a convenient stand-in — this is the walking skeleton's proof that
+    the CLI harness reaches the real runtime.
+    """
+    import shutil
+
+    shipped.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_SHIPPED_FR_GOAL, shipped / "fr-goal.yaml")
+
+    spec_rel = "docs/superpowers/specs/2026-09-20-fixture-design.md"
+    (repo / spec_rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / spec_rel).write_text("# Fixture\n")
+    slug = "2026-05-09-fixture-minimal"
+    plan_rel = f"docs/superpowers/plans/{slug}"
+    shutil.copytree(_FIXTURE_PLAN, repo / plan_rel)
+
+    def step(argv: list[str]) -> None:
+        result = _invoke(repo, shipped, argv)
+        assert result.exit_code == 0, f"{argv}: {result.output}"
+
+    step(["run", "start", "fr-goal", "--branch", "b", "--run-id", "r1"])
+    step(["run", "advance", "r1"])  # brainstorm: blocked on its operator gate
+    step(
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            f"spec={spec_rel}",
+        ]
+    )
+    step(["run", "advance", "r1"])  # spec-review: running
+    step(["run", "resolve", "r1", "--step", "spec-review", "--state", "done"])
+    step(["run", "advance", "r1"])  # plan: running
+    step(
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            f"plan={plan_rel}",
+        ]
+    )
+    step(["run", "advance", "r1"])  # plan-review: kind cli, executed here
+    assert load_run_state(repo, "r1").cursor == "implement"
+
+
+def _isolation_state_for(repo: Path, branch: str) -> None:
+    """Record an isolation workspace for `branch`, as `fr isolation up` would.
+
+    `_repo` builds a real linked worktree carrying a `.fr-isolation` marker,
+    which is what `ensure_run_workspace` reads — but `sessions.attach` reads
+    the isolation STATE file (`<common .git>/fr/isolation/<branch>.json`), a
+    different artifact that only `up` writes. Without it `attach` raises
+    `IsolationError`, which is the other test's subject.
+    """
+    from fr.isolation.types import IsolationState, save_state
+
+    save_state(
+        IsolationState(
+            repo_root=repo,
+            branch=branch,
+            worktree=repo,
+            profile="host",
+            created_at="2026-09-20T00:00:00+00:00",
+        )
+    )
+
+
+def _plan_with_tags(
+    repo: Path,
+    shapes: list[tuple[int, str, tuple[int, ...]]],
+    *,
+    slug: str = "2026-09-20-tagged",
+) -> str:
+    """Scaffold a real plan whose phases are exactly `(number, tag, deps)`.
+
+    Built inline rather than copied from a fixture folder for the reason
+    spec §1.4 measured: no plan folder on disk — live, archived or fixture —
+    has a manual phase anywhere but its trailing block, so the shapes #496
+    is about can only be constructed. One task, one step per phase, so
+    `plan_locally_complete` is decided purely by whether the test ticks it.
+    """
+    from fr.plan_ops import PhaseSpec, create
+
+    specs = repo / "docs" / "superpowers" / "specs"
+    specs.mkdir(parents=True, exist_ok=True)
+    spec_rel = f"docs/superpowers/specs/{slug}-design.md"
+    (repo / spec_rel).write_text(
+        "# Tagged\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|------|------|------|------------|\n"
+    )
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=spec_rel,
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=n,
+                title=f"Phase {n}",
+                tag=tag,  # type: ignore[arg-type]
+                depends_on=deps,
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": f"P{n}.T1.S1", "text": "do the thing"}],
+                    },
+                ),
+            )
+            for n, tag, deps in shapes
+        ],
+        prose="# x\n",
+    )
+    return f"docs/superpowers/plans/{slug}"
+
+
+def test_run_start_binds_the_session_when_given_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#500: a run started with `--session` leaves the workspace attributable.
+
+    Every fr-goal workspace reported `sessions=none` because `fr run start`
+    entered isolation itself and never bound the caller (spec §3.C.1).
+    """
+    from fr.isolation.types import load_state
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    result = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "start",
+            "cli-only",
+            "--branch",
+            "feat/x",
+            "--run-id",
+            "r1",
+            "--session",
+            "s1",
+            "--harness",
+            "claude-code",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_state(repo, "feat/x")
+    assert state is not None
+    assert [(b.session_id, b.harness) for b in state.sessions] == [("s1", "claude-code")]
+
+
+def test_run_start_warns_but_succeeds_when_attach_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed bind must never cost the operator a started run (spec §3.C.1).
+
+    Bindings are traceability, not enforcement — the edit gate never consults
+    one — so `attach` blowing up warns and the run file still exists.
+    """
+    from fr.isolation import sessions as _sessions
+    from fr.isolation.types import IsolationError
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise IsolationError("no isolation workspace for branch 'feat/x'")
+
+    monkeypatch.setattr(_sessions, "attach", _boom)
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1", "--session", "s1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").is_file()
+    assert "feat/x" in result.stderr
+    assert "could not bind session" in result.stderr
+
+
+def test_advance_refusing_a_running_agent_step_executes_and_writes_nothing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Was `..._brief_is_re_emitted_idempotently_while_running`, which asserted
+    exit 0 and a second brief — the #499 behaviour itself, pinned as if it were
+    the contract. The claim worth keeping is the other one: the second
+    `advance` still executes nothing (the no-claude-p-batch half) and now also
+    writes nothing, so the run file is byte-identical across the refusal."""
+    import fr.commands.run_cmd as run_cmd
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("must never execute anything for an agent step")
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the test above
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    before = (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text()
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["plan"].state == "running"
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
+
+
+def test_advance_refusing_a_running_unit_leaves_the_run_file_alone(tmp_path: Path) -> None:
+    """Was `test_advance_is_idempotent_over_the_snapshot`: "re-dispatching the
+    same unit (advance while running) refreshes the one snapshot rather than
+    stacking them". A plain `advance` no longer re-dispatches at all (#499),
+    so that claim moved to `--redispatch`
+    (`test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot`).
+
+    Kept, because the refusal has a claim of its own and this test was still
+    passing for the WRONG reason without it: nothing at all is written, so the
+    whole run file is byte-identical across the refused call."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    before = (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text()
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
+    assert list(_accounting(load_run_state(repo, "r1"))) == ["phase/1/code"]
+
+
+def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> None:
+    """#501: `advance` prints `phase/1/implement-phase`, and pasting it into
+    `--step` was refused with "not found in workflow", which sends the reader
+    to the shape file instead of to the flag list."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/implement-phase
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--step implement-phase" in result.output
+    assert "--item phase/1" in result.output
+
+
+def test_advance_prints_the_resolve_command_before_the_json(tmp_path: Path) -> None:
+    """The other half of #501: pre-empt the error rather than only improving
+    it. `advance` already prints the composite in its human line; it now also
+    prints the exact resolve command — BEFORE the JSON brief, because
+    `run_cmd` treats the brief as the line a naive `tail -1` parses (the same
+    ordering constraint the gate-degradation notice documents)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    expected = "fr run resolve r1 --step implement-phase --item phase/1 --state done"
+    assert any(expected in line for line in result.output.splitlines()), result.output
+    # The brief is still the last line `tail -1` reads.
+    brief = json.loads(result.output.strip().splitlines()[-1])
+    assert brief["step"] == "implement-phase"
+    assert brief["item"] == "phase/1"
+
+
+def test_the_printed_resolve_command_actually_runs_as_printed(tmp_path: Path) -> None:
+    """Review `r1-f1`. The hint is printed under "resolve with:" and is meant
+    to be PASTED, so the test pastes it: lift the command off stdout, split it
+    the way a shell would, and run it.
+
+    The bug this pins is not cosmetic. The first spelling ended
+    `--state done|failed`, and `|` is a pipe in every POSIX shell — pasting it
+    runs the resolve with `--state done` and THEN dies with
+    `command not found: failed`, exit 127, over a run whose state has already
+    moved. Asserting the absence of a `|` would pass for the wrong reason the
+    moment someone wrote `<done|failed>`; running the line is what actually
+    holds."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+
+    advanced = _invoke(repo, shipped, ["run", "advance", "r1"])
+    hint = next(line for line in advanced.output.splitlines() if "resolve with:" in line).split(
+        "resolve with:", 1
+    )[1]
+
+    # A shell would treat any of these as control operators, not argv.
+    pasteable, _, _ = hint.partition("(or ")
+    assert not set(pasteable) & set("|&;<>()$`"), f"not pasteable: {pasteable!r}"
+
+    argv = shlex.split(pasteable)
+    assert argv[:2] == ["fr", "run"], argv
+    result = _invoke(repo, shipped, argv[1:])  # drop the literal `fr`
+
+    assert result.exit_code == 0, result.output
+    assert "implement-phase phase/1: done" in result.output
+
+
+def test_the_composite_id_refusal_survives_a_narrow_console(tmp_path: Path) -> None:
+    """Review `r1-f2`. `_find_step`'s message ends in the flag pair the reader
+    is supposed to copy, and rich folds at width 80 whenever stderr is not a
+    tty — which is exactly when a harness captures it. Without `soft_wrap` the
+    pair breaks mid-line and the one actionable thing on the page becomes
+    unusable."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "phase/1/implement-phase", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert any(
+        "--step implement-phase --item phase/1" in line for line in result.output.splitlines()
+    ), result.output
+
+
+def test_advance_refuses_a_running_member(tmp_path: Path) -> None:
+    """#499, the grouped half. `_advance_group`'s pending-picker was
+    `items.get(key) != "done"`, which cannot tell `running` from `pending`, so
+    a second `advance` re-emitted a byte-identical brief for a unit already
+    dispatched.
+
+    Why this is worse than a papercut (spec §1.1): fr-goal §5 dispatches phase
+    executors into the ONE isolation worktree that already exists —
+    `isolation: "worktree"` is refused for them by design (#420) — so the usual
+    two-agents-one-tree protection is deliberately unavailable. A second brief
+    means two executors editing the same files and committing to the same
+    branch."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert first.exit_code == 0, first.output
+    # Decision u1: the dispatch record is the witness, so the moment the
+    # refusal names is the RECORD's `dispatched`, not the group's `at` — the
+    # two are separate `_now()` calls and only usually the same second.
+    dispatched_at = _dispatch_of(repo, "implement", "phase/1/implement-phase")[0].dispatched
+    assert dispatched_at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    # HELD, not RUNNING: `advance` opened a record, so there IS a holder to
+    # name — unclaimed, because nobody ran `fr run claim`. RUNNING is now the
+    # wording for the one case with no record at all
+    # (`test_a_running_member_with_no_dispatch_record_is_still_refused`).
+    flat = _squash(result.output)
+    assert "phase/1/implement-phase is ALREADY HELD by an unclaimed agent" in flat
+    assert "ALREADY RUNNING" not in flat
+    assert dispatched_at in result.output, result.output
+    # both ways forward, and the resolve one is the two-flag form (#501)
+    assert "fr run resolve r1 --step implement-phase --item phase/1 --state done" in result.output
+    assert "--redispatch" in result.output
+    # nothing a harness could mistake for an instruction to act
+    assert "{" not in result.stdout, result.stdout
+
+
+def test_advance_refuses_a_running_top_level_agent_step(tmp_path: Path) -> None:
+    """#499, the ungrouped half. `advance_cmd`'s `agent` branch marked the
+    step `running` only when it was not already, then printed the brief
+    unconditionally — so the state was right and the output lied."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert first.exit_code == 0, first.output
+    step_at = load_run_state(repo, "r1").steps["plan"].at
+    dispatched_at = _dispatch_of(repo, "plan", "step/plan")[0].dispatched
+    assert dispatched_at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    # `_AGENT_SHAPE`'s step names no `agent:`, so the orchestrator runs it
+    # itself and IS the holder (decision u1: the record is the witness).
+    flat = _squash(result.output)
+    assert "plan is ALREADY HELD by the orchestrator" in flat
+    assert "ALREADY RUNNING" not in flat
+    assert dispatched_at in result.output, result.output
+    # no `--item` for a top-level step: it has no unit to address
+    assert "fr run resolve r1 --step plan --state done" in result.output
+    assert "--item" not in result.output, result.output
+    assert "{" not in result.stdout, result.stdout
+    # and the refusal wrote nothing
+    assert load_run_state(repo, "r1").steps["plan"].at == step_at
+    assert len(_dispatch_of(repo, "plan", "step/plan")) == 1
+
+
+_RECORDLESS_SHAPES = ("adopted", "migrated")
+"""The two ways a v5 cursor holds a `running` unit fr never RECORDED
+dispatching. `adopted`: no attempt at all (`fr run adopt`, or a v2-v4 cursor
+that had no cost snapshot either). `migrated`: exactly one attempt, the
+`synthesized` one the 4 -> 5 rewrite creates to carry a pre-dispatch-record
+cost snapshot — the MAJORITY of real migrated cursors. Neither is a witness."""
+
+
+def _forget_dispatch_records(repo: Path, step_id: str, *, shape: str = "adopted") -> None:
+    """Make `step_id` look the way a cursor written BEFORE the dispatch record
+    existed looks once it reaches v5: running, and with no witness.
+
+    That shape is real, not hypothetical — `run` 2 -> 3 -> 4 are stamp-only
+    migrations, so a v2 cursor caught mid-dispatch arrives exactly like this
+    (gh#517's own cursor did: `deliver: running`, no `dispatch`). Built by
+    letting the real CLI dispatch and then un-recording it, so everything else
+    about the cursor is what fr wrote.
+
+    This is the one place in this file that touches `StepRecord.units`
+    directly: `fr.run.units` deliberately has no "drop the history" verb.
+    """
+    from fr.run.model import Attempt, save_run_state
+
+    assert shape in _RECORDLESS_SHAPES
+    state = load_run_state(repo, "r1")
+    forgotten = {}
+    for key, unit in (state.steps[step_id].units or {}).items():
+        kept: tuple = ()
+        if shape == "migrated" and unit.attempts and unit.attempts[-1].estimate is not None:
+            last = unit.attempts[-1]
+            kept = (Attempt(dispatched=last.dispatched, estimate=last.estimate, synthesized=True),)
+        if unit.state is not None or kept:
+            forgotten[key] = unit.model_copy(update={"attempts": kept})
+    record = state.steps[step_id].model_copy(update={"units": forgotten or None})
+    save_run_state(repo, state.model_copy(update={"steps": {**state.steps, step_id: record}}))
+
+
+@pytest.mark.parametrize("shape", _RECORDLESS_SHAPES)
+def test_a_running_member_with_no_dispatch_record_is_still_refused(
+    tmp_path: Path, shape: str
+) -> None:
+    """Decision u1's fallback, grouped half. The record is the witness — but a
+    unit that is `running` with NO record has no witness to consult, and "no
+    open record" must not be read as "free": that would silently re-open
+    gh#499 for every cursor that predates the record. It is refused on its
+    state, in the wording that names only the clock, because there is no
+    holder to name and inventing one would be worse than saying less."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_dispatch_records(repo, "implement", shape=shape)
+    before = load_run_state(repo, "r1")
+    if shape == "migrated":  # the helper really did leave the synthesized attempt
+        (only,) = units.attempts(before.steps["implement"], "phase/1/implement-phase")
+        assert only.synthesized is True
+    dispatched_at = before.steps["implement"].at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert f"phase/1/implement-phase is ALREADY RUNNING (dispatched {dispatched_at})" in flat
+    assert "ALREADY HELD" not in flat
+    assert "{" not in result.stdout, result.stdout
+    assert load_run_state(repo, "r1") == before  # a refusal writes nothing
+
+
+def test_a_running_flat_step_with_no_dispatch_record_is_still_refused(tmp_path: Path) -> None:
+    """The same fallback at the other call site — the exact shape gh#517's
+    real cursor arrived in (`deliver: running`, no `dispatch`)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_dispatch_records(repo, "plan")
+    before = load_run_state(repo, "r1")
+    dispatched_at = before.steps["plan"].at
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    flat = _squash(result.output)
+    assert f"plan is ALREADY RUNNING (dispatched {dispatched_at})" in flat
+    assert "ALREADY HELD" not in flat
+    assert "{" not in result.stdout, result.stdout
+    assert load_run_state(repo, "r1") == before
+
+
+@pytest.mark.parametrize("shape", _RECORDLESS_SHAPES)
+def test_redispatch_is_the_way_out_of_a_recordless_running_unit(tmp_path: Path, shape: str) -> None:
+    """A refusal with no escape is a wedge. `claim --abandoned` cannot help
+    here — there is no record to close — so `--redispatch` has to: it
+    re-briefs, and opens the first record this unit has ever had."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    _forget_dispatch_records(repo, "implement", shape=shape)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["item"] == "phase/1"
+    records = [
+        r for r in _dispatch_of(repo, "implement", "phase/1/implement-phase") if not r.synthesized
+    ]
+    assert len(records) == 1
+    assert records[0].returned is None
+    # ...and the synthesized attempt, where there was one, is still there,
+    # untouched and first: it was never a hold, so it was never "abandoned".
+    every = _dispatch_of(repo, "implement", "phase/1/implement-phase")
+    assert [bool(r.synthesized) for r in every] == (
+        [True, False] if shape == "migrated" else [False]
+    )
+    if shape == "migrated":
+        assert every[0].returned is None and every[0].outcome is None
+
+
+def test_a_failed_unit_whose_only_attempt_is_synthesized_can_still_be_retried(
+    tmp_path: Path,
+) -> None:
+    """The regression that would have blocked real in-flight runs on the day
+    they were migrated. A unit that FAILED before the dispatch record existed
+    had a cost snapshot and no record, and v4 `advance` simply re-briefed it.
+    The 4 -> 5 rewrite gives that snapshot a synthesized attempt with no
+    `returned`; read as a hold, `advance` refuses to retry the unit and names
+    a holder that never existed. It is history, not a hold: the retry opens a
+    NEW attempt beside it, and the cursor stays structurally valid (one open
+    attempt — the synthesized one is never counted as open)."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.run.model import run_path
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    failed = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "implement-phase", "--item", "phase/1"]
+        + ["--state", "failed"],
+    )
+    assert failed.exit_code == 0, failed.output
+    _forget_dispatch_records(repo, "implement", shape="migrated")
+    key = "phase/1/implement-phase"
+    before = load_run_state(repo, "r1").steps["implement"]
+    assert units.unit_state(before, key) == "failed"
+    assert [a.synthesized for a in units.attempts(before, key)] == [True]
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    flat = _squash(result.output)
+    assert "ALREADY HELD" not in flat and "ALREADY RUNNING" not in flat, flat
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["item"] == "phase/1"
+    first, second = units.attempts(load_run_state(repo, "r1").steps["implement"], key)
+    assert first.synthesized is True and first.returned is None, "history, left alone"
+    assert second.synthesized is None and second.returned is None, "the retry is the hold"
+    assert artifact_kind("run").validate(run_path(repo, "r1")) == []
+
+
+def test_advance_still_briefs_a_blocked_gated_agent_step(tmp_path: Path) -> None:
+    """Spec §3.A, "Unchanged". A `gate: operator` step is `blocked`, never
+    `running`, and its brief is how the operator's question gets ASKED — the
+    skill named in it is the thing that produces the answer the gate waits
+    for. The #499 refusal sits after `_gate_pending`, so the two never
+    interact and a re-entering orchestrator still sees what to dispatch."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
+
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    second = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    for result in (first, second):
+        assert result.exit_code == 0, result.output
+        assert "blocked on operator gate" in result.output
+        assert _brief_of(result.output)["step"] == "brainstorm"
+        assert "ALREADY RUNNING" not in result.output
+    assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
+
+
+_BACKDATED = "2026-01-01T00:00:00+00:00"
+
+
+def test_redispatch_re_emits_the_brief_for_the_outstanding_unit_only(tmp_path: Path) -> None:
+    """`--redispatch` is the deliberate escape for a genuinely lost agent. It
+    re-briefs the unit that IS outstanding — never a different one, and never
+    by resetting anything already recorded back to pending."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+    assert (
+        _invoke(
+            repo,
+            shipped,
+            ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+        ).exit_code
+        == 0
+    )
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/peer-review
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "peer-review"
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
+    assert items == {"phase/1/code": "done", "phase/1/peer-review": "running"}
+
+
+def test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot(
+    tmp_path: Path,
+) -> None:
+    """It refreshes `at` — so the ALREADY RUNNING refusal that follows names
+    the re-dispatch, not the original — and rewrites that unit's accounting
+    snapshot rather than stacking a second one."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _seed_journal(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+    stale = _backdate(repo, "implement")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    state = load_run_state(repo, "r1")
+    assert state.steps["implement"].at != stale
+    assert list(_accounting(state)) == ["phase/1/code"]
+
+
+def test_redispatch_with_nothing_outstanding_is_refused(tmp_path: Path) -> None:
+    """Spec §3.A: it exits 2 rather than quietly degrading into an ordinary
+    advance. The operator reaching for the flag believes an agent is running;
+    if none is, the mental model is wrong and saying so is the point."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert "{" not in result.stdout, result.stdout
+    # and it did NOT fall through and dispatch the first pending unit
+    assert units.unit_states(load_run_state(repo, "r1").steps["implement"]) == {}
+
+
+def test_redispatch_never_executes_a_cli_step(tmp_path: Path) -> None:
+    """A `cli` step is never `running` — fr executes it inline — so the flag
+    has nothing to re-brief there and must not become a second way to run a
+    command."""
+    repo = _repo(tmp_path, branch="feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"])
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 2, result.output
+    assert "nothing is running" in result.output
+    assert load_run_state(repo, "r1").steps["hello"].state == "pending"
+
+
+def test_redispatch_re_briefs_a_running_top_level_step(tmp_path: Path) -> None:
+    """The escape exists at both call sites, or the ungrouped half of #499
+    would be a wedge with no way out."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic", _AGENT_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    stale = _backdate(repo, "plan")
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "plan"
+    state = load_run_state(repo, "r1")
+    assert state.steps["plan"].state == "running"
+    assert state.steps["plan"].at != stale
+
+
+def test_the_refusals_two_commands_actually_run_as_printed(tmp_path: Path) -> None:
+    """Review `r1-f1`, applied to the new surface. The refusal's whole point is
+    that it names both ways forward, so both have to be pasteable: no shell
+    metacharacter anywhere in the span a reader would copy, and the
+    `--state failed` alternative kept OUTSIDE the command as prose. This lifts
+    `re-brief anyway:` off the refusal and RUNS it, rather than asserting the
+    absence of a `|` — which would pass for the wrong reason the moment
+    someone wrote `<done|failed>`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _fr_goal_at_implement(repo, shipped)
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    refusal = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert refusal.exit_code == 2, refusal.output
+    lines = refusal.output.splitlines()
+
+    resolve_span, _, _ = (
+        next(line for line in lines if "resolve it:" in line)
+        .split("resolve it:", 1)[1]
+        .partition("(or ")
+    )
+    assert not set(resolve_span) & set("|&;<>()$`"), f"not pasteable: {resolve_span!r}"
+
+    rebrief = next(line for line in lines if "re-brief anyway:" in line).split(
+        "re-brief anyway:", 1
+    )[1]
+    assert not set(rebrief) & set("|&;<>()$`"), f"not pasteable: {rebrief!r}"
+    argv = shlex.split(rebrief)
+    assert argv[:2] == ["fr", "run"], argv
+
+    result = _invoke(repo, shipped, argv[1:])  # drop the literal `fr`
+
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "implement-phase"
+
+
+def test_a_manual_phase_is_never_dispatched(tmp_path: Path) -> None:
+    """#496, spec §3.D.3. Three agentic phases and a trailing `[manual]` one:
+    the fan-out enumerates six units (3 phases × 2 members), never seven, and
+    the phase it skipped is named in the cursor and at group completion."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(
+        repo,
+        [(1, "agentic", ()), (2, "agentic", ()), (3, "agentic", ()), (4, "manual", ())],
+    )
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    outputs = _drive_the_group(repo, shipped)
+
+    # (a) no brief was ever built for the manual phase
+    briefs = [_brief_of(out) for out in outputs if "{" in out]
+    assert [b["item"] for b in briefs] == [f"phase/{n}" for n in (1, 1, 2, 2, 3, 3)], [
+        b["item"] for b in briefs
+    ]
+    # (b) the cursor records the deliberate omission
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
+    assert items.get("phase/4") == "manual", items
+    # (c) group completion counts what was dispatched, and names what was not
+    done_line = next(
+        line for out in outputs for line in out.splitlines() if "implement: done" in line
+    )
+    assert "6 members done" in done_line, done_line
+    assert "phase 4" in done_line and "manual" in done_line, done_line
+    # (d) and `fr run status` shows it beside every other item
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+    assert "phase/4: manual" in status.output, status.output
+
+
+def test_an_already_complete_manual_phase_is_still_recorded_manual(tmp_path: Path) -> None:
+    """The fan-out filters on `tag: manual` alone — completion does not enter
+    into it (review `r4-f1` draws the outstanding/manual distinction for the
+    AUTHORING rule; this pins what the RUNTIME does with the other case).
+
+    fr-goal §3's front-load shape is `1 [manual] (ticked, the operator's go),
+    2 agentic`, and a ticked manual phase waits on nobody — but it is still
+    not work this run did. Recording it `done` would claim a dispatch that
+    never happened; recording it `manual` says what is true and keeps the two
+    writers of `items` (`advance` and `fr run adopt`) able to agree without
+    either of them consulting completion.
+    """
+    from fr.plan_ops import tick
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "manual", ()), (2, "agentic", ()), (3, "agentic", ())])
+    tick(repo / plan_rel, "P1.T1.S1")
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    outputs = _drive_the_group(repo, shipped)
+
+    briefs = [_brief_of(out) for out in outputs if "{" in out]
+    assert [b["item"] for b in briefs] == [f"phase/{n}" for n in (2, 2, 3, 3)]
+    items = units.unit_states(load_run_state(repo, "r1").steps["implement"])
+    assert items.get("phase/1") == "manual", items
+
+
+def test_resolving_a_manual_phase_member_names_the_tag(tmp_path: Path) -> None:
+    """Spec §3.D.3. "not a phase member of 'implement' — expected phase/<n>
+    for phases [1]" reads as a bug in the phase list when phase 2 plainly
+    exists in the plan. The key is absent because it was deliberately never
+    dispatched, and the refusal has to say which of the two it is."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "agentic", ()), (2, "manual", ())])
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches phase/1/code
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/2", "--state", "done"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "`tag: manual`" in result.output, result.output
+    assert "phase 2" in result.output, result.output
+    assert "not a phase member" not in result.output, result.output
+
+
+def test_a_middle_manual_phase_is_refused_at_group_start(tmp_path: Path) -> None:
+    """Spec §3.D.2 point 2 — the preflight, defence in depth.
+
+    `fr plan self-review` is the primary gate, but this shape (a repo-authored
+    one, like an `fr run adopt`ed run) has no `plan-review` step, so the plan
+    reaches the fan-out unchecked. `1 agentic, 2 manual (unticked), 3 agentic`
+    is the one shape the rule forbids: phase 3 would run while a human is
+    still owed phase 2. It is refused before ANY unit is dispatched — the
+    hazard is the plan's, not this phase's.
+    """
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "agentic", ()), (2, "manual", ()), (3, "agentic", ())])
+    _started_grouped_with_plan(repo, shipped, plan_rel)
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 2, result.output
+    assert "phase 2 is `tag: manual`" in result.output, result.output
+    assert "phase 3" in result.output, result.output
+    # nothing was briefed, and nothing was claimed
+    assert "{" not in result.stdout, result.stdout
+    assert units.unit_states(load_run_state(repo, "r1").steps["implement"]) == {}
+    assert load_run_state(repo, "r1").steps["implement"].state == "pending"

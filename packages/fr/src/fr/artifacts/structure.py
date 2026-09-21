@@ -31,9 +31,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:  # pragma: no cover — typing only, keeps the runtime
+    # import of `fr.run.model` inside the function that needs it (see the
+    # module docstring's note on CLI-entry import cost).
+    from fr.run.model import RunState
 
 # --- shared helpers ------------------------------------------------------
 
@@ -196,21 +201,27 @@ def validate_journal(path: Path) -> list[str]:
 def validate_run(path: Path) -> list[str]:
     """`RunState`, plus the cross-references the model does not encode.
 
-    Three of them, each a relationship between fields rather than a field, so
-    the schema cannot see any of them:
+    Each is a relationship between fields rather than a field, so the schema
+    cannot see it:
 
     1. the cursor must name a step the run actually records;
-    2. a measurement is **atomic** — `fr.run.telemetry` writes all four token
-       fields or none, so a snapshot carrying only some is a partial sum that
-       reads like a whole one. The model cannot say this: every field is
-       independently optional, which is exactly what lets a pre-telemetry
-       cursor parse;
-    3. a cursor carrying measured tokens must DECLARE at least the version
-       those fields appeared in. v3 content under a v2 stamp is the one state
-       nothing else would catch — no migration would revisit the file, and any
-       fr that believed the stamp would raise on the keys.
+    2. a cursor carrying `units` must DECLARE at least the version that map
+       appeared in. A v5 body under an older stamp is the one state nothing
+       else would catch — it is what the 4 -> 5 migration's crash window
+       leaves behind, and any fr that believed the stamp would raise on the
+       key;
+    3. the unit-key grammar and the state rule of spec
+       `2026-09-20-unit-record-unification-design.md` §4.B
+       (`_run_unit_problems`).
+
+    What is NOT here any more, on purpose: the partial-measurement check. A
+    measurement is `MeasuredTokens`, whose four figures are all required, so a
+    partial one cannot be represented and `RunState` itself refuses it — the
+    invariant became structural (§4.A) and the check disappeared rather than
+    moving. A v4 file carrying one never reaches this function in the v5
+    shape: the migration refuses it and leaves it byte-identical.
     """
-    from fr.run.model import MEASURED_TOKEN_FIELDS, MEASURED_TOKENS_SCHEMA_VERSION, RunState
+    from fr.run.model import UNIT_RECORD_SCHEMA_VERSION, RunState
 
     data, problems = _load_mapping(path)
     if problems or data is None:
@@ -225,24 +236,116 @@ def validate_run(path: Path) -> list[str]:
         problems.append(
             f"`cursor` names `{state.cursor}`, which is not a recorded step (recorded: {known})"
         )
-    measured_anywhere = False
-    for key, snap in (state.accounting or {}).items():
-        missing = [name for name, value in snap.measured_fields().items() if value is None]
-        if len(missing) == len(MEASURED_TOKEN_FIELDS):
-            continue  # no measurement at all — the ordinary, honest state
-        measured_anywhere = True
-        if missing:
-            problems.append(
-                f"`accounting.{key}` records a PARTIAL measurement: "
-                f"{', '.join(missing)} missing. A measurement is all four fields or none — "
-                "three of four sums to a number that reads like a whole one"
-            )
-    if measured_anywhere and state.schema_version < MEASURED_TOKENS_SCHEMA_VERSION:
+    carries_units = any(record.units for record in state.steps.values())
+    if carries_units and state.schema_version < UNIT_RECORD_SCHEMA_VERSION:
         problems.append(
-            f"`accounting` carries measured tokens but `schema_version` is "
-            f"{state.schema_version}; those fields appeared in version "
-            f"{MEASURED_TOKENS_SCHEMA_VERSION}, so this file declares a shape it does not have"
+            f"a step carries `units` but `schema_version` is {state.schema_version}; that "
+            f"map appeared in version {UNIT_RECORD_SCHEMA_VERSION}, so this file declares a "
+            "shape it does not have — `fr migrate artifacts --yes` finishes the job"
         )
+    problems.extend(_run_unit_problems(state))
+    return problems
+
+
+_GROUPED_UNIT_KEY_RE = re.compile(r"^phase/\d+/.+$")
+_PHASE_UNIT_KEY_RE = re.compile(r"^phase/\d+$")
+_STEP_UNIT_KEY_RE = re.compile(r"^step/.+$")
+"""The three unit-key forms of spec §4.B: `phase/<n>/<member-id>` for a grouped
+`for_each` member, `phase/<n>` for a phase fr never dispatches as such, and
+`step/<step-id>` for a flat `kind: agent` step.
+
+The `step/` namespace is load-bearing rather than decorative: a repo-authored
+step id may itself contain a `/` — `fr.workflow.check.check_workflow` checks
+duplicate ids, dangling `needs`, cycles and unknown capabilities, and
+constrains no characters at all — so without the prefix the key spaces are
+not provably disjoint."""
+
+
+def _run_unit_problems(state: RunState) -> list[str]:
+    """The invariants `StepRecord.units` states but pydantic cannot (§4.B).
+
+    These live here rather than on the model deliberately. `advance`, `claim`,
+    `resolve` and `adopt` build every key and record themselves, so a
+    violation only reaches a file by hand-edit or a bad merge — the threat
+    model `.claude/rules/artifact-versioning.md` names for a git-tracked,
+    hand-editable artifact. Refusing them in `parse_run_state` would make a
+    damaged cursor unreadable by the very commands an operator needs in order
+    to repair it; reporting them from `fr validate artifacts` is what makes
+    the damage visible without making it unrecoverable.
+
+    **`phase/<n>` is broader than the spec's first wording.** §4.B called it
+    "gh#496's manual-phase marker — `state: manual`, always". A captured
+    cursor refutes the "always": a flat `for_each: phase` step (no member
+    steps) records its phases under the same key with an ordinary state
+    (`tests/fixtures/run_cursors/v1/2026-09-09-feat-issue-464.yaml`,
+    `phase/1: pending`), and `fr run adopt` still writes that. Enforcing
+    `manual` would have made every such cursor fail validation the moment it
+    migrated. What the marker and the flat unit share — and what IS enforced —
+    is that fr never dispatches a phase as a phase, so neither ever has
+    attempts.
+    """
+    problems: list[str] = []
+    for step_id, record in state.steps.items():
+        for key, unit in (record.units or {}).items():
+            where = f"step `{step_id}` unit `{key}`"
+            attempts = unit.attempts
+            if _STEP_UNIT_KEY_RE.match(key):
+                if unit.state is not None:
+                    problems.append(
+                        f"{where} carries `state: {unit.state}`; a flat step's unit has no "
+                        "state of its own — the step's `state` is that fact's one home, and "
+                        "a fact with two homes drifts"
+                    )
+                if not attempts and not unit.evidence:
+                    problems.append(
+                        f"{where} records nothing — no attempts and no evidence; a unit key "
+                        "with no history means nothing"
+                    )
+            elif _GROUPED_UNIT_KEY_RE.match(key):
+                if unit.state is None:
+                    problems.append(
+                        f"{where} carries no `state`; a grouped member's state has no other "
+                        "home, so `advance` can neither dispatch nor skip it"
+                    )
+            elif _PHASE_UNIT_KEY_RE.match(key):
+                if unit.state is None:
+                    problems.append(f"{where} carries no `state`")
+                if attempts:
+                    problems.append(
+                        f"{where} records {len(attempts)} attempts; fr dispatches a phase's "
+                        "MEMBERS (`phase/<n>/<member-id>`), never the phase, so a "
+                        "`phase/<n>` unit — a `manual` marker, or a flat fan-out's adopted "
+                        "phase — never has any"
+                    )
+            else:
+                problems.append(
+                    f"{where} is not a unit key — expected `step/<step-id>` for a flat "
+                    "agent step, `phase/<n>/<member-id>` for a grouped one, or `phase/<n>`"
+                )
+            synthesized_at = [i for i, a in enumerate(attempts) if a.synthesized]
+            if synthesized_at and synthesized_at != [0]:
+                problems.append(
+                    f"{where} has a synthesized attempt at position "
+                    f"{', '.join(str(i + 1) for i in synthesized_at)}; the 4 -> 5 migration "
+                    "writes at most one, and FIRST — nothing precedes a dispatch that predates "
+                    "the dispatch record"
+                )
+            # A synthesized attempt carries a migrated cost, never a hold, so it
+            # is not "open" however long it goes without a `returned`.
+            open_at = [
+                i for i, a in enumerate(attempts) if a.returned is None and not a.synthesized
+            ]
+            if len(open_at) > 1:
+                problems.append(
+                    f"{where} has {len(open_at)} open attempts; at most one unit may be "
+                    "held at a time, or two writers share one worktree"
+                )
+            elif open_at and open_at[0] != len(attempts) - 1:
+                problems.append(
+                    f"{where} leaves attempt {open_at[0] + 1} of {len(attempts)} open while a "
+                    "later one is closed; the open attempt is the LAST one, and every "
+                    "reader takes it from the end"
+                )
     return problems
 
 

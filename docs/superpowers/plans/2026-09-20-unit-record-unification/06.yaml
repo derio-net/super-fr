@@ -1,0 +1,167 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Liveness — one neutral predicate, two adapters, and a loop breaker
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - run-idle-detected
+  - run-stalled-reported-not-failed
+  - run-idle-stop-guard
+  - run-idle-guard-allows-waiting
+  - run-idle-guard-never-wedges
+  - run-idle-guard-acts-once-per-position
+  - run-idle-reprompt-opencode
+  tier: hard
+tasks:
+- number: 1
+  title: fr run check --idle and --stalled-after
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: `fr run check --idle` exits 3 and prints the next command EXACTLY when the
+      cursor is advanceable, no gate is pending, no attempt is open and nothing failed —
+      and exits 0 in each legitimate stop, ONE TEST APIECE: pending operator gate; manual
+      phase; a HELD unit (a turn that ends while a background executor works is correct);
+      failed step; finished run; no run. `--format json` carries the same facts.
+      `--stalled-after 120` reports an open attempt older than that, exit code unchanged.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: implement both readings in check_cmd over fr/run/units.py. Exit 3 is free —
+      `check` uses only 1 today.
+  - id: P6.T1.S3
+    text: |-
+      REFACTOR: the idle predicate is one pure function `is_idle(state, manifest)`; the
+      CLI and both adapters depend on it and none re-derives it.
+- number: 2
+  title: Claude Code — block the stop, once per position, fail open
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      First VERIFY on the binary, do not assume: what a Claude Code `Stop` hook receives
+      on stdin (is `stop_hook_active` present?) and what it must print to block
+      (`decision: "block"` + `reason`). Record the captured input as a fixture under
+      tests/fixtures/hooks/. Then RED, in tests/integration/: the hook blocks an idle
+      stop and its reason names the next command; is silent in all six legitimate cases;
+      is silent when no run is bound to the session; FAILS OPEN when `fr` errors or is
+      missing; and acts AT MOST ONCE per cursor position — a second stop at the same
+      position passes through.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: plugins/super-fr/hooks/fr-run-idle-guard.sh, registered under `Stop` in the
+      plugin's hooks.json. It resolves session -> worktree from
+      ~/.cache/fr/sessions/<session-id>.json (key on `worktree` only: that file says
+      `harness: "claude"` where fr.harness says `"claude-code"`), runs
+      `fr run check --idle --format json` there, and remembers the last position it acted
+      on, host-locally, beside the binding.
+  - id: P6.T2.S3
+    text: |-
+      REFACTOR: add the `parity.yaml` row for this surface — claude-code `enforced`;
+      opencode `partial` (next task); hermes `absent` with a scope_note that its stop
+      events are reportedly observe-only and were NOT verified (not installed on the
+      authoring machine); codex and copilot-cli `unsupported` with a note that a
+      block-tier adapter is small once they are onboarded.
+      `uv run pytest tests/unit/test_tripwire_harness_parity.py -q --no-cov` and
+      `uv run fr harness parity --check`.
+- number: 3
+  title: OpenCode — continue the session on idle
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: in packages/fr-opencode-plugin (TypeScript, `bun test` — `uv run pytest` does
+      NOT cover this package): on a `session.idle` event the plugin runs
+      `fr run check --idle --format json` in the session's directory and, when idle,
+      sends the next command back into the session (`/session/{id}/prompt_async`);
+      silent otherwise; at most once per cursor position; never throws when `fr` fails.
+      Both the event and the endpoint were verified in the installed 1.18.31 SDK types.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: implement the handler beside the existing `tool.execute.before` one; keep
+      the fr-side logic in the predicate, not in TypeScript.
+  - id: P6.T3.S3
+    text: |-
+      REFACTOR: `bun test`; then update observe.py only if `fr harness parity --check`
+      needs to learn the new registration. Journal plainly that the OpenCode row stays
+      `partial` until a LIVE run proves a plugin-originated prompt on idle executes —
+      the gh#494 standard; a green bun test does not show that.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T23:23:05+00:00'
+      note: 'RED: tests/unit/test_run_idle.py — 27 tests, first fails on ''No such
+        option: --idle''. Six legitimate stops one test apiece (+ a failed-UNIT variant);
+        manual-phase stop = the front-load shape advance''s preflight refuses.'
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T23:31:55+00:00'
+      note: 'GREEN: check_cmd gains --idle / --stalled-after / --format json; exit
+        3 only on idle. run id optional with --idle (runs of the checked-out branch,
+        by state.branch). 29 tests green.'
+    P6.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T23:31:56+00:00'
+      note: 'REFACTOR: fr/run/liveness.py — is_idle(state, manifest, *, refusals=())
+        is pure; gate_pending/next_step_id/hold_on MOVED there from run_cmd (re-imported
+        under their old names) so advance and the idle reading share one definition.
+        Mutation-verified, 11 mutants, each printed APPLIED; two survivors found and
+        fixed (the two halves of ''held'' covered for each other).'
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T23:40:20+00:00'
+      note: 'VERIFIED ON THE BINARY (Claude Code 2.1.278): two one-off headless turns
+        with a Stop hook registered via --settings. Input carries stop_hook_active
+        (bool), background_tasks, session_crons; {decision: block, reason} on stdout
+        + exit 0 DOES block and the reason reaches the model; the continuation''s
+        Stop carries stop_hook_active: true. Both inputs captured to tests/fixtures/hooks/
+        (home dir name redacted, stated in NOTE.md). Not verified: plugin-registered
+        hooks.json delivery, a populated background_tasks, interactive sessions. RED:
+        tests/integration/test_run_idle_guard.py, 46 failed / 3 passed (the capture
+        pins).'
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T23:48:09+00:00'
+      note: 'GREEN: plugins/super-fr/hooks/fr-run-idle-guard.sh registered under Stop.
+        Always exits 0 (EXIT trap; NO set -e — fr exits 2 on every refusal and exit
+        2 IS a block). Blocks only on rc==3 AND parsed idle==true AND position+next_command,
+        at a position not yet acted on; memory written BEFORE blocking and verified.
+        Brakes: stop_hook_active must be literally false; background_tasks/session_crons
+        non-empty = silence. 20s watchdog. 52 tests; 12 mutants, each printed APPLIED
+        — one survivor (idle-true) traced to a redundant double guard, collapsed to
+        one and re-killed. fr isolation detach/detach_all now delete the memory file.'
+    P6.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T23:54:37+00:00'
+      note: 'parity.yaml row fr-run-idle-guard: claude-code enforced; opencode partial;
+        hermes absent (observe-only lead, NOT verified, not installed); codex + copilot-cli
+        unsupported with the block-tier note. fr harness parity --check FAILED on
+        it until the OpenCode marker landed (the gate can fail), then passed.'
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T23:51:24+00:00'
+      note: 'RED: packages/fr-opencode-plugin/test/idle.test.ts — bun test fails on
+        ''Cannot find module ../src/idle''. SDK note: the installed opencode BINARY
+        is 1.18.31; the SDK type copies found on this machine are 1.17.15 (and 1.1.27
+        / 1.0.23), not 1.18.31 — all carry EventSessionIdle {properties.sessionID}
+        and session.promptAsync -> /session/{id}/prompt_async.'
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T23:54:37+00:00'
+      note: 'GREEN: packages/fr-opencode-plugin/src/idle.ts (createIdleHandler) wired
+        as the plugin''s event hook beside tool.execute.before; index.ts exports plugins
+        only. Verdict is fr''s; TS parses exit 3 + idle===true + string position/next_command
+        and nothing else.'
+    P6.T3.S3:
+      state: x
+      ticked_at: '2026-09-21T00:01:31+00:00'
+      note: 'bun test 50 pass / 0 fail; 10 TS mutants killed (two survivors found
+        and fixed first). observe.py needed NO change — the OpenCode marker comment
+        is the registration. Journalled plainly (p6-opencode-not-live-proven): the
+        row stays partial and run-idle-reprompt-opencode stays not-implemented, because
+        a green bun test does not show a plugin-originated prompt on idle executes.'
+  completion:
+    at: '2026-09-21T00:01:31+00:00'
+    note: null
+    observed_prs: []

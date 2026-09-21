@@ -64,6 +64,17 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
+    `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
+    the ONE definition of "idle" — a run that is advanceable with nobody
+    working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
+    plus `--stalled-after` (reported, never failed). It also owns the three
+    predicates `advance` shares with it (`gate_pending`, `next_step_id`,
+    `hold_on`). Two adapters call that CLI and re-derive nothing:
+    `plugins/super-fr/hooks/fr-run-idle-guard.sh` (Claude Code `Stop` — BLOCKS;
+    always exits 0, deliberately no `set -e`, because exit 2 from a Stop hook
+    is itself a block and `fr` exits 2 on every refusal) and
+    `packages/fr-opencode-plugin/src/idle.ts` (`session.idle` — CONTINUES; not
+    live-proven, so `partial`). Both act at most once per run `position`.
   - **`fr/tracker`** — the tracker protocol (`model.py`'s `Tracker` Protocol
     + `TrackedItem`, a structural stand-in for `WorkItem` so `fr` never
     imports `fr_dispatch`; `github.py`'s `GithubTracker` is the one
@@ -146,12 +157,15 @@ and a CI tripwire will catch drift anyway:
   `scripts/sync-opencode.py` (no flag writes; `--check` verifies) and commit
   the regenerated mirror — `test_tripwire_opencode_skills_sync.py` /
   `test_tripwire_opencode_instructions_sync.py` fail on drift.
-- Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md`. There
-  are **TWO** mirrors, not one — `scripts/sync-hermes.py` is the second sync,
-  guarded by `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill
-  and running only `sync-opencode.py` leaves that tripwire red, which is how
-  it was found (gh#434, phase 5: an unexplained "fourth" test failure in a
-  PR that had touched no Hermes file). Run BOTH after any skill edit.
+- Generated, and easy to forget: `.hermes/skills/fr/<name>/SKILL.md` **and**
+  `.hermes/SOUL.d/super-fr-rules.md`. There are **TWO** mirror generators, not
+  one — `scripts/sync-hermes.py` is the second sync, guarded by
+  `test_tripwire_hermes_skills_sync.py`. Editing a canonical skill and running
+  only `sync-opencode.py` leaves that tripwire red, which is how it was found
+  (gh#434, phase 5: an unexplained "fourth" test failure in a PR that had
+  touched no Hermes file) — and again, independently, in gh#503 phase 6, where
+  the symptom was a GREEN targeted tripwire run and a red full suite. Two
+  sessions hit the same trap a day apart; run BOTH after any skill edit.
 - `.claude/rules/fr-isolation-required.md` is the one exception: a
   **manually maintained**, deliberately condensed repo mirror of
   `plugins/super-fr/rules/fr-isolation-required.md`. No script covers it —

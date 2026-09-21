@@ -1,0 +1,145 @@
+schema_version: 2
+phase:
+  number: 3
+  title: A run is attributable to the session that started it (#500)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  tier: standard
+  acceptance:
+  - run-start-binds-session
+tasks:
+- number: 1
+  title: '`fr run start --session/--harness` binds, and never costs a run when it
+    cannot'
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED. In `tests/unit/test_run_cli.py` (or `test_run_workspace.py`, wherever the isolation fake
+      lives), add `test_run_start_binds_the_session_when_given_one`: `fr run start fr-goal --branch b
+      --session s1 --harness claude-code`, then assert `fr.isolation.types.load_state(repo, "b")`
+      lists a `SessionBinding` for `s1`. Add `test_run_start_warns_but_succeeds_when_attach_fails`:
+      monkeypatch `sessions.attach` to raise `IsolationError`, assert exit 0, the run file exists,
+      and stderr carries a warning naming the branch. Confirm both fail (no such flags).
+  - id: P3.T1.S2
+    text: |-
+      GREEN. Add `--session` and `--harness` options to `start_cmd` mirroring
+      `isolation_cmd`'s spelling (`--harness` default `"unknown"`, help
+      `claude | hermes | opencode | unknown`). After the run file is saved, call
+      `fr.isolation.sessions.attach(workspace, branch, session, harness=harness)` inside
+      `try/except IsolationError`, printing a warning on failure. Bindings are traceability, not
+      enforcement (spec 3.C.1) — a failed bind must never cost a started run.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR. Confirm the attach happens AFTER `save_run_state` so a bind failure cannot leave a
+      bound workspace with no run; add a comment saying so. Re-run the tests.
+- number: 2
+  title: '`fr-session-bind.sh` recognises `fr run start`, so Claude Code binds unaided'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED. In `tests/unit/test_hooks_session_bind.py`, add a case feeding the hook a Bash
+      PostToolUse payload whose command is `fr run start fr-goal --branch feat/x`, asserting the
+      stubbed `fr` records `isolation attach --session <id> --repo <cwd> --branch feat/x
+      --harness claude`. Add a negative case: `echo fr run start` (not leading) must NOT bind.
+      Run the file and confirm the positive case fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN. In `plugins/super-fr/hooks/fr-session-bind.sh`, extend the verb extraction to also
+      match a leading `fr run start`, mapping it to the existing `up|exec` attach branch and reusing
+      the existing `--branch` regex and leading-`cd` folding unchanged. Keep it start-anchored.
+      Confirm both hook tests pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR + PARITY. Update the `fr-session-bind` row's `summary` in
+      `packages/fr/src/fr/harness/parity.yaml` to name `fr run start` alongside `fr isolation`.
+      Leave every `state:` unchanged — `opencode: absent` / `hermes: absent` stay honest, which is
+      exactly why Task 1's flag exists. Run `uv run fr harness parity --check` and
+      `uv run pytest tests/unit/test_tripwire_harness_parity.py -q --no-cov`.
+- number: 3
+  title: The skill documents the fallback it never mentioned
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Edit `plugins/super-fr/skills/fr-goal/SKILL.md` section 0 to state that `fr run start` binds the
+      session when given `--session`, and that `fr isolation attach --session <id> --branch <b>
+      --harness <h>` is the fallback on a harness with no bind hook (the issue's own observation:
+      the skill text never mentioned `attach` at all). Keep it to two sentences; this file is
+      token-budgeted prose.
+  - id: P3.T3.S2
+    text: |-
+      Run `uv run python scripts/sync-opencode.py` (no flag writes) and commit the regenerated
+      `.opencode/skills/fr-goal/SKILL.md`. Then `uv run python scripts/sync-opencode.py --check`
+      plus `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`; all green.
+  - id: P3.T3.S3
+    text: |-
+      GATES + ROW. ruff format, ruff check, mypy, `uv run pytest -q --no-cov`. Then
+      `uv run fr acceptance set-status --id run-start-binds-session --status ci
+       --level unit=super-fr:tests/unit/test_run_cli.py
+       --level unit=super-fr:tests/unit/test_hooks_session_bind.py
+       --notes "Flag, hook and skill prose all landed; the hook case is the one that binds with no
+       agent cooperation, which is why a flag alone was not enough."`
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T15:34:27+00:00'
+      note: 'Both tests fail with click''s ''No such option: --session'' (exit 2).
+        Journal p3-red-t1.'
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T15:35:12+00:00'
+      note: --session/--harness on start_cmd (mirroring isolation_cmd's spelling);
+        _bind_session wraps sessions.attach in try/except IsolationError, warns on
+        stderr naming the branch, exits 0. Both tests pass.
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T15:36:15+00:00'
+      note: 'Confirmed: save_run_state -> two stdout prints -> _bind_session, with
+        a comment at the call site saying why the order is load-bearing. tests/unit/test_run_cli.py:
+        144 passed.'
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T15:37:38+00:00'
+      note: Positive case fails (stub logged []); journal p3-red-t2 records that the
+        two negatives pass vacuously until GREEN.
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T15:38:30+00:00'
+      note: 'Verb extraction falls through to a second start-anchored sed mapping
+        ''fr run start'' -> up, reusing the attach branch and --branch regex unchanged.
+        17 passed. The ''echo fr run start'' negative proven to have teeth: an unanchored
+        copy of the same regex binds on it (logged ''isolation attach ... --branch
+        a'').'
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T15:38:53+00:00'
+      note: 'parity.yaml: only the fr-session-bind row''s summary changed (now names
+        fr run start alongside fr isolation); every state: untouched, opencode/hermes
+        stay absent. ''fr harness parity --check'' -> declared matrix agrees with
+        the registration files; tripwire 9 passed.'
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T15:39:39+00:00'
+      note: 'Two sentences added to section 0: --session/--harness on start, and fr
+        isolation attach as the fallback (the skill text never mentioned attach at
+        all). Phrased harness-neutrally (''a harness with a session-bind hook'').'
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T15:40:45+00:00'
+      note: Ran sync-opencode.py AND sync-hermes.py (the step named only the first;
+        .hermes is a second byte-for-byte mirror that drifted — journal p3-d1). Both
+        --check runs clean; 11 sync/neutrality tripwire tests pass.
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T15:49:43+00:00'
+      note: 'ruff format: 361 unchanged. ruff check: All checks passed. mypy: no issues
+        in 138 files. pytest -q --no-cov: 3 failed, 3308 passed, 80 skipped — exactly
+        p1-f2''s three. fr acceptance check: 129 rows OK. Row run-start-binds-session:
+        not-implemented -> ci.'
+  completion:
+    at: '2026-09-20T15:50:20+00:00'
+    note: null
+    observed_prs: []

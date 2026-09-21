@@ -320,6 +320,28 @@ def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
     return ordered
 
 
+def phase_finding_states(entries: list[JournalEntry], phase: int) -> dict[str, FindingState]:
+    """Every finding FILED AGAINST `phase` -> its effective state, in
+    first-appearance order.
+
+    The phase is the ORIGINAL entry's, never a resolution record's: a record
+    speaks about the finding it names, and `fr journal resolve` does not ask
+    for a phase. The state is the same fold `fr journal check` gates on
+    (`effective_finding_states`), so `fr run resolve`'s `findings` obligation
+    and the end-of-run gate cannot disagree about what "open" means — one rule,
+    two moments.
+
+    A finding filed with no phase (`--global`) belongs to no review, so it is
+    in no phase's map. It stays `fr journal check`'s business.
+    """
+    states = effective_finding_states(entries)
+    return {
+        e.id: states[e.id]
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.phase == phase and e.id in states
+    }
+
+
 def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
     """The ONE writer — `fr journal add`, `fr journal resolve`, and any test
     fixture built through `fr.test_support.build_plan_journal` all land here,
@@ -335,6 +357,41 @@ def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
         path.write_text(prior + sep + block)
     else:
         path.write_text(f"# Journal: {slug}\n\n{block}")
+
+
+def reviews_phase(entry: JournalEntry, phase: int) -> bool:
+    """Is `entry` a recorded review OF `phase`? (spec §B)
+
+    **The one predicate, and there must never be a second.** Two gates read
+    it: gh#517's `fr journal check --require-reviews` (via `reviewed_phases`
+    below, for a plan with no run cursor) and the evidence gate on
+    `fr run resolve --state done` (for a plan that has one,
+    2026-09-20-unit-record-unification §4.E). A second spelling of "reviewed"
+    is how a `finding` comes to satisfy one gate and not the other — and then
+    "review skipped" and "review passed clean" are the same state again, with
+    extra steps, which is gh#430 verbatim.
+
+    An entry "names" a phase only through `phase=N`: a `review` entry with no
+    `phase` does not count toward ANY phase, and a non-`review` entry (a
+    `finding`, even one tagged with the same `phase=N`) does not count either,
+    however closely findings and reviews are related. This is deliberately
+    narrower than "any activity happened during phase N" — this repo's own
+    journals carry 5 unphased plan-scope `review` entries (spec §B, D2's
+    evidence), predating the `--phase` convention; treating them as blanket
+    cover would let one undated review satisfy every phase a plan ever grows,
+    which is the exact hole these gates exist to close.
+    """
+    return entry.kind == "review" and entry.phase == phase
+
+
+def reviewed_phases(entries: list[JournalEntry]) -> set[int]:
+    """Phase numbers that already have a recorded review (spec §B).
+
+    The fold of `reviews_phase` over `entries` — it holds no rule of its own,
+    so the gate that asks "which phases are reviewed?" and the gate that asks
+    "is THIS entry a review of phase N?" cannot answer differently.
+    """
+    return {e.phase for e in entries if e.phase is not None and reviews_phase(e, e.phase)}
 
 
 def _handoff_line(entry: JournalEntry, effective_state: str | None = None) -> str:

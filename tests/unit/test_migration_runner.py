@@ -610,3 +610,191 @@ def test_one_failure_is_reported_once_not_twice(tmp_path: Path) -> None:
     assert len(report.failed) == 1, [f.error for f in report.failed]
     assert report.failed[0].path == meta
     assert [a.path for a in report.applied] == [meta], "the schema step still ran"
+
+
+# --- the run kind's 2 → 3 bump (dispatch-holder-identity, spec §4.D) -------
+#
+# `StepRecord.dispatch` is a shape change on the same `extra="forbid"` model
+# the 1→2 bump above already exercised, so these mirror that block's shape:
+# the registry moved, a migration reaches version 3 from EVERY earlier
+# version (including straight from 1, since a v1 cursor may never have been
+# migrated), and the migration is stamp-only.
+
+
+def test_the_run_kind_moved_to_version_five() -> None:
+    assert ARTIFACT_KINDS["run"].current_version == 5
+
+
+def test_the_run_kind_is_reachable_all_the_way_from_version_one_to_five() -> None:
+    """Every registered migration is on ONE chain, in order — EVERY hop named.
+
+    The numbering here has history worth keeping: gh#506's telemetry migration
+    and gh#508's dispatch-holder migration were BOTH written as 2 -> 3, on
+    parallel branches, neither aware of the other. A kind has exactly one
+    linear history, so the one that merged second stacked to 3 -> 4. And it
+    happened AGAIN on the branch that added 4 -> 5: two different
+    `schema_version: 3`s existed for an afternoon. Nothing detects the
+    collision — this assertion on the full chain is the only guard this repo
+    has, which is why it names every hop rather than just the endpoint
+    (spec `2026-09-20-unit-record-unification-design.md` §4.F, §8).
+    """
+    chain = MIGRATIONS.chain("run", 1)
+    assert chain, "no registered migration chain carries a v1 run cursor forward"
+    assert chain[-1].to_version == ARTIFACT_KINDS["run"].current_version == 5
+    assert [m.to_version for m in chain] == [2, 3, 4, 5], (
+        "the chain must pass through 2 (gate provenance), 3 (telemetry) and 4 (dispatch "
+        "holder) on its way to 5 (one record per unit) — every migration is registered, "
+        "not just the new one"
+    )
+    assert [m.from_version for m in chain] == [1, 2, 3, 4]
+
+
+def test_migrating_a_v2_run_cursor_stamps_it_current_and_rewrites_no_body(
+    tmp_path: Path,
+) -> None:
+    """A v2 cursor rides the WHOLE chain, and every hop is stamp-only — so the
+    body is byte-identical at the end whatever `current_version` happens to be."""
+    path = tmp_path / "docs" / "superpowers" / "runs" / "r1.yaml"
+    path.parent.mkdir(parents=True)
+    text = (
+        "schema_version: 2\nrun: r1\nworkflow: fr-goal@1\nbranch: b\n"
+        "started: '2026-09-20T09:00:00Z'\ncursor: implement\n"
+        "steps:\n  implement:\n    state: running\n"
+    )
+    path.write_text(text)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, report.failed
+    assert path in report.changed_paths
+    after = path.read_text()
+    assert ARTIFACT_KINDS["run"].read_version(path) == ARTIFACT_KINDS["run"].current_version
+    stripped = "\n".join(
+        line for line in after.splitlines() if not line.startswith("schema_version:")
+    )
+    before_stripped = "\n".join(
+        line for line in text.splitlines() if not line.startswith("schema_version:")
+    )
+    assert stripped.strip() == before_stripped.strip()
+
+
+def test_the_dispatch_holder_migration_refuses_an_unreadable_cursor_and_migrates_the_rest(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    broken = runs / "broken.yaml"
+    broken.write_text("schema_version: 2\nrun: broken\ncursor: a\n")  # missing required fields
+    healthy = runs / "healthy.yaml"
+    healthy.write_text(
+        "schema_version: 2\nrun: healthy\nworkflow: fr-goal@1\nbranch: b\n"
+        "started: '2026-09-20T09:00:00Z'\ncursor: a\nsteps:\n  a:\n    state: pending\n"
+    )
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert [f.path for f in report.failed] == [broken]
+    assert ARTIFACT_KINDS["run"].read_version(broken) == 2, "left unstamped, retried next run"
+    assert ARTIFACT_KINDS["run"].read_version(healthy) == ARTIFACT_KINDS["run"].current_version
+
+
+# --- the run kind's 4 → 5 bump: the first BODY-REWRITING run migration ------
+#
+# Spec `2026-09-20-unit-record-unification-design.md` §4.F. Every earlier hop
+# was stamp-only and validated with the LIVE model; 4 -> 5 removes `items`,
+# `dispatch` and `accounting` from an `extra="forbid"` model, so a chain that
+# kept doing that would refuse every older cursor at its FIRST hop. These run
+# the shipped registry over the CAPTURED cursors of
+# `tests/fixtures/run_cursors/` — real files fr wrote — and nothing typed.
+
+RUN_CURSORS = REPO_ROOT / "tests" / "fixtures" / "run_cursors"
+MEASURED_V3 = "v3/2026-09-20-feat-bounded-executor-handoff.yaml"
+
+
+def _captured_cursors() -> list[str]:
+    found = sorted(str(p.relative_to(RUN_CURSORS)) for p in RUN_CURSORS.glob("v*/*.yaml"))
+    assert found, "no captured cursors — the glob is wrong, not the fixtures"
+    return found
+
+
+def _install(root: Path, name: str, *, text: str | None = None) -> Path:
+    """Copy the captured cursor `name` into `root`'s live runs directory."""
+    dest = root / "docs" / "superpowers" / "runs" / Path(name).name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes((RUN_CURSORS / name).read_bytes() if text is None else text.encode())
+    return dest
+
+
+def test_the_captures_span_every_version_the_chain_starts_from() -> None:
+    """The parametrised test below proves nothing about a version it never
+    sees, so the population is asserted rather than assumed."""
+    assert {name.split("/")[0] for name in _captured_cursors()} == {"v1", "v2", "v3", "v4"}
+
+
+@pytest.mark.parametrize("name", _captured_cursors())
+def test_every_captured_cursor_migrates_all_the_way_to_current(tmp_path: Path, name: str) -> None:
+    """A real v1, v2, v3 and v4 cursor each arrive at the current version, in
+    the v5 shape, readable by the LIVE model and structurally valid.
+
+    This is the test the legacy reader exists for: with the hops still
+    validating against the live model, every file carrying `items` fails here
+    at its first hop."""
+    from fr.artifacts.structure import validate_run
+    from fr.run.model import parse_run_state
+
+    path = _install(tmp_path, name)
+    started_at = ARTIFACT_KINDS["run"].read_version(path)
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert report.ok, [(f.path.name, f.error) for f in report.failed]
+    kind = ARTIFACT_KINDS["run"]
+    assert kind.read_version(path) == kind.current_version == 5
+    hops = [(a.from_version, a.to_version) for a in report.applied if a.path == path]
+    assert hops == [(v, v + 1) for v in range(started_at, 5)], "every hop, in order, once"
+
+    state = parse_run_state(path.read_text())
+    assert state.schema_version == 5
+    raw = yaml.safe_load(path.read_text())
+    assert "accounting" not in raw
+    assert all("items" not in r and "dispatch" not in r for r in raw["steps"].values())
+    assert validate_run(path) == []
+
+
+def test_a_cursor_with_a_partial_measurement_is_left_byte_identical_while_the_rest_migrate(
+    tmp_path: Path,
+) -> None:
+    """§4.F's stated edge, induced from a capture (no real cursor carries one:
+    gh#514's validator already calls it invalid). ONE figure is deleted from a
+    real measured cursor; that cursor's failure is its own, the others still
+    migrate, and its bytes AND mtime are exactly what they were."""
+    text = (RUN_CURSORS / MEASURED_V3).read_text()
+    lines = text.splitlines(keepends=True)
+    doomed = [i for i, line in enumerate(lines) if line.strip().startswith("output_tokens:")]
+    assert doomed, "the capture carries no measurement — wrong fixture, not a pass"
+    del lines[doomed[0]]
+    partial = _install(tmp_path, "v3/partial.yaml", text="".join(lines))
+    healthy = [_install(tmp_path, n) for n in _captured_cursors() if n != MEASURED_V3]
+
+    report = run_migrations(tmp_path, dry_run=False)
+
+    assert [f.path for f in report.failed] == [partial]
+    assert "output_tokens" in report.failed[0].error, "the refusal names the missing field"
+    # Left at 4, not at 3: the stamp-only hops 3 -> 4 are honest about a file
+    # they can read. What matters is the BODY — no half-written v5 shape.
+    raw = yaml.safe_load(partial.read_text())
+    assert "accounting" in raw and all("units" not in r for r in raw["steps"].values())
+    assert ARTIFACT_KINDS["run"].read_version(partial) < 5
+    for path in healthy:
+        assert ARTIFACT_KINDS["run"].read_version(path) == 5, path.name
+
+    # And run on its own, where no earlier hop touches the stamp, the refusal
+    # leaves the file BYTE-identical — bytes and mtime.
+    alone = tmp_path / "alone"
+    v4_text = "".join(lines).replace("schema_version: 3", "schema_version: 4", 1)
+    assert v4_text != "".join(lines), "the capture's stamp line moved — fix the test"
+    lone = _install(alone, "v4/partial.yaml", text=v4_text)
+    frozen = _freeze(lone)
+    lone_report = run_migrations(alone, dry_run=False)
+    assert [f.path for f in lone_report.failed] == [lone]
+    assert _unchanged(lone, frozen)

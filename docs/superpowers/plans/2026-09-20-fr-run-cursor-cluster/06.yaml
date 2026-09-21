@@ -1,0 +1,170 @@
+schema_version: 2
+phase:
+  number: 6
+  title: The published explainer stops lagging the code, and the version moves
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  - 5
+  tracking_issue: null
+  tier: standard
+tasks:
+- number: 1
+  title: Update `01-fr-goal.md` for what actually changed
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      VERIFY THE RENDERER FIRST, before editing a word. From `/` (never inside the worktree), run
+      the `--isolated --no-project` incantation from `.claude/rules/explainers-currency.md` over the
+      UNMODIFIED `docs/explainers/01-fr-goal.md` and confirm the output is byte-identical to the
+      committed `01-fr-goal.html` (`cmp`). This is not ceremony: that check has found a silent
+      pygments/codehilite divergence twice. If it diverges, stop and diagnose before editing.
+  - id: P6.T1.S2
+    text: |-
+      Edit `docs/explainers/01-fr-goal.md` in the worktree for three changes a reader would now be
+      misled about: (a) the five-commands paragraph (~line 213) gains `advance` refusing a step that
+      is already running and `--redispatch`; (b) the manual-phase section (~line 372) states the
+      trailing-or-complete rule and that a manual phase is never dispatched; (c) the front-loading
+      decision diagram (~line 385) reflects that front-loading remains legal precisely because the
+      operator ticks the phase before implementation resumes. Match the existing voice — second
+      person, unhurried, explaining why.
+  - id: P6.T1.S3
+    text: |-
+      Regenerate `docs/explainers/01-fr-goal.html` with the same verified command from `/`, and
+      `git diff --stat` it: the page diff must contain ONLY the paragraphs written in S2. Never
+      hand-edit the HTML. Run `uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov`.
+- number: 2
+  title: Bump the version and run every gate one last time
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor` — minor, not patch: this PR adds
+      two CLI flags (`fr run advance --redispatch`, `fr run start --session/--harness`) and a
+      mandatory new refusal, which AGENTS.md classifies as a user-visible workflow addition. Commit
+      the changed manifests and `uv.lock` together; never hand-edit a version-bearing file.
+  - id: P6.T2.S2
+    text: |-
+      Full gate sweep, exactly as CI runs it: `uv run ruff check packages/ tests/`,
+      `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src`,
+      `uv run pytest` (the full form, so `cov-fail-under=75` is exercised),
+      `uv run --no-project python scripts/bump-version.py --check`,
+      `uv run fr acceptance check`, `uv run fr harness parity --check`,
+      `uv run fr validate artifacts`, and `uv run python scripts/sync-opencode.py --check`.
+      Paste each command's verdict into the phase journal — spec 5 is post-merge, so this sweep is
+      the only pre-merge evidence there is.
+  - id: P6.T2.S3
+    text: |-
+      REFACTOR PASS over the whole diff: re-read every file this plan touched and remove anything
+      that duplicates what another phase already did (the shared `_resolve_hint`, the shared
+      `_trailing_manual_block`, the two refusal renderers). Record
+      `no-refactor-because: P6.T2` with a reason if nothing is left to do.
+- number: 3
+  title: Close the two pre-existing defects phase 1 surfaced (journal `p1-f2`)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED, cause 1. `tests/unit/test_run_workspace.py::test_a_forged_worktree_marker_in_a_plain_
+      directory_is_refused` and `::test_an_external_marker_without_container_evidence_is_refused`
+      fail on macOS and pass on CI. Confirm the cause before touching anything: run them and read
+      the output — the assertion's substring straddles a rich fold (`...is not a linked git
+      \nworktree`), because the message embeds `tmp_path` and macOS pytest tmp paths are far longer
+      than Linux's, so WHERE the fold lands is a function of the host.
+  - id: P6.T3.S2
+    text: |-
+      GREEN, cause 1 — fix the SOURCE, not the test. `fr run start`'s refusal is an operator-facing
+      message printed without `soft_wrap=True`; find its `err_console.print` (the `RunWorkspaceError`
+      handler in `fr.commands.run_cmd.start_cmd`) and add it. This is the same defect class as
+      `p1-f1` and `r1-f2`, which is why the operator scoped it into this PR: a refusal an operator
+      cannot read is a bug wherever it appears, and folding it on a long-path host is not a test
+      artifact. Confirm both tests pass on this host WITHOUT weakening either assertion.
+  - id: P6.T3.S3
+    text: |-
+      GREEN, cause 2. `tests/unit/test_workflow_check.py::test_cli_all_fails_when_nothing_is_
+      discoverable` monkeypatches `packaged_shipped_workflows_dir` but not `fr/workflow/resolve.py`'s
+      FOURTH source, the marketplace clone at
+      `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows` (resolve.py:88
+      and :174). On a host with super-fr installed the test finds `fr-goal: ok` and exits 0 — the
+      test asserting "nothing is discoverable" while something is. Monkeypatch that source too, so
+      the test means what its name says on every host.
+  - id: P6.T3.S4
+    text: |-
+      REFACTOR + close the finding. Re-run the FULL suite and confirm it is now `0 failed` on this
+      host, not `3 failed`. Then close the finding truthfully:
+      `uv run fr journal resolve --scope plan --slug 2026-09-20-fr-run-cursor-cluster --id p1-f2
+       --state fixed --phase 6 --note "<both causes, and which commit fixed each>"`.
+      `fr journal check --scope plan` must then be clean — `deliver` is gated on it.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-20T16:52:58+00:00'
+      note: 'Rendered the UNMODIFIED 01-fr-goal.md from / with uv run --isolated --no-project
+        --with markdown --with pyyaml; cmp against the committed 01-fr-goal.html:
+        byte-identical. Renderer pinned before a word was edited.'
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-09-20T16:53:04+00:00'
+      note: 'Three passages: the five-commands paragraph gains the already-running
+        refusal and --redispatch; the manual-phase section gains the trailing-or-complete
+        rule, where it fires, and ''never dispatched''; the diagram''s front-load
+        branch now ends with the operator ticking the phase.'
+    P6.T1.S3:
+      state: x
+      ticked_at: '2026-09-20T16:53:10+00:00'
+      note: 'Regenerated with the same verified command from /; git diff --stat: 39
+        insertions, 1 deletion, all of them the S2 paragraphs. test_tripwire_explainers_fresh.py:
+        3 passed.'
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-09-20T17:06:03+00:00'
+      note: 'scripts/bump-version.py minor: 4.8.0 -> 4.9.0 in 9 files, uv sync run,
+        fr --version reports 4.9.0. Minor because this PR adds fr run advance --redispatch,
+        fr run start --session/--harness and a mandatory refusal.'
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-09-20T17:06:10+00:00'
+      note: 'All eight green, verdicts in journal p6-gates: ruff ''All checks passed!'';
+        mypy ''no issues found in 138 source files''; pytest ''3330 passed, 80 skipped''
+        + ''Required test coverage of 75% reached. Total coverage: 91.76%''; bump
+        --check ''ok — versions agree''; acceptance ''129 rows OK''; parity ''declared
+        matrix agrees''; validate artifacts ''33 artifact(s) checked''; sync-opencode
+        --check in sync (and sync-hermes, per p3-d1).'
+    P6.T2.S3:
+      state: x
+      ticked_at: '2026-09-20T17:06:16+00:00'
+      note: 'no-refactor-because: P6.T2 — journal nrb-P6-T2. All three named duplications
+        are already single definitions with two or more call sites; the one repetition
+        left (the manual-items dict merge) is one line with two different justifications
+        and was kept deliberately. One latent unfixed defect recorded as x6.'
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-09-20T16:59:10+00:00'
+      note: 'RED confirmed by reading the output, not assumed: both refusals arrive
+        folded as ''is not a linked git \nworktree'' / ''container evidence'' straddling
+        a newline, with a 116-char macOS tmp_path embedded ahead of them. Host-dependent
+        by construction.'
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-09-20T16:59:15+00:00'
+      note: 'Fixed the SOURCE: run_cmd.py''s RunWorkspaceError handler now prints
+        with soft_wrap=True, like every other refusal in the module. tests/unit/test_run_workspace.py
+        is byte-unchanged (git diff --stat empty) and all 9 pass.'
+    P6.T3.S3:
+      state: x
+      ticked_at: '2026-09-20T16:59:21+00:00'
+      note: The fourth source is defeated by pointing HOME at an empty tmp dir for
+        the invocation, which is what a host with no marketplace clone actually is
+        — stronger than patching MARKETPLACE_ROOT, since it also covers any later
+        home-derived source. 28 passed.
+    P6.T3.S4:
+      state: x
+      ticked_at: '2026-09-20T16:59:27+00:00'
+      note: 'Full suite: 3330 passed, 80 skipped, 0 failed (was 3 failed / 3327 passed).
+        Finding p1-f2 resolved fixed with both causes and the commit that fixed each;
+        fr journal check --scope plan is clean.'
+  completion:
+    at: '2026-09-20T17:06:55+00:00'
+    note: null
+    observed_prs: []

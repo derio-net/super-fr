@@ -62,6 +62,49 @@ def _validate_scope(scope: str) -> None:
         raise typer.Exit(2)
 
 
+def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[str, str]:
+    """Resolve `check`'s `--slug`/`--plan-dir` pair, exit 2 if neither resolves.
+
+    `check` is the one journal verb where `--slug` is optional, because a
+    `kind: cli` manifest step (spec §C) can interpolate `{{ artifacts.plan }}`
+    as `--plan-dir` but cannot compute that folder's basename itself — without
+    this, `--require-reviews` is not expressible as a manifest step at all.
+    `--plan-dir` defaults symmetrically from `--slug` (mirroring `fr journal
+    handoff`'s existing default of `docs/superpowers/plans/<slug>`) so either
+    option alone is sufficient.
+
+    A plan dir with no final component (`.`, `""`, a bare `/`) derives an EMPTY
+    slug, and an empty slug is not a harmless one: it resolves the journal
+    `journals/plans/.md`, which does not exist, which `_load` reads as an empty
+    journal, so the whole command — including the pre-existing open-findings
+    rule — exits 0 having checked nothing. Review r-p1-f1 found this live:
+    `--plan-dir .` exited 0 on a plan whose journal carries four open findings.
+    A gate whose premise is failing closed cannot have a spelling of its own
+    arguments that fails open, so the empty derivation is refused here.
+
+    Structured as two early returns rather than one combined guard so that
+    neither branch needs a `type: ignore` for `Path(None)` (review r-p1-f5): a
+    guard that mypy can check is one a later edit cannot silently loosen.
+    """
+    if plan_dir is not None:
+        resolved_slug = slug if slug is not None else Path(plan_dir).name
+        # `.` and `..` are path-navigation tokens, not names: `Path("a/b/..").name`
+        # is `".."`, which is non-empty and so survives an emptiness check while
+        # resolving the journal `plans/...md` — the same fail-open by a
+        # different spelling, caught by the test written for the empty case.
+        if resolved_slug in ("", ".", ".."):
+            err_console.print(
+                f"[red]cannot derive a journal slug from --plan-dir {plan_dir!r}[/red] — "
+                "pass --slug, or a plan dir whose last component is the plan slug"
+            )
+            raise typer.Exit(2)
+        return resolved_slug, plan_dir
+    if slug is not None:
+        return slug, f"docs/superpowers/plans/{slug}"
+    err_console.print("[red]give --slug or --plan-dir (at least one is required)[/red]")
+    raise typer.Exit(2)
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -299,7 +342,25 @@ def render(
 @journal_app.command("check")
 def check(
     scope: str = typer.Option(..., "--scope"),
-    slug: str = typer.Option(..., "--slug"),
+    slug: str | None = typer.Option(
+        None,
+        "--slug",
+        help="Journal slug. Required unless --plan-dir is given (then derived "
+        "as the plan dir's basename).",
+    ),
+    require_reviews: bool = typer.Option(
+        False,
+        "--require-reviews",
+        help="Also fail when a phase the plan claims is done has no recorded "
+        "`review` journal entry naming it. --scope plan only.",
+    ),
+    plan_dir: str | None = typer.Option(
+        None,
+        "--plan-dir",
+        help="Plan folder (default docs/superpowers/plans/<slug>) --require-reviews "
+        "checks phases against. May be given instead of --slug, which is then "
+        "derived as this folder's basename.",
+    ),
 ) -> None:
     """Freshness gate. Non-zero on a parse error or any EFFECTIVELY open finding.
 
@@ -307,22 +368,123 @@ def check(
     record no longer counts, and one re-opened by a later record counts again
     (spec §3.G.1). A journal with no resolution records — every journal written
     before that verb existed — gates exactly as it did before.
+
+    `--require-reviews` additionally fails when a locally-complete, non-manual
+    phase has no `kind=review` entry naming it — opt-in, so `fr journal check
+    --scope plan` without the flag behaves exactly as it did before the flag
+    existed.
     """
     _validate_scope(scope)
+    # Scope refusals come FIRST, before any slug resolution (review r-p1-f3).
+    # Both are unsatisfiable whatever slug is supplied, so reporting a missing
+    # `--slug` here would send the operator to fix the wrong thing and learn
+    # the real objection only on the next run.
+    if require_reviews and scope != "plan":
+        err_console.print(
+            f"[red]--require-reviews needs --scope plan (got {scope!r}) — only "
+            "plan journals have phases[/red]"
+        )
+        raise typer.Exit(2)
+    if plan_dir is not None and scope != "plan":
+        err_console.print(
+            f"[red]--plan-dir needs --scope plan (got {scope!r})[/red] — it names a "
+            "plan, and outside plan scope it would silently pick a "
+            f"{scope} journal named after that folder"
+        )
+        raise typer.Exit(2)
+    resolved_slug, resolved_plan_dir = _resolve_slug_and_plan_dir(slug, plan_dir)
     root = resolve_repo_root()
     # Read-resolve so a check still gates on an archived journal's findings.
-    path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    path = resolve_journal_read_path(root, scope, resolved_slug)  # type: ignore[arg-type]
     try:
         entries = _load(path)
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
+    failed = False
     still_open = open_finding_ids(entries)
     if still_open:
         # Output shape unchanged ("N open finding(s): <ids>") — things grep it.
+        # Printed FIRST, and always, so composition with the reviews gate below
+        # never reorders or swallows this line (spec §B, P2.T2.S1(f)).
         err_console.print(
             f"[yellow]{len(still_open)} open finding(s):[/yellow] " + ", ".join(still_open)
         )
+        failed = True
+    if require_reviews:
+        # Imported here, not at module scope, so the cost of importing the
+        # plan parser/renderer stays off every `fr journal` verb that never
+        # touches a plan (the same convention `handoff` already uses below).
+        from fr.journal.model import reviewed_phases
+        from fr.parser import PlanSchemaError, parse
+        from fr.render import plan_locally_complete
+
+        plan_path = root / resolved_plan_dir
+        try:
+            plan = parse(plan_path)
+        except (PlanSchemaError, OSError) as e:
+            # `markup=False, soft_wrap=True`, not a bare print (review r-p2-f4):
+            # pydantic's error text carries `[type=missing, input_value=...]`,
+            # which Rich parses as a style tag and SILENTLY DROPS — the most
+            # diagnostic half of the message vanishing from a fail-closed exit.
+            # Wrapping likewise folds the absolute plan path mid-token.
+            err_console.print(
+                f"cannot check --require-reviews: plan {plan_path} is not parseable ({e})",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2) from e
+        # A plan that parses to ZERO phases must not read as "nothing owed"
+        # (review r-p2-f1). `parse` silently ignores any file not matching
+        # `NN.yaml`, so a phase file misnamed `1.yaml` or `02.yml` yields
+        # `phases == ()` — and a plan with real, complete, unreviewed phases
+        # would sail through green. That is the vacuous pass this gate exists
+        # to abolish, so it is refused rather than reported as clean. Spec §B:
+        # a gate that cannot read the plan does not know whether it passed.
+        if not plan.phases:
+            err_console.print(
+                f"cannot check --require-reviews: plan {plan_path} has no phase files "
+                "(NN.yaml, zero-padded) — refusing rather than reporting a vacuous pass",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        # Which completion predicate, and why it matters (spec §B): NOT
+        # `_phase_complete` (needs an observed merged PR that never exists
+        # during an fr-goal run — a gate built on it would pass every plan
+        # forever). `plan_locally_complete` answers "does the plan ITSELF
+        # claim this phase is done" — completion.at set OR every step ticked
+        # — which is what this gate actually asks. Tag-agnostic by design, so
+        # the [manual] exemption (spec D4) is applied here at the call site.
+        owed = {
+            p.phase.number
+            for p in plan.phases
+            if plan_locally_complete(p) and p.phase.tag != "manual"
+        }
+        missing = sorted(owed - reviewed_phases(entries))
+        if missing:
+            phases_str = ", ".join(str(n) for n in missing)
+            err_console.print(
+                f"[red]{len(missing)} phase(s) owed a review, none recorded: {phases_str}[/red]"
+            )
+            for n in missing:
+                # `soft_wrap=True` is load-bearing, not cosmetic (review
+                # r-p2-f2): this line ENDS IN A COMMAND the reader is meant to
+                # paste. Rich folds at column 80 in any non-TTY — a pipe, CI,
+                # or `fr run advance` executing the `kind: cli` step, which is
+                # precisely the consumer spec D3 designed this for — turning
+                # one command into three broken ones. Same convention and same
+                # reason as `run_cmd.py`'s gate lines and `archive_cmd.py`.
+                err_console.print(
+                    f"  fr journal add --scope plan --slug {resolved_slug} --kind review "
+                    f'--phase {n} --title "phase {n} review" '
+                    "--body \"<findings raised, by id; or 'no findings'>\"",
+                    markup=False,
+                    soft_wrap=True,
+                )
+            err_console.print("(manual phases are exempt from --require-reviews — spec D4)")
+            failed = True
+    if failed:
         raise typer.Exit(1)
 
 

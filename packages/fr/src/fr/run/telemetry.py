@@ -6,11 +6,31 @@ Two jobs, kept apart on purpose:
    path, selects `type == "assistant"` records, PROJECTS `message.usage` onto
    the four named keys, and returns a sum. It knows nothing about phases,
    runs, agents or fr-goal.
-2. **Attributing** — decide which dispatched unit a transcript belongs to. It
-   takes a session file and a time window and returns at most one dispatch.
-   This half is the fr-goal-shaped one.
+2. **Attributing** — decide which transcript belongs to one ATTEMPT of a
+   dispatched unit. It takes the four facts the run cursor records about that
+   attempt — `(session, agent)` and its `[dispatched, returned]` window — and
+   returns at most one dispatch. This half is the fr-goal-shaped one.
 
-`measure_unit` is the only place they meet.
+`measure_attempt` is the only place they meet, and `select_for_attempt` is the
+only place the attribution RULE lives (spec §4.D / §4.D.1):
+
+- a CLAIMED attempt is selected by its agent id, which is also the
+  transcript's filename, so overlapping dispatches — two phases in parallel,
+  or `advance --redispatch` racing a slow return — neither lose nor swap their
+  measurements;
+- an UNCLAIMED one falls back to the time window, and **only** when the
+  attempt's recorded session is the session this process is in. A window from
+  another session can contain exactly one unrelated subagent of THIS one, and
+  charging that stranger's cost to the attempt would be a wrong number
+  reported as a measurement. "Not observable from here" is the honest answer;
+  it is never zero and never borrowed.
+
+The transcript is looked up in the **recorded** session's directory, never the
+current one. That is what lets a new session on the same host still measure an
+earlier session's attempt — and what makes another host come back honestly
+empty. No hostname is recorded anywhere: a missing session directory already
+says "elsewhere", and a hostname in a public repo's committed cursor is
+identity nobody needs.
 
 **No harness API is called.** Everything here reads files the harness already
 writes. Claude Code is the one implementation; OpenCode and Hermes keep the V1
@@ -117,7 +137,7 @@ class UsageTotals:
         )
 
     def as_fields(self) -> dict[str, int]:
-        """The four figures, keyed as `PhaseAccounting` names them."""
+        """The four figures, keyed as `fr.run.model.MeasuredTokens` names them."""
         return {key: getattr(self, key) for key in USAGE_KEYS}
 
 
@@ -364,6 +384,46 @@ def select_dispatch(dispatches: list[Dispatch], *, start: str, end: str) -> Disp
     return inside[0] if len(inside) == 1 else None
 
 
+def select_for_attempt(
+    dispatches: list[Dispatch],
+    *,
+    agent: str | None,
+    start: str,
+    end: str,
+    same_session: bool,
+) -> Dispatch | None:
+    """THE decision: which of `dispatches` belongs to one attempt (spec §4.D).
+
+    Two paths, ONE function — the session rule lives here and nowhere else,
+    so the id path and the window path cannot each grow their own version of
+    it:
+
+    - **by agent id** — exact. A CLAIMED attempt carries the harness's own
+      agent id, which is also the transcript's filename
+      (`subagents/agent-<agentId>.jsonl`), so overlapping dispatches neither
+      lose nor swap their measurements and no window is consulted at all. An
+      id that matches nothing yields nothing: the window is not a second
+      chance at a question already answered exactly.
+    - **by window** — the fallback for an UNCLAIMED attempt, where the
+      dispatch-to-return interval the cursor already records is all fr has.
+      Allowed **only when `same_session`** (§4.D.1). Across sessions a window
+      is not merely unhelpful, it is dangerous: host B resolving host A's open
+      attempt at T2 gets `[T0, T2]`, which can contain exactly ONE subagent —
+      one host B dispatched itself, for something unrelated — and
+      `select_dispatch` would accept that stranger's cost as host A's. Wrong,
+      and plausible-looking. Never zero, never guessed, never borrowed.
+
+    `same_session` is a PROOF the caller supplies (`dispatched_from_this_
+    session`), never a default: an attempt with no recorded session is not
+    claimed to be this one's.
+    """
+    if agent is not None:
+        return next((d for d in dispatches if d.agent_id == agent), None)
+    if not same_session:
+        return None
+    return select_dispatch(dispatches, start=start, end=end)
+
+
 # --- 3. harness scoping --------------------------------------------------
 
 
@@ -374,11 +434,15 @@ class TranscriptReader(Protocol):
 
     harness: str
 
-    def locate_session(self, env: Mapping[str, str]) -> Path | None:
-        """The orchestrator transcript for this process's session, if findable."""
+    def locate_session(self, env: Mapping[str, str], session: str | None = None) -> Path | None:
+        """The orchestrator transcript for `session` — the session a run
+        cursor RECORDED — or, absent one, for this process's own."""
 
-    def measure(self, session: Path, *, start: str, end: str) -> Measurement | None:
-        """What the unit dispatched inside `[start, end]` cost, if measurable."""
+    def measure(
+        self, session: Path, *, agent: str | None, start: str, end: str, same_session: bool
+    ) -> Measurement | None:
+        """What one attempt cost, if measurable — selected by `agent` when it
+        has one, else by the window `[start, end]` and only `same_session`."""
 
 
 def transcript_root(env: Mapping[str, str]) -> Path:
@@ -388,8 +452,43 @@ def transcript_root(env: Mapping[str, str]) -> Path:
     return Path.home() / CLAUDE_CODE_PROJECTS
 
 
-def claude_code_session(env: Mapping[str, str]) -> Path | None:
+def current_session(env: Mapping[str, str]) -> str | None:
+    """The harness session id THIS process is running in, or `None`.
+
+    Derived from fr's own environment, the way `detect_harness` derives the
+    harness — `fr run advance` records it on every attempt it opens, and
+    `fr run status` compares against it, so the two must be one rule and not
+    two `env.get(...)` calls that can drift. One harness has a session concept
+    today, hence one key; an empty value is `None`, never the empty string,
+    because `"" == ""` would make two session-less processes "the same
+    session".
+    """
+    return env.get(SESSION_ID_ENV) or None
+
+
+def dispatched_from_this_session(env: Mapping[str, str], session: str | None) -> bool:
+    """Was `session` the session this process is running in? (§4.D.1)
+
+    A PROOF, never a default. `None` on either side is *not knowing*, and not
+    knowing is not a match: an attempt with no recorded session — every one
+    written before the field existed, and every harness with no session
+    concept — does not get this session's window, and neither does a real
+    session id compared against a process that has none.
+    """
+    current = current_session(env)
+    return session is not None and current is not None and session == current
+
+
+def claude_code_session(env: Mapping[str, str], session: str | None = None) -> Path | None:
     """`<root>/<cwd-slug>/<session-id>.jsonl`, found by session id.
+
+    `session` names the session a run cursor RECORDED, which is the one whose
+    transcripts answer for that attempt (§4.D.1); absent, this process's own
+    is used. Looking in the recorded session's directory rather than the
+    current one is what lets a NEW session on the same host still measure an
+    earlier one's attempt — and what makes another HOST come back empty,
+    since the directory simply is not there. A missing directory already says
+    "elsewhere", so no hostname is recorded anywhere.
 
     The project directory is named after the harness's LAUNCH directory, which
     is not derivable from fr's own working directory (fr runs inside the
@@ -397,7 +496,7 @@ def claude_code_session(env: Mapping[str, str]) -> Path | None:
     matched across every project directory instead of guessing the slug.
     More than one match is ambiguous and yields nothing.
     """
-    session_id = env.get(SESSION_ID_ENV)
+    session_id = session or current_session(env)
     if not session_id:
         return None
     root = transcript_root(env)
@@ -413,11 +512,21 @@ class ClaudeCodeReader:
 
     harness = "claude-code"
 
-    def locate_session(self, env: Mapping[str, str]) -> Path | None:
-        return claude_code_session(env)
+    def locate_session(self, env: Mapping[str, str], session: str | None = None) -> Path | None:
+        return claude_code_session(env, session)
 
-    def measure(self, session: Path, *, start: str, end: str) -> Measurement | None:
-        return measure_dispatch(session, start=start, end=end)
+    def measure(
+        self,
+        session: Path,
+        *,
+        agent: str | None = None,
+        start: str,
+        end: str,
+        same_session: bool = True,
+    ) -> Measurement | None:
+        return measure_dispatch(
+            session, agent=agent, start=start, end=end, same_session=same_session
+        )
 
 
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
@@ -433,14 +542,28 @@ def reader_for(harness: str | None) -> TranscriptReader | None:
     return READERS.get(harness)
 
 
-def measure_dispatch(session: Path, *, start: str, end: str) -> Measurement | None:
-    """Read + attribute: what the unit dispatched inside `[start, end]` cost.
+def measure_dispatch(
+    session: Path,
+    *,
+    agent: str | None = None,
+    start: str,
+    end: str,
+    same_session: bool = True,
+) -> Measurement | None:
+    """Read + attribute: what one attempt of `session` cost.
 
     `None` at every step that cannot be completed honestly — no session file,
-    no attributable dispatch, an ambiguous window, an unreadable transcript.
-    The caller records nothing and says so.
+    no attributable dispatch, an unmatched agent id, an ambiguous window, a
+    window this session may not use, an unreadable transcript. The caller
+    records nothing and says so.
     """
-    dispatch = select_dispatch(attribute_dispatches(session), start=start, end=end)
+    dispatch = select_for_attempt(
+        attribute_dispatches(session),
+        agent=agent,
+        start=start,
+        end=end,
+        same_session=same_session,
+    )
     if dispatch is None:
         return None
     totals = read_claude_code(dispatch.transcript)
@@ -455,8 +578,27 @@ def measure_dispatch(session: Path, *, start: str, end: str) -> Measurement | No
     )
 
 
-def measure_unit(env: Mapping[str, str], *, start: str, end: str) -> Measurement | None:
-    """The whole path, from a process environment to numbers — or `None`.
+def measure_attempt(
+    env: Mapping[str, str],
+    *,
+    session: str | None,
+    agent: str | None,
+    start: str,
+    end: str,
+) -> Measurement | None:
+    """The whole path, from one ATTEMPT's four facts to numbers — or `None`.
+
+    `(session, agent)` is the attempt's own identity as `fr run advance`
+    recorded it, and `[start, end]` is its own `[dispatched, returned]`
+    window. Three things follow, all of them §4.D.1:
+
+    1. the transcript is looked up in the **recorded** session's directory,
+       not this process's — so a new session on the same host still measures
+       an earlier session's attempt;
+    2. another host has no such directory, so the answer is honestly nothing;
+    3. the window is offered to `select_for_attempt` only with the proof of
+       whether the recorded session IS this one. The decision itself lives
+       there, once.
 
     Never raises: telemetry is observability, and an unreadable transcript
     must not be able to fail a dispatch or a resolve.
@@ -465,10 +607,16 @@ def measure_unit(env: Mapping[str, str], *, start: str, end: str) -> Measurement
         reader = reader_for(detect_harness(env))
         if reader is None:
             return None
-        session = reader.locate_session(env)
-        if session is None:
+        transcript = reader.locate_session(env, session)
+        if transcript is None:
             return None
-        return reader.measure(session, start=start, end=end)
+        return reader.measure(
+            transcript,
+            agent=agent,
+            start=start,
+            end=end,
+            same_session=dispatched_from_this_session(env, session),
+        )
     except (OSError, HarnessError):
         # `detect_harness` RAISES on an `FR_HARNESS` value outside the closed
         # set — correct there (a typo must not become an inference) and wrong
@@ -487,12 +635,15 @@ __all__ = [
     "UsageTotals",
     "attribute_dispatches",
     "claude_code_session",
+    "current_session",
+    "dispatched_from_this_session",
+    "measure_attempt",
     "measure_dispatch",
-    "measure_unit",
     "parse_timestamp",
     "read_claude_code",
     "reader_for",
     "select_dispatch",
+    "select_for_attempt",
     "session_dir",
     "tool_use_ids",
     "transcript_root",
