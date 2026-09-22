@@ -3595,3 +3595,35 @@ rows:
       - super-fr:tests/unit/test_triage_render.py
     status: ci
     notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.
+  - id: opencode-plugin-single-idle-nudge
+    capability: OpenCode adaptation
+    acceptance: When OpenCode loads the plugin twice (global install plus a project-local
+      copy), an idle run still gets one continuation nudge per run position
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
+    status: ci
+    notes: 'gh#563 consequence: global delivery doubles the load wherever a repo also
+      loads the plugin locally (super-fr itself). The once-per-position memory is shared
+      via globalThis; bun test pins one send for two instances (red first: 2 sends).'
+  - id: opencode-plugin-delivered
+    capability: OpenCode adaptation
+    acceptance: An operator who runs scripts/install.sh with OpenCode gets super-fr's
+      OpenCode plugin (edit gate + idle adapter) installed globally in a form OpenCode
+      loads, and --uninstall removes exactly it
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_plugin_delivery.py
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py
+    status: ci
+    notes: 'gh#563. Unit: deliver-opencode-plugin.sh behaviour (top-level loader + sources,
+      wholesale replace, scoped uninstall) and install.sh wiring. Integration, CI (opencode-plugin-test
+      job, opencode-ai@1.18.32, FR_REQUIRE_OPENCODE=1): the real binary registers the
+      delivered loader, and a sentinel plugin loaded by OpenCode''s own runtime imports
+      it and gets a base-clone edit refused / an out-of-repo edit allowed. A mutation
+      deleting one delivered module left registration green and failed the runtime probe.'

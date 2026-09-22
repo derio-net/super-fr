@@ -69,6 +69,17 @@ jobs:
       - name: Run OpenCode plugin tests
         working-directory: packages/fr-opencode-plugin
         run: bun test
+      # gh#563: the plugin install.sh DELIVERS must be one the real OpenCode
+      # binary loads and runs. Pinned to the version the probe was written
+      # against; FR_REQUIRE_OPENCODE=1 turns a missing binary into a failure,
+      # so the probe cannot silently skip here.
+      - name: Install OpenCode
+        run: npm install -g opencode-ai@1.18.32
+      - uses: astral-sh/setup-uv@v4
+      - name: Live delivery probe (real opencode binary)
+        env:
+          FR_REQUIRE_OPENCODE: "1"
+        run: uv run pytest --no-cov -q tests/integration/test_opencode_plugin_live.py
 
   version-sync:
     runs-on: ubuntu-latest

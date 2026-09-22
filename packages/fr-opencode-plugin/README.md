@@ -45,30 +45,36 @@ installed SDK's types and the tests drive the handler with a fake client; that a
 plugin-originated prompt on idle actually *executes* in a live session has not
 been shown. A green `bun test` does not show it.
 
+## How consumers get it
+
+super-fr's `install.sh` delivers it (gh#563), under the same opt-in as the
+OpenCode skills and agents (`~/.config/opencode` exists, or
+`OPENCODE_SKILLS_INSTALL=1`). `scripts/deliver-opencode-plugin.sh` writes:
+
+```
+~/.config/opencode/plugins/fr-opencode-plugin.ts     the loader OpenCode loads
+~/.config/opencode/plugins/fr-opencode-plugin/*.ts   this package's src/
+```
+
+OpenCode loads only top-level `*.ts`/`*.js` files in that directory, so the
+sources sit in a subdirectory it does not scan, and the loader re-exports
+them. There is no build step: OpenCode runs plugins on Bun, which runs
+TypeScript directly. `install.sh --uninstall` removes both paths. Nothing
+per repo is needed: the hook is a no-op outside an fr-enabled repo (no
+`.devcontainer/*/` profile and no `docs/superpowers/plans/`).
+
+`tests/integration/test_opencode_plugin_live.py` checks the delivered copy
+against the real `opencode` binary: it is registered, and OpenCode's own
+runtime imports it and refuses a base-clone edit. CI runs it pinned to the
+OpenCode version it was written against.
+
 ## Using it in this repo
 
 This repo loads it automatically via `.opencode/plugins/fr-isolation-required.ts`,
-a thin re-export of `src/index.ts`. No extra setup needed for OpenCode
-sessions run from within this repository.
-
-## Using it in another repo
-
-1. Install the package (once published) or vendor this directory.
-2. Add it to your repo's `opencode.json`:
-
-   ```json
-   {
-     "plugin": ["fr-opencode-plugin"]
-   }
-   ```
-
-   or, if consuming from a local path / monorepo checkout, point at the
-   built entry point directly per OpenCode's local-plugin loading
-   conventions.
-3. Ensure your repo actually has an fr-isolation marker workflow (a
-   `.devcontainer/*/devcontainer.json` profile and/or
-   `docs/superpowers/plans/`) — otherwise the hook is a no-op (`frEnabled`
-   is false and every edit is allowed).
+a thin re-export of `src/index.ts`. On a machine that also ran `install.sh`,
+OpenCode then loads two copies. That is safe: both refuse the same edits, and
+the idle adapter's once-per-position memory is shared process-wide, so it
+still sends one nudge, not two.
 
 ## Development
 

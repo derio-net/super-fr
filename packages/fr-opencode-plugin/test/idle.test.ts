@@ -18,7 +18,7 @@ import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import { createIdleHandler, type FrAnswer } from "../src/idle";
+import { createIdleHandler, SHARED_ACTED_ON, type FrAnswer } from "../src/idle";
 import { FrIsolationRequired } from "../src/index";
 
 const IDLE = {
@@ -293,6 +293,9 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
     dir = realpathSync(mkdtempSync(join(tmpdir(), "fr-opencode-idle-")));
     savedPath = process.env.PATH;
     process.env.PATH = `${dir}${delimiter}${savedPath ?? ""}`;
+    // The plugin's once-per-position memory is process-wide on purpose (see
+    // the double-load test below); each test starts from a clean process.
+    delete (globalThis as Record<symbol, unknown>)[SHARED_ACTED_ON];
   });
 
   afterEach(() => {
@@ -309,6 +312,23 @@ describe("idle guard (OpenCode): wired into the plugin, running a real process",
       worktree: dir,
     });
   }
+
+  // gh#563: install.sh delivers a GLOBAL copy of this plugin, and a repo that
+  // also loads it project-locally (super-fr itself, via .opencode/plugins/,
+  // or a consumer's opencode.json) gets two instances in one OpenCode
+  // process. The edit gate doubling is harmless; the idle nudge doubling is
+  // not — each instance would send its own "run is idle" prompt.
+  test("two loaded copies send ONE nudge per run position, not two", async () => {
+    stubFr(`printf '%s\\n' '${JSON.stringify(IDLE)}'\nexit 3`);
+    const { client, sent } = fakeClient();
+    const project = await plugin(client);
+    const global = await plugin(client);
+
+    await project.event!(idleEvent());
+    await global.event!(idleEvent());
+
+    expect(sent).toHaveLength(1);
+  });
 
   test("the plugin exposes an `event` hook beside tool.execute.before", async () => {
     const hooks = await plugin(fakeClient().client);
