@@ -85,3 +85,33 @@ def test_state_file_without_target_key_loads_as_none(tmp_path: Path) -> None:
 def test_unknown_target_value_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         _state(tmp_path, profile="dev", target="host")
+
+
+def test_an_unknown_key_is_tolerated_so_an_older_fr_can_read_a_newer_file(tmp_path: Path) -> None:
+    # §3.C: the state file is shared across fr versions on one host. Adding
+    # `target` is only safe because IsolationState ignores keys it does not know;
+    # `extra="forbid"` here would make every older fr refuse a newer file.
+    repo = make_repo(tmp_path)
+    payload = _state(repo, profile="dev", target="devcontainer").model_dump(mode="json")
+    payload["future_field"] = 1
+    assert IsolationState.model_validate(payload).target == "devcontainer"
+
+
+def test_list_states_skips_an_unparseable_state_and_names_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # One bad file (a newer fr's unknown mode) must not blind status/gc to every
+    # other workspace; the addressed workspace itself still fails closed via load_state.
+    from fr.isolation.types import list_states
+
+    repo = make_repo(tmp_path)
+    good = _state(repo, profile="dev", target="devcontainer")
+    save_state(good)
+    bad = state_path(repo, "feat/future")
+    bad.write_text(
+        json.dumps({**good.model_dump(mode="json"), "branch": "feat/future", "target": "remote"})
+    )
+    assert [s.branch for s in list_states(repo)] == ["feat/x"]
+    assert "feat__future.json" in capsys.readouterr().err
+    with pytest.raises(ValueError):
+        load_state(repo, "feat/future")

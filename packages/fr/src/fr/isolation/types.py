@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fr.artifacts.atomic import write_text_atomic
 
@@ -147,10 +148,27 @@ def load_state(repo_root: Path, branch: str) -> IsolationState | None:
 
 
 def list_states(repo_root: Path) -> list[IsolationState]:
+    """Every readable state record for the repo.
+
+    A record this fr cannot validate (e.g. a newer fr's unknown `target` mode)
+    is skipped and named on stderr rather than raised: one foreign file must not
+    blind `status`/`gc` to every other workspace. `load_state` stays strict, so
+    the workspace that file describes still fails closed when addressed.
+    """
     d = state_dir(repo_root)
     if not d.is_dir():
         return []
-    return [IsolationState.model_validate_json(f.read_text()) for f in sorted(d.glob("*.json"))]
+    states: list[IsolationState] = []
+    for f in sorted(d.glob("*.json")):
+        try:
+            states.append(IsolationState.model_validate_json(f.read_text()))
+        except ValidationError as err:
+            print(
+                f"warning: skipping unreadable isolation state {f} "
+                f"({err.error_count()} validation error(s)) — written by a newer fr?",
+                file=sys.stderr,
+            )
+    return states
 
 
 def sentinel_dir() -> Path:
