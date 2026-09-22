@@ -81,9 +81,18 @@ because an ambiguous name would leave the tripwire unable to say which
 harness a bare mention serves."""
 
 ARGUMENT_VOCABULARY: dict[str, dict[str, re.Pattern[str]]] = {
-    "claude-code": {},
+    "claude-code": {
+        'isolation: "worktree"': re.compile(r"""isolation\s*[:=]\s*["']?worktree\b"""),
+        "run_in_background": re.compile(r"\brun_in_background\b"),
+    },
+    # OpenCode's `timeout` is deliberately NOT registered (spec §3.A): it is
+    # ordinary English and would fire on every sentence about a timeout — the
+    # same trade TOOL_VOCABULARY states for `task`. A limit, not an oversight.
     "opencode": {},
-    "hermes": {},
+    "hermes": {
+        "background=true": re.compile(r"\bbackground\s*=\s*true\b"),
+        "notify_on_complete": re.compile(r"\bnotify_on_complete\b"),
+    },
     "codex": {},
     "copilot-cli": {},
 }
@@ -96,10 +105,11 @@ Same closed-world rule, keyed by every member of `HARNESSES`. Each harness
 maps an argument name (what a violation reports) to a compiled-at-import
 regex rather than a bare string, because an argument can be spelled several
 ways in prose (`isolation: "worktree"` vs. `isolation="worktree"`) where a
-tool name is one literal token. Phase 1 ships every harness with an empty
-mapping — the shape proven, no pattern populated yet; Phase 2 fills in the
-real patterns and wires `scan_prose` to scan them under the same clause
-rules as `TOOL_VOCABULARY`."""
+tool name is one literal token. Patterns are case-sensitive and are the
+spec §3.A table verbatim. `scan_prose` scans them under exactly the same
+clause rules as `TOOL_VOCABULARY`, and no name may be claimed by two
+harnesses across the two vocabularies together
+(`test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies`)."""
 
 
 def load_matrix() -> Matrix:

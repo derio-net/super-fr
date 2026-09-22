@@ -28,16 +28,8 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from fr.harness import HARNESSES, TOOL_VOCABULARY
+from fr.harness import ARGUMENT_VOCABULARY, HARNESSES, TOOL_VOCABULARY
 from fr.harness.model import HarnessError
-
-# Every mention needs its owning harness looked up; TOOL_VOCABULARY is
-# built the other way around (harness -> tools), so invert it once. The
-# module-level `test_no_tool_name_is_claimed_by_two_harnesses` guarantees
-# this inversion loses nothing.
-_HARNESS_BY_TOOL: dict[str, str] = {
-    tool: harness for harness, tools in TOOL_VOCABULARY.items() for tool in tools
-}
 
 # What a clause names is the HARNESS a reader is on, not necessarily that
 # harness's own tool — a clause explaining "Hermes has no dedicated tool
@@ -51,11 +43,38 @@ _HARNESS_LABELS: dict[str, str] = {
     "codex": "Codex",
     "copilot-cli": "Copilot CLI",
 }
-if set(_HARNESS_LABELS) != set(HARNESSES):  # pragma: no cover — import-time invariant
-    raise HarnessError(
-        "TOOL_VOCABULARY/_HARNESS_LABELS disagree with HARNESSES: "
-        f"{sorted(set(_HARNESS_LABELS) ^ set(HARNESSES))}"
-    )
+
+
+def require_every_harness(name: str, mapping: Mapping[str, object]) -> None:
+    """Closed-world key check for a harness-keyed mapping this module consumes:
+    exactly the members of `HARNESSES`, none missing, none extra. The error
+    names `name` — the mapping actually checked (review p1r-m2: the previous
+    inline check blamed `TOOL_VOCABULARY` while checking `_HARNESS_LABELS`)."""
+    if set(mapping) != set(HARNESSES):
+        raise HarnessError(
+            f"{name} disagrees with HARNESSES: {sorted(set(mapping) ^ set(HARNESSES))}"
+        )
+
+
+# Import-time invariants: a vocabulary missing a harness would silently scan
+# nothing for it.
+require_every_harness("_HARNESS_LABELS", _HARNESS_LABELS)
+require_every_harness("TOOL_VOCABULARY", TOOL_VOCABULARY)
+require_every_harness("ARGUMENT_VOCABULARY", ARGUMENT_VOCABULARY)
+
+
+@dataclass(frozen=True)
+class _Lookup:
+    """One harness-specific name and how to find it in a line. A tool name is
+    one literal token, matched by `_word_pattern`; an argument carries its own
+    compiled pattern because it has several spellings. Either way `scan_prose`
+    judges a match by the same clause rules — this is the one place both
+    vocabularies meet, so the clause logic exists once."""
+
+    harness: str
+    name: str
+    pattern: re.Pattern[str]
+
 
 # `**Harness — <topic>:**` — the em dash and bold markers are load-bearing:
 # they're what makes this shape rare enough to grep for and distinguishable
@@ -106,6 +125,24 @@ def _word_pattern(name: str) -> re.Pattern[str]:
     # labels (`Claude Code`) — same "is this really a standalone mention"
     # question either way.
     return re.compile(rf"(?<![\w-]){re.escape(name)}(?![\w-])")
+
+
+# Built once at import: tool names (`TOOL_VOCABULARY`, harness -> tools) and
+# argument patterns (`ARGUMENT_VOCABULARY`, harness -> name -> regex) flattened
+# into one table. `test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies`
+# guarantees no name appears twice, so a violation's `tool` names one harness.
+_LOOKUPS: tuple[_Lookup, ...] = (
+    *(
+        _Lookup(harness, tool, _word_pattern(tool))
+        for harness, tools in TOOL_VOCABULARY.items()
+        for tool in sorted(tools)
+    ),
+    *(
+        _Lookup(harness, name, pattern)
+        for harness, arguments in ARGUMENT_VOCABULARY.items()
+        for name, pattern in arguments.items()
+    ),
+)
 
 
 def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
@@ -172,17 +209,23 @@ def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[
     spans = _clause_spans(lines)
     valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
 
-    vocabulary = dict(_HARNESS_BY_TOOL)
-    vocabulary.update(extra_tools or {})
+    lookups = [
+        *_LOOKUPS,
+        *(
+            _Lookup(harness, tool, _word_pattern(tool))
+            for tool, harness in (extra_tools or {}).items()
+        ),
+    ]
 
     violations: list[Violation] = []
-    for tool, harness in vocabulary.items():
-        pattern = _word_pattern(tool)
+    for lookup in lookups:
         for line_idx, line in enumerate(lines):
-            if not pattern.search(line):
+            if not lookup.pattern.search(line):
                 continue
             clause = next((s for s in spans if s[0] <= line_idx <= s[1]), None)
             if clause is not None and valid_span[clause]:
                 continue
-            violations.append(Violation(harness=harness, tool=tool, line=line_idx + 1))
+            violations.append(
+                Violation(harness=lookup.harness, tool=lookup.name, line=line_idx + 1)
+            )
     return sorted(violations, key=lambda v: (v.line, v.tool))

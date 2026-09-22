@@ -77,6 +77,11 @@ def test_agent_tree_is_not_empty(tree_name: str) -> None:
     )
 
 
+# Phase 2 of the 2026-09-22 harness-argument-neutrality plan teaches
+# `scan_prose` arguments; the prose they flag is phase 3's to scope. `strict`
+# turns each marker into a hard failure the moment phase 3 fixes the prose and
+# forgets to remove it.
+@pytest.mark.xfail(strict=True, reason="phase 3 scopes fr-goal §2's cross-repo isolation flag")
 def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
     messages = []
     for path in _all_skill_files():
@@ -93,6 +98,7 @@ def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> Non
     )
 
 
+@pytest.mark.xfail(strict=True, reason="phase 3 scopes the executor Long-commands paragraph")
 def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
     messages = []
     for path in _all_agent_files():

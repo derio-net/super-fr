@@ -34,3 +34,18 @@ Phase-1 review minor 2, filed against phase 2 (which makes prose.py consume ARGU
 ### p1-review · review · Phase 1 review — separate reviewer, ready to proceed (phase 1)
 
 Reviewer: separately dispatched general-purpose subagent (a736b1a0f4178ac86), superpowers:requesting-code-review template, range f1fcd157..HEAD. Verdict: ready; no critical/important. Scope exact (nothing from phase 2 pulled forward), type fits phase 2, red recorded (d788290847d4), executor did not touch the run cursor; reviewer re-ran tests/ruff/mypy green. Three minors received and verified: all concern code phase 2 rewrites, so filed against phase 2 as open findings p1r-m1, p1r-m2 (they gate phase 2's review), not fixed twice.
+
+<!-- fr:journal kind=discovery scope=plan id=34ea50f5a3db created=2026-09-22T13:54:20 phase=2 -->
+### 34ea50f5a3db · discovery · P2.T1.S1 RED: arguments not scanned, vocabulary empty, no key-check helper (phase 2)
+
+12 failures, each for the intended reason. test_every_spelling_of_the_isolation_flag_is_the_claude_code_argument[isolation: 'worktree'] (and the 4 other spellings) / test_a_bare_argument_is_a_violation_naming_its_harness[...] (4): AssertionError: assert [] == [Violation(...)] — scan_prose sees no arguments. test_argument_vocabulary_is_exactly_the_spec_table: every harness maps to {}. test_an_argument_inside_a_one_harness_clause_is_still_a_violation: assert [] == ['run_in_background']. test_the_import_time_key_check_names_the_mapping_it_rejects: ImportError: cannot import name 'require_every_harness' from 'fr.harness.prose'. The excused-in-clause and case/word-boundary tests pass vacuously at RED (nothing is scanned) and are meaningful only after GREEN.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-expected-red-phase3 created=2026-09-22T13:55:02 phase=2 -->
+### p2-expected-red-phase3 · discovery · Expected red of phase 3: both neutrality tripwires, marked xfail(strict=True) (phase 2)
+
+Populating ARGUMENT_VOCABULARY (P2.T1.S2) makes the scan flag exactly the prose phase 3 scopes: (1) agent tripwire — plugins/super-fr/agents/fr-phase-executor.md:121 run_in_background (Long-commands paragraph) plus its 4 .opencode/agent mirrors :116 [P3.T2.S1]; (2) skill tripwire — plugins/super-fr/skills/fr-goal/SKILL.md:59 isolation: "worktree" (§2 cross-repo dispatch, outside a clause) plus both mirrors [P3.T2.S2]. The orchestrator's dispatch anticipated only (1); (2) follows from the same vocabulary (spec 3.A removes the agent-only extra_tools, so the flag is now global). Both assertions carry pytest.mark.xfail(strict=True, reason=...) in tests/unit/test_tripwire_skill_tool_neutrality.py: phase 3 MUST remove both markers — strict makes a forgotten marker an XPASS failure.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-expected-red-phase3-dispatch-prose created=2026-09-22T13:55:59 phase=2 -->
+### p2-expected-red-phase3-dispatch-prose · discovery · Expected red of phase 3 also covers two fr-goal whole-file scans in test_fr_goal_dispatch_prose.py (phase 2)
+
+test_the_new_tool_mention_stayed_inside_the_scoped_clause and test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped both assert scan_prose(fr-goal SKILL.md) == [] and now see fr-goal/SKILL.md:59 isolation: "worktree" (§2, P3.T2.S2). Both marked xfail(strict=True); phase 3 must remove these two markers along with the two in test_tripwire_skill_tool_neutrality.py (four markers total).

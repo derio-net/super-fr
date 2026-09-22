@@ -21,8 +21,10 @@ from __future__ import annotations
 from itertools import combinations
 from pathlib import Path
 
-from fr.harness import HARNESSES, TOOL_VOCABULARY
-from fr.harness.prose import Violation, scan_prose
+import pytest
+from fr.harness import ARGUMENT_VOCABULARY, HARNESSES, TOOL_VOCABULARY
+from fr.harness.model import HarnessError
+from fr.harness.prose import Violation, require_every_harness, scan_prose
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -173,19 +175,6 @@ def test_a_clause_naming_every_supported_harness_excuses_its_tools() -> None:
 # --- `extra_tools`: a caller-local name, deliberately NOT in the vocabulary. --
 
 
-def test_extra_tools_flags_a_name_the_global_vocabulary_does_not_carry() -> None:
-    """2026-09-21 agent-body-tool-neutrality spec §2.4. The agent tree needs
-    Claude Code's `isolation: "worktree"` dispatch flag flagged, but registering
-    it in `TOOL_VOCABULARY` would fire on `fr-goal` §2's legitimate, un-scoped
-    cross-repo mention — a different sentence, out of that fix's scope. So the
-    caller supplies it, for its own trees only."""
-    text = 'Dispatch it WITHOUT `isolation: "worktree"`.\n'
-    assert scan_prose(text) == []
-    assert scan_prose(text, extra_tools={'isolation: "worktree"': "claude-code"}) == [
-        Violation(harness="claude-code", tool='isolation: "worktree"', line=1)
-    ]
-
-
 def test_an_extra_tool_is_excused_by_a_scoped_clause_like_any_other() -> None:
     text = (
         '**Harness — dispatch isolation:** Claude Code can pass `isolation: "worktree"`;\n'
@@ -210,14 +199,120 @@ def test_an_unsupported_harness_label_does_not_count_toward_the_bar() -> None:
     ), "unsupported labels must not substitute for a supported harness"
 
 
-# --- ARGUMENT_VOCABULARY: closed-world skeleton (P1.T1) ----------------------
+# --- ARGUMENT_VOCABULARY: harness-specific arguments (spec §3.A) ------------
 
 
 def test_argument_vocabulary_is_keyed_by_exactly_the_harnesses() -> None:
-    """2026-09-22 harness-argument-neutrality spec §3.A, Phase 1 walking
-    skeleton. Same closed-world rule as `TOOL_VOCABULARY`: every member of
-    `HARNESSES` gets a key, none extra — Phase 1 only proves the shape, so
-    every value is empty until Phase 2 populates real argument patterns."""
-    from fr.harness import ARGUMENT_VOCABULARY
-
+    """2026-09-22 harness-argument-neutrality spec §3.A. Same closed-world
+    rule as `TOOL_VOCABULARY`: every member of `HARNESSES` gets a key, none
+    extra — a harness with no arguments of its own maps to an empty dict
+    rather than a missing key. Asserts the KEYS only; the populated values
+    are pinned by the table test below."""
     assert set(ARGUMENT_VOCABULARY) == set(HARNESSES)
+
+
+def test_argument_vocabulary_is_exactly_the_spec_table() -> None:
+    """Spec §3.A's table, verbatim — name and pattern. OpenCode's `timeout`
+    is deliberately absent (ordinary English; stated as a limit)."""
+    patterns = {
+        harness: {name: pattern.pattern for name, pattern in arguments.items()}
+        for harness, arguments in ARGUMENT_VOCABULARY.items()
+    }
+    assert patterns == {
+        "claude-code": {
+            'isolation: "worktree"': r"""isolation\s*[:=]\s*["']?worktree\b""",
+            "run_in_background": r"\brun_in_background\b",
+        },
+        "hermes": {
+            "background=true": r"\bbackground\s*=\s*true\b",
+            "notify_on_complete": r"\bnotify_on_complete\b",
+        },
+        "opencode": {},
+        "codex": {},
+        "copilot-cli": {},
+    }
+
+
+def test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies() -> None:
+    """Review p1r-m2: the uniqueness guard spans tool names AND argument names,
+    since `scan_prose` reports both through one `Violation.tool` field — a name
+    claimed twice, in either vocabulary or across them, could not say which
+    harness a mention serves."""
+    names = {
+        harness: set(TOOL_VOCABULARY[harness]) | set(ARGUMENT_VOCABULARY[harness])
+        for harness in HARNESSES
+    }
+    for (harness_a, names_a), (harness_b, names_b) in combinations(names.items(), 2):
+        overlap = names_a & names_b
+        assert not overlap, f"{harness_a!r} and {harness_b!r} both claim {overlap!r}"
+    for harness in HARNESSES:
+        both = set(TOOL_VOCABULARY[harness]) & set(ARGUMENT_VOCABULARY[harness])
+        assert not both, f"{harness!r} claims {both!r} as both a tool and an argument"
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        'isolation:"worktree"',
+        "isolation: 'worktree'",
+        'isolation="worktree"',
+        'isolation: "worktree"',
+        "isolation=worktree",
+    ],
+)
+def test_every_spelling_of_the_isolation_flag_is_the_claude_code_argument(spelling: str) -> None:
+    text = f"Dispatch it with `{spelling}` set.\n"
+    assert scan_prose(text) == [
+        Violation(harness="claude-code", tool='isolation: "worktree"', line=1)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "harness", "name"),
+    [
+        ("Run the suite with run_in_background, then wait.", "claude-code", "run_in_background"),
+        ("Call terminal with background=true and poll.", "hermes", "background=true"),
+        ("Call terminal with background = true and poll.", "hermes", "background=true"),
+        ("Pass notify_on_complete so you hear back.", "hermes", "notify_on_complete"),
+    ],
+)
+def test_a_bare_argument_is_a_violation_naming_its_harness(
+    text: str, harness: str, name: str
+) -> None:
+    assert scan_prose(text + "\n") == [Violation(harness=harness, tool=name, line=1)]
+
+
+@pytest.mark.parametrize(
+    "argument",
+    ['isolation: "worktree"', "run_in_background", "background=true", "notify_on_complete"],
+)
+def test_an_argument_inside_a_valid_clause_is_excused(argument: str) -> None:
+    text = (
+        f"**Harness — long commands:** Claude Code, Hermes and OpenCode differ; one of\n"
+        f"them takes `{argument}`, and each reader is told what to do.\n"
+    )
+    assert scan_prose(text) == []
+
+
+def test_an_argument_inside_a_one_harness_clause_is_still_a_violation() -> None:
+    text = "**Harness — long commands:** Claude Code takes run_in_background.\n"
+    assert [v.tool for v in scan_prose(text)] == ["run_in_background"]
+
+
+def test_argument_patterns_are_case_sensitive_and_word_bounded() -> None:
+    """`background=True` (Python's spelling in ordinary prose) and a longer
+    identifier that merely contains an argument name are not the argument."""
+    assert scan_prose("x.background=True\n") == []
+    assert scan_prose("my_run_in_background_helper\n") == []
+
+
+def test_the_import_time_key_check_names_the_mapping_it_rejects() -> None:
+    """Review p1r-m2: `prose.py` checks every harness-keyed mapping it consumes
+    at import, and the error names THAT mapping — the old message blamed
+    `TOOL_VOCABULARY` while checking `_HARNESS_LABELS`."""
+    require_every_harness("ARGUMENT_VOCABULARY", ARGUMENT_VOCABULARY)
+    broken = {harness: {} for harness in HARNESSES if harness != "hermes"}
+    with pytest.raises(
+        HarnessError, match=r"^ARGUMENT_VOCABULARY disagrees with HARNESSES: \['hermes'\]$"
+    ):
+        require_every_harness("ARGUMENT_VOCABULARY", broken)
