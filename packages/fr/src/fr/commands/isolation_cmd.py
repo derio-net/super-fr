@@ -28,6 +28,7 @@ from fr.isolation.types import (
     IsolationState,
     Target,
     clear_repo_sentinels,
+    clear_workspace_sentinels,
     list_states,
     load_state,
 )
@@ -433,12 +434,25 @@ def down(
     session: str | None = typer.Option(
         None,
         "--session",
-        help="The calling session; excluded from the still-attached warning.",
+        help="The calling session; excluded from the still-attached warning, "
+        "and (with --all) from the --yes confirmation.",
     ),
     worktree: Path | None = typer.Option(
         None,
         "--worktree",
         help="Resolve the workspace by its worktree path (WorktreeRemove hooks).",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="With --all: list what would be torn down or kept (and which "
+        "sessions are bound to each); change nothing.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="With --all: confirm tearing down workspaces bound to a session "
+        "other than --session (refused with exit 2 otherwise).",
     ),
 ) -> None:
     """Stop the container, remove the worktree, drop the state.
@@ -454,19 +468,31 @@ def down(
     With --all, ignore --branch: tear down all workspaces — keeping any that a
     guard refuses (an open PR, or a reap hazard: uncommitted changes, or
     content not yet on origin) unless --force — and clear this repo's
-    pipeline sentinel(s).
+    pipeline sentinel(s). It first prints its blast radius (per workspace:
+    tear down or keep-and-why, plus bound sessions); --dry-run stops there.
+    Tearing down a workspace bound to a session other than --session (any
+    bound session, without --session) needs --yes, else exit 2 (#533).
 
     Bound sessions (spec 2026-09-04 §5.A): every session attached to the
     workspace is unbound; those other than `--session` are named in a warning
     (never a refusal — liveness is unknowable here).
     """
+    if dry_run and not all_:
+        # A dry run that silently acted would be the worst possible failure.
+        _fail(IsolationError("--dry-run is only supported with --all."))
+    # The caller is the ambient session when --session is not given — the same
+    # rule `up` binds with (debug journal 2026-09-21 C4). Without it, a session
+    # that ran `up` then `down --all` was told its OWN workspace was another
+    # session's (the #533 guard, which treats every binding as foreign absent
+    # --session). A genuinely different session's binding is still foreign.
+    session, _ = _sessions.ambient_binding(session, "unknown", os.environ)
     if worktree is not None:
         state = _resolve_by_worktree(worktree)
         root = state.repo_root
     else:
         root = _resolve_repo(repo)
         if all_:
-            _down_all(root, force=force)
+            _down_all(root, force=force, session=session, dry_run=dry_run, yes=yes)
             return
         state = _resolve_single(root, branch)
     others = [b.session_id for b in state.sessions if b.session_id != session]
@@ -482,19 +508,50 @@ def down(
         return
     # Only after a SUCCESSFUL teardown: a refused `down` (open PR, or a reap
     # hazard — #467 phase 3) keeps the workspace, so it keeps its bindings too.
+    bound = [b.session_id for b in state.sessions] + ([session] if session else [])
     _sessions.detach_all(state)
-    # #399: when this was the last workspace, clear the pipeline sentinel(s)
-    # eagerly. The bash guard's own clear can't fire here — it exits early when
-    # `down` runs from the worktree cwd (the prescribed workflow), so the guard
-    # would keep reporting 'fr pipeline active'. Mirrors `down --all`'s eager
-    # clear (clear_repo_sentinels), scoped to "zero workspaces remain".
-    if not list_states(root):
-        clear_repo_sentinels(root)
+    # #399: clear the pipeline sentinel(s) eagerly. The bash guard's own clear
+    # can't fire here — it exits early when `down` runs from the worktree cwd
+    # (the prescribed workflow), so the guard would keep reporting 'fr pipeline
+    # active'. Scoped to THIS workspace's pipelines — sentinels stamped with it,
+    # or of sessions bound to it — never "every sentinel once zero workspaces
+    # remain": that also retired a stranger's FRESH pipeline, one whose
+    # workspace did not exist yet, and disarmed its guard (#472).
+    clear_workspace_sentinels(root, state.worktree, bound)
     typer.echo(f"isolation down: {state.branch} cleaned up.")
 
 
-def _down_all(root: Path, force: bool) -> None:
+def _down_refusal(target: Target, state: IsolationState, force: bool) -> str | None:
+    """Read-only prediction of whether `target.down` would refuse `state`.
+
+    `--force` bypasses every guard, so nothing is kept. A target without the
+    probe (test doubles) is predicted to proceed; the live `down` still has
+    the final word and a refusal there is reported as kept."""
+    if force:
+        return None
+    probe = getattr(target, "down_refusal", None)
+    return probe(state) if probe is not None else None
+
+
+def _sessions_text(state: IsolationState) -> str:
+    return ", ".join(b.session_id for b in state.sessions) or "none"
+
+
+def _down_all(
+    root: Path,
+    force: bool,
+    session: str | None = None,
+    dry_run: bool = False,
+    yes: bool = False,
+) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
+
+    Blast radius first (#533): every workspace is classified (tear down, or
+    keep and why) by the same guards `down` enforces, and printed with its
+    bound sessions BEFORE anything is touched. `--dry-run` stops there.
+    Tearing down a workspace bound to any session other than `--session` is
+    refused (exit 2, nothing changed) unless `--yes` — non-interactive by
+    design, since agents and CI are the callers.
 
     A workspace `down` refuses is KEPT (never silently destroyed) unless
     --force. An open PR is no longer the only reason `down` can refuse
@@ -507,9 +564,41 @@ def _down_all(root: Path, force: bool) -> None:
     lazy backstop.
     """
     target = _target_or_exit(root)
+    plan = [(state, _down_refusal(target, state, force)) for state in list_states(root)]
+    header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
+    typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
+    for state, refusal in plan:
+        if refusal is None:
+            typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
+        else:
+            first = refusal.splitlines()[0] if refusal else ""
+            typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
+    foreign = [
+        (state.branch, [b.session_id for b in state.sessions if b.session_id != session])
+        for state, refusal in plan
+        if refusal is None
+    ]
+    foreign = [(branch, sids) for branch, sids in foreign if sids]
+    foreign_text = "; ".join(f"{branch} (sessions: {', '.join(s)})" for branch, s in foreign)
+    if dry_run:
+        if foreign:
+            typer.echo(f"would require --yes — bound to another session: {foreign_text}")
+        typer.echo("dry run: nothing changed.")
+        return
+    if foreign and not yes:
+        _fail(
+            IsolationError(
+                "down --all would tear down workspace(s) bound to another session: "
+                f"{foreign_text}. Nothing was changed. Re-run with --yes to confirm, "
+                "or `fr isolation down --branch <b>` for just your own."
+            )
+        )
     torn: list[str] = []
     kept: list[tuple[str, str]] = []
-    for state in list_states(root):
+    for state, refusal in plan:
+        if refusal is not None:
+            kept.append((state.branch, refusal))
+            continue
         try:
             target.down(state, force=force)
             torn.append(state.branch)
@@ -595,7 +684,10 @@ def verify_merge(
 
     Squash/rebase/merge-safe: checks content presence on `origin/<default>`,
     not commit ancestry (the #320 close-out). Exit 1 if not verified — the fix
-    may have orphaned (a commit pushed after the PR merged).
+    may have orphaned (a commit pushed after the PR merged). With an explicit
+    --branch whose workspace gc already reaped, the same check runs from the
+    repo root, against every ref of the branch that survives (`origin/<b>`
+    after a fresh fetch of it, and the local branch); an unresolvable ref exits 2.
     """
     root = _resolve_repo(repo)
     if branch is None:
@@ -611,22 +703,30 @@ def verify_merge(
         state = states[0] if states else None
     else:
         state = load_state(root, branch)
+    reaped = False
     if state is None:
-        _fail(
-            IsolationError(
-                f"no isolation workspace for branch {branch!r}."
-                if branch is not None
-                else "no isolation workspace — run `fr isolation up` first."
-            )
-        )
-        return
+        if branch is None:
+            _fail(IsolationError("no isolation workspace — run `fr isolation up` first."))
+            return
+        reaped = True
     target = _target_or_exit(root)
     _refuse_external(target, "verify-merge")
-    res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+    if state is None:
+        assert branch is not None
+        try:
+            res = _worktree_ops(target).verify_merge_reaped(branch, default_branch=default_branch)
+        except IsolationError as err:
+            # Exit 2 (usage), never 1: 1 means "not verified — recover", and an
+            # unresolvable ref disproves nothing about the merge.
+            _fail(err)
+            return
+    else:
+        res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+    note = " (workspace already reaped; checked from the repo root)" if reaped else ""
     if res["verified"]:
         typer.echo(
             f"verify-merge: {res['branch']} ✓ changes present on "
-            f"origin/{default_branch}, PR MERGED."
+            f"origin/{default_branch}, PR MERGED.{note}"
         )
         return
     reasons = []
@@ -637,7 +737,7 @@ def verify_merge(
     if res["pr_state"] != "MERGED":
         reasons.append(f"PR state is {res['pr_state']} (expected MERGED)")
     typer.echo(
-        f"verify-merge: {res['branch']} ✗ NOT verified — {'; '.join(reasons)}. "
+        f"verify-merge: {res['branch']} ✗ NOT verified{note} — {'; '.join(reasons)}. "
         "Do NOT declare done; recover (cherry-pick onto the base branch / open a fresh PR).",
         err=True,
     )

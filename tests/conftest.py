@@ -103,3 +103,16 @@ def _sessions_dir_off_the_operators_machine(
     `FR_SESSIONS_DIR` themselves, which overrides this.
     """
     monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions-sandbox"))
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the operator's live `CLAUDE_CODE_SESSION_ID` for the whole suite.
+
+    `fr run start`, `fr isolation up` and `down` now default to the ambient
+    session (debug journal 2026-09-21 C4), so a suite run INSIDE a Claude Code
+    session behaved differently from CI, where no session id exists — found
+    when merging main made two `down --all` tests fail locally only. A test
+    that needs a session sets one explicitly; nothing inherits the operator's.
+    """
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)

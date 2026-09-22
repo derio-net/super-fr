@@ -75,25 +75,73 @@ def test_hook_ships_and_is_executable() -> None:
     assert os.access(HOOK, os.X_OK), f"not executable: {HOOK}"
 
 
+# The constraint may be carried EITHER by the literal Claude Code flag or by
+# the harness-neutral phrasing that means the same thing — see
+# `test_agent_description_carries_the_constraint` for why both are accepted,
+# and `test_a_merely_descriptive_description_does_not_count` for the pre-fix
+# wording that must keep failing either way.
+_SECOND_WORKTREE = re.compile(r'isolation:\s*"worktree"|second worktree', re.IGNORECASE)
+_RULES_OUT = re.compile(r"\bwithout\b|\bnever\b|\bdo not\b|\bnot\b", re.IGNORECASE)
+
+
+def _rules_out_a_second_worktree(description: str) -> bool:
+    """True when some ONE sentence both names the second worktree and rules it
+    out. Sentence-level, not file-level: a negation elsewhere in the blurb does
+    not negate a bare mention."""
+    return any(
+        _SECOND_WORKTREE.search(sentence) and _RULES_OUT.search(sentence)
+        for sentence in re.split(r"(?<=[.;])\s+", description)
+    )
+
+
 def test_agent_description_carries_the_constraint() -> None:
     """The orchestrator reads `description:`, not the body, when choosing.
 
-    The assertion demands the *literal flag* and a negation within the same
-    sentence. A looser check ("mentions isolation") passes on the pre-fix
-    description, which already says "already-active fr-isolation workspace" —
-    true, and still not a instruction about the flag.
+    Originally this demanded the *literal flag*, on the grounds that a looser
+    check ("mentions isolation") passes on the pre-fix description, which
+    already said "already-active fr-isolation workspace" — true, and still not
+    an instruction about the flag.
+
+    2026-09-21 (#497, agent-body-tool-neutrality) put that in direct conflict
+    with the neutrality scan, which now covers agent bodies: `isolation:
+    "worktree"` is Claude Code's alone, and a frontmatter `description:` cannot
+    carry a `**Harness — ...:**` clause without shipping bold markdown in a YAML
+    blurb every harness displays. The flag therefore left the description, and
+    this assertion accepts the neutral phrasing that means the same thing.
+
+    THIS IS NOT A #420 REGRESSION, and the two sibling tests that prove it are
+    in this file: `test_fr_goal_dispatch_section_says_without_the_flag` (the
+    orchestrator's actual instruction source still names the flag verbatim, in a
+    scoped clause) and `test_hook_is_registered_for_the_agent_tool` (the
+    enforcement). The description is the third copy, and "never a second
+    worktree" is not a weaker instruction to the reader holding a flag whose
+    value is literally `worktree`.
     """
     description = _front_matter_description(AGENT)
-    assert 'isolation: "worktree"' in description, (
-        "fr-phase-executor's `description:` must name the flag verbatim — the "
-        "body is read only by the executor, after the choice is already made"
+    assert _rules_out_a_second_worktree(description), (
+        "fr-phase-executor's `description:` must rule out a second worktree in one "
+        'sentence — naming it (`isolation: "worktree"`, or the neutral \'second '
+        "worktree') AND negating it. The body is read only by the executor, after "
+        "the choice is already made."
     )
-    sentence = next(
-        s for s in re.split(r"(?<=[.;])\s+", description) if 'isolation: "worktree"' in s
-    )
-    assert re.search(r"\bwithout\b|\bnever\b|\bdo not\b|\bnot\b", sentence, re.IGNORECASE), (
-        f"the sentence naming the flag must rule it OUT, not merely mention it: got {sentence!r}"
-    )
+
+
+def test_a_merely_descriptive_description_does_not_count() -> None:
+    """Widening the accepted phrasing is only safe if the widened predicate
+    still rejects prose that merely *describes* the workspace. Exercised on the
+    synthetic wording the original assertion was written against, so the
+    guarantee does not rest on the shipped file happening to be right."""
+    assert not _rules_out_a_second_worktree(
+        "Implement ONE plan phase, serially, inside an already-active fr-isolation "
+        "workspace, then return a structured result."
+    ), "a description that only mentions isolation must not satisfy the constraint"
+    for blessed in (
+        'Dispatch it WITHOUT `isolation: "worktree"`.',
+        "Dispatch it INTO that workspace, never into a second worktree.",
+    ):
+        assert _rules_out_a_second_worktree(blessed), (
+            f"a real prohibition must satisfy the constraint: {blessed}"
+        )
 
 
 def _dispatch_section(text: str) -> str:

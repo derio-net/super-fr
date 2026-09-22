@@ -22,9 +22,11 @@ from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
+    TRACKED_BY_RE,
     JournalEntry,
     JournalParseError,
     append_journal_entry,
+    effective_finding_states,
     journal_path,
     open_finding_ids,
     parse_journal,
@@ -209,7 +211,7 @@ def add(
     append_journal_entry(path, slug, entry)
 
 
-RESOLUTION_STATES = ("fixed", "refuted")
+RESOLUTION_STATES = ("fixed", "refuted", "deferred")
 """What `resolve` may close a finding to. Re-opening is `add --resolves`:
 `resolve` is the verb for "this is done with", and a re-open is new
 information, which belongs in an entry with a body of its own."""
@@ -232,7 +234,12 @@ def resolve(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
     slug: str = typer.Option(..., "--slug", help="Journal slug (spec/plan/debug slug)."),
     entry_id: str = typer.Option(..., "--id", help="The FINDING id being resolved."),
-    state: str = typer.Option(..., "--state", help="fixed | refuted."),
+    state: str = typer.Option(
+        ...,
+        "--state",
+        help="fixed | refuted | deferred. `deferred` = the finding is valid but not "
+        "this change's to fix; requires --tracked-by.",
+    ),
     note: str = typer.Option(
         ...,
         "--note",
@@ -240,8 +247,20 @@ def resolve(
         "silent state change the rules forbid).",
     ),
     phase: int | None = typer.Option(None, "--phase", help="Phase doing the resolving, if any."),
+    tracked_by: str | None = typer.Option(
+        None,
+        "--tracked-by",
+        help="--state deferred only: the issue that now carries the work "
+        "(#N, owner/repo#N, or an http(s) URL).",
+    ),
 ) -> None:
     """Append a resolution record closing one finding (spec §3.G.1).
+
+    `--state deferred --tracked-by <issue>` closes a finding that is REAL but
+    belongs to another change. Before it existed the only closing states were
+    fixed and refuted, so such findings were recorded as refuted — a claim the
+    finding was wrong. A deferral must name its issue: it is where the work
+    went, not a softer way to drop it.
 
     Append-only on purpose: the finding keeps its own text and `state: open`,
     and `fr journal check` folds records into an EFFECTIVE state. A finding
@@ -268,6 +287,24 @@ def resolve(
         err_console.print(
             f"[red]--state must be one of {' | '.join(RESOLUTION_STATES)} (got {state!r})[/red] "
             "— re-open a finding with `fr journal add --resolves <id> --state open --phase N`"
+        )
+        raise typer.Exit(2)
+    if state == "deferred" and not tracked_by:
+        err_console.print(
+            "[red]--state deferred needs --tracked-by <issue>[/red] — a deferral says "
+            "where the work went (#N, owner/repo#N, or a URL)"
+        )
+        raise typer.Exit(2)
+    if tracked_by is not None and state != "deferred":
+        err_console.print(
+            "[red]--tracked-by is only for --state deferred[/red] — a fixed or refuted "
+            "finding has nowhere left to go"
+        )
+        raise typer.Exit(2)
+    if tracked_by is not None and not TRACKED_BY_RE.match(tracked_by):
+        err_console.print(
+            f"[red]--tracked-by must name an issue (#N, owner/repo#N, or an http(s) "
+            f"URL), got {tracked_by!r}[/red]"
         )
         raise typer.Exit(2)
     try:
@@ -297,11 +334,27 @@ def resolve(
         phase=phase,
         title=f"resolves {entry_id}: {target.title}",
         body=note,
-        state=state,  # type: ignore[arg-type]
+        # A deferral is WRITTEN as `open` + `tracked_by`: an older fr rejects an
+        # unknown `state=` value (and with it the whole journal) but ignores an
+        # unknown token, so it reads the finding as still open — fail closed.
+        state="open" if state == "deferred" else state,  # type: ignore[arg-type]
         resolves=entry_id,
+        tracked_by=tracked_by,
     )
     append_journal_entry(path, slug, record)
-    typer.echo(f"{entry_id} → {state} (record {record.id})")
+    shown = f"deferred → {tracked_by}" if tracked_by else state
+    typer.echo(f"{entry_id} → {shown} (record {record.id})")
+
+
+def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:
+    """(finding id, tracked-by ref) for each finding whose EFFECTIVE state is
+    deferred — the last deferral record naming it supplies the ref."""
+    states = effective_finding_states(entries)
+    refs: dict[str, str] = {}
+    for e in entries:
+        if e.resolves is not None and e.tracked_by is not None:
+            refs[e.resolves] = e.tracked_by
+    return [(fid, refs[fid]) for fid, st in states.items() if st == "deferred" and fid in refs]
 
 
 _SECTION_KINDS = {
@@ -402,6 +455,15 @@ def check(
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
     failed = False
+    # Deferrals pass the gate, but are SAID, never silent: each names the
+    # issue that now carries it, so a reader of the check (or the PR it feeds)
+    # sees what this change chose not to fix.
+    deferred = _deferrals(entries)
+    if deferred:
+        console.print(
+            f"{len(deferred)} deferred finding(s): "
+            + ", ".join(f"{fid} → {ref}" for fid, ref in deferred)
+        )
     still_open = open_finding_ids(entries)
     if still_open:
         # Output shape unchanged ("N open finding(s): <ids>") — things grep it.

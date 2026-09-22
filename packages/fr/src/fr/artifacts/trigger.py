@@ -81,6 +81,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "init",
     "validate",
     "harness",
+    "triage",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -102,7 +103,13 @@ thing this gate exists to prevent. Render is explicitly designed to run on a pod
 with no super-fr checkout at all, which is the case where blocking it behind
 *this repo's own* stale plan/journal/run artifacts would be most visibly wrong:
 the command's whole purpose is to work where there is no checkout to be
-stale."""
+stale. `fr triage` (2026-09-21 fr-triage, spec §3.F′) meets the promise
+strictly: it never reads or writes a registered artifact, and every file it
+writes is under its own state directory (`$HOME/.cache/fr/triage/<scope>/`, or
+`--dir`). Gating it protects nothing, since triage cannot proceed *over* a
+stale artifact; it would only refuse an agent's triage, commonly an org triage
+run from inside some unrelated repo, over artifacts the command never
+touches."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

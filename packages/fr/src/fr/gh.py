@@ -64,13 +64,15 @@ def create_issue(
     return _run_gh(args)
 
 
+# Shared by every caller: only ever ADD a field here, never drop one.
+ISSUE_VIEW_FIELDS = "number,title,body,labels,state,url,closedAt"
+
+
 def view_issue(repo: str, number: int) -> dict[str, object]:
-    """Fetch an Issue's title, body, labels, state via gh issue view --json."""
+    """Fetch one Issue via gh issue view --json (fields: ``ISSUE_VIEW_FIELDS``)."""
     import json
 
-    out = _run_gh(
-        ["issue", "view", str(number), "--repo", repo, "--json", "title,body,labels,state"]
-    )
+    out = _run_gh(["issue", "view", str(number), "--repo", repo, "--json", ISSUE_VIEW_FIELDS])
     result: dict[str, object] = json.loads(out)
     return result
 
@@ -223,8 +225,14 @@ def list_labels(*, repo: str) -> list[dict[str, str | None]]:
     return json.loads(out) if out else []
 
 
-def list_repos(*, owner: str) -> list[dict[str, object]]:
-    """Return non-archived repos under the given owner."""
+def list_repos(
+    *, owner: str, limit: int = 200, include_archived: bool = False
+) -> list[dict[str, object]]:
+    """Return repos under *owner* — non-archived only unless *include_archived*.
+
+    ``include_archived`` exists so a caller can tell whether the list returned
+    exactly ``limit`` records (and so may be cut short) before filtering.
+    """
     import json
 
     out = _run_gh(
@@ -235,11 +243,65 @@ def list_repos(*, owner: str) -> list[dict[str, object]]:
             "--json",
             "name,isArchived",
             "--limit",
-            "200",
+            str(limit),
         ]
     )
-    repos = json.loads(out) if out else []
+    repos: list[dict[str, object]] = json.loads(out) if out else []
+    if include_archived:
+        return repos
     return [r for r in repos if not r.get("isArchived", False)]
+
+
+ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
+PR_LIST_FIELDS = "number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences"
+
+
+def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
+    """Return issues in *repo* via one bulk ``gh issue list``.
+
+    ``--limit`` is always explicit: gh's default is 30, which would silently
+    truncate any backlog past thirty issues.
+    """
+    import json
+
+    out = _run_gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            state,
+            "--limit",
+            str(limit),
+            "--json",
+            ISSUE_LIST_FIELDS,
+        ]
+    )
+    issues: list[dict[str, object]] = json.loads(out) if out else []
+    return issues
+
+
+def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
+    """Return PRs in *repo* via one bulk ``gh pr list`` (explicit ``--limit``)."""
+    import json
+
+    out = _run_gh(
+        [
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            state,
+            "--limit",
+            str(limit),
+            "--json",
+            PR_LIST_FIELDS,
+        ]
+    )
+    prs: list[dict[str, object]] = json.loads(out) if out else []
+    return prs
 
 
 def delete_label(*, repo: str, name: str) -> None:

@@ -99,11 +99,20 @@ set, so a third one cannot appear unnoticed.
 
 ## Known gaps
 
-1. **`index.html` and `fr-isolation.html` have no committed `.md` source** — only
-   `01-fr-goal.md` does. Those two pages can only be edited by whoever holds
-   their source, which is not this repository, and the tripwire can therefore
-   check nothing about them beyond their continued existence. Bringing their
-   sources in is owed.
+1. **`index.html` and `fr-isolation.html` are hand-authored, not renderer
+   output** — only `01-fr-goal.md` has a source. This was long read as "their
+   `.md` lives somewhere else"; it does not exist anywhere. Found 2026-09-21
+   (gh#535) by the byte-for-byte check above failing *structurally*: with the
+   renderer verified byte-identical on `01-fr-goal`, a reconstruction of
+   `fr-isolation` still could not match, because both pages (added in
+   b1567273) carry a shell the renderer cannot emit — lowercase `<!doctype
+   html>`, a `· super-fr` title suffix, a `<main>` with a custom hero, and a
+   bespoke stylesheet (`.hero`, `.schematic`, `.stair`) that the broadsheet
+   CSS does not define. So there is nothing to regenerate: **edit these two
+   pages in place, carefully** — a targeted replacement of the exact lines
+   that are false, reusing the surrounding markup, never a rewrite and never
+   a read of the whole file (the fonts are over a megabyte). The tripwire
+   can check nothing about them beyond their continued existence.
 2. **The tripwire cannot prove a page is fully current** — only that its
    headings and title survived. Prose edited within an unchanged section will
    not be caught. Closing that would mean either vendoring the renderer or
@@ -114,6 +123,9 @@ set, so a third one cannot appear unnoticed.
 Edit the `.md`; match the existing voice — second person, concrete, unhurried,
 explaining *why* a mechanism exists rather than only what it does; it is written
 for a reader who has never seen this repo. Then regenerate the `.html` and
-commit both. Never hand-edit the `.html`: it carries base64-embedded fonts and a
-"do not hand-edit" banner, and a manual patch there will be silently overwritten
-by the next regeneration.
+commit both. Never hand-edit a **renderer-generated** `.html`: it carries
+base64-embedded fonts and a "do not hand-edit" banner, and a manual patch there
+will be silently overwritten by the next regeneration. That reason is the whole
+rule, so it does not reach the two hand-authored pages of Known gap 1 — no
+regeneration exists to overwrite them, and editing them in place is the only way
+to keep them current.

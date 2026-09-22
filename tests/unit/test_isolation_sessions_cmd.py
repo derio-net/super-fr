@@ -336,3 +336,39 @@ def test_down_by_worktree_path_unknown_exits_2(
     res = runner.invoke(app, ["isolation", "down", "--worktree", "/nonexistent/wt"])
     assert res.exit_code == 2, res.output
     assert "no isolation workspace at" in res.output
+
+
+# (f3) down treats the AMBIENT session as the caller, symmetric with up (debug C4)
+def test_down_all_does_not_call_the_callers_own_workspace_foreign(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Merging C4 (up binds the ambient session) with #533/#547 (down --all
+    refuses workspaces bound to a session other than --session) made a session
+    that ran `up` and then `down --all` get told its OWN workspace belonged to
+    another session. The caller is knowable the same way it is for `up`."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "me-1")
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/mine"])
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--dry-run"])
+
+    assert res.exit_code == 0, res.output
+    assert "would require --yes" not in res.output
+
+
+def test_down_all_still_flags_a_genuinely_foreign_binding(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ambient default must not dissolve #533's guard: a workspace bound to
+    a DIFFERENT session is still named and still needs --yes."""
+    runner.invoke(
+        app,
+        ["isolation", "up", "--repo", str(repo), "--branch", "feat/theirs", "--session", "other"],
+    )
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "me-1")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--dry-run"])
+
+    assert res.exit_code == 0, res.output
+    assert "would require --yes" in res.output
+    assert "other" in res.output

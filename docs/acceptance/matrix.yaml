@@ -1911,9 +1911,12 @@ rows:
       - super-fr:tests/unit/test_harness_vocabulary.py
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
     status: ci
-    notes: Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1,
-      fr-init §2, both mirrors). Mirrors stay byte-identical; neutrality is
-      enforced at the canonical source.
+    notes: 'Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1, fr-init
+      §2, both mirrors). Mirrors stay byte-identical; neutrality is enforced at the
+      canonical source. Widened 2026-09-21 (agent-body-tool-neutrality, #497): the scan
+      now also covers the agent bodies — plugins/super-fr/agents/*.md and the generated
+      .opencode/agent/*.md — which were outside every tree, with scan_prose''s new extra_tools
+      flagging Claude Code''s isolation: "worktree" dispatch flag for those trees only.'
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance
@@ -2087,18 +2090,22 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-19-opencode-subagent-dispatch-design.md
     levels: {}
     status: skipped
-    notes: 'SCOPE CORRECTION (gh#498, spec 2026-09-20-opencode-tier-binding-reaches-dispatch
-      §3.C). This row''s evidence — a parented child session with agent=''fr-phase-executor''
-      and a real assistant turn — proves the rewritten fr-goal §5/§6 prose drove a genuine
-      dispatch. It does NOT prove tiering resolved: the two separate only if the session
-      row''s model is asserted against the phase tier''s binding, and it was not. The
-      row''s headline acceptance text should read ''...and the session row''s model
-      matches the phase tier''s binding''; there is no CLI verb that can edit a row''s
-      acceptance text (add refuses an existing id, set-status moves only status/levels/notes,
-      and hand-editing is forbidden), so the correction is recorded here and the tiering
-      claim now lives in its own row, opencode-tier-binding-reaches-dispatch. Follow-up
-      filed for an fr acceptance edit verb. Status unchanged at skipped: still real,
-      still not CI-reproducible without a live binary and model.'
+    notes: 'LIVE-VERIFIED 2026-09-21 — the post-merge run this row was owed. A real
+      headless /fr-goal on OpenCode (github-copilot/gpt-5.6-terra) dispatched a phase:
+      opencode.db child session ses_f3b00175… with parent_id set, agent=fr-phase-executor-mechanical
+      (the tier the plan phase declared), on the answered model, with its own usage
+      and its 32 tool calls recorded under the child rather than the orchestrator. Evidence:
+      the gh#494 phase-6 and gh#498 phase-4 journals (p6-live-evidence, p4-live-evidence).
+      STILL skipped, correctly: reproducing it needs a live opencode binary and a model,
+      neither available in CI. SCOPE, unchanged from before and still true: the headline
+      proves a genuine dispatch, not that tiering resolved — the tiering claim lives
+      in opencode-tier-binding-reaches-dispatch. The headline cannot be corrected because
+      there is no fr acceptance edit verb; that is #522. CORRECTION: an earlier version
+      of this note said a follow-up for that verb had been filed. It had not — #522
+      found the claim false. #522 is now that follow-up. Found by the same run, and
+      filed: #537 (fr''s cursor names the wrong holder for an OpenCode dispatch, and
+      cannot name the tier agent that ran) and #538 (fr-goal never asked the model-per-tier
+      question it is gated on).'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -2151,25 +2158,15 @@ rows:
       int:
       - super-fr:tests/integration/test_install_opencode_agents.py
     status: ci
-    notes: 'not-implemented -> ci: the spec shipped, so the evidence exists and runs
-      on every PR. The loop is closed at the BINDING (§3.A): fr.opencode_agents.materialize_agents
-      rewrites the installed agent files in place, and both triggers go through it —
-      fr models set (unit: test_models_cmd.py, the CLI side effect and its reporting)
-      and scripts/install.sh via the new fr models apply --harness opencode verb (int:
-      test_install_opencode_agents.py, rewritten in phase 2 to drive the REAL fr on
-      the sandbox PATH rather than a stub that could only fake resolve, so it exercises
-      install.sh + repo-over-user resolution + the materialiser end to end). The stale-binding
-      case named by Test Plan item 2 — an agent pinning model <A>, a binding moved to
-      <B>, the agent then reading <B> — is test_opencode_agents_materialize.py::TestMaterializeAgents::test_stale_binding_regression;
-      it is the sharper of §1.1''s two failure modes (a wrong value stated confidently)
-      and the test whose absence let the defect ship in PR #495. The §3.B complement,
-      an UNRESOLVED tier dispatching the untiered fr-phase-executor so the absence is
-      visible in the session row, is prose and is pinned by test_fr_goal_dispatch_prose.py::test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved.
-      What ci does NOT claim, stated so the row is not the overclaim it was created
-      to correct: no automated level dispatches a real OpenCode subagent and reads back
-      the session row''s model. That live claim stays with opencode-subagent-dispatch,
-      deliberately left at skipped (its scope correction is already in its own notes,
-      finding r-s1) and is this plan''s manual phase 4.'
+    notes: 'ci, and now also LIVE-CONFIRMED 2026-09-21 end to end on OpenCode (github-copilot/gpt-5.6-terra):
+      with the opencode tiers cleared, install.sh installed all three tier agents with
+      no model:; during a real /fr-goal run the binding was set and all three materialised
+      to the answered model; the dispatched child (opencode.db ses_f3b00175…) ran fr-phase-executor-mechanical
+      on it. Automated levels are unchanged and still what keeps this row ci: the stale-binding
+      regression in test_opencode_agents_materialize.py, both triggers, and the real-fr
+      integration tests. What neither the tests nor the live run show: that fr-goal
+      ASKS for the binding when it is unbound — on the live run it did not (#538); the
+      answer arrived as the operator''s reply.'
   - id: phase-header-fields-survive-phases-file
     capability: fr-goal subagent execution
     acceptance: Every PhaseHeader field an operator writes in a --phases-file survives
@@ -3317,3 +3314,197 @@ rows:
     status: ci
     notes: C7. fr-phase-executor was told to implement via superpowers:test-driven-development
       / fr-execute with no Skill tool; its 79-record transcript shows zero skill loads.
+  - id: triage-repo-local
+    capability: Backlog triage
+    acceptance: An operator can produce a ranked, filterable backlog board for one repo
+      as a local HTML file, with no Artifact tool and no server
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'Test Plan items 5 and 7: render groups a repo''s captured-fixture facts
+      by tier with Unranked first, carries the filter/sort data attributes, writes triage.html
+      via the CLI, and two renders under different patched clocks are byte-identical.
+      Collect side proven by test_triage_collect.py (items 1-3).'
+  - id: triage-org-scope
+    capability: Backlog triage
+    acceptance: An operator can triage every non-archived repo of an org into one board,
+      and a repo whose issues cannot be read is reported rather than aborting the board
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py
+    status: ci
+    notes: Org-scope collect with a failing repo recorded under skipped, plus cross-repo
+      PR links keyed on the reference's repository (spec §3.C, review r2).
+  - id: triage-unranked-visible
+    capability: Backlog triage
+    acceptance: 'An issue with no ranking is never silently absent: it renders first,
+      in its own Unranked tier, and fr triage check names it'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+      - super-fr:tests/unit/test_triage_check.py
+    status: ci
+    notes: 'Test Plan items 4 and 5: check reports unranked, settled, orphaned and unreachable
+      (unviewed or skipped-repo judgements never orphaned), exit 0 throughout; render
+      puts the unranked issue in the first tier, labelled not yet triaged with the fr-triage
+      prompt, also when judgements.yaml is missing.'
+  - id: triage-stage-derived
+    capability: Backlog triage
+    acceptance: Each issue's stage (backlog, blocked, PR draft, PR ready, merged, closed)
+      is derived from forge facts on every collect, never hand-set
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_stage.py
+    status: ci
+    notes: 'One case per row of spec §3.E: the six derived stages closed, merged, pr-ready,
+      pr-draft, blocked and backlog, plus a closed issue with an open PR staying closed.'
+  - id: triage-untrusted-text-inert
+    capability: Backlog triage
+    acceptance: 'A board over an org''s issues is safe to open: titles, bodies and labels
+      filed by anyone render as inert text'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: 'Test Plan item 6, now proven in every context the page places untrusted
+      text (review r-p3-row-overclaims). Element content: a <script> title, a </script>
+      body and a markup label render only escaped, the single script element carries
+      no facts text, and inline markup escapes first then allows only code and bold.
+      Attribute: test_a_title_cannot_break_out_of_the_data_search_attribute parses the
+      page and finds no on* attribute on any element and the literal quote inside data-search.
+      Href: test_a_non_https_url_produces_no_href (javascript:, data:, HTTPS://, whitespace-led).
+      Masthead, tier and pattern: test_hostile_text_in_every_context_renders_escaped
+      (theme, tier title, tier description, pattern title, skipped repo and reason,
+      unviewed reason, scope) and test_hostile_pattern_ids_render_escaped_even_past_the_loader.
+      Mutation proof 2026-09-21: dropping each esc() in render.py, or loosening _safe_url
+      to strip/lower or to accept anything, turned exactly the matching test red (11
+      of 11). check''s human output escapes rich markup (r7, test_triage_check.py).'
+  - id: triage-skill-claude-code
+    capability: Backlog triage
+    acceptance: An agent on Claude Code can follow fr-triage end to end for a repo and
+      an org
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels: {}
+    status: skipped
+    notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
+      / Opus 5: repo scope as a SYNC of an OpenCode-written ranking (1 new issue judged,
+      0 existing changed) and org scope over live derio-net (18/19 repos collected,
+      1 skipped with its reason, 112 issues rendered, willikins ranked by operator scope).
+      Both found fr-triage from a plain ask. Evidence: plan journal walk-claude-code-repo
+      and walk-claude-code-org. Not in CI: needs a live harness and model.'
+  - id: triage-skill-opencode
+    capability: Backlog triage
+    acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
+      end to end for a repo
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels: {}
+    status: skipped
+    notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
+      a non-Claude model: first-run repo triage (33 issues judged into a new judgements.yaml,
+      board rendered, no forge writes); fr-triage discovered from a plain ask. It surfaced
+      a skill defect (the YAML example teaches invalid YAML), fixed separately. Evidence:
+      plan journal walk-opencode. Not in CI: needs a live OpenCode session.'
+  - id: triage-skill-hermes
+    capability: Backlog triage
+    acceptance: An agent on Hermes can follow fr-triage end to end
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; decision d4 chose not to walk Hermes. Stays not-implemented
+      until someone does.
+  - id: sentinel-three-state-guard
+    capability: Isolation state
+    acceptance: The guard decides pipeline sentinel state from its fields (fresh/live/orphaned),
+      not a worktree count, ending count-based self-heal false negatives (#472) and
+      false positives (#529)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#L199,unit=super-fr:tests/unit/test_sentinel_workspace_stamp.py
+      - super-fr:tests/unit/test_sentinel_lifecycle.py
+      - super-fr:tests/unit/test_sentinel_liveness.py
+    status: ci
+    notes: 'Liveness closed: the guard refreshes an active session''s sentinel so the
+      48h GC only expires abandoned ones, and every sentinel writer shares one mkdir
+      lock (a lost workspace entry could fail open). End-to-end down through the real
+      CLI added. LIVE 2026-09-22 (fr 4.14.3, Claude Code, harness-invoked hooks on the
+      session''s own commands): fresh sentinel denied and never healed; bind recorded
+      the workspace cache-relative, no lock left; two workspaces formed a set and down
+      of one kept the guard armed; a gc-style reap of the last healed on the next base-clone
+      command. OpenCode: no Bash guard by design (parity: fr-pipeline-sentinel absent).'
+  - id: guard-denial-truthful
+    capability: Isolation state
+    acceptance: 'Guard denial messages convey the true state: cd target gone says the
+      path no longer exists and points at recovery options; standard denial points first
+      at status/up, deprecates unconditional down --all (#432)'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.C
+    levels:
+      unit:
+      - super-fr:tests/unit/test_hooks_guard.py#L362
+    status: ci
+    notes: 'Tests pass in TestDenialsSayTheTrueThing: cd <nonexistent path> says ''no
+      longer exists'' with recovery options; standard denial points at status/up first,
+      only warns about down --all effects.'
+  - id: verify-merge-after-gc
+    capability: Isolation state
+    acceptance: 'After gc has reaped a workspace, fr isolation verify-merge --branch
+      still works without state: it fetches origin, resolves the branch ref, verifies
+      the merge, and reports the workspace was already reaped'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-21-sentinel-three-states-design.md#2.D
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py#L777
+    status: ci
+    notes: 'With --branch and no workspace, verify-merge fetches the branch and requires
+      every surviving ref (origin/<b> and the local branch) to have landed on origin/<default>;
+      an unresolvable ref exits 2. LIVE 2026-09-22 on Claude Code (4.13.2 fallback,
+      #534 close-out) and OpenCode (4.14.3): reported verified with ''workspace already
+      reaped''.'
+  - id: journal-deferred-finding
+    capability: Journal
+    acceptance: A valid finding that belongs to another change is closed as deferred
+      with the issue that carries it — never recorded as refuted — and the gate says
+      so rather than hiding it
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-09-19-gh-429-journal-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: 'Written as an open record plus a tracked_by token so released fr (verified:
+      4.13.2) reads it without error and fails closed. Motivated by super-fr#535''s
+      finding being mislabelled refuted. LIVE 2026-09-22 (fr 4.14.3) on Claude Code
+      and OpenCode: deferred without --tracked-by exits 2; with it the gate passes and
+      prints the deferral.'
+  - id: down-all-blast-radius
+    capability: Isolation guard
+    acceptance: fr isolation down --all shows what it will tear down and refuses to
+      tear down another session's workspace without --yes
+    origin:
+    - super-fr:docs/superpowers/implemented/specs/2026-09-21-sentinel-three-states-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: 'Split from #432; #533. LIVE 2026-09-22 (fr 4.14.3) on Claude Code and OpenCode:
+      --dry-run listed all 8 workspaces with keep reasons and bound sessions and changed
+      nothing.'

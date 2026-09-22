@@ -159,3 +159,8 @@ Reviewer: a general-purpose subagent dispatched via superpowers:requesting-code-
 ### 0b93f5e1638d · discovery · fr acceptance check does not validate #L anchors
 
 Inserting tests above a cited test shifted 5 of this branch's new rows' #L refs onto blank lines or unrelated statements, and fr acceptance check still reported 185 rows OK. Corrected by hand (line numbers only). Not fixed here (out of scope): the check could require the anchored line to be a def/decorator, the same staleness the report-sync tripwire already guards for prose.
+
+<!-- fr:journal kind=finding scope=debug id=merge-down-all-ambient created=2026-09-22T13:43:50 state=fixed -->
+### merge-down-all-ambient · finding [fixed] · Merging main: C4's ambient binding made down --all call the caller's own workspace foreign (#547)
+
+After merging origin/main (15 commits, 4.14.4), two #547 down --all tests failed locally only: up now binds the ambient CLAUDE_CODE_SESSION_ID (C4), and #547 treats every binding as foreign absent --session. Real product interaction, not only a test leak: a session running up then down --all was told its own workspace was another session's. Fixed symmetrically — down defaults --session to the ambient session via sessions.ambient_binding. Tests: test_down_all_does_not_call_the_callers_own_workspace_foreign (red before), test_down_all_still_flags_a_genuinely_foreign_binding (guard kept). Suite made hermetic: conftest clears CLAUDE_CODE_SESSION_ID so local == CI. Also: #532's agent scan flagged Skill on the tools: frontmatter line — exempted that one line (_without_tools_allowlist) with test_only_the_frontmatter_tools_line_is_exempt proving body/description stay scanned. Version 4.15.0 (main was 4.14.4). Full suite 4411 passed, exit 0.

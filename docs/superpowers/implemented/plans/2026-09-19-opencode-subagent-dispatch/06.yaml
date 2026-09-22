@@ -36,14 +36,20 @@ tasks:
 state:
   steps:
     P6.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-21T17:58:01+00:00'
+      note: 'Live 2026-09-21: opencode.db child ses_f3b00175… agent=fr-phase-executor-mechanical
+        model=github-copilot/gpt-5.6-terra, parent_id set, own usage, 32 tool calls
+        under the child. Journal p6-live-evidence.'
     P6.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-21T17:58:02+00:00'
+      note: 'Live 2026-09-21: bound install carried this machine''s models, base none,
+        4/4 subagents from an unrelated dir, --uninstall removed only super-fr''s
+        agents. One listing miss not reproduced (3/3 reruns). Journal p6-live-evidence.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-21T17:58:09+00:00'
+    note: 'Operator-driven post-merge verification, run live 2026-09-21 on OpenCode
+      + github-copilot/gpt-5.6-terra. Both tasks pass; see journal p6-live-evidence.
+      Two defects found and filed (#537, #538), not fixed here.'
     observed_prs: []

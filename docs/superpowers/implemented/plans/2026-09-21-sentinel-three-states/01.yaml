@@ -1,0 +1,54 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the sentinel records its bound workspace (cache-relative)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - sentinel-three-state-guard
+  skeleton: true
+  tier: standard
+tasks:
+- number: 1
+  title: stamp_sentinel_workspace + attach stamping, red to green
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/ add test_sentinel_workspace_stamp.py. Cases against
+      fr.isolation.types.stamp_sentinel_workspace(session_id, worktree) and
+      fr.isolation.sessions.attach: (a) with $HOME=tmp and FR_SENTINEL_DIR=tmp/s, an existing
+      sentinel {repo_root, skill, started_at} gains workspace="worktrees/<repo>/<slug>" —
+      RELATIVE to $HOME/.cache/fr, never containing the home path — and every other key survives;
+      (b) no sentinel file for the session → no-op, nothing created; (c) a worktree outside
+      $HOME/.cache/fr → not stamped, sentinel byte-identical; (d) re-attach to a different
+      workspace restamps; (e) malformed sentinel JSON is left byte-identical; (f) the write is
+      atomic (via fr.artifacts.atomic.write_text_atomic or tmp+rename). Run pytest — fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: implement stamp_sentinel_workspace in packages/fr/src/fr/isolation/types.py beside
+      clear_repo_sentinels (docstring names the three states fresh/live/orphaned and that an
+      absent key IS fresh); call it from sessions.attach after save_state/_write_index. Run the
+      new tests plus tests/unit -k "isolation or session" and confirm green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: update the fr-pipeline-sentinel.sh header comment and sentinel_dir() docstring
+      to document the optional `workspace` field. Confirm ruff + mypy clean on packages/fr.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-21T15:02:36+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-21T15:02:37+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-21T15:02:37+00:00'
+      note: null
+  completion:
+    at: '2026-09-21T15:02:38+00:00'
+    note: null
+    observed_prs: []

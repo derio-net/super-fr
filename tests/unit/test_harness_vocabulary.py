@@ -170,6 +170,38 @@ def test_a_clause_naming_every_supported_harness_excuses_its_tools() -> None:
     )
 
 
+# --- `extra_tools`: a caller-local name, deliberately NOT in the vocabulary. --
+
+
+def test_extra_tools_flags_a_name_the_global_vocabulary_does_not_carry() -> None:
+    """2026-09-21 agent-body-tool-neutrality spec §2.4. The agent tree needs
+    Claude Code's `isolation: "worktree"` dispatch flag flagged, but registering
+    it in `TOOL_VOCABULARY` would fire on `fr-goal` §2's legitimate, un-scoped
+    cross-repo mention — a different sentence, out of that fix's scope. So the
+    caller supplies it, for its own trees only."""
+    text = 'Dispatch it WITHOUT `isolation: "worktree"`.\n'
+    assert scan_prose(text) == []
+    assert scan_prose(text, extra_tools={'isolation: "worktree"': "claude-code"}) == [
+        Violation(harness="claude-code", tool='isolation: "worktree"', line=1)
+    ]
+
+
+def test_an_extra_tool_is_excused_by_a_scoped_clause_like_any_other() -> None:
+    text = (
+        '**Harness — dispatch isolation:** Claude Code can pass `isolation: "worktree"`;\n'
+        "OpenCode and Hermes have no such argument, so the case cannot arise.\n"
+    )
+    assert scan_prose(text, extra_tools={'isolation: "worktree"': "claude-code"}) == []
+
+
+def test_extra_tools_does_not_mutate_the_global_vocabulary() -> None:
+    """A per-call mapping that leaked into `TOOL_VOCABULARY` would make the
+    skill trees start failing on the agent tree's private name."""
+    before = {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()}
+    scan_prose("nothing here", extra_tools={"WhateverTool": "claude-code"})
+    assert {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()} == before
+
+
 def test_an_unsupported_harness_label_does_not_count_toward_the_bar() -> None:
     """`codex`/`copilot-cli` have no reader to serve yet, so naming them cannot
     help a clause clear the bar."""

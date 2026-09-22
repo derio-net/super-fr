@@ -13,6 +13,10 @@
 
 set -eu
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/fr-isolation-decision.sh
+. "$SCRIPT_DIR/lib/fr-isolation-decision.sh"
+
 input=$(cat)
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -37,6 +41,13 @@ if [ -n "$cd_target" ]; then
   repo=$(cd "$cwd" 2>/dev/null && cd "$cd_target" 2>/dev/null && pwd -P) || exit 0
   first=$(printf '%s' "$first" | sed -nE "s/$cd_re/\\6/p")
 fi
+
+# `FR_ISOLATION_TARGET=worktree fr isolation up` (the form the guard's own deny
+# prescribes on a docker-less host) and `uv run fr run start` (AGENTS.md's form
+# inside a worktree) are still those commands. Unrecognised, they never bound
+# the session, the sentinel was never stamped, and a reaped workspace locked the
+# session out: #472, on exactly the hosts that use the prefix (review H1).
+first=$(fr_strip_command_prefix "$first")
 
 verb=$(printf '%s' "$first" | sed -nE 's/^[[:space:]]*fr[[:space:]]+isolation[[:space:]]+(up|exec|down)([[:space:]]|$).*/\1/p')
 # `fr run start` ENTERS isolation itself (spec 2026-09-20 §3.C.2), so it creates

@@ -24,6 +24,7 @@ from .types import (
     list_states,
     load_state,
     save_state,
+    stamp_sentinel_workspace,
     state_path,
 )
 
@@ -150,6 +151,7 @@ def attach(
     new = base.model_copy(update={"sessions": [*base.sessions, b]})
     save_state(new)
     _write_index(new, b)
+    stamp_sentinel_workspace(session_id, new.worktree)
     return new
 
 
