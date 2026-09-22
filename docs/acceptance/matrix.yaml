@@ -3416,8 +3416,9 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_open_prs.py
-    status: not-implemented
-    notes: Born at brainstorm gh#558; unit-pinned per-PR.
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: Render and PR collection tests pass in phase 4.
   - id: triage-pr-judgement
     capability: Backlog triage
     acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
@@ -3426,5 +3427,6 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_open_prs.py
-    status: not-implemented
-    notes: Born at brainstorm gh#558; shallow diff-vs-anchor, not code review.
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.

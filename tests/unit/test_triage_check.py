@@ -237,6 +237,19 @@ def test_a_markup_looking_title_prints_verbatim_and_does_not_raise(tmp_path: Pat
     assert "[manual] x [/red]" in result.output
 
 
+def test_unranked_prs_print_in_judgement_key_grammar(tmp_path: Path) -> None:
+    """Phase-4 review f3: the printed key pastes into judgements.yaml verbatim."""
+    facts = _state(tmp_path)
+    _write(
+        tmp_path, Facts.model_validate({**facts.to_json(), "prs": [_pr(558).model_dump()]}), JUDGED
+    )
+    result = _check(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert "super-fr#558" in result.output
+    assert "derio-net/super-fr#558" not in result.output
+
+
 def test_check_with_no_judgements_reports_everything_unranked(tmp_path: Path) -> None:
     _write(tmp_path, _facts([_issue(1), _issue(2)]), None)
     result = _check(tmp_path, "--json")

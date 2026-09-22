@@ -23,6 +23,7 @@ import re
 from typing import TYPE_CHECKING
 
 from fr.triage.check import CheckResult, classify
+from fr.triage.model import issue_key
 
 if TYPE_CHECKING:
     from fr.triage.model import Facts, Issue, Judgement, Judgements
@@ -136,6 +137,14 @@ details.row > summary::-webkit-details-marker { display: none; }
 .patterns article { background: var(--surface); border: 1px solid var(--line);
   border-radius: 6px; padding: 10px 12px; margin: 6px 0; }
 .patterns h3 { margin: 0 0 4px; font-size: 1rem; }
+.prs { margin-top: 28px; }
+.prs h2 { margin: 0 0 10px; font-size: 1.15rem; }
+.pr-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+.badge { font-size: .75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; }
+.badge.pass { color: var(--accent); border-color: var(--accent); }
+.badge.fail { color: var(--sev-1); border-color: var(--sev-1); }
+.badge.pending { color: var(--sev-2); border-color: var(--sev-2); }
+.badge.merge { font-family: var(--mono); }
 footer { margin-top: 40px; color: var(--muted); font-size: .8rem; }
 @media (max-width: 480px) {
   main { padding: 0 10px 32px; }
@@ -159,6 +168,8 @@ SCRIPT = """
     verified: function (r) { return r.dataset.verified === "1"; },
     small: function (r) { return r.dataset.cx === "XS" || r.dataset.cx === "S"; },
     done: function (r) { return r.dataset.done === "1"; }
+    ,redci: function (r) { return r.dataset.redci === "1"; }
+    ,conflicts: function (r) { return r.dataset.conflicts === "1"; }
   };
   var ORDERS = {
     priority: function (a, b) { return a.dataset.order - b.dataset.order; },
@@ -229,6 +240,8 @@ FILTER_BAR = """<div class="bar" role="toolbar" aria-label="Filter and sort">
 <button class="chip" type="button" data-filter="verified" aria-pressed="false">verified</button>
 <button class="chip" type="button" data-filter="small" aria-pressed="false">XS&amp;S only</button>
 <button class="chip" type="button" data-filter="done" aria-pressed="false">done</button>
+<button class="chip" type="button" data-filter="redci" aria-pressed="false">red CI</button>
+<button class="chip" type="button" data-filter="conflicts" aria-pressed="false">conflicts</button>
 </div>"""
 
 UNRANKED_TITLE = "Unranked — not yet triaged"
@@ -366,6 +379,53 @@ def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[s
     )
 
 
+def _pr_row(pr: "PullRequest", judgement: "Judgement | None", order: int, collected_at: str) -> str:
+    """Render an unranked PR with the forge's status, never an inferred status."""
+    checks = pr.checks
+    if checks.get("fail", 0):
+        ci_class, ci_symbol, ci_label = "fail", "✗", "fail"
+    elif checks.get("pending", 0):
+        ci_class, ci_symbol, ci_label = "pending", "●", "pending"
+    else:
+        ci_class, ci_symbol, ci_label = "pass", "✓", "pass"
+    merge = pr.merge_state
+    conflict = merge in {"DIRTY", "BLOCKED"} or pr.mergeable == "CONFLICTING"
+    delivery = judgement.delivery if judgement and judgement.delivery else "unranked"
+    delivery_note = judgement.delivery_note if judgement else ""
+    anchor = pr.anchor_path or pr.anchor_body or pr.anchor_reason or pr.anchor
+    url = _safe_url(pr.url)
+    attrs = {
+        "data-key": issue_key(pr.repo, pr.number), "data-num": str(pr.number),
+        "data-order": str(order), "data-search": f"{pr.repo} {pr.number} {pr.title}".lower(),
+        "data-redci": "1" if ci_class == "fail" else "0",
+        "data-conflicts": "1" if conflict else "0", "data-cxrank": "0",
+        "data-filed": "", "data-stage": "pr-ready", "data-cx": "-",
+    }
+    attr_s = " ".join(f'{k}="{esc(v)}"' for k, v in attrs.items())
+    link = f'<a href="{url}" rel="noopener noreferrer">PR #{pr.number}</a>' if url else f"PR #{pr.number}"
+    detail = [f'<p class="anchor"><strong>Anchor:</strong> {esc(anchor)}</p>']
+    if delivery_note:
+        detail.append(f'<p>{inline(delivery_note)}</p>')
+    return (
+        f'<details class="row" {attr_s}>'
+        f'<summary><span class="num">{esc(pr.repo)}#{pr.number}</span>'
+        f'<span class="title">{esc(pr.title)}</span><span class="pr-meta">'
+        f'<span class="badge {ci_class}">{ci_symbol} CI {ci_label}</span>'
+        f'<span class="badge merge">merge: {esc(merge)}</span>'
+        f'<span class="badge">delivery: {esc(delivery)}</span>'
+        f'<span class="tag mono">collected {esc(collected_at)}</span>'
+        f'</span></summary><div class="detail">{"".join(detail)}<p>{link}</p></div></details>'
+    )
+
+
+def _prs_section(prs: list["PullRequest"], judgements: "Judgements", start: int, collected_at: str) -> str:
+    rows = []
+    for offset, pr in enumerate(prs):
+        rows.append(_pr_row(pr, judgements.issues.get(issue_key(pr.repo, pr.number)), start + offset, collected_at))
+    body = "".join(rows) if rows else '<p class="empty">No unranked pull requests.</p>'
+    return f'<section class="prs"><h2>PRs</h2><p class="tier-desc">Unranked pull requests, with their implementation anchor and delivery verdict.</p><div class="rows">{body}</div></section>'
+
+
 def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
     open_n = sum(1 for i in facts.issues if i.state == "open")
     in_flight = sum(1 for i in facts.issues if i.stage in IN_FLIGHT)
@@ -436,6 +496,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
         )
 
     sections = [
+        _prs_section(result.unranked_prs, judgements, 1, facts.collected_at),
         _section(
             "unranked",
             "?",

@@ -35,6 +35,7 @@ from fr.triage.model import (
     Facts,
     Judgements,
     Scope,
+    issue_key,
     load_facts,
     load_judgements,
     state_dir,
@@ -184,7 +185,7 @@ def check_command(
     console.print(f"[bold]unranked PRs[/bold] ({len(result.unranked_prs)}) — open, no judgement")
     for pr in result.unranked_prs:
         console.print(
-            f"  {escape(pr.repo)}#{pr.number}  {escape(pr.title)}",
+            f"  {escape(issue_key(pr.repo, pr.number))}  {escape(pr.title)}",
             soft_wrap=True,
         )
     console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")

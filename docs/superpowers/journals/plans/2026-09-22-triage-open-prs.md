@@ -79,3 +79,23 @@ Optional judgement fields and check classification are direct model extensions; 
 ### 26e1ab768764 · review · review-phase 3: no findings (phase 3)
 
 Reviewed phase 3 (delivery verdicts, unranked-PRs check set). Optional delivery fields keep judgements schema 1 with old files loading; unranked_prs keyed by repo+number grammar; CLI escapes titles. No findings.
+
+<!-- fr:journal kind=discovery scope=plan id=36dc10812b58 created=2026-09-22T15:51:34 phase=4 -->
+### 36dc10812b58 · discovery · Phase 4 render implementation (phase 4)
+
+Phase 4 render now puts PRs first with escaped anchor/delivery metadata, CI symbols, verbatim merge_state, collection timestamp, red-CI/conflict chips, and no-script completeness. Render tests: 60 passed; mirror tripwires: 11 passed. Full suite exceeded 120s after 62 tests; minor bump 4.14.4→4.15.0 and acceptance rows moved to ci.
+
+<!-- fr:journal kind=finding scope=plan id=f3 created=2026-09-22T15:55:29 phase=4 state=open -->
+### f3 · finding [open] · check prints PRs as owner/repo#n, not the judgement key grammar (phase 4)
+
+CLI prints derio-net/super-fr#564 but judgements.yaml wants super-fr#564 (KEY_RE). Copy-paste from check into judgements fails validation. Print issue_key form like the JSON output does.
+
+<!-- fr:journal kind=review scope=plan id=1cd8627f849d created=2026-09-22T16:44:59 phase=4 -->
+### 1cd8627f849d · review · review-phase 4: 1 finding raised, fixed (phase 4)
+
+Reviewed phase 4 (render badges, PRs section, skill + mirrors, minor bump, matrix rows). Findings: f3 CLI printed owner/repo#n instead of judgement-key grammar. Fixed with regression test. Also trimmed SKILL.md to exactly 120 lines (skill validation green) and re-ran both mirror syncs. Live smoke on derio-net/super-fr: 7 issue-less PRs surface with badges, PRs section renders, chips present.
+
+<!-- fr:journal kind=finding scope=plan id=f3-resolved created=2026-09-22T16:44:59 state=fixed resolves=f3 -->
+### f3-resolved · finding [fixed] · resolves f3: check prints PRs as owner/repo#n, not the judgement key grammar
+
+check prints issue_key form; regression test test_unranked_prs_print_in_judgement_key_grammar.
