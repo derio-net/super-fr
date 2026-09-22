@@ -23,12 +23,12 @@ overrides it). Pass the same `--repo`/`--org`, and `--dir` if you use it, to eve
 
 | File | Written by | Holds |
 |---|---|---|
-| `facts.json` | `fr triage collect` | what the forge says: open issues, linked PRs, derived stages |
+| `facts.json` | `fr triage collect` | what the forge says: open issues, labels, linked PRs (no stages) |
 | `judgements.yaml` | **you** | tiers, per-issue rankings, patterns |
 | `triage.html` | `fr triage render` | the board, built from both |
 
-Stages (`backlog`, `blocked`, `pr-draft`, `pr-ready`, `merged`, `closed`) are derived from the
-forge on every collect. Never set one, and never write facts yourself.
+Stages (`backlog`, `blocked`, `pr-draft`, `pr-ready`, `merged`, `closed`) are derived from those
+facts by `check` and `render`, never stored. Never set one, and never write facts yourself.
 
 ## The loop (a re-run of it is the sync)
 
@@ -62,21 +62,29 @@ This file is your whole interface, and `fr triage --help` does not document it:
 schema: 1
 ranked_at: 2026-09-21
 tiers:                      # every tier an issue names must be declared here
-  - {n: 1, title: Data loss, description: Work destroyed with no prompt or salvage.}
-  - {n: 2, title: Silent wrongness, description: The failure looks like success.}
+  - n: 1
+    title: "Data loss"
+    description: "Work destroyed with no prompt or salvage."
+  - n: 2
+    title: "Silent wrongness"
+    description: "The failure looks like success."
 issues:
   "super-fr#435":           # "<repo-name>#<n>" in both scopes; lowercase is canonical
     tier: 1
     theme: isolation
-    cx: S                   # XS | S | S-M | M | L | -
+    cx: S                   # XS | S | S-M | M | L | "-" (quote it: a bare - is a YAML list)
     verified: true          # re-read at current main, not copied from the issue
     detail: "`gc()` trusts `MERGED` and calls `down()`. **Still live** on main (issue cites :1013, now :1312)."
     note: "Batch with super-fr#469, same subsystem."
 patterns:
-  - {title: Remote state justifies local destruction, ids: ["super-fr#435"], body: "…"}
+  - title: "Remote state justifies local destruction"
+    ids: ["super-fr#435"]
+    body: "…"
 ```
 
-Set `ranked_at` to today whenever you add or change a judgement; the board shows it. Keys are
+Keep this block style and quote every title, description, detail, note and body: a `: `
+inside unquoted text, or a leading `-`, breaks the file. Set `ranked_at` to today whenever you
+add or change a judgement; the board shows it. Keys are
 case-insensitive, so two keys differing only by case are refused as a conflict.
 `detail`, `note` and pattern `body` interpret exactly two inline forms, `` `code` `` and
 `**bold**`; everything else is shown as literal text.
