@@ -3296,8 +3296,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; decision d4. Post-merge operator walk (Test Plan 11).
+    status: skipped
+    notes: 'Walked live post-merge 2026-09-22 (Test Plan 11) on Claude Code 2.1.278
+      / Opus 5: repo scope as a SYNC of an OpenCode-written ranking (1 new issue judged,
+      0 existing changed) and org scope over live derio-net (18/19 repos collected,
+      1 skipped with its reason, 112 issues rendered, willikins ranked by operator scope).
+      Both found fr-triage from a plain ask. Evidence: plan journal walk-claude-code-repo
+      and walk-claude-code-org. Not in CI: needs a live harness and model.'
   - id: triage-skill-opencode
     capability: Backlog triage
     acceptance: An agent on OpenCode, which has no Artifact tool, can follow fr-triage
@@ -3305,9 +3310,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-21-fr-triage-design.md
     levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; decision d4. Post-merge operator walk, may ride with
-      the OpenCode verification run (Test Plan 12).
+    status: skipped
+    notes: 'Walked live post-merge 2026-09-22 (Test Plan 12) on OpenCode with github-copilot/gpt-5.6-terra,
+      a non-Claude model: first-run repo triage (33 issues judged into a new judgements.yaml,
+      board rendered, no forge writes); fr-triage discovered from a plain ask. It surfaced
+      a skill defect (the YAML example teaches invalid YAML), fixed separately. Evidence:
+      plan journal walk-opencode. Not in CI: needs a live OpenCode session.'
   - id: triage-skill-hermes
     capability: Backlog triage
     acceptance: An agent on Hermes can follow fr-triage end to end
