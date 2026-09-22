@@ -34,6 +34,7 @@ PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
 TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
+Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 
 # "<repo-name>#<number>" in both scopes (spec §3.D): one code path.
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
@@ -229,6 +230,8 @@ class Judgement(_Strict):
     verified: bool = False
     detail: str = ""
     note: str = ""
+    delivery: Delivery | None = None
+    delivery_note: str = ""
 
 
 class Pattern(_Strict):

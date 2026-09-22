@@ -61,7 +61,39 @@ def test_a_judgements_file_shaped_like_the_spec_loads(tmp_path: Path) -> None:
     assert j.issues["super-fr#435"].theme == "isolation"
     assert {j.issues[f"super-fr#{n}"].cx for n in range(1, 6)} == {"XS", "S-M", "M", "L", "-"}
     assert j.issues["super-fr#435"].cx == "S"
+    assert j.issues["super-fr#435"].delivery is None
     assert j.patterns[0].ids == ["super-fr#435"]
+
+
+@pytest.mark.parametrize("delivery", ["delivers", "partial", "drift", "unanchored"])
+def test_a_pr_delivery_verdict_and_reason_load(delivery: str) -> None:
+    judgement = Judgements.model_validate(
+        {
+            "schema": 1,
+            "tiers": [{"n": 1, "title": "Data loss"}],
+            "issues": {
+                "super-fr#558": {
+                    "tier": 1,
+                    "delivery": delivery,
+                    "delivery_note": "compared against its intent anchor",
+                }
+            },
+        }
+    ).issues["super-fr#558"]
+
+    assert judgement.delivery == delivery
+    assert judgement.delivery_note == "compared against its intent anchor"
+
+
+def test_an_unknown_delivery_verdict_is_refused() -> None:
+    with pytest.raises(ValueError, match="delivery"):
+        Judgements.model_validate(
+            {
+                "schema": 1,
+                "tiers": [{"n": 1, "title": "Data loss"}],
+                "issues": {"super-fr#558": {"tier": 1, "delivery": "reviewed"}},
+            }
+        )
 
 
 @pytest.mark.parametrize("key", ["derio-net/super-fr#435", "super-fr 435", "super-fr#", "#435"])

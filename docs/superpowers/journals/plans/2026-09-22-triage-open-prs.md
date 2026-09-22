@@ -69,3 +69,13 @@ Anchor selection, file reads, and fallback are isolated helpers; no cleanup warr
 ### 0c023df1a038 · review · review-phase 2: no findings (phase 2)
 
 Reviewed spec+plan+code for phase 2 (intent anchors). Anchor order, head-ref fetch with 2000-char cap, spec-meta ref, forge-error degradation all match spec 3.B and Q&A 1. Verified read_file_at_ref live against origin (21KB body). No findings.
+
+<!-- fr:journal kind=discovery scope=plan id=cecea4f371c5 created=2026-09-22T13:45:28 phase=3 -->
+### cecea4f371c5 · discovery · no-refactor-because P3.T2 (phase 3)
+
+Optional judgement fields and check classification are direct model extensions; no cleanup warranted.
+
+<!-- fr:journal kind=review scope=plan id=26e1ab768764 created=2026-09-22T15:46:39 phase=3 -->
+### 26e1ab768764 · review · review-phase 3: no findings (phase 3)
+
+Reviewed phase 3 (delivery verdicts, unranked-PRs check set). Optional delivery fields keep judgements schema 1 with old files loading; unranked_prs keyed by repo+number grammar; CLI escapes titles. No findings.

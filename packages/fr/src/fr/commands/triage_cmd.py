@@ -170,9 +170,9 @@ def check_command(
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
-    as_json: bool = typer.Option(False, "--json", help="Emit the four sets as JSON."),
+    as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked, settled, orphaned and unreachable. Always exits 0."""
+    """Report unranked issues and PRs, settled, orphaned and unreachable. Always exits 0."""
     _, facts, judgements = _load_state(_scope(repo, org), dir_override)
     result = classify(facts, judgements)
     if as_json:
@@ -181,6 +181,12 @@ def check_command(
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+    console.print(f"[bold]unranked PRs[/bold] ({len(result.unranked_prs)}) — open, no judgement")
+    for pr in result.unranked_prs:
+        console.print(
+            f"  {escape(pr.repo)}#{pr.number}  {escape(pr.title)}",
+            soft_wrap=True,
+        )
     console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")
     for i in result.settled:
         console.print(f"  {escape(i.key)}  {i.stage}  {escape(i.title)}", soft_wrap=True)
