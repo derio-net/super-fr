@@ -208,17 +208,15 @@ def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
     return len(harnesses_named) >= _MIN_HARNESSES_PER_CLAUSE
 
 
-def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[Violation]:
-    """Every harness-specific tool mention in `text` that is NOT inside a
-    scoped clause naming every supported harness.
+def scan_prose(text: str) -> list[Violation]:
+    """Every harness-specific tool or argument mention in `text` that is NOT
+    inside a scoped clause naming every supported harness, skipping headings.
 
-    `extra_tools` (name -> owning harness) adds names for THIS call only,
-    leaving `TOOL_VOCABULARY` untouched — the escape hatch for a name that is
-    genuinely harness-specific in one tree but must not fire repo-wide
-    (2026-09-21 agent-body-tool-neutrality spec §2.4: the agent tree needs
-    Claude Code's `isolation: "worktree"` flagged, while `fr-goal` §2 mentions
-    the same flag legitimately in an un-scoped sentence of its own). Extras
-    are judged by exactly the same clause rules as registered tools.
+    There is no per-call vocabulary: a name worth flagging in one tree is
+    worth flagging in every tree a reader on any harness follows, so it
+    belongs in `TOOL_VOCABULARY` or `ARGUMENT_VOCABULARY` (2026-09-22
+    harness-argument-neutrality spec §3.A removed the `extra_tools` escape
+    hatch the agent tree used for Claude Code's `isolation: "worktree"`).
 
     Ordered by (line, tool) so a failure listing several hits reads top to
     bottom the way the file does — the loop below is tool-major for pattern
@@ -227,16 +225,8 @@ def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[
     spans = _clause_spans(lines)
     valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
 
-    lookups = [
-        *_LOOKUPS,
-        *(
-            _Lookup(harness, tool, _word_pattern(tool))
-            for tool, harness in (extra_tools or {}).items()
-        ),
-    ]
-
     violations: list[Violation] = []
-    for lookup in lookups:
+    for lookup in _LOOKUPS:
         for line_idx, line in enumerate(lines):
             if _HEADING_RE.match(line) or not lookup.pattern.search(line):
                 continue

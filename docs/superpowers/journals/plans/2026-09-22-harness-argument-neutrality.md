@@ -64,3 +64,8 @@ Uniqueness: test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies (t
 ### 06f6c0af9ea2 · discovery · P2.T2.S1 RED: headings are scanned like body lines (phase 2)
 
 test_a_heading_is_not_flagged[## Plan Skill Override] (and 3 other headings): AssertionError: assert [Violation(harness='claude-code', tool='Skill', line=1)] == []. test_the_same_word_in_a_body_line_is_still_flagged: the heading on line 1 is reported alongside the body mention on line 3. test_only_a_real_atx_heading_is_exempt passes at RED (nothing is exempt yet) and guards the GREEN regex.
+
+<!-- fr:journal kind=discovery scope=plan id=11b2b72f9074 created=2026-09-22T13:57:35 phase=2 -->
+### 11b2b72f9074 · discovery · P2.T3.S1 RED: scan_prose still accepts extra_tools (phase 2)
+
+test_scan_prose_rejects_an_extra_tools_keyword: Failed: DID NOT RAISE <class 'TypeError'> — the parameter still exists. The three rewritten test_extra_tools_* tests (now test_the_isolation_flag_is_flagged_from_the_vocabulary_alone, ..._excused_by_a_scoped_clause_like_any_tool, test_scanning_does_not_mutate_either_vocabulary) pass already, since P2.T1 put the flag in the vocabulary; the agent tripwire calls scan_prose(text) with no extra and stays xfail on the executor's run_in_background.

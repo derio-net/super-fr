@@ -172,23 +172,46 @@ def test_a_clause_naming_every_supported_harness_excuses_its_tools() -> None:
     )
 
 
-# --- `extra_tools`: a caller-local name, deliberately NOT in the vocabulary. --
+# --- `extra_tools` is gone: the flag is vocabulary now (spec §3.A) -----------
 
 
-def test_an_extra_tool_is_excused_by_a_scoped_clause_like_any_other() -> None:
+def test_the_isolation_flag_is_flagged_from_the_vocabulary_alone() -> None:
+    """Was `test_extra_tools_flags_a_name_the_global_vocabulary_does_not_carry`
+    (2026-09-21 agent-body spec §2.4). The flag is an `ARGUMENT_VOCABULARY`
+    entry now, so no caller has to supply it — every tree sees it."""
+    text = 'Dispatch it WITHOUT `isolation: "worktree"`.\n'
+    assert scan_prose(text) == [
+        Violation(harness="claude-code", tool='isolation: "worktree"', line=1)
+    ]
+
+
+def test_the_isolation_flag_is_excused_by_a_scoped_clause_like_any_tool() -> None:
+    """Was `test_an_extra_tool_is_excused_by_a_scoped_clause_like_any_other`."""
     text = (
         '**Harness — dispatch isolation:** Claude Code can pass `isolation: "worktree"`;\n'
         "OpenCode and Hermes have no such argument, so the case cannot arise.\n"
     )
-    assert scan_prose(text, extra_tools={'isolation: "worktree"': "claude-code"}) == []
+    assert scan_prose(text) == []
 
 
-def test_extra_tools_does_not_mutate_the_global_vocabulary() -> None:
-    """A per-call mapping that leaked into `TOOL_VOCABULARY` would make the
-    skill trees start failing on the agent tree's private name."""
-    before = {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()}
-    scan_prose("nothing here", extra_tools={"WhateverTool": "claude-code"})
-    assert {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()} == before
+def test_scanning_does_not_mutate_either_vocabulary() -> None:
+    """Was `test_extra_tools_does_not_mutate_the_global_vocabulary`: a scan
+    that leaked state into a vocabulary would change what every later scan
+    reports."""
+    tools_before = {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()}
+    arguments_before = {harness: dict(args) for harness, args in ARGUMENT_VOCABULARY.items()}
+    scan_prose('isolation: "worktree", run_in_background, AskUserQuestion\n')
+    assert {harness: set(tools) for harness, tools in TOOL_VOCABULARY.items()} == tools_before
+    assert {harness: dict(args) for harness, args in ARGUMENT_VOCABULARY.items()} == (
+        arguments_before
+    )
+
+
+def test_scan_prose_rejects_an_extra_tools_keyword() -> None:
+    """The per-call escape hatch is removed (spec §3.A): a name worth flagging
+    belongs in a vocabulary every tree shares, not in one caller's argument."""
+    with pytest.raises(TypeError, match="extra_tools"):
+        scan_prose("text\n", extra_tools={"WhateverTool": "claude-code"})  # type: ignore[call-arg]
 
 
 def test_an_unsupported_harness_label_does_not_count_toward_the_bar() -> None:

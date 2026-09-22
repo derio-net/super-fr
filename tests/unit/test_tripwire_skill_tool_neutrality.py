@@ -41,13 +41,6 @@ _AGENT_TREES = {
     "opencode-agent-mirror": REPO_ROOT / ".opencode" / "agent",
 }
 
-# Claude Code's dispatch-isolation flag, deliberately NOT in TOOL_VOCABULARY
-# (spec §2.4/§3): registering it globally would fire on `fr-goal` §2's
-# legitimate un-scoped cross-repo mention, a separate sentence out of scope
-# here. It IS harness-specific in an agent body, so the agent trees pass it
-# to `scan_prose` themselves.
-_AGENT_EXTRA_TOOLS = {'isolation: "worktree"': "claude-code"}
-
 
 def _all_skill_files() -> list[Path]:
     files: list[Path] = []
@@ -103,7 +96,7 @@ def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -
     messages = []
     for path in _all_agent_files():
         text = path.read_text(encoding="utf-8")
-        for violation in scan_prose(text, extra_tools=_AGENT_EXTRA_TOOLS):
+        for violation in scan_prose(text):
             messages.append(
                 f"{path.relative_to(REPO_ROOT)}:{violation.line}: "
                 f"names {violation.tool!r} ({violation.harness}) outside a scoped clause "

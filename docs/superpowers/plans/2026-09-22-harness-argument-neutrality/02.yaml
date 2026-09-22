@@ -78,17 +78,19 @@ state:
       note: module docstring documents the heading rule with the four measured false
         positives
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:57:35+00:00'
+      note: RED recorded in journal
     P2.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:58:02+00:00'
+      note: extra_tools parameter and _AGENT_EXTRA_TOOLS removed; harness + tripwire
+        tests pass (tripwire reds xfail strict for phase 3)
     P2.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:58:03+00:00'
+      note: no dead imports (Mapping still serves require_every_harness); remaining
+        extra_tools mentions are deliberate history in docstrings; ruff, mypy green
   completion:
     at: null
     note: null
