@@ -134,3 +134,8 @@ Heading lines neither lead a clause nor count toward naming a harness in _clause
 ### p2r-7-resolved · finding [fixed] · resolves p2r-7: isolation: "worktree-mode" is a false positive
 
 (?![\w-]) after worktree; isolation: "worktree-mode" asserted unflagged.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-22T14:22:57 phase=2 -->
+### p2-review · review · Phase 2 review — separate reviewer, with fixes applied (phase 2)
+
+Reviewer: separately dispatched general-purpose subagent (a595be6374237b183), requesting-code-review template, adversarial on scanner silence, range b0d58fda..ea6bf001. Verdict: ready with fixes. Received and verified: p2r-1 (strict xfails pass a partial fix silently — my own brief's design) fixed with exact-set assertions; p2r-2 (JSON/dict/backtick isolation spellings), p2r-3 (background=True / colon), p2r-4 (fenced # comments skipped as headings), p2r-5 (headings counted toward clause validity), p2r-7 (worktree-mode false positive) fixed test-first; p2r-6 refuted with reasoning. Spec 3.A amended. Full suite after fixes: 4392 passed, exit 0.
