@@ -138,7 +138,7 @@ if [ -n "$cd_target" ]; then
         # it. Without this, a session holding a pipeline in repo A cannot
         # start isolation in repo B at all: the prefix list below never admits
         # another repo, and the `fr isolation` allowance could not compose
-        # with the leading `cd` needed to get there. That made fr-goal §3 —
+        # with the leading `cd` needed to get there. That made fr-goal §2 —
         # one agent per repo for a cross-repo spec — unreachable.
         #
         # A linked worktree of the SAME base repo also reports a toplevel

@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Live board walk post-merge
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Operator live verification
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Operator runs fr triage collect on derio-net/super-fr on Claude Code, judges an issue-less PR, renders and opens the board
+  - id: P5.T1.S2
+    text: |-
+      Operator repeats the repo-scope walk on OpenCode to prove harness parity; Hermes stays not-implemented with reason
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

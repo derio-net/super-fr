@@ -678,7 +678,7 @@ class TestCrossRepoReachability:
     start with `fr isolation`, but not both — and the deny message recommended
     `fr isolation up`, which was itself denied.
 
-    This blocked fr-goal §3: its per-repo agents inherit the same sentinel and
+    This blocked fr-goal §2: its per-repo agents inherit the same sentinel and
     the same base-repo cwd, so the multi-repo story was unreachable from the
     flow that defines it.
     """
