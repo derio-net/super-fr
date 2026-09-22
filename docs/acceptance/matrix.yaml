@@ -3636,3 +3636,48 @@ rows:
       prompt with opencode run --pure (no external plugins) in an identical repo applied
       the edit. The model-driven path through the DELIVERED copy is therefore live-proven;
       still live-only, so the CI level is unchanged.'
+  - id: scaffold-unknown-tool-refused
+    capability: fr init scaffold
+    acceptance: An unrecognised --tool fails loudly, names the known set, and writes
+      nothing; --feature <ref> is the explicit escape
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm (gh#574); verification lands in this PR.
+  - id: scaffold-jvm-toolchain
+    capability: fr init scaffold
+    acceptance: --tool java/maven yields a container where java -version (at the project's
+      detected version) and mvn -v succeed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm (gh#574); verification lands in this PR.
+  - id: scaffold-host-cli-arch
+    capability: fr init scaffold
+    acceptance: glab/tea postCreate installs the binary for the container's own architecture,
+      and an unsupported architecture fails naming it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm (gh#576); verification lands in this PR.
+  - id: pinned-host-cli-assets-resolve
+    capability: fr init scaffold
+    acceptance: Every pinned glab/tea asset still downloads and matches its recorded
+      checksum, checked on a schedule
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm (gh#576); verification lands in this PR.
+  - id: isolation-mode-from-state
+    capability: fr isolation
+    acceptance: Commands addressing an existing workspace route by its recorded mode,
+      whatever FR_ISOLATION_TARGET says in the caller's env
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#c-mode-from-state-gh569
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm (gh#569); verification lands in this PR.
