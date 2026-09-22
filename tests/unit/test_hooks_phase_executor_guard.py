@@ -120,8 +120,11 @@ class TestOutOfScopeDispatchesUntouched:
         assert decision(run_hook(dispatch("general-purpose", "worktree"))) is None
 
     def test_fr_goal_cross_repo_agent_shape_allowed(self) -> None:
-        """fr-goal §3 dispatches one agent per repo WITH the flag, correctly —
-        those agents each start a fresh pipeline in a different repo."""
+        """The guard refuses the flag for fr-phase-executor ONLY: any other agent
+        may carry it. (This docstring used to say fr-goal's cross-repo agents
+        take the flag to reach a different repo — false: it cuts a worktree of
+        the CURRENT repo; they enter isolation with `fr isolation up --repo`.
+        2026-09-22 harness-argument-neutrality review p3r-1.)"""
         assert decision(run_hook(dispatch("claude", "worktree"))) is None
 
     def test_non_agent_tool_allowed(self) -> None:
