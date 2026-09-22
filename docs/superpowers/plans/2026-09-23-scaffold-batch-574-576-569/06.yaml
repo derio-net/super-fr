@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Housekeeping, live proofs on arm64, acceptance flips, version bump
+  tag: agentic
+  depends_on:
+  - 2
+  - 4
+  - 5
+  tracking_issue: null
+  acceptance:
+  - scaffold-unknown-tool-refused
+  - scaffold-jvm-toolchain
+  - scaffold-host-cli-arch
+  - pinned-host-cli-assets-resolve
+  - isolation-mode-from-state
+  tier: standard
+tasks:
+- number: 1
+  title: Live proofs via fr isolation exec
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Live #574 (arm64 host, docker running): in the session scratchpad create a fictional
+      git repo `jvm-demo` (git init, one commit) with a pom.xml pinning maven.compiler.release 17.
+      Using THIS worktree's fr (`uv run --project <worktree> fr ...` from the scratch repo):
+      `fr init scaffold --profile dev --purpose "jvm demo" --tool nosuchtool` → capture the
+      refusal + exit code and `ls .devcontainer` (absent); then `fr init scaffold --profile dev
+      --purpose "jvm demo" --tool java --tool maven` → capture the detection line; `fr isolation
+      up --branch demo/jvm`, `fr isolation exec --branch demo/jvm -- mvn -v` and
+      `... -- java -version` (expect 17). Journal the verbatim outputs (`fr journal add --scope
+      plan --kind discovery --phase 6 --title "live #574 proof"`), then `fr isolation down
+      --branch demo/jvm --force`.
+  - id: P6.T1.S2
+    text: |-
+      Live #576: scratch repos `gl-demo` (`--backend gitlab`) and `gt-demo` (`--backend gitea`),
+      each scaffolded with `--tool uv`, `fr isolation up`, then `fr isolation exec -- sh -c
+      'dpkg --print-architecture; glab --version'` (resp. tea --version) — expect arm64 and the
+      pinned versions. Journal outputs (phase 6 discovery "live #576 proof"); tear down.
+  - id: P6.T1.S3
+    text: |-
+      Live #569: scratch repo `hw-demo`: `FR_ISOLATION_TARGET=worktree fr isolation up --branch
+      demo/hw`, then with the variable unset (`env -u FR_ISOLATION_TARGET`) `fr isolation exec
+      --branch demo/hw -- pwd`, `fr isolation status`, `fr isolation down --branch demo/hw` —
+      all exit 0. Journal outputs (phase 6 discovery "live #569 proof"). If any live proof is
+      blocked by the environment, journal a `finding --state open` naming the exact blocker
+      instead of asserting it.
+- number: 2
+  title: Acceptance, prose, version
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Flip rows with `fr acceptance set-status` (never hand-edit), adding --level refs to the
+      new tests: scaffold-unknown-tool-refused → ci (unit test_scaffold_tools.py,
+      test_init_scaffold.py); scaffold-jvm-toolchain → skipped (unit refs; notes: live mvn -v /
+      java -version walk recorded in PR, live container not in CI); scaffold-host-cli-arch →
+      ci (unit test_scaffold_host_cli_snippet.py; notes mention live arm64 walk);
+      pinned-host-cli-assets-resolve → scheduled (level ref scripts/check-pinned-clis.py +
+      tests/unit/test_check_pinned_clis.py; notes: pinned-clis.yml weekly);
+      isolation-mode-from-state → ci (unit + integration refs). Update notes of existing rows
+      `multibackend-scaffold` and `isolation-host-worktree-e2e` where they now misdescribe
+      behaviour (HOST_CLI_POST_CREATE → HOST_CLI_PINS; env fail-closed only for up/gc) via
+      set-status keeping their status. `fr acceptance check` green.
+  - id: P6.T2.S2
+    text: |-
+      Prose: AGENTS.md — if it describes `--tool` or FR_ISOLATION_TARGET behaviour, correct it;
+      grep docs/explainers/*.md for "--tool", "FR_ISOLATION_TARGET", "scaffold" — if a rendered
+      page's prose is now false, apply the explainers-currency rule (.claude/rules/explainers-currency.md);
+      otherwise journal "explainers checked: no stale prose". Run
+      `uv run --no-project python scripts/bump-version.py minor`, commit manifests + uv.lock.
+  - id: P6.T2.S3
+    text: |-
+      Final gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      mypy (AGENTS.md command), `uv run pytest -q` (full, with coverage), `uv run --no-project
+      python scripts/bump-version.py --check`, both sync scripts `--check`, `fr validate
+      artifacts`. Commit `chore: 4.18.0 — scaffold batch (gh#574, gh#576, gh#569)`.
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

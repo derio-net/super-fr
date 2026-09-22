@@ -1,0 +1,189 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '#569 — every workspace-addressing command routes by the recorded mode'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-mode-from-state
+  tier: hard
+tasks:
+- number: 1
+  title: Each target's up writes its mode; routing.target_for_state
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_isolation_routing.py: (a) LocalWorktreeDevcontainerTarget.up,
+      HostWorktreeTarget.up and ExternalTarget.up each save a state whose `target` is
+      "devcontainer" / "worktree" / "external" (reuse the fake-runner fixtures from
+      tests/unit/test_isolation.py, test_isolation_external.py and
+      tests/integration/test_hostworktree_lifecycle.py); (b)
+      fr.isolation.routing.target_for_state(state, runner=..., gc_spawner=...) returns
+      HostWorktreeTarget for a worktree state and LocalWorktreeDevcontainerTarget for a
+      devcontainer state, both with repo_root == state.repo_root, REGARDLESS of
+      FR_ISOLATION_TARGET (monkeypatch it to the opposite value and to a bogus value); (c) an
+      external state with no valid marker / no container evidence raises IsolationError naming
+      the branch; with marker + evidence (monkeypatch `fr.isolation.external._container_evidence`)
+      returns ExternalTarget. Confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: pass `target=` in the IsolationState constructed by local.py's up (grep
+      `IsolationState(` in packages/fr/src/fr/isolation/), hostworktree.py's up and
+      external.py's up. Create packages/fr/src/fr/isolation/routing.py with
+      `target_for_state(state, runner, gc_spawner) -> Target` using types.recorded_mode;
+      external → ExternalTarget.detect(state.worktree if it exists else state.repo_root) or
+      raise IsolationError(f"workspace {state.branch!r} was created in external mode but no
+      valid .fr-isolation marker with container evidence is present — fr will not guess a
+      backend"). Never read os.environ here. Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: module docstring in routing.py stating the rule (env selects the mode only
+      where no workspace exists — up, gc discovery, verify-merge on a reaped branch). ruff +
+      mypy clean.
+- number: 2
+  title: isolation_cmd routes exec/restart/status/down/down --worktree/down --all/verify-merge
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_isolation_cmd.py add tests with FR_ISOLATION_TARGET UNSET
+      (monkeypatch.delenv) and a saved state with target="worktree": `exec -- true`,
+      `restart`, `status`, `down --branch`, `down --worktree <path>`, `down --all --yes` and
+      `verify-merge` each reach a stub installed over `isolation_cmd._target_for` (record the
+      state it was called with) — and never `isolation_cmd._target`. Reverse case: env says
+      "worktree", state target="devcontainer" → devcontainer class selected (assert via
+      routing, not the stub). `status --stats` over a host-worktree row exits 2 with the
+      existing "require devcontainer mode" wording; `status` with zero workspaces and a bogus
+      env exits 0 ("no isolation workspaces."). `up` and `gc` with a bogus env still exit 2.
+      Rewrite (do not delete) the existing bogus-env tests near lines ~1411 (status) and
+      ~1428 (down --all) to assert the env is now ignored there, and move the existing stubs
+      over `isolation_cmd._target` (~798, ~869, ~1264 — grep `_target"` / `_target,`) for
+      exec/down/restart to `_target_for`. Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/isolation_cmd.py add
+      `_target_for(root: Path, state: IsolationState) -> Target` (the single seam; wraps
+      routing.target_for_state(state, runner=_runner, gc_spawner=_gc_spawner) and maps
+      IsolationError to exit 2 like _target_or_exit). Use it in exec, restart, down (both the
+      --branch and --worktree paths), _down_all (per state, for both `_down_refusal` and the
+      teardown loop), status (per row; run `_refuse_no_docker_status_extras` per row target and
+      call push_check through that row's target; select no target when states is empty) and
+      verify-merge when a state exists. Keep `_target` for up, gc and reaped verify-merge;
+      update `_target`'s docstring to say so. Tests green (`uv run pytest tests/unit/test_isolation_cmd.py -q --no-cov`).
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: remove any now-dead helper, keep comments at the file's density. Full
+      `uv run pytest -q --no-cov -x tests/unit/test_isolation*.py tests/integration/test_hostworktree_lifecycle.py` green; ruff + mypy clean.
+- number: 3
+  title: gc reaps each workspace through its own mode, and the background gc keeps
+    its mode
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests (tests/unit/test_isolation_gc_routing.py): (a) a HostWorktreeTarget gc whose
+      classification reaps a state with target="devcontainer" tears it down through a
+      LocalWorktreeDevcontainerTarget (its `_teardown_container` runs `docker stop`/`rm` on the
+      fake runner); the dry-run hazard probe likewise uses the recorded class — currently both
+      use `type(self)(…)` in local.py's gc (~lines 1027 and 1036); (b) the spawner a target
+      passes to `_detached_gc_spawn` launches `fr isolation gc` with FR_ISOLATION_TARGET set to
+      that target's mode: HostWorktreeTarget → "worktree", devcontainer → "devcontainer"
+      (monkeypatch subprocess.Popen in fr.isolation.local and capture `env`). Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: in local.py's gc build the reap sibling and the dry-run probe sibling via a
+      function-local `from fr.isolation.routing import target_for_state` (avoids the
+      hostworktree→local import cycle), passing runner=self.run, gc_spawner=_noop_gc_spawn;
+      an external recorded state is classified but never reaped by a worktree gc (report the
+      existing "external" verdict wording if one exists, else skip with detail "external —
+      preparer-managed"). Give `_detached_gc_spawn` a keyword `mode: str | None = None` that,
+      when set, passes `env={**os.environ, "FR_ISOLATION_TARGET": mode}` to Popen; make the
+      target's `_spawn_gc` pass its own mode (a class attribute `_MODE = "devcontainer"` on
+      the local target, `"worktree"` on HostWorktreeTarget), keeping the GcSpawner type
+      compatible (wrap with functools.partial or extend the Callable signature — pick the
+      smaller diff, update every call site mypy flags). Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: comments at the sibling construction explain WHY (the #354 leak when the
+      sweeper's class differs from the workspace's). ruff + mypy clean; commit
+      `fix(isolation): route every workspace-addressing command by its recorded mode (gh#569)`.
+- number: 4
+  title: Integration proof and skill prose
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: in tests/integration/test_hostworktree_lifecycle.py add a test: `up` under
+      FR_ISOLATION_TARGET=worktree through the CLI runner, then delenv and run
+      `fr isolation exec -- git rev-parse --show-toplevel` → exit 0 and prints the worktree;
+      `status` shows `container=n/a (host)`; `down` succeeds with the env still unset. Run it
+      against the Phase-2 code — it should now pass; if it passes before any change it is a
+      characterization test, record that in the plan journal (`fr journal add --scope plan
+      --kind discovery --phase 2`).
+  - id: P2.T4.S2
+    text: |-
+      GREEN: update plugins/super-fr/skills/fr-isolation/SKILL.md where it calls
+      FR_ISOLATION_TARGET a host-level declaration (~lines 24-27): it selects the mode at `up`;
+      every later command follows the workspace's recorded mode, so a dispatched agent needs
+      no env. Keep it harness-neutral (tests/unit/test_tripwire_skill_tool_neutrality.py).
+      Run `uv run --no-project python scripts/sync-opencode.py` AND
+      `uv run --no-project python scripts/sync-hermes.py`, then the three mirror tripwires +
+      tests/unit/test_skill_validation.py green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: grep AGENTS.md, plugins/super-fr/rules/ and .claude/rules/ for statements that
+      the env var picks the backend for every command; correct any (rules → re-run both syncs).
+      Commit `docs(isolation): later commands follow the recorded mode (gh#569)`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '#574 — Java version detection and the fr-init interview'
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - scaffold-jvm-toolchain
+  tier: standard
+tasks:
+- number: 1
+  title: detect_java_version
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_scaffold_java_version.py for
+      fr.isolation.scaffold.detect_java_version(repo_root) -> tuple[str, str] | None
+      (version major, human source): `.java-version` "17.0.9" → ("17", ".java-version");
+      `.sdkmanrc` "java=21.0.1-tem" → ("21", ".sdkmanrc"); `.tool-versions` "java temurin-17.0.9+9"
+      → ("17", ".tool-versions"); precedence .java-version > .sdkmanrc > .tool-versions > pom;
+      pom.xml WITH the maven namespace (xmlns="http://maven.apache.org/POM/4.0.0") and
+      <properties><maven.compiler.release>17</...> → ("17", "pom.xml maven.compiler.release");
+      maven.compiler.source "1.8" → "8"; <java.version>11</java.version> + <maven.compiler.release>${java.version}</...>
+      → "11" (one-level indirection); maven-compiler-plugin <configuration><release>21</release>
+      with no properties → "21"; unresolvable ${x} → skipped to the next source/None;
+      malformed pom → None (never raises); nothing → None. Confirm red.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement with xml.etree.ElementTree (strip `{ns}` from tags), no new
+      dependency. Normalise: "1.N" → "N", else the leading integer. Tests green.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: keep the source-order table as a module constant with a one-line comment;
+      ruff + mypy clean.
+- number: 2
+  title: scaffold applies the detected version and reports it
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_init_scaffold.py: repo with pom.xml pinning 17 + `--tool maven` →
+      java feature options include "version": "17" and CLI stderr contains
+      "java 17 (from pom.xml maven.compiler.release)"; `--tool java@21` with the same pom →
+      "21" (explicit wins) and no detection line; no version sources → no "version" key and
+      stderr warning "java version not detected"; a repo without java/maven tools → detection
+      never runs (no stderr line). Confirm red.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: scaffold_profile, after resolve_tools, when the java feature is present without
+      "version": call detect_java_version; set version + print report to stderr, else print the
+      spec §3.A warning to stderr. Tests green.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: ruff + mypy clean; commit `feat(scaffold): detect the project's Java version (gh#574)`.
+- number: 3
+  title: fr-init skill interview
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: run `uv run pytest tests/unit/test_skill_validation.py tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`
+      as the baseline (green), then grep plugins/super-fr/skills/fr-init/SKILL.md for
+      "Unknown tools land in the profile's notes" — that sentence is now false (the red).
+  - id: P4.T3.S2
+    text: |-
+      GREEN: update plugins/super-fr/skills/fr-init/SKILL.md: the known tool set (incl. java,
+      maven — maven implies java), the `<tool>[@<version>]` form, unknown tools are refused and
+      `--feature <ref>` is the escape for an unmapped toolchain, and a JVM step: confirm the
+      Java major from the scan (version files / pom) AND project notes (README, CONTRIBUTING,
+      CI workflow setup-java steps), then pass `--tool java@<major>` explicitly. Keep it
+      concise and harness-neutral. Run BOTH `scripts/sync-opencode.py` and
+      `scripts/sync-hermes.py`; skill validation, neutrality and all three mirror tripwires green.
+  - id: P4.T3.S3
+    text: |-
+      REFACTOR: re-read the edited section once for tone/length against the rest of the skill;
+      commit `docs(fr-init): tool refusal, --feature, Java version confirmation (gh#574)`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

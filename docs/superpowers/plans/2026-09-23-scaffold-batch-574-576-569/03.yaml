@@ -1,0 +1,103 @@
+schema_version: 2
+phase:
+  number: 3
+  title: '#574 — tool resolution: unknown tools refused, --feature escape, java/maven,
+    @version'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - scaffold-unknown-tool-refused
+  - scaffold-jvm-toolchain
+  tier: standard
+tasks:
+- number: 1
+  title: resolve_tools and the ToolSpec table
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_scaffold_tools.py for fr.isolation.scaffold.resolve_tools(tools,
+      features) -> dict[str, dict[str, object]]: (a) parametrised over KNOWN_TOOLS itself: each
+      tool alone yields its feature ref (spec §3.A table); (b) `java` + `maven` → exactly one
+      key `ghcr.io/devcontainers/features/java:1` with `{"installMaven": True}` (a bool);
+      `maven` alone → the same; (c) `java@17` → `{"version": "17"}`; `maven@3.9.6` →
+      `{"installMaven": True, "mavenVersion": "3.9.6"}`; `node@20` → `{"version": "20"}`;
+      (d) `java@17` + `java@21` → IsolationError naming both values; (e) `nosuchtool` →
+      IsolationError whose message contains 'nosuchtool', every known tool name sorted, and
+      '--feature'; (f) features=["ghcr.io/acme/x:1"] passes through with {}; a feature with
+      whitespace or empty → IsolationError; (g) `@` with empty version (`java@`) → IsolationError.
+      Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/scaffold.py replace KNOWN_TOOL_FEATURES with a
+      frozen dataclass `ToolSpec(feature: str, options: Mapping[str, object] = {}, version_option: str = "version")`
+      and `KNOWN_TOOLS: dict[str, ToolSpec]` (existing eight refs unchanged; java →
+      java:1; maven → java:1 with options {"installMaven": True}, version_option
+      "mavenVersion"). Implement `parse_tool(arg) -> (name, version|None)` and
+      `resolve_tools(tools, features)` per spec §3.A (merge options per feature ref, refuse
+      conflicting values). Update the comment above the table (unknown tools are REFUSED now).
+      Tests green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: grep the repo for KNOWN_TOOL_FEATURES (tests, skills, docs) and move every
+      reference to KNOWN_TOOLS; ruff + mypy clean.
+- number: 2
+  title: scaffold_profile validates before writing; CLI flags; reserved "host"
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_init_scaffold.py: (a) `fr init scaffold --profile dev --tool
+      nosuchtool` via the typer CliRunner exits 2, stderr names the known set, and afterwards
+      NO .devcontainer/dev/devcontainer.json, no fr-profiles.yaml, no secrets env file (patch
+      HOME / the secrets dir as the existing tests do) and no new commit exist; (b) `--profile
+      host` exits 2 naming the reserved name and the reason (host-worktree workspaces record
+      profile "host"); (c) `--tool java --tool maven` writes features with the java ref and
+      installMaven true; (d) `--feature ghcr.io/acme/x:1` lands in features; (e) `--tool uv@0.5.0`
+      still sets containerEnv UV_PROJECT_ENVIRONMENT. Rewrite the existing test asserting
+      unknown tools land in fr-profiles.yaml notes (~line 334) to assert refusal instead.
+      Confirm red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: scaffold_profile gains `features: list[str] = ()`-style param (use
+      `list[str] | None = None`), calls resolve_tools FIRST (before the exists/force check is
+      fine, but before any write), refuses profile == "host" (constant RESERVED_PROFILES =
+      {"host"}), types the features dict as dict[str, dict[str, object]], keys the uv
+      containerEnv check on parsed tool names, and drops the unknown_tools/notes path from
+      _update_profiles_yaml. packages/fr/src/fr/commands/init_cmd.py: add repeatable
+      `--feature`, update --tool help ("repeatable; <tool>[@<version>]; unknown tools are
+      refused — see --feature"), and print errors with err=True (stderr). Tests green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: full `uv run pytest tests/unit/test_init_scaffold.py tests/unit/test_scaffold_tools.py -q --no-cov`;
+      ruff + mypy clean. Commit `fix(scaffold): refuse unknown --tool, add --feature and java/maven (gh#574)`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
