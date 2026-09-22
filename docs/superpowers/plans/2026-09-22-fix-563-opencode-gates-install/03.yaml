@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Conformance probes (vendored from agnostic-fr)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-edit-gate-refuses
+  - opencode-edit-gate-allows
+  - opencode-patch-fails-closed
+  - opencode-bash-ungated
+  - opencode-idle-continues
+  - opencode-idle-respects-gate
+  tier: standard
+tasks:
+- number: 1
+  title: Vendor agnostic-fr conformance engine/mock/probe structure
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Create packages/fr-conformance/ with engine.py, mock/, probes.py, registry/opencode.yaml
+  - id: P3.T1.S2
+    text: |-
+      Implement mock server (deterministic OpenAI-compatible /chat/completions)
+  - id: P3.T1.S3
+    text: |-
+      Implement engine.py (launches real opencode binary, snapshots repo before/after)
+- number: 2
+  title: Create 6 conformance probes
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      test_edit_gate_refuses.py - fr-enabled repo, base clone, model calls write on tracked file
+  - id: P3.T2.S2
+    text: |-
+      test_edit_gate_allows.py - same, inside valid fr worktree with marker
+  - id: P3.T2.S3
+    text: |-
+      test_patch_fails_closed.py - patch on base-clone target
+  - id: P3.T2.S4
+    text: |-
+      test_bash_ungated.py - bash writes base-clone file
+  - id: P3.T2.S5
+    text: |-
+      test_idle_adapter_continues.py - advanceable run, model ends turn
+  - id: P3.T2.S6
+    text: |-
+      test_idle_adapter_respects_held_gate.py - pending operator gate, model ends turn
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S6:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

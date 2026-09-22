@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Plugin build + delivery in install.sh
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - opencode-plugin-delivered
+  skeleton: true
+  tier: mechanical
+tasks:
+- number: 1
+  title: Add bun build step to install.sh
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add bun build --compile step before OpenCode delivery block in install.sh
+  - id: P1.T1.S2
+    text: |-
+      Add delivery of binary to ~/.config/opencode/plugins/ in OpenCode block
+  - id: P1.T1.S3
+    text: |-
+      Add uninstall removal of plugin binary in --uninstall block
+- number: 2
+  title: Verify build + delivery works
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Run install.sh with OPENCODE_SKILLS_INSTALL=1 into temp HOME
+  - id: P1.T2.S2
+    text: |-
+      Run install.sh --uninstall and verify binary removed
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

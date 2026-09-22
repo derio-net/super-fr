@@ -1,0 +1,22 @@
+# OpenCode conformance registry
+# Launch command, wire protocol, and endpoint override
+
+launch:
+  command: "opencode"
+  args: ["run"]
+  # The binary should be on PATH
+
+wire_protocol: "openai-chat"
+# OpenCode uses OpenAI-compatible API
+
+endpoint:
+  # Override via OPENCODE_BASE_URL environment variable
+  # Default: http://localhost:12345/v1
+  base_url_env: "OPENCODE_BASE_URL"
+  default: "http://localhost:12345/v1"
+
+capabilities:
+  # What the mock server needs to support
+  - chat_completions
+  - tool_calls
+  - streaming

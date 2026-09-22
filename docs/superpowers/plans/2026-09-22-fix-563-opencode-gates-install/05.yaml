@@ -1,0 +1,43 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Parity footnote updates + version bump
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  tier: mechanical
+tasks:
+- number: 1
+  title: Update parity.yaml scope_notes based on live probe results
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Update fr-isolation-required / opencode scope_note with actual probe results
+  - id: P5.T1.S2
+    text: |-
+      Update fr-run-idle-guard / opencode scope_note with actual probe results
+- number: 2
+  title: Minor version bump
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Run scripts/bump-version.py minor
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

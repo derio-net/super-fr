@@ -1,0 +1,40 @@
+schema_version: 2
+phase:
+  number: 4
+  title: CI integration for conformance probes
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  tier: mechanical
+tasks:
+- number: 1
+  title: Add .github/workflows/opencode-conformance.yml
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Create workflow installing opencode via npm (cached)
+  - id: P4.T1.S2
+    text: |-
+      Run pytest packages/fr-conformance/probes/ -v
+  - id: P4.T1.S3
+    text: |-
+      Cache ~/.npm and binary to amortize install cost
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

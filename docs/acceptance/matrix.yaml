@@ -3400,3 +3400,86 @@ rows:
     notes: 'Split from #432; #533. LIVE 2026-09-22 (fr 4.14.3) on Claude Code and OpenCode:
       --dry-run listed all 8 workspaces with keep reasons and bound sessions and changed
       nothing.'
+  - id: opencode-plugin-delivered
+    capability: OpenCode gates
+    acceptance: install.sh delivers fr-opencode-plugin binary to ~/.config/opencode/plugins/
+      when OpenCode detected
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_plugin.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-parity-delivery-tripwire
+    capability: OpenCode gates
+    acceptance: Tripwire fails when parity.yaml credits OpenCode surface not installed
+      by install.sh
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_install_copies_opencode_plugin.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-edit-gate-refuses
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary refuses write in base clone of fr-enabled repo
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_edit_gate_refuses.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-edit-gate-allows
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary allows write in valid fr worktree with marker
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_edit_gate_allows.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-patch-fails-closed
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary refuses patch on base-clone target
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_patch_fails_closed.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-bash-ungated
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary allows bash write in base clone (pins documented
+      gap)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_bash_ungated.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-idle-continues
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary continues session on idle advanceable run
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_idle_adapter_continues.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install
+  - id: opencode-idle-respects-gate
+    capability: OpenCode gates
+    acceptance: Real OpenCode binary does NOT continue when operator gate held
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-fix-563-opencode-gates-install-design.md
+    levels:
+      unit:
+      - super-fr:packages/fr-conformance/probes/test_idle_adapter_respects_held_gate.py
+    status: not-implemented
+    notes: Born with spec 2026-09-22-fix-563-opencode-gates-install

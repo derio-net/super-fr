@@ -46,6 +46,7 @@ LEGACY_CACHE_BASE="$CLAUDE_DIR/plugins/cache/$LEGACY_MARKETPLACE_NAME"
 OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
 OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"
 OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agent"
+OPENCODE_PLUGINS_DIR="$HOME/.config/opencode/plugins"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
@@ -134,6 +135,13 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       fi
     done
   fi
+
+  # Remove fr-opencode-plugin binary
+  if [ -f "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin" ]; then
+    rm -f "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin"
+    echo "  Removed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin"
+  fi
+
   # Hermes: run the uninstall from THIS checkout, not whichever `fr` happens
   # to be installed globally. Upgrade removals may rename shipped inputs; a
   # stale binary then cannot parse the new tree and used to fail silently,
@@ -639,6 +647,16 @@ else
   echo "    uv tool install $PLUGIN_ROOT/packages/fr"
 fi
 
+
+# Build fr-opencode-plugin to a single binary for OpenCode delivery
+if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; then
+  echo ""
+  echo "Building fr-opencode-plugin..."
+  cd "$PLUGIN_ROOT/packages/fr-opencode-plugin"
+  bun build --compile src/index.ts --outfile "$PLUGIN_ROOT/.build/fr-opencode-plugin"
+  echo "  Built $PLUGIN_ROOT/.build/fr-opencode-plugin"
+fi
+
 # 7b. OpenCode skill + command + agent delivery — opt-in only (OpenCode has no
 # plugin/marketplace concept; it discovers plain SKILL.md files and
 # commands/<name>.md files from its own global dirs, and agents from .opencode/agent/).
@@ -682,6 +700,15 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # `|| true` did — an unbound tier, a missing `fr`, or a hand-edited agent
   # file must never fail the install.
   fr models apply --harness opencode || true
+
+  # Deliver fr-opencode-plugin binary to OpenCode plugins directory
+  echo ""
+  echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
+  mkdir -p "$OPENCODE_PLUGINS_DIR"
+  cp "$PLUGIN_ROOT/.build/fr-opencode-plugin" "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin"
+  chmod +x "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin"
+  echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin"
+
 else
   echo ""
   echo "Skipping OpenCode skill/command/agent delivery (no ~/.config/opencode found; set"
