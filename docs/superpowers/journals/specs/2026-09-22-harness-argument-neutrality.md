@@ -29,3 +29,8 @@ Measured before designing: a rules scan flags '## Plan Skill Override', '# Workt
 ### e2dccbb99cdb · review · Spec review vs codebase
 
 Checked every named symbol/test/file exists as described. Findings fixed in the spec: (F1) AGENTS.md's actual skills-only wording is at lines 93 and 343-344, not the phrase first cited; (F2) extra_tools has three unit tests in test_harness_vocabulary.py besides the agent tripwire — they are rewritten, not just the one caller. Q&A answers q1-q4 and d-headings-exempt all reflected in §2-§6.
+
+<!-- fr:journal kind=decision scope=spec id=q5-keep-parser created=2026-09-22T14:58:06 -->
+### q5-keep-parser · decision · Operator: keep the #420 description parser
+
+AskUserQuestion 2026-09-22 after three review rounds found sentence shapes the negation-governs-phrase predicate misjudged (all fixed; 46 cases pinned). Operator chose to keep it over an exact-sentence contract: it errs toward rejecting and its failure message now states the accepted shape; revisit only if it bites.
