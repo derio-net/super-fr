@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 2
+  title: scan_prose flags harness-specific arguments in every spelling, skips headings,
+    loses extra_tools
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - harness-argument-neutrality
+  tier: standard
+tasks:
+- number: 1
+  title: Arguments are scanned by pattern
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests that scan_prose flags isolation:"worktree", isolation: 'worktree', isolation="worktree" and isolation: "worktree" as the claude-code argument, flags run_in_background (claude-code) and background=true / notify_on_complete (hermes), excuses each inside a valid Harness clause, and that no argument name is claimed by two harnesses; see them fail
+  - id: P2.T1.S2
+    text: |-
+      GREEN: populate ARGUMENT_VOCABULARY with the spec 3.A table (name -> compiled regex) and make scan_prose report argument matches under the same clause rules as tool names; tests pass
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: one lookup helper serving both tool names and argument patterns in prose.py so the clause logic is not duplicated; tests green
+- number: 2
+  title: Headings are not instructions
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: test that a Markdown heading line ('## Plan Skill Override', '### 1. Agent sessions ...') is not flagged while the same word in a body line is; see it fail
+  - id: P2.T2.S2
+    text: |-
+      GREEN: scan_prose skips lines matching ^#{1,6} ; test passes and the existing skill tripwire stays green
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: document the heading rule in the module docstring with the measured false positives (spec decision d-headings-exempt); tests green
+- number: 3
+  title: extra_tools is gone
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: rewrite the three test_extra_tools_* tests in tests/unit/test_harness_vocabulary.py and the agent tripwire call to use the vocabulary instead of extra_tools, plus a test that scan_prose rejects an extra_tools keyword; see the rejection test fail
+  - id: P2.T3.S2
+    text: |-
+      GREEN: remove the extra_tools parameter from scan_prose and _AGENT_EXTRA_TOOLS from tests/unit/test_tripwire_skill_tool_neutrality.py; full harness and tripwire tests pass
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: drop any now-dead imports or comments mentioning extra_tools; ruff, mypy, tests green
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-22T11:54:20+00:00'
+      note: RED recorded in journal
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-22T11:56:06+00:00'
+      note: ARGUMENT_VOCABULARY = spec 3.A table; scan_prose scans it; require_every_harness
+        import-time check; expected phase-3 reds xfail(strict)
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-22T11:56:07+00:00'
+      note: _Lookup table (_LOOKUPS) serves tool names and argument patterns through
+        one clause loop
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-22T11:56:41+00:00'
+      note: RED recorded in journal
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-22T11:57:13+00:00'
+      note: _HEADING_RE ^#{1,6} skipped in scan_prose; skill tripwire's only violations
+        remain the xfailed fr-goal §2 line
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-22T11:57:13+00:00'
+      note: module docstring documents the heading rule with the four measured false
+        positives
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-22T11:57:35+00:00'
+      note: RED recorded in journal
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-22T11:58:02+00:00'
+      note: extra_tools parameter and _AGENT_EXTRA_TOOLS removed; harness + tripwire
+        tests pass (tripwire reds xfail strict for phase 3)
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-22T11:58:03+00:00'
+      note: no dead imports (Mapping still serves require_every_harness); remaining
+        extra_tools mentions are deliberate history in docstrings; ruff, mypy green
+  completion:
+    at: '2026-09-22T12:05:55+00:00'
+    note: null
+    observed_prs: []

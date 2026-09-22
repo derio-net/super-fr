@@ -20,6 +20,23 @@ as scoped by naming (in prose) more than one harness by name — not by
 each harness having its own distinct tool to name; a harness with no tool
 of its own for the topic ("Hermes has no dedicated question tool, ask via
 X instead") still correctly serves that harness's reader.
+
+What is scanned: tool names (`TOOL_VOCABULARY`) and harness-specific
+arguments (`ARGUMENT_VOCABULARY`, 2026-09-22 harness-argument-neutrality
+spec §3.A), both judged by the same clause rules.
+
+**Headings are not instructions** (spec §3.B, decision d-headings-exempt). A
+Markdown ATX heading line (`^#{1,6} `) names a topic; it never tells a reader
+to call anything, so it is skipped. Measured 2026-09-22 over the canonical
+skills, agents and rules, every heading the scan would otherwise flag was a
+false positive — four, all tool names used as English words:
+`## Plan Skill Override` and `## fr-* Skill Overview` (fr-plan-override),
+`# Worktree Skill Override (fr-enabled repos)` (fr-worktree-override), and
+`### 1. Agent sessions, pods and CI always land non-interactive — by design`
+(artifact-versioning). Only a real ATX heading OUTSIDE a code fence is
+exempt (a fenced `# ...` is a comment a reader may copy, review p2r-4), and a
+heading neither leads a clause nor names a harness for one (review p2r-5): `#Skill` (no
+space), seven hashes, or an indented hash are body text and still scanned.
 """
 
 from __future__ import annotations
@@ -28,16 +45,8 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from fr.harness import HARNESSES, TOOL_VOCABULARY
+from fr.harness import ARGUMENT_VOCABULARY, HARNESSES, TOOL_VOCABULARY
 from fr.harness.model import HarnessError
-
-# Every mention needs its owning harness looked up; TOOL_VOCABULARY is
-# built the other way around (harness -> tools), so invert it once. The
-# module-level `test_no_tool_name_is_claimed_by_two_harnesses` guarantees
-# this inversion loses nothing.
-_HARNESS_BY_TOOL: dict[str, str] = {
-    tool: harness for harness, tools in TOOL_VOCABULARY.items() for tool in tools
-}
 
 # What a clause names is the HARNESS a reader is on, not necessarily that
 # harness's own tool — a clause explaining "Hermes has no dedicated tool
@@ -51,16 +60,65 @@ _HARNESS_LABELS: dict[str, str] = {
     "codex": "Codex",
     "copilot-cli": "Copilot CLI",
 }
-if set(_HARNESS_LABELS) != set(HARNESSES):  # pragma: no cover — import-time invariant
-    raise HarnessError(
-        "TOOL_VOCABULARY/_HARNESS_LABELS disagree with HARNESSES: "
-        f"{sorted(set(_HARNESS_LABELS) ^ set(HARNESSES))}"
-    )
+
+
+def require_every_harness(name: str, mapping: Mapping[str, object]) -> None:
+    """Closed-world key check for a harness-keyed mapping this module consumes:
+    exactly the members of `HARNESSES`, none missing, none extra. The error
+    names `name` — the mapping actually checked (review p1r-m2: the previous
+    inline check blamed `TOOL_VOCABULARY` while checking `_HARNESS_LABELS`)."""
+    if set(mapping) != set(HARNESSES):
+        raise HarnessError(
+            f"{name} disagrees with HARNESSES: {sorted(set(mapping) ^ set(HARNESSES))}"
+        )
+
+
+# Import-time invariants: a vocabulary missing a harness would silently scan
+# nothing for it.
+require_every_harness("_HARNESS_LABELS", _HARNESS_LABELS)
+require_every_harness("TOOL_VOCABULARY", TOOL_VOCABULARY)
+require_every_harness("ARGUMENT_VOCABULARY", ARGUMENT_VOCABULARY)
+
+
+@dataclass(frozen=True)
+class _Lookup:
+    """One harness-specific name and how to find it in a line. A tool name is
+    one literal token, matched by `_word_pattern`; an argument carries its own
+    compiled pattern because it has several spellings. Either way `scan_prose`
+    judges a match by the same clause rules — this is the one place both
+    vocabularies meet, so the clause logic exists once."""
+
+    harness: str
+    name: str
+    pattern: re.Pattern[str]
+
 
 # `**Harness — <topic>:**` — the em dash and bold markers are load-bearing:
 # they're what makes this shape rare enough to grep for and distinguishable
 # from ordinary prose that happens to say the word "harness".
 _CLAUSE_LEAD_RE = re.compile(r"\*\*Harness — [^*\n]+:\*\*")
+
+# An ATX heading (spec §3.B) names a topic, never an instruction.
+_HEADING_RE = re.compile(r"^#{1,6} ")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
+def _heading_lines(lines: list[str]) -> frozenset[int]:
+    """Indices of real headings — `_HEADING_RE` lines OUTSIDE a code fence.
+
+    Inside a fence a `# ...` line is a shell or YAML comment a reader may copy
+    verbatim, so it is scanned like any other line (review p2r-4: the skip
+    first applied to fenced comments too, and hid `# pass run_in_background`).
+    """
+    headings: set[int] = set()
+    fenced = False
+    for idx, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+        elif not fenced and _HEADING_RE.match(line):
+            headings.add(idx)
+    return frozenset(headings)
+
 
 # A scoped clause excuses a mention only when it names every SUPPORTED
 # harness by display label — not by a tool of its own, because "OpenCode has
@@ -108,7 +166,27 @@ def _word_pattern(name: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![\w-]){re.escape(name)}(?![\w-])")
 
 
-def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
+# Built once at import: tool names (`TOOL_VOCABULARY`, harness -> tools) and
+# argument patterns (`ARGUMENT_VOCABULARY`, harness -> name -> regex) flattened
+# into one table. `test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies`
+# guarantees no name appears twice, so a violation's `tool` names one harness.
+_LOOKUPS: tuple[_Lookup, ...] = (
+    *(
+        _Lookup(harness, tool, _word_pattern(tool))
+        for harness, tools in TOOL_VOCABULARY.items()
+        for tool in sorted(tools)
+    ),
+    *(
+        _Lookup(harness, name, pattern)
+        for harness, arguments in ARGUMENT_VOCABULARY.items()
+        for name, pattern in arguments.items()
+    ),
+)
+
+
+def _clause_spans(
+    lines: list[str], headings: frozenset[int] = frozenset()
+) -> list[tuple[int, int]]:
     """Line-index spans (inclusive) covered by a `**Harness — ...:**`
     clause: from the lead-in to the next blank line followed by a
     non-indented line (or end of text), per spec §3.C."""
@@ -116,7 +194,7 @@ def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
     n = len(lines)
     i = 0
     while i < n:
-        if _CLAUSE_LEAD_RE.search(lines[i]):
+        if i not in headings and _CLAUSE_LEAD_RE.search(lines[i]):
             start = i
             end = i
             j = i + 1
@@ -140,10 +218,14 @@ def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
     return spans
 
 
-def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
-    """A scoped clause excuses a mention only when it names more than one
-    harness by its display label — see `_MIN_HARNESSES_PER_CLAUSE`."""
-    clause_lines = lines[start : end + 1]
+def _clause_is_valid(
+    lines: list[str], start: int, end: int, headings: frozenset[int] = frozenset()
+) -> bool:
+    """A scoped clause excuses a mention only when its PROSE names every
+    supported harness by display label — see `_MIN_HARNESSES_PER_CLAUSE`. A
+    heading line inside the span names a topic, not a reader, so it does not
+    count (review p2r-5)."""
+    clause_lines = [lines[i] for i in range(start, end + 1) if i not in headings]
     harnesses_named = {
         harness
         for harness, label in _HARNESS_LABELS.items()
@@ -153,36 +235,33 @@ def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
     return len(harnesses_named) >= _MIN_HARNESSES_PER_CLAUSE
 
 
-def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[Violation]:
-    """Every harness-specific tool mention in `text` that is NOT inside a
-    scoped clause naming every supported harness.
+def scan_prose(text: str) -> list[Violation]:
+    """Every harness-specific tool or argument mention in `text` that is NOT
+    inside a scoped clause naming every supported harness, skipping headings.
 
-    `extra_tools` (name -> owning harness) adds names for THIS call only,
-    leaving `TOOL_VOCABULARY` untouched — the escape hatch for a name that is
-    genuinely harness-specific in one tree but must not fire repo-wide
-    (2026-09-21 agent-body-tool-neutrality spec §2.4: the agent tree needs
-    Claude Code's `isolation: "worktree"` flagged, while `fr-goal` §2 mentions
-    the same flag legitimately in an un-scoped sentence of its own). Extras
-    are judged by exactly the same clause rules as registered tools.
+    There is no per-call vocabulary: a name worth flagging in one tree is
+    worth flagging in every tree a reader on any harness follows, so it
+    belongs in `TOOL_VOCABULARY` or `ARGUMENT_VOCABULARY` (2026-09-22
+    harness-argument-neutrality spec §3.A removed the `extra_tools` escape
+    hatch the agent tree used for Claude Code's `isolation: "worktree"`).
 
     Ordered by (line, tool) so a failure listing several hits reads top to
     bottom the way the file does — the loop below is tool-major for pattern
     reuse (review r3-m6)."""
     lines = text.splitlines()
-    spans = _clause_spans(lines)
-    valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
-
-    vocabulary = dict(_HARNESS_BY_TOOL)
-    vocabulary.update(extra_tools or {})
+    headings = _heading_lines(lines)
+    spans = _clause_spans(lines, headings)
+    valid_span = {span: _clause_is_valid(lines, *span, headings=headings) for span in spans}
 
     violations: list[Violation] = []
-    for tool, harness in vocabulary.items():
-        pattern = _word_pattern(tool)
+    for lookup in _LOOKUPS:
         for line_idx, line in enumerate(lines):
-            if not pattern.search(line):
+            if line_idx in headings or not lookup.pattern.search(line):
                 continue
             clause = next((s for s in spans if s[0] <= line_idx <= s[1]), None)
             if clause is not None and valid_span[clause]:
                 continue
-            violations.append(Violation(harness=harness, tool=tool, line=line_idx + 1))
+            violations.append(
+                Violation(harness=lookup.harness, tool=lookup.name, line=line_idx + 1)
+            )
     return sorted(violations, key=lambda v: (v.line, v.tool))

@@ -1,0 +1,40 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — an empty, closed ARGUMENT_VOCABULARY, CI green
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  tier: mechanical
+tasks:
+- number: 1
+  title: The vocabulary exists and is closed-world
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add a test in tests/unit/test_harness_vocabulary.py asserting fr.harness.ARGUMENT_VOCABULARY exists and is keyed by exactly the members of fr.harness.HARNESSES (same closed-world rule as TOOL_VOCABULARY); run it and see it fail on the missing name
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add ARGUMENT_VOCABULARY to packages/fr/src/fr/harness/__init__.py with an empty mapping per harness and export it in __all__; the new test passes; run ruff, mypy and the harness unit tests
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: give ARGUMENT_VOCABULARY a docstring beside TOOL_VOCABULARY's saying what an argument is and why it is separate from a tool name (spec 3.A); no behaviour change, tests still green
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-22T11:48:51+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-22T11:49:45+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-22T11:50:01+00:00'
+      note: null
+  completion:
+    at: '2026-09-22T11:50:17+00:00'
+    note: null
+    observed_prs: []

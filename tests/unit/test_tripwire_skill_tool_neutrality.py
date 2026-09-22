@@ -1,6 +1,8 @@
-"""CI tripwire: no `SKILL.md` — canonical or mirror — names a harness-
-specific tool outside an explicitly scoped `**Harness — <topic>:**`
-clause. 2026-09-18 harness-parity-matrix spec §3.C, Phase 3.
+"""CI tripwire: no skill, agent or rule — canonical or generated mirror —
+names a harness-specific tool or argument outside an explicitly scoped
+`**Harness — <topic>:**` clause. 2026-09-18 harness-parity-matrix spec §3.C
+(skills), widened 2026-09-21 (#497: agents) and 2026-09-22
+(harness-argument-neutrality: rules, and arguments via ARGUMENT_VOCABULARY).
 
 This is the closer for #436's class B: `fr-goal` §1 and `fr-init` §2 both
 specified their operator touchpoint as Claude Code's `AskUserQuestion`,
@@ -41,12 +43,72 @@ _AGENT_TREES = {
     "opencode-agent-mirror": REPO_ROOT / ".opencode" / "agent",
 }
 
-# Claude Code's dispatch-isolation flag, deliberately NOT in TOOL_VOCABULARY
-# (spec §2.4/§3): registering it globally would fire on `fr-goal` §2's
-# legitimate un-scoped cross-repo mention, a separate sentence out of scope
-# here. It IS harness-specific in an agent body, so the agent trees pass it
-# to `scan_prose` themselves.
-_AGENT_EXTRA_TOOLS = {'isolation: "worktree"': "claude-code"}
+# 2026-09-22 harness-argument-neutrality spec §3.C: rules are the third family
+# a reader on any harness follows. The shipped rules are copied into
+# `.opencode/instructions/` and `.hermes/SOUL.d/` by the two sync scripts, and
+# `.claude/rules/` holds the repo-local rules (sources in their own right, plus
+# the hand-maintained `fr-isolation-required` mirror) that OpenCode loads via
+# `opencode.json`'s `instructions`. Flat `*.md`, like agents.
+_RULE_TREES = {
+    "canonical-rules": REPO_ROOT / "plugins" / "super-fr" / "rules",
+    "repo-local-rules": REPO_ROOT / ".claude" / "rules",
+    "opencode-instructions-mirror": REPO_ROOT / ".opencode" / "instructions",
+    "hermes-soul-mirror": REPO_ROOT / ".hermes" / "SOUL.d",
+}
+
+
+def _all_skill_files() -> list[Path]:
+    files: list[Path] = []
+    for tree in _SKILL_TREES.values():
+        files.extend(sorted(tree.glob("*/SKILL.md")))
+    return files
+
+
+def _all_agent_files() -> list[Path]:
+    files: list[Path] = []
+    for tree in _AGENT_TREES.values():
+        files.extend(sorted(tree.glob("*.md")))
+    return files
+
+
+def _all_rule_files() -> list[Path]:
+    files: list[Path] = []
+    for tree in _RULE_TREES.values():
+        files.extend(sorted(tree.glob("*.md")))
+    return files
+
+
+@pytest.mark.parametrize("tree_name", sorted(_SKILL_TREES))
+def test_tree_is_not_empty(tree_name: str) -> None:
+    assert sorted(_SKILL_TREES[tree_name].glob("*/SKILL.md")), (
+        f"no SKILL.md found under {_SKILL_TREES[tree_name]} — did the layout move?"
+    )
+
+
+@pytest.mark.parametrize("tree_name", sorted(_AGENT_TREES))
+def test_agent_tree_is_not_empty(tree_name: str) -> None:
+    assert sorted(_AGENT_TREES[tree_name].glob("*.md")), (
+        f"no agent file found under {_AGENT_TREES[tree_name]} — did the layout move?"
+    )
+
+
+@pytest.mark.parametrize("tree_name", sorted(_RULE_TREES))
+def test_rule_tree_is_not_empty(tree_name: str) -> None:
+    assert sorted(_RULE_TREES[tree_name].glob("*.md")), (
+        f"no rule file found under {_RULE_TREES[tree_name]} — did the layout move?"
+    )
+
+
+def _violations(paths: list[Path], *, agent: bool = False) -> set[str]:
+    def text(path: Path) -> str:
+        raw = path.read_text(encoding="utf-8")
+        return _without_tools_allowlist(raw) if agent else raw
+
+    return {
+        f"{path.relative_to(REPO_ROOT)}:{v.line}:{v.tool}"
+        for path in paths
+        for v in scan_prose(text(path))
+    }
 
 
 def _without_tools_allowlist(text: str) -> str:
@@ -71,62 +133,20 @@ def _without_tools_allowlist(text: str) -> str:
     return "\n".join(lines)
 
 
-def _all_skill_files() -> list[Path]:
-    files: list[Path] = []
-    for tree in _SKILL_TREES.values():
-        files.extend(sorted(tree.glob("*/SKILL.md")))
-    return files
-
-
-def _all_agent_files() -> list[Path]:
-    files: list[Path] = []
-    for tree in _AGENT_TREES.values():
-        files.extend(sorted(tree.glob("*.md")))
-    return files
-
-
-@pytest.mark.parametrize("tree_name", sorted(_SKILL_TREES))
-def test_tree_is_not_empty(tree_name: str) -> None:
-    assert sorted(_SKILL_TREES[tree_name].glob("*/SKILL.md")), (
-        f"no SKILL.md found under {_SKILL_TREES[tree_name]} — did the layout move?"
-    )
-
-
-@pytest.mark.parametrize("tree_name", sorted(_AGENT_TREES))
-def test_agent_tree_is_not_empty(tree_name: str) -> None:
-    assert sorted(_AGENT_TREES[tree_name].glob("*.md")), (
-        f"no agent file found under {_AGENT_TREES[tree_name]} — did the layout move?"
-    )
-
-
 def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    messages = []
-    for path in _all_skill_files():
-        text = path.read_text(encoding="utf-8")
-        for violation in scan_prose(text):
-            messages.append(
-                f"{path.relative_to(REPO_ROOT)}:{violation.line}: "
-                f"names {violation.tool!r} ({violation.harness}) outside a scoped clause "
-                "naming more than one harness"
-            )
-    assert not messages, "\n".join(messages) + (
-        "\n\nName the operator touchpoint neutrally (spec §3.C) — the concrete tool "
+    found = sorted(_violations(_all_skill_files()))
+    assert found == [], (
+        f"{found}\n\n"
+        "Name the operator touchpoint neutrally (spec §3.C) — the concrete tool "
         "belongs in a `**Harness — <topic>:**` clause naming every harness it applies to."
     )
 
 
 def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    messages = []
-    for path in _all_agent_files():
-        text = _without_tools_allowlist(path.read_text(encoding="utf-8"))
-        for violation in scan_prose(text, extra_tools=_AGENT_EXTRA_TOOLS):
-            messages.append(
-                f"{path.relative_to(REPO_ROOT)}:{violation.line}: "
-                f"names {violation.tool!r} ({violation.harness}) outside a scoped clause "
-                "naming more than one harness"
-            )
-    assert not messages, "\n".join(messages) + (
-        "\n\nAn agent body is read on every harness that can dispatch it — say what "
+    found = sorted(_violations(_all_agent_files(), agent=True))
+    assert found == [], (
+        f"{found}\n\n"
+        "An agent body is read on every harness that can dispatch it — say what "
         "each reader should do inside a `**Harness — <topic>:**` clause, and keep the "
         "frontmatter `description` (which cannot sit in a clause) neutral."
     )
@@ -141,3 +161,13 @@ def test_only_the_frontmatter_tools_line_is_exempt() -> None:
     )
     flagged = [v.line for v in scan_prose(_without_tools_allowlist(agent))]
     assert flagged == [4, 9], flagged
+
+
+def test_no_rule_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
+    found = sorted(_violations(_all_rule_files()))
+    assert found == [], (
+        f"{found}\n\n"
+        "A rule is loaded on every harness (`.opencode/instructions/`, "
+        "`.hermes/SOUL.d/`) — say what each reader should do inside a "
+        "`**Harness — <topic>:**` clause naming Claude Code, OpenCode and Hermes."
+    )
