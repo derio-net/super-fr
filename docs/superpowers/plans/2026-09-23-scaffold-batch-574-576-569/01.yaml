@@ -40,18 +40,21 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T23:10:32+00:00'
+      note: 'RED: 5 tests (11 cases) in tests/unit/test_isolation_recorded_mode.py;
+        ImportError on recorded_mode'
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T23:10:32+00:00'
+      note: 'GREEN: IsolationMode, IsolationState.target, recorded_mode in types.py;
+        11 passed'
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T23:12:39+00:00'
+      note: ruff format/check + mypy packages/fr/src clean; 477 isolation unit tests
+        pass
   completion:
-    at: null
+    at: '2026-09-22T23:12:50+00:00'
     note: null
     observed_prs: []

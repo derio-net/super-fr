@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import yaml
 from pydantic import BaseModel, Field
@@ -19,6 +19,10 @@ from fr.artifacts.atomic import write_text_atomic
 
 def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
+
+
+IsolationMode = Literal["devcontainer", "worktree", "external"]
+"""Which isolation target owns a workspace (spec 2026-09-23 §3.C, gh#569)."""
 
 
 class IsolationError(Exception):
@@ -42,12 +46,33 @@ class IsolationState(BaseModel):
     branch: str
     worktree: Path
     profile: str
+    # The mode that created this workspace, written by each target's `up`
+    # (spec 2026-09-23 §3.C). An older fr on PATH may drop it when it rewrites
+    # the file (sessions.attach -> save_state), so `recorded_mode`'s legacy
+    # inference from `profile` is permanent, not a transitional fallback.
+    target: IsolationMode | None = None
     created_at: str
     # Sessions bound to this workspace (spec 2026-09-04 §5.A). Default keeps
     # pre-feature state files loadable; frozen models still `model_copy(update=)`.
     sessions: list[SessionBinding] = Field(default_factory=list)
 
     model_config = {"frozen": True}
+
+
+def recorded_mode(state: IsolationState) -> IsolationMode:
+    """The mode a workspace was created in, read from its state alone.
+
+    Pure: never consults the environment. ``state.target`` wins when recorded;
+    otherwise infer from the legacy profile sentinels (``host`` -> worktree,
+    ``external`` -> external, anything else -> devcontainer).
+    """
+    if state.target is not None:
+        return state.target
+    if state.profile == "host":
+        return "worktree"
+    if state.profile == "external":
+        return "external"
+    return "devcontainer"
 
 
 def _sanitize(branch: str) -> str:
