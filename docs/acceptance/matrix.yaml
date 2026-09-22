@@ -3626,4 +3626,13 @@ rows:
       job, opencode-ai@1.18.32, FR_REQUIRE_OPENCODE=1): the real binary registers the
       delivered loader, and a sentinel plugin loaded by OpenCode''s own runtime imports
       it and gets a base-clone edit refused / an out-of-repo edit allowed. A mutation
-      deleting one delivered module left registration green and failed the runtime probe.'
+      deleting one delivered module left registration green and failed the runtime probe.
+      POST-MERGE WALK (2026-09-22, #571 Test Plan): scripts/install.sh re-run from main
+      (fr 4.17.0) on an OpenCode 1.18.32 machine delivered the loader + 3 sources, and
+      opencode debug config listed the loader. Then one model-driven session (github-copilot/gpt-5.6-luna)
+      in a throwaway fr-enabled base clone outside super-fr, so only the global copy
+      was loaded, asked for an edit: the model''s apply_patch was refused with ''fr-isolation:
+      edit to .../README.md blocked'' and the file was unchanged. Control: the same
+      prompt with opencode run --pure (no external plugins) in an identical repo applied
+      the edit. The model-driven path through the DELIVERED copy is therefore live-proven;
+      still live-only, so the CI level is unchanged.'
