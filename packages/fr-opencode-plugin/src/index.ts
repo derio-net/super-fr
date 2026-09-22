@@ -21,7 +21,7 @@
 // plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { createIdleHandler } from "./idle";
+import { createIdleHandler, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
@@ -118,7 +118,11 @@ export async function FrIsolationRequired(ctx: {
   worktree: string;
 }) {
   return {
-    event: createIdleHandler({ client: ctx.client, directory: ctx.worktree || ctx.directory }),
+    event: createIdleHandler({
+      client: ctx.client,
+      directory: ctx.worktree || ctx.directory,
+      actedOn: sharedActedOn(),
+    }),
     "tool.execute.before": async (input: { tool: string }, output: unknown) => {
       // OpenCode cannot intercept filesystem effects of Bash. Other known
       // read-only tools are excluded; every remaining tool is inspected.
