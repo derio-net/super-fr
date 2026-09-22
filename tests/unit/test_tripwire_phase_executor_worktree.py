@@ -94,10 +94,22 @@ _NEUTRAL_PHRASE = re.compile(r"\bsecond\s+worktree\b", re.IGNORECASE)
 # A negation GOVERNS the phrase only when it stands directly in front of it,
 # with nothing but these words in between — prepositions, articles and the
 # dispatch verbs a prohibition is naturally phrased with.
-_NEGATIONS = frozenset({"never", "without", "not", "no"})
+_NEGATIONS = frozenset(
+    {"never", "without", "not", "no", "cannot", "can't", "don't", "doesn't", "mustn't",
+     "shouldn't", "isn't", "won't"}
+)  # fmt: skip
+# Phase 4 review (p4r-2): the dispatch verbs and pronoun a prohibition is most
+# naturally phrased with — "never dispatch it into", "must never be given" —
+# including the shipped description's own verb. `to`/`hesitate` stay OUT: that
+# is what keeps 'Do not hesitate to pass …' from counting.
 _GOVERNED_FILLER = frozenset(
-    {"into", "in", "a", "an", "the", "any", "pass", "passing", "use", "using", "with"}
-)
+    {"into", "in", "a", "an", "the", "any", "pass", "passing", "use", "using", "with",
+     "it", "dispatch", "dispatched", "dispatching", "run", "runs", "be", "given", "give",
+     "get", "create", "need", "needs"}
+)  # fmt: skip
+# Phase 4 review (p4r-1): a negation-like word EARLIER in the clause flips the
+# governing one — "It cannot run without a second worktree" REQUIRES one.
+_FLIPPERS = _NEGATIONS | {"nothing", "fail", "fails", "failing", "only"}
 _MAX_FILLER = 6
 _WORD = re.compile(r"[A-Za-z']+")
 
@@ -112,7 +124,8 @@ def _negation_governs(before: str) -> bool:
     words = [w.lower() for w in _WORD.findall(before)]
     for distance, word in enumerate(reversed(words)):
         if word in _NEGATIONS:
-            return True
+            earlier = words[: len(words) - distance - 1]
+            return not any(w in _FLIPPERS for w in earlier)
         if word not in _GOVERNED_FILLER or distance >= _MAX_FILLER:
             return False
     return False
@@ -175,10 +188,12 @@ def test_agent_description_carries_the_constraint() -> None:
     """
     description = _front_matter_description(AGENT)
     assert _rules_out_a_second_worktree(description), (
-        "fr-phase-executor's `description:` must rule out a second worktree in one "
-        'sentence — naming it (`isolation: "worktree"`, or the neutral \'second '
-        "worktree') AND negating it. The body is read only by the executor, after "
-        "the choice is already made."
+        "fr-phase-executor's `description:` must rule out a second worktree: in one "
+        "clause, a negation (never/not/no/without/don't/cannot) DIRECTLY before the "
+        "phrase ('second worktree' or the isolation flag), with only filler words "
+        "between (into/in/a/the/it/dispatch/run/be/given/...) and no earlier negation "
+        "in the clause flipping it — e.g. 'never dispatch it into a second worktree'. "
+        "The body is read only by the executor, after the choice is already made."
     )
 
 
@@ -208,6 +223,13 @@ _NEGATION_ELSEWHERE = (
     'Pass `isolation: "worktree"` — this is not optional.',
     'Do not hesitate to pass isolation: "worktree".',
     "Knowing whether it has a second worktree is not our concern.",
+    # Phase 4 review (p4r-1): a negation EARLIER in the clause flips the one
+    # governing the phrase — each of these REQUIRES a second worktree.
+    "It cannot run without a second worktree.",
+    "It fails without a second worktree.",
+    "Nothing works without a second worktree.",
+    "It is not without a second worktree.",
+    "It is never not in a second worktree.",
 )
 
 
@@ -225,6 +247,16 @@ def test_a_negation_that_does_not_govern_the_phrase_does_not_count(description: 
         pytest.param('Dispatch it WITHOUT `isolation: "worktree"`.', id="pre-532-literal-flag"),
         pytest.param('Do not pass `isolation: "worktree"` to it.', id="do-not-pass-the-flag"),
         pytest.param("It needs no second worktree.", id="no-second-worktree"),
+        # Phase 4 review (p4r-2): the natural phrasings of the prohibition,
+        # including the description's own verb and contractions.
+        pytest.param("Never dispatch it into a second worktree.", id="never-dispatch-it"),
+        pytest.param("Do NOT dispatch it into a second worktree.", id="do-not-dispatch"),
+        pytest.param('Do not dispatch it with isolation: "worktree".', id="not-with-flag"),
+        pytest.param("It must not run in a second worktree.", id="must-not-run"),
+        pytest.param("It never runs in a second worktree.", id="never-runs"),
+        pytest.param("It must never be given a second worktree.", id="never-be-given"),
+        pytest.param("Don't give it a second worktree.", id="contraction"),
+        pytest.param("It cannot be given a second worktree.", id="cannot"),
     ],
 )
 def test_a_governing_negation_counts(description: str) -> None:

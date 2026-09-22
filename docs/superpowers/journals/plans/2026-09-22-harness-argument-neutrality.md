@@ -234,3 +234,28 @@ Added test_a_negation_that_does_not_govern_the_phrase_does_not_count (4 params, 
 ### p4-t1-rule · discovery · P4.T1.S2/S3: negation must GOVERN the phrase — filler-only gap, stricter than spec 3.E's window; one flag regex (phase 4)
 
 Rule: clause split on . ; —; phrase = \bsecond\s+worktree\b or ARGUMENT_VOCABULARY['claude-code']['isolation: "worktree"']; walking back from the phrase, every word must be filler (into|in|a|an|the|any|pass|passing|use|using|with), at most 6, until a negation (never|without|not|no). Spec 3.E's plain six-word window passes 'Do not hesitate to pass isolation: "worktree"' (not negates hesitate), so spec 3.E was amended in this phase. pass/use added to the orchestrator's suggested filler so 'Do not pass `isolation: "worktree"`' (a natural prohibition) passes; 'to' stays non-filler, which is what fails the hesitate case. Extra must-pass params: do-not-pass-the-flag, no-second-worktree. REFACTOR: the module's local isolation regex AND the negative scan's _FLAG now both reuse the vocabulary pattern (one definition); consequence: _FLAG is now case-sensitive and also matches =/JSON/backtick spellings. Row phase-executor-description-rules-out-second-worktree: not-implemented -> ci.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-1 created=2026-09-22T14:56:25 phase=4 state=fixed -->
+### p4r-1 · finding [fixed] · Double negation accepted: 'It cannot run without a second worktree' passed (phase 4)
+
+Review a0eb0f895fbd2695f. Fixed: _FLIPPERS (negations + nothing/fail(s|ing)/only) earlier in the clause flip the governing negation. Five must-fail cases added (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p4r-2 created=2026-09-22T14:56:25 phase=4 state=fixed -->
+### p4r-2 · finding [fixed] · Natural prohibitions rejected ('Never dispatch it into…', contractions); failure message silent on the accepted shape (phase 4)
+
+Found by the orchestrator's own probe ('It never runs in a second worktree') and the review. Fixed: filler gains it/dispatch*/run(s)/be/given/give/get/create/need(s) (to/hesitate stay out); negations gain cannot and common contractions; assert message states the shape with an example. Eight must-pass cases added (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p4r-3 created=2026-09-22T14:56:25 phase=4 state=refuted -->
+### p4r-3 · finding [refuted] · Clause split misses ?/!/: (phase 4)
+
+Refuted for this PR: the reviewer's own '?' case ('No second worktree? Then create one.') cannot be caught by splitting — 'No second worktree' alone IS a prohibition — and the ':'/',' cases need contrived text. No realistic description is mis-judged; adding separators without a failing realistic case is speculative.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-4 created=2026-09-22T14:56:26 phase=4 state=refuted -->
+### p4r-4 · finding [refuted] · _FLAG scan lost case-insensitivity (phase 4)
+
+Refuted per the review's own evidence: every scanned tree's flag occurrences are lowercase and the flag is a case-sensitive key/value in the dispatch arguments, so 'Isolation: "Worktree"' would not trigger the harmful dispatch.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-09-22T14:56:26 phase=4 -->
+### p4-review · review · Phase 4 review — separate reviewer, fixes applied (phase 4)
+
+Reviewer a0eb0f895fbd2695f probed ~50 sentences in both directions. p4r-1 (double negation, false positive) and p4r-2 (natural prohibitions + contractions, false negatives; message) fixed test-first; p4r-3/p4r-4 refuted with reasoning; row level ref confirmed correct (p4r-5). Stated plainly: this predicate parses English with word lists, and three review rounds have each found new sentence shapes — the structural alternative (pin an exact canonical sentence) is put to the operator rather than decided here, since q3 chose this approach.
