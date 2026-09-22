@@ -3,13 +3,24 @@ run: 2026-09-23-fix-lifecycle-container-vs-worktree
 workflow: fr-goal@1
 branch: fix/lifecycle-container-vs-worktree
 started: '2026-09-22T22:49:31+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-22T22:49:39+00:00'
+    state: done
+    at: '2026-09-22T22:55:51+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-22T22:55:56+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-22T22:55:56+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
   plan:
     state: pending
   plan-review:
