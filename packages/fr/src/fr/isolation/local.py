@@ -29,6 +29,7 @@ from fr.isolation.types import (
     delete_state,
     harden_secret_file,
     list_states,
+    load_state,
     repo_cache_name,
     resolve_profile,
     save_state,
@@ -383,49 +384,174 @@ class LocalWorktreeDevcontainerTarget:
                     f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
                     "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
-        self._ensure_mounted_env_file(config)
-        # Resolve the shared common dir, not <repo_root>/.git: correct even if
-        # repo_root is a worktree (a gitfile), independent of normalization (#292).
-        git_dir = _git_common_dir(self.repo_root)
-        result = self.run(
-            [
-                "devcontainer",
-                "up",
-                f"--workspace-folder={worktree}",
-                f"--config={config}",
-                f"--mount=type=bind,source={git_dir},target={git_dir}",
-            ],
-            cwd=worktree,
-        )
-        if result.returncode != 0:
-            raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
+        self._devcontainer_up(worktree, name)
 
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=worktree,
-            profile=name,
-            created_at=datetime.now(UTC).isoformat(),
-        )
+        state = self._carried_state(branch, worktree, name)
         save_state(state)
         self._write_isolation_marker(worktree, branch)
         self._spawn_gc()
         return state
 
-    def exec(self, state: IsolationState, argv: list[str]) -> int:
-        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
-        result = self.run(
-            [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
-                *argv,
-            ],
-            cwd=state.worktree,
-            capture=False,
+    def _carried_state(self, branch: str, worktree: Path, profile: str) -> IsolationState:
+        """The record `up` saves. An `up` on an existing workspace is a resume
+        path (spec 2026-09-23 §3.C), so an existing record's `sessions` and
+        `created_at` are carried forward — re-saving a fresh record would unbind
+        every other session holding the workspace."""
+        prior = load_state(self.repo_root, branch)
+        return IsolationState(
+            repo_root=self.repo_root,
+            branch=branch,
+            worktree=worktree,
+            profile=profile,
+            created_at=prior.created_at if prior else datetime.now(UTC).isoformat(),
+            sessions=list(prior.sessions) if prior else [],
         )
+
+    @staticmethod
+    def _config_path(worktree: Path, profile: str) -> Path:
+        """The BRANCH's own profile config — `<worktree>/.devcontainer/<profile>/
+        devcontainer.json`, never the base clone's."""
+        return worktree / ".devcontainer" / profile / "devcontainer.json"
+
+    def _devcontainer_argv(self, worktree: Path, profile: str, *sub: str) -> list[str]:
+        """`devcontainer <sub…> --workspace-folder=<wt> --config=<cfg>`: the
+        addressing every devcontainer call shares (up, exec, the ssh probe)."""
+        return [
+            "devcontainer",
+            *sub,
+            f"--workspace-folder={worktree}",
+            f"--config={self._config_path(worktree, profile)}",
+        ]
+
+    def _devcontainer_up(
+        self,
+        worktree: Path,
+        profile: str,
+        *,
+        remove_existing: bool = False,
+        no_cache: bool = False,
+    ) -> None:
+        """The one `devcontainer up` — shared by `up`, `rebuild` and exec's
+        resume, so the mount and config rules cannot drift between them."""
+        self._ensure_mounted_env_file(self._config_path(worktree, profile))
+        # Resolve the shared common dir, not <repo_root>/.git: correct even if
+        # repo_root is a worktree (a gitfile), independent of normalization (#292).
+        git_dir = _git_common_dir(self.repo_root)
+        argv = [
+            *self._devcontainer_argv(worktree, profile, "up"),
+            f"--mount=type=bind,source={git_dir},target={git_dir}",
+        ]
+        if remove_existing:
+            argv.append("--remove-existing-container")
+        if no_cache:
+            argv.append("--build-no-cache")
+        result = self.run(argv, cwd=worktree)
+        if result.returncode != 0:
+            raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
+
+    def exec(self, state: IsolationState, argv: list[str]) -> int:
+        """Run `argv` in the workspace's container, resuming a stopped one first
+        (`_ensure_running`, spec §3.B). A missing binary is an IsolationError,
+        never a traceback."""
+        try:
+            self._ensure_running(state)
+            result = self.run(
+                [*self._devcontainer_argv(state.worktree, state.profile, "exec"), *argv],
+                cwd=state.worktree,
+                capture=False,
+            )
+        except FileNotFoundError as err:
+            missing = err.filename or (err.args[0] if err.args else "a required binary")
+            raise IsolationError(
+                f"{missing} not found — cannot run in {state.branch} "
+                "(is the devcontainer CLI installed and on PATH?)."
+            ) from err
         return result.returncode
+
+    # Docker states `exec` runs in directly, and the ones it resumes with
+    # `devcontainer up` (which re-runs postStartCommand; a bare `docker start`
+    # would skip it).
+    _RUNNING: ClassVar[frozenset[str]] = frozenset({"running", "restarting"})
+    _RESUMABLE: ClassVar[frozenset[str]] = frozenset({"exited", "created"})
+
+    def _ensure_running(self, state: IsolationState) -> None:
+        """Bring the workspace's container to a state `devcontainer exec` can
+        use, or raise (spec §3.B). A failed `docker ps` raises `docker is
+        unreachable` via `_ps_pairs_strict` — never read as absence (#354).
+        Absent or dead is never recreated silently: that is a build, not a
+        resume, so the error names `rebuild`."""
+        branch = state.branch
+        rebuild = f"`fr isolation rebuild --branch {branch}` recreates it (worktree kept)."
+        pairs = self._ps_pairs_strict(state)
+        if any(current in self._RUNNING for _, current in pairs):
+            return
+        if not pairs:
+            raise IsolationError(f"no usable container for {branch} — {rebuild}")
+        container, current = pairs[0]
+        if current in self._RESUMABLE:
+            print(
+                f"isolation: container for {branch} was stopped — resuming (devcontainer up)",
+                file=sys.stderr,
+            )
+            try:
+                self._devcontainer_up(state.worktree, state.profile)
+            except IsolationError as err:
+                raise IsolationError(
+                    f"could not resume the container for {branch}: {err} — {rebuild}"
+                ) from err
+            return
+        if current == "paused":
+            result = self.run(["docker", "unpause", container])
+            if result.returncode != 0:
+                raise IsolationError(
+                    f"docker unpause failed for {branch} ({container}): "
+                    f"{(result.stderr or result.stdout or '').strip()} — {rebuild}"
+                )
+            return
+        raise IsolationError(
+            f"no usable container for {branch} ({container}, docker state {current}) — {rebuild}"
+        )
+
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        """Recreate the container against the existing worktree and the
+        branch's own profile config (#577, spec §3.A). The state record,
+        worktree, marker, bindings and run cursor are never touched.
+
+        On success the old image is reclaimed if the rebuild changed it: the
+        rebuild retags the same `vsc-…` name, so the old image becomes `<none>`
+        and gc's `vsc-`-prefix sweep would never reach it. On failure nothing
+        is reclaimed — `--remove-existing-container` may already have removed
+        the old container, and the retry needs its image."""
+        branch = state.branch
+        if not state.worktree.is_dir():
+            raise IsolationError(
+                f"worktree {state.worktree} for {branch} is gone — there is nothing to "
+                f"rebuild against; run `fr isolation up --branch {branch}`."
+            )
+        config = self._config_path(state.worktree, state.profile)
+        before = self._ps_pairs_strict(state)
+        old = before[0][0] if before else None
+        old_image = self._image_for(old) if old else None
+        try:
+            self._devcontainer_up(
+                state.worktree, state.profile, remove_existing=True, no_cache=no_cache
+            )
+        except IsolationError as err:
+            raise IsolationError(
+                f"rebuild of {branch} failed: {err}\n"
+                f"The old container ({old or 'none'}) may already have been removed; the "
+                "worktree and run are intact. Fix the profile and retry with "
+                f"`fr isolation rebuild --branch {branch}`."
+            ) from err
+        after = self._ps_pairs_strict(state)
+        new = next((cid for cid, _ in after if cid != old), after[0][0] if after else None)
+        new_image = self._image_for(new) if new else None
+        if old_image and new_image and new_image != old_image:
+            self._reclaim_image(old_image)
+        return (
+            f"{branch} recreated ({old or 'none'} → {new or 'unknown'}) from {config}; "
+            "worktree untouched"
+        )
 
     def restart(self, state: IsolationState, force: bool = False) -> str:
         """Bounce the devcontainer without dropping the worktree (#341 Task 3).
@@ -610,7 +736,6 @@ class LocalWorktreeDevcontainerTarget:
         the env var is set and, if set, whether the socket path exists, never
         the path itself or any key material (no `ssh-add -l`, no reading the
         socket)."""
-        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
         probe_script = (
             'if [ -n "$SSH_AUTH_SOCK" ]; then '
             'if [ -S "$SSH_AUTH_SOCK" ]; then echo set:socket-exists; '
@@ -619,10 +744,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         result = self.run(
             [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
+                *self._devcontainer_argv(state.worktree, state.profile, "exec"),
                 "sh",
                 "-c",
                 probe_script,
@@ -1467,7 +1589,8 @@ class LocalWorktreeDevcontainerTarget:
             # Genuine cold-start: a brand-new branch. Default to freshly-fetched
             # origin/<default> instead of the base repo's current HEAD (#322).
             start_point, log_line = self._cold_start_base(branch, base, no_fetch)
-            print(log_line, file=sys.stderr if log_line.startswith("WARNING") else sys.stdout)
+            # stderr, always: `--print-path` and `fr run start` own stdout (§3.C).
+            print(log_line, file=sys.stderr)
             self._ensure_validator_wrapper_in_ref(start_point or "HEAD")
             argv = ["git", "worktree", "add", str(worktree), "-b", branch]
             if start_point is not None:
@@ -1524,7 +1647,7 @@ class LocalWorktreeDevcontainerTarget:
         Returns (start_point, log_line). start_point is the ref to append after
         `-b <branch>`, or None meaning "append nothing" — git then defaults to
         the current HEAD (byte-identical to the legacy behaviour). The log_line
-        is printed by the caller; a `WARNING`-prefixed line goes to stderr.
+        is printed by the caller, to stderr (every line `up` prints does).
         """
         # Operator named an explicit start-point — use it verbatim, no fetch, no
         # default-branch resolution. `--base HEAD` is the documented opt-in to the

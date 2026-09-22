@@ -78,11 +78,22 @@ def _push_origin(repo: Path) -> None:
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
 
+    # Stateful container: `devcontainer up` brings "cid" up running, a
+    # successful `docker rm` removes it — so exec's _ensure_running sees a
+    # live container and down's post-condition re-query sees it gone.
+    live: set[str] = set()
+
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         calls.append(list(argv))
         out = '{"state": "MERGED", "url": "u"}' if argv[0] == "gh" else ""
+        if argv[:2] == ["devcontainer", "up"]:
+            live.add("cid")
+        elif argv[:2] == ["docker", "rm"]:
+            live.difference_update(argv[2:])
+        elif argv[:2] == ["docker", "ps"] and "--all" in argv and live:
+            out = "cid running"
         return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
 
     monkeypatch.setattr(isolation_cmd, "_runner", run)

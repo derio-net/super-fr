@@ -207,6 +207,9 @@ class ExternalTarget:
     def stop(self, state: IsolationState) -> str:
         raise IsolationError(_EXTERNAL)
 
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        raise IsolationError(_EXTERNAL)
+
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)
 

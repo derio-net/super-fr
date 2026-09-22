@@ -654,11 +654,12 @@ def test_up_new_branch_bases_on_origin_default_not_local_head(
     assert _fetched(runner.git_calls)  # the default path fetched
 
 
-def test_up_logs_chosen_base_on_stdout(
+def test_up_logs_chosen_base_on_stderr(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    """The non-warning 'basing new branch …' line is informational → stdout
-    (WARNING fallbacks go to stderr; this pins the split)."""
+    """Every line `up` prints goes to stderr (2026-09-23 lifecycle spec §3.C):
+    `--print-path` and `fr run start` own stdout, so even the informational
+    'basing new branch …' line must not land there."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
@@ -666,7 +667,8 @@ def test_up_logs_chosen_base_on_stdout(
     target.up(profile="dev", branch="feat/x")
 
     captured = capsys.readouterr()
-    assert "basing new branch feat/x on origin/main (fetched)" in captured.out
+    assert "basing new branch feat/x on origin/main (fetched)" in captured.err
+    assert "basing new branch" not in captured.out
     assert "WARNING" not in captured.err
 
 
@@ -998,7 +1000,8 @@ def _upped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **runner_kw):
 
 
 def test_exec_passthrough(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, runner, target, st = _upped(tmp_path, monkeypatch)
+    # a running container: exec's _ensure_running execs directly (spec §3.B)
+    _, runner, target, st = _upped(tmp_path, monkeypatch, stdout={"docker": "cid1 running"})
     rc = target.exec(st, ["pytest", "-q", "--no-cov"])
     assert rc == 0
     (call,) = runner.argv_for("devcontainer")

@@ -94,3 +94,23 @@ All phases ship in one PR (spec §3.B); the phase is never merged alone. Phase 2
 ### p1-review · review · Phase 1 review (independent reviewer): 0 major, 4 minor, 4 nits (phase 1)
 
 Findings p1-f1..p1-f7 fixed with tests; p1-f8 refuted (single-PR delivery). Full suite 4539 passed / 88 skipped; ruff + mypy clean.
+
+<!-- fr:journal kind=discovery scope=plan id=108b178f281e created=2026-09-23T01:36:16 phase=2 -->
+### 108b178f281e · discovery · P2.T2 refactor: one devcontainer addressing helper (phase 2)
+
+Refactored rather than no-refactor: `_config_path(worktree, profile)` (the BRANCH config path) and `_devcontainer_argv(worktree, profile, *sub)` (`devcontainer <sub> --workspace-folder --config`) are now shared by `exec`, `_ssh_agent_probe` and `_devcontainer_up`, so the three can no longer drift. `_devcontainer_up` appends `--remove-existing-container` / `--build-no-cache` AFTER the mount, so rebuild argv == up argv + flags (pinned by test). `_carried_state(branch, worktree, profile)` is the shared §3.C record builder for both `up` implementations.
+
+<!-- fr:journal kind=discovery scope=plan id=2b2d6293bbdb created=2026-09-23T01:36:17 phase=2 -->
+### 2b2d6293bbdb · discovery · exec/_ensure_running semantics as built (phase 2)
+
+Any `running`/`restarting` row among the label-filtered containers → exec directly; otherwise the FIRST row decides: exited/created → stderr notice + `_devcontainer_up` (no remove flag); paused → `docker unpause`; anything else (dead, removing, unknown) and absent → `no usable container for <b> … fr isolation rebuild --branch <b> recreates it (worktree kept)`. A failed resume/unpause re-raises naming the same rebuild line. docker-ps failure keeps the phase-1 wording from `_ps_pairs_strict` (`docker is unreachable — …`), not the spec literal `cannot run in <b>`. A FileNotFoundError from the runner (devcontainer CLI missing) becomes an IsolationError; the CLI `exec` now routes IsolationError through `_fail` (exit 2, one line). Existing tests that exec'd against an absent container were updated: `test_exec_passthrough` now has a running container, and the CLI `fake_run` fixture models `devcontainer up` → `cid running`, `docker rm` → gone.
+
+<!-- fr:journal kind=discovery scope=plan id=8dbe79bb6dd7 created=2026-09-23T01:36:17 phase=2 -->
+### 8dbe79bb6dd7 · discovery · rebuild image reclaim needs both image ids (phase 2)
+
+rebuild reclaims the old image only when BOTH the old and the new image id were read and they differ; an unreadable new image (inspect failed) skips `rmi` rather than guess. The new container id is the first post-rebuild `docker ps --all` row whose id differs from the old one (falls back to the first row). No old container is fine: the message reads `(none → <new>)`, which is the path exec directs an absent/dead workspace to.
+
+<!-- fr:journal kind=discovery scope=plan id=8af43aee8ee9 created=2026-09-23T01:42:58 phase=2 -->
+### 8af43aee8ee9 · discovery · phase-2 acceptance rows left not-implemented on purpose (phase 2)
+
+`fr plan edit --complete-phase 2` warns that isolation-rebuild-keeps-worktree and isolation-stop-and-resume are still not-implemented. Left as-is: 06.yaml (Live walks and matrix flips) owns flipping all five rows after the live walks; unit refs to cite then: tests/unit/test_isolation_container_verbs.py (TestRebuild, TestExecEnsureRunning, CLI tests).

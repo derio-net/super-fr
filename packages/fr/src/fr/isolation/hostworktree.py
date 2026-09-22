@@ -14,7 +14,6 @@ enforcement.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,13 +35,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         worktree = self._worktree_up_core(branch, path)
         self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=worktree,
-            profile="host",
-            created_at=datetime.now(UTC).isoformat(),
-        )
+        state = self._carried_state(branch, worktree, "host")
         save_state(state)
         self._write_isolation_marker(worktree, branch)
         self._spawn_gc()
@@ -61,6 +54,10 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         """No container in this mode — nothing to stop, and docker is never
         touched (a docker-less pod has no binary to call)."""
         return f"{state.branch} runs in host-worktree mode — no container to stop (no-op)."
+
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        """No container in this mode — nothing to rebuild, docker never touched."""
+        return "nothing to rebuild — host-worktree mode has no container"
 
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)

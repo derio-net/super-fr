@@ -242,6 +242,9 @@ def up(
 ) -> None:
     """Create worktree + start the profile's devcontainer against it.
 
+    On an existing workspace this is a resume: a stopped container is started
+    again, and the state record's session bindings and creation time are kept.
+
     With --print-path (spec 2026-09-04 §5.B.3) the LAST non-empty stdout line
     is the worktree path — the contract a WorktreeCreate hook relies on — and
     the human-facing lines move to stderr.
@@ -291,7 +294,12 @@ def exec(  # noqa: A001 - typer command name
         None, help="Isolation branch (default: the single active workspace)."
     ),
 ) -> None:
-    """Run a command inside the isolation container (exit code passthrough)."""
+    """Run a command inside the isolation container (exit code passthrough).
+
+    A stopped container is resumed first (devcontainer up); a paused one is
+    unpaused. An absent or dead one is never recreated silently — the error
+    names `fr isolation rebuild`.
+    """
     root = _resolve_repo(repo)
     # super-fr#299 part 3: with --branch omitted, resolve to the single active
     # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
@@ -304,7 +312,12 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target_or_exit(repo).exec(state, argv))
+    try:
+        rc = _target_or_exit(repo).exec(state, argv)
+    except IsolationError as err:
+        _fail(err)
+        return
+    raise typer.Exit(rc)
 
 
 @isolation_app.command()
@@ -323,6 +336,8 @@ def restart(
 
     Unlike `down` + `up`, `restart` cycles only the container process tree — the
     worktree, node_modules, local DB stack, and in-container installs survive.
+    It also resumes a stopped container. It does NOT apply profile changes
+    (devcontainer.json edits) — use `fr isolation rebuild` for that.
     """
     root = _resolve_repo(repo)
     # Mirror exec's no-branch resolution: the single active workspace, or error.
@@ -333,6 +348,34 @@ def restart(
         _fail(err)
         return
     typer.echo(f"isolation restart: {state.branch} bounced ({container}).")
+
+
+@isolation_app.command()
+def rebuild(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
+    no_cache: bool = typer.Option(
+        False, "--no-cache", help="Rebuild the image without the docker build cache."
+    ),
+) -> None:
+    """Recreate the devcontainer against the existing worktree.
+
+    Uses the BRANCH's own profile config (<worktree>/.devcontainer/<profile>/
+    devcontainer.json): a profile fix merged to main applies only once the
+    branch has it. The worktree, state, marker, session bindings and run cursor
+    are untouched; in-container installs are lost (use `restart` to keep them).
+    Host-worktree mode has no container (no-op); external mode refuses.
+    """
+    root = _resolve_repo(repo)
+    state = _resolve_single(root, branch)
+    try:
+        message = _target(root).rebuild(state, no_cache=no_cache)
+    except IsolationError as err:
+        _fail(err)
+        return
+    typer.echo(f"isolation rebuild: {message}")
 
 
 @isolation_app.command()
