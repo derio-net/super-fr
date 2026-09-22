@@ -78,17 +78,17 @@ def test_the_clause_states_the_cost_policy(dispatch_clause: str) -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="phase 3 scopes fr-goal §2's cross-repo isolation flag (scan_prose now sees it)",
-)
 def test_the_new_tool_mention_stayed_inside_the_scoped_clause(skill_text: str) -> None:
     """The load-bearing one. `task` is now in `TOOL_VOCABULARY["opencode"]`,
     so naming it anywhere outside a clause that serves every supported harness
     is a violation — this is what proves the rewrite did not leak a
     harness-specific tool name into the two byte-identical mirrors."""
-    assert scan_prose(skill_text) == []
+    # Review p2r-1: exactly what phase 3 still owes, never a strict xfail.
+    assert [(v.line, v.tool) for v in scan_prose(skill_text)] == _PHASE_3_OWES
 
+
+_PHASE_3_OWES = [(59, 'isolation: "worktree"')]
+"""fr-goal §2's cross-repo flag — phase 3 scopes it and empties this list."""
 
 _MULTIPLE_RE = re.compile(r"(?<![\w.])(\d+)\s*(?:[x×]|times)\b")
 
@@ -168,10 +168,6 @@ def test_the_clause_instructs_the_untiered_fallback_when_a_tier_is_unresolved(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="phase 3 scopes fr-goal §2's cross-repo isolation flag (scan_prose now sees it)",
-)
 def test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped(
     skill_text: str,
 ) -> None:
@@ -180,4 +176,5 @@ def test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped(
     exactly where a harness-specific mention could escape its scope.
     `test_the_new_tool_mention_stayed_inside_the_scoped_clause` is the standing
     guard; this pins it to P3.T1's change."""
-    assert scan_prose(skill_text) == []
+    # Review p2r-1: exactly what phase 3 still owes, never a strict xfail.
+    assert [(v.line, v.tool) for v in scan_prose(skill_text)] == _PHASE_3_OWES

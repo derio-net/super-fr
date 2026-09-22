@@ -69,3 +69,68 @@ test_a_heading_is_not_flagged[## Plan Skill Override] (and 3 other headings): As
 ### 11b2b72f9074 · discovery · P2.T3.S1 RED: scan_prose still accepts extra_tools (phase 2)
 
 test_scan_prose_rejects_an_extra_tools_keyword: Failed: DID NOT RAISE <class 'TypeError'> — the parameter still exists. The three rewritten test_extra_tools_* tests (now test_the_isolation_flag_is_flagged_from_the_vocabulary_alone, ..._excused_by_a_scoped_clause_like_any_tool, test_scanning_does_not_mutate_either_vocabulary) pass already, since P2.T1 put the flag in the vocabulary; the agent tripwire calls scan_prose(text) with no extra and stays xfail on the executor's run_in_background.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-1 created=2026-09-22T14:13:13 phase=2 state=open -->
+### p2r-1 · finding [open] · Strict xfails hide phase 3's RED and pass a PARTIAL fix silently (phase 2)
+
+Review of phase 2 (a595be6374237b183): xfail(strict) only fails when EVERY violation is gone, so a canonical fixed but one mirror not re-synced, or a new unrelated violation, stays XFAIL; a bare xfail also swallows exceptions. My own instruction to the executor. Fix: each of the four assertions compares the violation set to the EXACT known list, so any change goes red; phase 3 flips each to empty.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-2 created=2026-09-22T14:13:13 phase=2 state=open -->
+### p2r-2 · finding [open] · isolation pattern misses the JSON/dict key and backtick spellings (phase 2)
+
+'"isolation": "worktree"', "'isolation': 'worktree'", 'isolation: `worktree`' pass unflagged; the dispatch tool's input IS {"isolation": "worktree"} (the repo's hook reads .tool_input.isolation). Spec-level gap. Fix: isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-]) + spec 3.A amendment + parametrized cases.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-3 created=2026-09-22T14:13:13 phase=2 state=open -->
+### p2r-3 · finding [open] · Hermes background pattern misses background=True and background: true; a test pinned the miss (phase 2)
+
+Hermes is Python: terminal(cmd, background=True). test_argument_patterns_are_case_sensitive_and_word_bounded asserted it unflagged. Fix: \bbackground\s*[:=]\s*(?:true|True)\b, flip that assertion, amend spec 3.A.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-4 created=2026-09-22T14:13:14 phase=2 state=open -->
+### p2r-4 · finding [open] · Heading skip also skips # comment lines inside fenced code (phase 2)
+
+'```bash\n# run_in_background is needed\n```' is skipped though the docstring says only real ATX headings are. Fix: fence-aware skip (a heading is only a heading outside a fence).
+
+<!-- fr:journal kind=finding scope=plan id=p2r-5 created=2026-09-22T14:13:14 phase=2 state=open -->
+### p2r-5 · finding [open] · Heading lines still count toward a clause naming every harness (phase 2)
+
+'**Harness — x:** Claude Code OpenCode\n## Hermes\nAgent' excuses Agent via a heading. Fix: heading lines neither name harnesses for a clause nor lead one.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-6 created=2026-09-22T14:13:15 phase=2 state=refuted -->
+### p2r-6 · finding [refuted] · Plan note for P2.T2.S2 says the skill tripwire stays green (phase 2)
+
+Refuted: plan step text records intent at planning time; the change (xfail, now the exact-set assertion) is recorded in the journal (p2-expected-red-phase3*) and this review, which is where the PR body is derived from. Rewriting a completed step's text would make the plan claim a history it did not have.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-7 created=2026-09-22T14:13:15 phase=2 state=open -->
+### p2r-7 · finding [open] · isolation: "worktree-mode" is a false positive (phase 2)
+
+\b before a hyphen; use (?![\w-]) like the tool-name convention.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-1-resolved created=2026-09-22T14:15:43 state=fixed resolves=p2r-1 -->
+### p2r-1-resolved · finding [fixed] · resolves p2r-1: Strict xfails hide phase 3's RED and pass a PARTIAL fix silently
+
+Four strict xfails replaced by exact-set assertions (_SKILLS_PHASE_3_OWES, _AGENTS_PHASE_3_OWES, _PHASE_3_OWES): any new, partial or changed violation now goes red; phase 3 empties them. No xfail marker remains.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-2-resolved created=2026-09-22T14:15:43 state=fixed resolves=p2r-2 -->
+### p2r-2-resolved · finding [fixed] · resolves p2r-2: isolation pattern misses the JSON/dict key and backtick spellings
+
+isolation pattern -> isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-]); JSON key, dict key and backtick spellings added to the parametrized test (red first). Spec 3.A amended.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-3-resolved created=2026-09-22T14:15:44 state=fixed resolves=p2r-3 -->
+### p2r-3-resolved · finding [fixed] · resolves p2r-3: Hermes background pattern misses background=True and background: true; a test pinned the miss
+
+background pattern -> \bbackground\s*[:=]\s*(?:true|True)\b; background=True and background: true cases added (red first); the test that pinned background=True as prose now asserts it is flagged elsewhere and keeps only genuine negatives. Spec 3.A amended.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-4-resolved created=2026-09-22T14:15:44 state=fixed resolves=p2r-4 -->
+### p2r-4-resolved · finding [fixed] · resolves p2r-4: Heading skip also skips # comment lines inside fenced code
+
+_heading_lines is fence-aware: a # line inside ```/~~~ is scanned. test_a_hash_comment_inside_a_fenced_block_is_not_a_heading (red first) and test_a_real_heading_after_a_closed_fence_is_still_exempt.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-5-resolved created=2026-09-22T14:15:45 state=fixed resolves=p2r-5 -->
+### p2r-5-resolved · finding [fixed] · resolves p2r-5: Heading lines still count toward a clause naming every harness
+
+Heading lines neither lead a clause nor count toward naming a harness in _clause_is_valid. test_a_heading_cannot_name_a_harness_for_a_clause (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p2r-7-resolved created=2026-09-22T14:15:45 state=fixed resolves=p2r-7 -->
+### p2r-7-resolved · finding [fixed] · resolves p2r-7: isolation: "worktree-mode" is a false positive
+
+(?![\w-]) after worktree; isolation: "worktree-mode" asserted unflagged.

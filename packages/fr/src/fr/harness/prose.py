@@ -33,7 +33,9 @@ false positive — four, all tool names used as English words:
 `## Plan Skill Override` and `## fr-* Skill Overview` (fr-plan-override),
 `# Worktree Skill Override (fr-enabled repos)` (fr-worktree-override), and
 `### 1. Agent sessions, pods and CI always land non-interactive — by design`
-(artifact-versioning). Only a real ATX heading is exempt: `#Skill` (no
+(artifact-versioning). Only a real ATX heading OUTSIDE a code fence is
+exempt (a fenced `# ...` is a comment a reader may copy, review p2r-4), and a
+heading neither leads a clause nor names a harness for one (review p2r-5): `#Skill` (no
 space), seven hashes, or an indented hash are body text and still scanned.
 """
 
@@ -98,6 +100,25 @@ _CLAUSE_LEAD_RE = re.compile(r"\*\*Harness — [^*\n]+:\*\*")
 
 # An ATX heading (spec §3.B) names a topic, never an instruction.
 _HEADING_RE = re.compile(r"^#{1,6} ")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
+def _heading_lines(lines: list[str]) -> frozenset[int]:
+    """Indices of real headings — `_HEADING_RE` lines OUTSIDE a code fence.
+
+    Inside a fence a `# ...` line is a shell or YAML comment a reader may copy
+    verbatim, so it is scanned like any other line (review p2r-4: the skip
+    first applied to fenced comments too, and hid `# pass run_in_background`).
+    """
+    headings: set[int] = set()
+    fenced = False
+    for idx, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+        elif not fenced and _HEADING_RE.match(line):
+            headings.add(idx)
+    return frozenset(headings)
+
 
 # A scoped clause excuses a mention only when it names every SUPPORTED
 # harness by display label — not by a tool of its own, because "OpenCode has
@@ -163,7 +184,9 @@ _LOOKUPS: tuple[_Lookup, ...] = (
 )
 
 
-def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
+def _clause_spans(
+    lines: list[str], headings: frozenset[int] = frozenset()
+) -> list[tuple[int, int]]:
     """Line-index spans (inclusive) covered by a `**Harness — ...:**`
     clause: from the lead-in to the next blank line followed by a
     non-indented line (or end of text), per spec §3.C."""
@@ -171,7 +194,7 @@ def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
     n = len(lines)
     i = 0
     while i < n:
-        if _CLAUSE_LEAD_RE.search(lines[i]):
+        if i not in headings and _CLAUSE_LEAD_RE.search(lines[i]):
             start = i
             end = i
             j = i + 1
@@ -195,10 +218,14 @@ def _clause_spans(lines: list[str]) -> list[tuple[int, int]]:
     return spans
 
 
-def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
-    """A scoped clause excuses a mention only when it names more than one
-    harness by its display label — see `_MIN_HARNESSES_PER_CLAUSE`."""
-    clause_lines = lines[start : end + 1]
+def _clause_is_valid(
+    lines: list[str], start: int, end: int, headings: frozenset[int] = frozenset()
+) -> bool:
+    """A scoped clause excuses a mention only when its PROSE names every
+    supported harness by display label — see `_MIN_HARNESSES_PER_CLAUSE`. A
+    heading line inside the span names a topic, not a reader, so it does not
+    count (review p2r-5)."""
+    clause_lines = [lines[i] for i in range(start, end + 1) if i not in headings]
     harnesses_named = {
         harness
         for harness, label in _HARNESS_LABELS.items()
@@ -222,13 +249,14 @@ def scan_prose(text: str) -> list[Violation]:
     bottom the way the file does — the loop below is tool-major for pattern
     reuse (review r3-m6)."""
     lines = text.splitlines()
-    spans = _clause_spans(lines)
-    valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
+    headings = _heading_lines(lines)
+    spans = _clause_spans(lines, headings)
+    valid_span = {span: _clause_is_valid(lines, *span, headings=headings) for span in spans}
 
     violations: list[Violation] = []
     for lookup in _LOOKUPS:
         for line_idx, line in enumerate(lines):
-            if _HEADING_RE.match(line) or not lookup.pattern.search(line):
+            if line_idx in headings or not lookup.pattern.search(line):
                 continue
             clause = next((s for s in spans if s[0] <= line_idx <= s[1]), None)
             if clause is not None and valid_span[clause]:

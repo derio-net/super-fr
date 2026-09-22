@@ -82,7 +82,9 @@ harness a bare mention serves."""
 
 ARGUMENT_VOCABULARY: dict[str, dict[str, re.Pattern[str]]] = {
     "claude-code": {
-        'isolation: "worktree"': re.compile(r"""isolation\s*[:=]\s*["']?worktree\b"""),
+        'isolation: "worktree"': re.compile(
+            r"""isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-])"""
+        ),
         "run_in_background": re.compile(r"\brun_in_background\b"),
     },
     # OpenCode's `timeout` is deliberately NOT registered (spec §3.A): it is
@@ -90,7 +92,7 @@ ARGUMENT_VOCABULARY: dict[str, dict[str, re.Pattern[str]]] = {
     # same trade TOOL_VOCABULARY states for `task`. A limit, not an oversight.
     "opencode": {},
     "hermes": {
-        "background=true": re.compile(r"\bbackground\s*=\s*true\b"),
+        "background=true": re.compile(r"\bbackground\s*[:=]\s*(?:true|True)\b"),
         "notify_on_complete": re.compile(r"\bnotify_on_complete\b"),
     },
     "codex": {},

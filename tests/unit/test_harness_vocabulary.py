@@ -243,11 +243,11 @@ def test_argument_vocabulary_is_exactly_the_spec_table() -> None:
     }
     assert patterns == {
         "claude-code": {
-            'isolation: "worktree"': r"""isolation\s*[:=]\s*["']?worktree\b""",
+            'isolation: "worktree"': r"""isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-])""",
             "run_in_background": r"\brun_in_background\b",
         },
         "hermes": {
-            "background=true": r"\bbackground\s*=\s*true\b",
+            "background=true": r"\bbackground\s*[:=]\s*(?:true|True)\b",
             "notify_on_complete": r"\bnotify_on_complete\b",
         },
         "opencode": {},
@@ -281,10 +281,14 @@ def test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies() -> None:
         'isolation="worktree"',
         'isolation: "worktree"',
         "isolation=worktree",
+        # Review p2r-2: the dispatch tool's own input shape, and a backticked value.
+        '"isolation": "worktree"',
+        "'isolation': 'worktree'",
+        "isolation: `worktree`",
     ],
 )
 def test_every_spelling_of_the_isolation_flag_is_the_claude_code_argument(spelling: str) -> None:
-    text = f"Dispatch it with `{spelling}` set.\n"
+    text = f"Dispatch it with {spelling} set.\n"
     assert scan_prose(text) == [
         Violation(harness="claude-code", tool='isolation: "worktree"', line=1)
     ]
@@ -296,6 +300,9 @@ def test_every_spelling_of_the_isolation_flag_is_the_claude_code_argument(spelli
         ("Run the suite with run_in_background, then wait.", "claude-code", "run_in_background"),
         ("Call terminal with background=true and poll.", "hermes", "background=true"),
         ("Call terminal with background = true and poll.", "hermes", "background=true"),
+        # Review p2r-3: Hermes is Python, and YAML/JSON-ish configs use a colon.
+        ("Call terminal(cmd, background=True) and poll.", "hermes", "background=true"),
+        ("Set background: true on the call.", "hermes", "background=true"),
         ("Pass notify_on_complete so you hear back.", "hermes", "notify_on_complete"),
     ],
 )
@@ -323,10 +330,14 @@ def test_an_argument_inside_a_one_harness_clause_is_still_a_violation() -> None:
 
 
 def test_argument_patterns_are_case_sensitive_and_word_bounded() -> None:
-    """`background=True` (Python's spelling in ordinary prose) and a longer
-    identifier that merely contains an argument name are not the argument."""
-    assert scan_prose("x.background=True\n") == []
+    """A longer identifier that merely contains an argument name is not the
+    argument, nor is a different value of the flag. (This test used to pin
+    `background=True` as ordinary prose — review p2r-3: it is Hermes' Python
+    spelling, and is now flagged above.)"""
     assert scan_prose("my_run_in_background_helper\n") == []
+    assert scan_prose("background=TRUE is not a spelling anyone writes\n") == []
+    # Review p2r-7: a hyphenated value is a different word, as for tool names.
+    assert scan_prose('isolation: "worktree-mode"\n') == []
 
 
 def test_the_import_time_key_check_names_the_mapping_it_rejects() -> None:
@@ -369,3 +380,25 @@ def test_only_a_real_atx_heading_is_exempt() -> None:
     is not a heading, and does not escape the scan."""
     for line in ("#Skill", "####### Skill", "  ## Skill"):
         assert [v.tool for v in scan_prose(line + "\n")] == ["Skill"], line
+
+
+# --- Review p2r-4 / p2r-5: what a heading is, and what it is not --------------
+
+
+def test_a_hash_comment_inside_a_fenced_block_is_not_a_heading() -> None:
+    """`# ...` inside a code fence is a shell/YAML comment a reader may copy,
+    not a heading; only a heading OUTSIDE a fence is exempt."""
+    text = "Run it:\n\n```bash\n# pass run_in_background here\n```\n"
+    assert [v.tool for v in scan_prose(text)] == ["run_in_background"]
+
+
+def test_a_real_heading_after_a_closed_fence_is_still_exempt() -> None:
+    text = "```\ncode\n```\n\n## Plan Skill Override\n"
+    assert scan_prose(text) == []
+
+
+def test_a_heading_cannot_name_a_harness_for_a_clause() -> None:
+    """A clause is valid only if its PROSE names every harness; a heading line
+    inside its span names a topic, so it does not count."""
+    text = "**Harness — x:** Claude Code and OpenCode.\n## Hermes\nAgent\n"
+    assert [v.tool for v in scan_prose(text)] == ["Agent"]

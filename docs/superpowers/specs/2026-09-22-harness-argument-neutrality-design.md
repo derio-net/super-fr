@@ -58,11 +58,16 @@ violation reports) to a compiled-at-import regex:
 
 | harness | name | pattern (case-sensitive) |
 |---|---|---|
-| claude-code | `isolation: "worktree"` | `isolation\s*[:=]\s*["']?worktree\b` |
+| claude-code | `isolation: "worktree"` | `isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-])` |
 | claude-code | `run_in_background` | `\brun_in_background\b` |
-| hermes | `background=true` | `\bbackground\s*=\s*true\b` |
+| hermes | `background=true` | `\bbackground\s*[:=]\s*(?:true|True)\b` |
 | hermes | `notify_on_complete` | `\bnotify_on_complete\b` |
 | opencode, codex, copilot-cli | — | — |
+
+*Amended in phase 2's review (p2r-2, p2r-3, p2r-7):* the isolation pattern also matches the
+dispatch tool's own input shape (`"isolation": "worktree"`) and a backticked value, and stops
+at a hyphen (`worktree-mode` is a different word); the Hermes pattern matches Python's
+`background=True` and a colon form.
 
 OpenCode's `timeout` is deliberately NOT registered: it is ordinary English and would fire on
 every sentence about a timeout — the same trade `TOOL_VOCABULARY` already states for `task`.

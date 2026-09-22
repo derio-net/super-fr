@@ -70,40 +70,51 @@ def test_agent_tree_is_not_empty(tree_name: str) -> None:
     )
 
 
-# Phase 2 of the 2026-09-22 harness-argument-neutrality plan teaches
-# `scan_prose` arguments; the prose they flag is phase 3's to scope. `strict`
-# turns each marker into a hard failure the moment phase 3 fixes the prose and
-# forgets to remove it.
-@pytest.mark.xfail(strict=True, reason="phase 3 scopes fr-goal §2's cross-repo isolation flag")
+# Phase 2 of the 2026-09-22 harness-argument-neutrality plan taught `scan_prose`
+# arguments; the prose they flag is phase 3's to scope. Review p2r-1: these were
+# `xfail(strict=True)`, which only fails once EVERY violation is gone — a
+# canonical fixed but one mirror not re-synced, or a brand-new violation, stayed
+# XFAIL, and a bare xfail swallowed exceptions too. Each test now asserts the
+# violation set EQUALS what phase 3 still owes, so any change at all goes red;
+# phase 3 empties both sets.
+_SKILLS_PHASE_3_OWES = {
+    'plugins/super-fr/skills/fr-goal/SKILL.md:59:isolation: "worktree"',
+    '.opencode/skills/fr-goal/SKILL.md:59:isolation: "worktree"',
+    '.hermes/skills/fr/fr-goal/SKILL.md:59:isolation: "worktree"',
+}
+_AGENTS_PHASE_3_OWES = {
+    "plugins/super-fr/agents/fr-phase-executor.md:121:run_in_background",
+    ".opencode/agent/fr-phase-executor.md:116:run_in_background",
+    ".opencode/agent/fr-phase-executor-mechanical.md:116:run_in_background",
+    ".opencode/agent/fr-phase-executor-standard.md:116:run_in_background",
+    ".opencode/agent/fr-phase-executor-hard.md:116:run_in_background",
+}
+
+
+def _violations(paths: list[Path]) -> set[str]:
+    return {
+        f"{path.relative_to(REPO_ROOT)}:{v.line}:{v.tool}"
+        for path in paths
+        for v in scan_prose(path.read_text(encoding="utf-8"))
+    }
+
+
 def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    messages = []
-    for path in _all_skill_files():
-        text = path.read_text(encoding="utf-8")
-        for violation in scan_prose(text):
-            messages.append(
-                f"{path.relative_to(REPO_ROOT)}:{violation.line}: "
-                f"names {violation.tool!r} ({violation.harness}) outside a scoped clause "
-                "naming more than one harness"
-            )
-    assert not messages, "\n".join(messages) + (
-        "\n\nName the operator touchpoint neutrally (spec §3.C) — the concrete tool "
+    found = _violations(_all_skill_files())
+    assert found == _SKILLS_PHASE_3_OWES, (
+        f"new: {sorted(found - _SKILLS_PHASE_3_OWES)}\n"
+        f"now fixed (shrink _SKILLS_PHASE_3_OWES): {sorted(_SKILLS_PHASE_3_OWES - found)}\n\n"
+        "Name the operator touchpoint neutrally (spec §3.C) — the concrete tool "
         "belongs in a `**Harness — <topic>:**` clause naming every harness it applies to."
     )
 
 
-@pytest.mark.xfail(strict=True, reason="phase 3 scopes the executor Long-commands paragraph")
 def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    messages = []
-    for path in _all_agent_files():
-        text = path.read_text(encoding="utf-8")
-        for violation in scan_prose(text):
-            messages.append(
-                f"{path.relative_to(REPO_ROOT)}:{violation.line}: "
-                f"names {violation.tool!r} ({violation.harness}) outside a scoped clause "
-                "naming more than one harness"
-            )
-    assert not messages, "\n".join(messages) + (
-        "\n\nAn agent body is read on every harness that can dispatch it — say what "
+    found = _violations(_all_agent_files())
+    assert found == _AGENTS_PHASE_3_OWES, (
+        f"new: {sorted(found - _AGENTS_PHASE_3_OWES)}\n"
+        f"now fixed (shrink _AGENTS_PHASE_3_OWES): {sorted(_AGENTS_PHASE_3_OWES - found)}\n\n"
+        "An agent body is read on every harness that can dispatch it — say what "
         "each reader should do inside a `**Harness — <topic>:**` clause, and keep the "
         "frontmatter `description` (which cannot sit in a clause) neutral."
     )
