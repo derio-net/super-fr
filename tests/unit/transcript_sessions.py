@@ -21,6 +21,18 @@ FIXTURES = Path(__file__).parents[1] / "fixtures" / "transcripts"
 ORCHESTRATOR = FIXTURES / "claude-code-session.jsonl"
 SUBAGENT = FIXTURES / "claude-code-subagent.jsonl"
 SUBAGENT_META = FIXTURES / "claude-code-subagent.meta.json"
+QUESTION = FIXTURES / "claude-code-askuserquestion.jsonl"
+BASH = FIXTURES / "claude-code-bash.jsonl"
+"""Captured 2026-09-21 from the same live session (local and scratchpad paths
+redacted): line 0 a main-thread `assistant` record whose `Bash` tool_use runs
+a test suite into a log file (`.../c1.log`), line 1 its `tool_result`
+(`is_error: false`)."""
+"""Captured 2026-09-21 from a live Claude Code 2.1.278 session (local paths
+redacted to `/home/user`): line 0 is the `assistant` record carrying an
+`AskUserQuestion` tool_use, line 1 the `user` record carrying its tool_result,
+whose `toolUseResult` is an object with a non-empty `answers` map. A declined
+or failed tool call carries a plain STRING `toolUseResult` instead — observed
+on other tools in the same transcript."""
 
 AGENT_ID = "adc0716be5565cc07"
 TOOL_USE_ID = "toolu_014ynBvFpxdbG1PXwxASc1Cu"
@@ -112,11 +124,20 @@ def add_dispatch(
     return write_agent(session, agent_id, tool_use_id=tool_use_id, rows=rows)
 
 
-def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[str, int]) -> Path:
+def dispatched_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    usage: dict[str, int],
+    agent_type: str | None = None,
+) -> Path:
     """A one-dispatch session whose tool_use lands exactly at `timestamp`.
 
     Used by the CLI tests, where the window comes from the run cursor's own
     `at` and cannot be predicted before `fr run advance` writes it.
+    `agent_type` re-keys the captured metadata's `agentType` (the capture is a
+    `super-fr:fr-phase-executor`; a reviewer test needs a reviewer).
     """
     orchestrator = copy_of(records(ORCHESTRATOR))
     orchestrator[AGENT_TOOL_USE_LINE]["timestamp"] = timestamp
@@ -126,5 +147,57 @@ def dispatched_at(root: Path, timestamp: str, *, session_id: str, usage: dict[st
         row["timestamp"] = timestamp
         if row["type"] == "assistant":
             row["message"]["usage"] = dict(usage)
-    write_agent(session, rows=subagent)
+    meta = None
+    if agent_type is not None:
+        meta = json.loads(SUBAGENT_META.read_text())
+        meta["agentType"] = agent_type
+    write_agent(session, rows=subagent, meta=meta)
     return session
+
+
+def asked_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    answered: bool = True,
+) -> Path:
+    """A session whose captured `AskUserQuestion` exchange lands at `timestamp`.
+
+    `answered=False` swaps the captured result's `toolUseResult` object for the
+    string form a declined tool call carries, keeping everything else captured.
+    Timestamps are moved (the gate window comes from the cursor's own `at`,
+    which a test cannot predict), never the shape.
+    """
+    question, answer = copy_of(records(QUESTION))
+    question["timestamp"] = timestamp
+    answer["timestamp"] = timestamp
+    if not answered:
+        answer["toolUseResult"] = "User rejected tool use"
+    return write_session(
+        root, session_id=session_id, rows=[*records(ORCHESTRATOR), question, answer]
+    )
+
+
+CAPTURED_LOG = "/tmp/scratchpad/c1.log"
+"""The (redacted) path the captured `Bash` command writes its suite output to."""
+
+
+def ran_at(
+    root: Path,
+    timestamp: str,
+    *,
+    session_id: str,
+    until: str | None = None,
+    log: Path | None = None,
+) -> Path:
+    """A session whose captured orchestrator `Bash` exchange runs from
+    `timestamp` to `until` (default: the same instant), writing `log` (default:
+    the captured path). Only the timestamps and that one path are varied."""
+    call, result = copy_of(records(BASH))
+    call["timestamp"] = timestamp
+    result["timestamp"] = until or timestamp
+    if log is not None:
+        block = call["message"]["content"][0]
+        block["input"]["command"] = block["input"]["command"].replace(CAPTURED_LOG, str(log))
+    return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])

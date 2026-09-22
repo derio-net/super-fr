@@ -62,6 +62,11 @@ def _plan_dir(tmp_path: Path, *, workflow: str | None = None) -> Path:
     specs = tmp_path / "docs" / "superpowers" / "specs"
     specs.mkdir(parents=True, exist_ok=True)
     (specs / "fixture-spec-design.md").write_text("# stub spec\n")
+    from tests.unit.skeleton_override import write_skeleton_override
+
+    # One agentic phase, marked skeleton: a self-review error since debug
+    # journal C2 — recorded as the sanctioned override, see the helper.
+    write_skeleton_override(tmp_path)
     meta: dict[str, object] = {
         "schema_version": 2,
         "plan": "2026-05-09-fixture-minimal",

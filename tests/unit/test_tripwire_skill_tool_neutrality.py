@@ -99,12 +99,38 @@ def test_rule_tree_is_not_empty(tree_name: str) -> None:
     )
 
 
-def _violations(paths: list[Path]) -> set[str]:
+def _violations(paths: list[Path], *, agent: bool = False) -> set[str]:
+    def text(path: Path) -> str:
+        raw = path.read_text(encoding="utf-8")
+        return _without_tools_allowlist(raw) if agent else raw
+
     return {
         f"{path.relative_to(REPO_ROOT)}:{v.line}:{v.tool}"
         for path in paths
-        for v in scan_prose(path.read_text(encoding="utf-8"))
+        for v in scan_prose(text(path))
     }
+
+
+def _without_tools_allowlist(text: str) -> str:
+    """`text` with the frontmatter `tools:` line blanked (line count kept, so
+    reported line numbers stay true).
+
+    That one line is Claude Code's own allowlist syntax, not prose any reader
+    follows: `scripts/sync-opencode.py` translates it into OpenCode's
+    `permission:` map and the mirrors carry no `tools:` line at all. It also
+    cannot sit inside a `**Harness — …:**` clause, so scanning it made any
+    agent granted a Claude Code tool (`Skill`, `Agent`) unshippable — found
+    when #536 granted `fr-phase-executor` the `Skill` tool its body tells it to
+    use (review of #532, M3). Only the frontmatter line is exempt: the same
+    name in the description or the body is still prose and still scanned."""
+    lines = text.split("\n")
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                break
+            if lines[i].startswith("tools:"):
+                lines[i] = ""
+    return "\n".join(lines)
 
 
 def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
@@ -117,13 +143,24 @@ def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> Non
 
 
 def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    found = sorted(_violations(_all_agent_files()))
+    found = sorted(_violations(_all_agent_files(), agent=True))
     assert found == [], (
         f"{found}\n\n"
         "An agent body is read on every harness that can dispatch it — say what "
         "each reader should do inside a `**Harness — <topic>:**` clause, and keep the "
         "frontmatter `description` (which cannot sit in a clause) neutral."
     )
+
+
+def test_only_the_frontmatter_tools_line_is_exempt() -> None:
+    """The exemption must not become a hole: `Skill` in the `tools:` allowlist
+    passes, the same name in the description or the body is still caught."""
+    agent = (
+        "---\nname: x\ndescription: >\n  Uses the Skill tool.\n"
+        "tools: Read, Skill\n---\n# x\n\nLoad it with the Skill tool.\n"
+    )
+    flagged = [v.line for v in scan_prose(_without_tools_allowlist(agent))]
+    assert flagged == [4, 9], flagged
 
 
 def test_no_rule_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:

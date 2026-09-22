@@ -110,3 +110,33 @@ spec, and phase 4 depends on the corrected version.
    binding a dispatch actually used is recoverable from the transcript without
    asking the harness anything — useful to `fr models` reporting, beyond
    telemetry.
+
+## `claude-code-askuserquestion.jsonl` (added 2026-09-21)
+
+Captured live 2026-09-21 from this operator's own `super-fr` orchestrator
+session (Claude Code 2.1.278, no third-party content), for the operator-gate
+verification of debug journal `2026-09-21-fr-goal-first-run-contracts` (C1).
+Two records, selected verbatim and paired by tool_use id:
+
+- line 0 — the `assistant` record carrying an `AskUserQuestion` tool_use;
+- line 1 — the `user` record carrying its `tool_result`. Its top-level
+  `toolUseResult` is an OBJECT with `questions`, `answers` and `annotations`;
+  `answers` maps each question to the chosen label.
+
+Only redaction: absolute home paths rewritten to `/home/user`, like the files
+above. A declined or failed tool call is NOT captured here; in the same
+transcript, failed calls of other tools carry `toolUseResult` as a plain
+STRING, which is the shape `asked_at(..., answered=False)` substitutes — the one
+field the helper varies beyond timestamps.
+
+## `claude-code-bash.jsonl` (added 2026-09-21)
+
+Captured live 2026-09-21 from the same session, for `deliver`'s `tests=<log>`
+evidence (debug journal C5). Two records paired by tool_use id: line 0 a
+main-thread `assistant` record whose `Bash` tool_use runs the test suite with
+its output redirected into a log, line 1 the `user` record carrying its
+`tool_result` (`is_error: false`; `toolUseResult` an object with
+`stdout`/`stderr`/`interrupted`/...). Redactions: home paths → `/home/user`, the
+session scratchpad → `/tmp/scratchpad` (so the log is `/tmp/scratchpad/c1.log`,
+`transcript_sessions.CAPTURED_LOG`). Helpers vary only the timestamps and that
+one log path.

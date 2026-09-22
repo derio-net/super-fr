@@ -284,6 +284,11 @@ _TOOL_PERMISSIONS: dict[str, tuple[str, str] | None] = {
     "Grep": None,
     "Glob": None,
     "TodoWrite": None,
+    # Skill loading (2026-09-21 debug journal C7): the executor body says to
+    # implement "via superpowers:test-driven-development / fr-execute", which it
+    # could not do without the tool. OpenCode loads skills natively; the mirror
+    # neither grants nor denies here and leaves OpenCode's own default in place.
+    "Skill": None,
 }
 # The capability classes a canonical `tools:` line does not grant must be
 # denied explicitly, or the mirror ends up strictly more powerful than its
