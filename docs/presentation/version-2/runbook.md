@@ -43,20 +43,23 @@ the interview asking for it is where the GitLab story becomes visible.
 **Waits are shown as waits**, compressed hard with the compression labelled on
 screen. Pre-pulling base image layers is legitimate and unlabelled.
 
-## Tiers: pre-bound, genuinely different (route A)
+## Tiers: pre-bound, and none equal to the session model
 
 **#538 (open)**: with every tier unbound, fr-goal on OpenCode never asked the
-model-per-tier question — the condition is a check the model has to remember,
-and it didn't. So filming the question as onboarding (route B) is not reliable
-until #538 is fixed.
+model-per-tier question. So filming it as onboarding (route B) is unreliable
+until that is fixed; pre-bind instead.
 
-Pre-bind each tier to a **different** model with `fr models set`, which
-materialises into the installed agent and names the file it wrote. Same-model
-bindings show three labels resolving to one model and prove nothing.
+**Tiering is already proven** — #560 recorded a live OpenCode run where three
+declared tiers each dispatched to their tier agent and each ran on *its own*
+binding, pairwise distinct, none on the session model. This run therefore
+**shows** tiering rather than owing evidence for it.
 
-Subagent dispatch itself is proven: #494's post-merge run (PR #539) dispatched a
-phase to `fr-phase-executor-mechanical`, the tier its plan declared, with its own
-usage and every tool call under the child.
+Take #560's method as a constraint on the bindings: **no tier may be bound to
+the model the session itself runs on.** Its predecessor run bound all three
+tiers to the session model, so its rows could not tell a correct tiered dispatch
+from a broken untiered one — the proof rested on the agent *name* alone. Pick
+three models that differ from each other **and** from the session model, or the
+same ambiguity returns on camera.
 
 ## Identity inverts from bc88
 
@@ -68,6 +71,10 @@ by the `includeIf` for the work path. Assert `user.email` in the clone.
 
 Each line below failed silently in some earlier run:
 
+- **the installed `fr` matches the repo** — the surfaces move fast; re-run
+  `install.sh` when it does not;
+- **the plugin is delivered** — `fr-opencode-plugin` present in the OpenCode
+  plugins directory (since #563, 4.17.0);
 - `fr-goal` and `fr-init` skills present in the **real** OpenCode config;
 - `opencode agent list` shows all four `fr-phase-executor*` agents;
 - `glab auth status`, plus a real API read of the fork;
@@ -102,19 +109,63 @@ A take is discarded and re-recorded unless:
   to resolve), on the model bound to that tier;
 - a check genuinely failed and was recovered;
 - the merge request exists on the fork;
+- **the model was not auto-continued after asking its questions** — if it was,
+  the idle adapter answered past the operator and the take is void (and the
+  observation is worth an issue);
+- `resolve` demanded `reviewer=` and `tests=`, and recorded its evidence as
+  *unverified* rather than claiming otherwise;
 - annotation offsets were noted live.
 
-## Known limits — film them honestly
+## The plugin is delivered now — and one risk goes live with it
 
-- **The OpenCode plugin is not delivered by `install.sh`** — tracked, high
-  priority, as [#563](https://github.com/derio-net/super-fr/issues/563). Its README says
-  "install the package (once published) or vendor this directory" and add it to
-  the repo's `opencode.json`. So this run has **no edit-gate backstop** and **no
-  idle adapter** on OpenCode. The isolation itself — worktree and container —
-  still happens through `fr`; only the backstop against a wandering agent is
-  absent. A listener who runs `install.sh` gets exactly this.
-- `operator-gate / opencode: advisory` — above.
-- #538 — why tiers are pre-bound.
+**#563 landed (4.17.0).** `install.sh` delivers `fr-opencode-plugin` to
+`~/.config/opencode/plugins/`, so a consumer's OpenCode now carries both the
+edit gate and the idle adapter. Two consequences, opposite in sign.
+
+**The Security beat became real on this harness.** Parity footnote [2]: all
+file-writing tools are gated including nested arguments and patch-body targets;
+the delivered copy is loaded by the real binary and refuses a base-clone edit in
+CI (`tests/integration/test_opencode_plugin_live.py`). `bash` remains ungated
+(#436) — a known gap, not a bypass, and worth saying out loud rather than
+filming around.
+
+**The idle adapter is now active, and unproven.** Footnote [3]: on
+`session.idle` the plugin sends the next command back into the session; that a
+plugin-originated prompt actually *executes* is **not live-proven**. It was
+harmless while nothing delivered it. It is not harmless now, because **the
+operator gate works by ending the turn — which is exactly `session.idle`.** If
+the model is auto-continued straight after asking its questions, that is the
+adapter answering past the operator, and the take is void. Watch for it, and
+record it either way: this run is the first real chance to see the behaviour.
+
+## Evidence the run must now produce (#536)
+
+`fr-goal`'s first post-#508 run broke seven contracts while reporting success,
+and #536's fixes mean `fr run resolve` now demands real evidence. Its own Test
+Plan names *"the next real fr-goal run"* as the live check — this one.
+
+- **The session binds itself.** `fr run start` / `fr isolation up` record the
+  ambient session id (C4 — the old matcher only recognised a bare `fr`).
+- **An unasked gate is refused.** `resolve` wants an answered question since the
+  gate paused; the bypass is `--no-questions --reason`, and it is journaled.
+- **`reviewer=` must name a separately dispatched subagent** — never the phase's
+  implementer, never a phase executor.
+- **`tests=` must be a log the orchestrator itself wrote during `deliver`**,
+  with the log's bytes inside that command's run window, hashed onto the cursor.
+- **The model recorded is the served model**, not the alias typed (C3).
+
+**Expect loud degradation on OpenCode, and do not read it as failure.**
+Transcripts cannot be read there, so `reviewer=` is checked only against the
+implementer set, the gates stay advisory, and evidence is recorded as
+*unverified*. Seeing that said plainly is the correct outcome; seeing it claimed
+as verified would be the bug.
+
+## Remaining limits
+
+- `operator-gate / opencode: advisory` — nothing can mechanically block, so both
+  question gates can still silently not fire. Still the highest-risk moment.
+- `bash` is ungated by the edit gate.
+- The idle adapter's behaviour is unproven, as above.
 
 ## Assets never enter this repo
 
