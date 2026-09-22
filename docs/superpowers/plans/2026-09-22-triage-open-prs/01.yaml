@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Collect open PRs with CI summary and schema 2
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-open-prs
+  skeleton: true
+  tier: mechanical
+tasks:
+- number: 1
+  title: Red - failing tests for open-PR collect and schema 2
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing unit tests in tests/unit/test_triage_open_prs.py covering the open-PR bulk call fields, checks summary pass/fail/pending, UNKNOWN mergeable kept verbatim, issue-less PR in Facts.prs, linked PR not duplicated, and schema 1 refused with re-run collect message, following superpowers:test-driven-development red step
+  - id: P1.T1.S2
+    text: |-
+      Capture gh JSON fixtures from derio-net/super-fr for mixed checks, UNKNOWN mergeable, and no-anchor PR, storing them under tests/fixtures/triage/ for deterministic replay
+  - id: P1.T1.S3
+    text: |-
+      Run the new tests and confirm they fail for the right reason, recording output per superpowers:test-driven-development
+- number: 2
+  title: Green - implement open-PR collect
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Extend PullRequest with checks summary, mergeable, merge_state, review fields and Facts with top-level prs list, bumping schema 1 to 2 with readers refusing other versions naming the file and saying re-run collect
+  - id: P1.T2.S2
+    text: |-
+      Add the per-repo open-PR bulk call with statusCheckRollup, mergeable, mergeStateStatus, reviewDecision, files fields, reducing to summary at collect time and keeping the existing state-all call unchanged
+  - id: P1.T2.S3
+    text: |-
+      Run the new tests plus the full triage suite until green, then run uv run ruff check and uv run ruff format on touched files
+  - id: P1.T2.S4
+    text: |-
+      Refactor the new collect code for duplication and naming, then re-run the triage tests green
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-22T13:03:59+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-22T13:35:15+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-22T13:04:01+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-22T13:04:02+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-22T13:04:03+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-22T13:04:05+00:00'
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: '2026-09-22T13:04:07+00:00'
+      note: null
+  completion:
+    at: '2026-09-22T13:35:16+00:00'
+    note: null
+    observed_prs: []

@@ -1,0 +1,203 @@
+[
+  {
+    "closingIssuesReferences": [],
+    "files": [
+      {
+        "path": "docs/acceptance/matrix.yaml",
+        "additions": 28,
+        "deletions": 6,
+        "changeType": "MODIFIED"
+      },
+      {
+        "path": "docs/acceptance/report_linked.html",
+        "additions": 2,
+        "deletions": 2,
+        "changeType": "MODIFIED"
+      },
+      {
+        "path": "docs/acceptance/report_linked.md",
+        "additions": 2,
+        "deletions": 2,
+        "changeType": "MODIFIED"
+      },
+      {
+        "path": "docs/acceptance/report_local.html",
+        "additions": 2,
+        "deletions": 2,
+        "changeType": "MODIFIED"
+      }
+    ],
+    "headRefName": "chore/record-discriminating-opencode-tier-run",
+    "isDraft": false,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "mergedAt": null,
+    "number": 560,
+    "reviewDecision": "",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:53Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721829",
+        "name": "lint",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706875",
+        "name": "lint",
+        "startedAt": "2026-09-22T12:17:42Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:57Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319646/job/106740733011",
+        "name": "matrix",
+        "startedAt": "2026-09-22T12:17:47Z",
+        "status": "COMPLETED",
+        "workflowName": "acceptance-report"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314127/job/106740710940",
+        "name": "matrix",
+        "startedAt": "2026-09-22T12:17:42Z",
+        "status": "COMPLETED",
+        "workflowName": "acceptance-report"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:59Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721466",
+        "name": "typecheck",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:57Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706750",
+        "name": "typecheck",
+        "startedAt": "2026-09-22T12:17:46Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:22:26Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721826",
+        "name": "test",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:23:42Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706734",
+        "name": "test",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:55Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721654",
+        "name": "validate-artifacts",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:53Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706554",
+        "name": "validate-artifacts",
+        "startedAt": "2026-09-22T12:17:42Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:54Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721839",
+        "name": "opencode-plugin-test",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706757",
+        "name": "opencode-plugin-test",
+        "startedAt": "2026-09-22T12:17:42Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721892",
+        "name": "version-sync",
+        "startedAt": "2026-09-22T12:17:44Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740706673",
+        "name": "version-sync",
+        "startedAt": "2026-09-22T12:17:43Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:38Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726314153/job/106740708433",
+        "name": "version-bump-required",
+        "startedAt": "2026-09-22T12:17:38Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-09-22T12:17:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/derio-net/super-fr/actions/runs/35726319618/job/106740721886",
+        "name": "version-bump-required",
+        "startedAt": "2026-09-22T12:17:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      }
+    ],
+    "title": "docs(acceptance): record the first model-discriminating OpenCode tier run",
+    "url": "https://github.com/derio-net/super-fr/pull/560"
+  }
+]
