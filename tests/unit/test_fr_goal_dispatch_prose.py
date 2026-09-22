@@ -83,7 +83,7 @@ def test_the_new_tool_mention_stayed_inside_the_scoped_clause(skill_text: str) -
     so naming it anywhere outside a clause that serves every supported harness
     is a violation — this is what proves the rewrite did not leak a
     harness-specific tool name into the two byte-identical mirrors."""
-    assert scan_prose(skill_text) == []
+    assert [(v.line, v.tool) for v in scan_prose(skill_text)] == []
 
 
 _MULTIPLE_RE = re.compile(r"(?<![\w.])(\d+)\s*(?:[x×]|times)\b")
@@ -172,4 +172,4 @@ def test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped(
     exactly where a harness-specific mention could escape its scope.
     `test_the_new_tool_mention_stayed_inside_the_scoped_clause` is the standing
     guard; this pins it to P3.T1's change."""
-    assert scan_prose(skill_text) == []
+    assert [(v.line, v.tool) for v in scan_prose(skill_text)] == []
