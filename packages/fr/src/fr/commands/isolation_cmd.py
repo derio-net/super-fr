@@ -255,6 +255,19 @@ def up(
     except IsolationError as err:
         _fail(err)
         return
+    if not session:
+        # The ambient default (2026-09-21 debug journal, C4): bind the session
+        # fr already knows, so traceability and the Stop idle guard no longer
+        # hinge on the bind hook recognising how `fr` was launched. Unlike an
+        # explicit `--session`, a failure here never costs the workspace.
+        ambient, ambient_harness = _sessions.ambient_binding(None, harness, os.environ)
+        if ambient is not None:
+            try:
+                state = _sessions.attach(
+                    state.repo_root, state.branch, ambient, harness=ambient_harness
+                )
+            except IsolationError as err:
+                typer.echo(f"warning: could not bind session {ambient!r}: {err}", err=True)
     typer.echo(
         f"isolation up: worktree={state.worktree} profile={state.profile} branch={state.branch}",
         err=print_path,
@@ -467,6 +480,12 @@ def down(
     if dry_run and not all_:
         # A dry run that silently acted would be the worst possible failure.
         _fail(IsolationError("--dry-run is only supported with --all."))
+    # The caller is the ambient session when --session is not given — the same
+    # rule `up` binds with (debug journal 2026-09-21 C4). Without it, a session
+    # that ran `up` then `down --all` was told its OWN workspace was another
+    # session's (the #533 guard, which treats every binding as foreign absent
+    # --session). A genuinely different session's binding is still foreign.
+    session, _ = _sessions.ambient_binding(session, "unknown", os.environ)
     if worktree is not None:
         state = _resolve_by_worktree(worktree)
         root = state.repo_root

@@ -510,7 +510,13 @@ def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
     assert "text: |-" in phase_text, "step text must use `|-` after round-trip write"
 
 
-def test_self_review_clean_plan_has_no_issues(tmp_path):
+def test_self_review_minimal_plan_raises_only_its_sole_skeleton(tmp_path):
+    """Was `..._clean_plan_has_no_issues`. The minimal fixture is ONE agentic
+    phase marked skeleton — exactly the shape 2026-09-21 debug journal C2 made
+    an error (a skeleton with no work after it is the whole plan wearing the
+    marker). The fixture is shared by ten test files, so it keeps its shape;
+    what this test still guarantees is that the minimal plan raises NOTHING
+    else."""
     from fr import parse
     from fr.plan_ops import self_review
 
@@ -519,7 +525,8 @@ def test_self_review_clean_plan_has_no_issues(tmp_path):
     shutil.copytree(fixture, dest)
 
     plan = parse(dest)
-    assert self_review(plan) == []
+    issues = self_review(plan)
+    assert [(i.severity, "only agentic phase" in i.message) for i in issues] == [("error", True)]
 
 
 def test_self_review_detects_manual_complete_without_note(tmp_path):
@@ -1488,6 +1495,92 @@ def test_skeleton_override_survives_spec_archival(tmp_path):
     archived = archived_journal_path(repo, "spec", "2026-05-10-test-spec")
     archived.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(active), str(archived))
+
+    assert _skeleton_issues(plan_dir) == []
+
+
+def _sole_skeleton_plan(tmp_path, *, with_manual=False):
+    """ONE agentic phase, marked `skeleton: true` — the shape of the #497 run's
+    plan (2026-09-21 debug journal C2). `with_manual` appends a manual phase,
+    which must not count as the "real work" after the smoke."""
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo)
+    slug = "2026-09-09-skeleton"
+    phases = [
+        PhaseSpec(
+            number=1,
+            title="Everything",
+            tasks=(
+                {
+                    "number": 1,
+                    "title": "t",
+                    "steps": [{"id": "P1.T1.S1", "text": "Run the test suite"}],
+                },
+            ),
+            skeleton=True,
+        )
+    ]
+    if with_manual:
+        phases.append(
+            PhaseSpec(
+                number=2,
+                title="Hands",
+                tag="manual",
+                depends_on=(1,),
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [{"id": "P2.T1.S1", "text": "Rotate the secret"}],
+                    },
+                ),
+            )
+        )
+    create(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=4.2.0,<5.0.0",
+        phases=phases,
+        prose="# x\n",
+    )
+    return repo / "docs" / "superpowers" / "plans" / slug
+
+
+@pytest.mark.parametrize("with_manual", [False, True])
+def test_self_review_errors_when_the_skeleton_is_the_only_agentic_phase(tmp_path, with_manual):
+    """2026-09-21 debug journal C2: the first fr-goal run after #508 shipped a
+    one-phase plan whose single phase was marked the walking skeleton AND
+    carried the whole change (tests, rewrite, mirrors, matrix, version bump).
+    The gate only checked WHERE the marker sat, so it passed, and the per-phase
+    implement → review loop ran exactly once. A skeleton is the smoke BEFORE the
+    expensive part; with nothing after it, it is not a skeleton, it is the plan.
+    Operator decision: an error, overridable like every other skeleton error."""
+    issues = _skeleton_issues(_sole_skeleton_plan(tmp_path, with_manual=with_manual))
+
+    assert any(i.severity == "error" and "only agentic phase" in i.message for i in issues), issues
+
+
+def test_sole_skeleton_error_is_silenced_by_the_skeleton_override(tmp_path):
+    """The same escape hatch as the unmarked-first-phase error: a genuinely
+    tiny change records WHY on the spec journal instead of splitting itself
+    into ceremony phases."""
+    from fr.journal.model import journal_path
+
+    plan_dir = _sole_skeleton_plan(tmp_path)
+    repo = plan_dir.parents[3]
+    journal = journal_path(repo, "spec", "2026-05-10-test-spec")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(
+        "# Journal: 2026-05-10-test-spec\n\n"
+        "<!-- fr:journal kind=decision scope=spec "
+        "id=skeleton-override-2026-09-09-skeleton created=2026-09-09T00:00:00 -->\n"
+        "### skeleton-override-2026-09-09-skeleton · decision · One-line fix\n\n"
+        "Single-line change; a separate smoke phase would test nothing new.\n"
+    )
 
     assert _skeleton_issues(plan_dir) == []
 

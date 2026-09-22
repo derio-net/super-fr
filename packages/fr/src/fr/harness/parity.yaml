@@ -191,7 +191,7 @@ surfaces:
 
   - id: operator-gate
     kind: interaction
-    summary: A `gate operator` run step blocks until a human answers via the harness's own question tool.
+    summary: A `gate operator` run step blocks until a human answers via the harness's own question tool. On claude-code `fr run resolve` VERIFIES it — an answered AskUserQuestion in the session transcript since the gate blocked, else refused (bypass only via `--no-questions --reason`, recorded); with no readable transcript `fr run advance` degrades loudly instead (debug journal 2026-09-21 C1).
     harnesses:
       claude-code: {state: enforced}
       opencode:

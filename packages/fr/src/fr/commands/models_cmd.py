@@ -88,7 +88,13 @@ def _report_changes(changes: list[Change]) -> None:
 @models_app.command("set")
 def set_cmd(
     harness: str = typer.Option(..., "--harness", help="e.g. claude-code | opencode | hermes."),
-    tier: str = typer.Option(..., "--tier", help="mechanical | standard | hard."),
+    tier: str = typer.Option(
+        ...,
+        "--tier",
+        help="mechanical | standard | hard — or `orchestrator`, the model the "
+        "orchestrating session itself is expected to run on (compared by `fr run "
+        "start`/`advance`, which warn on a mismatch; never dispatched to).",
+    ),
     model: str = typer.Option(..., "--model", help="Concrete model id for this harness+tier."),
 ) -> None:
     """Persist a binding to ~/.config/fr/models.yaml, then materialize it

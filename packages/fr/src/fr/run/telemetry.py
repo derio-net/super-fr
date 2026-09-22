@@ -73,10 +73,12 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, TypeGuard
 
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
@@ -126,6 +128,20 @@ class UsageTotals:
     cache_read_input_tokens: int = 0
     output_tokens: int = 0
     assistant_records: int = 0
+    served_models: tuple[str, ...] = field(default=(), compare=False)
+    """Distinct `message.model` values of the assistant records, in order of
+    first appearance — the model that actually SERVED the transcript. Not the
+    agent metadata's `model`, which is the dispatch REQUEST (`"opus"`), i.e.
+    the same claim the orchestrator already made (2026-09-21 debug journal C3).
+    `compare=False`: this value's equality is the four FIGURES, and who served
+    them is provenance beside them, not part of the sum."""
+
+    @property
+    def served_model(self) -> str | None:
+        """The one model that served every record, or several joined by `+`
+        (never observed for a subagent, but a mid-dispatch switch must not be
+        reported as either model alone); `None` when no record named one."""
+        return "+".join(self.served_models) or None
 
     @property
     def total(self) -> int:
@@ -197,6 +213,19 @@ def _usage_of(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return usage if isinstance(usage, Mapping) else None
 
 
+def _is_real_model(model: object) -> TypeGuard[str]:
+    """A model id a request was actually served by — not a harness placeholder.
+
+    Claude Code writes main-thread `assistant` records with `"model":
+    "<synthetic>"` and an all-zero `usage` (e.g. a "No response requested."
+    filler) — observed twice in this operator's own transcripts (review of
+    debug journal 2026-09-21 C3). Such a record served nothing, so its "model"
+    must never be recorded as the one that ran a unit. Placeholders are
+    angle-bracketed; real ids never are.
+    """
+    return isinstance(model, str) and bool(model) and not model.startswith("<")
+
+
 def read_claude_code(path: Path) -> UsageTotals | None:
     """Summed usage for one Claude Code transcript, or `None` for *no
     measurement* (the file is missing, unreadable, or holds no record).
@@ -210,17 +239,22 @@ def read_claude_code(path: Path) -> UsageTotals | None:
         return None
     totals = dict.fromkeys(USAGE_KEYS, 0)
     seen = 0
+    served: list[str] = []
     for record in records:
         usage = _usage_of(record)
         if usage is None:
             continue
         seen += 1
+        # `_usage_of` already proved `message` is a Mapping.
+        model = record["message"].get("model")
+        if _is_real_model(model) and model not in served:
+            served.append(model)
         for key in USAGE_KEYS:
             value = usage.get(key)
             # `isinstance(True, int)` is True in Python; a boolean is not a count.
             if isinstance(value, int) and not isinstance(value, bool):
                 totals[key] += value
-    return UsageTotals(**totals, assistant_records=seen)
+    return UsageTotals(**totals, assistant_records=seen, served_models=tuple(served))
 
 
 # --- 2. attributing: which dispatch does a transcript answer for? --------
@@ -527,6 +561,251 @@ class ClaudeCodeReader:
         return measure_dispatch(
             session, agent=agent, start=start, end=end, same_session=same_session
         )
+
+
+_ORCHESTRATOR_TAIL_BYTES = 512 * 1024
+"""How far back from the end `orchestrator_model` looks. A live orchestrator
+transcript runs to tens of MB and this is read on every `advance`; the last
+assistant record is always near the end, so the tail is the whole question."""
+
+
+def orchestrator_model(env: Mapping[str, str]) -> str | None:
+    """The model THIS session's orchestrator is running on right now — the
+    `message.model` of the last main-thread assistant record in its transcript
+    — or `None` when that cannot be observed.
+
+    2026-09-21 debug journal C3: the orchestrator runs every non-dispatched
+    unit (spec-review, plan, review, deliver) and fr recorded no model for any
+    of it, on the grounds that it "cannot see" one. It can: the transcript names
+    it. Observed, never resolved — a tier binding says what SHOULD run; this
+    says what DID, which is the only thing a cursor may record without it being
+    a claim. Sidechain (subagent) records are skipped: their model is the
+    subagent's. Claude Code only, like the rest of this module; never raises.
+    """
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    try:
+        transcript = claude_code_session(env)
+        if transcript is None:
+            return None
+        with transcript.open("rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - _ORCHESTRATOR_TAIL_BYTES))
+            tail = fh.read().decode("utf-8", errors="replace")
+    except (OSError, HarnessError):
+        return None
+    for line in reversed(tail.splitlines()):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # the first line of the tail, or a half-written last one
+        if not isinstance(record, dict) or record.get("isSidechain") is True:
+            continue
+        if _usage_of(record) is None:
+            continue
+        model = record["message"].get("model")
+        if _is_real_model(model):
+            return model
+    return None
+
+
+QUESTION_TOOL = "AskUserQuestion"
+"""Claude Code's operator-question tool — the one `operator_answered_since`
+looks for. Named once, here, beside the only reader that knows its records."""
+
+
+def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
+    """Did the operator ANSWER a question in this session at or after `since`?
+
+    `True`/`False` when the transcript was read; `None` when it could not be
+    (another harness, no session id, no file) — the caller must be able to tell
+    "observed: nobody asked" from "cannot see", because the first refuses a gate
+    and the second only degrades loudly (2026-09-21 debug journal C1).
+
+    Answered means BOTH halves, paired by tool_use id: a main-thread assistant
+    record with a `QUESTION_TOOL` tool_use stamped at or after `since` (a
+    question asked before the gate blocked answered an earlier question), and a
+    `tool_result` for it whose `toolUseResult` is an object with a non-empty
+    `answers` map. A declined or failed call carries a plain string there
+    (captured, `tests/fixtures/transcripts/`), and asking is not answering.
+    """
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    start = parse_timestamp(since)
+    if start is None:
+        return None
+    try:
+        transcript = claude_code_session(env)
+    except (OSError, HarnessError):
+        return None
+    if transcript is None:
+        return None
+    records = _read_records(transcript)
+    if records is None:
+        return None
+    asked: set[str] = set()
+    for record in records:
+        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        if stamp is None or stamp < start:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_use"
+                and block.get("name") == QUESTION_TOOL
+                and isinstance(block.get("id"), str)
+            ):
+                asked.add(block["id"])
+    if not asked:
+        return False
+    for record in records:
+        if record.get("type") != "user":
+            continue
+        result = record.get("toolUseResult")
+        if not isinstance(result, Mapping) or not result.get("answers"):
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") in asked
+            ):
+                return True
+    return False
+
+
+def _this_session(env: Mapping[str, str]) -> Path | None:
+    """This process's own Claude Code session transcript, or `None` when there
+    is none to read — another harness included. The shared front half of the
+    three "did X happen in this session?" predicates."""
+    if detect_harness(env) != ClaudeCodeReader.harness:
+        return None
+    try:
+        return claude_code_session(env)
+    except (OSError, HarnessError):
+        return None
+
+
+def subagent_dispatch_since(
+    env: Mapping[str, str], agent_id: str, since: str
+) -> Dispatch | Literal[False] | None:
+    """The dispatch of subagent `agent_id` by THIS session at or after `since`
+    — or `False` when the transcript was read and holds none, `None` when it
+    could not be read.
+
+    The separate-context review check (2026-09-21 debug journal C6): a review
+    unit's `reviewer=<agent-id>` evidence must name a subagent that actually
+    ran, and ran after the review unit opened — not the orchestrator's own
+    context, which is where the #497 run's "review" was written. Attribution is
+    `attribute_dispatches`', the same pairing token measurement already trusts.
+    The dispatch is returned (not a bool) so the caller can judge its
+    `agent_type`. A dispatch whose start cannot be dated proves nothing about
+    the window and does not count. An unreadable transcript is `None`, never
+    `False`: "could not read it" is not "nobody was dispatched" (review r1-3).
+    """
+    start = parse_timestamp(since)
+    session = _this_session(env)
+    if start is None or session is None or _read_records(session) is None:
+        return None
+    for dispatch in attribute_dispatches(session):
+        if (
+            dispatch.agent_id == agent_id
+            and dispatch.started is not None
+            and dispatch.started >= start
+        ):
+            return dispatch
+    return False
+
+
+_WRITE_TARGET = re.compile(r"""(?:>>?|\btee(?:\s+-a)?)\s*(["']?)([^\s;&|'"<>]+)\1""")
+"""A shell redirect or `tee` and the path it writes. Deliberately syntactic: it
+answers "did this command claim to WRITE that file", which a `cat` or `ls` of
+the log — accepted before review r1-1 — does not."""
+
+
+def _writes(command: str, log: Path) -> bool:
+    for _quote, target in _WRITE_TARGET.findall(command):
+        if Path(target).is_absolute():
+            if Path(target) == log:
+                return True
+        elif str(log).endswith("/" + target.lstrip("./")) or log.name == target:
+            return True
+    return False
+
+
+def orchestrator_wrote_since(
+    env: Mapping[str, str], log: Path, since: str
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """The run windows `(tool_use, tool_result)` of every main-thread `Bash`
+    command, issued at or after `since`, that WROTE `log` (a `>`, `>>` or `tee`
+    naming it) and ran to completion (`is_error` not true). `[]` when the
+    transcript holds none; `None` when it cannot be read.
+
+    The verification-before-completion check (debug journal C5): `deliver`'s
+    `tests=<log>` must be a suite the ORCHESTRATOR ran during delivery, not a
+    subagent's report relayed as its own — how the #497 run said "verified
+    locally". The caller also requires the file's mtime to fall INSIDE one of
+    these windows, which ties the bytes on disk to that command.
+
+    BE HONEST ABOUT THE LIMIT (review r1-1): this proves the orchestrator
+    produced the log, in this session, during delivery. It cannot prove the
+    command was a real test suite — `echo ok > log` passes. That is forgery,
+    not the drift this gate closes (relaying someone else's green), and
+    closing it needs a per-repo test-runner declaration fr does not have.
+    """
+    start = parse_timestamp(since)
+    session = _this_session(env)
+    if start is None or session is None:
+        return None
+    records = _read_records(session)
+    if records is None:
+        return None
+    issued: dict[str, _dt.datetime] = {}
+    for record in records:
+        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        if stamp is None or stamp < start:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if not isinstance(block, Mapping):
+                continue
+            tool_input = block.get("input")
+            command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
+            if (
+                block.get("type") == "tool_use"
+                and block.get("name") == "Bash"
+                and isinstance(command, str)
+                and isinstance(block.get("id"), str)
+                and _writes(command, log)
+            ):
+                issued[block["id"]] = stamp
+    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        done = parse_timestamp(record.get("timestamp"))
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") in issued
+                and block.get("is_error") is not True
+                and done is not None
+            ):
+                windows.append((issued[block["tool_use_id"]], done))
+    return windows
 
 
 READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
