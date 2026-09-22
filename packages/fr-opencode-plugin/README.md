@@ -4,10 +4,14 @@ An [OpenCode](https://opencode.ai) plugin that ports super-fr's
 `fr-isolation-required` PreToolUse hook (Claude Code) to OpenCode's
 `tool.execute.before` hook API.
 
-It blocks Edit/Write-class tool calls (`edit`, `write`, `patch`,
-`multiedit`) against tracked source in an fr-enabled repository (one with
-a `.devcontainer/*/devcontainer.json` profile or a
-`docs/superpowers/plans/` tree) unless:
+It blocks every non-read-only file-writing tool call against tracked source in
+an fr-enabled repository (one with a `.devcontainer/*/devcontainer.json`
+profile or a `docs/superpowers/plans/` tree). It recursively reads known path
+arguments, finds absolute paths in other arguments, and parses `apply_patch`
+headers with OpenCode's own grammar. Relative paths resolve from
+`ctx.directory`, matching OpenCode. An unparseable patch target is denied
+rather than allowed,
+unless:
 
 - a valid `.fr-isolation` marker is present (written by `fr isolation up` /
   `fr isolation down` — must record `mode: "worktree"` for *this* toplevel,
@@ -82,6 +86,7 @@ OpenCode calls every export of a plugin module as a plugin.
 
 ## Verification
 
-The edit-class tool names (`edit`, `write`, `patch`, `multiedit`) and the
-`args.filePath` argument shape have been verified against live `opencode run`
-sessions; the marker and hook behavior are covered by `bun test` and run in CI.
+Direct paths, nested path arguments, relative paths, symlink targets, and
+`apply_patch` patch-body targets have regression coverage in `bun test` and
+run in CI. Bash is intentionally ungated because an OpenCode tool hook cannot
+inspect filesystem effects performed by a shell command.

@@ -1,6 +1,8 @@
-"""CI tripwire: no `SKILL.md` — canonical or mirror — names a harness-
-specific tool outside an explicitly scoped `**Harness — <topic>:**`
-clause. 2026-09-18 harness-parity-matrix spec §3.C, Phase 3.
+"""CI tripwire: no skill, agent or rule — canonical or generated mirror —
+names a harness-specific tool or argument outside an explicitly scoped
+`**Harness — <topic>:**` clause. 2026-09-18 harness-parity-matrix spec §3.C
+(skills), widened 2026-09-21 (#497: agents) and 2026-09-22
+(harness-argument-neutrality: rules, and arguments via ARGUMENT_VOCABULARY).
 
 This is the closer for #436's class B: `fr-goal` §1 and `fr-init` §2 both
 specified their operator touchpoint as Claude Code's `AskUserQuestion`,

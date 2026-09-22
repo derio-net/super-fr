@@ -362,20 +362,13 @@ rows:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
-    status: skipped
-    notes: >-
-      12 bun unit tests cover the hook + marker logic, including a real
-      `git worktree add` scenario, and now run in CI. Live-verified twice with a real
-      `opencode run` session against a free public model
-      (opencode/north-mini-code-free) targeting a scratch fr-enabled repo
-      with the plugin wired into `.opencode/plugins/`: first during
-      development (2026-07-08) and re-confirmed post-merge as Test Plan
-      step 3 (2026-07-09, fresh isolation devcontainer, merged main) — both
-      times the model's `edit` tool call (`args.filePath`) was denied with
-      the exact hook message, confirming the assumed OpenCode tool
-      name/arg shape is correct against the real plugin API. The remaining skipped
-      leg is the live model/API call, which is not automated in CI; backfill owed if
-      that becomes scriptable/offline-mockable.
+    status: ci
+    notes: 'CI pins OpenCode-compatible patch headers (including no-space Add File and
+      Move to), malformed patch denial in every fr-enabled context, recursive known/absolute-path
+      argument discovery, ctx.directory resolution, normalization, symlink escape prevention,
+      and the read-only built-ins. Fresh OpenCode 1.18.32 sessions on 2026-09-22: worktree-launched
+      no-space Add File targeting the base clone blocked; base-clone read allowed; base-clone
+      apply_patch blocked.'
   - id: opencode-commands-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
@@ -1911,10 +1904,12 @@ rows:
       - super-fr:tests/unit/test_harness_vocabulary.py
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
     status: ci
-    notes: 'Widened 2026-09-22 (harness-argument-neutrality, spec 2026-09-22-harness-argument-neutrality-design.md):
-      acceptance sentence now names skills, agents and rules (canonical or generated
-      mirror) and covers harness-specific arguments via the new ARGUMENT_VOCABULARY,
-      not just tool names.'
+    notes: 'Spec 3.C (2026-09-18): fixed the six live AskUserQuestion occurrences (fr-goal
+      §1, fr-init §2, both mirrors); mirrors stay byte-identical, neutrality enforced
+      at the canonical source. Widened 2026-09-21 (#497/#532): agent bodies and the
+      .opencode/agent mirror scanned. Widened 2026-09-22 (spec 2026-09-22-harness-argument-neutrality):
+      rules and their mirrors scanned; harness-specific ARGUMENTS via ARGUMENT_VOCABULARY
+      in every spelling; headings outside code fences exempt.'
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance

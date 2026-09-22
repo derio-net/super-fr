@@ -264,3 +264,23 @@ Reviewer a0eb0f895fbd2695f probed ~50 sentences in both directions. p4r-1 (doubl
 ### p5-t1-t2-verified · discovery · P5.T1/P5.T2 complete: docs widened, version bumped, full verification green (phase 5)
 
 P5.T1.S1: matrix row harness-tool-neutrality acceptance sentence widened to 'No skill, agent or rule — canonical or generated mirror — names a harness-specific tool or argument outside an explicitly scoped per-harness clause.'; set-status ci with notes citing spec 2026-09-22-harness-argument-neutrality-design.md; acceptance check and report --check both exit 0 (warnings only, pre-existing backfill-owed rows). P5.T1.S2: AGENTS.md lines ~93 and ~343-346 updated to name TOOL_VOCABULARY+ARGUMENT_VOCABULARY and skills/agents/rules + generated mirrors; grepped for stale 'fr-goal §6'/'§3' in AGENTS.md, found none (already correct). P5.T2.S1: scripts/bump-version.py patch: 4.14.4 -> 4.14.5, uv sync ran, --check green. P5.T2.S2 all green: ruff check 0, ruff format --check (416 files formatted), mypy 0 issues/154 files, fr validate artifacts 29 OK, bun test (fr-opencode-plugin) 50 pass/0 fail, sync-opencode.py --check OK, sync-hermes.py --check OK, full pytest -q -p no:cacheprovider: 4427 passed, 88 skipped, 92.55% coverage, exit 0 (7m47s, run in background with bounded wait, confirmed no leftover process at handback).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-1 created=2026-09-22T15:45:27 phase=5 state=fixed -->
+### p5r-1 · finding [fixed] · Version collides with main: #559 already took 4.14.5 (phase 5)
+
+Review a6f25746b09733f74. Fixed: merged origin/main (#559; only the three generated reports conflicted — regenerated, not hand-merged), bumped patch to 4.14.6. #536 (4.15.0) remains higher either way; whichever lands second rebases.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-2 created=2026-09-22T15:45:27 phase=5 state=fixed -->
+### p5r-2 · finding [fixed] · set-status --notes replaced the row's history (phase 5)
+
+harness-tool-neutrality notes now carry all three stages: 2026-09-18 AskUserQuestion fix, 2026-09-21 #497 agent widening, 2026-09-22 rules + arguments.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-3 created=2026-09-22T15:45:28 phase=5 state=fixed -->
+### p5r-3 · finding [fixed] · Tripwire module docstring still said SKILL.md-only, tools-only (phase 5)
+
+Docstring names skills, agents and rules, tools and arguments, with the three spec dates.
+
+<!-- fr:journal kind=review scope=plan id=p5-review created=2026-09-22T15:45:28 phase=5 -->
+### p5-review · review · Phase 5 review — separate reviewer, fixes applied (phase 5)
+
+Reviewer a6f25746b09733f74: new AGENTS.md and matrix sentences verified TRUE against prose.py/__init__.py/the tripwire (no overclaim; no stale skills-only surface left bar one docstring); PATCH confirmed correct per AGENTS.md. Critical p5r-1 (main already at 4.14.5 via #559) fixed by merging main and bumping to 4.14.6; minors p5r-2, p5r-3 fixed.
