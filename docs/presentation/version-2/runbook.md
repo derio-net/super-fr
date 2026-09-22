@@ -106,7 +106,8 @@ A take is discarded and re-recorded unless:
 
 ## Known limits — film them honestly
 
-- **The OpenCode plugin is not delivered by `install.sh`.** Its README says
+- **The OpenCode plugin is not delivered by `install.sh`** — tracked, high
+  priority, as [#563](https://github.com/derio-net/super-fr/issues/563). Its README says
   "install the package (once published) or vendor this directory" and add it to
   the repo's `opencode.json`. So this run has **no edit-gate backstop** and **no
   idle adapter** on OpenCode. The isolation itself — worktree and container —
