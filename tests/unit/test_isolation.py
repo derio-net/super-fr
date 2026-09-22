@@ -2801,6 +2801,14 @@ class TestRestart:
         with pytest.raises(IsolationError, match="--force"):
             target.restart(st)
 
+    def test_failed_docker_ps_is_unreachable_not_absent(self, tmp_path: Path) -> None:
+        """Phase-1 review f2: a failed query is not 'no container — run up'."""
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="unreachable"):
+            target.restart(st)
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["restart"]]
+
 
 class TestStop:
     """#471 / spec §3.B: `stop` halts the container, keeps everything else,
@@ -2834,8 +2842,43 @@ class TestStop:
     def test_failed_docker_ps_is_an_error_never_absence(self, tmp_path: Path) -> None:
         runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
         target, st = _target_state(tmp_path, runner)
-        with pytest.raises(IsolationError, match="docker"):
+        with pytest.raises(IsolationError, match="unreachable"):
             target.stop(st)
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_missing_docker_binary_is_unreachable(self, tmp_path: Path) -> None:
+        def no_docker(argv, cwd=None, check=False, capture=True):
+            if argv[0] == "git":
+                return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+            raise FileNotFoundError(argv[0])
+
+        target, st = _target_state(tmp_path, FakeRunner())
+        target.run = no_docker
+        with pytest.raises(IsolationError, match="unreachable"):
+            target.stop(st)
+
+    def test_verifies_this_container_by_id_not_first_line(self, tmp_path: Path) -> None:
+        """Phase-1 review f1: the label filter can list a stale sibling FIRST.
+        A still-running cid1 behind an exited cid0 must not read as stopped."""
+        ps_outputs = iter(["cid1 running\n", "cid0 exited\ncid1 running\n"])
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[0] == "git":
+                return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+            out = next(ps_outputs) if argv[:2] == ["docker", "ps"] else ""
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+        target, st = _target_state(tmp_path, FakeRunner())
+        target.run = run
+        with pytest.raises(IsolationError, match="cid1 .*still running"):
+            target.stop(st)
+
+    def test_dead_container_points_at_rebuild(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 dead"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        assert "dead" in msg and "fr isolation rebuild --branch feat/x" in msg
+        assert "resumes" not in msg
         assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
 
     def test_still_running_after_stop_raises(self, tmp_path: Path) -> None:
@@ -2899,6 +2942,12 @@ class TestStatusStopped:
         runner = FakeRunner(stdout={"docker": ps})
         target, st = _target_state(tmp_path, runner)
         assert target.status(st)["container"] == shown
+
+    def test_failed_query_is_unknown_not_absent(self, tmp_path: Path) -> None:
+        """Phase-1 review f7 (#354): a down daemon must not read as no container."""
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        assert target.status(st)["container"] == "unknown (docker unreachable)"
 
 
 class _DockerRunner:

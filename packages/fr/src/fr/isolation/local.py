@@ -459,6 +459,13 @@ class LocalWorktreeDevcontainerTarget:
         read as 'no container' (the #354 rule). An already-stopped container is
         a no-op success whose message says so."""
         container, current = self._require_container(state, "nothing to stop")
+        if current == "dead":
+            # Not resumable: `up`/`restart`/`exec` cannot bring a dead container
+            # back, so do not promise they will (phase-1 review f4).
+            return (
+                f"{state.branch}'s container {container} is dead — "
+                f"`fr isolation rebuild --branch {state.branch}` recreates it (worktree kept)."
+            )
         if current in self._NOT_RUNNING:
             return f"{state.branch} already stopped ({container}, docker state {current})."
         result = self.run(["docker", "stop", container])
@@ -467,11 +474,14 @@ class LocalWorktreeDevcontainerTarget:
                 f"docker stop failed for {state.branch} ({container}): "
                 f"{(result.stderr or result.stdout or '').strip()}"
             )
-        after = self._ps_parts_strict(state)
-        if after and after[0] == container and after[1] not in self._NOT_RUNNING:
+        # Verify THIS container by id, not whatever line comes first: the label
+        # filter can list several containers for one worktree (phase-1 review
+        # f1). Absent from the re-query means it was removed (`--rm`) — stopped.
+        after = dict(self._ps_pairs_strict(state)).get(container)
+        if after is not None and after not in self._NOT_RUNNING:
             raise IsolationError(
                 f"container {container} for {state.branch} is still running "
-                f"(docker state {after[1]}) after `docker stop`."
+                f"(docker state {after}) after `docker stop`."
             )
         return (
             f"{state.branch} stopped ({container}) — worktree, state and bindings kept; "
@@ -479,9 +489,15 @@ class LocalWorktreeDevcontainerTarget:
         )
 
     def _ps_parts_strict(self, state: IsolationState) -> list[str]:
-        """`[id, state]` from `docker ps --all`, `[]` when there is no
-        container. Unlike `_docker_ps_line`, a failed query — or a missing
-        docker binary — raises instead of reading as absence (#354)."""
+        """`[id, state]` of the first container from `docker ps --all`, `[]`
+        when there is none. Raises like `_ps_pairs_strict`."""
+        pairs = self._ps_pairs_strict(state)
+        return list(pairs[0]) if pairs else []
+
+    def _ps_pairs_strict(self, state: IsolationState) -> list[tuple[str, str]]:
+        """Every `(id, state)` from `docker ps --all` for this worktree. Unlike
+        `_docker_ps_line`, a failed query — or a missing docker binary — raises
+        instead of reading as absence (#354)."""
         try:
             result = self._docker_ps(state)
         except FileNotFoundError as err:
@@ -493,8 +509,12 @@ class LocalWorktreeDevcontainerTarget:
                 f"docker is unreachable — `docker ps` failed for {state.branch}: "
                 f"{(result.stderr or result.stdout or '').strip()}"
             )
-        parts = (result.stdout or "").split()
-        return parts[:2] if len(parts) >= 2 else []
+        pairs = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                pairs.append((parts[0], parts[1]))
+        return pairs
 
     def _require_container(self, state: IsolationState, nothing: str) -> tuple[str, str]:
         """The workspace's `(container id, docker state)`; raise with the `up`
@@ -1665,10 +1685,6 @@ class LocalWorktreeDevcontainerTarget:
         the #354 leak under a down daemon), only a successful-but-empty one."""
         return (self._docker_ps(state).stdout or "").strip()
 
-    def _container_id(self, state: IsolationState) -> str | None:
-        line = self._docker_ps_line(state)
-        return line.split()[0] if line else None
-
     def _image_for(self, container: str) -> str | None:
         """The image id backing a container (for post-teardown reclamation)."""
         result = self.run(["docker", "inspect", "--format", "{{.Image}}", container])
@@ -1691,15 +1707,16 @@ class LocalWorktreeDevcontainerTarget:
                 file=sys.stderr,
             )
 
-    def _container_state(self, state: IsolationState) -> str | None:
-        parts = self._docker_ps_line(state).split()
-        return parts[1] if len(parts) > 1 else None
-
     def _shown_container_state(self, state: IsolationState) -> str:
         """`status`'s rendering of the docker state: `exited` reads as `stopped`
         (the state `fr isolation stop` leaves, #471); every other state passes
-        through; no container is `not running`."""
-        current = self._container_state(state)
+        through; no container is `not running`. A FAILED query is not absence
+        (#354, phase-1 review f7): it reads `unknown (docker unreachable)`."""
+        try:
+            pairs = self._ps_pairs_strict(state)
+        except IsolationError:
+            return "unknown (docker unreachable)"
+        current = pairs[0][1] if pairs else None
         if current is None:
             return "not running"
         return "stopped" if current == "exited" else current

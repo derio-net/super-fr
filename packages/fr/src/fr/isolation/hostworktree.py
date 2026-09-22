@@ -67,7 +67,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
 
     def status(self, state: IsolationState) -> dict[str, Any]:
         """Same shape as the local target's status MINUS the docker probe: this
-        mode has no container, so `_container_state` (which shells out to
+        mode has no container, so `_shown_container_state` (which shells out to
         `docker ps`) must never run — on a docker-less pod that raises
         FileNotFoundError. `container` is the fixed sentinel "n/a (host)"; the
         worktree/PR fields are unchanged (git + gh work on the host)."""

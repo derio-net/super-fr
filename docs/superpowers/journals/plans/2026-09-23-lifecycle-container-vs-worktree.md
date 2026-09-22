@@ -49,3 +49,48 @@ Refactored rather than no-refactor: `LocalWorktreeDevcontainerTarget._ps_parts_s
 ### 1e6486082107 · discovery · stop treats exited/created/dead as already stopped; status maps only exited (phase 1)
 
 `_NOT_RUNNING = {exited, created, dead}`: stop on any of these is a no-op success ('already stopped (<id>, docker state <s>)'). A container absent after a successful `docker stop` (e.g. --rm) is accepted as stopped. status maps only `exited` -> `stopped` per spec §3.B (helper `_shown_container_state`); `created`/`dead` pass through. The FakeRunner in tests/unit/test_isolation.py gained a stateful `stopped` set + `stop_sticks` flag (still-running-after-stop case).
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1 created=2026-09-23T01:28:31 phase=1 state=fixed -->
+### p1-f1 · finding [fixed] · stop verified the first docker ps line, not this container (phase 1)
+
+Verification now looks the container up by id among all (id,state) pairs (_ps_pairs_strict); test_verifies_this_container_by_id_not_first_line.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f2 created=2026-09-23T01:28:31 phase=1 state=fixed -->
+### p1-f2 · finding [fixed] · No tests for missing docker binary or restart's new unreachable message (phase 1)
+
+Added test_missing_docker_binary_is_unreachable and TestRestart.test_failed_docker_ps_is_unreachable_not_absent.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f3 created=2026-09-23T01:28:32 phase=1 state=fixed -->
+### p1-f3 · finding [fixed] · CLI stop tests passed on the already-stopped no-op (phase 1)
+
+Fake records docker argv; tests assert docker stop was issued and 'already' absent.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f4 created=2026-09-23T01:28:32 phase=1 state=fixed -->
+### p1-f4 · finding [fixed] · dead container reported as already stopped and promised a resume (phase 1)
+
+dead now returns a message naming fr isolation rebuild --branch <b>; test_dead_container_points_at_rebuild.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f5 created=2026-09-23T01:28:33 phase=1 state=fixed -->
+### p1-f5 · finding [fixed] · _container_id (and later _container_state) had no callers (phase 1)
+
+Both removed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f6 created=2026-09-23T01:28:33 phase=1 state=fixed -->
+### p1-f6 · finding [fixed] · match='docker' too loose (phase 1)
+
+Tightened to 'unreachable'.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f7 created=2026-09-23T01:28:34 phase=1 state=fixed -->
+### p1-f7 · finding [fixed] · status read a failed docker ps as 'not running' (#354) (phase 1)
+
+status now renders 'unknown (docker unreachable)'; test_failed_query_is_unknown_not_absent.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f8 created=2026-09-23T01:28:34 phase=1 state=refuted -->
+### p1-f8 · finding [refuted] · stop help/message promise exec resume before phase 2 lands (phase 1)
+
+All phases ship in one PR (spec §3.B); the phase is never merged alone. Phase 2 implements the promised resume.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-09-23T01:28:34 phase=1 -->
+### p1-review · review · Phase 1 review (independent reviewer): 0 major, 4 minor, 4 nits (phase 1)
+
+Findings p1-f1..p1-f7 fixed with tests; p1-f8 refuted (single-PR delivery). Full suite 4539 passed / 88 skipped; ruff + mypy clean.

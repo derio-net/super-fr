@@ -1174,15 +1174,17 @@ def test_restart_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None
     assert "--branch" in res.output
 
 
-def _stoppable_docker_run():
+def _stoppable_docker_run(record: list | None = None):
     """Stateful docker fake for `stop` (#471): `docker ps` reports `running`
     until a `docker stop` lands, `exited` after — so the verification re-query
-    sees the stop took effect."""
+    sees the stop took effect. `record` collects every docker argv."""
     stopped: set[str] = set()
 
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        if record is not None and argv[0] == "docker":
+            record.append(list(argv))
         out = ""
         if argv[:2] == ["docker", "stop"]:
             stopped.update(argv[2:])
@@ -1196,11 +1198,14 @@ def _stoppable_docker_run():
 
 
 def test_stop_with_branch_prints_stopped_line(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run())
+    calls: list = []
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run(calls))
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/s"])
     res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo), "--branch", "feat/s"])
     assert res.exit_code == 0, res.output
     assert "isolation stop:" in res.output and "stopped" in res.output
+    assert "already" not in res.output
+    assert ["docker", "stop", "cid"] in calls
     from fr.isolation.types import list_states
 
     assert [s.branch for s in list_states(repo.resolve())] == ["feat/s"], "state kept"
@@ -1209,11 +1214,13 @@ def test_stop_with_branch_prints_stopped_line(repo: Path, monkeypatch: pytest.Mo
 def test_stop_resolves_single_workspace_no_branch(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run())
+    calls: list = []
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run(calls))
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
     res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
-    assert "stopped" in res.output
+    assert "stopped" in res.output and "already" not in res.output
+    assert ["docker", "stop", "cid"] in calls
 
 
 def test_stop_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
