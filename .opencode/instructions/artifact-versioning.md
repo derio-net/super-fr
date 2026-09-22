@@ -118,9 +118,15 @@ artifacts` (preview), `fr migrate artifacts --yes` (apply) and
    that raises, a `_meta.yaml` that is empty or truncated. Unknown state is not
    "current"; the gate refuses and names the file.
 
-**Exempt commands** are `migrate` plus the read-only five — `status`, `skills`,
-`isolation`, `init`, `validate` — along with `--help`, `--version` and
-`FR_SKIP_MIGRATION=1`. Two of those matter beyond tidiness: `fr status` is
+**Exempt commands** are `migrate` plus the read-only commands in
+`fr.artifacts.trigger.READ_ONLY_COMMANDS` — `status`, `skills`, `isolation`, `init`,
+`validate`, `harness` and `triage` at the time of writing, but the tuple is the source of
+truth; this sentence used to say "the read-only five" and was two short before anyone
+noticed — along with `--help`, `--version` and `FR_SKIP_MIGRATION=1`. The criterion for
+membership is the tuple's own docstring: the command never mutates a registered artifact.
+`harness` meets it by only reading hook registrations; `triage` by never reading or
+writing an artifact at all (its state lives under `~/.cache/fr/triage/`). Two of those
+matter beyond tidiness: `fr status` is
 registered as never mutating and must not mutate by proxy, and `fr validate
 artifacts` is the diagnostic for exactly the state the gate repairs — if the
 gate ran first, a human could never see it report a stale artifact. The list is

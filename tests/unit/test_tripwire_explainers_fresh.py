@@ -23,10 +23,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPLAINERS = REPO_ROOT / "docs" / "explainers"
 
-# Pages with no committed `.md` in this repo: their source lives elsewhere, so
-# nothing here can check or regenerate them. Pinned as a closed set so a THIRD
-# sourceless page cannot appear unnoticed — that would be new undocumented debt,
-# not the known kind. See `.claude/rules/explainers-currency.md`, gap 2.
+# Pages with no `.md` source at all: they are HAND-AUTHORED HTML (bespoke shell
+# and stylesheet no renderer produces), so there is nothing to regenerate and
+# nothing here to check their headings against — they are edited in place.
+# Pinned as a closed set so a THIRD sourceless page cannot appear unnoticed —
+# that would be new undocumented debt, not the known kind. See
+# `.claude/rules/explainers-currency.md`, gap 1.
 SOURCELESS = {"index.html", "fr-isolation.html"}
 
 
@@ -94,11 +96,12 @@ def test_rendered_pages_carry_their_sources_headings() -> None:
 
 
 def test_sourceless_pages_remain_a_known_closed_set() -> None:
-    """Two published pages have no source here (rule gap 2). That is tracked
-    debt; a third appearing silently would be untracked debt."""
+    """Two published pages are hand-authored and have no markdown source (rule
+    gap 1). That is tracked debt; a third appearing silently would be untracked
+    debt."""
     actual = {p.name for p in EXPLAINERS.glob("*.html") if not p.with_suffix(".md").is_file()}
     assert actual == SOURCELESS, (
         "the set of explainer pages with no committed markdown source changed: "
         f"expected {sorted(SOURCELESS)}, found {sorted(actual)}. Adding a page "
-        "whose source lives outside this repo means nobody here can update it."
+        "with no markdown source means no check here can tell when it goes stale."
     )

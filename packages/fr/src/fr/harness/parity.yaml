@@ -52,7 +52,7 @@ surfaces:
       claude-code: {state: enforced}
       opencode:
         state: partial
-        scope_note: edit/write/patch/multiedit only — bash is ungated (#436)
+        scope_note: All file-writing tools, including nested arguments and patch-body targets, are gated (index.test.ts); bash remains ungated (#436).
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}

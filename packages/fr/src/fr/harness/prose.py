@@ -25,6 +25,7 @@ X instead") still correctly serves that harness's reader.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from fr.harness import HARNESSES, TOOL_VOCABULARY
@@ -152,9 +153,17 @@ def _clause_is_valid(lines: list[str], start: int, end: int) -> bool:
     return len(harnesses_named) >= _MIN_HARNESSES_PER_CLAUSE
 
 
-def scan_prose(text: str) -> list[Violation]:
+def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[Violation]:
     """Every harness-specific tool mention in `text` that is NOT inside a
     scoped clause naming every supported harness.
+
+    `extra_tools` (name -> owning harness) adds names for THIS call only,
+    leaving `TOOL_VOCABULARY` untouched — the escape hatch for a name that is
+    genuinely harness-specific in one tree but must not fire repo-wide
+    (2026-09-21 agent-body-tool-neutrality spec §2.4: the agent tree needs
+    Claude Code's `isolation: "worktree"` flagged, while `fr-goal` §2 mentions
+    the same flag legitimately in an un-scoped sentence of its own). Extras
+    are judged by exactly the same clause rules as registered tools.
 
     Ordered by (line, tool) so a failure listing several hits reads top to
     bottom the way the file does — the loop below is tool-major for pattern
@@ -163,8 +172,11 @@ def scan_prose(text: str) -> list[Violation]:
     spans = _clause_spans(lines)
     valid_span = {span: _clause_is_valid(lines, *span) for span in spans}
 
+    vocabulary = dict(_HARNESS_BY_TOOL)
+    vocabulary.update(extra_tools or {})
+
     violations: list[Violation] = []
-    for tool, harness in _HARNESS_BY_TOOL.items():
+    for tool, harness in vocabulary.items():
         pattern = _word_pattern(tool)
         for line_idx, line in enumerate(lines):
             if not pattern.search(line):
