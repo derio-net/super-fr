@@ -17,7 +17,9 @@ runs it as the `fr-opencode-plugin` `tool.execute.before` plugin on the `edit` /
 `write` / `patch` / `multiedit` tool calls (not `bash` — a known gap, not a
 sanctioned bypass). Hermes
 runs it as a `pre_tool_call` hook on `write_file` / `patch`, installed by
-`fr hermes install`.
+`fr hermes install` — not on `terminal` / `execute_code`, whose writes only the
+sibling bash guard sees (git/gh mutations alone). On every harness, shell writes
+are the gap: make edits with the edit tools.
 
 `fr isolation up` selects the mode (`FR_ISOLATION_TARGET=worktree` for a
 docker-less host; a preparer-written `external` marker is adopted as-is) and
@@ -52,9 +54,10 @@ fr-isolation worktree that already exists* — that worktree IS their isolation,
 and the two mechanisms don't compose. Given one, the executor wakes in a
 fresh worktree cut from `main` where the spec/plan are invisible and every
 Bash/Edit call is denied, yet the dispatch succeeds, so the run looks healthy
-while nothing happens (super-fr#420). fr-goal §2 is the opposite case — its
-cross-repo agents each start a fresh pipeline in a different repo, in a
-workspace of their own.
+while nothing happens (super-fr#420). fr-goal §2's cross-repo agents are a
+different case: each needs a workspace in a *different* repo, which no dispatch
+argument gives it (the Claude Code flag cuts a worktree of the current repo), so
+each enters isolation there itself with `fr isolation up --repo <path>`.
 
 **Harness — subagent worktree:** On Claude Code the second worktree is the Agent
 tool's `isolation: "worktree"` argument: dispatch the executor without it, and

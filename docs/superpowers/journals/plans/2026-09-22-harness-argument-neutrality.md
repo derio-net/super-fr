@@ -154,3 +154,73 @@ fr-plan-override.md and .claude/rules/artifact-versioning.md carried no violatio
 ### p3-t3-refactor-reread · discovery · P3.T3.S3 REFACTOR: every new Harness clause reread per reader; one arm tightened (phase 3)
 
 Reread all six new clauses (executor long commands; fr-goal §2 cross-repo agents; rule edit gate; rule subagent worktree; worktree-override native worktree commands; repo-mirror edit gate + subagent worktree) as a Claude Code, an OpenCode and a Hermes reader. Each arm carries an action or a concrete fact its reader needs (a mechanism, an argument, or 'nothing to refuse — dispatch normally'), none only name-drops. One fix: the OpenCode arm of both edit-gate clauses said bash is ungated but not what to do about it — now 'a known gap, not a sanctioned bypass: make your edits with the edit tools' (wording AGENTS.md already uses). Also formatted tests/unit/test_fr_goal_dispatch_prose.py (a blank line lost with _PHASE_3_OWES).
+
+<!-- fr:journal kind=finding scope=plan id=p3r-1 created=2026-09-22T14:40:04 phase=3 state=open -->
+### p3r-1 · finding [open] · fr-goal §2's Claude Code arm is false: the flag gives a worktree of THIS repo, not the target (phase 3)
+
+Review a44ffe50334af3c87, verified by the orchestrator: fr-worktree-create.sh:28 sends agent-* to mimic_default, which cuts the worktree under the toplevel of the CALLER's cwd. So on Claude Code isolation:worktree gives a cross-repo agent a detached worktree of the current repo; every harness's agent must enter isolation in the other repo itself, and fr isolation up defaults --repo to cwd (a delegated agent inherits the parent's). The same false premise is in spec §3.D (mine), the rule's pointer, and the guard hook's refusal message. Fix: harness-neutral unscoped instruction (fr isolation up --repo <path> --branch <b>, or fr run start from that repo), scoped clause states only the flag facts.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-2 created=2026-09-22T14:40:04 phase=3 state=open -->
+### p3r-2 · finding [open] · Hermes edit-gate arm omits the terminal/execute_code gap the OpenCode arm discloses; lead sentence overclaims (phase 3)
+
+Hermes hook header: terminal/execute_code are gated by fr-isolation-guard only (git/gh mutations, parity partial). Fix the prose (caveat + 'edit with write_file/patch'), soften 'every supported harness enforces this'. The parity.yaml declaration (Hermes enforced vs OpenCode partial for the same gap) is filed as a follow-up issue, not changed here.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-3 created=2026-09-22T14:40:04 phase=3 state=open -->
+### p3r-3 · finding [open] · Stale §3/§6 in the shipped guard refusal message and hook/test comments (phase 3)
+
+fr-phase-executor-guard.sh:65 reason string says fr-goal §3/§6 (now §2/§5) and repeats the p3r-1 false premise; also fr-isolation-guard.sh:141 comment, tests test_hooks_phase_executor_guard.py:123, test_hooks_guard.py:681.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-4 created=2026-09-22T14:40:05 phase=3 state=open -->
+### p3r-4 · finding [open] · Long-commands test searches needles across the whole clause, not per arm (phase 3)
+
+OpenCode's 'kill' satisfied by Hermes' process(kill); a wrong fact like 'On OpenCode pass background=true' passes. Fix: split on the **Claude Code**/**OpenCode**/**Hermes** leads; required AND forbidden needles per arm.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-m1 created=2026-09-22T14:40:05 phase=3 state=open -->
+### p3r-m1 · finding [open] · OpenCode detach recipe drops the exit code and never says how to stop the job (phase 3)
+
+Use (cmd; echo "exit=$?") > log 2>&1 & and kill the job before handback; matrix note must not call this arm 'verified' — it is sourced for timeout/kill, the detach survival is what the smoke checks.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-m2 created=2026-09-22T14:40:06 phase=3 state=refuted -->
+### p3r-m2 · finding [refuted] · Row executor-long-commands-per-harness at ci while the smoke is owed (phase 3)
+
+Partly refuted: the row's acceptance sentence is that the executor TELLS each harness's reader how to run a long command — prose, which the per-arm test pins at ci. The behaviour (not killed, nothing left running) is the Test Plan smoke's; the note is made explicit about that split rather than demoting a correctly pinned claim.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-m3m4 created=2026-09-22T14:40:06 phase=3 state=open -->
+### p3r-m3m4 · finding [open] · Carve-out lead-in dangles into the scoped clause; 'this hook' singular; relative hook path (phase 3)
+
+Move the Harness clause after the #420 bullets; 'the tool-layer backstops'; cite plugins/super-fr/hooks/hermes/fr-isolation-required.sh.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-1-resolved created=2026-09-22T14:43:08 state=fixed resolves=p3r-1 -->
+### p3r-1-resolved · finding [fixed] · resolves p3r-1: fr-goal §2's Claude Code arm is false: the flag gives a worktree of THIS repo, not the target
+
+fr-goal §2 now tells EVERY cross-repo agent to enter isolation in its own repo (fr isolation up --repo <path> --branch <b>); the scoped clause says the Claude Code flag only cuts a worktree of THIS repo. Same premise corrected in the rule (canonical + hand mirror), the guard's refusal message, the spec §3.D (marked corrected), and two test docstrings. Pinned: tests/unit/test_fr_goal_cross_repo_prose.py (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p3r-2-resolved created=2026-09-22T14:43:08 state=fixed resolves=p3r-2 -->
+### p3r-2-resolved · finding [fixed] · resolves p3r-2: Hermes edit-gate arm omits the terminal/execute_code gap the OpenCode arm discloses; lead sentence overclaims
+
+Hermes edit-gate arm now states the terminal/execute_code gap and says edit with write_file/patch; lead sentence softened ('gates its edit tools'; shell writes are the gap on every harness); hand mirror too. Declaration inconsistency filed as #561.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-3-resolved created=2026-09-22T14:43:09 state=fixed resolves=p3r-3 -->
+### p3r-3-resolved · finding [fixed] · resolves p3r-3: Stale §3/§6 in the shipped guard refusal message and hook/test comments
+
+fr-phase-executor-guard.sh refusal now cites §5/§2 and states the flag's real effect; fr-isolation-guard.sh comment and three test docstrings §3/§6 -> §2/§5. test_the_guard_refusal_cites_the_current_sections_and_no_false_premise (red first).
+
+<!-- fr:journal kind=finding scope=plan id=p3r-4-resolved created=2026-09-22T14:43:09 state=fixed resolves=p3r-4 -->
+### p3r-4-resolved · finding [fixed] · resolves p3r-4: Long-commands test searches needles across the whole clause, not per arm
+
+test_long_commands_tell_each_harness_what_to_do splits the clause per 'On **Harness**' lead (whitespace-tolerant) with required AND forbidden needles per arm.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-m1-resolved created=2026-09-22T14:43:10 state=fixed resolves=p3r-m1 -->
+### p3r-m1-resolved · finding [fixed] · resolves p3r-m1: OpenCode detach recipe drops the exit code and never says how to stop the job
+
+OpenCode detach recipe keeps the exit code ((cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid) and stops it with kill "$(cat log.pid)" (each bash call is a fresh shell, $! does not survive); required by the per-arm test. Matrix note states this arm is the one not verified from source.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-m3m4-resolved created=2026-09-22T14:43:10 state=fixed resolves=p3r-m3m4 -->
+### p3r-m3m4-resolved · finding [fixed] · resolves p3r-m3m4: Carve-out lead-in dangles into the scoped clause; 'this hook' singular; relative hook path
+
+Subagent-worktree clause moved after the #420 bullets; 'These hooks are the tool-layer backstop'; Hermes hook cited by its repo path.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-09-22T14:43:10 phase=3 -->
+### p3-review · review · Phase 3 review — separate reviewer, fixes applied (phase 3)
+
+Reviewer: separately dispatched general-purpose subagent (a44ffe50334af3c87), adversarial on prose accuracy, every harness claim traced to a repo file. Verdict: with fixes. I1 (p3r-1) verified by the orchestrator against fr-worktree-create.sh:28 — the Claude Code flag yields a worktree of the CURRENT repo; a long-standing false premise in fr-goal §2, the rule, the guard message and this plan's own spec, all corrected. p3r-2..4, m1, m3/m4 fixed test-first where testable; m2 refuted (ci pins the prose the row claims; behaviour is the smoke's). Parity declaration split out as #561.

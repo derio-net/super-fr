@@ -12,8 +12,10 @@ Three shipped surfaces have to agree, and each has already drifted once:
   worthless unregistered;
 - the agent's **`description:`** is what the orchestrator reads when choosing —
   the constraint sat in the body, which only the executor itself reads;
-- **fr-goal §6** is what the orchestrator follows, and §3 uses the flag
-  *correctly*, so without an explicit contrast §3 reads as precedent for §6.
+- **fr-goal §5** is what the orchestrator follows, and §2 used to present the
+  flag as correct for cross-repo agents, so without an explicit contrast §2 read
+  as precedent for §5. (That §2 premise was itself false — the flag cuts a
+  worktree of the CURRENT repo; 2026-09-22 review p3r-1.)
 
 A fourth surface carries the carve-out to the harnesses the hook can't reach:
 `plugins/super-fr/rules/fr-isolation-required.md` is the ONE file that ships to

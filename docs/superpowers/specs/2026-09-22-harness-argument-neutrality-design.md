@@ -103,9 +103,12 @@ A not-empty guard per tree, as today.
 - **Executor long commands** → `**Harness — long commands:**`, three verified arms (§1.1).
   The rules that hold on every harness stay unscoped: bounded waits, nothing left polling at
   handback (#503), read the command's own exit code.
-- **`fr-goal` §2** cross-repo dispatch: the flag moves into a scoped clause (Claude Code keeps
-  the flag for a fresh pipeline in another repo; OpenCode/Hermes have no isolation argument —
-  each cross-repo agent starts its own `fr isolation up`).
+- **`fr-goal` §2** cross-repo dispatch: *corrected in phase 3's review (p3r-1)* — this spec first
+  said "Claude Code keeps the flag for a fresh pipeline in another repo", repeating a long-standing
+  false premise: `fr-worktree-create.sh` leaves `agent-*` worktrees at Claude's default, cut under
+  the CALLER's toplevel, so the flag yields a worktree of the current repo. Every harness's agent
+  enters isolation in its own repo, `fr isolation up --repo <path> --branch <b>` (a delegated agent
+  inherits the parent's cwd); the scoped clause states only what the flag does and does not do.
 - **Rules**: every Claude-only mention in `fr-isolation-required`, `fr-worktree-override`,
   `fr-plan-override` scoped; the hand-maintained `.claude/rules/fr-isolation-required.md` updated
   by hand (no script covers it — AGENTS.md).

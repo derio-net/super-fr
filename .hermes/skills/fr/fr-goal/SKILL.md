@@ -56,10 +56,11 @@ unanswered batch is the same stop signal there, and clearing the gate unasked is
 Review the spec against the Q&A answers AND codebase reality (do the named
 files/helpers/services exist?). Fix every finding, log a spec-scope `review`. Cross-repo
 spec: this session owns ONE repo's plan + PR; for each other repo, dispatch one agent with the
-spec ref and this pipeline from `plan` onward — one plan, one PR, one fresh workspace per repo.
-**Harness — cross-repo agents:** Claude Code passes `isolation: "worktree"` — right *here*: a fresh
-pipeline in a *different* repo. OpenCode's task tool and Hermes' `delegate_task` take no isolation
-argument, so brief each agent to run `fr isolation up --branch <b>` in its own repo first.
+spec ref and this pipeline from `plan` onward — one plan, one PR, one workspace per repo: brief it to
+enter isolation in ITS repo first, `fr isolation up --repo <path> --branch <b>` (it inherits your cwd).
+**Harness — cross-repo agents:** Claude Code's `isolation: "worktree"` only cuts a worktree of THIS
+repo — optional, never the isolation; OpenCode's task tool and Hermes' `delegate_task` take no
+isolation argument. On all three, that `fr isolation up --repo` is what isolates the agent.
 
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep

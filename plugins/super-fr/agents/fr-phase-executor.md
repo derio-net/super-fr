@@ -127,7 +127,10 @@ on it with a bounded loop. On **OpenCode**, the bash tool takes a `timeout` in
 milliseconds (default 2 minutes, maximum 10 minutes) and **kills** the command
 when it expires, and it has no background argument at all: pass an explicit
 `timeout` of up to `600000` for a long suite, and for anything longer detach it
-yourself (`cmd > log 2>&1 &`) and poll the log with a bounded loop. On
+yourself so the exit code survives — `(cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid`
+— poll the log with a bounded loop, and before you hand back stop anything still
+running with `kill "$(cat log.pid)"` (each bash call is a fresh shell, so `$!` does
+not survive to the next one). On
 **Hermes**, start it with `terminal(command, background=true,
 notify_on_complete=true)`, wait with `process(action="wait")` (or `"poll"` /
 `"log"`), and `process(action="kill")` anything of yours still running before

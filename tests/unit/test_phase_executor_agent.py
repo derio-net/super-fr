@@ -97,15 +97,39 @@ def test_long_commands_tell_each_harness_what_to_do() -> None:
     all three harnesses passes the tripwire and helps nobody.
     """
     clause = _long_commands_clause(AGENT.read_text())
-    arms = {
+    arms = _arms(clause)
+    # Review p3r-4: needles are checked PER ARM, with forbidden ones — searched
+    # across the whole clause, OpenCode's "kill" was satisfied by Hermes'
+    # process(kill), and "On OpenCode pass background=true" would have passed.
+    required = {
         "Claude Code": ("run_in_background",),
-        "OpenCode": ("timeout", "600000", "kill"),
+        # Review p3r-m1: the detach recipe must keep the exit code and say how
+        # to stop the job — the paragraph below it says to read the real exit
+        # code, and the handback rule says nothing may be left running.
+        # Each bash call is a fresh shell, so `$!` is gone by the next call:
+        # the PID is written to a file and killed from it.
+        "OpenCode": ("timeout", "600000", "kills", 'echo "exit=$?"', "echo $! >", 'kill "$(cat'),
         "Hermes": ("background=true", 'process(action="wait"', 'process(action="kill")'),
     }
-    for harness, needles in arms.items():
-        assert harness in clause, f"the long-commands clause has no {harness} arm"
-        for needle in needles:
-            assert needle in clause, f"the {harness} arm must say {needle!r}"
+    forbidden = {
+        "Claude Code": ("process(", "600000", "background=true"),
+        "OpenCode": ("run_in_background", "background=true", "process("),
+        "Hermes": ("run_in_background", "600000"),
+    }
+    assert set(arms) == set(required), f"expected one arm per harness, got {sorted(arms)}"
+    for harness, arm in arms.items():
+        for needle in required[harness]:
+            assert needle in arm, f"the {harness} arm must say {needle!r}: {arm!r}"
+        for needle in forbidden[harness]:
+            assert needle not in arm, f"the {harness} arm must NOT say {needle!r}: {arm!r}"
+
+
+def _arms(clause: str) -> dict[str, str]:
+    """The clause split at its `On **<Harness>**` leads, one segment each."""
+    import re
+
+    parts = re.split(r"On\s+\*\*(Claude Code|OpenCode|Hermes)\*\*", clause)
+    return {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
 
 
 def test_the_harness_neutral_long_command_rules_stay_unscoped() -> None:
