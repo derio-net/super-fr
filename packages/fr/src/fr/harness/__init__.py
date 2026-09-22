@@ -13,6 +13,7 @@ the repo).
 from __future__ import annotations
 
 import importlib.resources
+import re
 
 from fr.harness.model import (
     HARNESSES,
@@ -25,6 +26,7 @@ from fr.harness.model import (
 )
 
 __all__ = [
+    "ARGUMENT_VOCABULARY",
     "HARNESSES",
     "STATES",
     "TOOL_VOCABULARY",
@@ -77,6 +79,27 @@ empty frozenset rather than a missing key. No name may appear under two
 harnesses — checked by `test_no_tool_name_is_claimed_by_two_harnesses` —
 because an ambiguous name would leave the tripwire unable to say which
 harness a bare mention serves."""
+
+ARGUMENT_VOCABULARY: dict[str, dict[str, re.Pattern[str]]] = {
+    "claude-code": {},
+    "opencode": {},
+    "hermes": {},
+    "codex": {},
+    "copilot-cli": {},
+}
+"""2026-09-22 harness-argument-neutrality spec §3.A. `TOOL_VOCABULARY`'s
+sibling, over a different kind of harness-specific name: not a tool a skill
+invokes (`Agent`, `delegate_task`), but an ARGUMENT a skill passes one — a
+flag or field name that means something only on its own harness (Claude
+Code's `isolation: "worktree"` dispatch flag, Hermes's `background=true`).
+Same closed-world rule, keyed by every member of `HARNESSES`. Each harness
+maps an argument name (what a violation reports) to a compiled-at-import
+regex rather than a bare string, because an argument can be spelled several
+ways in prose (`isolation: "worktree"` vs. `isolation="worktree"`) where a
+tool name is one literal token. Phase 1 ships every harness with an empty
+mapping — the shape proven, no pattern populated yet; Phase 2 fills in the
+real patterns and wires `scan_prose` to scan them under the same clause
+rules as `TOOL_VOCABULARY`."""
 
 
 def load_matrix() -> Matrix:

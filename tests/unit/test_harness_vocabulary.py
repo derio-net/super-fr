@@ -21,7 +21,7 @@ from __future__ import annotations
 from itertools import combinations
 from pathlib import Path
 
-from fr.harness import TOOL_VOCABULARY
+from fr.harness import HARNESSES, TOOL_VOCABULARY
 from fr.harness.prose import Violation, scan_prose
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -208,3 +208,16 @@ def test_an_unsupported_harness_label_does_not_count_toward_the_bar() -> None:
     assert scan_prose(
         "**Harness — q:** Claude Code calls AskUserQuestion. Codex, Copilot CLI.\n"
     ), "unsupported labels must not substitute for a supported harness"
+
+
+# --- ARGUMENT_VOCABULARY: closed-world skeleton (P1.T1) ----------------------
+
+
+def test_argument_vocabulary_is_keyed_by_exactly_the_harnesses() -> None:
+    """2026-09-22 harness-argument-neutrality spec §3.A, Phase 1 walking
+    skeleton. Same closed-world rule as `TOOL_VOCABULARY`: every member of
+    `HARNESSES` gets a key, none extra — Phase 1 only proves the shape, so
+    every value is empty until Phase 2 populates real argument patterns."""
+    from fr.harness import ARGUMENT_VOCABULARY
+
+    assert set(ARGUMENT_VOCABULARY) == set(HARNESSES)
