@@ -3449,3 +3449,26 @@ rows:
       to GOVERN the phrase — same clause (split on . ; —), before it, only filler words
       between (<=6). Parametrized must-fail cases (the adversarial review''s four) and
       must-pass cases (shipped description, pre-#532 literal-flag wording) run in CI.'
+  - id: triage-open-prs
+    capability: Backlog triage
+    acceptance: triage shows every open PR with CI and merge state, including issue-less
+      PRs anchored to spec or journal
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: Render and PR collection tests pass in phase 4.
+  - id: triage-pr-judgement
+    capability: Backlog triage
+    acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.

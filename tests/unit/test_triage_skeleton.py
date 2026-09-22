@@ -41,6 +41,10 @@ class FixtureForge:
         assert repo == "derio-net/super-fr"
         return self.prs
 
+    def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
+        assert repo == "derio-net/super-fr"
+        return [p for p in self.prs if p.get("state") == "OPEN"]
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         raise AssertionError("the skeleton never views a single issue")
 
@@ -60,7 +64,7 @@ def test_collect_writes_facts_json_from_the_forge(
     facts_path = tmp_path / "facts.json"
     assert facts_path.exists()
     facts = json.loads(facts_path.read_text(encoding="utf-8"))
-    assert facts["schema"] == 1
+    assert facts["schema"] == 2
     assert facts["scope"] == "derio-net--super-fr"
     assert facts["kind"] == "repo"
     collected = {(i["repo"], i["number"]) for i in facts["issues"]}
