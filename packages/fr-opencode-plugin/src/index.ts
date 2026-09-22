@@ -19,8 +19,8 @@
 //
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
 // plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
-import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { lstatSync, readlinkSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { createIdleHandler } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
@@ -95,8 +95,19 @@ function extractTargets(output: unknown): Targets {
 }
 
 function normalizeTarget(directory: string, target: string): string {
-  const resolved = resolve(directory, target);
-  return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
+  let resolved = resolve(directory, target);
+  for (let hops = 0; hops < 40; hops += 1) {
+    let stat: ReturnType<typeof lstatSync>;
+    try {
+      stat = lstatSync(resolved);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolved;
+      throw new Error(`fr-isolation: cannot inspect target symlink: ${resolved}`);
+    }
+    if (!stat.isSymbolicLink()) return resolved;
+    resolved = resolve(dirname(resolved), readlinkSync(resolved));
+  }
+  throw new Error("fr-isolation: target symlink chain exceeds 40 hops");
 }
 
 export async function FrIsolationRequired(ctx: {
