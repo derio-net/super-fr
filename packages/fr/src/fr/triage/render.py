@@ -380,7 +380,7 @@ def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[s
 
 
 def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_at: str) -> str:
-    """Render an unranked PR with the forge's status, never an inferred status."""
+    """Render an open PR with the forge's status, never an inferred status."""
     checks = pr.checks
     if checks.get("fail", 0):
         ci_class, ci_symbol, ci_label = "fail", "✗", "fail"
@@ -434,10 +434,10 @@ def _prs_section(
     for offset, pr in enumerate(prs):
         key = issue_key(pr.repo, pr.number)
         rows.append(_pr_row(pr, judgements.issues.get(key), start + offset, collected_at))
-    body = "".join(rows) if rows else '<p class="empty">No unranked pull requests.</p>'
+    body = "".join(rows) if rows else '<p class="empty">No open pull requests.</p>'
     return (
         '<section class="prs"><h2>PRs</h2>'
-        '<p class="tier-desc">Unranked pull requests, with their implementation anchor '
+        '<p class="tier-desc">Open pull requests, with their implementation anchor '
         f'and delivery verdict.</p><div class="rows">{body}</div></section>'
     )
 
@@ -512,7 +512,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
         )
 
     sections = [
-        _prs_section(result.unranked_prs, judgements, 1, facts.collected_at),
+        _prs_section(facts.prs, judgements, 1, facts.collected_at),
         _section(
             "unranked",
             "?",
