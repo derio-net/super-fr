@@ -3636,3 +3636,53 @@ rows:
       prompt with opencode run --pure (no external plugins) in an identical repo applied
       the edit. The model-driven path through the DELIVERED copy is therefore live-proven;
       still live-only, so the CI level is unchanged.'
+  - id: isolation-rebuild-keeps-worktree
+    capability: Isolation lifecycle
+    acceptance: 'An operator applies a changed devcontainer profile with `fr isolation
+      rebuild`: the container is recreated with the new features while uncommitted worktree
+      files and an active run''s cursor survive (#577).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    levels: {}
+    status: not-implemented
+    notes: Live walk owed (spec Test Plan 10) plus unit argv pins.
+  - id: isolation-stop-and-resume
+    capability: Isolation lifecycle
+    acceptance: An operator stops an idle workspace container with `fr isolation stop`
+      (worktree and state kept, status reads stopped), and the next `fr isolation exec`
+      resumes it instead of failing with a raw devcontainer error (#471).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    levels: {}
+    status: not-implemented
+    notes: Unit + live walk owed (spec Test Plan 2,3,11).
+  - id: isolation-down-preserves-run
+    capability: Isolation lifecycle
+    acceptance: Tearing down a workspace that holds an active run names the run in the
+      refusal, preserves its uncommitted cursor even under --force, and the next `fr
+      isolation up --branch` restores it (#575).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    levels: {}
+    status: not-implemented
+    notes: Unit + integration start→down --force→advance→up owed (spec Test Plan 4,5,7).
+  - id: run-missing-explains-teardown
+    capability: Isolation lifecycle
+    acceptance: A `fr run` command for a run whose workspace was torn down says so and
+      names the recovery command, instead of an unexplained missing path; a never-existed
+      id says that instead (#575).
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    levels: {}
+    status: not-implemented
+    notes: Unit messages + integration owed (spec Test Plan 6,7).
+  - id: isolation-up-reuses-remote-branch
+    capability: Isolation lifecycle
+    acceptance: '`fr isolation up --branch <B>` on a branch that exists only on origin
+      checks out origin''s tip, refuses an ambiguous --base, and names the tip it used
+      (#438).'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+    levels: {}
+    status: not-implemented
+    notes: Integration against a bare-repo origin owed (spec Test Plan 8).
