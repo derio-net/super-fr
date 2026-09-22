@@ -215,7 +215,7 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     }
   });
 
-  test("resolves an existing worktree symlink before checking the marker", async () => {
+  test("denies worktree symlinks that resolve into the base clone, including dangling links", async () => {
     const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-symlink-wt-"));
     rmSync(worktreeDir, { recursive: true, force: true });
     sh("git", ["worktree", "add", "-b", "feat/symlink-test", worktreeDir], repo);
@@ -224,12 +224,37 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
         join(worktreeDir, ".fr-isolation"),
         JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
       );
-      const escaped = join(worktreeDir, "base-link.md");
-      symlinkSync(join(repo, "README.md"), escaped);
+      const nonDangling = join(worktreeDir, "base-link.md");
+      const dangling = join(worktreeDir, "base-link-dangling.md");
+      symlinkSync(join(repo, "README.md"), nonDangling);
+      symlinkSync(join(repo, "does-not-exist.md"), dangling);
       const hook = await makeHook(worktreeDir);
       await expect(
-        hook({ tool: "edit" } as never, { args: { filePath: escaped } } as never)
+        hook({ tool: "write" } as never, { args: { filePath: nonDangling } } as never)
       ).rejects.toThrow(/fr-isolation/);
+      await expect(
+        hook({ tool: "write" } as never, { args: { filePath: dangling } } as never)
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
+  });
+
+  test("allows a symlink that remains inside a marked worktree", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-contained-symlink-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/contained-symlink-test", worktreeDir], repo);
+    try {
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
+      );
+      const contained = join(worktreeDir, "contained-link.md");
+      symlinkSync(join(worktreeDir, "README.md"), contained);
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook({ tool: "write" } as never, { args: { filePath: contained } } as never)
+      ).resolves.toBeUndefined();
     } finally {
       sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
     }

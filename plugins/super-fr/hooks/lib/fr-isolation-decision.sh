@@ -365,6 +365,23 @@ fr_isolation_decide_edit() {
   # against the wrong (session-cwd) repo.
   case "$_fr_file" in /*) ;; *) return 0 ;; esac
 
+  # `-L` detects a dangling symlink, unlike `-e`. Resolve each link against
+  # the link's own directory so a marked worktree cannot proxy a base-clone
+  # write through a link whose target does not exist yet.
+  _fr_hops=0
+  while [ -L "$_fr_file" ]; do
+    _fr_hops=$((_fr_hops + 1))
+    [ "$_fr_hops" -le 40 ] || return 1
+    _fr_link=$(readlink "$_fr_file") || return 1
+    case "$_fr_link" in
+      /*) _fr_next=$_fr_link ;;
+      *) _fr_next="$(dirname "$_fr_file")/$_fr_link" ;;
+    esac
+    _fr_next_dir=$(dirname "$_fr_next")
+    _fr_next_dir=$(cd "$_fr_next_dir" 2>/dev/null && pwd -P) || return 1
+    _fr_file="$_fr_next_dir/$(basename "$_fr_next")"
+  done
+
   # Nearest existing ancestor dir (a write may target a not-yet-created file).
   _fr_dir=$(dirname "$_fr_file")
   while [ ! -d "$_fr_dir" ] && [ "$_fr_dir" != "/" ] && [ "$_fr_dir" != "." ]; do
