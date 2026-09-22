@@ -3333,7 +3333,11 @@ rows:
     notes: 'Liveness closed: the guard refreshes an active session''s sentinel so the
       48h GC only expires abandoned ones, and every sentinel writer shares one mkdir
       lock (a lost workspace entry could fail open). End-to-end down through the real
-      CLI added.'
+      CLI added. LIVE 2026-09-22 (fr 4.14.3, Claude Code, harness-invoked hooks on the
+      session''s own commands): fresh sentinel denied and never healed; bind recorded
+      the workspace cache-relative, no lock left; two workspaces formed a set and down
+      of one kept the guard armed; a gc-style reap of the last healed on the next base-clone
+      command. OpenCode: no Bash guard by design (parity: fr-pipeline-sentinel absent).'
   - id: guard-denial-truthful
     capability: Isolation state
     acceptance: 'Guard denial messages convey the true state: cd target gone says the
@@ -3360,9 +3364,11 @@ rows:
       - super-fr:tests/unit/test_isolation.py
       - super-fr:tests/unit/test_isolation_cmd.py#L777
     status: ci
-    notes: 'Tests pass: verify-merge --branch works on reaped workspace (no state file)
-      by fetching origin, resolving ref (local then origin/branch), checking changes
-      on origin/main, verifying PR merged.'
+    notes: 'With --branch and no workspace, verify-merge fetches the branch and requires
+      every surviving ref (origin/<b> and the local branch) to have landed on origin/<default>;
+      an unresolvable ref exits 2. LIVE 2026-09-22 on Claude Code (4.13.2 fallback,
+      #534 close-out) and OpenCode (4.14.3): reported verified with ''workspace already
+      reaped''.'
   - id: journal-deferred-finding
     capability: Journal
     acceptance: A valid finding that belongs to another change is closed as deferred
@@ -3377,7 +3383,9 @@ rows:
     status: ci
     notes: 'Written as an open record plus a tracked_by token so released fr (verified:
       4.13.2) reads it without error and fails closed. Motivated by super-fr#535''s
-      finding being mislabelled refuted.'
+      finding being mislabelled refuted. LIVE 2026-09-22 (fr 4.14.3) on Claude Code
+      and OpenCode: deferred without --tracked-by exits 2; with it the gate passes and
+      prints the deferral.'
   - id: down-all-blast-radius
     capability: Isolation guard
     acceptance: fr isolation down --all shows what it will tear down and refuses to
@@ -3388,4 +3396,6 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation_cmd.py
     status: ci
-    notes: 'Split from #432; #533.'
+    notes: 'Split from #432; #533. LIVE 2026-09-22 (fr 4.14.3) on Claude Code and OpenCode:
+      --dry-run listed all 8 workspaces with keep reasons and bound sessions and changed
+      nothing.'
