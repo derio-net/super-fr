@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +30,7 @@ from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
+    carried_state,
     delete_state,
     save_state,
 )
@@ -166,13 +166,7 @@ class ExternalTarget:
                 file=sys.stderr,
             )
         self._ensure_branch(branch)
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=self.repo_root,
-            profile="external",
-            created_at=datetime.now(UTC).isoformat(),
-        )
+        state = carried_state(self.repo_root, branch, self.repo_root, "external")
         save_state(state)
         self._set_marker_branch(branch)
         self._exclude_marker()

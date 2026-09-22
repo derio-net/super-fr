@@ -78,10 +78,15 @@ def _push_origin(repo: Path) -> None:
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
 
-    # Stateful container: `devcontainer up` brings "cid" up running, a
-    # successful `docker rm` removes it — so exec's _ensure_running sees a
-    # live container and down's post-condition re-query sees it gone.
-    live: set[str] = set()
+    # Stateful containers, one per workspace: `devcontainer up` brings a
+    # container up running for its --workspace-folder, a successful `docker rm`
+    # removes it — so exec's _ensure_running sees a live container and down's
+    # post-condition re-query sees it gone. Keyed on the workspace (the ps
+    # label filter) so multi-workspace tests never share one container.
+    live: dict[str, str] = {}  # workspace folder -> container id
+
+    def _flag(argv: list[str], prefix: str) -> str | None:
+        return next((a[len(prefix) :] for a in argv if a.startswith(prefix)), None)
 
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
@@ -89,11 +94,15 @@ def fake_run(monkeypatch: pytest.MonkeyPatch):
         calls.append(list(argv))
         out = '{"state": "MERGED", "url": "u"}' if argv[0] == "gh" else ""
         if argv[:2] == ["devcontainer", "up"]:
-            live.add("cid")
+            folder = _flag(argv, "--workspace-folder=") or ""
+            live[folder] = f"cid{len(live)}"
         elif argv[:2] == ["docker", "rm"]:
-            live.difference_update(argv[2:])
-        elif argv[:2] == ["docker", "ps"] and "--all" in argv and live:
-            out = "cid running"
+            for folder in [f for f, cid in live.items() if cid in argv[2:]]:
+                del live[folder]
+        elif argv[:2] == ["docker", "ps"] and "--all" in argv:
+            folder = _flag(argv, "--filter=label=devcontainer.local_folder=")
+            if folder in live:
+                out = f"{live[folder]} running"
         return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
 
     monkeypatch.setattr(isolation_cmd, "_runner", run)

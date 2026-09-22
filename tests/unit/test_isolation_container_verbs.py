@@ -128,13 +128,66 @@ class TestRebuild:
         assert not _docker(rr, "rmi")
 
     def test_failure_never_reclaims_and_names_the_retry(self, tmp_path, monkeypatch) -> None:
-        _repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch, fail_on="up")
+        repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch, fail_on="up")
+        state_file = state_path(repo, st.branch)
+        marker = st.worktree / ".fr-isolation"
+        before = (state_file.read_bytes(), marker.read_bytes())
         with pytest.raises(IsolationError) as info:
             target.rebuild(st, no_cache=False)
         text = str(info.value)
-        assert "fr isolation rebuild" in text
-        assert "worktree" in text and "intact" in text
+        assert f"fr isolation rebuild --branch {st.branch}" in text
+        assert "may already have been removed" in text
+        assert "worktree and run are intact" in text
         assert not _docker(rr, "rmi")
+        assert (state_file.read_bytes(), marker.read_bytes()) == before  # p2-f11
+
+    def test_failed_requery_after_successful_up_is_still_success(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        """p2-f1: the container WAS recreated; a failed `docker ps` afterwards
+        must not report the rebuild as failed."""
+        _repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch)
+        real = rr.__call__
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[:2] == ["docker", "ps"] and _dc(rr, "up"):
+                rr.calls.append(list(argv))
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr="daemon gone")
+            return real(argv, cwd=cwd, check=check, capture=capture)
+
+        target.run = run
+        msg = target.rebuild(st, no_cache=False)
+        assert "recreated (cid1 → unknown)" in msg
+        assert not _docker(rr, "rmi")
+        assert "warning" in capsys.readouterr().err.lower()
+
+    def test_missing_devcontainer_binary_is_an_isolation_error(self, tmp_path, monkeypatch) -> None:
+        """p2-f2: `_devcontainer_up` converts FileNotFoundError for up, rebuild
+        and resume alike."""
+        _repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch)
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[0] == "devcontainer":
+                raise FileNotFoundError(2, "No such file or directory", "devcontainer")
+            return rr(argv, cwd=cwd, check=check, capture=capture)
+
+        target.run = run
+        with pytest.raises(IsolationError, match="devcontainer"):
+            target.rebuild(st, no_cache=False)
+
+    def test_new_id_is_one_absent_from_the_whole_before_set(self, tmp_path, monkeypatch) -> None:
+        """p2-f8: a sibling that existed before (cid1) is not the new container."""
+        _repo, _ut, st, _rr, target = _rebuild_setup(tmp_path, monkeypatch)
+        outputs = iter(["cid0 exited\ncid1 running\n", "cid1 running\ncid2 running\n"])
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[0] == "git":
+                return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+            out = next(outputs) if argv[:2] == ["docker", "ps"] else ""
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+        target.run = run
+        assert "(cid0 → cid2)" in target.rebuild(st, no_cache=False)
 
     def test_state_and_marker_byte_identical(self, tmp_path, monkeypatch) -> None:
         repo, _ut, st, _rr, target = _rebuild_setup(tmp_path, monkeypatch)
@@ -187,7 +240,9 @@ class TestExecEnsureRunning:
     def test_running_execs_directly(self, tmp_path, monkeypatch, ps) -> None:
         st, runner, target = _exec_setup(tmp_path, monkeypatch, ps)
         assert target.exec(st, ["echo", "hi"]) == 0
-        assert not _dc(runner, "up") and not _docker(runner, "unpause")
+        (only_docker,) = runner.argv_for("docker")  # p2-f10: exactly one, the ps
+        assert only_docker[1] == "ps"
+        assert not _dc(runner, "up")
         (call,) = _dc(runner, "exec")
         assert call[-2:] == ["echo", "hi"]
 
@@ -263,6 +318,67 @@ class TestExecEnsureRunning:
         assert not _dc(runner, "exec")
 
 
+class TestExecReviewFixes:
+    @pytest.mark.parametrize(
+        ("ps", "expect"),
+        [("cid0 dead\ncid1 exited\n", "up"), ("cid0 dead\ncid1 paused\n", "unpause")],
+    )
+    def test_several_containers_prefer_a_usable_one(self, tmp_path, monkeypatch, ps, expect):
+        """p2-f9: a dead sibling listed first must not hide a resumable one."""
+        st, runner, target = _exec_setup(tmp_path, monkeypatch, ps)
+        assert target.exec(st, ["echo", "hi"]) == 0
+        if expect == "up":
+            assert _dc(runner, "up")
+        else:
+            assert _docker(runner, "unpause") == [["docker", "unpause", "cid1"]]
+        assert _dc(runner, "exec")
+
+    def test_resumable_preferred_over_paused(self, tmp_path, monkeypatch) -> None:
+        st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid0 paused\ncid1 exited\n")
+        target.exec(st, ["echo", "hi"])
+        assert _dc(runner, "up") and not _docker(runner, "unpause")
+
+    def test_missing_worktree_names_up_before_any_docker(self, tmp_path, monkeypatch) -> None:
+        """p2-f7."""
+        st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid1 running")
+        gone = st.model_copy(update={"worktree": tmp_path / "gone"})
+        with pytest.raises(IsolationError, match="fr isolation up"):
+            target.exec(gone, ["echo", "hi"])
+        assert runner.calls == []
+
+    def test_missing_binary_hint_names_the_binary(self, tmp_path, monkeypatch) -> None:
+        """p2-f7: the hint comes from err.filename, not an assumed devcontainer."""
+        st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid1 running")
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[:2] == ["devcontainer", "exec"]:
+                raise FileNotFoundError(2, "No such file or directory", "weird-shim")
+            return runner(argv, cwd=cwd, check=check, capture=capture)
+
+        target.run = run
+        with pytest.raises(IsolationError) as info:
+            target.exec(st, ["echo", "hi"])
+        assert "weird-shim" in str(info.value)
+        assert "devcontainer CLI" not in str(info.value)
+
+    def test_resume_failure_first_line_names_rebuild(self, tmp_path, monkeypatch) -> None:
+        """p2-f6: devcontainer's multi-line output goes AFTER the hint."""
+        st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid1 exited")
+
+        def run(argv, cwd=None, check=False, capture=True):
+            if argv[:2] == ["devcontainer", "up"]:
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr="boom\nline2\n")
+            return runner(argv, cwd=cwd, check=check, capture=capture)
+
+        target.run = run
+        with pytest.raises(IsolationError) as info:
+            target.exec(st, ["echo", "hi"])
+        first = str(info.value).splitlines()[0]
+        assert first.startswith(f"could not resume the container for {st.branch}")
+        assert f"fr isolation rebuild --branch {st.branch}" in first
+        assert "boom" in str(info.value) and "boom" not in first
+
+
 # ---------- §3.C up keeps its record ----------
 
 
@@ -294,6 +410,60 @@ def test_host_up_carries_sessions_and_created_at_forward(tmp_path, monkeypatch) 
     assert again.sessions == [_BOUND]
     assert again.created_at == "2026-09-01T00:00:00Z"
     assert load_state(repo, "feat/x") == again
+
+
+def test_up_over_a_corrupt_record_starts_fresh_with_warning(tmp_path, monkeypatch, capsys) -> None:
+    """p2-f3: a garbage/empty/truncated record must not break `up`."""
+    repo, _runner, target, st = _upped(tmp_path, monkeypatch)
+    for garbage in ("{not json", "", '{"repo_root": "/x"'):
+        state_path(repo, st.branch).write_text(garbage)
+        again = target.up(None, st.branch)
+        assert again.sessions == []
+        assert load_state(repo, st.branch) == again
+        assert "warning" in capsys.readouterr().err.lower()
+
+
+def test_up_does_not_carry_a_record_for_a_different_worktree(tmp_path, monkeypatch) -> None:
+    """p2-f4: a record pointing at another worktree path is not this workspace."""
+    repo, _runner, target, st = _upped(tmp_path, monkeypatch)
+    save_state(
+        st.model_copy(
+            update={
+                "worktree": tmp_path / "elsewhere",
+                "sessions": [_BOUND],
+                "created_at": "2026-09-01T00:00:00Z",
+            }
+        )
+    )
+    again = target.up(None, st.branch)
+    assert again.sessions == []
+    assert again.created_at != "2026-09-01T00:00:00Z"
+    assert again.worktree == st.worktree
+
+
+def test_external_up_carries_sessions_and_created_at_forward(tmp_path) -> None:
+    """p2-f5: all three targets share the carry logic."""
+    from tests.unit.test_isolation_external import RecordingRunner, _write_marker
+
+    repo = make_repo(tmp_path)
+    _write_marker(repo)
+    target = ExternalTarget(repo, runner=RecordingRunner())
+    st = target.up(profile=None, branch="feat/x")
+    _bind(st)
+    again = target.up(profile=None, branch="feat/x")
+    assert again.sessions == [_BOUND]
+    assert again.created_at == "2026-09-01T00:00:00Z"
+
+
+def test_up_marker_created_at_matches_the_carried_record(tmp_path, monkeypatch) -> None:
+    """p2-f13."""
+    import json
+
+    _repo, _runner, target, st = _upped(tmp_path, monkeypatch)
+    _bind(st)
+    again = target.up(None, st.branch)
+    marker = json.loads((again.worktree / ".fr-isolation").read_text())
+    assert marker["created_at"] == again.created_at == "2026-09-01T00:00:00Z"
 
 
 # ---------- CLI ----------
@@ -356,3 +526,27 @@ def test_cli_rebuild_help_says_branch_profile_and_restart_help_says_no_profile(
     assert "branch" in rebuild_help.lower() and "profile" in rebuild_help.lower()
     restart_help = " ".join(cli.invoke(app, ["isolation", "restart", "--help"]).output.split())
     assert "rebuild" in restart_help and "stopped" in restart_help
+
+
+def test_cli_exec_failed_resume_first_line_names_rebuild(cli_repo, monkeypatch) -> None:
+    """p2-f6: the one line the operator reads names the way out."""
+    ups: list = []
+
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        if argv[:2] == ["devcontainer", "up"]:
+            ups.append(argv)
+            if len(ups) > 1:  # the initial `up` works; the resume fails
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr="err1\nerr2\n")
+        out = "cid1 exited" if argv[:2] == ["docker", "ps"] else ""
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(isolation_cmd, "_runner", run)
+    cli.invoke(app, ["isolation", "up", "--repo", str(cli_repo), "--branch", "feat/z"])
+    res = cli.invoke(
+        app, ["isolation", "exec", "--repo", str(cli_repo), "--branch", "feat/z", "--", "ls"]
+    )
+    assert res.exit_code == 2, res.output
+    first = next(ln for ln in res.output.splitlines() if ln.startswith("error:"))
+    assert "fr isolation rebuild --branch feat/z" in first

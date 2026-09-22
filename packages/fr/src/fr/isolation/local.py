@@ -26,10 +26,10 @@ from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
+    carried_state,
     delete_state,
     harden_secret_file,
     list_states,
-    load_state,
     repo_cache_name,
     resolve_profile,
     save_state,
@@ -37,6 +37,13 @@ from fr.isolation.types import (
 from fr.plan_validator_wrapper import REPAIR_COMMAND
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
+
+
+def _missing_binary(err: FileNotFoundError, context: str) -> str:
+    """One line naming the binary the runner could not find — from the error
+    itself, never an assumed name."""
+    missing = err.filename or (err.args[0] if err.args else "a required binary")
+    return f"{missing} not found on PATH — {context}."
 
 
 def subprocess_runner(
@@ -386,26 +393,11 @@ class LocalWorktreeDevcontainerTarget:
                 )
         self._devcontainer_up(worktree, name)
 
-        state = self._carried_state(branch, worktree, name)
+        state = carried_state(self.repo_root, branch, worktree, name)
         save_state(state)
-        self._write_isolation_marker(worktree, branch)
+        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
         self._spawn_gc()
         return state
-
-    def _carried_state(self, branch: str, worktree: Path, profile: str) -> IsolationState:
-        """The record `up` saves. An `up` on an existing workspace is a resume
-        path (spec 2026-09-23 §3.C), so an existing record's `sessions` and
-        `created_at` are carried forward — re-saving a fresh record would unbind
-        every other session holding the workspace."""
-        prior = load_state(self.repo_root, branch)
-        return IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=worktree,
-            profile=profile,
-            created_at=prior.created_at if prior else datetime.now(UTC).isoformat(),
-            sessions=list(prior.sessions) if prior else [],
-        )
 
     @staticmethod
     def _config_path(worktree: Path, profile: str) -> Path:
@@ -445,7 +437,10 @@ class LocalWorktreeDevcontainerTarget:
             argv.append("--remove-existing-container")
         if no_cache:
             argv.append("--build-no-cache")
-        result = self.run(argv, cwd=worktree)
+        try:
+            result = self.run(argv, cwd=worktree)
+        except FileNotFoundError as err:
+            raise IsolationError(_missing_binary(err, "cannot run `devcontainer up`")) from err
         if result.returncode != 0:
             raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
 
@@ -453,19 +448,20 @@ class LocalWorktreeDevcontainerTarget:
         """Run `argv` in the workspace's container, resuming a stopped one first
         (`_ensure_running`, spec §3.B). A missing binary is an IsolationError,
         never a traceback."""
+        if not state.worktree.is_dir():
+            raise IsolationError(
+                f"worktree {state.worktree} for {state.branch} is gone — "
+                f"run `fr isolation up --branch {state.branch}`."
+            )
+        self._ensure_running(state)
         try:
-            self._ensure_running(state)
             result = self.run(
                 [*self._devcontainer_argv(state.worktree, state.profile, "exec"), *argv],
                 cwd=state.worktree,
                 capture=False,
             )
         except FileNotFoundError as err:
-            missing = err.filename or (err.args[0] if err.args else "a required binary")
-            raise IsolationError(
-                f"{missing} not found — cannot run in {state.branch} "
-                "(is the devcontainer CLI installed and on PATH?)."
-            ) from err
+            raise IsolationError(_missing_binary(err, f"cannot run in {state.branch}")) from err
         return result.returncode
 
     # Docker states `exec` runs in directly, and the ones it resumes with
@@ -485,10 +481,11 @@ class LocalWorktreeDevcontainerTarget:
         pairs = self._ps_pairs_strict(state)
         if any(current in self._RUNNING for _, current in pairs):
             return
-        if not pairs:
-            raise IsolationError(f"no usable container for {branch} — {rebuild}")
-        container, current = pairs[0]
-        if current in self._RESUMABLE:
+        # Several containers can share the label: the first usable one wins,
+        # a resumable one before a paused one; only none usable raises.
+        resumable = next((cid for cid, cur in pairs if cur in self._RESUMABLE), None)
+        paused = next((cid for cid, cur in pairs if cur == "paused"), None)
+        if resumable is not None:
             print(
                 f"isolation: container for {branch} was stopped — resuming (devcontainer up)",
                 file=sys.stderr,
@@ -496,18 +493,22 @@ class LocalWorktreeDevcontainerTarget:
             try:
                 self._devcontainer_up(state.worktree, state.profile)
             except IsolationError as err:
+                # The hint leads: devcontainer's output is multi-line (p2-f6).
                 raise IsolationError(
-                    f"could not resume the container for {branch}: {err} — {rebuild}"
+                    f"could not resume the container for {branch} — {rebuild}\n{err}"
                 ) from err
             return
-        if current == "paused":
-            result = self.run(["docker", "unpause", container])
+        if paused is not None:
+            result = self.run(["docker", "unpause", paused])
             if result.returncode != 0:
                 raise IsolationError(
-                    f"docker unpause failed for {branch} ({container}): "
-                    f"{(result.stderr or result.stdout or '').strip()} — {rebuild}"
+                    f"could not unpause the container for {branch} ({paused}) — {rebuild}\n"
+                    f"{(result.stderr or result.stdout or '').strip()}"
                 )
             return
+        if not pairs:
+            raise IsolationError(f"no usable container for {branch} — {rebuild}")
+        container, current = pairs[0]
         raise IsolationError(
             f"no usable container for {branch} ({container}, docker state {current}) — {rebuild}"
         )
@@ -543,8 +544,22 @@ class LocalWorktreeDevcontainerTarget:
                 "worktree and run are intact. Fix the profile and retry with "
                 f"`fr isolation rebuild --branch {branch}`."
             ) from err
-        after = self._ps_pairs_strict(state)
-        new = next((cid for cid, _ in after if cid != old), after[0][0] if after else None)
+        # The container WAS recreated: a failed re-query must not report the
+        # rebuild as failed (p2-f1). Without the new id, skip the reclaim.
+        new: str | None = None
+        try:
+            after = self._ps_pairs_strict(state)
+        except IsolationError as err:
+            print(
+                f"warning: {branch} was rebuilt, but the new container could not be "
+                f"queried ({err}); the old image was not reclaimed.",
+                file=sys.stderr,
+            )
+        else:
+            known = {cid for cid, _ in before}
+            new = next((cid for cid, _ in after if cid not in known), None)
+            if new is None and after:
+                new = after[0][0]
         new_image = self._image_for(new) if new else None
         if old_image and new_image and new_image != old_image:
             self._reclaim_image(old_image)
@@ -1601,7 +1616,13 @@ class LocalWorktreeDevcontainerTarget:
 
     # ----- .fr-isolation marker lifecycle (#328 Task 3) -----
 
-    def _write_isolation_marker(self, worktree: Path, branch: str, mode: str = "worktree") -> None:
+    def _write_isolation_marker(
+        self,
+        worktree: Path,
+        branch: str,
+        mode: str = "worktree",
+        created_at: str | None = None,
+    ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
         The marker is what the `fr-isolation-required` PreToolUse hook reads to
@@ -1620,7 +1641,9 @@ class LocalWorktreeDevcontainerTarget:
                     "toplevel": str(worktree.resolve()),
                     "branch": branch,
                     "mode": mode,
-                    "created_at": datetime.now(UTC).isoformat(),
+                    # the state record's own created_at, so an `up` that
+                    # carries the record forward does not restamp the marker
+                    "created_at": created_at or datetime.now(UTC).isoformat(),
                 },
                 indent=2,
             )

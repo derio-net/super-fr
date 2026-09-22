@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
-from fr.isolation.types import IsolationError, IsolationState, save_state
+from fr.isolation.types import IsolationError, IsolationState, carried_state, save_state
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
 
@@ -35,9 +35,9 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         worktree = self._worktree_up_core(branch, path)
         self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
-        state = self._carried_state(branch, worktree, "host")
+        state = carried_state(self.repo_root, branch, worktree, "host")
         save_state(state)
-        self._write_isolation_marker(worktree, branch)
+        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
         self._spawn_gc()
         return state
 

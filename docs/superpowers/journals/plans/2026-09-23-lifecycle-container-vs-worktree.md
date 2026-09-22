@@ -114,3 +114,68 @@ rebuild reclaims the old image only when BOTH the old and the new image id were 
 ### 8af43aee8ee9 · discovery · phase-2 acceptance rows left not-implemented on purpose (phase 2)
 
 `fr plan edit --complete-phase 2` warns that isolation-rebuild-keeps-worktree and isolation-stop-and-resume are still not-implemented. Left as-is: 06.yaml (Live walks and matrix flips) owns flipping all five rows after the live walks; unit refs to cite then: tests/unit/test_isolation_container_verbs.py (TestRebuild, TestExecEnsureRunning, CLI tests).
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1 created=2026-09-23T01:52:26 phase=2 state=fixed -->
+### p2-f1 · finding [fixed] · rebuild reported a successful recreate as failed when the re-query failed (phase 2)
+
+rebuild now catches IsolationError from the post-up docker ps: returns the recreated line with new=unknown, skips the image reclaim, warns on stderr. Test: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_failed_requery_after_successful_up_is_still_success.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f2 created=2026-09-23T01:52:27 phase=2 state=fixed -->
+### p2-f2 · finding [fixed] · _devcontainer_up leaked FileNotFoundError (traceback on up/rebuild) (phase 2)
+
+_devcontainer_up converts FileNotFoundError via the new module helper _missing_binary (shared by up, rebuild, resume); exec's handler now wraps only the devcontainer exec call. Test: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_missing_devcontainer_binary_is_an_isolation_error.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f3 created=2026-09-23T01:52:27 phase=2 state=fixed -->
+### p2-f3 · finding [fixed] · carried-state load raised on a corrupt/empty/truncated record (phase 2)
+
+carried_state catches (ValidationError, OSError, ValueError) from load_state, warns on stderr naming the state path, and writes a fresh record. Test: tests/unit/test_isolation_container_verbs.py::test_up_over_a_corrupt_record_starts_fresh_with_warning (garbage, empty, truncated).
+
+<!-- fr:journal kind=finding scope=plan id=p2-f4 created=2026-09-23T01:52:28 phase=2 state=fixed -->
+### p2-f4 · finding [fixed] · sessions carried across a record for a different worktree (phase 2)
+
+carried_state only carries when prior.worktree.resolve() == worktree.resolve(). Test: tests/unit/test_isolation_container_verbs.py::test_up_does_not_carry_a_record_for_a_different_worktree.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f5 created=2026-09-23T01:52:28 phase=2 state=fixed -->
+### p2-f5 · finding [fixed] · ExternalTarget.up still dropped sessions and created_at (phase 2)
+
+Carry logic lifted to fr.isolation.types.carried_state(repo_root, branch, worktree, profile), used by the local, host-worktree and external targets (the LocalWorktreeDevcontainerTarget._carried_state method is gone). Test: tests/unit/test_isolation_container_verbs.py::test_external_up_carries_sessions_and_created_at_forward.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f6 created=2026-09-23T01:52:28 phase=2 state=fixed -->
+### p2-f6 · finding [fixed] · resume-failure message buried the rebuild hint after multi-line output (phase 2)
+
+_ensure_running now raises 'could not resume the container for <b> — `fr isolation rebuild --branch <b>` recreates it (worktree kept).' then a newline, then devcontainer's output; the unpause failure uses the same shape. Tests: tests/unit/test_isolation_container_verbs.py::TestExecReviewFixes::test_resume_failure_first_line_names_rebuild and tests/unit/test_isolation_container_verbs.py::test_cli_exec_failed_resume_first_line_names_rebuild (CLI: the error: line names the rebuild).
+
+<!-- fr:journal kind=finding scope=plan id=p2-f7 created=2026-09-23T01:52:29 phase=2 state=fixed -->
+### p2-f7 · finding [fixed] · exec: no worktree check; FileNotFoundError hint assumed devcontainer (phase 2)
+
+exec checks state.worktree.is_dir() first ('run `fr isolation up --branch <b>`', no docker call); the missing-binary message is built from err.filename (fallback err.args[0]) with no assumed name. Tests: tests/unit/test_isolation_container_verbs.py::TestExecReviewFixes::test_missing_worktree_names_up_before_any_docker, ::test_missing_binary_hint_names_the_binary.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f8 created=2026-09-23T01:52:29 phase=2 state=fixed -->
+### p2-f8 · finding [fixed] · rebuild new-id pick only excluded the old id (phase 2)
+
+The new id is the first post-rebuild row absent from the whole before set (fallback: first row). Test: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_new_id_is_one_absent_from_the_whole_before_set.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f9 created=2026-09-23T01:52:30 phase=2 state=fixed -->
+### p2-f9 · finding [fixed] · _ensure_running decided on the first row only (phase 2)
+
+With several containers under the label: any running/restarting → exec; else the first resumable (exited/created) → devcontainer up; else the first paused → unpause; raise only when none is usable. Tests: tests/unit/test_isolation_container_verbs.py::TestExecReviewFixes::test_several_containers_prefer_a_usable_one (dead first, then exited/paused), ::test_resumable_preferred_over_paused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f10 created=2026-09-23T01:52:30 phase=2 state=fixed -->
+### p2-f10 · finding [fixed] · test_running_execs_directly under-asserted (phase 2)
+
+Now asserts exactly one docker call and that it is ps. Test: tests/unit/test_isolation_container_verbs.py::TestExecEnsureRunning::test_running_execs_directly.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f11 created=2026-09-23T01:52:31 phase=2 state=fixed -->
+### p2-f11 · finding [fixed] · rebuild failure test did not pin state/marker or the wording (phase 2)
+
+Asserts state file + .fr-isolation marker byte-identical after the failed rebuild and the 'may already have been removed' / 'worktree and run are intact' / 'fr isolation rebuild --branch <b>' wording. Test: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_failure_never_reclaims_and_names_the_retry.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f12 created=2026-09-23T01:52:31 phase=2 state=fixed -->
+### p2-f12 · finding [fixed] · CLI fake_run shared one global container across workspaces (phase 2)
+
+tests/unit/test_isolation_cmd.py fake_run now keys live containers on the devcontainer up --workspace-folder= value and answers docker ps by the --filter=label=devcontainer.local_folder= value (docker rm removes by id). Whole test_isolation_cmd.py green.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f13 created=2026-09-23T01:52:32 phase=2 state=fixed -->
+### p2-f13 · finding [fixed] · up restamped the marker's created_at while the state kept the old one (phase 2)
+
+_write_isolation_marker takes created_at; local and host-worktree up pass the carried state's created_at. Test: tests/unit/test_isolation_container_verbs.py::test_up_marker_created_at_matches_the_carried_record.
