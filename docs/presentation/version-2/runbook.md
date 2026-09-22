@@ -94,6 +94,12 @@ Two corrections from live runs:
   manifest's agent id rather than the tier that ran. The `session` table's
   `agent` and `model` columns are the source of truth.
 
+**Artifacts live in the workspace, not the clone.** After `fr isolation up`
+the spec, plan and run cursor are written into the fr worktree — reading the
+base clone finds nothing. They are also *uncommitted* there, so an
+`fr isolation down` plus `git worktree remove` destroys the cursor and the run
+cannot be resumed ("no run state at …"). Commit or copy before any down/up cycle.
+
 Wall time is the db's session span. **Cast length is not runtime** — the TUI
 repaints about once a second, so `--idle-time-limit` never engages.
 
