@@ -3,7 +3,7 @@ run: 2026-09-22-fix-532-repair-harness-neutrality
 workflow: fr-goal@1
 branch: fix/532-repair-harness-neutrality
 started: '2026-09-22T11:16:57+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,16 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
   spec-review:
-    state: running
-    at: '2026-09-22T11:46:14+00:00'
+    state: done
+    at: '2026-09-22T11:46:39+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-09-22T11:46:14+00:00'
           harness: claude-code
           session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
+          returned: '2026-09-22T11:46:39+00:00'
+          outcome: done
   plan:
-    state: pending
+    state: running
+    at: '2026-09-22T11:46:40+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-22T11:46:40+00:00'
+          harness: claude-code
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
   plan-review:
     state: pending
   implement:

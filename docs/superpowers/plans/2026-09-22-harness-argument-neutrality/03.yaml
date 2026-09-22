@@ -1,0 +1,70 @@
+schema_version: 2
+phase:
+  number: 3
+  title: One tripwire over skills, agents and rules — and the prose it demands
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - harness-argument-neutrality
+  - executor-long-commands-per-harness
+  tier: standard
+tasks:
+- number: 1
+  title: The tripwire covers all three families
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: widen tests/unit/test_tripwire_skill_tool_neutrality.py to the rules family (plugins/super-fr/rules/*.md, .claude/rules/*.md, .opencode/instructions/*.md, .hermes/SOUL.d/*.md) with a not-empty guard per tree, one scan over skills, agents and rules; record the red list (file:line:name) in the plan journal as a discovery
+- number: 2
+  title: Agent and skill prose scoped
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Rewrite the Long commands paragraph of plugins/super-fr/agents/fr-phase-executor.md as a '**Harness — long commands:**' clause with the three verified arms of spec 1.1 (Claude Code run_in_background + bounded wait; OpenCode explicit bash timeout up to 600000 ms, or detach into a log and poll with a bounded loop; Hermes terminal background=true and process wait/kill), keeping the harness-neutral rules unscoped
+  - id: P3.T2.S2
+    text: |-
+      Scope fr-goal §2's cross-repo isolation flag as a Harness clause per spec 3.D without growing plugins/super-fr/skills/fr-goal/SKILL.md past its 120-line cap; regenerate mirrors with both scripts/sync-opencode.py and scripts/sync-hermes.py
+- number: 3
+  title: Rule prose scoped
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Scope every Claude-only mention the tripwire lists in plugins/super-fr/rules/fr-isolation-required.md, fr-worktree-override.md and fr-plan-override.md as Harness clauses naming Claude Code, OpenCode and Hermes; update the hand-maintained .claude/rules/fr-isolation-required.md and .claude/rules/artifact-versioning.md to match; regenerate both mirrors
+  - id: P3.T3.S2
+    text: |-
+      GREEN: the widened tripwire, the mirror-sync tripwires (opencode skills, instructions, agents, hermes skills and rules) and the gate-provenance and #420 prose tripwires all pass; move harness-argument-neutrality and executor-long-commands-per-harness to ci with fr acceptance set-status and the test refs
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: reread each new Harness clause for a reader on each harness — no clause may name all three harnesses without telling each what to do; fix any that only name-drop; tests green
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

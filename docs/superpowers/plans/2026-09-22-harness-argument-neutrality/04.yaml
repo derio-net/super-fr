@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 4
+  title: The
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - phase-executor-description-rules-out-second-worktree
+  tier: standard
+tasks:
+- number: 1
+  title: Negation must govern the phrase
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: in tests/unit/test_tripwire_phase_executor_worktree.py add must-fail cases for the adversarial review's four descriptions ('Dispatch it with a second worktree, not the shared one.', 'Pass `isolation: "worktree"` — this is not optional.', 'Do not hesitate to pass isolation: "worktree".', 'Knowing whether it has a second worktree is not our concern.') and must-pass cases for the shipped description and the pre-#532 literal-flag wording; see the must-fail cases pass wrongly (red)
+  - id: P4.T1.S2
+    text: |-
+      GREEN: tighten _rules_out_a_second_worktree per spec 3.E (clause split on . ; —, a negation within six words BEFORE the phrase, phrase = second worktree or the vocabulary's isolation pattern); all cases pass; move the row to ci with fr acceptance set-status
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: reuse ARGUMENT_VOCABULARY's isolation pattern instead of a second regex in the test module; tests green
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
