@@ -69,7 +69,9 @@ every sentence about a timeout — the same trade `TOOL_VOCABULARY` already stat
 Stated as a limit, not hidden.
 
 `scan_prose(text)` scans tool names AND argument patterns under the same clause rules; the
-`extra_tools` parameter is removed and its one caller (the agent test) with it. No name may be
+`extra_tools` parameter is removed, with its callers: the agent tripwire and three unit tests in
+`tests/unit/test_harness_vocabulary.py` (`test_extra_tools_*`), which are rewritten against the
+vocabulary (an argument is flagged, is excused by a valid clause, matches every spelling). No name may be
 claimed by two harnesses (extends `test_no_tool_name_is_claimed_by_two_harnesses`).
 
 ### B. What the scanner skips
@@ -114,7 +116,8 @@ the shipped description and the pre-#532 literal-flag wording.
 
 Matrix row `harness-tool-neutrality`: acceptance sentence names skills, agents and rules, notes
 record the argument vocabulary (sentence edit + `set-status --notes`, reports regenerated).
-`AGENTS.md`'s harness-parity bullet updated.
+`AGENTS.md` updated in two places that say skills-only: line 93 ("the sibling tool-neutrality
+scanner over skill prose") and lines 343-344 ("over the canonical skills plus both mirrors").
 
 ## 4. Non-goals
 

@@ -12,7 +12,14 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-22T11:46:14+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-22T11:46:14+00:00'
+          harness: claude-code
+          session: 1d0b209a-09d7-44d3-b3cb-1ee482466318
   plan:
     state: pending
   plan-review:

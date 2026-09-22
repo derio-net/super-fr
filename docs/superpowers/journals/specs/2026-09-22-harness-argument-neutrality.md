@@ -24,3 +24,8 @@ Post-merge Test Plan: confirm the OpenCode node runs the released version, then 
 ### d-headings-exempt · decision · Agent decision (within approved scope): Markdown headings are not scanned
 
 Measured before designing: a rules scan flags '## Plan Skill Override', '# Worktree Skill Override', '## fr-* Skill Overview', '### 1. Agent sessions…' — English words in headings, not tool mentions. A heading states a topic, never an instruction, so heading lines are skipped. Skills were unaffected only because none had such headings.
+
+<!-- fr:journal kind=review scope=spec id=e2dccbb99cdb created=2026-09-22T13:46:39 -->
+### e2dccbb99cdb · review · Spec review vs codebase
+
+Checked every named symbol/test/file exists as described. Findings fixed in the spec: (F1) AGENTS.md's actual skills-only wording is at lines 93 and 343-344, not the phrase first cited; (F2) extra_tools has three unit tests in test_harness_vocabulary.py besides the agent tripwire — they are rewritten, not just the one caller. Q&A answers q1-q4 and d-headings-exempt all reflected in §2-§6.
