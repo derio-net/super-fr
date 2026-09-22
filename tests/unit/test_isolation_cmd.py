@@ -1174,6 +1174,56 @@ def test_restart_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None
     assert "--branch" in res.output
 
 
+def _stoppable_docker_run():
+    """Stateful docker fake for `stop` (#471): `docker ps` reports `running`
+    until a `docker stop` lands, `exited` after — so the verification re-query
+    sees the stop took effect."""
+    stopped: set[str] = set()
+
+    def run(argv, cwd=None, check=False, capture=True):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        out = ""
+        if argv[:2] == ["docker", "stop"]:
+            stopped.update(argv[2:])
+        elif argv[:2] == ["docker", "ps"]:
+            out = "cid exited" if "cid" in stopped else "cid running"
+        elif argv[0] == "gh":
+            out = '{"state": "OPEN", "url": "u"}'
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    return run
+
+
+def test_stop_with_branch_prints_stopped_line(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/s"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo), "--branch", "feat/s"])
+    assert res.exit_code == 0, res.output
+    assert "isolation stop:" in res.output and "stopped" in res.output
+    from fr.isolation.types import list_states
+
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/s"], "state kept"
+
+
+def test_stop_resolves_single_workspace_no_branch(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run())
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "stopped" in res.output
+
+
+def test_stop_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "--branch" in res.output
+
+
 def _stats_run(record: list | None = None):
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":

@@ -186,6 +186,7 @@ class FakeRunner:
         pr_by_branch: dict[str, str] | None = None,
         docker_images: list[tuple[str, str]] | None = None,
         referenced_images: list[str] | None = None,
+        stop_sticks: bool = True,
     ):
         self.calls: list[list[str]] = []
         self.git_calls: list[list[str]] = []
@@ -193,6 +194,11 @@ class FakeRunner:
         self.fail_on = fail_on
         self.stdout = stdout or {}
         self.removed: set[str] = set()
+        # #471: a successful `docker stop <id>` flips that id's `docker ps`
+        # state to `exited` — unless `stop_sticks=False`, which models a
+        # container that is still running after the stop returned 0.
+        self.stopped: set[str] = set()
+        self.stop_sticks = stop_sticks
         # gc host-wide discovery: (container_id, worktree_path) pairs the
         # `docker ps -a --filter label=... --format '{{.ID}}\t{{.Label ...}}'`
         # call returns (minus already-rm'd ids).
@@ -219,6 +225,8 @@ class FakeRunner:
         rc = 1 if (self.fail_on and self.fail_on in argv[0:2]) else 0
         if argv[0:2] == ["docker", "rm"] and rc == 0:
             self.removed.update(argv[2:])
+        if argv[0:2] == ["docker", "stop"] and rc == 0 and self.stop_sticks:
+            self.stopped.update(argv[2:])
         out = self.stdout.get(argv[0], "")
         if argv[0:2] == ["docker", "ps"]:
             if any(".Label" in a for a in argv):
@@ -240,7 +248,11 @@ class FakeRunner:
         """Per-state `docker ps` line, minus any container id already `rm`'d."""
         out = self.stdout.get("docker", "")
         first = out.split()[0] if out.split() else ""
-        return "" if first in self.removed else out
+        if first in self.removed:
+            return ""
+        if first in self.stopped:
+            return f"{first} exited\n"
+        return out
 
     def _docker_labels_out(self) -> str:
         """gc discovery listing: `id\\tpath` per labelled container, minus rm'd."""
@@ -2788,6 +2800,105 @@ class TestRestart:
         target, st = _target_state(tmp_path, runner)
         with pytest.raises(IsolationError, match="--force"):
             target.restart(st)
+
+
+class TestStop:
+    """#471 / spec §3.B: `stop` halts the container, keeps everything else,
+    and verifies the stop with a re-query rather than trusting docker's rc."""
+
+    def test_stop_runs_docker_stop_then_verifies(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        docker = runner.argv_for("docker")
+        stops = [c for c in docker if c[1:2] == ["stop"]]
+        assert stops == [["docker", "stop", "cid1"]]
+        # the verification re-query comes AFTER the stop, and asks `--all`
+        after = docker[docker.index(stops[0]) + 1 :]
+        assert any(c[1:2] == ["ps"] and "--all" in c for c in after)
+        assert "cid1" in msg and "stopped" in msg and "already" not in msg
+
+    def test_already_exited_is_noop_success(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 exited"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        assert "already stopped" in msg
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_no_container_errors_with_up_hint(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="fr isolation up"):
+            target.stop(st)
+
+    def test_failed_docker_ps_is_an_error_never_absence(self, tmp_path: Path) -> None:
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="docker"):
+            target.stop(st)
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_still_running_after_stop_raises(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"}, stop_sticks=False)
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="still running"):
+            target.stop(st)
+
+    def test_docker_stop_failure_raises(self, tmp_path: Path) -> None:
+        runner = FakeRunner(fail_on="stop", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="docker stop failed"):
+            target.stop(st)
+
+    def test_host_worktree_stop_is_noop_without_docker(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        target = HostWorktreeTarget(repo, runner=runner)
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            worktree=tmp_path / "wt",
+            profile="host",
+            created_at="2026-09-23T00:00:00Z",
+        )
+        msg = target.stop(st)
+        assert "no-op" in msg
+        assert runner.argv_for("docker") == []
+
+    def test_external_stop_refuses(self, tmp_path: Path) -> None:
+        from fr.isolation.external import ExternalTarget
+
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            worktree=repo,
+            profile="external",
+            created_at="2026-09-23T00:00:00Z",
+        )
+        with pytest.raises(IsolationError, match="externally managed"):
+            ExternalTarget(repo, runner=runner).stop(st)
+        assert runner.argv_for("docker") == []
+
+
+class TestStatusStopped:
+    """Spec §3.B: docker's `exited` reads as `stopped`; others pass through."""
+
+    @pytest.mark.parametrize(
+        ("ps", "shown"),
+        [
+            ("cid1 exited", "stopped"),
+            ("cid1 running", "running"),
+            ("cid1 paused", "paused"),
+            ("cid1 created", "created"),
+            ("", "not running"),
+        ],
+    )
+    def test_status_container_state(self, tmp_path: Path, ps: str, shown: str) -> None:
+        runner = FakeRunner(stdout={"docker": ps})
+        target, st = _target_state(tmp_path, runner)
+        assert target.status(st)["container"] == shown
 
 
 class _DockerRunner:

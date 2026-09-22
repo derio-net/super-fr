@@ -57,6 +57,11 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
     def restart(self, state: IsolationState, force: bool = False) -> str:
         raise IsolationError(_EXTERNAL)
 
+    def stop(self, state: IsolationState) -> str:
+        """No container in this mode — nothing to stop, and docker is never
+        touched (a docker-less pod has no binary to call)."""
+        return f"{state.branch} runs in host-worktree mode — no container to stop (no-op)."
+
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)
 

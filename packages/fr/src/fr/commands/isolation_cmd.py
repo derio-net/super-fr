@@ -336,6 +336,30 @@ def restart(
 
 
 @isolation_app.command()
+def stop(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
+) -> None:
+    """Stop a workspace's devcontainer to free its resources, keeping the rest.
+
+    The worktree, state, marker and session bindings are kept — only the
+    container halts. `fr isolation up`, `restart` or the next `exec` resumes it.
+    Already stopped is a no-op; host-worktree mode has no container (no-op);
+    external mode refuses.
+    """
+    root = _resolve_repo(repo)
+    state = _resolve_single(root, branch)
+    try:
+        message = _target(root).stop(state)
+    except IsolationError as err:
+        _fail(err)
+        return
+    typer.echo(f"isolation stop: {message}")
+
+
+@isolation_app.command()
 def status(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     branch: str | None = typer.Option(None, help="Limit to one isolation branch."),
