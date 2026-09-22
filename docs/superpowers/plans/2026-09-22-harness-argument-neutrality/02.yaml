@@ -64,17 +64,19 @@ state:
       note: _Lookup table (_LOOKUPS) serves tool names and argument patterns through
         one clause loop
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:56:41+00:00'
+      note: RED recorded in journal
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:57:13+00:00'
+      note: _HEADING_RE ^#{1,6} skipped in scan_prose; skill tripwire's only violations
+        remain the xfailed fr-goal §2 line
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T11:57:13+00:00'
+      note: module docstring documents the heading rule with the four measured false
+        positives
     P2.T3.S1:
       state: ' '
       ticked_at: null

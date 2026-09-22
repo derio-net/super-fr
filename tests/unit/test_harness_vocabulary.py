@@ -316,3 +316,33 @@ def test_the_import_time_key_check_names_the_mapping_it_rejects() -> None:
         HarnessError, match=r"^ARGUMENT_VOCABULARY disagrees with HARNESSES: \['hermes'\]$"
     ):
         require_every_harness("ARGUMENT_VOCABULARY", broken)
+
+
+# --- Headings are not instructions (spec §3.B) --------------------------------
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Plan Skill Override",
+        "### 1. Agent sessions, pods and CI always land non-interactive",
+        "# Skill",
+        "###### MultiEdit",
+    ],
+)
+def test_a_heading_is_not_flagged(heading: str) -> None:
+    """A heading names a topic, never an instruction — `## Plan Skill Override`
+    and `### 1. Agent sessions ...` are real headings in the rules family."""
+    assert scan_prose(heading + "\n") == []
+
+
+def test_the_same_word_in_a_body_line_is_still_flagged() -> None:
+    text = "## Plan Skill Override\n\nInvoke the Skill tool to load it.\n"
+    assert scan_prose(text) == [Violation(harness="claude-code", tool="Skill", line=3)]
+
+
+def test_only_a_real_atx_heading_is_exempt() -> None:
+    """`^#{1,6} ` — a hash run with no space, seven hashes, or an indented hash
+    is not a heading, and does not escape the scan."""
+    for line in ("#Skill", "####### Skill", "  ## Skill"):
+        assert [v.tool for v in scan_prose(line + "\n")] == ["Skill"], line

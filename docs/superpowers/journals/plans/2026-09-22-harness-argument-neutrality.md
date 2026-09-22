@@ -49,3 +49,18 @@ Populating ARGUMENT_VOCABULARY (P2.T1.S2) makes the scan flag exactly the prose 
 ### p2-expected-red-phase3-dispatch-prose · discovery · Expected red of phase 3 also covers two fr-goal whole-file scans in test_fr_goal_dispatch_prose.py (phase 2)
 
 test_the_new_tool_mention_stayed_inside_the_scoped_clause and test_the_fallback_clause_still_names_no_harness_specific_tool_unscoped both assert scan_prose(fr-goal SKILL.md) == [] and now see fr-goal/SKILL.md:59 isolation: "worktree" (§2, P3.T2.S2). Both marked xfail(strict=True); phase 3 must remove these two markers along with the two in test_tripwire_skill_tool_neutrality.py (four markers total).
+
+<!-- fr:journal kind=finding scope=plan id=p1r-m1-resolved created=2026-09-22T13:56:24 state=fixed resolves=p1r-m1 -->
+### p1r-m1-resolved · finding [fixed] · resolves p1r-m1: Vocabulary test docstring claims emptiness it does not assert; in-function import now unnecessary
+
+tests/unit/test_harness_vocabulary.py: ARGUMENT_VOCABULARY (and HarnessError, require_every_harness) imported at module top; test_argument_vocabulary_is_keyed_by_exactly_the_harnesses docstring now says it asserts keys only, and the values are pinned by the new test_argument_vocabulary_is_exactly_the_spec_table. Commit 'feat(fr): scan_prose flags harness-specific arguments'.
+
+<!-- fr:journal kind=finding scope=plan id=p1r-m2-resolved created=2026-09-22T13:56:25 state=fixed resolves=p1r-m2 -->
+### p1r-m2-resolved · finding [fixed] · resolves p1r-m2: Closed-world guard for both vocabularies; prose.py error message names the wrong vocabulary
+
+Uniqueness: test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies (tool+argument names per harness, pairwise, and no harness claims a name as both). Import-time check: prose.require_every_harness(name, mapping) runs for _HARNESS_LABELS, TOOL_VOCABULARY and ARGUMENT_VOCABULARY; its error names the mapping checked, replacing the inline check that blamed TOOL_VOCABULARY — pinned by test_the_import_time_key_check_names_the_mapping_it_rejects.
+
+<!-- fr:journal kind=discovery scope=plan id=06f6c0af9ea2 created=2026-09-22T13:56:41 phase=2 -->
+### 06f6c0af9ea2 · discovery · P2.T2.S1 RED: headings are scanned like body lines (phase 2)
+
+test_a_heading_is_not_flagged[## Plan Skill Override] (and 3 other headings): AssertionError: assert [Violation(harness='claude-code', tool='Skill', line=1)] == []. test_the_same_word_in_a_body_line_is_still_flagged: the heading on line 1 is reported alongside the body mention on line 3. test_only_a_real_atx_heading_is_exempt passes at RED (nothing is exempt yet) and guards the GREEN regex.

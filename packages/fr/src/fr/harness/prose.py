@@ -20,6 +20,21 @@ as scoped by naming (in prose) more than one harness by name — not by
 each harness having its own distinct tool to name; a harness with no tool
 of its own for the topic ("Hermes has no dedicated question tool, ask via
 X instead") still correctly serves that harness's reader.
+
+What is scanned: tool names (`TOOL_VOCABULARY`) and harness-specific
+arguments (`ARGUMENT_VOCABULARY`, 2026-09-22 harness-argument-neutrality
+spec §3.A), both judged by the same clause rules.
+
+**Headings are not instructions** (spec §3.B, decision d-headings-exempt). A
+Markdown ATX heading line (`^#{1,6} `) names a topic; it never tells a reader
+to call anything, so it is skipped. Measured 2026-09-22 over the canonical
+skills, agents and rules, every heading the scan would otherwise flag was a
+false positive — four, all tool names used as English words:
+`## Plan Skill Override` and `## fr-* Skill Overview` (fr-plan-override),
+`# Worktree Skill Override (fr-enabled repos)` (fr-worktree-override), and
+`### 1. Agent sessions, pods and CI always land non-interactive — by design`
+(artifact-versioning). Only a real ATX heading is exempt: `#Skill` (no
+space), seven hashes, or an indented hash are body text and still scanned.
 """
 
 from __future__ import annotations
@@ -80,6 +95,9 @@ class _Lookup:
 # they're what makes this shape rare enough to grep for and distinguishable
 # from ordinary prose that happens to say the word "harness".
 _CLAUSE_LEAD_RE = re.compile(r"\*\*Harness — [^*\n]+:\*\*")
+
+# An ATX heading (spec §3.B) names a topic, never an instruction.
+_HEADING_RE = re.compile(r"^#{1,6} ")
 
 # A scoped clause excuses a mention only when it names every SUPPORTED
 # harness by display label — not by a tool of its own, because "OpenCode has
@@ -220,7 +238,7 @@ def scan_prose(text: str, extra_tools: Mapping[str, str] | None = None) -> list[
     violations: list[Violation] = []
     for lookup in lookups:
         for line_idx, line in enumerate(lines):
-            if not lookup.pattern.search(line):
+            if _HEADING_RE.match(line) or not lookup.pattern.search(line):
                 continue
             clause = next((s for s in spans if s[0] <= line_idx <= s[1]), None)
             if clause is not None and valid_span[clause]:
