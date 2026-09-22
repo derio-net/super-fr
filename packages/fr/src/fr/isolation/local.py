@@ -60,15 +60,19 @@ def _home() -> Path:
 # non-raising contract is testable. The library default is a NO-OP — production
 # opts into the real spawn at the CLI boundary, so a Target built directly (every
 # unit test, and gc's own sibling teardown Targets) never spawns.
-GcSpawner = Callable[[Path], None]
+#
+# The second argument is the spawning target's MODE (gh#569, review p2-f2): a
+# required part of the contract, so no wrapper or test double can silently drop
+# it and hand the child sweep the caller's env instead.
+GcSpawner = Callable[[Path, str], None]
 
 
-def _detached_gc_spawn(repo_root: Path, *, mode: str | None = None) -> None:
+def _detached_gc_spawn(repo_root: Path, mode: str) -> None:
     """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
     output to a rotating-ish log. Any spawn error is swallowed — a caller must
     never fail because a background reap could not start.
 
-    `mode`, when given, is pinned as the child's `FR_ISOLATION_TARGET` (gh#569):
+    `mode` is always pinned as the child's `FR_ISOLATION_TARGET` (gh#569):
     the sweep's discovery and docker steps run in the SPAWNING target's mode,
     not whatever the caller's env says. A `down` of a host-worktree workspace
     run without the env would otherwise start a devcontainer sweep, which dies
@@ -87,7 +91,7 @@ def _detached_gc_spawn(repo_root: Path, *, mode: str | None = None) -> None:
         subprocess.Popen(
             [sys.executable, "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
             cwd=str(repo_root) if repo_root.is_dir() else None,
-            env=None if mode is None else {**os.environ, "FR_ISOLATION_TARGET": mode},
+            env={**os.environ, "FR_ISOLATION_TARGET": mode},
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=log,
@@ -97,7 +101,7 @@ def _detached_gc_spawn(repo_root: Path, *, mode: str | None = None) -> None:
         pass
 
 
-def _noop_gc_spawn(repo_root: Path) -> None:
+def _noop_gc_spawn(repo_root: Path, mode: str) -> None:
     """The safe default — no background sweep (see GcSpawner)."""
 
 
@@ -912,14 +916,10 @@ class LocalWorktreeDevcontainerTarget:
         """Fire the opportunistic background sweep — best-effort, never raises
         into up()/down().
 
-        The production spawner gets this target's mode pinned (gh#569); an
-        injected spawner (a test double) keeps the plain one-argument shape,
-        which is why `GcSpawner` stays `Callable[[Path], None]`."""
+        Every spawner is handed this target's mode (gh#569), so the background
+        sweep runs in the mode of the workspace that fired it."""
         try:
-            if self._gc_spawner is _detached_gc_spawn:
-                _detached_gc_spawn(self.repo_root, mode=self._MODE)
-            else:
-                self._gc_spawner(self.repo_root)
+            self._gc_spawner(self.repo_root, self._MODE)
         except Exception:
             pass
 
@@ -1105,7 +1105,23 @@ class LocalWorktreeDevcontainerTarget:
         state = rec.state
         if state is None:
             return GcAction(wt, None, "orphan", "skipped", "no container")
-        if not self._stale_state_reapable():
+        from fr.isolation.external import GC_EXTERNAL_DETAIL
+        from fr.isolation.routing import target_for_state
+
+        if recorded_mode(state) == "external":
+            return GcAction(wt, state.branch, "external", "skipped", GC_EXTERNAL_DETAIL)
+        # Ask the WORKSPACE's mode, not the sweeper's (review p2-f1): a
+        # host-worktree sweeper's own answer is an unconditional True, so a
+        # devcontainer record whose worktree is gone would be dropped without
+        # asking docker whether its container still runs — the #354 leak.
+        try:
+            owner = cast(
+                "LocalWorktreeDevcontainerTarget",
+                target_for_state(state, runner=self.run, gc_spawner=_noop_gc_spawn),
+            )
+        except Exception as e:  # unknown owner ⇒ never reap; never abort the sweep
+            return GcAction(wt, state.branch, "orphan", "skipped", f"cannot route: {e}")
+        if not owner._stale_state_reapable():
             return GcAction(
                 wt, state.branch, "orphan", "skipped", "docker unavailable — reap deferred"
             )

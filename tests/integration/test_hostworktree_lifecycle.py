@@ -64,7 +64,7 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
 
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
     # Selection: the env declaration routes to the host-worktree backend.
     target = isolation_cmd._target(repo)
@@ -124,7 +124,7 @@ def test_later_commands_follow_the_recorded_mode_without_the_env(
     repo = _base_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
     res = cli.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/env"])
     assert res.exit_code == 0, res.output

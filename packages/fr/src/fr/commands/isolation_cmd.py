@@ -80,10 +80,18 @@ def _target_for(root: Path, state: IsolationState) -> Target:
     """The backend that owns an EXISTING workspace, from its recorded mode
     (gh#569) — the single seam every addressing command goes through. `root`
     is the repo the command was pointed at; the routing itself keys off
-    `state.repo_root`. An external workspace whose marker/evidence is gone is
-    a clean exit 2, like `_target_or_exit`."""
+    `state.repo_root`. Raises IsolationError when no backend can be built (an
+    external workspace whose marker, evidence or checkout is gone): `down
+    --all` keeps such a row instead of aborting; single-workspace commands
+    use `_target_for_or_exit`."""
+    return target_for_state(state, runner=_runner, gc_spawner=_gc_spawner)
+
+
+def _target_for_or_exit(root: Path, state: IsolationState) -> Target:
+    """`_target_for` + uniform IsolationError → clean exit 2 (the
+    `_target_or_exit` counterpart)."""
     try:
-        return target_for_state(state, runner=_runner, gc_spawner=_gc_spawner)
+        return _target_for(root, state)
     except IsolationError as err:
         typer.echo(f"error: {err}", err=True)
         raise typer.Exit(2) from err
@@ -322,7 +330,7 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target_for(root, state).exec(state, argv))
+    raise typer.Exit(_target_for_or_exit(root, state).exec(state, argv))
 
 
 @isolation_app.command()
@@ -390,7 +398,7 @@ def status(
     # workspaces select none. The --stats/--push-check refusal runs per row
     # BEFORE any row is rendered, so a set holding any host/external workspace
     # is refused naming its mode rather than half-printed.
-    targets = [_target_for(root, s) for s in states]
+    targets = [_target_for_or_exit(root, s) for s in states]
     if stats or push_check:
         for target in targets:
             _refuse_no_docker_status_extras(target)
@@ -589,8 +597,18 @@ def _down_all(
     # Each workspace is probed AND torn down through its own recorded mode
     # (gh#569): one repo can hold a devcontainer and a host-worktree workspace,
     # and the env of whoever runs `--all` says nothing about either.
-    routed = [(state, _target_for(root, state)) for state in list_states(root)]
-    plan = [(state, target, _down_refusal(target, state, force)) for state, target in routed]
+    # A row whose backend cannot be built (review p2-f3: an external record
+    # whose checkout is gone) is KEPT with the routing error as its reason —
+    # even under --force, since there is nothing to tear it down through — and
+    # never aborts the sweep over the others.
+    plan: list[tuple[IsolationState, Target | None, str | None]] = []
+    for state in list_states(root):
+        try:
+            routed = _target_for(root, state)
+        except IsolationError as err:
+            plan.append((state, None, str(err)))
+            continue
+        plan.append((state, routed, _down_refusal(routed, state, force)))
     header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
     typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
     for state, _t, refusal in plan:
@@ -622,8 +640,8 @@ def _down_all(
     torn: list[str] = []
     kept: list[tuple[str, str]] = []
     for state, target, refusal in plan:
-        if refusal is not None:
-            kept.append((state.branch, refusal))
+        if refusal is not None or target is None:
+            kept.append((state.branch, refusal or "no backend"))
             continue
         try:
             target.down(state, force=force)
@@ -737,7 +755,7 @@ def verify_merge(
         reaped = True
     # A live workspace follows its recorded mode (gh#569); a reaped one has
     # only the host to go on, so it keeps the env-based selection.
-    target = _target_or_exit(root) if state is None else _target_for(root, state)
+    target = _target_or_exit(root) if state is None else _target_for_or_exit(root, state)
     _refuse_external(target, "verify-merge")
     if state is None:
         assert branch is not None

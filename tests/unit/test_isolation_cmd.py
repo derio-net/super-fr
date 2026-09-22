@@ -20,7 +20,7 @@ runner = CliRunner()
 def _no_real_gc_spawn(monkeypatch: pytest.MonkeyPatch):
     """Never fork a real `fr isolation gc` during CLI tests — up/down would
     otherwise reap the developer's live workspaces (#354)."""
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
 
 @pytest.fixture(autouse=True)
@@ -949,7 +949,7 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     # keep BOTH kinds of refusal and state each workspace's ACTUAL reason,
     # never hardcode "open PR" for a hazard refusal.
     _push_origin(repo)  # the hazard guard's content check needs a real origin
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
@@ -1733,3 +1733,33 @@ def test_status_zero_workspaces_selects_no_target(
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
     assert res.exit_code == 0, res.output
     assert "no isolation workspaces." in res.output
+
+
+def test_down_all_keeps_an_unroutable_row_and_tears_down_the_rest(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Review p2-f3: one workspace whose backend cannot be built (an external
+    record whose checkout is gone) is reported as kept — it never aborts the
+    sweep over the others."""
+    from fr.isolation.types import IsolationState, list_states, state_path
+
+    _push_origin(repo)
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/ok"])
+    assert res.exit_code == 0, res.output
+    gone = tmp_path / "gone-checkout"
+    lost = IsolationState(
+        repo_root=gone,
+        branch="feat/lost",
+        worktree=gone,
+        profile="external",
+        created_at="2026-09-23T00:00:00+00:00",
+        target="external",
+    )
+    state_path(repo.resolve(), "feat/lost").write_text(lost.model_dump_json(indent=2) + "\n")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--yes"])
+    assert res.exit_code == 0, res.output
+    assert "Traceback" not in res.output
+    assert "keep feat/lost" in res.output
+    assert "1 torn down" in res.output and "1 kept" in res.output
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/lost"]

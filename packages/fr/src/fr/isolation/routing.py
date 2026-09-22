@@ -32,8 +32,15 @@ def target_for_state(state: IsolationState, runner: Runner, gc_spawner: GcSpawne
     if mode == "worktree":
         return HostWorktreeTarget(state.repo_root, runner=runner, gc_spawner=gc_spawner)
     if mode == "external":
-        probe = state.worktree if state.worktree.is_dir() else state.repo_root
-        adopted = ExternalTarget.detect(probe, runner=runner)
+        probes = [p for p in (state.worktree, state.repo_root) if p.is_dir()]
+        if not probes:
+            # detect() would run git with a missing cwd and raise
+            # FileNotFoundError — a traceback, not a routing decision.
+            raise IsolationError(
+                f"workspace {state.branch!r} was created in external mode but its "
+                f"checkout is gone ({state.repo_root}) — fr will not guess a backend"
+            )
+        adopted = ExternalTarget.detect(probes[0], runner=runner)
         if adopted is None:
             raise IsolationError(
                 f"workspace {state.branch!r} was created in external mode but no valid "

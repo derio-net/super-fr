@@ -135,12 +135,97 @@ def test_spawned_gc_carries_the_spawning_targets_mode(
     assert call["env"].get("HOME") == str(tmp_path / "home"), "rest of env inherited"
 
 
-def test_detached_gc_spawn_without_mode_inherits_the_env(
+def test_detached_gc_spawn_always_pins_the_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p2-f2: the mode is a required argument, so no caller (a wrapper,
+    a partial) can drop it and hand the child the caller's env by accident."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "devcontainer")
+    captured: list[dict] = []
+    monkeypatch.setattr(local_mod.subprocess, "Popen", lambda argv, **kw: captured.append(kw))
+    _detached_gc_spawn(tmp_path, "worktree")
+    (kw,) = captured
+    assert kw["env"]["FR_ISOLATION_TARGET"] == "worktree"
+
+
+# ---------- review p2-f1: the stale-state reap asks the WORKSPACE's mode ----------
+
+
+def test_host_worktree_sweep_defers_a_devcontainer_stale_state_when_docker_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A devcontainer workspace whose worktree is gone may still own a running
+    container. A host-worktree sweeper must ask the devcontainer mode's
+    `_stale_state_reapable` (a healthy `docker ps`), not its own hard-coded True —
+    dropping the state on a failed docker query is the #354 leak."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path)
+    gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "repo" / "feat__gone"
+    state = IsolationState(
+        repo_root=repo.resolve(),
+        branch="feat/gone",
+        worktree=gone,
+        profile="dev",
+        created_at="2026-09-23T00:00:00+00:00",
+        target="devcontainer",
+    )
+    save_state(state)
+    runner = FakeRunner(fail_on="ps")  # every `docker ps` fails
+    sweeper = HostWorktreeTarget(repo, runner=runner)
+
+    by_branch = {a.branch: a for a in sweeper.gc()}
+
+    action = by_branch["feat/gone"]
+    assert (action.verdict, action.action) == ("orphan", "skipped"), action
+    assert "docker unavailable" in (action.detail or "")
+    assert load_state(repo, "feat/gone") is not None
+
+
+def test_host_worktree_sweep_still_retires_its_own_stale_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    captured: list[dict] = []
-    monkeypatch.setattr(local_mod.subprocess, "Popen", lambda argv, **kw: captured.append(kw))
-    _detached_gc_spawn(tmp_path)
-    (kw,) = captured
-    assert kw.get("env") is None
+    repo, _origin = make_repo_with_origin(tmp_path)
+    state = IsolationState(
+        repo_root=repo.resolve(),
+        branch="feat/hgone",
+        worktree=tmp_path / "nowhere" / "feat__hgone",
+        profile="host",
+        created_at="2026-09-23T00:00:00+00:00",
+        target="worktree",
+    )
+    save_state(state)
+    sweeper = HostWorktreeTarget(repo, runner=FakeRunner(fail_on="ps"))
+    by_branch = {a.branch: a for a in sweeper.gc()}
+    assert by_branch["feat/hgone"].action == "reaped", by_branch["feat/hgone"]
+    assert load_state(repo, "feat/hgone") is None
+
+
+# ---------- review p2-f2: the mode is part of the spawner contract ----------
+
+
+@pytest.mark.parametrize(
+    ("profile", "target", "mode"),
+    [("host", "worktree", "worktree"), ("dev", "devcontainer", "devcontainer")],
+)
+def test_routed_target_hands_its_mode_to_any_spawner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profile: str, target: str, mode: str
+) -> None:
+    from fr.commands import isolation_cmd
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo, _origin = make_repo_with_origin(tmp_path)
+    spawned: list[tuple[Path, str]] = []
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda root, m: spawned.append((root, m)))
+    state = IsolationState(
+        repo_root=repo.resolve(),
+        branch="feat/sp",
+        worktree=repo.resolve(),
+        profile=profile,
+        created_at="2026-09-23T00:00:00+00:00",
+        target=target,  # type: ignore[arg-type]
+    )
+    t = isolation_cmd._target_for(repo, state)
+    t._spawn_gc()  # type: ignore[attr-defined]
+    assert spawned == [(repo.resolve(), mode)]

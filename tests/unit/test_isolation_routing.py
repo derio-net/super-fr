@@ -22,7 +22,7 @@ from tests.unit.test_isolation import FakeRunner, make_repo, make_repo_with_orig
 from tests.unit.test_isolation_external import _write_marker
 
 
-def _noop(_root: Path) -> None:
+def _noop(_root: Path, _mode: str) -> None:
     return None
 
 
@@ -166,3 +166,16 @@ def test_external_state_with_marker_and_evidence_is_adopted(
     )
     assert type(t) is ExternalTarget
     assert t.repo_root == repo.resolve()
+
+
+def test_external_state_whose_checkout_is_gone_fails_closed_not_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p2-f3: with neither the worktree nor the repo root on disk,
+    `ExternalTarget.detect` would run git with a missing cwd and raise
+    FileNotFoundError — a traceback, not a routing decision."""
+    monkeypatch.setattr(external_mod, "_container_evidence", lambda: True)
+    gone = tmp_path / "gone"
+    state = _state(gone, profile="external", target="external", branch="feat/lost")
+    with pytest.raises(IsolationError, match=r"feat/lost.*checkout.*gone"):
+        target_for_state(state, subprocess_runner, _noop)
