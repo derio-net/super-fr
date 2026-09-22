@@ -41,6 +41,19 @@ _AGENT_TREES = {
     "opencode-agent-mirror": REPO_ROOT / ".opencode" / "agent",
 }
 
+# 2026-09-22 harness-argument-neutrality spec §3.C: rules are the third family
+# a reader on any harness follows. The shipped rules are copied into
+# `.opencode/instructions/` and `.hermes/SOUL.d/` by the two sync scripts, and
+# `.claude/rules/` holds the repo-local rules (sources in their own right, plus
+# the hand-maintained `fr-isolation-required` mirror) that OpenCode loads via
+# `opencode.json`'s `instructions`. Flat `*.md`, like agents.
+_RULE_TREES = {
+    "canonical-rules": REPO_ROOT / "plugins" / "super-fr" / "rules",
+    "repo-local-rules": REPO_ROOT / ".claude" / "rules",
+    "opencode-instructions-mirror": REPO_ROOT / ".opencode" / "instructions",
+    "hermes-soul-mirror": REPO_ROOT / ".hermes" / "SOUL.d",
+}
+
 
 def _all_skill_files() -> list[Path]:
     files: list[Path] = []
@@ -52,6 +65,13 @@ def _all_skill_files() -> list[Path]:
 def _all_agent_files() -> list[Path]:
     files: list[Path] = []
     for tree in _AGENT_TREES.values():
+        files.extend(sorted(tree.glob("*.md")))
+    return files
+
+
+def _all_rule_files() -> list[Path]:
+    files: list[Path] = []
+    for tree in _RULE_TREES.values():
         files.extend(sorted(tree.glob("*.md")))
     return files
 
@@ -70,25 +90,11 @@ def test_agent_tree_is_not_empty(tree_name: str) -> None:
     )
 
 
-# Phase 2 of the 2026-09-22 harness-argument-neutrality plan taught `scan_prose`
-# arguments; the prose they flag is phase 3's to scope. Review p2r-1: these were
-# `xfail(strict=True)`, which only fails once EVERY violation is gone — a
-# canonical fixed but one mirror not re-synced, or a brand-new violation, stayed
-# XFAIL, and a bare xfail swallowed exceptions too. Each test now asserts the
-# violation set EQUALS what phase 3 still owes, so any change at all goes red;
-# phase 3 empties both sets.
-_SKILLS_PHASE_3_OWES = {
-    'plugins/super-fr/skills/fr-goal/SKILL.md:59:isolation: "worktree"',
-    '.opencode/skills/fr-goal/SKILL.md:59:isolation: "worktree"',
-    '.hermes/skills/fr/fr-goal/SKILL.md:59:isolation: "worktree"',
-}
-_AGENTS_PHASE_3_OWES = {
-    "plugins/super-fr/agents/fr-phase-executor.md:121:run_in_background",
-    ".opencode/agent/fr-phase-executor.md:116:run_in_background",
-    ".opencode/agent/fr-phase-executor-mechanical.md:116:run_in_background",
-    ".opencode/agent/fr-phase-executor-standard.md:116:run_in_background",
-    ".opencode/agent/fr-phase-executor-hard.md:116:run_in_background",
-}
+@pytest.mark.parametrize("tree_name", sorted(_RULE_TREES))
+def test_rule_tree_is_not_empty(tree_name: str) -> None:
+    assert sorted(_RULE_TREES[tree_name].glob("*.md")), (
+        f"no rule file found under {_RULE_TREES[tree_name]} — did the layout move?"
+    )
 
 
 def _violations(paths: list[Path]) -> set[str]:
@@ -100,21 +106,29 @@ def _violations(paths: list[Path]) -> set[str]:
 
 
 def test_no_skill_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    found = _violations(_all_skill_files())
-    assert found == _SKILLS_PHASE_3_OWES, (
-        f"new: {sorted(found - _SKILLS_PHASE_3_OWES)}\n"
-        f"now fixed (shrink _SKILLS_PHASE_3_OWES): {sorted(_SKILLS_PHASE_3_OWES - found)}\n\n"
+    found = sorted(_violations(_all_skill_files()))
+    assert found == [], (
+        f"{found}\n\n"
         "Name the operator touchpoint neutrally (spec §3.C) — the concrete tool "
         "belongs in a `**Harness — <topic>:**` clause naming every harness it applies to."
     )
 
 
 def test_no_agent_body_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
-    found = _violations(_all_agent_files())
-    assert found == _AGENTS_PHASE_3_OWES, (
-        f"new: {sorted(found - _AGENTS_PHASE_3_OWES)}\n"
-        f"now fixed (shrink _AGENTS_PHASE_3_OWES): {sorted(_AGENTS_PHASE_3_OWES - found)}\n\n"
+    found = sorted(_violations(_all_agent_files()))
+    assert found == [], (
+        f"{found}\n\n"
         "An agent body is read on every harness that can dispatch it — say what "
         "each reader should do inside a `**Harness — <topic>:**` clause, and keep the "
         "frontmatter `description` (which cannot sit in a clause) neutral."
+    )
+
+
+def test_no_rule_names_a_harness_specific_tool_outside_a_scoped_clause() -> None:
+    found = sorted(_violations(_all_rule_files()))
+    assert found == [], (
+        f"{found}\n\n"
+        "A rule is loaded on every harness (`.opencode/instructions/`, "
+        "`.hermes/SOUL.d/`) — say what each reader should do inside a "
+        "`**Harness — <topic>:**` clause naming Claude Code, OpenCode and Hermes."
     )
