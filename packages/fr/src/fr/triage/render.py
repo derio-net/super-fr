@@ -26,7 +26,7 @@ from fr.triage.check import CheckResult, classify
 from fr.triage.model import issue_key
 
 if TYPE_CHECKING:
-    from fr.triage.model import Facts, Issue, Judgement, Judgements
+    from fr.triage.model import Facts, Issue, Judgement, Judgements, PullRequest
 
 _CODE = re.compile(r"`([^`\n]+)`")
 # One pass over code OR bold, so two matches can never overlap and a code span is
@@ -379,7 +379,7 @@ def _section(tier: str, chip: str, sev: str, title: str, desc: str, rows: list[s
     )
 
 
-def _pr_row(pr: "PullRequest", judgement: "Judgement | None", order: int, collected_at: str) -> str:
+def _pr_row(pr: PullRequest, judgement: Judgement | None, order: int, collected_at: str) -> str:
     """Render an unranked PR with the forge's status, never an inferred status."""
     checks = pr.checks
     if checks.get("fail", 0):
@@ -395,20 +395,29 @@ def _pr_row(pr: "PullRequest", judgement: "Judgement | None", order: int, collec
     anchor = pr.anchor_path or pr.anchor_body or pr.anchor_reason or pr.anchor
     url = _safe_url(pr.url)
     attrs = {
-        "data-key": issue_key(pr.repo, pr.number), "data-num": str(pr.number),
-        "data-order": str(order), "data-search": f"{pr.repo} {pr.number} {pr.title}".lower(),
+        "data-key": issue_key(pr.repo, pr.number),
+        "data-num": str(pr.number),
+        "data-order": str(order),
+        "data-search": f"{pr.repo} {pr.number} {pr.title}".lower(),
         "data-redci": "1" if ci_class == "fail" else "0",
-        "data-conflicts": "1" if conflict else "0", "data-cxrank": "0",
-        "data-filed": "", "data-stage": "pr-ready", "data-cx": "-",
+        "data-conflicts": "1" if conflict else "0",
+        "data-cxrank": "0",
+        "data-filed": "",
+        "data-stage": "pr-ready",
+        "data-cx": "-",
     }
     attr_s = " ".join(f'{k}="{esc(v)}"' for k, v in attrs.items())
-    link = f'<a href="{url}" rel="noopener noreferrer">PR #{pr.number}</a>' if url else f"PR #{pr.number}"
+    link = (
+        f'<a href="{url}" rel="noopener noreferrer">PR #{pr.number}</a>'
+        if url
+        else f"PR #{pr.number}"
+    )
     detail = [f'<p class="anchor"><strong>Anchor:</strong> {esc(anchor)}</p>']
     if delivery_note:
-        detail.append(f'<p>{inline(delivery_note)}</p>')
+        detail.append(f"<p>{inline(delivery_note)}</p>")
     return (
         f'<details class="row" {attr_s}>'
-        f'<summary><span class="num">{esc(pr.repo)}#{pr.number}</span>'
+        f'<summary><span class="num">{esc(issue_key(pr.repo, pr.number))}</span>'
         f'<span class="title">{esc(pr.title)}</span><span class="pr-meta">'
         f'<span class="badge {ci_class}">{ci_symbol} CI {ci_label}</span>'
         f'<span class="badge merge">merge: {esc(merge)}</span>'
@@ -418,12 +427,19 @@ def _pr_row(pr: "PullRequest", judgement: "Judgement | None", order: int, collec
     )
 
 
-def _prs_section(prs: list["PullRequest"], judgements: "Judgements", start: int, collected_at: str) -> str:
+def _prs_section(
+    prs: list[PullRequest], judgements: Judgements, start: int, collected_at: str
+) -> str:
     rows = []
     for offset, pr in enumerate(prs):
-        rows.append(_pr_row(pr, judgements.issues.get(issue_key(pr.repo, pr.number)), start + offset, collected_at))
+        key = issue_key(pr.repo, pr.number)
+        rows.append(_pr_row(pr, judgements.issues.get(key), start + offset, collected_at))
     body = "".join(rows) if rows else '<p class="empty">No unranked pull requests.</p>'
-    return f'<section class="prs"><h2>PRs</h2><p class="tier-desc">Unranked pull requests, with their implementation anchor and delivery verdict.</p><div class="rows">{body}</div></section>'
+    return (
+        '<section class="prs"><h2>PRs</h2>'
+        '<p class="tier-desc">Unranked pull requests, with their implementation anchor '
+        f'and delivery verdict.</p><div class="rows">{body}</div></section>'
+    )
 
 
 def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
@@ -504,7 +520,7 @@ def render(facts: Facts, judgements: Judgements) -> str:
             UNRANKED_TITLE,
             UNRANKED_DESC,
             [row(i, None, "unranked") for i in result.unranked],
-        )
+        ),
     ]
     for pos, tier in enumerate(sorted(judgements.tiers, key=lambda t: t.n)):
         rows = [

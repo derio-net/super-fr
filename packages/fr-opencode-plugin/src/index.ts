@@ -19,17 +19,95 @@
 //
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
 // plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
-import { isAbsolute } from "node:path";
+import { lstatSync, readlinkSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { createIdleHandler } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
-const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit"]);
+// This is intentionally a short exclusion list, not a writer allowlist: new
+// path-carrying tools fail closed. Bash is separately declared as ungated in
+// parity.yaml; these built-ins can only read files.
+const NON_WRITING_TOOLS = new Set(["bash", "glob", "grep", "list", "read"]);
+const PATH_KEYS = new Set([
+  "filePath",
+  "path",
+  "file",
+  "filename",
+  "file_path",
+  "paths",
+  "files",
+  "source",
+  "source_path",
+  "destination",
+  "destination_path",
+  "target",
+  "target_path",
+  "oldPath",
+  "newPath",
+  "old_path",
+  "new_path",
+]);
+const PATCH_KEYS = new Set(["patchText", "patch", "diff"]);
+const PATCH_PREFIXES = ["*** Add File:", "*** Update File:", "*** Delete File:", "*** Move to:"];
 
-function extractFilePath(output: unknown): string | undefined {
+interface Targets {
+  paths: string[];
+  unresolvablePatch: boolean;
+}
+
+function collectPathValues(value: unknown, key: string | undefined, targets: Set<string>): void {
+  if (typeof value === "string") {
+    if ((key !== undefined && PATH_KEYS.has(key)) || isAbsolute(value)) targets.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPathValues(item, key, targets);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [childKey, childValue] of Object.entries(value)) {
+      collectPathValues(childValue, childKey, targets);
+    }
+  }
+}
+
+function extractTargets(output: unknown): Targets {
   const args = (output as { args?: Record<string, unknown> } | undefined)?.args;
-  if (!args) return undefined;
-  const candidate = args.filePath ?? args.path;
-  return typeof candidate === "string" ? candidate : undefined;
+  if (!args) return { paths: [], unresolvablePatch: false };
+
+  const targets = new Set<string>();
+  collectPathValues(args, undefined, targets);
+  let unresolvablePatch = false;
+  for (const [key, value] of Object.entries(args)) {
+    if (!PATCH_KEYS.has(key) || typeof value !== "string") continue;
+    let found = false;
+    // Match OpenCode's apply_patch parser: split only on LF, then match its
+    // exact prefixes and trim the suffix.
+    for (const line of value.split("\n")) {
+      const prefix = PATCH_PREFIXES.find((candidate) => line.startsWith(candidate));
+      if (!prefix) continue;
+      targets.add(line.slice(prefix.length).trim());
+      found = true;
+    }
+    if (!found) unresolvablePatch = true;
+  }
+  return { paths: [...targets].filter(Boolean), unresolvablePatch };
+}
+
+function normalizeTarget(directory: string, target: string): string {
+  let resolved = resolve(directory, target);
+  for (let hops = 0; hops < 40; hops += 1) {
+    let stat: ReturnType<typeof lstatSync>;
+    try {
+      stat = lstatSync(resolved);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolved;
+      throw new Error(`fr-isolation: cannot inspect target symlink: ${resolved}`);
+    }
+    if (!stat.isSymbolicLink()) return resolved;
+    resolved = resolve(dirname(resolved), readlinkSync(resolved));
+  }
+  throw new Error("fr-isolation: target symlink chain exceeds 40 hops");
 }
 
 export async function FrIsolationRequired(ctx: {
@@ -42,25 +120,45 @@ export async function FrIsolationRequired(ctx: {
   return {
     event: createIdleHandler({ client: ctx.client, directory: ctx.worktree || ctx.directory }),
     "tool.execute.before": async (input: { tool: string }, output: unknown) => {
-      if (!EDIT_TOOLS.has(input.tool)) return;
+      // OpenCode cannot intercept filesystem effects of Bash. Other known
+      // read-only tools are excluded; every remaining tool is inspected.
+      if (NON_WRITING_TOOLS.has(input.tool)) return;
 
       // Deliberate base-clone edit — the documented escape hatch.
       if (process.env.FR_BASE_OK === "1") return;
 
-      const file = extractFilePath(output);
-      if (!file || !isAbsolute(file)) return; // no parseable target — not our concern
+      const targets = extractTargets(output);
+      if (targets.unresolvablePatch) {
+        const resolution = resolveMarker(normalizeTarget(ctx.directory, ".fr-unresolvable-patch-target"));
+        if (resolution.toplevel && resolution.frEnabled && !resolution.hasValidMarker) {
+          throw new Error(
+            "fr-isolation: edit with an unresolvable patch target blocked — not inside an fr-isolation " +
+              "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the worktree; " +
+              "or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for a deliberate " +
+              "base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
+          );
+        }
+        // A malformed patch is ambiguous even in an isolated worktree.
+        if (resolution.toplevel && resolution.frEnabled) {
+          throw new Error("fr-isolation: edit with an unresolvable patch target blocked");
+        }
+      }
+      if (targets.paths.length === 0) return;
 
-      const resolution = resolveMarker(file);
-      if (!resolution.toplevel || !resolution.frEnabled) return; // not fr-enabled — allow
-      if (resolution.hasValidMarker) return; // valid isolation workspace — allow
-      if (matchesAllowlist(resolution.toplevel, file)) return; // operator-managed exemption
+      for (const target of targets.paths) {
+        const file = normalizeTarget(ctx.directory, target);
+        const resolution = resolveMarker(file);
+        if (!resolution.toplevel || !resolution.frEnabled) continue; // not fr-enabled — allow
+        if (resolution.hasValidMarker) continue; // valid isolation workspace — allow
+        if (matchesAllowlist(resolution.toplevel, file)) continue;
 
-      throw new Error(
-        `fr-isolation: edit to \`${file}\` blocked — not inside an fr-isolation ` +
-          "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the " +
-          "worktree; or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for " +
-          "a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
-      );
+        throw new Error(
+          `fr-isolation: edit to \`${target}\` blocked — not inside an fr-isolation ` +
+            "workspace. Enter isolation (`fr isolation up` / fr-goal) and edit in the " +
+            "worktree; or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for " +
+            "a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
+        );
+      }
     },
   };
 }
