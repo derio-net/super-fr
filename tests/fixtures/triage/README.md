@@ -8,10 +8,19 @@ gh issue list --repo derio-net/super-fr --state open --limit 1000 \
   --json number,title,labels,createdAt,updatedAt,url,body
 gh pr list --repo derio-net/super-fr --state all --limit 200 \
   --json number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences
+gh pr list --repo derio-net/super-fr --state open --limit 1 \
+  --json number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences,files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision
 ```
 
 - `super-fr-issues.json` — output of the first command (38 open issues at capture).
 - `super-fr-prs.json` — output of the second command (200 PRs at capture).
+- `super-fr-open-prs.json` — output of the third command, captured live on
+  **2026-09-22** (one open PR, whole record): the open-PR call's extra fields
+  (`files`, `statusCheckRollup`, `mergeable`, `mergeStateStatus`,
+  `reviewDecision`). The captured PR reads `mergeable: CONFLICTING`,
+  `mergeStateStatus: DIRTY` — a real conflict, not constructed — and an empty
+  `reviewDecision` (no review). The earlier `UNKNOWN` case (GitHub computes
+  these lazily after a push) is covered by unit inline fixtures instead.
 
 **Subset, never edited.** Each file keeps a subset of the captured records to stay
 small — whole records only, in the order `gh` returned them. No field inside any

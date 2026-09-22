@@ -48,12 +48,14 @@ class FakeForge:
         repos: list[dict[str, Any]] | None = None,
         failing: dict[str, str] | None = None,
         closed: dict[tuple[str, int], dict[str, Any]] | None = None,
+        file_bodies: dict[tuple[str, str, str], str | Exception] | None = None,
     ) -> None:
         self.issues = issues
         self.prs = prs
         self.repos = repos or []
         self.failing = failing or {}
         self.closed = closed or {}
+        self.file_bodies = file_bodies or {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
@@ -70,9 +72,20 @@ class FakeForge:
         self.calls.append(("list_prs", {"repo": repo, "state": state, "limit": limit}))
         return self.prs[repo]
 
+    def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
+        self.calls.append(("list_open_prs", {"repo": repo, "limit": limit}))
+        return [p for p in self.prs[repo] if p.get("state") == "OPEN"]
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         self.calls.append(("view_issue", {"repo": repo, "number": number}))
         return self.closed[(repo, number)]
+
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        self.calls.append(("read_file_at_ref", {"repo": repo, "path": path, "ref": ref}))
+        body = self.file_bodies[(repo, path, ref)]
+        if isinstance(body, Exception):
+            raise body
+        return body
 
     def called(self, name: str) -> list[dict[str, Any]]:
         return [kw for n, kw in self.calls if n == name]
