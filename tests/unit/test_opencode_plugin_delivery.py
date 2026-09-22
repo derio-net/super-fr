@@ -28,9 +28,7 @@ PLUGIN_SRC = REPO_ROOT / "packages" / "fr-opencode-plugin" / "src"
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["bash", str(SCRIPT), *args], capture_output=True, text=True, check=False
-    )
+    return subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True, check=False)
 
 
 def test_install_writes_a_top_level_loader_and_every_source(tmp_path: Path) -> None:
