@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 3
+  title: up --branch classifies origin/<B> (#438)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-up-reuses-remote-branch
+  tier: hard
+tasks:
+- number: 1
+  title: Red - branch classification tests
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Write failing unit tests over the Runner fake for every row of the spec §3.E table: local same/ahead/behind/diverged/origin-unknown; remote-only reuse via `git worktree add --track -b <B> <wt> origin/<B>`; remote-only plus --base refused with IsolationError; origin unknown with and without a local origin/<B> ref; absent remote cold start whose log line names the sha; --no-fetch uses a local origin/<B> ref without ls-remote or fetch; ls-remote exit 2 is absence while any other non-zero is unknown (never absence); the fetch uses the explicit refspec +refs/heads/<B>:refs/remotes/origin/<B>
+  - id: P3.T1.S2
+    text: |-
+      Write a failing integration test in tests/integration/ using real git: a bare repo as origin with a branch feat/x holding one extra commit, a clone that has never checked feat/x out, HostWorktreeTarget(clone).up(branch="feat/x") yields a worktree whose HEAD equals origin's feat/x tip; repeat against a `git clone --single-branch` clone; up(branch="feat/x", base="origin/main") raises; a local feat/x behind origin is used with the WARNING on stderr (capsys)
+  - id: P3.T1.S3
+    text: |-
+      Run the new tests and confirm they fail for the right reason
+- number: 2
+  title: Green - classifier
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Implement the remote probe helper in local.py (`git ls-remote --exit-code origin refs/heads/<B>` → exists/absent/unknown, explicit-refspec fetch when exists) and rewrite _git_worktree_add's classification per the §3.E table, keeping #322 corner 1 (never rebase a reused branch) and the existing-worktree short-circuit; every line to stderr; _ensure_validator_wrapper_in_ref gets the ref actually checked out
+  - id: P3.T2.S2
+    text: |-
+      Run ruff, mypy and the full pytest suite green; then refactor the classification into a small pure decision function (inputs: local sha, remote state, ahead/behind, base) separate from the git calls if the method grew past readability, else record no-refactor-because for P3.T2 in the plan journal
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,60 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Honest run-not-found and the end-to-end
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - run-missing-explains-teardown
+  - isolation-down-preserves-run
+  tier: standard
+tasks:
+- number: 1
+  title: Red - explain_missing and the integration walk
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Write failing unit tests for preserve.explain_missing(repo_root, run_id, path) (spec §3.D.5): a live workspace of the repo holding runs/<id>.yaml wins; a tombstone with a preserved cursor names the teardown time and `fr isolation up --branch <b>`; a tombstone whose cursor was committed says so; otherwise the never-existed text listing the run ids in this checkout (or none)
+  - id: P5.T1.S2
+    text: |-
+      Write a failing integration test in tests/integration/ (real git, FR_ISOLATION_TARGET=worktree, HOME and cache under tmp_path, driven through the typer CliRunner): fr run start fr-goal --branch feat/y → commit the cursor → resolve/advance so it is dirty → fr isolation down refuses naming the run → fr isolation down --force prints the ended-run line → fr run advance <id> from the base clone exits 2 with the torn-down message → fr isolation up --branch feat/y prints the restored line → fr run status <id> from the worktree shows the advanced cursor
+  - id: P5.T1.S3
+    text: |-
+      Run the new tests and confirm they fail for the right reason
+- number: 2
+  title: Green - CLI-layer message
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      In packages/fr/src/fr/commands/run_cmd.py route _load_or_exit and the direct load_run_state call sites (grep them) through one helper that, for a missing file, lazily imports fr.isolation.preserve.explain_missing and prints its message (soft_wrap) with exit 2; load_run_state in fr/run/model.py stays import-free
+  - id: P5.T2.S2
+    text: |-
+      Make `fr run start`'s existing-run refusal name `fr run advance <id>` as the way on; run ruff, mypy and the full pytest suite green; refactor or record no-refactor-because for P5.T2 in the plan journal
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

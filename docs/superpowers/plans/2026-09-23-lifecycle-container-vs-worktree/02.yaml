@@ -1,0 +1,74 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Container verbs - rebuild, stopped-aware exec, up keeps its record
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-rebuild-keeps-worktree
+  - isolation-stop-and-resume
+  tier: standard
+tasks:
+- number: 1
+  title: Red - rebuild, exec resume and up record tests
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write failing unit tests for rebuild (spec §3.A): the devcontainer argv carries --remove-existing-container and, with no_cache, --build-no-cache, plus the same --workspace-folder/--config/--mount args as up; a missing worktree is refused naming `fr isolation up`; on success the new container id is re-queried and a changed old image is passed to docker rmi; on failure no rmi happens and the IsolationError names `fr isolation rebuild` as the retry and says the worktree is intact; state file and .fr-isolation marker are byte-identical before/after; host mode returns a no-op message without docker; external mode raises
+  - id: P2.T1.S2
+    text: |-
+      Write failing unit tests for exec's _ensure_running (spec §3.B): running and restarting exec directly; exited and created run devcontainer up first and print the resuming notice to stderr; paused runs docker unpause; absent and dead raise IsolationError naming `fr isolation rebuild --branch <b>`; a non-zero docker ps and a FileNotFoundError from the runner both raise `docker is unreachable`; a failed resume raises naming rebuild; plus a CLI test that `fr isolation exec` turns IsolationError into exit 2 with the one-line message
+  - id: P2.T1.S3
+    text: |-
+      Write failing unit tests for up on an existing workspace (spec §3.C): an existing state record's sessions and created_at are carried forward by both LocalWorktreeDevcontainerTarget.up and HostWorktreeTarget.up; the cold-start log line goes to stderr; then run the new tests and confirm they fail for the right reason
+- number: 2
+  title: Green - shared devcontainer helper, rebuild, exec, up
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Extract `_devcontainer_up(worktree, profile, *, remove_existing=False, no_cache=False)` in local.py (ensures the mounted env file, builds the argv, raises on failure) and make up() call it; implement rebuild(state, no_cache) per spec §3.A incl. image capture/reclaim-on-success and the failure message; add rebuild to the Target Protocol, the host no-op and the external refusal
+  - id: P2.T2.S2
+    text: |-
+      Implement _ensure_running in local.py and call it from exec(); catch FileNotFoundError from the runner; make the CLI exec command catch IsolationError via _fail; move up's log_line print to stderr
+  - id: P2.T2.S3
+    text: |-
+      Carry sessions and created_at forward in both up() implementations when load_state returns a record; add the `rebuild` CLI command (--branch, --no-cache) printing the recreated line with the config path; update restart and up help text to say they resume a stopped container and that restart does not apply profile changes
+  - id: P2.T2.S4
+    text: |-
+      Run ruff format, ruff check, mypy and the full `uv run pytest -q --no-cov`; all green; refactor shared argv/config-path code between exec, _ssh_agent_probe and _devcontainer_up if it reads cleaner, else record no-refactor-because for P2.T2 in the plan journal
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
