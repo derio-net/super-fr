@@ -3448,6 +3448,11 @@ rows:
       mentions a second worktree instead of ruling it out
     origin:
     - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.E. #532 widened the #420 check to any negation anywhere in the sentence.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_phase_executor_worktree.py
+    status: ci
+    notes: 'Phase 4 (2026-09-22): _rules_out_a_second_worktree now requires a negation
+      to GOVERN the phrase — same clause (split on . ; —), before it, only filler words
+      between (<=6). Parametrized must-fail cases (the adversarial review''s four) and
+      must-pass cases (shipped description, pre-#532 literal-flag wording) run in CI.'

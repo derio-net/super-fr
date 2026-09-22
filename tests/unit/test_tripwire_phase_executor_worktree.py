@@ -36,6 +36,9 @@ import os
 import re
 from pathlib import Path
 
+import pytest
+from fr.harness import ARGUMENT_VOCABULARY
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = REPO_ROOT / "plugins" / "super-fr"
 HOOK = PLUGIN / "hooks" / "fr-phase-executor-guard.sh"
@@ -82,18 +85,69 @@ def test_hook_ships_and_is_executable() -> None:
 # `test_agent_description_carries_the_constraint` for why both are accepted,
 # and `test_a_merely_descriptive_description_does_not_count` for the pre-fix
 # wording that must keep failing either way.
-_SECOND_WORKTREE = re.compile(r'isolation:\s*"worktree"|second worktree', re.IGNORECASE)
-_RULES_OUT = re.compile(r"\bwithout\b|\bnever\b|\bdo not\b|\bnot\b", re.IGNORECASE)
+# The flag spelling is NOT restated here: `ARGUMENT_VOCABULARY` already owns
+# every prose spelling of it (JSON key, `=`, backticks — review p2r-2), and a
+# second regex in this module is one that drifts from it.
+_ISOLATION_FLAG = ARGUMENT_VOCABULARY["claude-code"]['isolation: "worktree"']
+_NEUTRAL_PHRASE = re.compile(r"\bsecond\s+worktree\b", re.IGNORECASE)
+
+# A negation GOVERNS the phrase only when it stands directly in front of it,
+# with nothing but these words in between — prepositions, articles and the
+# dispatch verbs a prohibition is naturally phrased with.
+_NEGATIONS = frozenset({"never", "without", "not", "no"})
+_GOVERNED_FILLER = frozenset(
+    {"into", "in", "a", "an", "the", "any", "pass", "passing", "use", "using", "with"}
+)
+_MAX_FILLER = 6
+_WORD = re.compile(r"[A-Za-z']+")
+
+
+def _clauses(description: str) -> list[str]:
+    return re.split(r"[.;—]", description)
+
+
+def _negation_governs(before: str) -> bool:
+    """Walk back from the phrase over filler words; True if the first
+    non-filler word, within `_MAX_FILLER` words, is a negation."""
+    words = [w.lower() for w in _WORD.findall(before)]
+    for distance, word in enumerate(reversed(words)):
+        if word in _NEGATIONS:
+            return True
+        if word not in _GOVERNED_FILLER or distance >= _MAX_FILLER:
+            return False
+    return False
 
 
 def _rules_out_a_second_worktree(description: str) -> bool:
-    """True when some ONE sentence both names the second worktree and rules it
-    out. Sentence-level, not file-level: a negation elsewhere in the blurb does
-    not negate a bare mention."""
-    return any(
-        _SECOND_WORKTREE.search(sentence) and _RULES_OUT.search(sentence)
-        for sentence in re.split(r"(?<=[.;])\s+", description)
-    )
+    """True when some ONE clause names the second worktree AND a negation
+    governs that name.
+
+    The rule (2026-09-22, spec 3.E, tightened past the spec's six-word window):
+
+    - split the description into clauses on `.`, `;` and `—`;
+    - the phrase is `second worktree`, or Claude Code's isolation flag;
+    - a negation token (`never|without|not|no`) must come BEFORE the phrase,
+      in the same clause, with at most six words between them — and every one
+      of those words must be filler (`into|in|a|an|the|any|pass|passing|
+      use|using|with`). "never into a second worktree", "WITHOUT `isolation:
+      \"worktree\"`", "do not pass `isolation: \"worktree\"`" and "no second
+      worktree" pass.
+
+    Why not the bare six-word window: 'Do not hesitate to pass isolation:
+    "worktree"' puts `not` three words before the flag, but it negates
+    *hesitate* — the sentence instructs the poisoned dispatch. Requiring only
+    filler between negation and phrase is what makes the negation provably
+    about the phrase. A negation AFTER the phrase ("a second worktree, not the
+    shared one"; "has a second worktree is not our concern") and one in a
+    different clause ('pass `isolation: "worktree"` — this is not optional')
+    never count.
+    """
+    for clause in _clauses(description):
+        for pattern in (_NEUTRAL_PHRASE, _ISOLATION_FLAG):
+            for match in pattern.finditer(clause):
+                if _negation_governs(clause[: match.start()]):
+                    return True
+    return False
 
 
 def test_agent_description_carries_the_constraint() -> None:
@@ -144,6 +198,39 @@ def test_a_merely_descriptive_description_does_not_count() -> None:
         assert _rules_out_a_second_worktree(blessed), (
             f"a real prohibition must satisfy the constraint: {blessed}"
         )
+
+
+# 2026-09-22 adversarial review (#532 repair, spec 3.E): each of these names the
+# second worktree AND carries a negation in the same sentence, so a
+# sentence-level co-occurrence check accepted all four. None forbids anything.
+_NEGATION_ELSEWHERE = (
+    "Dispatch it with a second worktree, not the shared one.",
+    'Pass `isolation: "worktree"` — this is not optional.',
+    'Do not hesitate to pass isolation: "worktree".',
+    "Knowing whether it has a second worktree is not our concern.",
+)
+
+
+@pytest.mark.parametrize("description", _NEGATION_ELSEWHERE)
+def test_a_negation_that_does_not_govern_the_phrase_does_not_count(description: str) -> None:
+    assert not _rules_out_a_second_worktree(description), (
+        f"the negation here does not govern the second-worktree phrase: {description}"
+    )
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        pytest.param(_front_matter_description(AGENT), id="shipped-description"),
+        pytest.param('Dispatch it WITHOUT `isolation: "worktree"`.', id="pre-532-literal-flag"),
+        pytest.param('Do not pass `isolation: "worktree"` to it.', id="do-not-pass-the-flag"),
+        pytest.param("It needs no second worktree.", id="no-second-worktree"),
+    ],
+)
+def test_a_governing_negation_counts(description: str) -> None:
+    assert _rules_out_a_second_worktree(description), (
+        f"a real prohibition must satisfy the constraint: {description}"
+    )
 
 
 def _dispatch_section(text: str) -> str:
@@ -242,7 +329,9 @@ _NEGATED = re.compile(
     r"without|\bnot\b|\bno\b|never|refus|mutually exclusive|wrong|instead of|deadlock",
     re.IGNORECASE,
 )
-_FLAG = re.compile(r'isolation:\s*[`"\']?worktree', re.IGNORECASE)
+# Same vocabulary pattern as `_rules_out_a_second_worktree` — one definition
+# of what spells the flag, not two.
+_FLAG = _ISOLATION_FLAG
 
 
 def _sentences(text: str) -> list[str]:

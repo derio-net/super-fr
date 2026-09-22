@@ -120,6 +120,12 @@ A not-empty guard per tree, as today.
 `ARGUMENT_VOCABULARY` isolation match). Must fail: the review's four counterexamples. Must pass:
 the shipped description and the pre-#532 literal-flag wording.
 
+*Amended in phase 4:* a six-word window alone passes the review's third counterexample —
+`Do not hesitate to pass isolation: "worktree"` puts `not` three words before the flag while
+negating *hesitate*. So every word between the negation and the phrase must also be filler
+(`into|in|a|an|the|any|pass|passing|use|using|with`): the negation must govern the phrase, not
+merely precede it.
+
 ### F. Stale surfaces
 
 Matrix row `harness-tool-neutrality`: acceptance sentence names skills, agents and rules, notes
