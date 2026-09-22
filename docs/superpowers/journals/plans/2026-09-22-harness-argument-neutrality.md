@@ -14,3 +14,8 @@ Declared at planning time, structural: P5.T1 changes documentation text only (a 
 ### ab612304e428 · discovery · no-refactor-because P5.T2 (phase 5)
 
 Declared at planning time, structural: P5.T2 is a version bump plus verification runs; it writes no code.
+
+<!-- fr:journal kind=discovery scope=plan id=d788290847d4 created=2026-09-22T13:48:56 phase=1 -->
+### d788290847d4 · discovery · P1.T1.S1 RED: ARGUMENT_VOCABULARY missing (phase 1)
+
+test_argument_vocabulary_is_keyed_by_exactly_the_harnesses failed with: ImportError: cannot import name 'ARGUMENT_VOCABULARY' from 'fr.harness' (packages/fr/src/fr/harness/__init__.py) — confirms the name does not exist yet, the correct RED reason before adding the empty closed-world mapping.
