@@ -3407,3 +3407,34 @@ rows:
     notes: 'Split from #432; #533. LIVE 2026-09-22 (fr 4.14.3) on Claude Code and OpenCode:
       --dry-run listed all 8 workspaces with keep reasons and bound sessions and changed
       nothing.'
+  - id: harness-argument-neutrality
+    capability: Harness parity
+    acceptance: A harness-specific argument named outside a scoped per-harness clause,
+      in any skill, agent or rule (canonical or mirror) and in any spelling, fails CI
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.A-C. Closes the gap the adversarial review of #532 found: the flag
+      was scanned only in agents, in one spelling; run_in_background nowhere; rules
+      not at all.'
+  - id: executor-long-commands-per-harness
+    capability: fr-goal phase executor dispatch
+    acceptance: The phase executor tells a reader on each harness how to run a command
+      longer than that harness's foreground limit, and to leave nothing running at handback
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.D. OpenCode kills at its bash timeout (default 2 min) and has no
+      background argument; the #532 prose told it to use run_in_background. Live-verified
+      by the Test Plan smoke.'
+  - id: phase-executor-description-rules-out-second-worktree
+    capability: fr-goal phase executor dispatch
+    acceptance: The phase-executor description check fails a description that merely
+      mentions a second worktree instead of ruling it out
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec 3.E. #532 widened the #420 check to any negation anywhere in the sentence.'
