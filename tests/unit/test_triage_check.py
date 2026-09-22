@@ -49,7 +49,7 @@ def _merged_pr(number: int) -> PullRequest:
 def _facts(issues: list[Issue], **kw: Any) -> Facts:
     return Facts.model_validate(
         {
-            "schema": 1,
+            "schema": 2,
             "scope": "derio-net--super-fr",
             "kind": "repo",
             "collected_at": "2026-09-21T12:00:00+00:00",

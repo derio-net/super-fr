@@ -88,9 +88,9 @@ def test_schema_2_in_judgements_is_refused_naming_the_file(tmp_path: Path) -> No
     assert "schema" in str(exc.value)
 
 
-def test_schema_2_in_facts_is_refused_naming_the_file(tmp_path: Path) -> None:
+def test_schema_1_in_facts_is_refused_naming_the_file(tmp_path: Path) -> None:
     facts = {
-        "schema": 2,
+        "schema": 1,
         "scope": "derio-net--super-fr",
         "kind": "repo",
         "collected_at": "2026-09-21T00:00:00+00:00",
@@ -104,6 +104,7 @@ def test_schema_2_in_facts_is_refused_naming_the_file(tmp_path: Path) -> None:
     with pytest.raises(TriageError, match=str(path)) as exc:
         load_facts(path)
     assert "schema" in str(exc.value)
+    assert "re-run collect" in str(exc.value)
 
 
 def test_unreadable_yaml_is_refused_naming_the_file(tmp_path: Path) -> None:
@@ -207,7 +208,7 @@ def test_pattern_ids_go_through_the_same_normaliser_as_keys(tmp_path: Path) -> N
 
 def _facts_doc(**over: object) -> dict[str, object]:
     doc: dict[str, object] = {
-        "schema": 1,
+        "schema": 2,
         "scope": "example-org",
         "kind": "org",
         "collected_at": "2026-09-21T00:00:00+00:00",

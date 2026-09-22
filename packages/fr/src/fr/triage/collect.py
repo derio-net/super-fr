@@ -15,10 +15,12 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Protocol
 
+import yaml
+
 from fr import gh
 from fr.triage.errors import ForgeError
 from fr.triage.model import (
-    SCHEMA,
+    FACTS_SCHEMA,
     Facts,
     Issue,
     IssueState,
@@ -49,8 +51,11 @@ class Forge(Protocol):
     def list_issues(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
 
     def list_prs(self, *, repo: str, state: str, limit: int) -> list[dict[str, Any]]: ...
+    def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]: ...
 
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]: ...
+
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str: ...
 
 
 GH_MISSING = (
@@ -87,9 +92,17 @@ class GhForge:
         with _forge_errors():
             return gh.list_prs(repo=repo, state=state, limit=limit)
 
+    def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
+        with _forge_errors():
+            return gh.list_open_prs(repo=repo, limit=limit)
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         with _forge_errors():
             return gh.view_issue(repo, number)
+
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        with _forge_errors():
+            return gh.read_file_at_ref(repo=repo, path=path, ref=ref)
 
 
 def scope_repos(
@@ -130,6 +143,10 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             merged_at=r.get("mergedAt"),
             url=r["url"],
             head_ref=r.get("headRefName") or "",
+            checks=_checks(r.get("statusCheckRollup") or []),
+            mergeable=r.get("mergeable") or "UNKNOWN",
+            merge_state=r.get("mergeStateStatus") or "UNKNOWN",
+            review=r.get("reviewDecision") or None,
         )
         refs = [
             _ref(ref["repository"]["owner"]["login"], ref["repository"]["name"], ref["number"])
@@ -139,11 +156,82 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
     return out
 
 
+def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
+    result = {"pass": 0, "fail": 0, "pending": 0}
+    for check in raw:
+        state = str(check.get("conclusion") or check.get("state") or "").upper()
+        bucket = (
+            "pass"
+            if state in {"SUCCESS", "SUCCEEDED", "PASS", "PASSED", "SKIPPED", "NEUTRAL"}
+            else "fail"
+            if state in {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}
+            else "pending"
+        )
+        result[bucket] += 1
+    return result
+
+
+def _anchor_file(paths: Iterable[str]) -> tuple[str, str] | None:
+    """First spec-like or debug path in anchor priority order, independent of diff order."""
+    paths = list(paths)
+    for path in paths:
+        if path.startswith("docs/superpowers/specs/") and path.endswith(".md"):
+            return "spec", path
+        if path.startswith("docs/superpowers/journals/specs/") and path.endswith(".md"):
+            return "spec", path
+        if path.startswith("docs/superpowers/plans/") and path.endswith("/_meta.yaml"):
+            return "spec-meta", path
+    for path in paths:
+        if path.startswith("docs/superpowers/journals/debug/") and path.endswith(".md"):
+            return "debug", path
+    return None
+
+
+def _anchor_pr(forge: Forge, pr: PullRequest, raw: dict[str, Any]) -> PullRequest:
+    """Attach a file-derived intent anchor, degrading forge failures to unanchored."""
+    if pr.anchor == "issue":
+        return pr
+    match = _anchor_file(f["path"] for f in raw.get("files") or [] if "path" in f)
+    if match is None:
+        return pr.model_copy(update={"anchor_reason": "no matching intent file"})
+    kind, path = match
+    try:
+        body = forge.read_file_at_ref(repo=pr.repo, path=path, ref=pr.head_ref)
+        if kind == "spec-meta":
+            spec = yaml.safe_load(body).get("spec")
+            if not isinstance(spec, str):
+                raise ForgeError("plan metadata has no spec reference")
+            return pr.model_copy(
+                update={"anchor": "spec", "anchor_path": spec, "anchor_body": body[:BODY_LIMIT]}
+            )
+        return pr.model_copy(
+            update={"anchor": kind, "anchor_path": path, "anchor_body": body[:BODY_LIMIT]}
+        )
+    except (ForgeError, yaml.YAMLError, AttributeError) as exc:
+        return pr.model_copy(update={"anchor_reason": str(exc)})
+
+
 def _in_scope(ref: IssueRef, scope: Scope) -> bool:
     owner, name, _ = ref
     if scope.kind == "repo":
         return f"{owner}/{name}" == scope.target.lower()
     return owner == scope.owner.lower()
+
+
+def _issue_anchored(
+    prs: Iterable[tuple[PullRequest, list[IssueRef]]], scope: Scope
+) -> list[tuple[PullRequest, list[IssueRef]]]:
+    """Mark a PR whose closing reference is in scope with the highest-priority anchor."""
+    out: list[tuple[PullRequest, list[IssueRef]]] = []
+    for pr, refs in prs:
+        ref = next((candidate for candidate in refs if _in_scope(candidate, scope)), None)
+        if ref is not None:
+            owner, name, number = ref
+            pr = pr.model_copy(
+                update={"anchor": "issue", "anchor_path": f"{owner}/{name}#{number}"}
+            )
+        out.append((pr, refs))
+    return out
 
 
 def invert(
@@ -220,10 +308,12 @@ def collect_facts(
     collected: list[str] = []
     raw_issues: list[tuple[str, dict[str, Any]]] = []
     parsed_prs: list[tuple[PullRequest, list[IssueRef]]] = []
+    open_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
+            current = forge.list_open_prs(repo=repo, limit=pr_limit)
         except ForgeError as exc:
             if scope.kind == "repo":
                 raise
@@ -235,7 +325,12 @@ def collect_facts(
         if len(prs) == pr_limit:
             warnings.append(Truncation(source="prs", target=repo, limit=pr_limit))
         raw_issues.extend((repo, i) for i in issues)
-        parsed_prs.extend(parse_prs(repo, prs))
+        parsed_prs.extend(_issue_anchored(parse_prs(repo, prs), scope))
+        parsed_open = _issue_anchored(parse_prs(repo, current), scope)
+        open_prs.extend(
+            (_anchor_pr(forge, pr, raw), refs)
+            for (pr, refs), raw in zip(parsed_open, current, strict=True)
+        )
     if not collected:
         # Nothing to show is an error, never an empty board: an empty facts.json
         # would render as a clean backlog (spec §3.C, review r-p2-empty). Repo
@@ -263,13 +358,20 @@ def collect_facts(
             continue
         state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         out.append(_issue(repo, {"number": number, **raw}, linked(repo, number), state=state))
+    linked_prs = {(p.repo, p.number) for issue in out for p in issue.prs}
+    unlinked = [
+        p
+        for p, refs in open_prs
+        if not any(_in_scope(ref, scope) for ref in refs) and (p.repo, p.number) not in linked_prs
+    ]
     return Facts(
-        schema=SCHEMA,
+        schema=FACTS_SCHEMA,
         scope=scope.name,
         kind=scope.kind,
         collected_at=now.isoformat(timespec="seconds"),
         repos=repos,
         issues=out,
+        prs=unlinked,
         skipped=skipped,
         unviewed=unviewed,
         warnings=warnings,
