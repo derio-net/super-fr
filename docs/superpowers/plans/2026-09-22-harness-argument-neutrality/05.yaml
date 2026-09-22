@@ -30,22 +30,27 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T13:33:16+00:00'
+      note: Matrix sentence widened to skills/agents/rules + arguments; set-status
+        ci with notes; check + report --check both pass.
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T13:33:17+00:00'
+      note: AGENTS.md lines 93 and 343-344 updated to TOOL_VOCABULARY+ARGUMENT_VOCABULARY
+        over skills/agents/rules + mirrors; no stale fr-goal §6/§3 references found.
     P5.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T13:42:20+00:00'
+      note: 'bump-version.py patch: 4.14.4 -> 4.14.5, uv sync ran, --check passes.'
     P5.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T13:42:21+00:00'
+      note: 'ruff check 0, ruff format --check 416 files formatted, mypy 0 issues
+        (154 files), fr validate artifacts 29 OK, bun test 50 pass/0 fail, sync-opencode
+        --check OK, sync-hermes --check OK, full pytest: 4427 passed, 88 skipped,
+        92.55% cov, exit 0 (7m47s).'
   completion:
-    at: null
+    at: '2026-09-22T13:42:36+00:00'
     note: null
     observed_prs: []

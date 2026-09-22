@@ -1902,8 +1902,8 @@ rows:
       (fr-acceptance-nag on Hermes) both produce findings.'
   - id: harness-tool-neutrality
     capability: Harness parity
-    acceptance: No skill names a harness-specific tool as the way to do something outside
-      an explicitly scoped per-harness clause.
+    acceptance: No skill, agent or rule — canonical or generated mirror — names a harness-specific
+      tool or argument outside an explicitly scoped per-harness clause.
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
@@ -1911,12 +1911,10 @@ rows:
       - super-fr:tests/unit/test_harness_vocabulary.py
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
     status: ci
-    notes: 'Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1, fr-init
-      §2, both mirrors). Mirrors stay byte-identical; neutrality is enforced at the
-      canonical source. Widened 2026-09-21 (agent-body-tool-neutrality, #497): the scan
-      now also covers the agent bodies — plugins/super-fr/agents/*.md and the generated
-      .opencode/agent/*.md — which were outside every tree, with scan_prose''s new extra_tools
-      flagging Claude Code''s isolation: "worktree" dispatch flag for those trees only.'
+    notes: 'Widened 2026-09-22 (harness-argument-neutrality, spec 2026-09-22-harness-argument-neutrality-design.md):
+      acceptance sentence now names skills, agents and rules (canonical or generated
+      mirror) and covers harness-specific arguments via the new ARGUMENT_VOCABULARY,
+      not just tool names.'
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance
