@@ -2100,12 +2100,34 @@ rows:
       neither available in CI. SCOPE, unchanged from before and still true: the headline
       proves a genuine dispatch, not that tiering resolved — the tiering claim lives
       in opencode-tier-binding-reaches-dispatch. The headline cannot be corrected because
-      there is no fr acceptance edit verb; that is #522. CORRECTION: an earlier version
-      of this note said a follow-up for that verb had been filed. It had not — #522
-      found the claim false. #522 is now that follow-up. Found by the same run, and
-      filed: #537 (fr''s cursor names the wrong holder for an OpenCode dispatch, and
-      cannot name the tier agent that ran) and #538 (fr-goal never asked the model-per-tier
-      question it is gated on).'
+      there is no fr acceptance edit verb; that is #522, since folded into #510. CORRECTION:
+      an earlier version of this note said a follow-up for that verb had been filed.
+      It had not — #522 found the claim false. #522 became that follow-up and is now
+      folded into #510. Found by the same run, and filed: #537 (fr''s cursor names the
+      wrong holder for an OpenCode dispatch, and cannot name the tier agent that ran)
+      and #538 (fr-goal never asked the model-per-tier question it is gated on). DISCRIMINATING
+      RUN, 2026-09-22 (the model-level proof the earlier runs could not give): the 2026-09-21
+      run''s orchestrator and child both ran on gpt-5.6-terra and all three tiers were
+      bound to it, so its session-row model could not tell a tiered dispatch from an
+      untiered one; its proof rested on the agent NAME alone, for one tier. This run
+      bound FOUR distinct models - mechanical github-copilot/gpt-5.6-luna, standard
+      github-copilot/gpt-5.6-terra, hard github-copilot/gpt-5.6-sol, orchestrator github-copilot/claude-sonnet-5
+      - in a throwaway local repo (fr-tier-proof, local bare origin, no forge resource)
+      whose plan declared phases 1/2/3 as mechanical/standard/hard. opencode.db, root
+      ses_f37014a55ffePrm0GvcXNde25v (build, claude-sonnet-5), three parented children
+      in phase order: ses_f36fd32e5ffeLnEhUiVhc8dhwj fr-phase-executor-mechanical gpt-5.6-luna
+      $0.0132; ses_f36fb6911ffeFuz6aUuFfsbWjz fr-phase-executor-standard gpt-5.6-terra
+      $0.1326; ses_f36f9f94dffeXlvlEQ6t1mCyBs fr-phase-executor-hard gpt-5.6-sol $0.3867
+      (run total $1.71). All six assertions PASS: three children; declared tier -> tier
+      agent in order; each child on its tier''s binding (read from the installed agent
+      files, last written before the run and stable through it); NO child on the session
+      model; child models pairwise distinct; bindings themselves distinct, i.e. the
+      test could have failed. That closes the gap the scope note above records: tiering
+      resolves to the bound MODEL per tier, not merely to a tier-named agent. #537 reproduced
+      in the same run: fr''s cursor records agent_type super-fr:fr-phase-executor for
+      all three, never the tier agent that ran - though it does record the three child
+      session ids, matching opencode.db exactly, so the two stores can be joined by
+      session id. Still skipped: live-only, no CI level.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
