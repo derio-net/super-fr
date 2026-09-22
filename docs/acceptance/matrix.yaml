@@ -363,11 +363,12 @@ rows:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
     status: ci
-    notes: CI now covers unlisted future writers, apply_patch patch-body paths, malformed
-      patch targets, relative paths, and the marker/allowlist escapes. Fresh OpenCode
-      1.18.32 sessions from the isolated checkout on 2026-09-22 blocked base-clone absolute
-      edit, GPT-family apply_patch (patchText), and relative-path edit attempts; an
-      edit inside this valid worktree was allowed.
+    notes: 'CI pins OpenCode-compatible patch headers (including no-space Add File and
+      Move to), malformed patch denial in every fr-enabled context, recursive known/absolute-path
+      argument discovery, ctx.directory resolution, normalization, symlink escape prevention,
+      and the read-only built-ins. Fresh OpenCode 1.18.32 sessions on 2026-09-22: worktree-launched
+      no-space Add File targeting the base clone blocked; base-clone read allowed; base-clone
+      apply_patch blocked.'
   - id: opencode-commands-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)

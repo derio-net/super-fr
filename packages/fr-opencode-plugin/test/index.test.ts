@@ -4,9 +4,9 @@
 // of plugins/super-fr/hooks/fr-isolation-required.sh (Claude Code PreToolUse
 // hook) to OpenCode's plugin API.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { execFileSync } from "node:child_process";
 
 import { FrIsolationRequired } from "../src/index";
@@ -40,13 +40,13 @@ afterEach(() => {
   rmSync(repo, { recursive: true, force: true });
 });
 
-async function makeHook(directory: string) {
+async function makeHook(directory: string, worktree = directory) {
   const plugin = await FrIsolationRequired({
     project: undefined as never,
     client: undefined as never,
     $: undefined as never,
     directory,
-    worktree: directory,
+    worktree,
   });
   return plugin["tool.execute.before"]!;
 }
@@ -68,6 +68,45 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
         { args: { patchText: "*** Update File: README.md\n@@\n-placeholder\n+blocked\n" } } as never
       )
     ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("uses OpenCode's no-space patch header grammar", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-header-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/header-test", worktreeDir], repo);
+    try {
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
+      );
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook(
+          { tool: "apply_patch" } as never,
+          { args: { patchText: `*** Add File:${join(repo, "escaped.md")}\n+blocked\n` } } as never
+        )
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
+  });
+
+  test("denies a headerless patch from a marked worktree", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-empty-patch-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/empty-patch-test", worktreeDir], repo);
+    try {
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
+      );
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook({ tool: "apply_patch" } as never, { args: { patchText: "not a patch" } } as never)
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
   });
 
   test("denies a patch whose Move to destination leaves the worktree", async () => {
@@ -108,6 +147,29 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).rejects.toThrow(/fr-isolation/);
   });
 
+  test.each([
+    () => ({ edits: [{ filePath: "README.md" }] }),
+    () => ({ destination: "README.md" }),
+    () => ({ destination_path: "README.md" }),
+    () => ({ file_path: "README.md" }),
+    () => ({ paths: ["README.md"] }),
+    () => ({ path: ["README.md"] }),
+    () => ({ metadata: { nested: join(repo, "README.md") } }),
+  ])("denies every known or absolute-path argument shape: %#", async (args) => {
+    const hook = await makeHook(repo);
+    await expect(hook({ tool: "future_writer" } as never, { args: args() } as never)).rejects.toThrow(
+      /fr-isolation/
+    );
+  });
+
+  test.each(["todowrite", "task", "webfetch", "skill"])(
+    "allows a pathless %s call",
+    async (tool) => {
+      const hook = await makeHook(repo);
+      await expect(hook({ tool } as never, { args: { prompt: "hello" } } as never)).resolves.toBeUndefined();
+    }
+  );
+
   test("denies an unresolvable patch target rather than failing open", async () => {
     const hook = await makeHook(repo);
     await expect(
@@ -115,11 +177,9 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).rejects.toThrow(/fr-isolation/);
   });
 
-  test("denies a writer with no resolvable arguments rather than failing open", async () => {
+  test("allows a tool call with no path arguments", async () => {
     const hook = await makeHook(repo);
-    await expect(hook({ tool: "future_writer" } as never, {} as never)).rejects.toThrow(
-      /fr-isolation/
-    );
+    await expect(hook({ tool: "future_writer" } as never, {} as never)).resolves.toBeUndefined();
   });
 
   test("resolves a relative target against the session worktree", async () => {
@@ -127,6 +187,52 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     await expect(
       hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
     ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("resolves relative targets against OpenCode's directory, not worktree", async () => {
+    const hook = await makeHook(repo, "/");
+    await expect(
+      hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
+    ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("normalizes nonexistent path segments before checking the marker", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-normalize-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/normalize-test", worktreeDir], repo);
+    try {
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
+      );
+      const hook = await makeHook(worktreeDir);
+      const escaped = join(worktreeDir, "nope", "..", relative(worktreeDir, repo), "README.md");
+      await expect(
+        hook({ tool: "edit" } as never, { args: { filePath: escaped } } as never)
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
+  });
+
+  test("resolves an existing worktree symlink before checking the marker", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-symlink-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/symlink-test", worktreeDir], repo);
+    try {
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: worktreeDir, mode: "worktree" })
+      );
+      const escaped = join(worktreeDir, "base-link.md");
+      symlinkSync(join(repo, "README.md"), escaped);
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook({ tool: "edit" } as never, { args: { filePath: escaped } } as never)
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
   });
 
   test("allows the edit when FR_BASE_OK=1 is set", async () => {
@@ -164,11 +270,13 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("denies a path-carrying read tool by the fail-closed default", async () => {
+  test("allows the read-only built-ins", async () => {
     const hook = await makeHook(repo);
-    await expect(
-      hook({ tool: "read" } as never, { args: { filePath: join(repo, "README.md") } } as never)
-    ).rejects.toThrow(/fr-isolation/);
+    for (const tool of ["glob", "grep", "list", "read"]) {
+      await expect(
+        hook({ tool } as never, { args: { filePath: join(repo, "README.md") } } as never)
+      ).resolves.toBeUndefined();
+    }
   });
 
   test("allows edits inside a real linked worktree with a valid marker", async () => {

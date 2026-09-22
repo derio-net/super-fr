@@ -19,3 +19,13 @@ Implemented target-based gating, patch-header extraction, relative-path resoluti
 ### d5f2184dda6b · review · Implementation self-review
 
 Reviewed the target classification boundary and preserve only Bash plus known read-only OpenCode tools as explicit exceptions. Tests pin that arbitrary non-excluded writers cannot bypass the gate. No findings.
+
+<!-- fr:journal kind=review scope=debug id=8b27912b756e created=2026-09-22T13:58:23 -->
+### 8b27912b756e · review · Adversarial review corrections
+
+Restored the verified read-only built-in exclusions (bash, glob, grep, list, read); unknown path-carrying tools remain fail-closed. Replaced regex patch parsing with OpenCode's LF-split and prefix grammar, deny headerless patches in every fr-enabled context, recursively collect known path-bearing arguments and arbitrary absolute values, resolve from ctx.directory, normalize before marker checks, and realpath existing targets. Regression coverage pins each reviewed bypass.
+
+<!-- fr:journal kind=finding scope=debug id=opencode-edit-gate-adversarial-followup created=2026-09-22T13:59:17 state=fixed -->
+### opencode-edit-gate-adversarial-followup · finding [fixed] · Closed adversarial parser and resolver bypasses
+
+Fresh OpenCode 1.18.32 probes confirmed a worktree-launched no-space Add File targeting the base clone is blocked, base-clone read remains allowed, and base-clone apply_patch is blocked. The acceptance row remains ci with this evidence.
