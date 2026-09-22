@@ -30,18 +30,22 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T05:56:55+00:00'
+      note: Claude Code walked repo (sync) + org; triage-skill-claude-code -> skipped.
+        Journal walk-claude-code-repo, walk-claude-code-org.
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-22T05:56:55+00:00'
+      note: OpenCode walked repo first-run; triage-skill-opencode -> skipped. Journal
+        walk-opencode.
     P5.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: '-'
+      ticked_at: '2026-09-22T05:56:56+00:00'
+      note: Not walked by operator decision d4; triage-skill-hermes stays not-implemented
+        with that reason.
   completion:
-    at: null
-    note: null
+    at: '2026-09-22T05:56:56+00:00'
+    note: 'Post-merge live walks: Claude Code (repo sync + org) and OpenCode (repo
+      first-run) passed; Hermes not walked (d4).'
     observed_prs: []
