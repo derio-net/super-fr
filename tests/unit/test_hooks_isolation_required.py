@@ -129,7 +129,34 @@ def test_allowlist_path_allows(tmp_path: Path) -> None:
     assert allowed(run_hook(payload(wt / "notes" / "x.md")))
 
 
+def notebook_payload(notebook_path: Path) -> dict:
+    """The shape NotebookEdit really sends: its schema requires `notebook_path` and
+    sets additionalProperties false, so it can never carry a `file_path`."""
+    return {
+        "tool_name": "NotebookEdit",
+        "tool_input": {"notebook_path": str(notebook_path), "new_source": "print(1)"},
+    }
+
+
+def test_a_notebook_edit_in_a_valid_workspace_allows(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    assert allowed(run_hook(notebook_payload(wt / "analysis.ipynb")))
+
+
 # ---------- deny paths ----------
+
+
+def test_a_notebook_edit_blocks_like_any_other_edit(tmp_path: Path) -> None:
+    """The gate named NotebookEdit in its matcher, header and `case`, yet read only
+    `file_path`. NotebookEdit's target is `notebook_path`, so the path arrived empty
+    and `fr_isolation_decide_edit` allows an empty path. Every notebook edit went
+    through ungated: declared coverage, not observed enforcement (#550's Claude-side
+    twin, found by the fr-triage post-merge walk)."""
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)  # fr-enabled, no marker
+    assert decision(run_hook(notebook_payload(wt / "analysis.ipynb"))) == "deny"
 
 
 def test_no_marker_blocks(tmp_path: Path) -> None:

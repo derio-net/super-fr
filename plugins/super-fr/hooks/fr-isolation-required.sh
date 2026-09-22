@@ -32,7 +32,9 @@ esac
 # jq is load-bearing: under `set -eu` an absent jq aborts here (no deny emitted
 # → fail-open). Same posture as fr-isolation-guard.sh — a discipline backstop,
 # not a security boundary; the hook tests skip when jq is missing.
-file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+# NotebookEdit's target is `notebook_path` (its schema has no `file_path`), so
+# reading only `file_path` handed the gate an empty path, which it allows.
+file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
 
 # Call in an `if` so a deny (`return 1`) does not trip `set -e`.
 if fr_isolation_decide_edit "$file"; then
