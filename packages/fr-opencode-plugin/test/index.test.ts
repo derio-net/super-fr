@@ -60,6 +60,75 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).rejects.toThrow(/fr-isolation/);
   });
 
+  test("denies an unlisted patch tool whose target is in patchText", async () => {
+    const hook = await makeHook(repo);
+    await expect(
+      hook(
+        { tool: "apply_patch" } as never,
+        { args: { patchText: "*** Update File: README.md\n@@\n-placeholder\n+blocked\n" } } as never
+      )
+    ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("denies a patch whose Move to destination leaves the worktree", async () => {
+    const worktreeDir = mkdtempSync(join(tmpdir(), "fr-opencode-move-wt-"));
+    rmSync(worktreeDir, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "-b", "feat/move-test", worktreeDir], repo);
+    try {
+      const resolvedTop = execFileSync("bash", ["-c", `cd "${worktreeDir}" && pwd -P`])
+        .toString()
+        .trim();
+      writeFileSync(
+        join(worktreeDir, ".fr-isolation"),
+        JSON.stringify({ toplevel: resolvedTop, mode: "worktree" })
+      );
+      const hook = await makeHook(worktreeDir);
+      await expect(
+        hook(
+          { tool: "apply_patch" } as never,
+          {
+            args: {
+              patchText:
+                `*** Update File: ${join(worktreeDir, "README.md")}\n` +
+                `*** Move to: ${join(repo, "README.md")}\n` +
+                "@@\n-placeholder\n+blocked\n",
+            },
+          } as never
+        )
+      ).rejects.toThrow(/fr-isolation/);
+    } finally {
+      sh("git", ["worktree", "remove", "--force", worktreeDir], repo);
+    }
+  });
+
+  test("denies a future file-writing tool without a tool-name allowlist", async () => {
+    const hook = await makeHook(repo);
+    await expect(
+      hook({ tool: "future_writer" } as never, { args: { path: "README.md" } } as never)
+    ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("denies an unresolvable patch target rather than failing open", async () => {
+    const hook = await makeHook(repo);
+    await expect(
+      hook({ tool: "apply_patch" } as never, { args: { patchText: "not a patch" } } as never)
+    ).rejects.toThrow(/fr-isolation/);
+  });
+
+  test("denies a writer with no resolvable arguments rather than failing open", async () => {
+    const hook = await makeHook(repo);
+    await expect(hook({ tool: "future_writer" } as never, {} as never)).rejects.toThrow(
+      /fr-isolation/
+    );
+  });
+
+  test("resolves a relative target against the session worktree", async () => {
+    const hook = await makeHook(repo);
+    await expect(
+      hook({ tool: "edit" } as never, { args: { filePath: "README.md" } } as never)
+    ).rejects.toThrow(/fr-isolation/);
+  });
+
   test("allows the edit when FR_BASE_OK=1 is set", async () => {
     process.env.FR_BASE_OK = "1";
     const hook = await makeHook(repo);
@@ -87,12 +156,19 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).rejects.toThrow(/fr-isolation/);
   });
 
-  test("ignores non-edit tools entirely", async () => {
+  test("keeps Bash ungated", async () => {
     const hook = await makeHook(repo);
     const target = join(repo, "README.md");
     await expect(
       hook({ tool: "bash" } as never, { args: { filePath: target } } as never)
     ).resolves.toBeUndefined();
+  });
+
+  test("denies a path-carrying read tool by the fail-closed default", async () => {
+    const hook = await makeHook(repo);
+    await expect(
+      hook({ tool: "read" } as never, { args: { filePath: join(repo, "README.md") } } as never)
+    ).rejects.toThrow(/fr-isolation/);
   });
 
   test("allows edits inside a real linked worktree with a valid marker", async () => {

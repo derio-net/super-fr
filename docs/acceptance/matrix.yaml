@@ -362,20 +362,12 @@ rows:
       unit:
       - super-fr:packages/fr-opencode-plugin/test/index.test.ts
       - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
-    status: skipped
-    notes: >-
-      12 bun unit tests cover the hook + marker logic, including a real
-      `git worktree add` scenario, and now run in CI. Live-verified twice with a real
-      `opencode run` session against a free public model
-      (opencode/north-mini-code-free) targeting a scratch fr-enabled repo
-      with the plugin wired into `.opencode/plugins/`: first during
-      development (2026-07-08) and re-confirmed post-merge as Test Plan
-      step 3 (2026-07-09, fresh isolation devcontainer, merged main) — both
-      times the model's `edit` tool call (`args.filePath`) was denied with
-      the exact hook message, confirming the assumed OpenCode tool
-      name/arg shape is correct against the real plugin API. The remaining skipped
-      leg is the live model/API call, which is not automated in CI; backfill owed if
-      that becomes scriptable/offline-mockable.
+    status: ci
+    notes: CI now covers unlisted future writers, apply_patch patch-body paths, malformed
+      patch targets, relative paths, and the marker/allowlist escapes. Fresh OpenCode
+      1.18.32 sessions from the isolated checkout on 2026-09-22 blocked base-clone absolute
+      edit, GPT-family apply_patch (patchText), and relative-path edit attempts; an
+      edit inside this valid worktree was allowed.
   - id: opencode-commands-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can type /fr-goal (and the other 8 mirrored fr-* skills)
