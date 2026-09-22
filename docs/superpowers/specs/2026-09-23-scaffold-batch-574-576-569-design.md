@@ -137,39 +137,103 @@ human should reconfirm" with a check that fails on its own.
 
 ### C. Mode from state (gh#569)
 
-- `IsolationState` gains `target: Literal["devcontainer", "worktree"] | None =
-  None`. `LocalWorktreeDevcontainerTarget.up` writes `"devcontainer"` and
-  `HostWorktreeTarget.up` writes `"worktree"`. The state file lives under
-  `~/.cache` and is not a registered artifact kind. The model is not
-  `extra="forbid"`, so an older `fr` ignores the key instead of refusing.
-- `_target_for(root, state)`: a valid external marker is checked first, as
-  today. Otherwise `state.target` decides. A legacy state with `target=None`
-  maps `profile == "host"` to worktree and anything else to devcontainer. The
-  environment variable is never read.
-- Routed through `_target_for`: `exec`, `restart`, `down`, `down --all` (per
-  workspace, including its refusal probe), `status` (per row) and
-  `verify-merge` when the workspace exists. Still on the environment variable:
-  `up`, `gc` (a host-wide sweep, not tied to one workspace) and `verify-merge`
-  for a reaped workspace. Each one has only the host to go on.
+- **The field.** `IsolationState` gains `target: Literal["devcontainer",
+  "worktree", "external"] | None = None`. Each target's `up` writes its own
+  value.
+- **Where the state lives, and why legacy inference is permanent.** The state
+  file is `<git-common-dir>/fr/isolation/<branch>.json` (`types.py`
+  `state_path`). It is not a registered artifact kind, and the model is not
+  `extra="forbid"`, so an older `fr` loads the new field without refusing. But
+  an older `fr` on `PATH` also **rewrites** the file. `fr-session-bind.sh` →
+  `sessions.attach` → `save_state` drops the key it does not know. So `target`
+  can vanish from a new workspace at any time, and legacy inference is
+  **permanently load-bearing**, not a transitional fallback.
+- **Pure mode resolution.** `recorded_mode(state)` lives in
+  `fr/isolation/types.py` and is pure:
+  - `state.target` when set;
+  - otherwise `profile == "host"` → `worktree`;
+  - `profile == "external"` → `external`;
+  - anything else → `devcontainer`.
+- **Target construction.** `target_for_state(state, runner, gc_spawner)` lives
+  in a new `fr/isolation/routing.py`, which imports all three target classes.
+  - An `external` mode is adopted through `ExternalTarget.detect` as today. If
+    no valid marker plus container evidence is found, it fails closed with an
+    `IsolationError` naming the workspace. It never falls through to
+    devcontainer.
+  - The environment variable is never read here.
+  - `isolation_cmd._target_for(root, state)` is the single monkeypatchable seam
+    over it. `_target` (env-based) stays for the host-level commands.
+- **Routed by the recorded mode:**
+  - `exec`, `restart`;
+  - `down --branch`, `down --worktree` (the path `fr-worktree-remove.sh` calls,
+    which never sets the variable);
+  - `down --all`, per workspace, including its `_down_refusal` probe;
+  - `status`, per row, where the `--stats`/`--push-check` refusal also runs per
+    row. A set containing any host or external workspace is refused naming it,
+    same wording as today. `status` over zero workspaces selects no target at
+    all;
+  - `verify-merge` when the workspace exists.
+- **Still on the environment variable** (only the host to go on): `up`, `gc`'s
+  discovery and docker sweep, and `verify-merge` for an already reaped
+  workspace.
+- **gc's per-workspace teardown follows the recorded mode too.** In
+  `local.py`'s gc, the reap sibling and its dry-run hazard probe are built
+  with `type(self)(…)`. That is the sweeping class, not the workspace's, so a
+  host-worktree sweep reaping a devcontainer workspace would skip
+  `_teardown_container` and leak the container (the #354 leak). The sibling is
+  now built through `routing.target_for_state`, with a function-local import to
+  avoid the `hostworktree → local` cycle.
+- **The background gc keeps its mode.** `_detached_gc_spawn` starts `python -m
+  fr isolation gc` with the caller's environment. After this change, a `down`
+  on a host-worktree workspace run *without* the variable (the exact #569 case)
+  would therefore start a devcontainer sweep. On a docker-less pod,
+  `_labelled_containers` would raise `FileNotFoundError` and kill it. So each
+  target spawns gc with `FR_ISOLATION_TARGET` set to its own mode:
+  `HostWorktreeTarget` → `worktree`, the devcontainer target → `devcontainer`.
 - **`host` becomes a reserved profile name.** `fr init scaffold --profile host`
-  is refused. The legacy inference above therefore cannot misroute a real
-  devcontainer profile. It also retires the confusing
-  `.devcontainer/host/devcontainer.json not found` message at its root.
+  is refused. Because legacy inference is permanent (above), this is what keeps
+  a real devcontainer profile from ever being misrouted. It also retires the
+  confusing `.devcontainer/host/devcontainer.json not found` message at its
+  root.
 
 ### D. Housekeeping
 
-Minor version bump (new `--feature` flag and `@version` syntax). The fr-init
-skill and both mirrors are updated. AGENTS.md's `--tool` wording is updated if
-it still says "known tools map to features". The explainers are checked for
-fr-init/scaffold prose. Acceptance rows are added (§5).
+- **Version:** minor bump (new `--feature` flag and `@version` syntax).
+- **Code shape the change forces:**
+  - `features` is typed `dict[str, dict[str, object]]`, since `installMaven`
+    is a bool;
+  - the `containerEnv` uv check keys on the *parsed* tool name, so it survives
+    `uv@x`;
+  - `init_cmd` prints its errors on stderr, matching the detection report;
+  - the tests pinning the old notes path and `HOST_CLI_POST_CREATE`'s keys
+    (`test_init_scaffold.py` ~334/484) are rewritten.
+- **Prose:**
+  - the `fr-init` skill: known set, `@version`, `--feature`, and the Java
+    version confirmation;
+  - the `fr-isolation` skill: `FR_ISOLATION_TARGET` selects the mode at `up`,
+    and later commands follow the workspace's recorded mode;
+  - AGENTS.md's `--tool` wording, if present;
+  - both mirror generators (`sync-opencode.py` **and** `sync-hermes.py`);
+  - the explainers, checked for scaffold/isolation-mode prose.
+- **Acceptance:** rows are added (§5). The existing rows `multibackend-scaffold`
+  and `isolation-host-worktree-e2e` get notes updated via `fr acceptance
+  set-status` where their text now misdescribes behaviour.
+- **Pin-check script:** run through `uv run`, so the `fr.isolation.scaffold`
+  import resolves. Downloading and hashing each asset is the check itself.
+  Comparing against upstream `checksums.txt` is not added, because a match
+  there proves nothing the hash does not.
 
 ## 4. Risks
 
-- **Java feature distro.** The feature's default `jdkDistro` (`ms`) may not
-  ship every major. `8` in particular is not a Microsoft build. The live proof
-  uses 17. The detection warning names the version, so a failure at `up` is
-  attributable. Changing the distro is left to the operator through
-  `--feature`.
+- **Java feature distro.** Not a risk. The feature's default `jdkDistro` is
+  `ms`, and its own `install.sh` (lines 279-287 upstream) switches to `tem`
+  when `ms` lacks the requested major (for example 8). No `jdkDistro` override
+  is needed.
+- **A failed postCreate leaves debris.** `local.py` raises on a non-zero
+  `devcontainer up` before `save_state`, so the worktree and container remain
+  with no fr state. This is not new. The unsupported-architecture exit makes it
+  reachable on purpose, but only on architectures other than amd64 and arm64.
+  Deferred to gh#578, not fixed here.
 - **dpkg absent.** The `uname -m` fallback covers non-Debian images. Any other
   spelling fails naming itself. That failure is the intended one.
 - **Scheduled check flakiness** (network). It fails the run, which GitHub
@@ -193,16 +257,33 @@ fr-init/scaffold prose. Acceptance rows are added (§5).
 3. Unit `detect_java_version`: each source, the precedence between them,
    `${prop}` indirection, a namespaced pom, `1.8`→`8`, none found; explicit
    `@version` overrides detection; the stderr report and warning.
-4. Unit host-CLI snippet, **executed** under `bash` with stub `dpkg`/`curl`/
-   `sha256sum`/`tar`/`sudo` on `PATH`: amd64 and arm64 each select their own
-   URL and checksum; `x86_64`/`aarch64` normalise; `s390x` exits non-zero, names
-   `s390x`, and never calls `curl`.
-5. Unit isolation CLI: with `FR_ISOLATION_TARGET` unset, `exec`, `status`,
-   `down`, `down --all`, `restart` and `verify-merge` on a `target="worktree"`
-   state route to the host-worktree target. The reverse case also holds (a
-   devcontainer state is not rerouted when the env says worktree). A legacy
-   state with no `target` infers from its profile. `up` and `gc` still follow
-   the env.
+4. Unit host-CLI snippet, **executed** under `sh` (what devcontainer runs
+   `postCreateCommand` with: dash on the Ubuntu base image) with stub
+   `dpkg`/`uname`/`curl`/`sha256sum`/`tar`/`sudo` on `PATH`:
+   - amd64 and arm64 each select their own URL and checksum;
+   - `x86_64` and `aarch64` normalise;
+   - `s390x` exits non-zero, names `s390x`, and never calls `curl`;
+   - a failing `sha256sum` fails the whole snippet.
+5. Unit isolation CLI: with `FR_ISOLATION_TARGET` unset, `exec`, `restart`,
+   `status`, `down --branch`, `down --worktree`, `down --all` and
+   `verify-merge` on a `target="worktree"` state route to the host-worktree
+   target.
+   - The reverse case also holds: a devcontainer state is not rerouted when the
+     env says worktree.
+   - Legacy states with no `target` infer from `profile`, for `host`,
+     `external` and a named profile.
+   - An external state without a marker fails closed.
+   - `status --stats` over a host row is refused.
+   - `up` and `gc` still follow the env.
+   - Existing tests the design changes are rewritten, not deleted: the
+     bogus-env tests for `status` and `down --all` (`test_isolation_cmd.py`
+     ~1411/1428) now assert that the env is ignored there, and still fail
+     closed for `up`/`gc`. The stubs over `isolation_cmd._target` move to
+     `_target_for` for the addressing commands.
+5a. Unit gc: a reap sibling is built from the workspace's recorded mode, not
+    the sweeper's class. The spawned gc carries the spawning target's
+    `FR_ISOLATION_TARGET`.
+5b. Unit `recorded_mode` is pure, and `IsolationState` round-trips `target`.
 6. Integration `test_hostworktree_lifecycle`: `up` under
    `FR_ISOLATION_TARGET=worktree`, then `exec` with the variable removed,
    succeeds.

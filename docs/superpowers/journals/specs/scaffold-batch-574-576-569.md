@@ -24,3 +24,8 @@ Operator chose to include a scheduled workflow verifying every pinned glab/tea a
 ### d5-models · decision · All fr model tiers bound to claude-opus-5-5
 
 Operator instruction: every subagent and tier runs Opus 5.5; claude-code mechanical/standard/hard/orchestrator bound via fr models set.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-09-23T01:06:02 -->
+### spec-review-1 · review · Spec review (independent Opus reviewer): 12 findings, all folded or dispositioned
+
+Folded: (1) gc reap sibling built from type(self) → now routing.target_for_state; background gc spawned with the spawning target's mode (verified local.py:1036, local.py:65-89). (2) down --worktree added to routing (fr-worktree-remove.sh never sets the env). (3) status per-row routing + per-row --stats/--push-check refusal; zero states → no target. (4) existing bogus-env tests + _target stubs listed as rewrites; _target_for is the seam. (5) state lives under <git-common-dir>/fr/isolation, older PATH fr drops 'target' on rewrite → legacy inference permanent, justifies reserved 'host'. (6) 'external' added to the Literal; external without marker fails closed. (7) snippet test under sh + sha256 failure case. (9) code-shape changes listed. (10) fr-isolation skill prose, both mirror syncs, existing matrix rows' notes. (12) pin check via uv run. Refuted: (8) Java 8 risk — feature install.sh:279-287 falls back ms→tem itself. Deferred: (11) failed postCreate debris → gh#578. Refuted-as-redundant: (12b) checksums.txt comparison.

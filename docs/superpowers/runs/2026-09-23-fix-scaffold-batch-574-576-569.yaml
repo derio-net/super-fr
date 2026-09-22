@@ -3,13 +3,24 @@ run: 2026-09-23-fix-scaffold-batch-574-576-569
 workflow: fr-goal@1
 branch: fix/scaffold-batch-574-576-569
 started: '2026-09-22T22:49:13+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-22T22:49:21+00:00'
+    state: done
+    at: '2026-09-22T23:00:27+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-22T23:00:28+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-22T23:00:28+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: ec61d713-0539-4679-a830-b48e724c8675
   plan:
     state: pending
   plan-review:
