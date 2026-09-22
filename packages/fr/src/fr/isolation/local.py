@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Any, ClassVar
+from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
 from fr.isolation.types import (
@@ -29,6 +29,7 @@ from fr.isolation.types import (
     delete_state,
     harden_secret_file,
     list_states,
+    recorded_mode,
     repo_cache_name,
     resolve_profile,
     save_state,
@@ -62,10 +63,16 @@ def _home() -> Path:
 GcSpawner = Callable[[Path], None]
 
 
-def _detached_gc_spawn(repo_root: Path) -> None:
+def _detached_gc_spawn(repo_root: Path, *, mode: str | None = None) -> None:
     """Fire-and-forget `fr isolation gc`: detached (own session), non-blocking,
     output to a rotating-ish log. Any spawn error is swallowed — a caller must
     never fail because a background reap could not start.
+
+    `mode`, when given, is pinned as the child's `FR_ISOLATION_TARGET` (gh#569):
+    the sweep's discovery and docker steps run in the SPAWNING target's mode,
+    not whatever the caller's env says. A `down` of a host-worktree workspace
+    run without the env would otherwise start a devcontainer sweep, which dies
+    on `docker ps` (FileNotFoundError) on a docker-less pod.
 
     Named with `--repo` and run there rather than inheriting the caller's cwd
     (#423): a `down` fired from inside the worktree it just removed would
@@ -80,6 +87,7 @@ def _detached_gc_spawn(repo_root: Path) -> None:
         subprocess.Popen(
             [sys.executable, "-m", "fr", "isolation", "gc", "--repo", str(repo_root)],
             cwd=str(repo_root) if repo_root.is_dir() else None,
+            env=None if mode is None else {**os.environ, "FR_ISOLATION_TARGET": mode},
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=log,
@@ -313,6 +321,10 @@ def _main_worktree_root(repo_root: Path) -> Path:
 
 
 class LocalWorktreeDevcontainerTarget:
+    # The mode this class implements — pinned on the background gc it spawns
+    # (gh#569). HostWorktreeTarget overrides it.
+    _MODE: ClassVar[str] = "devcontainer"
+
     def __init__(
         self,
         repo_root: Path,
@@ -406,6 +418,7 @@ class LocalWorktreeDevcontainerTarget:
             worktree=worktree,
             profile=name,
             created_at=datetime.now(UTC).isoformat(),
+            target="devcontainer",
         )
         save_state(state)
         self._write_isolation_marker(worktree, branch)
@@ -897,9 +910,16 @@ class LocalWorktreeDevcontainerTarget:
 
     def _spawn_gc(self) -> None:
         """Fire the opportunistic background sweep — best-effort, never raises
-        into up()/down()."""
+        into up()/down().
+
+        The production spawner gets this target's mode pinned (gh#569); an
+        injected spawner (a test double) keeps the plain one-argument shape,
+        which is why `GcSpawner` stays `Callable[[Path], None]`."""
         try:
-            self._gc_spawner(self.repo_root)
+            if self._gc_spawner is _detached_gc_spawn:
+                _detached_gc_spawn(self.repo_root, mode=self._MODE)
+            else:
+                self._gc_spawner(self.repo_root)
         except Exception:
             pass
 
@@ -1013,7 +1033,31 @@ class LocalWorktreeDevcontainerTarget:
         dry-run asks `_reap_hazard` the SAME question the live reap enforces
         before promising "would-reap" — a preview that predicts an action the
         live run would refuse is not a preview.
+
+        Both the preview probe and the live teardown go through a sibling built
+        from the WORKSPACE's recorded mode (gh#569), not `type(self)`. gc is
+        host-wide and `self` is whatever mode the triggering command ran in: a
+        host-worktree sweep reaping a devcontainer workspace through
+        `type(self)` ran the docker-less `_teardown_container` no-op and leaked
+        the container — the #354 leak by another route. Function-local import:
+        `routing` imports `hostworktree`, which imports this module.
         """
+        from fr.isolation.external import GC_EXTERNAL_DETAIL
+        from fr.isolation.routing import target_for_state
+
+        if recorded_mode(state) == "external":
+            # An adopted checkout is the preparer's to clean up — classified,
+            # never reaped, by a worktree sweep (same verdict ExternalTarget.gc
+            # reports).
+            return GcAction(wt, state.branch, "external", "skipped", GC_EXTERNAL_DETAIL)
+        # Rooted at the WORKSPACE's repo (see the dry-run note below) and built
+        # with the NO-OP spawner so a reap never re-triggers a sweep. The cast
+        # is sound: with external excluded above, routing only ever returns
+        # this class or HostWorktreeTarget.
+        sibling = cast(
+            "LocalWorktreeDevcontainerTarget",
+            target_for_state(state, runner=self.run, gc_spawner=_noop_gc_spawn),
+        )
         if dry_run:
             # Ask through a sibling rooted at the WORKSPACE's repo, exactly as
             # the live path below does — `_reap_hazard` calls
@@ -1025,7 +1069,6 @@ class LocalWorktreeDevcontainerTarget:
             # for a workspace the live run then reaps — the preview/live
             # divergence this dry-run change exists to remove (phase-3 review
             # f5). Same sibling idiom as `_merged_by_content`.
-            sibling = type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn)
             hazard = sibling._reap_hazard(state)
             if hazard is not None:
                 return GcAction(wt, state.branch, verdict, "would-skip", hazard.detail)
@@ -1033,11 +1076,8 @@ class LocalWorktreeDevcontainerTarget:
         try:
             # Tear down through a Target rooted at the workspace's OWN repo
             # (down() keys git/gh off its repo_root) — substrate-neutral: gc
-            # orchestrates Targets, it doesn't reach past them. The sibling
-            # gets the NO-OP spawner so a reap never re-triggers a sweep.
-            type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
-                state, force=False
-            )
+            # orchestrates Targets, it doesn't reach past them.
+            sibling.down(state, force=False)
             return GcAction(wt, state.branch, verdict, "reaped")
         except ReapRefused as e:
             return GcAction(wt, state.branch, verdict, "skipped", e.hazard.detail)

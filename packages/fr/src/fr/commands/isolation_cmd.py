@@ -23,6 +23,7 @@ from fr.isolation.local import (
     _detached_gc_spawn,
     subprocess_runner,
 )
+from fr.isolation.routing import target_for_state
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -49,16 +50,20 @@ DEFAULT_BRANCH = "vk-iso/work"
 
 
 def _target(repo: Path) -> Target:
-    """Select the isolation backend. Precedence (spec §A Selection):
+    """Select the isolation backend where NO workspace exists yet — `up`, `gc`'s
+    host-wide discovery sweep, and `verify-merge` on an already reaped branch.
+    Every command addressing an existing workspace uses `_target_for` instead
+    (gh#569): the workspace's recorded mode, never this env. Precedence (spec
+    §A Selection):
 
     1. a valid `external` marker at `repo`'s toplevel → `ExternalTarget`,
        regardless of any other configuration — a prepared container is a
        recognize-and-adopt, not a second isolation attempt;
-    2. else `FR_ISOLATION_TARGET` (a HOST-level declaration, never a per-call
-       flag — spec §B): unset/"devcontainer" → the local worktree+devcontainer
-       target (unchanged default); "worktree" → HostWorktreeTarget (fr worktree,
-       host env, no docker); anything else fails closed so a broken docker can't
-       be silently routed around."""
+    2. else `FR_ISOLATION_TARGET` (selects the mode at creation, never a
+       per-call flag — spec §B): unset/"devcontainer" → the local
+       worktree+devcontainer target (unchanged default); "worktree" →
+       HostWorktreeTarget (fr worktree, host env, no docker); anything else
+       fails closed so a broken docker can't be silently routed around."""
     root = repo.resolve()
     external = ExternalTarget.detect(root, runner=_runner)
     if external is not None:
@@ -69,6 +74,19 @@ def _target(repo: Path) -> Target:
     if mode == "worktree":
         return HostWorktreeTarget(root, runner=_runner, gc_spawner=_gc_spawner)
     raise IsolationError(f"unknown FR_ISOLATION_TARGET {mode!r} — valid: devcontainer | worktree")
+
+
+def _target_for(root: Path, state: IsolationState) -> Target:
+    """The backend that owns an EXISTING workspace, from its recorded mode
+    (gh#569) — the single seam every addressing command goes through. `root`
+    is the repo the command was pointed at; the routing itself keys off
+    `state.repo_root`. An external workspace whose marker/evidence is gone is
+    a clean exit 2, like `_target_or_exit`."""
+    try:
+        return target_for_state(state, runner=_runner, gc_spawner=_gc_spawner)
+    except IsolationError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
 
 
 def _worktree_ops(target: Target) -> LocalWorktreeDevcontainerTarget:
@@ -122,9 +140,9 @@ def _resolve_repo(repo: Path) -> Path:
 def _target_or_exit(repo: Path) -> Target:
     """`_target` + uniform IsolationError → clean exit 2. `_target` fails closed
     on a bogus `FR_ISOLATION_TARGET`; every command that selects a target must
-    map that to the same "error: … (exit 2)" UX rather than a traceback (up /
-    restart / down already wrap their whole body; this is the shared wrap for
-    exec / status / verify-merge / gc / down --all)."""
+    map that to the same "error: … (exit 2)" UX rather than a traceback (up
+    already wraps its whole body; this is the shared wrap for gc and a reaped
+    verify-merge — the other env-selected commands)."""
     try:
         return _target(repo)
     except IsolationError as err:
@@ -304,7 +322,7 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target_or_exit(repo).exec(state, argv))
+    raise typer.Exit(_target_for(root, state).exec(state, argv))
 
 
 @isolation_app.command()
@@ -328,7 +346,7 @@ def restart(
     # Mirror exec's no-branch resolution: the single active workspace, or error.
     state = _resolve_single(root, branch)
     try:
-        container = _target(root).restart(state, force=force)
+        container = _target_for(root, state).restart(state, force=force)
     except IsolationError as err:
         _fail(err)
         return
@@ -368,17 +386,22 @@ def status(
         return
     if session:
         states = [s for s in states if any(b.session_id == session for b in s.sessions)]
-    target = _target_or_exit(root)
+    # One target PER ROW, from each workspace's recorded mode (gh#569) — zero
+    # workspaces select none. The --stats/--push-check refusal runs per row
+    # BEFORE any row is rendered, so a set holding any host/external workspace
+    # is refused naming its mode rather than half-printed.
+    targets = [_target_for(root, s) for s in states]
     if stats or push_check:
-        _refuse_no_docker_status_extras(target)
-    rows = [target.status(s) for s in states]
+        for target in targets:
+            _refuse_no_docker_status_extras(target)
+    rows = [target.status(s) for target, s in zip(targets, states)]
     for row, s in zip(rows, states):
         row["sessions"] = [b.model_dump() for b in s.sessions]
     if stats:
-        for row, s in zip(rows, states):
+        for row, target, s in zip(rows, targets, states):
             row["stats"] = target.stats(s)
     if push_check:
-        for row, s in zip(rows, states):
+        for row, target, s in zip(rows, targets, states):
             row["push_check"] = _worktree_ops(target).push_check(s)
     if format == "json":
         typer.echo(json.dumps(rows, indent=2))
@@ -502,7 +525,7 @@ def down(
             err=True,
         )
     try:
-        _target(root).down(state, force=force)
+        _target_for(root, state).down(state, force=force)
     except IsolationError as err:
         _fail(err)
         return
@@ -563,11 +586,14 @@ def _down_all(
     deliberate "end this pipeline" lever, with the guard self-heal as the
     lazy backstop.
     """
-    target = _target_or_exit(root)
-    plan = [(state, _down_refusal(target, state, force)) for state in list_states(root)]
+    # Each workspace is probed AND torn down through its own recorded mode
+    # (gh#569): one repo can hold a devcontainer and a host-worktree workspace,
+    # and the env of whoever runs `--all` says nothing about either.
+    routed = [(state, _target_for(root, state)) for state in list_states(root)]
+    plan = [(state, target, _down_refusal(target, state, force)) for state, target in routed]
     header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
     typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
-    for state, refusal in plan:
+    for state, _t, refusal in plan:
         if refusal is None:
             typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
         else:
@@ -575,7 +601,7 @@ def _down_all(
             typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
     foreign = [
         (state.branch, [b.session_id for b in state.sessions if b.session_id != session])
-        for state, refusal in plan
+        for state, _t, refusal in plan
         if refusal is None
     ]
     foreign = [(branch, sids) for branch, sids in foreign if sids]
@@ -595,7 +621,7 @@ def _down_all(
         )
     torn: list[str] = []
     kept: list[tuple[str, str]] = []
-    for state, refusal in plan:
+    for state, target, refusal in plan:
         if refusal is not None:
             kept.append((state.branch, refusal))
             continue
@@ -709,7 +735,9 @@ def verify_merge(
             _fail(IsolationError("no isolation workspace — run `fr isolation up` first."))
             return
         reaped = True
-    target = _target_or_exit(root)
+    # A live workspace follows its recorded mode (gh#569); a reaped one has
+    # only the host to go on, so it keeps the env-based selection.
+    target = _target_or_exit(root) if state is None else _target_for(root, state)
     _refuse_external(target, "verify-merge")
     if state is None:
         assert branch is not None

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
 from fr.isolation.types import IsolationError, IsolationState, save_state
@@ -25,6 +25,8 @@ _EXTERNAL = "environment is externally managed — restart/inspect the host, not
 
 
 class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
+    _MODE: ClassVar[str] = "worktree"
+
     def up(
         self,
         profile: str | None,
@@ -42,6 +44,7 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
             worktree=worktree,
             profile="host",
             created_at=datetime.now(UTC).isoformat(),
+            target="worktree",
         )
         save_state(state)
         self._write_isolation_marker(worktree, branch)
