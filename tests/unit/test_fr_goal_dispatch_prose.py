@@ -85,6 +85,7 @@ def test_the_new_tool_mention_stayed_inside_the_scoped_clause(skill_text: str) -
     harness-specific tool name into the two byte-identical mirrors."""
     assert [(v.line, v.tool) for v in scan_prose(skill_text)] == []
 
+
 _MULTIPLE_RE = re.compile(r"(?<![\w.])(\d+)\s*(?:[x×]|times)\b")
 
 

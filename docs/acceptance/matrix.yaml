@@ -3413,9 +3413,16 @@ rows:
       in any skill, agent or rule (canonical or mirror) and in any spelling, fails CI
     origin:
     - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.A-C. Closes the gap the adversarial review of #532 found: the flag
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
+      - super-fr:tests/unit/test_harness_vocabulary.py
+    status: ci
+    notes: 'Spec 3.A-C, phase 3. ARGUMENT_VOCABULARY (isolation flag in every spelling,
+      run_in_background, Hermes background=true) is scanned by scan_prose everywhere;
+      the tripwire covers skills, agents and rules (canonical plugins/super-fr/rules
+      + .claude/rules, mirrors .opencode/instructions + .hermes/SOUL.d) and asserts
+      zero violations. Closes the gap the adversarial review of #532 found: the flag
       was scanned only in agents, in one spelling; run_in_background nowhere; rules
       not at all.'
   - id: executor-long-commands-per-harness
@@ -3424,11 +3431,18 @@ rows:
       longer than that harness's foreground limit, and to leave nothing running at handback
     origin:
     - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec 3.D. OpenCode kills at its bash timeout (default 2 min) and has no
-      background argument; the #532 prose told it to use run_in_background. Live-verified
-      by the Test Plan smoke.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
+      - super-fr:tests/unit/test_phase_executor_agent.py
+    status: ci
+    notes: 'Spec 3.D, phase 3. The executor''s long-commands prose is a Harness clause
+      with three verified arms (Claude Code run_in_background + bounded wait; OpenCode
+      explicit bash timeout up to 600000 ms, which kills on expiry, else detach to a
+      log and poll; Hermes terminal background=true + process wait/kill), pinned by
+      test_phase_executor_agent.py, with bounded waits / nothing running at handback
+      (#503) / own exit code kept unscoped. The tripwire keeps run_in_background inside
+      the clause. Still owed: the Test Plan''s live OpenCode smoke.'
   - id: phase-executor-description-rules-out-second-worktree
     capability: fr-goal phase executor dispatch
     acceptance: The phase-executor description check fails a description that merely

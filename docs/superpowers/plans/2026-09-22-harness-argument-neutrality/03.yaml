@@ -53,18 +53,18 @@ state:
       ticked_at: '2026-09-22T12:26:21+00:00'
       note: null
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-22T12:28:14+00:00'
       note: null
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-22T12:35:06+00:00'
       note: null
     P3.T3.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-22T12:35:06+00:00'
       note: null
   completion:
-    at: null
+    at: '2026-09-22T12:35:07+00:00'
     note: null
     observed_prs: []

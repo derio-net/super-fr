@@ -5,10 +5,18 @@
 ## Rule
 
 In an **fr-enabled** repo, edits to tracked source/docs must happen **inside an
-fr-isolation workspace**, never the base clone. This is enforced by the
-PreToolUse hook `fr-isolation-required.sh` (shipped by super-fr, registered via
-the plugin's `hooks.json`), which gates **Edit / Write / MultiEdit /
-NotebookEdit** — you can't commit what you can't write.
+fr-isolation workspace**, never the base clone. Every supported harness
+enforces this at the tool layer, before the edit lands — you can't commit what
+you can't write.
+
+**Harness — edit gate:** On Claude Code the PreToolUse hook
+`fr-isolation-required.sh` (shipped by super-fr, registered via the plugin's
+`hooks.json`) gates **Edit / Write / MultiEdit / NotebookEdit**. On OpenCode the
+`fr-opencode-plugin` runs the same decision as a `tool.execute.before` plugin on
+the `edit` / `write` / `patch` / `multiedit` tool calls — **not** `bash`, a known
+gap (#436), not a sanctioned bypass: make your edits with the edit tools. On
+Hermes `hermes/fr-isolation-required.sh` runs as a `pre_tool_call` hook on `write_file` / `patch`, merged into
+`~/.hermes/config.yaml` by `fr hermes install`.
 
 A repo is **fr-enabled** when it has a `.devcontainer/<profile>/` profile or a
 `docs/superpowers/plans/` directory.
@@ -20,8 +28,8 @@ first, so the base repo is never touched"). Prose gets bypassed under load: a
 session enters isolation for the brainstorm, then *wanders* — follow-up edits in
 another repo, later turns, host-side chores — all landing on the **base clone**
 with no gate forcing re-entry. This hook is the tool-layer backstop, mirroring
-`agent-worktree-default.md` (Agent tool — but see the `fr-phase-executor`
-carve-out below) and `fr-isolation-guard.sh` (Bash tool). It is
+`agent-worktree-default.md` (subagent dispatch — but see the `fr-phase-executor`
+carve-out below) and `fr-isolation-guard.sh` (shell commands). It is
 session-independent: it fires on any edit to an fr-enabled repo, even when no
 pipeline skill ran this session.
 
@@ -139,13 +147,21 @@ that the workspace is a genuine isolation, per the checks above.
 ## Carve-out: `fr-phase-executor` must NOT get its own worktree
 
 The org convention `agent-worktree-default.md` says every code-writing subagent
-is dispatched with `isolation: "worktree"`. **`fr-phase-executor` is the one
-exception, and it is a hard one** (super-fr#420):
+gets its own worktree. **`fr-phase-executor` is the one exception, and it is a
+hard one** (super-fr#420):
 
-- fr-goal §6 dispatches phase executors **serially into the fr-isolation
+**Harness — subagent worktree:** On Claude Code the convention is the Agent
+tool's `isolation: "worktree"` argument: dispatch a phase executor **without**
+it. `plugins/super-fr/hooks/fr-phase-executor-guard.sh` (PreToolUse, matcher
+`Agent|Task`) refuses the combination outright. OpenCode's task tool and
+Hermes' `delegate_task` take no isolation argument at all, so the poisoned
+shape cannot be expressed there and no hook is needed: dispatch the executor
+as you would any subagent, and it runs in the workspace it was sent into.
+
+- fr-goal §5 dispatches phase executors **serially into the fr-isolation
   worktree that already exists** — that worktree *is* their isolation. A second
   one is not extra safety, it is a different repo state.
-- Given the flag, the executor wakes in a fresh worktree cut from `main`: the
+- Given a second worktree, the executor wakes in one cut fresh from `main`: the
   spec and plan live on the feature branch and are invisible, so `fr pickup` is
   unsatisfiable; Bash is denied by `fr-isolation-guard.sh`; and Edit/Write is
   denied by *this* rule's gate, because a fresh checkout has no marker and the
@@ -154,13 +170,9 @@ exception, and it is a hard one** (super-fr#420):
 - The reason is *not* "this agent is read-only" — it writes code. It is that
   **the two isolation mechanisms are mutually exclusive, not composable.**
 
-fr-goal §3 is the opposite case and keeps the flag: those agents each start a
-**fresh** pipeline in a **different** repo, so they need their own workspace.
-
-Enforcement, not prose: `plugins/super-fr/hooks/fr-phase-executor-guard.sh`
-(PreToolUse, `Agent|Task`) refuses the combination outright. Harnesses without
-an `isolation` argument on their dispatch tool — Hermes' `delegate_task`,
-OpenCode — cannot express the poisoned shape and need no hook.
+fr-goal §2 is the opposite case: its cross-repo agents each start a
+**fresh** pipeline in a **different** repo, so they need their own workspace —
+fr-goal §2's own clause says how each harness gets one.
 
 ## Rollout (two-file pattern)
 
@@ -224,11 +236,13 @@ Never create `<repo>/.worktrees/`. fr owns the location
 (`~/.cache/fr/worktrees/<main-checkout>/<branch-slug>`), the state, and the
 session binding (`fr isolation status` shows which sessions hold a workspace).
 
-On Claude Code, `claude --worktree <name>` and the `EnterWorktree` tool need
-no override: super-fr's `WorktreeCreate` hook already lands them in fr
-(subagent worktrees, `agent-*`, keep Claude's default shape on purpose).
-OpenCode and Hermes have no such hook — there, the `fr isolation up` above is
-the only route in. Plain `using-git-worktrees` remains for non-fr repos.
+Plain `using-git-worktrees` remains for non-fr repos.
+
+**Harness — native worktree commands:** On Claude Code, `claude --worktree
+<name>` and the `EnterWorktree` tool need no override: super-fr's
+`WorktreeCreate` hook already lands them in fr (subagent worktrees, `agent-*`,
+keep Claude's default shape on purpose). OpenCode and Hermes have no such hook
+— there, the `fr isolation up` above is the only route in.
 
 # Never `claude -p` for batch LLM work (Org-Wide)
 
