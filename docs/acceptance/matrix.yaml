@@ -1895,8 +1895,8 @@ rows:
       (fr-acceptance-nag on Hermes) both produce findings.'
   - id: harness-tool-neutrality
     capability: Harness parity
-    acceptance: No skill names a harness-specific tool as the way to do something outside
-      an explicitly scoped per-harness clause.
+    acceptance: No skill, agent or rule — canonical or generated mirror — names a harness-specific
+      tool or argument outside an explicitly scoped per-harness clause.
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-09-18-harness-parity-matrix-design.md
     levels:
@@ -1904,12 +1904,12 @@ rows:
       - super-fr:tests/unit/test_harness_vocabulary.py
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
     status: ci
-    notes: 'Spec 3.C. Fixed the six live AskUserQuestion occurrences (fr-goal §1, fr-init
-      §2, both mirrors). Mirrors stay byte-identical; neutrality is enforced at the
-      canonical source. Widened 2026-09-21 (agent-body-tool-neutrality, #497): the scan
-      now also covers the agent bodies — plugins/super-fr/agents/*.md and the generated
-      .opencode/agent/*.md — which were outside every tree, with scan_prose''s new extra_tools
-      flagging Claude Code''s isolation: "worktree" dispatch flag for those trees only.'
+    notes: 'Spec 3.C (2026-09-18): fixed the six live AskUserQuestion occurrences (fr-goal
+      §1, fr-init §2, both mirrors); mirrors stay byte-identical, neutrality enforced
+      at the canonical source. Widened 2026-09-21 (#497/#532): agent bodies and the
+      .opencode/agent mirror scanned. Widened 2026-09-22 (spec 2026-09-22-harness-argument-neutrality):
+      rules and their mirrors scanned; harness-specific ARGUMENTS via ARGUMENT_VOCABULARY
+      in every spelling; headings outside code fences exempt.'
   - id: harness-gate-degrades-loudly
     capability: Harness parity
     acceptance: On a harness where the operator gate is not enforced, fr run advance
@@ -2093,12 +2093,34 @@ rows:
       neither available in CI. SCOPE, unchanged from before and still true: the headline
       proves a genuine dispatch, not that tiering resolved — the tiering claim lives
       in opencode-tier-binding-reaches-dispatch. The headline cannot be corrected because
-      there is no fr acceptance edit verb; that is #522. CORRECTION: an earlier version
-      of this note said a follow-up for that verb had been filed. It had not — #522
-      found the claim false. #522 is now that follow-up. Found by the same run, and
-      filed: #537 (fr''s cursor names the wrong holder for an OpenCode dispatch, and
-      cannot name the tier agent that ran) and #538 (fr-goal never asked the model-per-tier
-      question it is gated on).'
+      there is no fr acceptance edit verb; that is #522, since folded into #510. CORRECTION:
+      an earlier version of this note said a follow-up for that verb had been filed.
+      It had not — #522 found the claim false. #522 became that follow-up and is now
+      folded into #510. Found by the same run, and filed: #537 (fr''s cursor names the
+      wrong holder for an OpenCode dispatch, and cannot name the tier agent that ran)
+      and #538 (fr-goal never asked the model-per-tier question it is gated on). DISCRIMINATING
+      RUN, 2026-09-22 (the model-level proof the earlier runs could not give): the 2026-09-21
+      run''s orchestrator and child both ran on gpt-5.6-terra and all three tiers were
+      bound to it, so its session-row model could not tell a tiered dispatch from an
+      untiered one; its proof rested on the agent NAME alone, for one tier. This run
+      bound FOUR distinct models - mechanical github-copilot/gpt-5.6-luna, standard
+      github-copilot/gpt-5.6-terra, hard github-copilot/gpt-5.6-sol, orchestrator github-copilot/claude-sonnet-5
+      - in a throwaway local repo (fr-tier-proof, local bare origin, no forge resource)
+      whose plan declared phases 1/2/3 as mechanical/standard/hard. opencode.db, root
+      ses_f37014a55ffePrm0GvcXNde25v (build, claude-sonnet-5), three parented children
+      in phase order: ses_f36fd32e5ffeLnEhUiVhc8dhwj fr-phase-executor-mechanical gpt-5.6-luna
+      $0.0132; ses_f36fb6911ffeFuz6aUuFfsbWjz fr-phase-executor-standard gpt-5.6-terra
+      $0.1326; ses_f36f9f94dffeXlvlEQ6t1mCyBs fr-phase-executor-hard gpt-5.6-sol $0.3867
+      (run total $1.71). All six assertions PASS: three children; declared tier -> tier
+      agent in order; each child on its tier''s binding (read from the installed agent
+      files, last written before the run and stable through it); NO child on the session
+      model; child models pairwise distinct; bindings themselves distinct, i.e. the
+      test could have failed. That closes the gap the scope note above records: tiering
+      resolves to the bound MODEL per tier, not merely to a tier-named agent. #537 reproduced
+      in the same run: fr''s cursor records agent_type super-fr:fr-phase-executor for
+      all three, never the tier agent that ran - though it does record the three child
+      session ids, matching opencode.db exactly, so the two stores can be joined by
+      session id. Still skipped: live-only, no CI level.'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
@@ -3160,8 +3182,9 @@ rows:
       an unclaimed record names no holder - so this row claims the member path only.'
   - id: run-model-only-for-dispatched-work
     capability: Run cursor
-    acceptance: fr records a model only for work it dispatched to a tier; a unit the
-      orchestrator runs itself records no model unless the orchestrator reports one
+    acceptance: fr resolves a tier's model only for work it dispatched to that tier;
+      a unit the orchestrator runs itself never carries a tier's model - it records
+      the orchestrator's OBSERVED model, or none when unobservable
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-508-live-test-plan-defects.md
     levels:
@@ -3169,10 +3192,11 @@ rows:
       - super-fr:tests/unit/test_run_orchestrator_model.py#L70
       - super-fr:tests/unit/test_run_orchestrator_model.py#L87
     status: ci
-    notes: 'C2. Not a labelling quibble: this repo''s archived #508 cursor credits seven
-      inline reviews to a model that did not perform them. Cursors already carrying
-      the false value are left alone - a repair would be guessing, and archives are
-      frozen.'
+    notes: 'C2 of the #508 defects. Refined 2026-09-21 (debug journal 2026-09-21-fr-goal-first-run-contracts,
+      C3): the orchestrator''s model is no longer invisible - its session transcript
+      names it - so an orchestrator-run unit now records the model fr OBSERVES there;
+      what this row forbids, a tier''s model on work the tier never touched, is unchanged.
+      The seven false archived reviews stay as they are (archives are frozen). See run-records-observed-models.'
   - id: guard-run-start-enters-isolation
     capability: Isolation
     acceptance: fr-goal's first action, fr run start, is allowed from the base clone
@@ -3206,6 +3230,105 @@ rows:
       path is shared by every project in a container, and a probe showed project a importing
       a package only b declared. Existing containers must be recreated; profiles already
       scaffolded in consumer repos are not rewritten.'
+  - id: run-gate-verified-from-transcript
+    capability: Run cursor
+    acceptance: On Claude Code an operator gate clears only with an answered question
+      in the session transcript since it paused, or an explicit recorded bypass with
+      a reason; where the transcript is unreadable the gate announces itself advisory
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L3348
+      - super-fr:tests/unit/test_run_cli.py#L3368
+      - super-fr:tests/unit/test_run_cli.py#L3406
+      - super-fr:tests/unit/test_run_cli.py#L416
+    status: ci
+    notes: 'C1. The first fr-goal run after #508 cleared its brainstorm gate unasked
+      on Claude Code while parity.yaml called the gate enforced - which also suppressed
+      the only warning. Verification reads a captured AskUserQuestion shape (tests/fixtures/transcripts).'
+  - id: run-review-by-a-separate-context
+    capability: Run cursor
+    acceptance: A phase review names the separate reviewer that performed it; the phase's
+      own implementer, or a reviewer this session never dispatched, is refused
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L137
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L176
+    status: ci
+    notes: C6. The review evidence gate proved an entry existed; on the first post-#508
+      run the orchestrator typed it about work nobody reviewed. Unobservable harnesses
+      record the id as claimed and say so.
+  - id: run-deliver-needs-an-orchestrator-test-run
+    capability: Run cursor
+    acceptance: Delivery names the log of a full test run the orchestrator itself performed
+      during delivery; a missing, stale, or someone-else's log is refused
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L253
+      - super-fr:tests/unit/test_run_evidence_separate_context.py#L269
+    status: ci
+    notes: C5. deliver resolved in 28s on a PR url and the executor's word ('verified
+      locally'). The log is hashed onto the cursor.
+  - id: plan-skeleton-is-not-the-whole-plan
+    capability: fr-goal-methodology
+    acceptance: A plan whose only agentic phase is the walking skeleton fails self-review
+      unless an operator override records why
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1554
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1567
+    status: ci
+    notes: C2. A one-phase plan carried the whole change under the skeleton marker,
+      so the per-phase implement/review loop ran once.
+  - id: isolation-session-bound-without-flags
+    capability: isolation-traceability
+    acceptance: Starting a run or entering isolation binds the calling session to the
+      workspace whenever the session is knowable, however fr was launched
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L5614
+      - super-fr:tests/unit/test_isolation_sessions_cmd.py#L205
+    status: ci
+    notes: C4. The bind hook matched only a leading bare 'fr', and this repo mandates
+      'uv run fr', so fr-goal workspaces read sessions=none and the Stop idle guard
+      was inert.
+  - id: run-records-observed-models
+    capability: Run cursor
+    acceptance: The run records the model it observed serving each unit - the served
+      model over a claimed alias, the orchestrator's own model for units it ran - and
+      warns when the orchestrator strays from a bound orchestrator model
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py#L2531
+      - super-fr:tests/unit/test_run_cli.py#L2582
+      - super-fr:tests/unit/test_run_cli.py#L2611
+    status: ci
+    notes: C3. The cursor stored 'opus' (the claim) while the transcript fr already
+      read said claude-opus-5; the whole fr-goal run's orchestrator was claude-sonnet-5
+      and nothing recorded it. Record + warn, never block.
+  - id: agent-skill-instructions-are-executable
+    capability: Conventions
+    acceptance: An agent whose body tells it to use a skill is granted the tool to load
+      one
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_agent_skill_capability.py#L49
+    status: ci
+    notes: C7. fr-phase-executor was told to implement via superpowers:test-driven-development
+      / fr-execute with no Skill tool; its 79-record transcript shows zero skill loads.
   - id: triage-repo-local
     capability: Backlog triage
     acceptance: An operator can produce a ranked, filterable backlog board for one repo
@@ -3400,3 +3523,107 @@ rows:
     notes: 'Split from #432; #533. LIVE 2026-09-22 (fr 4.14.3) on Claude Code and OpenCode:
       --dry-run listed all 8 workspaces with keep reasons and bound sessions and changed
       nothing.'
+  - id: harness-argument-neutrality
+    capability: Harness parity
+    acceptance: A harness-specific argument named outside a scoped per-harness clause,
+      in any skill, agent or rule (canonical or mirror) and in any spelling, fails CI
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
+      - super-fr:tests/unit/test_harness_vocabulary.py
+    status: ci
+    notes: 'Spec 3.A-C, phase 3. ARGUMENT_VOCABULARY (isolation flag in every spelling,
+      run_in_background, Hermes background=true) is scanned by scan_prose everywhere;
+      the tripwire covers skills, agents and rules (canonical plugins/super-fr/rules
+      + .claude/rules, mirrors .opencode/instructions + .hermes/SOUL.d) and asserts
+      zero violations. Closes the gap the adversarial review of #532 found: the flag
+      was scanned only in agents, in one spelling; run_in_background nowhere; rules
+      not at all.'
+  - id: executor-long-commands-per-harness
+    capability: fr-goal phase executor dispatch
+    acceptance: The phase executor tells a reader on each harness how to run a command
+      longer than that harness's foreground limit, and to leave nothing running at handback
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
+      - super-fr:tests/unit/test_phase_executor_agent.py
+    status: ci
+    notes: 'Spec 3.D. ci pins the PROSE: tests/unit/test_phase_executor_agent.py checks
+      each harness''s arm carries its own mechanism and none of another''s (review p3r-4).
+      Sources: OpenCode timeout/kill from its bash tool source; Hermes terminal/process
+      from its tools reference; the OpenCode detach recipe (PID file, exit-code capture)
+      is the one arm not verified from source. The BEHAVIOUR — a long suite not killed,
+      nothing left running — is the post-merge Test Plan smoke''s to show (review p3r-m1/m2).'
+  - id: phase-executor-description-rules-out-second-worktree
+    capability: fr-goal phase executor dispatch
+    acceptance: The phase-executor description check fails a description that merely
+      mentions a second worktree instead of ruling it out
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-harness-argument-neutrality-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_phase_executor_worktree.py
+    status: ci
+    notes: 'Phase 4 (2026-09-22): _rules_out_a_second_worktree now requires a negation
+      to GOVERN the phrase — same clause (split on . ; —), before it, only filler words
+      between (<=6). Parametrized must-fail cases (the adversarial review''s four) and
+      must-pass cases (shipped description, pre-#532 literal-flag wording) run in CI.'
+  - id: triage-open-prs
+    capability: Backlog triage
+    acceptance: triage shows every open PR with CI and merge state, including issue-less
+      PRs anchored to spec or journal
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: Render and PR collection tests pass in phase 4.
+  - id: triage-pr-judgement
+    capability: Backlog triage
+    acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-22-triage-open-prs-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_open_prs.py
+      - super-fr:tests/unit/test_triage_render.py
+    status: ci
+    notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.
+  - id: opencode-plugin-single-idle-nudge
+    capability: OpenCode adaptation
+    acceptance: When OpenCode loads the plugin twice (global install plus a project-local
+      copy), an idle run still gets one continuation nudge per run position
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/idle.test.ts
+    status: ci
+    notes: 'gh#563 consequence: global delivery doubles the load wherever a repo also
+      loads the plugin locally (super-fr itself). The once-per-position memory is shared
+      via globalThis; bun test pins one send for two instances (red first: 2 sends).'
+  - id: opencode-plugin-delivered
+    capability: OpenCode adaptation
+    acceptance: An operator who runs scripts/install.sh with OpenCode gets super-fr's
+      OpenCode plugin (edit gate + idle adapter) installed globally in a form OpenCode
+      loads, and --uninstall removes exactly it
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-22-opencode-plugin-delivery.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_opencode_plugin_delivery.py
+      int:
+      - super-fr:tests/integration/test_opencode_plugin_live.py
+    status: ci
+    notes: 'gh#563. Unit: deliver-opencode-plugin.sh behaviour (top-level loader + sources,
+      wholesale replace, scoped uninstall) and install.sh wiring. Integration, CI (opencode-plugin-test
+      job, opencode-ai@1.18.32, FR_REQUIRE_OPENCODE=1): the real binary registers the
+      delivered loader, and a sentinel plugin loaded by OpenCode''s own runtime imports
+      it and gets a base-clone edit refused / an out-of-repo edit allowed. A mutation
+      deleting one delivered module left registration green and failed the runtime probe.'

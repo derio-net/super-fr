@@ -24,6 +24,10 @@
 //     repeats is a trap. Remembered BEFORE sending, so a broken endpoint cannot
 //     become a retry loop either. In memory: it lives as long as the OpenCode
 //     server that loaded the plugin, and forgetting costs one extra nudge.
+//     Shared by every copy loaded into that process (`sharedActedOn`): the
+//     global install plus a project-local one must still nudge once (gh#563).
+//     The check-and-set has no `await` between them, so two copies racing on
+//     the same idle event cannot both pass it.
 //   - CHILD SESSIONS are left alone. A subagent's session goes idle when it
 //     finishes; it does not own the run. A session that cannot be looked up is
 //     not assumed to be top-level.
@@ -37,13 +41,28 @@ import { execFile } from "node:child_process";
 
 export type FrAnswer = { code: number | null; stdout: string };
 
+/** `globalThis` key for the plugin's process-wide once-per-position memory. */
+export const SHARED_ACTED_ON = Symbol.for("super-fr.fr-opencode-plugin.idle.actedOn");
+
 export type IdleHandlerOptions = {
   client: unknown;
   directory: string;
   /** Test seam. Default: `fr run check --idle --format json` in `cwd`. */
   runFr?: (cwd: string) => Promise<FrAnswer>;
   timeoutMs?: number;
+  /** Once-per-position memory. Default: this handler's own. The plugin passes
+   * `sharedActedOn()` so every loaded copy shares one (gh#563). */
+  actedOn?: Map<string, string>;
 };
+
+/** The one once-per-position memory for every copy of this plugin loaded into
+ * this process. install.sh delivers a global copy (gh#563), and a repo that
+ * also loads it project-locally gets two module instances — module state is
+ * per copy, `globalThis` is not, so the memory lives there. */
+export function sharedActedOn(): Map<string, string> {
+  const slot = globalThis as Record<symbol, Map<string, string> | undefined>;
+  return (slot[SHARED_ACTED_ON] ??= new Map<string, string>());
+}
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -118,7 +137,7 @@ async function isTopLevel(api: SessionApi, id: string, directory: string): Promi
 
 export function createIdleHandler(options: IdleHandlerOptions) {
   const runFr = options.runFr ?? defaultRunFr(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const actedOn = new Map<string, string>();
+  const actedOn = options.actedOn ?? new Map<string, string>();
 
   return async (input: { event?: { type?: unknown; properties?: unknown } }): Promise<void> => {
     try {

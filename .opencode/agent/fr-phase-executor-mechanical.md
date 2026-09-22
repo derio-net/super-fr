@@ -111,15 +111,32 @@ Keep the prose minimal; the journal holds the detail.
 
 ## Long commands, and what you must not leave behind
 
-**A foreground `Bash` call that exceeds 120 seconds is moved to the background by
-the harness — you do not get to opt out**, and a full test suite in this repo is
-well past that. So run a long suite with `run_in_background` *deliberately*, wait
-on it with a **bounded** loop, and before you hand back make sure nothing you
-started is still polling. An unbounded `until … ; do sleep N; done` alive at
-handback keeps you **non-terminal and resumable indefinitely** — a second writer
-for a tree where a second worktree is forbidden by design (#420). One
-executor did exactly this for 11.5 hours (#503): it returned a clean result, and
-the orchestrator had no way to tell it apart from a finished agent.
+A full test suite in this repo runs for minutes — longer than any harness lets
+a plain foreground command run. Each harness handles that differently, and the
+wrong move on one is fatal on another:
+
+**Harness — long commands:** On **Claude Code**, a foreground `Bash` call that
+exceeds ~120 seconds is moved to the background by the harness — you do not get
+to opt out — so run a long suite with `run_in_background` *deliberately* and wait
+on it with a bounded loop. On **OpenCode**, the bash tool takes a `timeout` in
+milliseconds (default 2 minutes, maximum 10 minutes) and **kills** the command
+when it expires, and it has no background argument at all: pass an explicit
+`timeout` of up to `600000` for a long suite, and for anything longer detach it
+yourself so the exit code survives — `(cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid`
+— poll the log with a bounded loop, and before you hand back stop anything still
+running with `kill "$(cat log.pid)"` (each bash call is a fresh shell, so `$!` does
+not survive to the next one). On
+**Hermes**, start it with `terminal(command, background=true,
+notify_on_complete=true)`, wait with `process(action="wait")` (or `"poll"` /
+`"log"`), and `process(action="kill")` anything of yours still running before
+you hand back.
+
+On every harness, the wait is **bounded**, and before you hand back nothing you
+started is still running or polling. An unbounded `until … ; do sleep N; done`
+alive at handback keeps you **non-terminal and resumable indefinitely** — a
+second writer for a tree where a second worktree is forbidden by design (#420).
+One executor did exactly this for 11.5 hours (#503): it returned a clean result,
+and the orchestrator had no way to tell it apart from a finished agent.
 
 **And read the right exit code.** `pytest … | tail -20` exits with *tail's*
 status, not pytest's, so a gate reports success over a red suite — and the output

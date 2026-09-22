@@ -1,4 +1,4 @@
-"""`fr triage check` — the four sets that make triage debt visible (spec §3.F).
+"""`fr triage check` — issue sets plus unranked PRs that make triage debt visible (spec §3.F).
 
 unranked, settled, orphaned and unreachable (review r-p2-check-sets): a
 judgement whose issue the forge would not show (`unviewed`) or whose repo was
@@ -46,10 +46,21 @@ def _merged_pr(number: int) -> PullRequest:
     )
 
 
+def _pr(number: int, *, repo: str = REPO) -> PullRequest:
+    return PullRequest(
+        repo=repo,
+        number=number,
+        title="unlinked fix",
+        state="OPEN",
+        is_draft=False,
+        url=f"https://github.com/{repo}/pull/{number}",
+    )
+
+
 def _facts(issues: list[Issue], **kw: Any) -> Facts:
     return Facts.model_validate(
         {
-            "schema": 1,
+            "schema": 2,
             "scope": "derio-net--super-fr",
             "kind": "repo",
             "collected_at": "2026-09-21T12:00:00+00:00",
@@ -74,6 +85,14 @@ def test_an_open_issue_with_no_judgement_is_unranked() -> None:
     result = classify(_facts([_issue(1), _issue(2)]), _judgements("super-fr#2"))
 
     assert [i.key for i in result.unranked] == ["super-fr#1"]
+    assert result.settled == [] and result.orphaned == [] and result.unreachable == []
+
+
+def test_an_open_unlinked_pr_with_no_judgement_is_unranked_without_changing_issue_sets() -> None:
+    result = classify(_facts([_issue(1)], prs=[_pr(558)]), _judgements())
+
+    assert result.unranked == [_issue(1)]
+    assert [pr.number for pr in result.unranked_prs] == [558]
     assert result.settled == [] and result.orphaned == [] and result.unreachable == []
 
 
@@ -184,23 +203,27 @@ def _check(tmp_path: Path, *extra: str) -> Any:
     )
 
 
-def test_check_exits_0_with_all_four_sets_present(tmp_path: Path) -> None:
+def test_check_exits_0_with_issue_sets_and_unranked_prs_present(tmp_path: Path) -> None:
     _state(tmp_path)
     result = _check(tmp_path)
 
     assert result.exit_code == 0, result.output
-    for label in ("unranked", "settled", "orphaned", "unreachable"):
+    for label in ("unranked", "unranked PRs", "settled", "orphaned", "unreachable"):
         assert label in result.output
 
 
-def test_check_json_emits_the_four_sets(tmp_path: Path) -> None:
-    _state(tmp_path)
+def test_check_json_emits_issue_sets_and_unranked_prs(tmp_path: Path) -> None:
+    facts = _state(tmp_path)
+    _write(
+        tmp_path, Facts.model_validate({**facts.to_json(), "prs": [_pr(558).model_dump()]}), JUDGED
+    )
     result = _check(tmp_path, "--json")
 
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert [i["key"] for i in data["unranked"]] == ["super-fr#1"]
     assert [i["key"] for i in data["settled"]] == ["super-fr#3"]
+    assert [pr["number"] for pr in data["unranked_prs"]] == [558]
     assert data["orphaned"] == ["super-fx#404"]
     assert data["unreachable"] == [{"key": "super-fr#7", "reason": "HTTP 502"}]
 
@@ -212,6 +235,19 @@ def test_a_markup_looking_title_prints_verbatim_and_does_not_raise(tmp_path: Pat
 
     assert result.exception is None, result.exception
     assert "[manual] x [/red]" in result.output
+
+
+def test_unranked_prs_print_in_judgement_key_grammar(tmp_path: Path) -> None:
+    """Phase-4 review f3: the printed key pastes into judgements.yaml verbatim."""
+    facts = _state(tmp_path)
+    _write(
+        tmp_path, Facts.model_validate({**facts.to_json(), "prs": [_pr(558).model_dump()]}), JUDGED
+    )
+    result = _check(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert "super-fr#558" in result.output
+    assert "derio-net/super-fr#558" not in result.output
 
 
 def test_check_with_no_judgements_reports_everything_unranked(tmp_path: Path) -> None:

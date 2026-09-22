@@ -338,7 +338,7 @@ def test_unviewed_round_trips_through_facts_json(tmp_path: Path) -> None:
 
     loaded = load_facts(path)
 
-    assert facts.to_json()["schema"] == 1
+    assert facts.to_json()["schema"] == 2
     assert [(u.key, u.reason) for u in loaded.unviewed] == [("super-fr#99999", "HTTP 502")]
 
 
@@ -371,6 +371,7 @@ def test_gh_forge_raises_the_triage_forge_error_not_gh_error(
         lambda f: f.list_issues(repo="example-org/alpha", state="open", limit=1000),
         lambda f: f.list_prs(repo="example-org/alpha", state="all", limit=200),
         lambda f: f.view_issue(repo="example-org/alpha", number=1),
+        lambda f: f.read_file_at_ref(repo="example-org/alpha", path="intent.md", ref="head"),
     ):
         with pytest.raises(ForgeError, match="HTTP 404") as exc:
             call(GhForge())

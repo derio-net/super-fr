@@ -152,7 +152,7 @@ def test_subagent_dispatch_on_opencode_carries_no_scope_note() -> None:
     """The retired note read "no isolation-argument dispatch primitive on
     OpenCode". That cannot be the discriminator (#493): Hermes has no
     isolation argument either and is `enforced`, and the fr-phase-executor
-    carve-out positively FORBIDS one for this agent (fr-goal §6 runs executors
+    carve-out positively FORBIDS one for this agent (fr-goal §5 runs executors
     inside the workspace that already exists; `fr-phase-executor-guard.sh`
     refuses the combination). A note that names a requirement of the surface
     as the reason it is missing is worse than no note — and `enforced` is a

@@ -25,13 +25,16 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-SCHEMA: Literal[1] = 1
+FACTS_SCHEMA: Literal[2] = 2
+JUDGEMENTS_SCHEMA: Literal[1] = 1
 
 ScopeKind = Literal["repo", "org"]
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
 PrState = Literal["OPEN", "CLOSED", "MERGED"]
 IssueState = Literal["open", "closed"]
 TruncatedList = Literal["repos", "issues", "prs"]
+AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
+Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 
 # "<repo-name>#<number>" in both scopes (spec §3.D): one code path.
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
@@ -106,6 +109,14 @@ class PullRequest(_Strict):
     merged_at: str | None = None
     url: str
     head_ref: str = ""
+    checks: dict[str, int] = {"pass": 0, "fail": 0, "pending": 0}
+    mergeable: str = "UNKNOWN"
+    merge_state: str = "UNKNOWN"
+    review: str | None = None
+    anchor: AnchorKind = "unanchored"
+    anchor_path: str | None = None
+    anchor_body: str = ""
+    anchor_reason: str | None = None
 
 
 class Issue(_Strict):
@@ -181,12 +192,13 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[1] = Field(1, alias="schema")
+    schema_: Literal[2] = Field(2, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
     repos: list[str]
     issues: list[Issue]
+    prs: list[PullRequest] = []
     skipped: list[Skipped] = []
     unviewed: list[Unviewed] = []
     warnings: list[Truncation] = []
@@ -218,6 +230,8 @@ class Judgement(_Strict):
     verified: bool = False
     detail: str = ""
     note: str = ""
+    delivery: Delivery | None = None
+    delivery_note: str = ""
 
 
 class Pattern(_Strict):
@@ -276,14 +290,17 @@ class Judgements(_Strict):
 # ------------------------------------------------------------------- loaders
 
 
-def _check_schema(path: Path, data: object) -> dict[str, Any]:
+def _check_schema(path: Path, data: object, expected: int, remedy: str = "") -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TriageError(f"{path}: expected a mapping at the top level")
     value = data.get("schema")
     # `type(...) is int`, not `==`: True == 1 == 1.0, and pydantic's Literal[1]
     # accepts all three, so `schema: true` would otherwise load (r-p2-schema-strict).
-    if type(value) is not int or value != SCHEMA:
-        raise TriageError(f"{path}: unsupported schema {value!r} (this fr reads schema {SCHEMA})")
+    if type(value) is not int or value != expected:
+        suffix = f"; {remedy}" if remedy else ""
+        raise TriageError(
+            f"{path}: unsupported schema {value!r} (this fr reads schema {expected}){suffix}"
+        )
     return data
 
 
@@ -294,7 +311,7 @@ def load_facts(path: Path) -> Facts:
     except (OSError, ValueError) as exc:
         raise TriageError(f"{path}: cannot read facts: {exc}") from exc
     try:
-        return Facts.model_validate(_check_schema(path, data))
+        return Facts.model_validate(_check_schema(path, data, FACTS_SCHEMA, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
 
@@ -306,6 +323,6 @@ def load_judgements(path: Path) -> Judgements:
     except (OSError, yaml.YAMLError) as exc:
         raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
     try:
-        return Judgements.model_validate(_check_schema(path, data))
+        return Judgements.model_validate(_check_schema(path, data, JUDGEMENTS_SCHEMA))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid judgements: {exc}") from exc

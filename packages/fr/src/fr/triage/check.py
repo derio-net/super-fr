@@ -1,4 +1,4 @@
-"""`check` — the four sets that make triage debt visible (spec §3.F).
+"""`check` — the issue sets plus unranked PRs that make triage debt visible (spec §3.F).
 
 Pure: facts and judgements in, sets out. The command only formats them.
 
@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fr.triage.model import Facts, Issue, Judgements, issue_key, normalize_key
+from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
 
@@ -44,6 +44,7 @@ class Unreachable:
 @dataclass(frozen=True)
 class CheckResult:
     unranked: list[Issue]
+    unranked_prs: list[PullRequest]
     settled: list[Issue]
     orphaned: list[str]
     unreachable: list[Unreachable]
@@ -52,8 +53,18 @@ class CheckResult:
         def row(i: Issue) -> dict[str, Any]:
             return {"key": i.key, "title": i.title, "stage": i.stage, "url": i.url}
 
+        def pr_row(pr: PullRequest) -> dict[str, Any]:
+            return {
+                "key": issue_key(pr.repo, pr.number),
+                "number": pr.number,
+                "title": pr.title,
+                "state": pr.state,
+                "url": pr.url,
+            }
+
         return {
             "unranked": [row(i) for i in self.unranked],
+            "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
             "orphaned": list(self.orphaned),
             "unreachable": [{"key": u.key, "reason": u.reason} for u in self.unreachable],
@@ -77,10 +88,13 @@ def _unreachable_reason(key: str, facts: Facts) -> str | None:
 
 
 def classify(facts: Facts, judgements: Judgements) -> CheckResult:
-    """Sort every issue and judgement into the four sets (spec §3.F)."""
+    """Sort issues into their four sets and report open PRs without a judgement."""
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
     unranked = [i for i in facts.issues if i.state == "open" and i.key not in judged]
+    unranked_prs = [
+        pr for pr in facts.prs if pr.state == "OPEN" and issue_key(pr.repo, pr.number) not in judged
+    ]
     settled = [found[k] for k in sorted(judged & found.keys()) if found[k].stage in SETTLED_STAGES]
     orphaned: list[str] = []
     unreachable: list[Unreachable] = []
@@ -91,5 +105,9 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         else:
             unreachable.append(Unreachable(key=key, reason=reason))
     return CheckResult(
-        unranked=unranked, settled=settled, orphaned=orphaned, unreachable=unreachable
+        unranked=unranked,
+        unranked_prs=unranked_prs,
+        settled=settled,
+        orphaned=orphaned,
+        unreachable=unreachable,
     )

@@ -19,9 +19,9 @@
 //
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
 // plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
-import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
-import { createIdleHandler } from "./idle";
+import { lstatSync, readlinkSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { createIdleHandler, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
 // This is intentionally a short exclusion list, not a writer allowlist: new
@@ -95,8 +95,19 @@ function extractTargets(output: unknown): Targets {
 }
 
 function normalizeTarget(directory: string, target: string): string {
-  const resolved = resolve(directory, target);
-  return existsSync(resolved) ? realpathSync.native(resolved) : resolved;
+  let resolved = resolve(directory, target);
+  for (let hops = 0; hops < 40; hops += 1) {
+    let stat: ReturnType<typeof lstatSync>;
+    try {
+      stat = lstatSync(resolved);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolved;
+      throw new Error(`fr-isolation: cannot inspect target symlink: ${resolved}`);
+    }
+    if (!stat.isSymbolicLink()) return resolved;
+    resolved = resolve(dirname(resolved), readlinkSync(resolved));
+  }
+  throw new Error("fr-isolation: target symlink chain exceeds 40 hops");
 }
 
 export async function FrIsolationRequired(ctx: {
@@ -107,7 +118,11 @@ export async function FrIsolationRequired(ctx: {
   worktree: string;
 }) {
   return {
-    event: createIdleHandler({ client: ctx.client, directory: ctx.worktree || ctx.directory }),
+    event: createIdleHandler({
+      client: ctx.client,
+      directory: ctx.worktree || ctx.directory,
+      actedOn: sharedActedOn(),
+    }),
     "tool.execute.before": async (input: { tool: string }, output: unknown) => {
       // OpenCode cannot intercept filesystem effects of Bash. Other known
       // read-only tools are excluded; every remaining tool is inspected.

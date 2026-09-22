@@ -124,7 +124,13 @@ steps:
         # rule, moved from once-before-`deliver` to the moment a finding is
         # cheapest to act on. A finding that belongs to a later phase is filed
         # against THAT phase and gates its review instead.
-        evidence: [review, findings]
+        #
+        # `reviewer` (2026-09-21 debug journal C6): the review names the
+        # dispatched reviewer SUBAGENT by the id its dispatch returned. fr refuses
+        # the phase's own implementer and, where the transcript is readable, an id
+        # this session never dispatched after the review opened. The #497 run's
+        # review was an entry the orchestrator typed about work nobody reviewed.
+        evidence: [review, reviewer, findings]
 
   - id: journal-check
     kind: cli
@@ -141,3 +147,7 @@ steps:
     skill: superpowers:verification-before-completion
     needs: [spec, plan]
     emits: [pr]
+    # `tests` (debug journal C5): the log of the full suite the ORCHESTRATOR ran
+    # during delivery — `--evidence tests=<log>`, hashed onto the cursor. On the
+    # #497 run `deliver` resolved in 28s on a PR url and the executor's word.
+    evidence: [tests]
