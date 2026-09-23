@@ -17,32 +17,38 @@ from __future__ import annotations
 import hashlib
 import sys
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 
 from fr.isolation.scaffold import HOST_CLI_PINS, HostCliPin
 
 TIMEOUT_SECONDS = 60
+CHUNK_BYTES = 1 << 20
+
+Fetch = Callable[[str], Iterable[bytes]]
 
 
-def fetch_url(url: str) -> bytes:
+def fetch_url(url: str) -> Iterator[bytes]:
+    """Stream the asset in CHUNK_BYTES reads — never the whole thing in memory."""
     with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as resp:  # noqa: S310 - https pins only
-        body: bytes = resp.read()
-        return body
+        while chunk := resp.read(CHUNK_BYTES):
+            yield chunk
 
 
-def check(pins: Mapping[str, HostCliPin], fetch: Callable[[str], bytes]) -> int:
+def check(pins: Mapping[str, HostCliPin], fetch: Fetch) -> int:
     """Print one line per asset; return 0 when every asset matches, else 1."""
     failed = False
     for pin in pins.values():
         for arch, (url, expected) in pin.assets.items():
             label = f"{pin.name} {pin.version} {arch}"
+            digest = hashlib.sha256()
             try:
-                body = fetch(url)
+                for chunk in fetch(url):
+                    digest.update(chunk)
             except Exception as exc:  # noqa: BLE001 - any failure to fetch is a failed check
                 print(f"FETCH-FAILED {label} {url}: {exc}")
                 failed = True
                 continue
-            got = hashlib.sha256(body).hexdigest()
+            got = digest.hexdigest()
             if got == expected:
                 print(f"OK {label}")
             else:

@@ -18,6 +18,7 @@ import pytest
 from fr.isolation.scaffold import (
     HOST_CLI_PINS,
     POST_CREATE,
+    HostCliPin,
     render_host_cli_post_create,
     scaffold_profile,
 )
@@ -29,12 +30,19 @@ _STUBS = {
         'printf "%s\\n" "$STUB_ARCH"\n'
     ),
     "uname": 'echo "uname $*" >> "$LOG"\nprintf "%s\\n" "$STUB_UNAME"\n',
-    "curl": 'echo "curl $*" >> "$LOG"\n',
+    "curl": 'echo "curl $*" >> "$LOG"\nexit "${STUB_CURL_RC:-0}"\n',
     "sha256sum": (
         'printf "sha256sum %s | " "$*" >> "$LOG"\ncat >> "$LOG"\nexit "${STUB_SHA_RC:-0}"\n'
     ),
     "tar": 'echo "tar $*" >> "$LOG"\n',
     "sudo": 'echo "sudo $*" >> "$LOG"\n',
+    # Stubbed so the tarball recipe's scratch dir never touches the host's real /tmp.
+    "rm": 'echo "rm $*" >> "$LOG"\n',
+    "mkdir": 'echo "mkdir $*" >> "$LOG"\n',
+    "find": 'echo "find $*" >> "$LOG"\n',
+    # POST_CREATE's own commands, for executing the whole postCreateCommand.
+    "pipx": 'echo "pipx $*" >> "$LOG"\n',
+    "uv": 'echo "uv $*" >> "$LOG"\n',
 }
 
 
@@ -162,3 +170,76 @@ def test_the_amd64_pins_are_unchanged_from_the_previous_release() -> None:
         "be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3"
     )
     assert os.path.basename(HOST_CLI_PINS["gitea"].assets["arm64"][0]) == "tea-0.14.2-linux-arm64"
+
+
+def test_the_glab_tarball_installs_its_exact_path_from_a_dedicated_dir(
+    stubdir: Path, tmp_path: Path
+) -> None:
+    """The release tarball carries `bin/glab` (checked 2026-09-23 with `tar -tzf`).
+
+    Extracting into a fresh dedicated dir and installing that exact path means a
+    stray `glab` elsewhere in a shared /tmp can never be the one installed (p5r-f2).
+    """
+    res, log = _run(
+        render_host_cli_post_create(HOST_CLI_PINS["gitlab"]), stubdir, tmp_path, STUB_ARCH="arm64"
+    )
+    assert res.returncode == 0, res.stderr
+    assert not [line for line in log if line.startswith("find ")], log
+    tail = log[log.index(next(line for line in log if line.startswith("sha256sum "))) + 1 :]
+    assert tail == [
+        "rm -rf /tmp/glab-x",
+        "mkdir -p /tmp/glab-x",
+        "tar -xzf /tmp/glab.dl -C /tmp/glab-x",
+        "sudo install -m 755 /tmp/glab-x/bin/glab /usr/local/bin/glab",
+    ], log
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_a_failing_download_fails_the_snippet_before_verify_or_install(
+    backend: str, stubdir: Path, tmp_path: Path
+) -> None:
+    res, log = _run(
+        render_host_cli_post_create(HOST_CLI_PINS[backend]),
+        stubdir,
+        tmp_path,
+        STUB_ARCH="amd64",
+        STUB_CURL_RC="22",
+    )
+    assert res.returncode != 0
+    assert len(_curl_lines(log)) == 1
+    assert not [line for line in log if line.startswith(("sha256sum ", "sudo ", "tar "))], log
+
+
+@pytest.mark.parametrize(("arch", "ok"), [("s390x", False), ("arm64", True)])
+def test_the_whole_post_create_command_carries_the_snippets_status(
+    arch: str,
+    ok: bool,
+    stubdir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Executed, not string-compared: POST_CREATE's `|| true`s must not swallow it (p5r-f3)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab", commit=False)
+    command = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())[
+        "postCreateCommand"
+    ]
+
+    res, log = _run(command, stubdir, tmp_path, STUB_ARCH=arch)
+
+    assert [line.split()[0] for line in log][:2] == ["pipx", "uv"], log
+    if ok:
+        assert res.returncode == 0, res.stderr
+    else:
+        assert res.returncode != 0
+        assert "glab 1.107.0: unsupported architecture 's390x'" in res.stderr
+        assert _curl_lines(log) == [], log
+
+
+@pytest.mark.parametrize(("kind", "member"), [("tarball", ""), ("binary", "bin/x")])
+def test_a_tarball_pin_must_name_its_member_and_only_a_tarball_may(kind: str, member: str) -> None:
+    with pytest.raises(ValueError, match="tarball_member"):
+        HostCliPin(name="x", version="1", assets={}, kind=kind, tarball_member=member)  # type: ignore[arg-type]

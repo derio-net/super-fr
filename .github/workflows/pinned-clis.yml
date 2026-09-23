@@ -12,9 +12,13 @@ on:
       - scripts/check-pinned-clis.py
       - .github/workflows/pinned-clis.yml
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

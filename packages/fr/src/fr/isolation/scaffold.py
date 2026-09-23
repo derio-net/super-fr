@@ -336,6 +336,15 @@ class HostCliPin:
     version: str
     assets: Mapping[HostCliArch, tuple[str, str]]
     kind: Literal["tarball", "binary"]
+    # tarball only: the executable's path inside the archive (glab 1.107.0: bin/glab,
+    # read from the real asset with `tar -tzf`, 2026-09-23).
+    tarball_member: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.kind == "tarball") != bool(self.tarball_member):
+            raise ValueError(
+                f"{self.name}: tarball_member is required for, and only for, a tarball"
+            )
 
 
 _GLAB_BASE = "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0"
@@ -358,6 +367,7 @@ HOST_CLI_PINS: dict[str, HostCliPin] = {
             }
         ),
         kind="tarball",
+        tarball_member="bin/glab",
     ),
     "gitea": HostCliPin(
         name="tea",
@@ -391,10 +401,12 @@ def render_host_cli_post_create(pin: HostCliPin) -> str:
     )
     supported = " ".join(pin.assets)
     if pin.kind == "tarball":
+        # A fresh dir of its own, and the exact path the release tarball carries:
+        # nothing else sitting in a shared /tmp can be what gets installed (p5r-f2).
+        xdir = f"/tmp/{pin.name}-x"
         install = (
-            f"tar -xzf {dl} -C /tmp && "
-            f"sudo install -m 755 $(find /tmp -maxdepth 2 -name {pin.name} -type f | head -1) "
-            f"/usr/local/bin/{pin.name}"
+            f"rm -rf {xdir} && mkdir -p {xdir} && tar -xzf {dl} -C {xdir} && "
+            f"sudo install -m 755 {xdir}/{pin.tarball_member} /usr/local/bin/{pin.name}"
         )
     else:
         install = f"sudo install -m 755 {dl} /usr/local/bin/{pin.name}"
