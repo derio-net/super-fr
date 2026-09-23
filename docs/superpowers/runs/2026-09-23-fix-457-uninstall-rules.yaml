@@ -1,0 +1,133 @@
+schema_version: 5
+run: 2026-09-23-fix-457-uninstall-rules
+workflow: fr-goal@1
+branch: fix/457-uninstall-rules
+started: '2026-09-23T12:40:59+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-23T12:44:01+00:00'
+    answered_by: agent
+  spec-review:
+    state: done
+    at: '2026-09-23T12:45:43+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-23T12:44:04+00:00'
+          harness: opencode
+          returned: '2026-09-23T12:45:43+00:00'
+          outcome: done
+  plan:
+    state: done
+    at: '2026-09-23T12:46:29+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-23-uninstall-installed-rules
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-23T12:45:47+00:00'
+          harness: opencode
+          returned: '2026-09-23T12:46:29+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-23T12:46:34+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-23T13:01:46+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T12:46:45+00:00'
+          agent: ses_f31b2016fffeh1ZP3pg5LLd1GK
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          model: github-copilot/claude-haiku-4.5
+          returned: '2026-09-23T12:49:34+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 0
+            journal_lines: 1
+            handoff_chars: 127
+            spec_bytes: 0
+            plan_bytes: 2616
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T12:49:38+00:00'
+          harness: opencode
+          model: github-copilot/gpt-6-luna
+          returned: '2026-09-23T12:52:01+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 1
+            journal_lines: 6
+            handoff_chars: 678
+            spec_bytes: 0
+            plan_bytes: 3167
+        evidence:
+          review: e8d9d299f484
+          reviewer: ses_f31af6c42ffec6fmdX6xwna4C4
+          findings: e52755b61b87,uninstall-rule-derivation,uninstall-rule-derivation-review
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T12:52:02+00:00'
+          agent: ses_f31ad3206ffePb4mr1jJwwNWOS
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          model: github-copilot/claude-haiku-4.5
+          returned: '2026-09-23T12:58:52+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 6
+            journal_lines: 31
+            handoff_chars: 1350
+            spec_bytes: 0
+            plan_bytes: 3167
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T12:58:56+00:00'
+          harness: opencode
+          model: github-copilot/gpt-6-luna
+          returned: '2026-09-23T13:01:46+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 8
+            journal_lines: 41
+            handoff_chars: 2252
+            spec_bytes: 0
+            plan_bytes: 3253
+        evidence:
+          review: 5078d42d2bf9
+          reviewer: ses_f31a6ce94ffeOqjhHV505SN3vf
+          findings: acceptance-note-context
+  journal-check:
+    state: done
+    at: '2026-09-23T13:01:51+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-09-23T13:13:22+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/586
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-23T13:01:55+00:00'
+          harness: opencode
+          returned: '2026-09-23T13:13:22+00:00'
+          outcome: done
+        evidence:
+          tests: fr-457-tests.log@257aef35e97d

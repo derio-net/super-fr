@@ -196,9 +196,12 @@ rows:
       - super-fr:tests/unit/test_tripwire_isolation_marker.py
       - super-fr:tests/unit/test_install_copies_rules.py
       - super-fr:tests/unit/test_version_bump_guard.py
+      int:
+      - super-fr:tests/integration/test_install_sh.py
     status: ci
     notes: Tripwires ARE the acceptance (#328); CI now also fails PRs that change shipped
-      source/skills/rules/install surfaces without a version bump.
+      source/skills/rules/install surfaces without a version bump. Integration test verifies
+      every rule in install.sh's shared list is removed by --uninstall.
   - id: auto-archive-merged-plans
     capability: Lifecycle
     acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
