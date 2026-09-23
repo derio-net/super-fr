@@ -389,6 +389,53 @@ def test_java_and_maven_write_one_java_feature_with_maven(repo: Path) -> None:
     assert features["ghcr.io/devcontainers/features/java:1"] == {"installMaven": True}
 
 
+JAVA = "ghcr.io/devcontainers/features/java:1"
+
+
+def _pom_release(repo: Path, version: str) -> None:
+    (repo / "pom.xml").write_text(
+        '<project xmlns="http://maven.apache.org/POM/4.0.0"><properties>'
+        f"<maven.compiler.release>{version}</maven.compiler.release>"
+        "</properties></project>\n"
+    )
+
+
+def test_maven_applies_the_detected_java_version_and_reports_it(repo: Path) -> None:
+    """gh#574: maven implies java — its version comes from the project's pom."""
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "maven")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA] == {"installMaven": True, "version": "17"}
+    assert "java 17 (from pom.xml maven.compiler.release)" in res.stderr
+
+
+def test_an_explicit_java_version_wins_over_detection(repo: Path) -> None:
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "java@21", "--tool", "maven")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA]["version"] == "21"
+    assert "from pom.xml" not in res.stderr
+    assert "not detected" not in res.stderr
+
+
+def test_an_undetected_java_version_warns_and_keeps_the_default(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--tool", "java")
+    assert res.exit_code == 0, res.output
+    assert "version" not in _config(repo)["features"][JAVA]
+    assert (
+        "java version not detected — the java feature's default (latest) will be used; "
+        "pass --tool java@<major> to pin it"
+    ) in res.stderr
+
+
+def test_java_detection_never_runs_without_java(repo: Path) -> None:
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "uv")
+    assert res.exit_code == 0, res.output
+    assert "java" not in res.stderr
+    assert JAVA not in _config(repo)["features"]
+
+
 def test_a_raw_feature_lands_in_features(repo: Path) -> None:
     res = scaffold(repo, "--no-commit", "--feature", "ghcr.io/acme/x:1")
     assert res.exit_code == 0, res.output

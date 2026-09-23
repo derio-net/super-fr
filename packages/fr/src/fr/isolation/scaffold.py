@@ -11,8 +11,10 @@ Writes three things per profile:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -164,6 +166,117 @@ def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, 
     return resolved
 
 
+def _java_major(raw: str) -> str | None:
+    """`1.8` → `8`; otherwise the first integer (`17.0.9`, `21.0.1-tem`,
+    `temurin-17.0.9+9` → `17`/`21`/`17`). No integer → None."""
+    m = re.search(r"(\d+)(?:\.(\d+))?", raw)
+    if not m:
+        return None
+    return m.group(2) if m.group(1) == "1" and m.group(2) else m.group(1)
+
+
+def _java_from_java_version(text: str) -> str | None:
+    return _java_major(text.strip().splitlines()[0]) if text.strip() else None
+
+
+def _java_from_sdkmanrc(text: str) -> str | None:
+    for line in text.splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key.strip() == "java":
+            return _java_major(value)
+    return None
+
+
+def _java_from_tool_versions(text: str) -> str | None:
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "java":
+            return _java_major(parts[1])
+    return None
+
+
+# pom.xml `<properties>` keys, then maven-compiler-plugin `<configuration>`
+# children — first resolvable hit wins (spec §3.A).
+POM_JAVA_PROPERTIES = (
+    "maven.compiler.release",
+    "maven.compiler.target",
+    "maven.compiler.source",
+    "java.version",
+)
+POM_COMPILER_PLUGIN_KEYS = ("release", "target")
+
+
+def _local(tag: object) -> str:
+    """An element tag without its `{namespace}`."""
+    return str(tag).rpartition("}")[2]
+
+
+def _child(elem: ET.Element, name: str) -> ET.Element | None:
+    return next((c for c in elem if _local(c.tag) == name), None)
+
+
+def _text(elem: ET.Element | None) -> str:
+    return (elem.text or "").strip() if elem is not None else ""
+
+
+def _java_from_pom(path: Path) -> tuple[str, str] | None:
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return None
+    props_elem = _child(root, "properties")
+    props = {_local(c.tag): _text(c) for c in props_elem} if props_elem is not None else {}
+
+    def resolve(value: str) -> str | None:
+        # ONE level of `${property}` indirection; anything deeper is skipped.
+        m = re.fullmatch(r"\$\{([^}]+)\}", value)
+        if m:
+            value = props.get(m.group(1), "")
+        return None if not value or "${" in value else _java_major(value)
+
+    candidates = [(props.get(key, ""), f"pom.xml {key}") for key in POM_JAVA_PROPERTIES]
+    build = _child(root, "build")
+    plugins = _child(build, "plugins") if build is not None else None
+    for plugin in plugins if plugins is not None else ():
+        config = _child(plugin, "configuration")
+        if _text(_child(plugin, "artifactId")) != "maven-compiler-plugin" or config is None:
+            continue
+        for key in POM_COMPILER_PLUGIN_KEYS:
+            candidates.append((_text(_child(config, key)), f"pom.xml maven-compiler-plugin {key}"))
+    for value, source in candidates:
+        major = resolve(value)
+        if major:
+            return major, source
+    return None
+
+
+# Version files in precedence order; the root pom.xml is consulted after them.
+JAVA_VERSION_FILES = (
+    (".java-version", _java_from_java_version),
+    (".sdkmanrc", _java_from_sdkmanrc),
+    (".tool-versions", _java_from_tool_versions),
+)
+
+
+def detect_java_version(repo_root: Path) -> tuple[str, str] | None:
+    """The project's Java major and where it came from, or None (gh#574).
+
+    Deterministic sources only — version files, then the root pom.xml. Project
+    notes (README, CI setup-java) need judgement and belong to the fr-init
+    skill, which passes `--tool java@<major>` explicitly. Never raises.
+    """
+    for name, parse in JAVA_VERSION_FILES:
+        try:
+            text = (repo_root / name).read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        major = parse(text)
+        if major:
+            return major, name
+    pom = repo_root / "pom.xml"
+    return _java_from_pom(pom) if pom.is_file() else None
+
+
 # Profile names `fr isolation` gives a meaning of its own: a legacy state with
 # no `target` infers its mode from the recorded profile (types.py), so a real
 # devcontainer profile by either name would be routed to the wrong target
@@ -276,6 +389,10 @@ def scaffold_profile(
             "(the host secrets file is preserved either way)."
         )
 
+    java_opts = resolved.get(JAVA_FEATURE)
+    if java_opts is not None and "version" not in java_opts:
+        _apply_detected_java_version(repo_root, java_opts)
+
     host_feature = HOST_CLI_FEATURE.get(backend)
     feature_map: dict[str, dict[str, object]] = {host_feature: {}} if host_feature else {}
     feature_map.update(resolved)
@@ -325,6 +442,22 @@ def scaffold_profile(
     if commit:
         _commit_profile(repo_root, profile, include_validator_wrapper=include_validator_wrapper)
     return config_path
+
+
+def _apply_detected_java_version(repo_root: Path, java_opts: dict[str, object]) -> None:
+    """Pin the java feature to the project's detected major, reporting where it
+    came from — or warn that the feature's default will be used (spec §3.A)."""
+    detected = detect_java_version(repo_root)
+    if detected is None:
+        print(
+            "java version not detected — the java feature's default (latest) will be "
+            "used; pass --tool java@<major> to pin it",
+            file=sys.stderr,
+        )
+        return
+    major, source = detected
+    java_opts["version"] = major
+    print(f"java {major} (from {source})", file=sys.stderr)
 
 
 def _commit_profile(
