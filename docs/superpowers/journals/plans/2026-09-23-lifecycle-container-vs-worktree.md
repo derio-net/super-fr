@@ -730,3 +730,8 @@ set-status notes now say the feature-applies and cursor/scratch-survive claims a
 ### p6-f12 · finding [fixed] · down refusal line had no subject ('error: holds run …') (phase 6)
 
 preserve.name_runs(runs, refusal, branch) renders 'isolation: <b> holds active run <id> (at step <s>) — tearing it down ends that run here' (unreadable run file noted inside the parens); runs_line stays bare for the down --all listing, whose filter now drops the refusal's run sentences by prefix. Spec §3.D.1 updated; tests/unit/test_isolation_preserve.py (HELD constant, unreadable case, --all listing asserts the sentence is absent) and tests/integration/test_run_survives_teardown.py updated.
+
+<!-- fr:journal kind=review scope=plan id=p6-review created=2026-09-23T05:39:44 phase=6 -->
+### p6-review · review · Phase 6 review (independent reviewer): 0 major, 5 minor, 6 nits — all fixed (phase 6)
+
+Skill/explainer accuracy (p6-f2..f4, f7..f9), live evidence gaps closed (p6-f5: #471 acc 2 via restart and up live; p6-f6: containerd store, no dangling image after rebuild, p6-f1 resolved with evidence), transcript honesty (f10), matrix notes (f11), refusal wording names the branch (f12). #471 acc 4 deferred to #580 per operator's 'close all four'. c85592e4.
