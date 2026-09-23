@@ -199,4 +199,18 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: done
+    at: '2026-09-23T16:45:31+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/592
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-23T16:02:21+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 23343080-96cd-4d63-a694-ddef4d6fb103
+          returned: '2026-09-23T16:45:31+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-shards.log@8ca2b189afa4
