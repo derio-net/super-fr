@@ -3,7 +3,7 @@ run: 2026-09-23-fix-526-status-archivable-merged
 workflow: fr-goal@1
 branch: fix/526-status-archivable-merged
 started: '2026-09-23T13:44:34+00:00'
-cursor: implement
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -44,8 +44,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-09-23T15:58:10+00:00'
+    state: done
+    at: '2026-09-23T16:01:44+00:00'
     members:
     - implement-phase
     - review-phase
@@ -169,20 +169,34 @@ steps:
             cache_read_input_tokens: 15432929
             output_tokens: 1994
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-23T15:58:10+00:00'
           agent: a582f76fd62c78609
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5
           session: 23343080-96cd-4d63-a694-ddef4d6fb103
+          returned: '2026-09-23T16:01:44+00:00'
+          outcome: done
           estimate:
             journal_entries: 15
             journal_lines: 76
             handoff_chars: 5954
             spec_bytes: 16029
             plan_bytes: 17096
+          measured:
+            input_tokens: 98
+            cache_creation_input_tokens: 423321
+            cache_read_input_tokens: 4894622
+            output_tokens: 12840
+        evidence:
+          review: rev-p3
+          reviewer: a582f76fd62c78609
+          findings: f-p3-skill-gate
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-23T16:01:45+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending

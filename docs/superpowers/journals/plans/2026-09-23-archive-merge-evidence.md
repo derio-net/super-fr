@@ -89,3 +89,8 @@ Paragraph now states all three arms (dispatched: gh evidence; undispatched agent
 ### rev-p3 · review · Phase 3 review (dispatched feature-dev:code-reviewer): 1 minor finding, fixed (phase 3)
 
 Verified: archive_gate landed required keyword-only; undispatched agentic needs local + landed; manual local only; dispatched arm unchanged; landed=None blocks with stated wording; archive_blockers/landed_for single adapter never falsely clears (ref None -> None, absent plan -> empty); one merge_evidence per invocation for archive and apply; --force single still overrides; _apply_one fallback reads the plan-dir's own repo, no cross-repo mixup; failure paths degrade; status read-only; close-out case tested; no test passes via --force; rows at ci; version lockstep 4.19.2. Finding f-p3-skill-gate fixed.
+
+<!-- fr:journal kind=discovery scope=plan id=live-premerge created=2026-09-23T18:02:18 phase=4 -->
+### live-premerge · discovery · Live pre-merge check (orchestrator, uv run fr 4.19.2): not merged, no archive suggestion, archive refuses (phase 4)
+
+On fix/526-status-archivable-merged after implement, before any PR: fr status listed this plan under 'in progress' (phase 4 open) and printed no fr archive line for it; with phase 4 temporarily ticked (then restored via git checkout) it moved to 'complete locally, not yet on origin/main (waiting for merge)', JSON archivable=[] complete_unmerged=[this plan] - the exact #526 scenario, now correct. fr archive <this plan> exited 2: 'Phase 1..3: complete locally, not on origin/main; merge the PR first'. Side observation: the four other live plans read 'merged, manual phases still open' (incl. fr-run-cursor-cluster phase 7), a signal the old sweep hid under 'in progress'. The operator still owns ticking P4.T1.S1.
