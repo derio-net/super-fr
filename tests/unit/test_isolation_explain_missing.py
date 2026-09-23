@@ -12,9 +12,12 @@ Real git throughout — the tombstones here are written by a real
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 
+import pytest
 from fr.isolation import preserve
 from fr.run.model import run_path
 
@@ -29,6 +32,8 @@ from tests.unit.test_isolation_preserve import (
 
 # `_hermetic_git` is autouse in its own module only — re-export it here.
 from tests.unit.test_isolation_preserve import _hermetic_git as _hermetic_git  # noqa: F401
+
+_RUN_FILE = "docs/superpowers/runs/r1.yaml"
 
 
 def _explain(repo: Path, run_id: str = "r1") -> str:
@@ -112,29 +117,42 @@ def test_a_committed_cursor_says_it_is_committed(tmp_path: Path) -> None:
     )
 
 
-def test_a_restored_tombstone_whose_workspace_is_gone_again_reads_committed(
-    tmp_path: Path,
-) -> None:
-    """A restored tombstone is history (`up` will not restore it again), so
-    promising a restore would be false. A later clean teardown writes no new
-    tombstone, and the cursor was committed before it — say that."""
+def test_p5_f3_a_restored_tombstone_says_restored_not_committed(tmp_path: Path) -> None:
+    """A restored tombstone is history (`up` will not restore it again), and
+    after a `--no-preserve` down of a DIRTY restored workspace the cursor was
+    never committed — so neither "restores it" nor "committed on" is true."""
     repo, _runner, target, st = _upped(tmp_path)
     _write_run(st.worktree)
     _commit(st.worktree, "cursor")
     _write_run(st.worktree, cursor="implement", states={"plan": "done", "implement": "running"})
     target.down(st, force=True)
     st2 = target.up(None, BRANCH)
-    _commit(st2.worktree, "advanced cursor")
     tomb = _tomb(repo)
     assert tomb.get("restored_at")
-    # Stand-in for the later teardown: the workspace is gone, the restored
-    # tombstone remains (a clean, run-less down writes none of its own).
+    _write_run(st2.worktree, cursor="review", states={"implement": "done", "review": "running"})
     target.down(st2, force=True, preserve=False)
 
     msg = _explain(repo)
 
-    assert "its cursor is committed on" in msg
+    assert f"its record was restored into a workspace at {tomb['restored_at']}" in msg
+    assert f"if that workspace is gone, what survives is what {BRANCH} committed" in msg
     assert "restores it" not in msg
+    assert "its cursor is committed on" not in msg
+
+
+def test_p5_f3_a_tombstone_with_no_copy_says_so(tmp_path: Path) -> None:
+    repo, _wt = _torn_down(tmp_path, dirty=True)
+    root = _tomb_dir(repo)
+    tomb = _tomb(repo)
+    tomb["files"] = [f for f in tomb["files"] if not f["path"].endswith("r1.yaml")]
+    (root / "teardown.json").write_text(json.dumps(tomb))
+    (root / "files" / _RUN_FILE).unlink()
+
+    msg = _explain(repo)
+
+    assert "fr kept no copy of its record" in msg
+    assert "restores it" not in msg
+    assert "its cursor is committed on" not in msg
 
 
 def test_the_most_recent_tombstone_listing_the_run_wins(tmp_path: Path) -> None:
@@ -218,3 +236,143 @@ def test_explain_missing_outside_a_git_repo_is_the_plain_answer(tmp_path: Path) 
     bare.mkdir()
 
     assert _explain(bare, "x").startswith("no run x at ")
+
+
+# ------------------------------------------------------- review (phase 5)
+
+
+def test_p5_f1_an_unrecorded_teardown_names_the_staged_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The removal happened but `commit` failed (or the process was killed):
+    no tombstone, only staging/stage.json with `removal_attempted`. That is a
+    record — "fr has no record of one" would be false."""
+    repo, _runner, target, st = _upped(tmp_path)
+    _write_run(st.worktree, cursor="plan")
+    _commit(st.worktree, "cursor")
+    _write_run(st.worktree, cursor="implement", states={"plan": "done", "implement": "running"})
+
+    def boom(*_a: object, **_k: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(preserve, "commit", boom)
+    target.down(st, force=True)
+    assert not st.worktree.exists()
+    root = _tomb_dir(repo)
+    assert not (root / "teardown.json").exists()
+    assert json.loads((root / "staging" / "stage.json").read_text())["removal_attempted"]
+
+    msg = _explain(repo)
+
+    assert "no record" not in msg
+    assert msg.startswith("run r1 is not in this checkout: ")
+    assert "was never recorded" in msg
+    assert str(root / "staging" / "files" / _RUN_FILE) in msg
+    assert f"copy it back, or the next `fr isolation down --branch {BRANCH}` merges it" in msg
+
+
+def _crlf_repo_torn_down(tmp_path: Path) -> Path:
+    """A committed, UNCHANGED cursor in a `* text eol=crlf` repo: the worktree
+    bytes carry CRLF while git's blob is LF-normalised."""
+    repo, _runner, target, st = _upped(tmp_path)
+    (st.worktree / ".gitattributes").write_text("* text eol=crlf\n")
+    path = _write_run(st.worktree, cursor="plan")
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    _commit(st.worktree, "cursor")
+    assert b"\r\n" in path.read_bytes()
+    target.down(st, force=True)
+    return repo
+
+
+def test_p5_f2_a_filtered_committed_cursor_reads_committed(tmp_path: Path) -> None:
+    repo = _crlf_repo_torn_down(tmp_path)
+    entry = next(f for f in _tomb(repo)["files"] if f["path"] == _RUN_FILE)
+    assert entry["changed"] is False, "teardown.json must persist `changed`"
+
+    msg = _explain(repo)
+
+    assert f"its cursor is committed on {BRANCH}" in msg
+
+
+def _git_blob_sha256(data: bytes) -> str:
+    return hashlib.sha256(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+@pytest.mark.parametrize("same", [True, False])
+def test_p5_f2_without_changed_the_blob_fallback_handles_sha256(tmp_path: Path, same: bool) -> None:
+    """A tombstone written before `changed` was persisted: fall back to
+    comparing the copy's blob id, in the hash the base was written in."""
+    repo, _wt = _torn_down(tmp_path, dirty=False)
+    root = _tomb_dir(repo)
+    tomb = _tomb(repo)
+    data = (root / "files" / _RUN_FILE).read_bytes()
+    for f in tomb["files"]:
+        f.pop("changed", None)
+        if f["path"] == _RUN_FILE:
+            f["base_blob"] = _git_blob_sha256(data) if same else "ab" * 32
+    (root / "teardown.json").write_text(json.dumps(tomb))
+
+    msg = _explain(repo)
+
+    if same:
+        assert f"its cursor is committed on {BRANCH}" in msg
+    else:
+        assert "its record is preserved" in msg
+
+
+def test_p5_f4_a_deleted_branch_is_not_promised_a_restore(tmp_path: Path) -> None:
+    repo, _wt = _torn_down(tmp_path, dirty=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "branch", "-D", BRANCH], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "-d", f"refs/remotes/origin/{BRANCH}"],
+        check=False,
+        capture_output=True,
+    )
+
+    msg = _explain(repo)
+
+    assert "restores it" not in msg
+    assert "will not restore it automatically" in msg
+    assert str(_tomb_dir(repo) / "files" / _RUN_FILE) in msg
+
+
+def test_p5_f4_a_vanished_head_is_not_promised_a_restore(tmp_path: Path) -> None:
+    repo, _wt = _torn_down(tmp_path, dirty=True)
+    root = _tomb_dir(repo)
+    tomb = _tomb(repo)
+    tomb["head"] = "0" * 40
+    (root / "teardown.json").write_text(json.dumps(tomb))
+
+    msg = _explain(repo)
+
+    assert "will not restore it automatically" in msg
+    assert str(root / "files" / _RUN_FILE) in msg
+
+
+def test_p5_f6_a_lineage_break_set_aside_names_its_reason(tmp_path: Path) -> None:
+    repo, _wt = _torn_down(tmp_path, dirty=True)
+    live = _tomb_dir(repo)
+    aside = live.parent / f"{live.name}@20260923T000000Z"
+    live.rename(aside)
+    tomb = json.loads((aside / "teardown.json").read_text())
+    tomb["set_aside_at"] = "2026-09-23T00:00:00Z"
+    tomb["set_aside_reason"] = "lineage-break"
+    (aside / "teardown.json").write_text(json.dumps(tomb))
+
+    msg = _explain(repo)
+
+    assert f"set aside at {aside} (lineage-break)" in msg
+    assert "fr isolation up" not in msg
+
+
+def test_p5_f7_the_holder_on_the_runs_own_branch_wins(tmp_path: Path) -> None:
+    """Two live workspaces carry runs/r1.yaml (a merged-in copy on one); the
+    one whose branch the run file names is the answer."""
+    repo, _runner, target, st = _upped(tmp_path)
+    other = target.up(None, "feat/a-other")
+    _write_run(other.worktree, branch=BRANCH)  # r1 of feat/x, sitting in feat/a-other
+    _write_run(st.worktree, branch=BRANCH)
+
+    assert _explain(repo).startswith(f"run r1 lives in the workspace at {st.worktree} ")

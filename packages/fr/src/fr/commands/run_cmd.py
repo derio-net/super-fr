@@ -2568,7 +2568,7 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
     traceback; `RunStateError` already carries the path.
     """
     path = run_path(repo_root, run_id)
-    if not path.is_file():
+    if not path.exists():  # a present-but-unreadable file keeps its own error (p5-f9)
         _missing_run_exit(repo_root, run_id, path)
     try:
         return load_run_state(repo_root, run_id)

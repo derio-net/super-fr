@@ -464,3 +464,53 @@ tests/integration/test_run_survives_teardown.py drives the real CLI (CliRunner, 
 ### 85815977c916 · discovery · phase-5 acceptance rows left not-implemented for phase 6 (phase 5)
 
 run-missing-explains-teardown and isolation-down-preserves-run stay not-implemented, matching phases 2-4 (8af43aee8ee9, 3f54c04d7371, 83e667284b0b): 06.yaml flips rows after the live walks. Refs to cite then: tests/unit/test_isolation_explain_missing.py (every order, set-aside, never-raises), tests/unit/test_run_cli.py::test_a_missing_run_is_explained_at_every_load_site and ::test_start_refusing_an_existing_run_id_names_advance, tests/integration/test_run_survives_teardown.py (the #575 acceptance-4 walk).
+
+<!-- fr:journal kind=finding scope=plan id=p5-f1 created=2026-09-23T04:37:54 phase=5 state=fixed -->
+### p5-f1 · finding [fixed] · Unfinished teardown answered 'fr has no record' (phase 5)
+
+Verified: with preserve.commit raising during down --force, only staging/stage.json (removal_attempted) remains and explain_missing said never-existed. Fixed: every preserved dir's staging/stage.json is checked after live tombstones, before set-aside; the message says the teardown was never recorded, names <dir>/staging/files/<run file>, and "copy it back, or the next `fr isolation down --branch <b>` merges it" (the set-aside wording when the dir's tombstone is set aside). Test: test_p5_f1_an_unrecorded_teardown_names_the_staged_copy.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f2 created=2026-09-23T04:37:55 phase=5 state=fixed -->
+### p5-f2 · finding [fixed] · _cursor_preserved hashed raw worktree bytes against git's clean blob (phase 5)
+
+Verified (CRLF: `* text eol=crlf` with a committed CRLF cursor, raw-bytes SHA-1 != LF-normalised blob). Fixed: commit persists `changed` in teardown.json files entries (prior entries keep theirs; stage.json/_merge_prior already carried it); explain_missing reads it and falls back to raw blob comparison only when the key is absent. Tests: test_p5_f2_a_filtered_committed_cursor_reads_committed (CRLF), test_p5_f2_without_changed_the_blob_fallback_handles_sha256 (same/different, 64-hex base).
+
+<!-- fr:journal kind=finding scope=plan id=p5-f3 created=2026-09-23T04:37:55 phase=5 state=fixed -->
+### p5-f3 · finding [fixed] · 'committed on <b>' was the fallback for every non-preserved case (phase 5)
+
+Fixed: "committed" only for a files entry with non-null base_blob and changed false (or fallback blob-equal); a restored tombstone says "its record was restored into a workspace at <restored_at>; if that workspace is gone, what survives is what <b> committed"; no files entry or no copy says "fr kept no copy of its record". Tests: test_p5_f3_a_restored_tombstone_says_restored_not_committed (no-preserve dirty down after a restore), test_p5_f3_a_tombstone_with_no_copy_says_so.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f4 created=2026-09-23T04:37:56 phase=5 state=fixed -->
+### p5-f4 · finding [fixed] · 'up … restores it' promised when restore would decline (phase 5)
+
+Fixed: before promising, `git cat-file -e <head>^{commit}` and `show-ref --verify refs/heads/<b>` or `refs/remotes/origin/<b>`; on failure the message gives <dir>/files/<file> and says up "will not restore it automatically (<why>)". Not a full descendant check (that needs the post-up HEAD). Tests: test_p5_f4_a_deleted_branch_is_not_promised_a_restore, test_p5_f4_a_vanished_head_is_not_promised_a_restore.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f5 created=2026-09-23T04:37:56 phase=5 state=fixed -->
+### p5-f5 · finding [fixed] · run check --idle missing from the load-site parametrization (phase 5)
+
+Added `check-idle` case; it passed on arrival (check already used _load_or_exit) — now pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f6 created=2026-09-23T04:37:57 phase=5 state=fixed -->
+### p5-f6 · finding [fixed] · No set-aside test with set_aside_reason (phase 5)
+
+Added test_p5_f6_a_lineage_break_set_aside_names_its_reason; passed on arrival (reason was already rendered) — now pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f7 created=2026-09-23T04:37:57 phase=5 state=fixed -->
+### p5-f7 · finding [fixed] · _live_holder returned the first holder regardless of the run file's branch (phase 5)
+
+Verified red (sorted state files put feat__a-other first). Fixed: holders whose run file names their own branch win, else the first. Test: test_p5_f7_the_holder_on_the_runs_own_branch_wins.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f8 created=2026-09-23T04:37:57 phase=5 state=fixed -->
+### p5-f8 · finding [fixed] · Tombstone partition used a tuple-membership test (phase 5)
+
+Fixed: one pass, one predicate (_is_set_aside) splits listing into live/aside. Refactor only; covered by the existing ordering and set-aside tests.
+
+<!-- fr:journal kind=finding scope=plan id=p5-f9 created=2026-09-23T04:37:58 phase=5 state=fixed -->
+### p5-f9 · finding [fixed] · _load_or_exit used is_file for the missing check (phase 5)
+
+Fixed: `not path.exists()`, OSError branch kept. No dedicated test: the only behavioural difference is a directory at the run path, which now reports via load_run_state's RunStateError instead of the explanation.
+
+<!-- fr:journal kind=discovery scope=plan id=e9c5d1f3c8ae created=2026-09-23T04:37:58 phase=5 -->
+### e9c5d1f3c8ae · discovery · Integration walk leaves fr-goal's shipped manifest unexercised after a restore (phase 5)
+
+test_run_survives_teardown.py uses the custom `walk` shape, so no test yet advances the SHIPPED fr-goal manifest on a restored cursor (manifest resolution, gates, agent-step briefs after restore). Phase 6's live walk covers it.

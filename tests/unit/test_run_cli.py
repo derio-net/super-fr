@@ -6382,8 +6382,9 @@ def test_a_middle_manual_phase_is_refused_at_group_start(tmp_path: Path) -> None
         ["run", "advance", "nope"],
         ["run", "resolve", "nope", "--step", "hello", "--state", "done"],
         ["run", "claim", "nope", "--step", "hello", "--agent", "a1"],
+        ["run", "check", "--idle", "nope"],
     ],
-    ids=["status", "gates", "advance", "resolve", "claim"],
+    ids=["status", "gates", "advance", "resolve", "claim", "check-idle"],
 )
 def test_a_missing_run_is_explained_at_every_load_site(tmp_path: Path, argv: list[str]) -> None:
     """`_load_or_exit` and the three direct `load_run_state` call sites all
