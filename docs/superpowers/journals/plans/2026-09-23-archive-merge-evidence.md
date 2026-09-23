@@ -74,3 +74,18 @@ apply_command calls merge_evidence(resolve_repo_root(), fetch=True) once (also u
 ### d-p3-vacuous-nudge · discovery · Old nudge assertions were satisfied by drift-warning text, not the nudge (phase 3)
 
 test_status_cmd and test_archive_cmd's apply nudge test asserted 'fr archive' in output, which the never-dispatched drift warning ('fr archive if this plan is done') also contains, so they would stay green with the nudge gone. Migrated onto landed repos (file-path origin) and tightened to the nudge line 'plan complete — run fr archive'. No test gained --force. A shared tests.unit.test_merge_evidence.stub_fetch now owns hermetic git config + the recording _fetch stub for all four CLI test modules.
+
+<!-- fr:journal kind=finding scope=plan id=f-p3-skill-gate created=2026-09-23T18:01:39 phase=3 state=open -->
+### f-p3-skill-gate · finding [open] · fr-progress Archive-on-complete paragraph still described the pre-#544 gate (phase 3)
+
+Reviewer finding (minor): SKILL.md said 'fully-ticked never-dispatched' clears the gate; phase 3 now also requires an undispatched agentic phase to be on origin/<default>.
+
+<!-- fr:journal kind=finding scope=plan id=f-p3-skill-gate-resolved created=2026-09-23T18:01:39 state=fixed resolves=f-p3-skill-gate -->
+### f-p3-skill-gate-resolved · finding [fixed] · resolves f-p3-skill-gate: fr-progress Archive-on-complete paragraph still described the pre-#544 gate
+
+Paragraph now states all three arms (dispatched: gh evidence; undispatched agentic: ticked AND on origin/<default>; manual: ticked locally); mirrors regenerated; skill + mirror + neutrality tripwires green; 120/120 lines.
+
+<!-- fr:journal kind=review scope=plan id=rev-p3 created=2026-09-23T18:01:40 phase=3 -->
+### rev-p3 · review · Phase 3 review (dispatched feature-dev:code-reviewer): 1 minor finding, fixed (phase 3)
+
+Verified: archive_gate landed required keyword-only; undispatched agentic needs local + landed; manual local only; dispatched arm unchanged; landed=None blocks with stated wording; archive_blockers/landed_for single adapter never falsely clears (ref None -> None, absent plan -> empty); one merge_evidence per invocation for archive and apply; --force single still overrides; _apply_one fallback reads the plan-dir's own repo, no cross-repo mixup; failure paths degrade; status read-only; close-out case tested; no test passes via --force; rows at ci; version lockstep 4.19.2. Finding f-p3-skill-gate fixed.

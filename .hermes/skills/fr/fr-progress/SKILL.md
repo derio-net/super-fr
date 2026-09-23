@@ -109,8 +109,9 @@ archived), archive it with the verb it printed, never a hand-rolled mv:
 fr archive <plan-dir>     # gate-checked git mv to docs/superpowers/implemented/plans/
 ```
 
-The gate requires every phase complete (gh evidence, or fully-ticked
-never-dispatched); `--force` overrides for a single plan. The owning spec
+The gate requires every phase complete: a dispatched phase by gh evidence, an
+undispatched agentic one fully ticked AND on `origin/<default>`, a manual one
+ticked locally. `--force` overrides for a single plan. The owning spec
 moves to `implemented/specs/` once all its rows resolve as implemented. The
 moves are staged `git mv`s: you commit them. Never fires without intent.
 
