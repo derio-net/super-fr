@@ -24,3 +24,8 @@ MergeEvidence.agentic_landed is computed from the plan as it exists on the defau
 ### f-p2-local-phases · finding [open] · Sweep's merged buckets must check every LOCAL agentic phase against landed_phases (phase 2)
 
 From phase 1 discovery 80e0b0080222: agentic_landed is judged from the ref's copy of the plan, so a phase that exists only in the working tree (added after an earlier merge) does not block it. The sweep must classify a plan as merged (archivable / merged_manual_open) only when every agentic phase in the WORKING-TREE plan is in landed_phases[name]; otherwise it is complete_unmerged or in_progress. Test: plan on ref with phase 1 landed, phase 2 added + ticked locally -> complete_unmerged, not archivable.
+
+<!-- fr:journal kind=review scope=plan id=rev-p1 created=2026-09-23T17:21:42 phase=1 -->
+### rev-p1 · review · Phase 1 review (dispatched feature-dev:code-reviewer): no findings (phase 1)
+
+Reviewer verified default-ref fidelity with the old _default_branch (commit-gate tests unchanged), the fetch seam (timeout, GIT_TERMINAL_PROMPT=0, failure degrades, real destroyed-remote test), git archive materialisation, per-phase landed_phases, agentic_landed excluding manual phases (closed PhaseTag literal), unparsed_on_ref, the tripwire's explicit skip, and test quality (real repos, no network). No findings at >=80 confidence. The known working-tree-only-phase gap is filed against phase 2 as f-p2-local-phases.
