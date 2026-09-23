@@ -35,6 +35,7 @@ from rich.console import Console
 from fr.commands.common import resolve_repo_root
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
+from fr.harness.long_commands import long_command_rule
 from fr.harness.model import HarnessError
 from fr.isolation import sessions as _sessions
 from fr.isolation.types import IsolationError
@@ -1806,7 +1807,12 @@ def _close_on_resolve(
 
 
 def _build_member_brief(
-    member: Step, group: Step, item: str, state: RunState, resolved_tier: str | None
+    member: Step,
+    group: Step,
+    item: str,
+    state: RunState,
+    resolved_tier: str | None,
+    harness: str | None = None,
 ) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -1825,12 +1831,19 @@ def _build_member_brief(
     (`_build_brief`, left untouched): a group spans every phase, so there is
     no single tier to resolve there, and a confidently-wrong value would be
     worse than an absent one.
+
+    `long_commands` (gh#582) is the long-command rule for `harness`, the
+    one `fr.harness.long_commands` resolves. It rides every member brief
+    because the executor reads its task prompt when it acts, and the same
+    rule in its agent file alone did not stop OpenCode killing a full suite
+    at 120 s. fr-goal §5 relays it verbatim.
     """
     return {
         "run": state.run,
         "workflow": state.workflow,
         "step": member.id,
         "group": group.id,
+        "long_commands": long_command_rule(harness),
         "item": item,
         "kind": member.kind,
         "skill": _brief_skill(member),
@@ -2078,7 +2091,12 @@ def _print_member_dispatch(
         soft_wrap=True,
     )
     console.print(
-        json.dumps(_build_member_brief(member, step, item, state, resolved_tier), sort_keys=True),
+        json.dumps(
+            _build_member_brief(
+                member, step, item, state, resolved_tier, harness=detect_harness(os.environ)
+            ),
+            sort_keys=True,
+        ),
         soft_wrap=True,
     )
 

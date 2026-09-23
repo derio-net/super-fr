@@ -3551,13 +3551,23 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
       - super-fr:tests/unit/test_phase_executor_agent.py
+      - super-fr:tests/unit/test_long_command_rule.py
+      - super-fr:tests/unit/test_run_cli.py
     status: ci
     notes: 'Spec 3.D. ci pins the PROSE: tests/unit/test_phase_executor_agent.py checks
       each harness''s arm carries its own mechanism and none of another''s (review p3r-4).
       Sources: OpenCode timeout/kill from its bash tool source; Hermes terminal/process
       from its tools reference; the OpenCode detach recipe (PID file, exit-code capture)
       is the one arm not verified from source. The BEHAVIOUR — a long suite not killed,
-      nothing left running — is the post-merge Test Plan smoke''s to show (review p3r-m1/m2).'
+      nothing left running — is the post-merge Test Plan smoke''s to show (review p3r-m1/m2).
+      LIVE SMOKE (#564 Test Plan step 2, 2026-09-23, OpenCode 1.18.32, mechanical tier
+      on claude-haiku-4.5): the executor ran the full suite with no timeout twice, and
+      it was killed at 120 s both times before it passed timeout=600000 and the suite
+      passed (150 s). The orchestrator passed timeouts correctly. So the agent-file
+      clause alone does not change behaviour (gh#582). FIX: every phase-member brief
+      now carries the harness''s rule as long_commands, and fr-goal copies it into the
+      task prompt verbatim (tests/unit/test_run_cli.py, tests/unit/test_long_command_rule.py).
+      A live re-walk of the smoke is owed after release.'
   - id: phase-executor-description-rules-out-second-worktree
     capability: fr-goal phase executor dispatch
     acceptance: The phase-executor description check fails a description that merely
