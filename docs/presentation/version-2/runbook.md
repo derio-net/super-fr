@@ -107,7 +107,9 @@ Each line below failed silently in some earlier run:
 - `opencode agent list` shows all four `fr-phase-executor*` agents;
 - `glab auth status`, plus a real API read of the fork;
 - tier bindings resolve to three different models;
-- clone pristine, identity is the work one, `origin` pushable, `upstream` not.
+- clone pristine, identity is the work one, `origin` pushable and the **only**
+  remote;
+- the operator's project is **not a fork** of anything (see below).
 
 ## Measurement — read `opencode.db`, not the cursor
 
@@ -200,6 +202,21 @@ as verified would be the bug.
   question gates can still silently not fire. Still the highest-risk moment.
 - `bash` is ungated by the edit gate.
 - The idle adapter's behaviour is unproven, as above.
+
+## Never record against a fork
+
+A disabled push URL looks like protection and is not. On GitLab, `glab mr
+create` in a **fork** targets the **parent** project by default, through the API
+— no `git push` involved — so an agent that passes no target opens its merge
+request on the upstream team's project while its branch sits on ours. Observed
+live on 2026-09-23: the code never left the operator's project, but the MR and
+its notifications did.
+
+The only protection that holds is structural: **the project the run pushes to
+must have no parent.** Remove the fork relationship, keep `origin` as the only
+remote, and have preflight refuse otherwise. A cheaper guard belongs in fr as
+well — `resolve --emitted pr=` accepted an MR URL on a project other than the
+repo's `origin`, and could have caught it at delivery.
 
 ## Resetting between attempts
 

@@ -436,11 +436,12 @@ unreachable host now **raises** instead of reporting absence.
 **Preconditions before recording** — note how few remain, now that `fr-init`
 and the backend declaration happen on camera:
 
-1. **Remote repointed** ✅ (2026-09-19). `origin` is the operator's own fork;
-   the team's project is kept as `upstream` with its push URL `DISABLED`,
-   verified by dry-run. A `/fr-goal` run opens merge requests unattended, so an
-   unreachable push path on another team's repo is a safety property, not
-   tidiness. The MR lands in the operator's own namespace.
+1. **Own project, not a fork** ✅ (corrected 2026-09-23). The run pushes to the
+   operator's own project, which is **not** a fork of the team's. The earlier
+   setup kept the team's project as a push-disabled `upstream` and called that a
+   safety property — it was not: `glab mr create` in a GitLab fork targets the
+   parent over the API, and attempt 2's MR landed on the team's project. The fork
+   relationship is removed and no remote names the team's project.
 2. **The repo must be PRISTINE** ✅ (2026-09-19). No `.devcontainer`, clean
    working tree. This is now a precondition rather than a setup step — it is
    the state the recording has to start from. A `fr-profiles.yaml` written by
