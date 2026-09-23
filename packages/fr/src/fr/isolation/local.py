@@ -47,11 +47,34 @@ def _missing_binary(err: FileNotFoundError, context: str) -> str:
 
 
 def subprocess_runner(
-    argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+    argv: list[str],
+    cwd: Path | None = None,
+    check: bool = False,
+    capture: bool = True,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """capture=False inherits stdio — exec passthrough must stream the
-    container's output live (long builds/test runs), not swallow it."""
-    return subprocess.run(argv, cwd=cwd, check=check, capture_output=capture, text=True)
+    container's output live (long builds/test runs), not swallow it.
+
+    `timeout` makes the call bounded AND non-interactive: stdin is /dev/null,
+    and an expiry returns exit 124 with a `timed out` stderr instead of
+    raising, so a caller reads it as a failure (for a probe: `unknown`)."""
+    try:
+        return subprocess.run(
+            argv,
+            cwd=cwd,
+            check=check,
+            capture_output=capture,
+            text=True,
+            env=env,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL if timeout is not None else None,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            argv, 124, stdout="", stderr=f"{argv[0]}: timed out after {timeout:g}s\n"
+        )
 
 
 def _home() -> Path:
@@ -327,11 +350,15 @@ def _main_worktree_root(repo_root: Path) -> Path:
 class RemoteView:
     """What fr knows about `origin/<B>`.
 
-    `state` is `exists` (probed and fetched, or a local ref under `--no-fetch`),
-    `absent` (ls-remote exit 2, or no origin remote at all) or `unknown` (any
-    other probe/fetch failure — never read as absence, #354). `sha` is the
-    local `origin/<B>` ref's commit when one exists: freshly fetched for
-    `exists`, the last-fetched value for `unknown`.
+    `state` is one of:
+    - `exists` — probed and fetched (or, under `--no-fetch`, a local ref);
+    - `unfetched` — ls-remote says it exists but the explicit fetch failed;
+    - `absent` — ls-remote exit 2, or no origin remote at all;
+    - `unknown` — any other probe failure (never read as absence, #354);
+    - `unchecked` — `--no-fetch` with no local `origin/<B>` ref.
+
+    `sha` is the local `origin/<B>` ref's commit when one exists: freshly
+    fetched for `exists`, the last-fetched value otherwise.
     """
 
     state: str
@@ -350,6 +377,18 @@ class BranchDecision:
     lines: tuple[str, ...]
 
 
+# A git call that talks to origin is bounded and never prompts (#438 review).
+_NETWORK_TIMEOUT_S = 60.0
+_BATCH_SSH = "ssh -o BatchMode=yes -o ConnectTimeout=15"
+
+
+def _why(what: str, result: subprocess.CompletedProcess[str]) -> str:
+    """`<what> exited <rc>`, plus the last stderr line git printed."""
+    lines = [ln for ln in (result.stderr or "").splitlines() if ln.strip()]
+    head = f"{what} exited {result.returncode}"
+    return f"{head}: {lines[-1].strip()}" if lines else head
+
+
 def _short(sha: str | None) -> str:
     return (sha or "")[:12]
 
@@ -358,50 +397,83 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
+def _local_row(
+    branch: str,
+    local_sha: str,
+    remote: RemoteView,
+    relation: tuple[int, int] | None,
+    worktree: Path,
+) -> BranchDecision:
+    """The `local <B> exists` rows. #322 corner 1: always reuse as-is."""
+    remote_ref = f"origin/{branch}"
+    line = f"isolation: reusing local branch {branch} at {_short(local_sha)}"
+    if remote.state in ("unknown", "unfetched", "unchecked"):
+        return BranchDecision("local", branch, (f"{line} (origin not checked: {remote.reason})",))
+    if remote.state != "exists" or remote.sha is None or remote.sha == local_sha:
+        return BranchDecision("local", branch, (line,))
+    if relation is None:
+        return BranchDecision(
+            "local",
+            branch,
+            (f"{line} (differs from {remote_ref} at {_short(remote.sha)}; relation unknown)",),
+        )
+    ahead, behind = relation
+    if behind == 0:
+        return BranchDecision(
+            "local", branch, (f"{line} ({_plural(ahead, 'commit')} ahead of {remote_ref})",)
+        )
+    if ahead == 0:
+        relation_text, catch_up = "is behind", f"merge --ff-only {remote_ref}"
+    else:
+        relation_text, catch_up = "has diverged from", f"merge {remote_ref}"
+    return BranchDecision(
+        "local",
+        branch,
+        (
+            f"WARNING: local {branch} ({_short(local_sha)}) {relation_text} {remote_ref} "
+            f"({_short(remote.sha)}, +{ahead}/−{behind}) — using local; "
+            f"`git -C {worktree} {catch_up}` to catch up",
+        ),
+    )
+
+
 def classify_branch(
     branch: str,
     *,
     local_sha: str | None,
     remote: RemoteView,
-    ahead: int,
-    behind: int,
+    relation: tuple[int, int] | None,
     base: str | None,
     worktree: Path,
 ) -> BranchDecision:
     """The §3.E table as a pure function — no git, no I/O.
 
-    `ahead`/`behind` count local `<B>` against `origin/<B>` and are only read
-    when both exist. Raises IsolationError for the one refused row: `--base`
-    beside a known `origin/<B>` would fork a second history under one name.
+    `relation` is (ahead, behind) of local `<B>` against `origin/<B>`, or None
+    when it could not be counted; it is only read when both exist and differ.
+    Raises IsolationError for the refused rows: `--base` beside a known
+    `origin/<B>` (it would fork a second history under one name), and an
+    `origin/<B>` that exists but could neither be fetched nor found locally
+    (a cold start there is #438 itself).
     """
-    remote_ref = f"origin/{branch}"
     if local_sha is not None:
-        # #322 corner 1: a reused branch is checked out as-is, never rebased.
-        line = f"isolation: reusing local branch {branch} at {_short(local_sha)}"
-        if remote.state == "unknown":
-            return BranchDecision(
-                "local", branch, (f"{line} (origin not checked: {remote.reason})",)
-            )
-        if remote.state != "exists" or remote.sha is None or remote.sha == local_sha:
-            return BranchDecision("local", branch, (line,))
-        if behind == 0:
-            return BranchDecision(
-                "local", branch, (f"{line} ({_plural(ahead, 'commit')} ahead of {remote_ref})",)
-            )
-        relation = "is behind" if ahead == 0 else "has diverged from"
-        return BranchDecision(
-            "local",
-            branch,
-            (
-                f"WARNING: local {branch} ({_short(local_sha)}) {relation} {remote_ref} "
-                f"({_short(remote.sha)}, +{ahead}/−{behind}) — using local; "
-                f"`git -C {worktree} merge --ff-only {remote_ref}` to catch up",
-            ),
-        )
+        return _local_row(branch, local_sha, remote, relation, worktree)
 
-    known = remote.state == "exists" or (remote.state == "unknown" and remote.sha is not None)
+    remote_ref = f"origin/{branch}"
+    fetch_hint = f"`git fetch origin +refs/heads/{branch}:refs/remotes/origin/{branch}`"
+    if remote.state == "unfetched" and remote.sha is None:
+        raise IsolationError(
+            f"{remote_ref} exists but could not be fetched ({remote.reason}) — retry, "
+            f"or {fetch_hint}"
+        )
+    known = remote.state == "exists" or (
+        remote.state in ("unknown", "unfetched") and remote.sha is not None
+    )
     if known and base is not None:
-        seen = "exists" if remote.state == "exists" else "was last fetched (origin unreachable)"
+        seen = {
+            "exists": "exists",
+            "unfetched": "exists (fetch failed)",
+            "unknown": "was last fetched (origin unreachable)",
+        }[remote.state]
         raise IsolationError(
             f"{remote_ref} {seen} — --base would fork a second history under the same "
             "name; drop --base to reuse it, or choose another branch name"
@@ -412,12 +484,15 @@ def classify_branch(
             remote_ref,
             (f"isolation: reusing remote branch {branch} at {remote_ref} ({_short(remote.sha)})",),
         )
-    if remote.state == "unknown" and remote.sha is not None:
+    if remote.sha is not None:  # unknown / unfetched with a last-fetched ref
+        why = (
+            f"fetch of {remote_ref} failed" if remote.state == "unfetched" else "origin unreachable"
+        )
         return BranchDecision(
             "remote",
             remote_ref,
             (
-                f"WARNING: origin unreachable — reusing the last-fetched {remote_ref} "
+                f"WARNING: {why} — reusing the last-fetched {remote_ref} "
                 f"({_short(remote.sha)}); it may be stale",
             ),
         )
@@ -428,6 +503,15 @@ def classify_branch(
             (
                 f"WARNING: origin could not be checked for {branch} ({remote.reason}) — "
                 "cold-starting it; if it exists on origin this forks a second history",
+            ),
+        )
+    if remote.state == "unchecked":
+        return BranchDecision(
+            "cold",
+            None,
+            (
+                f"isolation: {remote_ref} not checked (--no-fetch, no local ref) — "
+                "starting a new branch",
             ),
         )
     return BranchDecision("cold", None, ())
@@ -1713,13 +1797,11 @@ class LocalWorktreeDevcontainerTarget:
         # corner 1) — only the remote-tracking ref moves.
         local_sha = self._rev(f"refs/heads/{branch}")
         remote = self._remote_view(branch, no_fetch)
-        ahead, behind = self._ahead_behind(local_sha, remote.sha)
         decision = classify_branch(
             branch,
             local_sha=local_sha,
             remote=remote,
-            ahead=ahead,
-            behind=behind,
+            relation=self._relation(local_sha, remote.sha),
             base=base,
             worktree=worktree,
         )
@@ -1740,7 +1822,10 @@ class LocalWorktreeDevcontainerTarget:
         else:
             # Genuine cold-start: a brand-new branch. Default to freshly-fetched
             # origin/<default> instead of the base repo's current HEAD (#322).
-            start_point, log_line = self._cold_start_base(branch, base, no_fetch)
+            # An unknown probe already failed to reach origin: no second fetch.
+            start_point, log_line = self._cold_start_base(
+                branch, base, no_fetch, origin_reachable=remote.state != "unknown"
+            )
             checkout = start_point or "HEAD"
             sha = self._rev(checkout)
             print(f"{log_line} ({_short(sha)})" if sha else log_line, file=sys.stderr)
@@ -1752,8 +1837,21 @@ class LocalWorktreeDevcontainerTarget:
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
         if track:
-            for key, value in (("remote", "origin"), ("merge", f"refs/heads/{branch}")):
-                self.run(["git", "config", f"branch.{branch}.{key}", value], cwd=self.repo_root)
+            self._set_upstream(branch)
+
+    def _set_upstream(self, branch: str) -> None:
+        """branch.<B>.{remote,merge} — what --track would have written. A
+        failure is reported, never fatal: the worktree is already correct."""
+        for key, value in (("remote", "origin"), ("merge", f"refs/heads/{branch}")):
+            res = self.run(["git", "config", f"branch.{branch}.{key}", value], cwd=self.repo_root)
+            if res.returncode != 0:
+                print(
+                    f"WARNING: could not set {branch}'s upstream to origin/{branch} "
+                    f"({_why('git config', res)}) — set branch.{branch}.remote=origin and "
+                    f"branch.{branch}.merge=refs/heads/{branch} yourself",
+                    file=sys.stderr,
+                )
+                return
 
     def _rev(self, ref: str) -> str | None:
         """The commit `ref` names, or None when it names none."""
@@ -1763,48 +1861,63 @@ class LocalWorktreeDevcontainerTarget:
         sha = (result.stdout or "").strip()
         return sha if result.returncode == 0 and sha else None
 
+    def _network_env(self) -> dict[str, str]:
+        """The environment for a git call that talks to origin: never prompt
+        (no terminal credential prompt; ssh in BatchMode with a connect
+        timeout) — unless the operator already chose an ssh command, which a
+        GIT_SSH_COMMAND of ours would silently override."""
+        env = dict(os.environ)
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        if not env.get("GIT_SSH_COMMAND") and not env.get("GIT_SSH"):
+            configured = self.run(["git", "config", "--get", "core.sshCommand"], cwd=self.repo_root)
+            if configured.returncode != 0 or not (configured.stdout or "").strip():
+                env["GIT_SSH_COMMAND"] = _BATCH_SSH
+        return env
+
+    def _run_network(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
+        """A bounded, non-interactive git call against origin. A timeout comes
+        back as a non-zero, non-2 exit — `unknown`, never `absent`."""
+        return self.run(
+            argv, cwd=self.repo_root, env=self._network_env(), timeout=_NETWORK_TIMEOUT_S
+        )
+
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
         """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,
         anything else unknown — never absence, #354), then an explicit-refspec
         fetch so `origin/<B>` updates even in a --single-branch clone."""
         tracking = f"refs/remotes/origin/{branch}"
-        if no_fetch:
-            sha = self._rev(tracking)
-            return RemoteView("exists", sha) if sha else RemoteView("unknown", None, "--no-fetch")
         if not self._has_origin_remote():
             return RemoteView("absent", None, "no origin remote")
-        probe = self.run(
-            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"],
-            cwd=self.repo_root,
+        if no_fetch:
+            sha = self._rev(tracking)
+            return RemoteView("exists", sha) if sha else RemoteView("unchecked", None, "--no-fetch")
+        probe = self._run_network(
+            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"]
         )
         if probe.returncode == 2:
             return RemoteView("absent")
         if probe.returncode != 0:
-            detail = (probe.stderr or "").strip().splitlines()
-            why = f"git ls-remote exited {probe.returncode}"
-            return RemoteView(
-                "unknown", self._rev(tracking), f"{why}: {detail[-1]}" if detail else why
-            )
-        fetch = self.run(
-            ["git", "fetch", "origin", f"+refs/heads/{branch}:{tracking}"], cwd=self.repo_root
-        )
+            return RemoteView("unknown", self._rev(tracking), _why("git ls-remote", probe))
+        fetch = self._run_network(["git", "fetch", "origin", f"+refs/heads/{branch}:{tracking}"])
         sha = self._rev(tracking)
-        if fetch.returncode != 0 or sha is None:
-            return RemoteView("unknown", sha, f"git fetch of {branch} failed")
+        if fetch.returncode != 0:
+            return RemoteView("unfetched", sha, _why("git fetch", fetch))
+        if sha is None:
+            return RemoteView("unfetched", None, f"no origin/{branch} after the fetch")
         return RemoteView("exists", sha)
 
-    def _ahead_behind(self, local_sha: str | None, remote_sha: str | None) -> tuple[int, int]:
-        """(ahead, behind) of local `<B>` against `origin/<B>`; (0, 0) when
+    def _relation(self, local_sha: str | None, remote_sha: str | None) -> tuple[int, int] | None:
+        """(ahead, behind) of local `<B>` against `origin/<B>`; None when
         either is missing, they agree, or git cannot count."""
         if local_sha is None or remote_sha is None or local_sha == remote_sha:
-            return 0, 0
+            return None
         result = self.run(
             ["git", "rev-list", "--left-right", "--count", f"{local_sha}...{remote_sha}"],
             cwd=self.repo_root,
         )
         parts = (result.stdout or "").split()
-        if result.returncode != 0 or len(parts) != 2:
-            return 0, 0
+        if result.returncode != 0 or len(parts) != 2 or not all(p.isdigit() for p in parts):
+            return None
         return int(parts[0]), int(parts[1])
 
     # ----- .fr-isolation marker lifecycle (#328 Task 3) -----
@@ -1856,7 +1969,7 @@ class LocalWorktreeDevcontainerTarget:
     # ----- cold-start base resolution (#322) -----
 
     def _cold_start_base(
-        self, branch: str, base: str | None, no_fetch: bool
+        self, branch: str, base: str | None, no_fetch: bool, origin_reachable: bool = True
     ) -> tuple[str | None, str]:
         """Resolve the start-point for a NEW branch per the spec matrix.
 
@@ -1886,6 +1999,11 @@ class LocalWorktreeDevcontainerTarget:
         if not self._has_origin_remote():
             return None, f"WARNING: no origin remote — basing {branch} on local HEAD"
 
+        if not origin_reachable:
+            # The <B> probe just failed to reach origin; a second, full fetch
+            # would only repeat that wait (#438 review).
+            return None, f"WARNING: origin unreachable — basing {branch} on local HEAD"
+
         if not self._fetch_origin():
             return None, f"WARNING: git fetch origin failed — basing {branch} on local HEAD"
 
@@ -1902,12 +2020,12 @@ class LocalWorktreeDevcontainerTarget:
     def _fetch_origin(self) -> bool:
         """git fetch origin; return success. Never raises — a fetch problem
         degrades to the local-HEAD fallback, it does not abort the run."""
-        result = self.run(["git", "fetch", "origin"], cwd=self.repo_root)
+        result = self._run_network(["git", "fetch", "origin"])
         if result.returncode != 0:
             return False
         # Refresh origin/HEAD so _resolve_default_branch's symbolic-ref hits.
         # Best-effort: a failure here just falls through to the gh/main chain.
-        self.run(["git", "remote", "set-head", "origin", "--auto"], cwd=self.repo_root)
+        self._run_network(["git", "remote", "set-head", "origin", "--auto"])
         return True
 
     def _resolve_default_branch(self) -> str:

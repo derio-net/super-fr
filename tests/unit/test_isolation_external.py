@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.isolation.external import ExternalTarget
@@ -36,11 +37,16 @@ class RecordingRunner:
         self.captures: list[bool] = []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         self.captures.append(capture)
-        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture)
+        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture, **kw)
 
     def argv_for(self, binary: str) -> list[list[str]]:
         return [c for c in self.calls if c and c[0] == binary]

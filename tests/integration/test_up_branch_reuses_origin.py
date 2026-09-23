@@ -49,7 +49,17 @@ def _clone(tmp_path: Path, origin: Path, *flags: str) -> Path:
 
 @pytest.fixture(autouse=True)
 def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """HOME and every git config source under tmp_path — no operator config
+    (sshCommand, url rewrites, init.defaultBranch) reaches these repos."""
+    cfg = tmp_path / "gitcfg"
+    cfg.mkdir()
+    (cfg / "global").write_text("")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg / "global"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg / "xdg"))
+    for var in ("GIT_SSH_COMMAND", "GIT_SSH"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def test_fresh_clone_worktree_carries_the_remote_branch(tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -212,7 +213,12 @@ class FakeRunner:
         self.referenced_images = referenced_images or []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ):
         self.captures.append(capture)
         if argv[0] == "git":
@@ -220,7 +226,9 @@ class FakeRunner:
             # tests can assert mechanism (e.g. a fetch ran / did not run) on top of
             # the resulting repo state.
             self.git_calls.append(list(argv))
-            return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
+            return subprocess.run(
+                argv, cwd=cwd, check=check, capture_output=True, text=True, env=kw.get("env")
+            )
         self.calls.append(list(argv))
         rc = 1 if (self.fail_on and self.fail_on in argv[0:2]) else 0
         if argv[0:2] == ["docker", "rm"] and rc == 0:
@@ -2865,7 +2873,7 @@ class TestStop:
         A still-running cid1 behind an exited cid0 must not read as stopped."""
         ps_outputs = iter(["cid1 running\n", "cid0 exited\ncid1 running\n"])
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[0] == "git":
                 return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
             out = next(ps_outputs) if argv[:2] == ["docker", "ps"] else ""
@@ -2964,7 +2972,7 @@ class _DockerRunner:
         self.stats_rc = stats_rc
         self.calls: list[list[str]] = []
 
-    def __call__(self, argv, cwd=None, check=False, capture=True):
+    def __call__(self, argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         self.calls.append(list(argv))

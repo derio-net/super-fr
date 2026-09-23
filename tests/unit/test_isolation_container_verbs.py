@@ -49,7 +49,7 @@ class _RebuildRunner(FakeRunner):
         self.images = {old[0]: old[1], new[0]: new[1]}
         self.new_id = new[0]
 
-    def __call__(self, argv, cwd=None, check=False, capture=True):
+    def __call__(self, argv, cwd=None, check=False, capture=True, **_kw):
         result = super().__call__(argv, cwd=cwd, check=check, capture=capture)
         if (
             argv[:2] == ["devcontainer", "up"]
@@ -149,7 +149,7 @@ class TestRebuild:
         _repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch)
         real = rr.__call__
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[:2] == ["docker", "ps"] and _dc(rr, "up"):
                 rr.calls.append(list(argv))
                 return subprocess.CompletedProcess(argv, 1, stdout="", stderr="daemon gone")
@@ -166,7 +166,7 @@ class TestRebuild:
         and resume alike."""
         _repo, _ut, st, rr, target = _rebuild_setup(tmp_path, monkeypatch)
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[0] == "devcontainer":
                 raise FileNotFoundError(2, "No such file or directory", "devcontainer")
             return rr(argv, cwd=cwd, check=check, capture=capture)
@@ -180,7 +180,7 @@ class TestRebuild:
         _repo, _ut, st, _rr, target = _rebuild_setup(tmp_path, monkeypatch)
         outputs = iter(["cid0 exited\ncid1 running\n", "cid1 running\ncid2 running\n"])
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[0] == "git":
                 return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
             out = next(outputs) if argv[:2] == ["docker", "ps"] else ""
@@ -350,7 +350,7 @@ class TestExecReviewFixes:
         """p2-f7: the hint comes from err.filename, not an assumed devcontainer."""
         st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid1 running")
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[:2] == ["devcontainer", "exec"]:
                 raise FileNotFoundError(2, "No such file or directory", "weird-shim")
             return runner(argv, cwd=cwd, check=check, capture=capture)
@@ -365,7 +365,7 @@ class TestExecReviewFixes:
         """p2-f6: devcontainer's multi-line output goes AFTER the hint."""
         st, runner, target = _exec_setup(tmp_path, monkeypatch, "cid1 exited")
 
-        def run(argv, cwd=None, check=False, capture=True):
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
             if argv[:2] == ["devcontainer", "up"]:
                 return subprocess.CompletedProcess(argv, 1, stdout="", stderr="boom\nline2\n")
             return runner(argv, cwd=cwd, check=check, capture=capture)
@@ -478,7 +478,7 @@ def cli_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _cli_run(ps: str, record: list):
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         record.append(list(argv))
@@ -532,7 +532,7 @@ def test_cli_exec_failed_resume_first_line_names_rebuild(cli_repo, monkeypatch) 
     """p2-f6: the one line the operator reads names the way out."""
     ups: list = []
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if argv[:2] == ["devcontainer", "up"]:

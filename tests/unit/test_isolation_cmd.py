@@ -88,7 +88,7 @@ def fake_run(monkeypatch: pytest.MonkeyPatch):
     def _flag(argv: list[str], prefix: str) -> str | None:
         return next((a[len(prefix) :] for a in argv if a.startswith(prefix)), None)
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         calls.append(list(argv))
@@ -938,7 +938,7 @@ def test_down_all_keeps_open_pr_without_force(
 ) -> None:
     calls: list[list[str]] = []
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         calls.append(list(argv))
@@ -970,7 +970,7 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     _push_origin(repo)  # the hazard guard's content check needs a real origin
     monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if argv[0] == "gh" and argv[1] == "pr" and argv[2] == "view":
@@ -1163,7 +1163,7 @@ def test_down_single_hazard_refusal_keeps_bindings_and_sentinel(
 
 
 def _docker_run(container: str = "cid running"):
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         out = ""
@@ -1200,7 +1200,7 @@ def _stoppable_docker_run(record: list | None = None):
     sees the stop took effect. `record` collects every docker argv."""
     stopped: set[str] = set()
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if record is not None and argv[0] == "docker":
@@ -1252,7 +1252,7 @@ def test_stop_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
 
 
 def _stats_run(record: list | None = None):
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if record is not None:
@@ -1412,7 +1412,7 @@ def _host_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: str = "f
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
     repo = _init_git_repo(tmp_path / "repo")
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv and argv[0] == "docker":
             raise FileNotFoundError("docker: not found (docker-less host)")
         if argv and argv[0] == "git":

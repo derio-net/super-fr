@@ -247,7 +247,8 @@ When the branch exists, fr fetches it with an explicit refspec, `git fetch origi
 | yes | local is ahead | any | reuse local | `… at <sha> (N commits ahead of origin/<B>)` |
 | yes | local is behind or diverged | any | reuse local (#322 corner 1: never rebase) | `WARNING: local <B> (<sha>) is behind/diverged from origin/<B> (<sha>, +a/−b) — using local; \`git -C <wt> merge --ff-only origin/<B>\` to catch up` |
 | yes | unknown | any | reuse local | as the first row, plus `(origin not checked: <reason>)` |
-| no | exists | none | `git worktree add --track -b <B> <wt> origin/<B>` | `isolation: reusing remote branch <B> at origin/<B> (<sha>)` |
+| no | exists | none | `git worktree add --no-track -b <B> <wt> origin/<B>` + `branch.<B>.{remote,merge}` (`--track` refuses a `--single-branch` clone; journal 59d279fcdb7d) | `isolation: reusing remote branch <B> at origin/<B> (<sha>)` |
+| no | exists, fetch failed, no local `origin/<B>` ref | any | **refuse** (exit 2) — a cold start here is #438 itself | `origin/<B> exists but could not be fetched (<reason>) — retry, or` `git fetch origin +refs/heads/<B>:refs/remotes/origin/<B>` |
 | no | exists | given | **refuse** (exit 2) | `origin/<B> exists — --base would fork a second history under the same name; drop --base to reuse it, or choose another branch name` |
 | no | unknown, local `origin/<B>` ref present | none | reuse that ref | WARNING: `origin unreachable — reusing the last-fetched origin/<B> (<sha>); it may be stale` |
 | no | unknown, no local ref | any | cold start, as today | the existing `basing new branch …` line with `(<sha>)`, plus a WARNING that origin could not be checked for `<B>` |

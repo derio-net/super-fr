@@ -204,3 +204,63 @@ Rather than growing _git_worktree_add then extracting, the §3.E table was writt
 ### 3f54c04d7371 · discovery · phase-3 acceptance row left not-implemented for phase 6 (phase 3)
 
 The #438 row (Isolation lifecycle, 'up --branch <B> on a branch that exists only on origin…') stays not-implemented, matching phase 2's precedent (8af43aee8ee9): 06.yaml flips rows after the live walks. Refs to cite then: tests/integration/test_up_branch_reuses_origin.py (fresh clone, --single-branch clone, --base refusal, behind+WARNING) and tests/unit/test_isolation_branch_classify.py (every §3.E row, ls-remote exit codes, --no-fetch).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1 created=2026-09-23T02:31:18 phase=3 state=fixed -->
+### p3-f1 · finding [fixed] · ls-remote exit 0 + failed fetch + no local ref cold-started a second history (#438 itself) (phase 3)
+
+New RemoteView state `unfetched` (ls-remote said exists, the explicit fetch failed, or no origin/<B> after it). No local <B> and no local origin/<B> ref → IsolationError 'origin/<B> exists but could not be fetched (<reason>) — retry, or `git fetch origin +refs/heads/<B>:refs/remotes/origin/<B>`'. With a stale local ref → reuse it, WARNING 'fetch of origin/<B> failed — reusing the last-fetched origin/<B> (<sha>); it may be stale'. --base beside unfetched+ref is refused like exists. Spec §3.E gained the refuse row. Tests: tests/unit/test_isolation_branch_classify.py::test_remote_exists_but_fetch_fails_without_ref_is_refused, ::test_remote_exists_fetch_fails_with_stale_ref_reuses_it (runner fails only the refspec fetch).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f2 created=2026-09-23T02:31:18 phase=3 state=fixed -->
+### p3-f2 · finding [fixed] · _ahead_behind read a failed rev-list as (0,0) (phase 3)
+
+Renamed `_relation`, returns None when it cannot count; classify_branch takes `relation: tuple[int,int] | None` (replacing ahead/behind) and prints '(differs from origin/<B> at <sha>; relation unknown)' when the shas differ and the relation is None. Tests: tests/unit/test_isolation_branch_classify.py::test_relation_unknown_is_reported_not_read_as_equal, ::test_classify_branch_relation_unknown.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f3 created=2026-09-23T02:31:19 phase=3 state=fixed -->
+### p3-f3 · finding [fixed] · probe/fetch could block on a credential prompt or slow ssh (phase 3)
+
+Runner seam extended minimally: `subprocess_runner` gains optional `env` and `timeout`; with a timeout stdin is /dev/null and an expiry returns exit 124 + 'timed out' stderr (never raises; 124 is not 2, so a probe timeout is unknown). `_run_network` runs ls-remote, the refspec fetch, the cold-start `git fetch origin` and `remote set-head --auto` with GIT_TERMINAL_PROMPT=0, a 60s timeout, and GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15' only when none of GIT_SSH_COMMAND / GIT_SSH / core.sshCommand is set. Cost: every test fake runner had to accept the new kwargs (**kw) — 25 fakes across test_isolation*.py and two integration files; no production Runner other than subprocess_runner exists. Tests: tests/unit/test_isolation_branch_classify.py::test_network_calls_are_non_interactive_and_bounded, ::test_operator_ssh_command_env_is_respected, ::test_operator_core_ssh_command_is_respected, ::test_subprocess_runner_timeout_is_a_failure_not_a_hang, ::test_ls_remote_other_failure_is_unknown_never_absence[124].
+
+<!-- fr:journal kind=finding scope=plan id=p3-f4 created=2026-09-23T02:31:19 phase=3 state=fixed -->
+### p3-f4 · finding [fixed] · an unknown probe was followed by a second full fetch in _cold_start_base (phase 3)
+
+`_cold_start_base(..., origin_reachable=False)` when the probe was unknown: skips the fetch and returns local HEAD with 'WARNING: origin unreachable — basing <B> on local HEAD' (the today-equivalent of a failed fetch). Test: tests/unit/test_isolation_branch_classify.py::test_unknown_probe_skips_the_second_full_fetch (no git fetch at all).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f5 created=2026-09-23T02:31:19 phase=3 state=fixed -->
+### p3-f5 · finding [fixed] · git config return codes for the upstream were ignored (phase 3)
+
+`_set_upstream` checks each rc; on failure prints 'WARNING: could not set <B>'s upstream to origin/<B> (<why>) — set branch.<B>.remote=origin and branch.<B>.merge=refs/heads/<B> yourself' and continues (the worktree is already correct). Test: tests/unit/test_isolation_branch_classify.py::test_failed_upstream_config_warns.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f6 created=2026-09-23T02:31:20 phase=3 state=fixed -->
+### p3-f6 · finding [fixed] · missing tests for wrapper ref, short-circuit, no-origin, --no-fetch no ref, CLI exit 2 (phase 3)
+
+Added tests/unit/test_isolation_branch_classify.py::test_remote_row_checks_the_validator_wrapper_in_origin_ref (plan repo whose origin/feat/x lacks the wrapper → 'not in origin/feat/x'), ::test_existing_worktree_short_circuit_never_probes, ::test_no_origin_output_unchanged (exact stderr lines both rows, no ls-remote), ::test_no_fetch_without_origin_ref_is_a_soft_line, ::test_no_fetch_local_branch_without_origin_ref, ::test_cli_maps_the_base_refusal_to_exit_2. All passed against the fixed code (they pin existing behaviour).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f7 created=2026-09-23T02:31:20 phase=3 state=fixed -->
+### p3-f7 · finding [fixed] · spec §3.E and 03.yaml still named --track (phase 3)
+
+Spec §3.E remote-reuse row now reads `git worktree add --no-track -b <B> <wt> origin/<B>` + `branch.<B>.{remote,merge}` with the reason and journal 59d279fcdb7d; 03.yaml P3.T1.S1 text updated likewise (text only, state untouched; fr validate artifacts clean).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f8 created=2026-09-23T02:31:21 phase=3 state=refuted -->
+### p3-f8 · finding [refuted] · single-branch clone: <B>@{u} does not resolve — do not add a remote.origin.fetch refspec (phase 3)
+
+Not changed, by design. Verified on git 2.53 in a --single-branch clone after the remote row: `git rev-parse --abbrev-ref @{u}` fails ('upstream branch refs/heads/feat/x not stored as a remote-tracking branch', exit 128) and `git status -sb` shows no ahead/behind, but `git pull --ff-only` works (branch.<B>.remote/merge are set). Making @{u} resolve needs a remote.origin.fetch refspec, which rewrites repo-wide config beyond this branch — rejected. Limitation accepted and recorded here.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f9 created=2026-09-23T02:31:21 phase=3 state=fixed -->
+### p3-f9 · finding [fixed] · unknown/unfetched reasons omitted git's stderr (phase 3)
+
+`_why(what, result)` → '<what> exited <rc>: <last non-empty stderr line>'; used for ls-remote, the refspec fetch and git config failures. Test: tests/unit/test_isolation_branch_classify.py::test_remote_exists_but_fetch_fails_without_ref_is_refused asserts 'git fetch exited 1: fatal: simulated failure'.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f10 created=2026-09-23T02:31:21 phase=3 state=fixed -->
+### p3-f10 · finding [fixed] · diverged hint suggested --ff-only, which cannot succeed (phase 3)
+
+Diverged now suggests `git -C <wt> merge origin/<B>`; strictly behind keeps `merge --ff-only`. Tests: tests/unit/test_isolation_branch_classify.py::test_local_branch_diverged_used_with_warning (asserts merge hint, no --ff-only), ::test_local_branch_behind_used_with_warning_never_rebased.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f11 created=2026-09-23T02:31:22 phase=3 state=fixed -->
+### p3-f11 · finding [fixed] · test git config not hermetic (phase 3)
+
+Autouse fixtures in tests/unit/test_isolation_branch_classify.py and tests/integration/test_up_branch_reuses_origin.py set HOME, GIT_CONFIG_NOSYSTEM=1, GIT_CONFIG_GLOBAL (empty file) and XDG_CONFIG_HOME under tmp_path, and unset GIT_SSH_COMMAND/GIT_SSH.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f12 created=2026-09-23T02:31:22 phase=3 state=fixed -->
+### p3-f12 · finding [fixed] · --no-fetch/no-origin ordering and wording (phase 3)
+
+`_remote_view` checks `_has_origin_remote()` first (no origin → absent, output unchanged); --no-fetch without a local origin/<B> ref is a new `unchecked` state: local <B> prints '(origin not checked: --no-fetch)', a cold start prints the soft 'isolation: origin/<B> not checked (--no-fetch, no local ref) — starting a new branch' instead of the second-history WARNING. Tests: tests/unit/test_isolation_branch_classify.py::test_no_fetch_without_origin_ref_is_a_soft_line, ::test_no_origin_output_unchanged.
