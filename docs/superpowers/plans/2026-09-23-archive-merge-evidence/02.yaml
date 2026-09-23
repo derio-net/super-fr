@@ -37,30 +37,38 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:25:09+00:00'
+      note: 16 sweep tests over real temp repos with a file-path remote, _fetch monkeypatched;
+        includes f-p2-local-phases case (GROWN)
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:25:10+00:00'
+      note: 13 failed / 3 passed on the old labels and JSON shape
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:27:02+00:00'
+      note: status_cmd._sweep_lists/_sweep_text/_sweep_json over merge_evidence(fetch=True);
+        _merged checks every LOCAL agentic phase against landed_phases (f-p2-local-phases);
+        docstring + --help describe four buckets
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:27:31+00:00'
+      note: fr-progress preflight + archive-on-complete blocks now name the four buckets
+        and the per-plan fr archive line; opencode + hermes mirrors regenerated
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:29:27+00:00'
+      note: 7 named test files green (150 passed); ruff format/check clean; mypy packages/fr/src
+        clean. fr-progress SKILL.md was already at the 120-line cap, so surrounding
+        prose was tightened to fit
     P2.T2.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:30:50+00:00'
+      note: text renderer split into _archivable_block/_manual_open_row/_unknown_ref_blocks/_known_ref_blocks;
+        156 passed across sweep, status_cmd, skill validation, mirror + neutrality
+        tripwires; ruff/mypy clean
   completion:
-    at: null
+    at: '2026-09-23T15:30:50+00:00'
     note: null
     observed_prs: []

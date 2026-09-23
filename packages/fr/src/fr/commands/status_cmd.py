@@ -13,6 +13,7 @@ Exit codes: 0 report printed (drift included); 2 usage / legacy layout;
 from __future__ import annotations
 
 import json as _json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -30,7 +31,9 @@ from fr.parser import PlanSchemaError
 from fr.render import archive_gate
 
 if TYPE_CHECKING:
+    from fr.archive import DefaultRef, MergeEvidence
     from fr.ghclient import GhClient
+    from fr.parser import Plan
 
 console = Console()
 err_console = Console(stderr=True)
@@ -124,46 +127,158 @@ def _report_json(report: PlanReport) -> dict[str, Any]:
     }
 
 
-def _sweep_lists(repo_root: Path) -> tuple[list[str], list[str]]:
-    """(archivable, in_progress) plan-dir names under docs/superpowers/plans/.
+@dataclass(frozen=True)
+class _Sweep:
+    """The four buckets of the repo-wide sweep (spec 2026-09-23 §3.B)."""
 
-    archivable = the gh-free `completed_unarchived_plans` set (#334);
-    in_progress = every other plan folder (a malformed dir is neither
-    archivable nor a false positive — it lands in in_progress)."""
-    from fr.archive import completed_unarchived_plans
+    evidence: MergeEvidence
+    archivable: list[str]
+    """Merged (see ``_merged``) and locally complete, manual phases included."""
+    merged_manual_open: list[tuple[str, list[int]]]
+    """Merged, but these local phase numbers are still open."""
+    complete_unmerged: list[str]
+    """Locally complete, not merged — or merge state unknown (``ref is None``)."""
+    in_progress: list[str]
+    """Everything else, a plan the working tree cannot parse included."""
 
-    archivable = completed_unarchived_plans(repo_root)
-    plans_dir = repo_root / "docs" / "superpowers" / "plans"
-    all_plans = (
+
+def _merged(name: str, plan: Plan, evidence: MergeEvidence) -> bool:
+    """Every agentic phase of the WORKING-TREE plan is complete on the ref.
+
+    ``agentic_landed`` alone is judged from the ref's copy of the plan, so a
+    phase added on the branch after an earlier merge would not block it
+    (f-p2-local-phases); each local agentic phase must be in ``landed_phases``.
+    """
+    landed = evidence.landed_phases.get(name, frozenset())
+    return name in evidence.agentic_landed and all(
+        p.phase.number in landed for p in plan.phases if p.phase.tag == "agentic"
+    )
+
+
+def _sweep_lists(repo_root: Path) -> _Sweep:
+    """Bucket every plan dir under docs/superpowers/plans/ by merge evidence
+    from the default branch's remote-tracking ref (fetched first)."""
+    from fr.archive import PLANS_REL, merge_evidence
+    from fr.parser import parse
+    from fr.render import plan_locally_complete
+
+    evidence = merge_evidence(repo_root, fetch=True)
+    sweep = _Sweep(evidence, [], [], [], [])
+    plans_dir = repo_root / PLANS_REL
+    names = (
         sorted(p.name for p in plans_dir.iterdir() if (p / "_meta.yaml").exists())
         if plans_dir.is_dir()
         else []
     )
-    done = set(archivable)
-    in_progress = [n for n in all_plans if n not in done]
-    return archivable, in_progress
+    for name in names:
+        try:
+            plan = parse(plans_dir / name)
+        except PlanSchemaError:
+            sweep.in_progress.append(name)
+            continue
+        open_phases = [p.phase.number for p in plan.phases if not plan_locally_complete(p)]
+        complete = bool(plan.phases) and not open_phases
+        if _merged(name, plan, evidence):
+            if complete:
+                sweep.archivable.append(name)
+            else:
+                sweep.merged_manual_open.append((name, open_phases))
+        elif complete:
+            sweep.complete_unmerged.append(name)
+        else:
+            sweep.in_progress.append(name)
+    return sweep
 
 
-def _sweep_text(archivable: list[str], in_progress: list[str]) -> str:
-    lines: list[str] = []
-    if archivable:
-        lines.append(f"archivable — merged but not archived ({len(archivable)}):")
-        lines.extend(f"  {n}" for n in archivable)
-        lines.append("")
-        lines.append(f"run `fr archive --all` to move {len(archivable)} plan(s) to implemented/.")
-    else:
-        lines.append("no archivable plans — plans/ is clean.")
-    if in_progress:
-        lines.append("")
-        lines.append(f"in progress ({len(in_progress)}):")
-        lines.extend(f"  {n}" for n in in_progress)
-    return "\n".join(lines)
+def _sweep_json(sweep: _Sweep) -> dict[str, Any]:
+    ev = sweep.evidence
+    return {
+        "archivable": sweep.archivable,
+        "merged_manual_open": [name for name, _ in sweep.merged_manual_open],
+        "complete_unmerged": sweep.complete_unmerged,
+        "in_progress": sweep.in_progress,
+        "default_ref": (
+            None
+            if ev.ref is None
+            else {
+                "ref": ev.ref.ref,
+                "sha": ev.ref.sha,
+                "fetched": ev.fetched,
+                "fetch_error": ev.fetch_error,
+            }
+        ),
+        "ref_error": ev.ref_error,
+        "unparsed_on_ref": list(ev.unparsed_on_ref),
+    }
+
+
+_Block = list[str]
+"""One blank-line-delimited section of the sweep's text output."""
+
+
+def _block(heading: str, rows: list[str]) -> _Block:
+    return [f"{heading} ({len(rows)}):", *(f"  {r}" for r in rows)]
+
+
+def _archivable_block(names: list[str], on: str) -> _Block:
+    """The only bucket that prints a command: one `fr archive` per plan."""
+    from fr.archive import PLANS_REL
+
+    if not names:
+        return [f"no merged plans waiting to be archived ({on})."]
+    block = [f"merged but not archived: agentic phases on {on} ({len(names)}):"]
+    for name in names:
+        block += [f"  {name}", f"    fr archive {PLANS_REL}/{name}"]
+    return block
+
+
+def _manual_open_row(name: str, phases: list[int]) -> str:
+    label = "phase" if len(phases) == 1 else "phases"
+    return f"{name}  ({label} {', '.join(map(str, phases))})"
+
+
+def _unknown_ref_blocks(sweep: _Sweep) -> list[_Block]:
+    """No resolvable default ref: nothing is merged, so every locally
+    complete plan is listed as unknown rather than archivable."""
+    hint = f"{sweep.evidence.ref_error}; try git fetch / git remote set-head origin -a"
+    return [_block(f"merge state unknown ({hint})", sweep.complete_unmerged)]
+
+
+def _known_ref_blocks(sweep: _Sweep, ref: DefaultRef) -> list[_Block]:
+    ev = sweep.evidence
+    blocks: list[_Block] = []
+    if ev.fetch_error:
+        blocks.append([f"(fetch failed: {ev.fetch_error}; using the local {ref.ref} ref)"])
+    blocks.append(_archivable_block(sweep.archivable, f"{ref.ref} @ {ref.sha}"))
+    if sweep.merged_manual_open:
+        rows = [_manual_open_row(n, p) for n, p in sweep.merged_manual_open]
+        blocks.append(_block("merged, manual phases still open", rows))
+    if sweep.complete_unmerged:
+        heading = f"complete locally, not yet on {ref.ref} (waiting for merge)"
+        blocks.append(_block(heading, sweep.complete_unmerged))
+    if ev.unparsed_on_ref:
+        heading = f"could not parse on {ref.ref} with this fr; merge state unknown"
+        blocks.append(_block(heading, list(ev.unparsed_on_ref)))
+    return blocks
+
+
+def _sweep_text(sweep: _Sweep) -> str:
+    ref = sweep.evidence.ref
+    blocks = _unknown_ref_blocks(sweep) if ref is None else _known_ref_blocks(sweep, ref)
+    if sweep.in_progress:
+        blocks.append(_block("in progress", sweep.in_progress))
+    return "\n\n".join("\n".join(b) for b in blocks)
 
 
 def status_command(
     plan_dir: Path | None = typer.Argument(
         None,
-        help="Path to plan folder. Omit for a repo-wide sweep of archivable plans.",
+        help=(
+            "Path to plan folder. Omit for a repo-wide sweep that buckets every plan by "
+            "whether its agentic phases are on the default branch (fetched first): merged "
+            "and archivable, merged with manual phases open, complete locally but waiting "
+            "for merge, and in progress."
+        ),
     ),
     output_format: str = typer.Option(
         "text",
@@ -173,9 +288,22 @@ def status_command(
 ) -> None:
     """Read-only plan report: tick counts, dispatch state, drift, archive hint.
 
-    With no PLAN_DIR, sweeps docs/superpowers/plans/ and lists archivable
-    ("merged-but-unarchived") plans. Never mutates GitHub. Safe to allowlist
-    as `fr status*`.
+    With no PLAN_DIR, fetches the default remote and sweeps
+    docs/superpowers/plans/ into four buckets. A plan is merged only when every
+    agentic phase is complete on the default branch's remote-tracking ref
+    (e.g. origin/main); local completeness alone never counts.
+
+    \b
+    - merged but not archived: prints its own `fr archive <plan-dir>` line
+    - merged, manual phases still open: names the open phases
+    - complete locally, not yet on the default branch: waiting for merge
+    - in progress: everything else
+
+    With no resolvable default ref, complete plans are listed as "merge state
+    unknown". The sweep is gh-free: for a dispatched plan, `fr archive`'s
+    merged-PR gate may still refuse a plan listed here. Never mutates GitHub
+    (a fetch moves only remote-tracking refs). Safe to allowlist as
+    `fr status*`.
     """
     require_migrated_layout()
     if output_format not in ("text", "json"):
@@ -183,11 +311,11 @@ def status_command(
         raise typer.Exit(2)
 
     if plan_dir is None:
-        archivable, in_progress = _sweep_lists(resolve_repo_root())
+        sweep = _sweep_lists(resolve_repo_root())
         if output_format == "json":
-            console.print_json(_json.dumps({"archivable": archivable, "in_progress": in_progress}))
+            console.print_json(_json.dumps(_sweep_json(sweep)))
         else:
-            console.print(_sweep_text(archivable, in_progress))
+            console.print(_sweep_text(sweep), markup=False, highlight=False, soft_wrap=True)
         return
 
     gh = _make_gh_client()

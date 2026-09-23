@@ -29,3 +29,18 @@ From phase 1 discovery 80e0b0080222: agentic_landed is judged from the ref's cop
 ### rev-p1 · review · Phase 1 review (dispatched feature-dev:code-reviewer): no findings (phase 1)
 
 Reviewer verified default-ref fidelity with the old _default_branch (commit-gate tests unchanged), the fetch seam (timeout, GIT_TERMINAL_PROMPT=0, failure degrades, real destroyed-remote test), git archive materialisation, per-phase landed_phases, agentic_landed excluding manual phases (closed PhaseTag literal), unparsed_on_ref, the tripwire's explicit skip, and test quality (real repos, no network). No findings at >=80 confidence. The known working-tree-only-phase gap is filed against phase 2 as f-p2-local-phases.
+
+<!-- fr:journal kind=finding scope=plan id=f-p2-local-phases-resolved created=2026-09-23T17:30:49 state=fixed resolves=f-p2-local-phases -->
+### f-p2-local-phases-resolved · finding [fixed] · resolves f-p2-local-phases: Sweep's merged buckets must check every LOCAL agentic phase against landed_phases
+
+status_cmd._merged requires name in agentic_landed AND every agentic phase of the WORKING-TREE plan in landed_phases[name]. Test: tests/unit/test_status_sweep.py::test_a_phase_added_locally_after_merge_keeps_the_plan_unmerged (GROWN: phase 1 on origin/main, phase 2 added+ticked locally -> complete_unmerged, not archivable/merged_manual_open); also covered by the four-bucket text/JSON tests.
+
+<!-- fr:journal kind=discovery scope=plan id=2972df159e1a created=2026-09-23T17:30:49 phase=2 -->
+### 2972df159e1a · discovery · Sweep JSON carries ref_error and unparsed_on_ref beyond the spec's keys (phase 2)
+
+Spec 3.B lists archivable, merged_manual_open, complete_unmerged, in_progress, default_ref. The sweep adds top-level ref_error (why default_ref is null; otherwise the reason is lost from JSON) and unparsed_on_ref (the text note's JSON twin). merged_manual_open stays a list of plan names like the other buckets; the open phase numbers are text-only. With ref=None, locally complete plans go to complete_unmerged in JSON (archivable only narrows) and under 'merge state unknown' in text. Text output is printed with markup=False/soft_wrap so rich neither eats brackets nor wraps long ref/fetch lines.
+
+<!-- fr:journal kind=discovery scope=plan id=0fc64d146f12 created=2026-09-23T17:30:49 phase=2 -->
+### 0fc64d146f12 · discovery · fr-progress SKILL.md sits at the 120-line cap (phase 2)
+
+test_skill_validation::test_under_120_lines caps SKILL.md at 120 lines and fr-progress was already at 120, so describing the four buckets forced tightening unrelated prose in the same file (how-it-works, audit-drift, spec-rollup, acceptance-debt, v1-archive paragraphs; meaning kept). The archive-gate paragraph was left as-is for phase 3 to update when archive_gate changes.
