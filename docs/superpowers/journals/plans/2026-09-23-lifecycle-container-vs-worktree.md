@@ -439,3 +439,28 @@ _decline takes the real worktree; the hint is cp -R <aside>/files/. <worktree pa
 ### p4-review · review · Phase 4 review (independent reviewer, 3 rounds): 4+3+1 majors, all closed (phase 4)
 
 Round 1: p4-f1..f16 (4 major data-loss holes, each reproduced by probe) fixed in a4790043. Round 2 re-verify: p4-n1..n6 (3 majors) + orchestrator decision p4-d1 (restore never deletes) fixed in fb3ce370. Round 3 re-verify: p4-n7 (fresh commit deleted an unrestored record) + n8/n9 fixed in 7540e57e with the invariant 'nothing deletes preserved data unless restored_at'. Orchestrator audited all 5 deletion sites in preserve.py against it. Reviewer: no other path found where down --force loses an uncommitted docs/superpowers file or up writes content the operator did not have.
+
+<!-- fr:journal kind=discovery scope=plan id=a99bdd74ec5d created=2026-09-23T04:19:34 phase=5 -->
+### a99bdd74ec5d · discovery · explain_missing: set-aside records are named, never promised to up (phase 5)
+
+Decision (spec §3.D.5 lists three answers; built four). A tombstone carrying `set_aside_at` or `declined_at` (`<branch>@<UTC>/`) is NOT a live tombstone — `restore` never reads it — so it is not offered as `fr isolation up --branch`. But it still holds the run, so the never-existed text ("fr has no record of one") would be false. Checked after live tombstones and before never-existed: `<torn-down head>; its preserved record was set aside at <dir> (<reason>) and is not restored automatically; its copy is <dir>/files/<run file>.` Classified by tombstone content, not by the `@` in the dir name.
+
+<!-- fr:journal kind=discovery scope=plan id=7aae8ece5011 created=2026-09-23T04:19:35 phase=5 -->
+### 7aae8ece5011 · discovery · explain_missing: preserved vs committed, and restored tombstones (phase 5)
+
+preserved = the tombstone is unrestored, holds `files/<run file>`, and that copy's git blob id (computed in Python: sha1 for a 40-hex base, sha256 for 64) differs from the recorded `base_blob` (or base is null). Everything else that lists the run reads "committed": a committed-unchanged cursor copied under p4-f3, and a RESTORED tombstone (restore skips it, so promising a restore would be false). Newest `torn_down_at` wins among several. Live workspaces come from the isolation state dir, read per file tolerantly; the caller's own checkout is skipped. The function never raises — any exception falls through to the never-existed text.
+
+<!-- fr:journal kind=discovery scope=plan id=f1edd9204591 created=2026-09-23T04:19:35 phase=5 -->
+### f1edd9204591 · discovery · P5.T2 refactor: one load path (phase 5)
+
+Refactored during green: the three direct `load_run_state` call sites (advance, resolve, claim) now call `_load_or_exit` inside their existing try (typer.Exit passes through their except), so there is ONE load path and one missing-run message (`_missing_run_exit`: lazy import of `fr.isolation.preserve.explain_missing`, soft_wrap, exit 2). `load_run_state` untouched. Side effect: parse errors at those sites now print soft_wrap like the rest. `fr run start`'s same-id refusal ("run r1 already exists") now also prints `inspect it: fr run status <id>` / `resume it: fr run advance <id>`, matching the second-run refusal — after a restore the derived id usually collides first, so this is the refusal an operator actually meets.
+
+<!-- fr:journal kind=discovery scope=plan id=a685cf24b981 created=2026-09-23T04:19:36 phase=5 -->
+### a685cf24b981 · discovery · Integration walk uses a 3-step custom shape, not fr-goal (phase 5)
+
+tests/integration/test_run_survives_teardown.py drives the real CLI (CliRunner, real git, FR_ISOLATION_TARGET=worktree, hermetic HOME/GIT_CONFIG_*, isolation_cmd._runner fakes gh as no-PR) with a shipped-dir shape `walk` (cli one, cli two, agent three) instead of `fr run start fr-goal`: fr-goal starts on an agent step, and the walk needs a deterministic committed→advanced→dirty cursor. Pinned: `holds run r1 at step two`, the `down: ended run r1 at step two here — its record is preserved at <dir>; ...` line, the full torn-down message from `fr run advance r1` in the base clone (exit 2, no run file written), `isolation: restored 1 preserved file(s) (run r1 at two)`, status reads cursor `two`, a re-start names `fr run advance r1`.
+
+<!-- fr:journal kind=discovery scope=plan id=85815977c916 created=2026-09-23T04:27:01 phase=5 -->
+### 85815977c916 · discovery · phase-5 acceptance rows left not-implemented for phase 6 (phase 5)
+
+run-missing-explains-teardown and isolation-down-preserves-run stay not-implemented, matching phases 2-4 (8af43aee8ee9, 3f54c04d7371, 83e667284b0b): 06.yaml flips rows after the live walks. Refs to cite then: tests/unit/test_isolation_explain_missing.py (every order, set-aside, never-raises), tests/unit/test_run_cli.py::test_a_missing_run_is_explained_at_every_load_site and ::test_start_refusing_an_existing_run_id_names_advance, tests/integration/test_run_survives_teardown.py (the #575 acceptance-4 walk).

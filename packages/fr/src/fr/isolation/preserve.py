@@ -54,7 +54,13 @@ from typing import Any, TypeGuard
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
-from fr.isolation.types import IsolationError, IsolationState, _git_common_dir, _sanitize
+from fr.isolation.types import (
+    IsolationError,
+    IsolationState,
+    _git_common_dir,
+    _sanitize,
+    state_dir,
+)
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
@@ -902,3 +908,163 @@ def restore(
             file=sys.stderr,
         )
     return result
+
+
+# --------------------------------------------------------- run-not-found
+
+
+def _blob_id(path: Path, like: str) -> str | None:
+    """Git's object id for `path`'s bytes, in the hash `like` was written in
+    (40 hex → SHA-1, 64 → SHA-256). None when unreadable. Pure Python, so the
+    not-found path never shells out to git per file."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    algo = hashlib.sha256 if len(like) == 64 else hashlib.sha1
+    return algo(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _names_run(tomb: dict[str, Any], run_id: str) -> dict[str, Any] | None:
+    """The tombstone's run entry for `run_id` — by id, or by the run file's
+    conventional path. None when it does not list the run."""
+    file = (RUNS_DIR / f"{run_id}.yaml").as_posix()
+    for r in tomb.get("runs", []):
+        if isinstance(r, dict) and (r.get("id") == run_id or r.get("file") == file):
+            return r
+    return None
+
+
+def _run_file(tomb: dict[str, Any], entry: dict[str, Any], run_id: str) -> str:
+    file = entry.get("file")
+    return file if _safe(file) else (RUNS_DIR / f"{run_id}.yaml").as_posix()
+
+
+def _cursor_preserved(root: Path, tomb: dict[str, Any], file: str) -> bool:
+    """True when the tombstone holds a copy of `file` that differs from what
+    the branch had committed at teardown — i.e. `up` would bring back
+    something the branch alone does not carry. A restored tombstone never
+    does: `restore` skips it (its content already went back once)."""
+    if tomb.get("restored_at"):
+        return False
+    copy = root / "files" / file
+    if not copy.is_file():
+        return False
+    for f in tomb.get("files", []):
+        if isinstance(f, dict) and f.get("path") == file:
+            base = f.get("base_blob")
+            return not (isinstance(base, str) and base and _blob_id(copy, base) == base)
+    return False
+
+
+def _live_holder(repo_root: Path, run_id: str) -> tuple[Path, str] | None:
+    """A live workspace of this repo (isolation state) holding the run file.
+    Read tolerantly: one corrupt state file must not hide the others."""
+    try:
+        states = sorted(state_dir(repo_root).glob("*.json"))
+    except OSError:
+        return None
+    here = Path(repo_root).resolve()
+    for sp in states:
+        try:
+            st = IsolationState.model_validate_json(sp.read_text())
+        except Exception:
+            continue
+        wt = Path(st.worktree)
+        try:
+            if wt.resolve() == here:
+                continue
+            if (wt / RUNS_DIR / f"{run_id}.yaml").is_file():
+                return wt, st.branch
+        except OSError:
+            continue
+    return None
+
+
+def _tombstones(repo_root: Path) -> list[tuple[Path, dict[str, Any]]]:
+    base = _git_common_dir(repo_root) / "fr" / "preserved"
+    try:
+        dirs = sorted(p for p in base.iterdir() if p.is_dir())
+    except OSError:
+        return []
+    out = []
+    for d in dirs:
+        tomb = _load_json(d / TOMBSTONE)
+        if tomb is not None:
+            out.append((d, tomb))
+    return out
+
+
+def explain_missing(repo_root: Path, run_id: str, path: Path) -> str:
+    """Why `runs/<run_id>.yaml` is not at `path` (spec §3.D.5) — in order:
+
+    1. another live workspace of this repo holds it → run fr from there;
+    2. a live tombstone lists it → torn down at T; its record is preserved
+       (`up` restores it) or its cursor is committed on the branch;
+    3. a SET-ASIDE record (`<branch>@<UTC>/`, declined or a lineage break)
+       lists it → name that directory. `up` never restores from one, so it is
+       not promised; but "fr has no record of one" would be false. (Not in the
+       spec's list; decided in phase 5 — see the plan journal.)
+    4. otherwise → never started here, listing the runs this checkout has.
+
+    Called lazily from the CLI (`fr/run/model.py` stays import-free). NEVER
+    raises: every read is tolerant, and a failure degrades to the next answer.
+    """
+    try:
+        live = _live_holder(repo_root, run_id)
+        if live is not None:
+            wt, branch = live
+            return (
+                f"run {run_id} lives in the workspace at {wt} (branch {branch}) — "
+                "run fr from there."
+            )
+        listed = [
+            (d, t, e) for d, t in _tombstones(repo_root) if (e := _names_run(t, run_id)) is not None
+        ]
+        listed.sort(key=lambda x: str(x[1].get("torn_down_at") or ""), reverse=True)
+        aside = [x for x in listed if x[1].get("set_aside_at") or x[1].get("declined_at")]
+        live_t = [x for x in listed if x not in aside]
+        if live_t:
+            root, tomb, entry = live_t[0]
+            head = _torn_down_head(run_id, tomb)
+            b = tomb.get("branch") or "?"
+            if _cursor_preserved(root, tomb, _run_file(tomb, entry, run_id)):
+                return (
+                    f"{head}; its record is preserved — `fr isolation up --branch {b}` "
+                    "restores it, then run fr from there."
+                )
+            return (
+                f"{head}; its cursor is committed on {b} — `fr isolation up --branch {b}`, "
+                "then run fr from there."
+            )
+        if aside:
+            root, tomb, entry = aside[0]
+            reason = tomb.get("set_aside_reason") or ("declined" if tomb.get("declined_at") else "")
+            copy = root / "files" / _run_file(tomb, entry, run_id)
+            where = f"; its copy is {copy}" if copy.is_file() else ""
+            return (
+                f"{_torn_down_head(run_id, tomb)}; its preserved record was set aside at "
+                f"{root}{f' ({reason})' if reason else ''} and is not restored automatically"
+                f"{where}."
+            )
+    except Exception:  # never raise: fall through to the plain answer
+        pass
+    return _never_existed(repo_root, run_id, path)
+
+
+def _torn_down_head(run_id: str, tomb: dict[str, Any]) -> str:
+    return (
+        f"run {run_id} is not in this checkout: its workspace for {tomb.get('branch') or '?'} "
+        f"({tomb.get('worktree') or '?'}) was torn down at {tomb.get('torn_down_at') or '?'}"
+    )
+
+
+def _never_existed(repo_root: Path, run_id: str, path: Path) -> str:
+    try:
+        ids = sorted(p.stem for p in (Path(repo_root) / RUNS_DIR).glob("*.yaml"))
+    except OSError:
+        ids = []
+    return (
+        f"no run {run_id} at {path}, and fr has no record of one (never started here, "
+        f"or a mistyped id). Runs in this checkout: {', '.join(ids) or 'none'}."
+    )
