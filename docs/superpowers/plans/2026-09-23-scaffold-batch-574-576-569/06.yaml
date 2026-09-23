@@ -94,14 +94,16 @@ state:
       note: 5 rows flipped + 2 notes refreshed via set-status; fr acceptance check
         exit 0
     P6.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T01:24:17+00:00'
+      note: prose checked (journal p6-prose-checked); bumped 4.17.1 -> 4.18.0 (75f689c9)
     P6.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T01:24:17+00:00'
+      note: ruff format/check clean; mypy clean (155 files); pytest 4709 passed/88
+        skipped, cov 92.67%, exit 0; bump --check, sync-opencode/hermes --check, validate
+        artifacts all ok
   completion:
-    at: null
+    at: '2026-09-23T01:24:18+00:00'
     note: null
     observed_prs: []
