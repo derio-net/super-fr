@@ -2128,7 +2128,18 @@ rows:
       in the same run: fr''s cursor records agent_type super-fr:fr-phase-executor for
       all three, never the tier agent that ran - though it does record the three child
       session ids, matching opencode.db exactly, so the two stores can be joined by
-      session id. Still skipped: live-only, no CI level.'
+      session id. Still skipped: live-only, no CI level. PAID RUN (2026-09-23, #564
+      Test Plan step 3, fr 4.17.2, real feature #457 -> PR #586, orchestrator build
+      on github-copilot/gpt-6-luna). Cursor vs opencode.db: both phases (plan tier mechanical)
+      were dispatched to fr-phase-executor-mechanical on github-copilot/claude-haiku-4.5
+      = the binding; each cursor holder id equals its child session id exactly; both
+      review-phase reviewer= ids equal the dispatched general child sessions exactly
+      (on gpt-6-luna); every child is parented to the root; deliver carries tests=<log>.
+      The cursor''s agent_type still reads super-fr:fr-phase-executor, never the tier
+      agent (#537). The question batch WAS asked and the turn ended; the operator answered.
+      But brainstorm was resolved with no --emitted spec= and no --answered-by operator,
+      so the cursor records answered_by=agent and no spec, and fr accepted it (#587).
+      Row stays skipped (live-only).'
   - id: opencode-subagent-tiering
     capability: OpenCode parity
     acceptance: A phase's tier selects the model its OpenCode subagent runs on, resolved
