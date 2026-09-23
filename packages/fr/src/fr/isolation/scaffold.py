@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal
 
 import yaml
 
@@ -307,7 +308,7 @@ GH_FEATURE = "ghcr.io/devcontainers/features/github-cli:1"
 # the containers.dev registry during the multi-backend design's research —
 # only an unrelated "gitlab-ci-local" runner feature turned up). `None` here
 # means "no feature — install via POST_CREATE instead" (see
-# HOST_CLI_POST_CREATE below). See docs/superpowers/specs/
+# HOST_CLI_PINS below). See docs/superpowers/specs/
 # 2026-07-09-multi-backend-git-host-adapters-design.md §9.
 HOST_CLI_FEATURE: dict[HostBackend, str | None] = {
     "github": GH_FEATURE,
@@ -315,35 +316,99 @@ HOST_CLI_FEATURE: dict[HostBackend, str | None] = {
     "gitea": None,
 }
 
-# Versioned + checksummed installs (linux-amd64 only — the devcontainer
-# base image's other architectures, e.g. arm64 hosts under Docker Desktop
-# emulation, are a known gap, not solved here) — pinned to a specific
-# released version, NOT "latest", matching BASE_IMAGE's own reproducibility
-# rationale. Versions/checksums verified directly against each project's
-# real release artifacts during this design (glab v1.107.0 via the GitLab
-# releases API + its published checksums.txt; tea v0.14.2 via its Gitea
-# release page + published checksums.txt) — reconfirm against current
-# releases before reusing this snippet long after this PR merges.
-HOST_CLI_POST_CREATE: dict[str, str] = {
-    "gitlab": (
-        "curl -fsSL "
-        "'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/"
-        "1.107.0/glab_1.107.0_linux_amd64.tar.gz' -o /tmp/glab.tar.gz && "
-        "echo 'eb42f56eb1a789cf4f22aa5960ff0ef60cf1e7fc1295327501f9f59030d5ae2c  "
-        "/tmp/glab.tar.gz' | sha256sum -c - && "
-        "tar -xzf /tmp/glab.tar.gz -C /tmp && "
-        "sudo install -m 755 $(find /tmp -maxdepth 2 -name glab -type f | head -1) "
-        "/usr/local/bin/glab"
+# Versioned + checksummed installs, one asset per supported architecture
+# (gh#576, spec 2026-09-23-scaffold-batch-574-576-569 §3.B). Pinned to a
+# specific released version, NOT "latest", matching BASE_IMAGE's own
+# reproducibility rationale. Only amd64 and arm64 are carried: any other
+# architecture fails postCreate loudly, naming itself, before any download.
+# Every sha256 was taken from the project's published checksums.txt for the
+# pinned version (2026-09-23) — never typed. That they still match is not a
+# comment's promise: scripts/check-pinned-clis.py re-downloads every asset and
+# .github/workflows/pinned-clis.yml runs it weekly.
+HostCliArch = Literal["amd64", "arm64"]
+
+
+@dataclass(frozen=True)
+class HostCliPin:
+    """One pinned host CLI: per-arch (url, sha256) and how to install the asset."""
+
+    name: str
+    version: str
+    assets: Mapping[HostCliArch, tuple[str, str]]
+    kind: Literal["tarball", "binary"]
+
+
+_GLAB_BASE = "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0"
+_TEA_BASE = "https://gitea.com/gitea/tea/releases/download/v0.14.2"
+
+HOST_CLI_PINS: dict[str, HostCliPin] = {
+    "gitlab": HostCliPin(
+        name="glab",
+        version="1.107.0",
+        assets=MappingProxyType(
+            {
+                "amd64": (
+                    f"{_GLAB_BASE}/glab_1.107.0_linux_amd64.tar.gz",
+                    "eb42f56eb1a789cf4f22aa5960ff0ef60cf1e7fc1295327501f9f59030d5ae2c",
+                ),
+                "arm64": (
+                    f"{_GLAB_BASE}/glab_1.107.0_linux_arm64.tar.gz",
+                    "8356e442ed42ff6973cbe267dd7371c65f9b810b01e7d70bb557cd284e7b35ba",
+                ),
+            }
+        ),
+        kind="tarball",
     ),
-    "gitea": (
-        "curl -fsSL "
-        "'https://gitea.com/gitea/tea/releases/download/v0.14.2/tea-0.14.2-linux-amd64' "
-        "-o /tmp/tea && "
-        "echo 'be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3  "
-        "/tmp/tea' | sha256sum -c - && "
-        "sudo install -m 755 /tmp/tea /usr/local/bin/tea"
+    "gitea": HostCliPin(
+        name="tea",
+        version="0.14.2",
+        assets=MappingProxyType(
+            {
+                "amd64": (
+                    f"{_TEA_BASE}/tea-0.14.2-linux-amd64",
+                    "be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3",
+                ),
+                "arm64": (
+                    f"{_TEA_BASE}/tea-0.14.2-linux-arm64",
+                    "f201f6ba4136f1129e99e6318af07900c0c16a92030648bd186ff27067b34568",
+                ),
+            }
+        ),
+        kind="binary",
     ),
 }
+
+
+def render_host_cli_post_create(pin: HostCliPin) -> str:
+    """The POSIX-sh install snippet for `pin` (devcontainer runs it under dash).
+
+    A subshell, so its `exit 1` ends only the snippet — and, being the last
+    command of postCreateCommand, sets that command's status.
+    """
+    dl = f"/tmp/{pin.name}.dl"
+    arms = " ".join(
+        f"{arch}) url='{url}'; sha='{sha}';;" for arch, (url, sha) in pin.assets.items()
+    )
+    supported = " ".join(pin.assets)
+    if pin.kind == "tarball":
+        install = (
+            f"tar -xzf {dl} -C /tmp && "
+            f"sudo install -m 755 $(find /tmp -maxdepth 2 -name {pin.name} -type f | head -1) "
+            f"/usr/local/bin/{pin.name}"
+        )
+    else:
+        install = f"sudo install -m 755 {dl} /usr/local/bin/{pin.name}"
+    return (
+        "( arch=$(dpkg --print-architecture 2>/dev/null || uname -m); "
+        'case "$arch" in x86_64) arch=amd64;; aarch64) arch=arm64;; esac; '
+        f'case "$arch" in {arms} '
+        f"*) echo \"{pin.name} {pin.version}: unsupported architecture '$arch' "
+        f'(supported: {supported})" >&2; exit 1;; esac; '
+        f'curl -fsSL "$url" -o {dl} && '
+        f'echo "$sha  {dl}" | sha256sum -c - && '
+        f"{install} )"
+    )
+
 
 # Baseline: vk itself, installed from the repo's main branch at create time.
 POST_CREATE = (
@@ -418,9 +483,9 @@ def scaffold_profile(
     feature_map.update(resolved)
 
     post_create = POST_CREATE
-    host_post_create = HOST_CLI_POST_CREATE.get(backend)
-    if host_post_create:
-        post_create = f"{POST_CREATE}; {host_post_create}"
+    host_pin = HOST_CLI_PINS.get(backend)
+    if host_pin is not None:
+        post_create = f"{POST_CREATE}; {render_host_cli_post_create(host_pin)}"
 
     env_file = env_file_path(repo_root, profile)
     config = {

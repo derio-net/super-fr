@@ -13,7 +13,7 @@ from fr.isolation.scaffold import (
     BASE_IMAGE,
     GH_FEATURE,
     HOST_CLI_FEATURE,
-    HOST_CLI_POST_CREATE,
+    HOST_CLI_PINS,
     KNOWN_TOOLS,
     scaffold_profile,
 )
@@ -604,8 +604,8 @@ def test_host_cli_feature_table_shape() -> None:
     assert HOST_CLI_FEATURE["gitea"] is None
 
 
-def test_host_cli_post_create_table_has_gitlab_and_gitea_only() -> None:
-    assert set(HOST_CLI_POST_CREATE) == {"gitlab", "gitea"}
+def test_host_cli_pins_table_has_gitlab_and_gitea_only() -> None:
+    assert set(HOST_CLI_PINS) == {"gitlab", "gitea"}
 
 
 def test_cli_backend_flag_reaches_scaffold_profile(repo: Path) -> None:
