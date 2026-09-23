@@ -120,6 +120,47 @@ class TestRebuild:
         up_at = rr.calls.index(_dc(rr, "up")[0])
         assert any(c[:2] == ["docker", "ps"] for c in rr.calls[up_at + 1 :])
 
+    def test_an_already_gone_old_image_is_not_a_warning(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        """Live walk (phase 6, p6-f1): with a features profile the devcontainer
+        CLI's rebuild leaves the old image id already gone, and `docker rmi`
+        answers `No such image`. That is reclaimed, not "shared or in use?" —
+        the warning must only fire for an image that is still there."""
+
+        class _GoneRmi(_RebuildRunner):
+            def __call__(self, argv, cwd=None, check=False, capture=True, **_kw):
+                if argv[:2] == ["docker", "rmi"]:
+                    self.calls.append(list(argv))
+                    return subprocess.CompletedProcess(
+                        argv,
+                        1,
+                        stdout="",
+                        stderr=f"Error response from daemon: No such image: {argv[-1]}",
+                    )
+                return super().__call__(argv, cwd=cwd, check=check, capture=capture)
+
+        repo, _up_runner, _ut, st = _upped(tmp_path, monkeypatch)
+        rr = _GoneRmi()
+        msg = LocalWorktreeDevcontainerTarget(repo, runner=rr).rebuild(st, no_cache=False)
+        assert "cid1 → cid2" in msg
+        assert _docker(rr, "rmi") == [["docker", "rmi", "img-old"]]
+        assert "could not remove image" not in capsys.readouterr().err
+
+    def test_a_still_present_old_image_still_warns(self, tmp_path, monkeypatch, capsys) -> None:
+        class _BusyRmi(_RebuildRunner):
+            def __call__(self, argv, cwd=None, check=False, capture=True, **_kw):
+                if argv[:2] == ["docker", "rmi"]:
+                    self.calls.append(list(argv))
+                    return subprocess.CompletedProcess(
+                        argv, 1, stdout="", stderr="conflict: image is being used"
+                    )
+                return super().__call__(argv, cwd=cwd, check=check, capture=capture)
+
+        repo, _up_runner, _ut, st = _upped(tmp_path, monkeypatch)
+        LocalWorktreeDevcontainerTarget(repo, runner=_BusyRmi()).rebuild(st, no_cache=False)
+        assert "could not remove image img-old" in capsys.readouterr().err
+
     def test_unchanged_image_is_not_reclaimed(self, tmp_path, monkeypatch) -> None:
         _repo, _ut, st, rr, target = _rebuild_setup(
             tmp_path, monkeypatch, old=("cid1", "img-same"), new=("cid2", "img-same")

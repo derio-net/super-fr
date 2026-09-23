@@ -3643,9 +3643,17 @@ rows:
       files and an active run''s cursor survive (#577).'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
-    levels: {}
-    status: not-implemented
-    notes: Live walk owed (spec Test Plan 10) plus unit argv pins.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_container_verbs.py
+    status: ci
+    notes: 'Unit (every PR): rebuild argv = up argv + --remove-existing-container (+
+      --build-no-cache), missing worktree refused, changed old image reclaimed only
+      on success (an already-gone one is not a warning, p6-f1), host no-op / external
+      refuses, state + marker untouched. Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
+      p6-live-577): a node feature added to the dev profile uncommitted → rebuild →
+      node answers via exec, uncommitted scratch file and the fr-goal run cursor survive;
+      reverted + rebuilt again.'
   - id: isolation-stop-and-resume
     capability: Isolation lifecycle
     acceptance: An operator stops an idle workspace container with `fr isolation stop`
@@ -3653,9 +3661,18 @@ rows:
       resumes it instead of failing with a raw devcontainer error (#471).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
-    levels: {}
-    status: not-implemented
-    notes: Unit + live walk owed (spec Test Plan 2,3,11).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_isolation_container_verbs.py
+    status: ci
+    notes: 'Unit (every PR): stop argv + verification re-query, already-stopped no-op,
+      no container errors, status maps exited→stopped (TestStop, CLI stop tests); exec
+      resume matrix running/exited/paused/dead/docker-unreachable/resume-failure (TestExecEnsureRunning).
+      Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
+      p6-live-471): in-container install → stop → status stopped → exec resumes the
+      same container with the stderr notice, install intact.'
   - id: isolation-down-preserves-run
     capability: Isolation lifecycle
     acceptance: Tearing down a workspace that holds an active run names the run in the
@@ -3663,9 +3680,18 @@ rows:
       isolation up --branch` restores it (#575).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
-    levels: {}
-    status: not-implemented
-    notes: Unit + integration start→down --force→advance→up owed (spec Test Plan 4,5,7).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_preserve.py
+      int:
+      - super-fr:tests/integration/test_run_survives_teardown.py
+    status: ci
+    notes: 'Unit (every PR): only docs/superpowers/** staged, -z rename/delete/non-ASCII
+      parsing, tombstone only after verified removal, merge, restore rules, refusal
+      names the active run. Integration (every PR): run start → commit → advance → down
+      refuses naming the run → down --force preserves → up --branch restores the advanced
+      cursor. Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
+      p6-live-575), incl. the shipped fr-goal manifest advancing on the restored cursor.'
   - id: run-missing-explains-teardown
     capability: Isolation lifecycle
     acceptance: A `fr run` command for a run whose workspace was torn down says so and
@@ -3673,9 +3699,19 @@ rows:
       id says that instead (#575).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
-    levels: {}
-    status: not-implemented
-    notes: Unit messages + integration owed (spec Test Plan 6,7).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_explain_missing.py
+      - super-fr:tests/unit/test_run_cli.py
+      int:
+      - super-fr:tests/integration/test_run_survives_teardown.py
+    status: ci
+    notes: 'Unit (every PR): explain_missing in every order (live workspace, preserved/committed
+      tombstone, set-aside, unfinished teardown, never-existed; never raises) and one
+      load path at every fr run load site. Integration: the torn-down message from fr
+      run advance in another checkout. Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
+      p6-live-575): fr run advance/status for a torn-down run print the preserved-record
+      text naming fr isolation up --branch.'
   - id: isolation-up-reuses-remote-branch
     capability: Isolation lifecycle
     acceptance: '`fr isolation up --branch <B>` on a branch that exists only on origin
@@ -3683,6 +3719,15 @@ rows:
       (#438).'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
-    levels: {}
-    status: not-implemented
-    notes: Integration against a bare-repo origin owed (spec Test Plan 8).
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_branch_classify.py
+      int:
+      - super-fr:tests/integration/test_up_branch_reuses_origin.py
+    status: ci
+    notes: 'Integration (every PR, bare-repo origin): remote-only branch checks out
+      origin''s tip, --single-branch clone still finds it, --base beside origin/<B>
+      refused, behind local used with WARNING. Unit: every spec §3.E row, ls-remote
+      exit codes, fetch-failure and --no-fetch paths. Not walked live against github.com:
+      the phase-6 live walks exercised the local-branch reuse row only (up after a forced
+      down: ''reusing local branch'').'

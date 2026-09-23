@@ -519,3 +519,104 @@ test_run_survives_teardown.py uses the custom `walk` shape, so no test yet advan
 ### p5-review · review · Phase 5 review (independent reviewer): 1 major, 3 minor, 5 nits — all fixed (phase 5)
 
 p5-f1 (crashed teardown answered 'no record') fixed with an unfinished-teardown answer; p5-f2..f4 truthfulness of preserved/committed/restore claims fixed (persisted git-computed 'changed' flag, restored-tombstone wording, branch/head reachability check); p5-f5..f9 nits fixed. Decisions a99bdd74ec5d, a685cf24b981 accepted; 7aae8ece5011 corrected by f2. 09a89293; suites re-run by orchestrator.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-471 created=2026-09-23T04:52:27 phase=6 -->
+### p6-live-471 · discovery · Live walk #471: stop -> status stopped -> exec auto-resumes, install survives (phase 6)
+
+Live walk, 2026-09-23, this host (macOS + Docker), `dev` profile, `uv run fr` from the fix/lifecycle-container-vs-worktree worktree (fr 4.18.0), throwaway workspace `tmp/lifecycle-live-walk` (never pushed). Spec Test Plan 13 / #471 acceptance 1-3.
+
+```
+$ fr isolation up --branch tmp/lifecycle-live-walk
+isolation: basing new branch tmp/lifecycle-live-walk on origin/main (fetched) (1ba61de23e6d)
+isolation up: worktree=~/.cache/fr/worktrees/super-fr/tmp__lifecycle-live-walk profile=dev branch=tmp/lifecycle-live-walk
+$ fr isolation exec --branch tmp/lifecycle-live-walk -- sh -c 'sudo sh -c "printf ... > /usr/local/bin/fr-walk-probe && chmod +x ..." && fr-walk-probe'
+live-walk-471 installed                       # in-container install, outside the worktree
+$ fr isolation status --branch tmp/lifecycle-live-walk
+tmp/lifecycle-live-walk: profile=dev container=running ...
+$ fr isolation stop --branch tmp/lifecycle-live-walk
+isolation stop: tmp/lifecycle-live-walk stopped (db403085c3ff) — worktree, state and bindings kept; `fr isolation up`, `restart` or the next `exec` resumes it.
+$ fr isolation status --branch tmp/lifecycle-live-walk
+tmp/lifecycle-live-walk: profile=dev container=stopped ...
+$ fr isolation exec --branch tmp/lifecycle-live-walk -- fr-walk-probe
+isolation: container for tmp/lifecycle-live-walk was stopped — resuming (devcontainer up)     # stderr
+live-walk-471 installed                                                                       # the install survived
+$ fr isolation status --branch tmp/lifecycle-live-walk
+tmp/lifecycle-live-walk: profile=dev container=running ...
+$ docker ps --filter id=db403085c3ff   ->  db403085c3ff Up 6 seconds   # same container, resumed not recreated
+```
+
+All three #471 acceptances hold live: stop frees the container and status reads `stopped`; exec auto-resumes with the stderr notice; an in-container install survives stop/resume.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-577 created=2026-09-23T04:58:50 phase=6 -->
+### p6-live-577 · discovery · Live walk #577: rebuild applies a new feature; scratch file and run cursor survive (phase 6)
+
+Live walk, 2026-09-23, this host (macOS + Docker), `dev` profile, fr 4.18.0 from this worktree, same throwaway `tmp/lifecycle-live-walk` (never pushed). Spec Test Plan 12 / #577 acceptance 1-2. The run was started INSIDE the throwaway (`fr run start` refuses from inside a workspace of another branch: "this workspace is isolated for branch 'fix/…', not 'tmp/…' — … run `fr run start` from outside the workspace").
+
+```
+$ cd ~/.cache/fr/worktrees/super-fr/tmp__lifecycle-live-walk
+$ fr run start fr-goal --branch tmp/lifecycle-live-walk
+started run 2026-09-23-tmp-lifecycle-live-walk (fr-goal@1) — cursor: brainstorm
+$ fr run advance 2026-09-23-tmp-lifecycle-live-walk      # brainstorm: blocked on operator gate
+$ echo "uncommitted scratch, live walk #577" > scratch-live-walk.txt
+$ fr isolation exec … -- sh -c 'command -v node || echo "node: absent"'
+node: absent
+# add "ghcr.io/devcontainers/features/node:1": {"version": "lts"} to .devcontainer/dev/devcontainer.json (uncommitted)
+$ fr isolation rebuild --branch tmp/lifecycle-live-walk
+isolation rebuild: tmp/lifecycle-live-walk recreated (db403085c3ff → ca1f21ea6b4f) from …/tmp__lifecycle-live-walk/.devcontainer/dev/devcontainer.json; worktree untouched
+$ fr isolation exec … -- sh -c 'node --version; command -v fr-walk-probe || echo gone; cat scratch-live-walk.txt'
+v24.21.0                                   # the new feature's tool answers
+fr-walk-probe: gone (container recreated)  # the #471 install did not survive a rebuild — as the skill table says
+uncommitted scratch, live walk #577        # the scratch file survived
+$ git status --short
+ M .devcontainer/dev/devcontainer-lock.json   # devcontainer CLI writes the lock beside the profile
+ M .devcontainer/dev/devcontainer.json
+?? docs/superpowers/runs/2026-09-23-tmp-lifecycle-live-walk.yaml
+?? scratch-live-walk.txt
+$ fr run status 2026-09-23-tmp-lifecycle-live-walk
+cursor: brainstorm / brainstorm: blocked          # cursor intact
+# revert the profile (git checkout -- both files), rebuild again:
+isolation rebuild: tmp/lifecycle-live-walk recreated (ca1f21ea6b4f → eba2355df529) …; worktree untouched
+```
+
+Both rebuilds also printed `warning: could not remove image sha256:… (shared or in use?): … No such image` — see finding p6-f1 (fixed in this phase).
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-575 created=2026-09-23T04:58:51 phase=6 -->
+### p6-live-575 · discovery · Live walk #575: down refuses naming the run, --force preserves, advance explains, up restores, shipped fr-goal advances (phase 6)
+
+Live walk, 2026-09-23, same throwaway after the #577 walk (fr 4.18.0 from this worktree). #575 acceptance 1-4 end to end, including the SHIPPED fr-goal manifest advancing on a restored cursor (closes the gap e9c5d1f3c8ae named).
+
+```
+# in the throwaway: commit the cursor locally (never pushed), then move it
+$ git commit -m "tmp: live-walk cursor (never pushed)"            # 28982a7b
+$ fr run resolve 2026-09-23-tmp-lifecycle-live-walk --step brainstorm --state done --no-questions --reason "…" --emitted spec=docs/superpowers/specs/2026-09-23-tmp-live-walk-design.md
+brainstorm: done                                                   # cursor → spec-review, run file now dirty
+$ fr isolation down --branch tmp/lifecycle-live-walk              # rc=2
+error: holds run 2026-09-23-tmp-lifecycle-live-walk at step spec-review
+isolation: tmp/lifecycle-live-walk has 4 uncommitted change(s) — refusing to reap (nothing was deleted).
+  docs/superpowers/runs/….yaml, docs/superpowers/journals/specs/….md, docs/superpowers/specs/….md, scratch-live-walk.txt
+$ fr isolation down --branch tmp/lifecycle-live-walk --force      # rc=0
+down: ended run 2026-09-23-tmp-lifecycle-live-walk at step spec-review here — its record is preserved at <repo>/.git/fr/preserved/tmp__lifecycle-live-walk; `fr isolation up --branch tmp/lifecycle-live-walk` restores it
+isolation down: tmp/lifecycle-live-walk cleaned up.
+# from the fix/lifecycle-container-vs-worktree worktree:
+$ fr run advance 2026-09-23-tmp-lifecycle-live-walk               # rc=2 (run status: same text)
+run 2026-09-23-tmp-lifecycle-live-walk is not in this checkout: its workspace for tmp/lifecycle-live-walk (~/.cache/fr/worktrees/super-fr/tmp__lifecycle-live-walk) was torn down at 2026-09-23T02:57:19Z; its record is preserved — `fr isolation up --branch tmp/lifecycle-live-walk` restores it, then run fr from there.
+$ fr isolation up --branch tmp/lifecycle-live-walk
+isolation: reusing local branch tmp/lifecycle-live-walk at 28982a7b2c19
+isolation: restored 3 preserved file(s) (run 2026-09-23-tmp-lifecycle-live-walk at spec-review)
+$ git status --short        # run file M, spec + spec journal ??; scratch-live-walk.txt gone (outside docs/superpowers — by design)
+$ fr run status …           # cursor: spec-review, brainstorm: done — the ADVANCED cursor
+$ fr run advance …          # shipped fr-goal@1 on the restored cursor:
+spec-review: dispatch brief {"kind": "agent", "needs": ["spec"], "step": "spec-review", "workflow": "fr-goal@1", …}
+                            # → spec-review: running
+# teardown
+$ fr isolation down --force --branch tmp/lifecycle-live-walk      # preserved again (active run), cleaned up
+$ git branch -D tmp/lifecycle-live-walk; rm -rf <git-common-dir>/fr/preserved/tmp__lifecycle-live-walk
+$ fr isolation status | grep -c lifecycle-live-walk  → 0; git worktree list → 0; docker ps -a → 0
+```
+
+Wording nit noticed, not changed (spec §3.D.1 fixes the prefix and tests pin it): the refusal's first line renders as `error: holds run <id> at step <s>` — the subject (the branch) is implied by the next line. Left for the orchestrator/reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f1 created=2026-09-23T04:58:51 phase=6 state=fixed -->
+### p6-f1 · finding [fixed] · rebuild warned 'could not remove image (shared or in use?)' for an image already gone (phase 6)
+
+Both live rebuilds (features profile) printed the warning with docker's 'No such image' — the old image id was already removed when fr ran rmi. _reclaim_image (local.py, shared with down) now treats 'No such image' as reclaimed and warns only for an image still present. Tests: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_an_already_gone_old_image_is_not_a_warning and ::test_a_still_present_old_image_still_warns.

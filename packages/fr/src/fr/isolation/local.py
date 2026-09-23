@@ -2239,10 +2239,13 @@ class LocalWorktreeDevcontainerTarget:
         if not image:
             return
         result = self.run(["docker", "rmi", image])
-        if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        # Already gone is reclaimed, not a failure: a features profile's rebuild
+        # can leave the old image id removed before fr gets to it (live walk,
+        # phase-6 p6-f1). Only an image that is still there earns the warning.
+        if result.returncode != 0 and "No such image" not in detail:
             print(
-                f"warning: could not remove image {image} (shared or in use?): "
-                f"{(result.stderr or result.stdout or '').strip()}",
+                f"warning: could not remove image {image} (shared or in use?): {detail}",
                 file=sys.stderr,
             )
 
