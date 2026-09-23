@@ -698,12 +698,14 @@ def _down_all(
     for state, refusal in plan:
         # #575: the run a workspace holds is named for EVERY workspace, even
         # under --force (where no refusal carries it). A refusal already
-        # starts with that line, so the keep line shows the actual reason.
+        # starts with a sentence naming it, so the keep line shows the actual reason.
         held = _held_runs(target, state)
         if refusal is None:
             typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
         else:
-            why = [ln for ln in refusal.splitlines() if ln not in held.splitlines()]
+            # the refusal's run sentences are shown bare below, from `held`
+            ran = f"isolation: {state.branch} holds active run "
+            why = [ln for ln in refusal.splitlines() if not ln.startswith(ran)]
             first = why[0] if why else ""
             typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
         for line in held.splitlines():

@@ -1246,13 +1246,15 @@ class LocalWorktreeDevcontainerTarget:
         workspace, or None if it would proceed. Asks the SAME two guards, in
         the same order, that `_down_worktree_tail` enforces — so `down --all`'s
         blast-radius listing predicts rather than guesses — including the
-        `holds run <id> at step <cursor>` prefix (#575, spec §3.D.1)."""
+        `isolation: <b> holds active run <id> …` prefix (#575, spec §3.D.1)."""
         runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None:
-            return _preserve.name_runs(runs, open_pr)
+            return _preserve.name_runs(runs, open_pr, state.branch)
         hazard = self._reap_hazard(state)
-        return _preserve.name_runs(runs, hazard.detail) if hazard is not None else None
+        return (
+            _preserve.name_runs(runs, hazard.detail, state.branch) if hazard is not None else None
+        )
 
     def held_runs(self, state: IsolationState) -> str:
         """PURE QUERY: the `holds run <id> at step <cursor>` line(s) for the
@@ -1284,11 +1286,13 @@ class LocalWorktreeDevcontainerTarget:
         runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None and not force:
-            raise IsolationError(_preserve.name_runs(runs, open_pr))
+            raise IsolationError(_preserve.name_runs(runs, open_pr, state.branch))
         if not force:
             hazard = self._reap_hazard(state)
             if hazard is not None:
-                raise ReapRefused(ReapHazard(hazard.kind, _preserve.name_runs(runs, hazard.detail)))
+                raise ReapRefused(
+                    ReapHazard(hazard.kind, _preserve.name_runs(runs, hazard.detail, state.branch))
+                )
         record = _preserve.stage(state, self.run, runs=runs) if preserve else None
         self._teardown_container(state)
         if record is not None:

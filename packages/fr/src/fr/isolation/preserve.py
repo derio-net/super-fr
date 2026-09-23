@@ -254,11 +254,24 @@ def runs_line(runs: list[BranchRun]) -> str:
     return "\n".join(lines)
 
 
-def name_runs(runs: list[BranchRun], refusal: str) -> str:
-    """Prefix a refusal with the active runs it would end (spec §3.D.1). The
-    one helper both `_down_worktree_tail` and `down_refusal` go through."""
-    line = runs_line(runs)
-    return f"{line}\n{refusal}" if line else refusal
+def name_runs(runs: list[BranchRun], refusal: str, branch: str) -> str:
+    """Prefix a refusal with the active runs it would end (spec §3.D.1), as a
+    sentence with the branch as its subject — `isolation: <b> holds active run
+    <id> (at step <s>) — tearing it down ends that run here`. The one helper
+    both `_down_worktree_tail` and `down_refusal` go through. `runs_line` stays
+    bare: in the `down --all` listing the branch is already the row's subject."""
+    lines = []
+    for r in runs:
+        if not r.active:
+            continue
+        where = f"at step {r.cursor}"
+        if r.unreadable:
+            where += f", unreadable run file {r.file}"
+        lines.append(
+            f"isolation: {branch} holds active run {r.id} ({where}) — "
+            "tearing it down ends that run here"
+        )
+    return "\n".join([*lines, refusal])
 
 
 # ------------------------------------------------------------------ storage

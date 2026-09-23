@@ -157,9 +157,11 @@ and the function never raises.
 
 1. **Name the run in every refusal.** `_down_worktree_tail` and `down_refusal`
    compute the branch's active runs once. Whichever refusal fires (open PR,
-   dirty tree, unlanded content, unverifiable) is prefixed with `holds run <id>
-   at step <cursor>`. `down --all`'s blast-radius listing shows the same line even
-   under `--force`, where it currently lists nothing. The shared `--force`
+   dirty tree, unlanded content, unverifiable) is prefixed with `isolation: <b>
+   holds active run <id> (at step <cursor>) — tearing it down ends that run here`
+   (phase-6 review p6-f12: the branch is the sentence's subject). `down --all`'s
+   blast-radius listing shows the bare `holds run <id> at step <cursor>` under
+   each workspace row, even under `--force`, where it currently lists nothing. The shared `--force`
    sentence in `_hazard_detail` changes from "uncommitted changes do not survive"
    to "uncommitted changes do not survive, except fr's own records under
    `docs/superpowers/`, which are preserved and restored by the next `up`".

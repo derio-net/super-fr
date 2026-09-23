@@ -3650,10 +3650,11 @@ rows:
     notes: 'Unit (every PR): rebuild argv = up argv + --remove-existing-container (+
       --build-no-cache), missing worktree refused, changed old image reclaimed only
       on success (an already-gone one is not a warning, p6-f1), host no-op / external
-      refuses, state + marker untouched. Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
-      p6-live-577): a node feature added to the dev profile uncommitted → rebuild →
-      node answers via exec, uncommitted scratch file and the fr-goal run cursor survive;
-      reverted + rebuilt again.'
+      refuses, state + marker untouched. LIVE ONLY, not automated: that a changed profile''s
+      feature actually applies (node answered after rebuild) and that the uncommitted
+      scratch file and the run cursor survive — plan journal 2026-09-23-lifecycle-container-vs-worktree
+      p6-live-577 (transcript corrected in p6-live-577b); p6-f1''s resolution records
+      the image-store evidence (no leak).'
   - id: isolation-stop-and-resume
     capability: Isolation lifecycle
     acceptance: An operator stops an idle workspace container with `fr isolation stop`
@@ -3670,9 +3671,10 @@ rows:
     notes: 'Unit (every PR): stop argv + verification re-query, already-stopped no-op,
       no container errors, status maps exited→stopped (TestStop, CLI stop tests); exec
       resume matrix running/exited/paused/dead/docker-unreachable/resume-failure (TestExecEnsureRunning).
-      Live walk 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree
-      p6-live-471): in-container install → stop → status stopped → exec resumes the
-      same container with the stderr notice, install intact.'
+      Live 2026-09-23 (plan journal 2026-09-23-lifecycle-container-vs-worktree): acceptance
+      1+3 by exec (p6-live-471), acceptance 2 — an in-container install survives — by
+      restart and by up on the same container (p6-live-471b); attribution in p6-live-471-attribution.
+      #471 acceptance 4 deferred to #580.'
   - id: isolation-down-preserves-run
     capability: Isolation lifecycle
     acceptance: Tearing down a workspace that holds an active run names the run in the

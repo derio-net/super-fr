@@ -620,3 +620,113 @@ Wording nit noticed, not changed (spec §3.D.1 fixes the prefix and tests pin it
 ### p6-f1 · finding [fixed] · rebuild warned 'could not remove image (shared or in use?)' for an image already gone (phase 6)
 
 Both live rebuilds (features profile) printed the warning with docker's 'No such image' — the old image id was already removed when fr ran rmi. _reclaim_image (local.py, shared with down) now treats 'No such image' as reclaimed and warns only for an image still present. Tests: tests/unit/test_isolation_container_verbs.py::TestRebuild::test_an_already_gone_old_image_is_not_a_warning and ::test_a_still_present_old_image_still_warns.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-471b created=2026-09-23T05:22:06 phase=6 -->
+### p6-live-471b · discovery · Live walk #471 acceptance 2: install survives stop→restart and stop→up (same container) (phase 6)
+
+Live walk, 2026-09-23, this host (macOS + Docker Desktop, containerd image store), `dev` profile, fr 4.18.0 from this worktree, fresh throwaway `tmp/lifecycle-live-walk2` (never pushed, torn down after). #471 acceptance 2 — resume by `restart` and by `up`, not only by `exec`.
+
+```
+$ fr isolation up --branch tmp/lifecycle-live-walk2
+isolation: basing new branch tmp/lifecycle-live-walk2 on origin/main (fetched) (1ba61de23e6d)
+$ fr isolation exec … -- sh -c 'sudo sh -c "printf … > /usr/local/bin/fr-walk-probe && chmod +x …" && fr-walk-probe'
+live-walk-471b installed
+$ fr isolation stop --branch tmp/lifecycle-live-walk2
+isolation stop: tmp/lifecycle-live-walk2 stopped (395398ab389c) — worktree, state and bindings kept; …
+$ fr isolation status …            → container=stopped
+$ fr isolation restart --branch tmp/lifecycle-live-walk2
+isolation restart: tmp/lifecycle-live-walk2 bounced (395398ab389c).
+$ fr isolation status …            → container=running
+$ fr isolation exec … -- fr-walk-probe
+live-walk-471b installed           # survived stop → restart
+$ fr isolation stop …              → stopped (395398ab389c)
+$ fr isolation up --branch tmp/lifecycle-live-walk2      # rc=0
+isolation up: worktree=…/tmp__lifecycle-live-walk2 profile=dev branch=tmp/lifecycle-live-walk2
+$ fr isolation status …            → container=running
+$ docker ps --filter label=devcontainer.local_folder=…   → 395398ab389c Up 1 second   # same container
+$ fr isolation exec … -- fr-walk-probe
+live-walk-471b installed           # survived stop → up
+```
+
+#471 acceptance 2 holds by both `restart` and `up --branch`, on the same container id.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-471-attribution created=2026-09-23T05:22:07 phase=6 -->
+### p6-live-471-attribution · discovery · p6-live-471 reworded: acceptance 1+3 by exec, 2 by restart/up (p6-live-471b), 4 deferred to #580 (phase 6)
+
+Rewording of p6-live-471's closing claim (that entry is left as written; the journal is append-only). p6-live-471 said "All three #471 acceptances hold live" — too broad: that walk resumed only through `exec`. Correct attribution:
+- acceptance 1 (stop frees the container, status reads `stopped`) and 3 (the next `exec` auto-resumes with the stderr notice) — by exec, p6-live-471;
+- acceptance 2 (an in-container install survives, resumed by `restart` or `up`) — by restart and by up, p6-live-471b (exec also showed it in p6-live-471);
+- acceptance 4 is deferred to issue #580 (filed by the orchestrator), not claimed here.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-live-577b created=2026-09-23T05:22:07 phase=6 -->
+### p6-live-577b · discovery · p6-live-577 transcript corrected: raw output is 'gone', explanation is a comment (phase 6)
+
+Correction to p6-live-577's transcript (that entry is left as written; the journal is append-only). The raw output of `command -v fr-walk-probe || echo "fr-walk-probe: gone (container recreated)"` was shown with the explanation inline as if docker printed it. The honest form:
+
+```
+$ fr isolation exec … -- sh -c 'node --version; command -v fr-walk-probe || echo gone; cat scratch-live-walk.txt'
+v24.21.0
+gone
+uncommitted scratch, live walk #577
+# `gone`: the #471 probe under /usr/local/bin did not survive — the container was recreated, as the skill table says
+```
+
+<!-- fr:journal kind=finding scope=plan id=p6-f1-resolved created=2026-09-23T05:22:08 phase=6 state=fixed resolves=p6-f1 -->
+### p6-f1-resolved · finding [fixed] · resolves p6-f1: rebuild warned 'could not remove image (shared or in use?)' for an image already gone (phase 6)
+
+Evidence (p6-f6, live, tmp/lifecycle-live-walk2, containerd image store): before the rebuild, `docker images -a --filter dangling=true` was empty and the only vsc-tmp__lifecycle-live-walk2-<hash>-features:latest was sha256:9dddc84f…, the container's image. After adding the node feature and `fr isolation rebuild` (395398ab389c → 83947bd1e308, no warning printed now): dangling list still empty; the same tag now points at sha256:f00f5b4f…, the new container's image; `docker image inspect sha256:9dddc84f…` → rc=1 and no `<none>` images exist. The devcontainer CLI rebuilds under the SAME tag, so the re-tag plus --remove-existing-container leaves the old image unreferenced and the store drops it; fr's rmi then answers `No such image`. Verdict: no leak — the suppression hides nothing. The walk2 image was also gone after `down --force` (docker images | grep live-walk → 0).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f2 created=2026-09-23T05:22:27 phase=6 state=fixed -->
+### p6-f2 · finding [fixed] · fr-isolation SKILL.md branch-base line still said 'never aborts' (phase 6)
+
+Replaced with the real outcomes: no remote → local HEAD + WARNING; origin unreachable → the last-fetched origin/<B> or a cold start, each with a WARNING; origin/<B> present but unfetchable with no local ref, or --base beside an existing origin/<B> → refused (exit 2).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f3 created=2026-09-23T05:22:27 phase=6 state=fixed -->
+### p6-f3 · finding [fixed] · profile-switch table row understated what down loses (phase 6)
+
+Row now: worktree removed; uncommitted files lost except fr's records under docs/superpowers/ (preserved); mid-work that needs --force, so only the operator can ask for it.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f4 created=2026-09-23T05:22:28 phase=6 state=fixed -->
+### p6-f4 · finding [fixed] · restore described as unconditional in SKILL.md and the explainer (phase 6)
+
+SKILL.md --force bullet and docs/explainers/fr-isolation.html (in place, targeted): preserved unless --no-preserve; restore is additive and runs only when up re-creates the worktree; a changed file is a reported conflict with the copy kept; recorded deletions are reported, never re-applied; an unrelated re-created branch gets nothing (set aside).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f5 created=2026-09-23T05:22:28 phase=6 state=fixed -->
+### p6-f5 · finding [fixed] · #471 acceptance 2 (resume by restart/up) not walked live (phase 6)
+
+Walked live on a fresh throwaway: install survives stop→restart and stop→up on the same container (p6-live-471b); p6-live-471's claim reworded in p6-live-471-attribution (1+3 by exec, 2 by restart/up, 4 deferred to #580).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f6 created=2026-09-23T05:22:29 phase=6 state=fixed -->
+### p6-f6 · finding [fixed] · the 'No such image' suppression could hide an image leak (phase 6)
+
+Captured docker images -a --filter dangling=true and the vsc-* listing before/after a feature rebuild: no dangling image, old id gone (inspect rc=1), tag re-pointed to the new image. No leak; evidence in p6-f1's resolution record p6-f1-resolved.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f7 created=2026-09-23T05:22:29 phase=6 state=fixed -->
+### p6-f7 · finding [fixed] · SKILL.md modes line omitted stop/rebuild per mode (phase 6)
+
+external: restart/stop/rebuild/stats refuse; host-worktree: restart/stats refuse, stop/rebuild are no-ops (verified against external.py / hostworktree.py).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f8 created=2026-09-23T05:22:30 phase=6 state=fixed -->
+### p6-f8 · finding [fixed] · SKILL.md lost two facts in the phase-6 compression (phase 6)
+
+Restored: 'a foreign `git worktree add` is invisible to it' (ownership boundary) and '`--base HEAD` forks the checkout' (branch base).
+
+<!-- fr:journal kind=finding scope=plan id=p6-f9 created=2026-09-23T05:22:30 phase=6 state=fixed -->
+### p6-f9 · finding [fixed] · fr-goal / fr-debugging repair sentence skipped restart (phase 6)
+
+Both now read: repaired with `fr isolation restart`, then `rebuild` (worktree, cursor and uncommitted work kept), never `down --force`. Mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f10 created=2026-09-23T05:22:30 phase=6 state=fixed -->
+### p6-f10 · finding [fixed] · p6-live-577 transcript mixed commentary into raw output (phase 6)
+
+Append-only journal: corrected transcript added as p6-live-577b (raw line is `gone`, explanation in a # comment); the old entry is untouched.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f11 created=2026-09-23T05:22:31 phase=6 state=fixed -->
+### p6-f11 · finding [fixed] · isolation-rebuild-keeps-worktree notes overstated automation (phase 6)
+
+set-status notes now say the feature-applies and cursor/scratch-survive claims are live-only (p6-live-577/577b), the unit tests cover argv/refusals/image reclaim/state.
+
+<!-- fr:journal kind=finding scope=plan id=p6-f12 created=2026-09-23T05:22:31 phase=6 state=fixed -->
+### p6-f12 · finding [fixed] · down refusal line had no subject ('error: holds run …') (phase 6)
+
+preserve.name_runs(runs, refusal, branch) renders 'isolation: <b> holds active run <id> (at step <s>) — tearing it down ends that run here' (unreadable run file noted inside the parens); runs_line stays bare for the down --all listing, whose filter now drops the refusal's run sentences by prefix. Spec §3.D.1 updated; tests/unit/test_isolation_preserve.py (HELD constant, unreadable case, --all listing asserts the sentence is absent) and tests/integration/test_run_survives_teardown.py updated.

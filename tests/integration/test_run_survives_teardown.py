@@ -126,7 +126,10 @@ def test_a_dirty_run_survives_a_forced_down_and_comes_back_with_up(tmp_path: Pat
     # 3. down refuses, naming the run it would end.
     refused = _fr(repo, shipped, ["isolation", "down", "--repo", str(repo), "--branch", BRANCH])
     assert refused.exit_code == 2, refused.output
-    assert f"holds run {RUN} at step two" in refused.output
+    assert (
+        f"isolation: {BRANCH} holds active run {RUN} (at step two) — "
+        "tearing it down ends that run here"
+    ) in refused.output
     assert wt.is_dir()
 
     # 4. down --force ends it and says where the record went.

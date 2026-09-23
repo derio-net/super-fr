@@ -33,6 +33,7 @@ from typer.testing import CliRunner
 from tests.unit.test_isolation import make_repo, make_repo_with_origin
 
 BRANCH = "feat/x"
+HELD = "isolation: feat/x holds active run r1 (at step plan) — tearing it down ends that run here"
 _ID = ["-c", "user.email=t@t", "-c", "user.name=t"]
 
 
@@ -166,6 +167,9 @@ def test_branch_runs_unreadable_file_is_active_and_labelled(tmp_path: Path, body
     (run,) = preserve.branch_runs(tmp_path, BRANCH)
     assert run.active is True and run.unreadable is True
     assert "unreadable" in preserve.runs_line([run])
+    named = preserve.name_runs([run], "refused", BRANCH)
+    assert named.startswith(f"isolation: {BRANCH} holds active run {run.id} (at step ")
+    assert "unreadable run file" in named and named.endswith("\nrefused")
 
 
 def test_branch_runs_never_raises_on_an_unreadable_path(tmp_path: Path) -> None:
@@ -187,10 +191,10 @@ def test_open_pr_refusal_names_the_active_run(tmp_path: Path) -> None:
     _write_run(st.worktree)
     with pytest.raises(IsolationError) as err:
         target.down(st, force=False)
-    assert str(err.value).splitlines()[0] == "holds run r1 at step plan"
+    assert str(err.value).splitlines()[0] == HELD
     assert "still open" in str(err.value)
     refusal = target.down_refusal(st)
-    assert refusal is not None and refusal.startswith("holds run r1 at step plan\n")
+    assert refusal is not None and refusal.startswith(HELD + "\n")
 
 
 def test_dirty_hazard_names_the_active_run(tmp_path: Path) -> None:
@@ -199,9 +203,9 @@ def test_dirty_hazard_names_the_active_run(tmp_path: Path) -> None:
     with pytest.raises(ReapRefused) as err:
         target.down(st, force=False)
     assert err.value.hazard.kind == "dirty-worktree"
-    assert str(err.value).startswith("holds run r1 at step plan\n")
+    assert str(err.value).startswith(HELD + "\n")
     refusal = target.down_refusal(st)
-    assert refusal is not None and refusal.startswith("holds run r1 at step plan\n")
+    assert refusal is not None and refusal.startswith(HELD + "\n")
 
 
 def test_unlanded_hazard_names_the_active_run(tmp_path: Path) -> None:
@@ -211,9 +215,9 @@ def test_unlanded_hazard_names_the_active_run(tmp_path: Path) -> None:
     with pytest.raises(ReapRefused) as err:
         target.down(st, force=False)
     assert err.value.hazard.kind == "unlanded-content"
-    assert str(err.value).startswith("holds run r1 at step plan\n")
+    assert str(err.value).startswith(HELD + "\n")
     refusal = target.down_refusal(st)
-    assert refusal is not None and refusal.startswith("holds run r1 at step plan\n")
+    assert refusal is not None and refusal.startswith(HELD + "\n")
 
 
 def test_finished_or_foreign_run_is_not_named(tmp_path: Path) -> None:
@@ -573,7 +577,7 @@ def test_cli_down_refusal_names_the_run(host_cli: Path) -> None:
     _write_run(_wt(host_cli), "r1")
     res = cli.invoke(app, ["isolation", "down", "--repo", str(host_cli), "--branch", BRANCH])
     assert res.exit_code == 2
-    assert "holds run r1 at step plan" in res.output
+    assert HELD in res.output
 
 
 def test_cli_no_preserve_requires_force(host_cli: Path) -> None:
@@ -594,7 +598,10 @@ def test_cli_down_all_dry_run_names_the_run(host_cli: Path, force: bool) -> None
     assert res.exit_code == 0, res.output
     line = next(ln for ln in res.output.splitlines() if BRANCH in ln and "sessions" in ln)
     assert ("tear down" in line) is force
+    # the listing keeps the bare line (the branch is already the row's subject);
+    # only a refusal carries the sentence naming it
     assert "holds run r1 at step plan" in res.output
+    assert HELD not in res.output
     if not force:
         assert "uncommitted" in res.output, "the actual refusal reason still shows"
 
