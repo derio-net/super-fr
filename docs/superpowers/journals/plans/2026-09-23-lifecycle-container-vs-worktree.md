@@ -184,3 +184,23 @@ _write_isolation_marker takes created_at; local and host-worktree up pass the ca
 ### p2-review · review · Phase 2 review (independent reviewer): 0 major, 6 minor, 7 nits (phase 2)
 
 All 13 (p2-f1..p2-f13) verified real and fixed with tests in 3387b79f; full suite 4579 passed / 88 skipped per executor, isolation suites re-run by orchestrator.
+
+<!-- fr:journal kind=discovery scope=plan id=59d279fcdb7d created=2026-09-23T02:08:07 phase=3 -->
+### 59d279fcdb7d · discovery · remote reuse uses --no-track + explicit upstream config, not --track (phase 3)
+
+The plan/spec name `git worktree add --track -b <B> <wt> origin/<B>`. Verified against git 2.53: in a `--single-branch` clone (fetch refspec maps only main) `--track` fails with 'cannot set up tracking information; starting point origin/<B> is not a branch' (exit 255, no residue). So the remote row runs `git worktree add --no-track -b <B> <wt> origin/<B>` and then sets `branch.<B>.remote=origin` / `branch.<B>.merge=refs/heads/<B>` — same upstream as --track in every clone shape. Pinned by the single-branch integration test and the unit test's config assertions.
+
+<!-- fr:journal kind=discovery scope=plan id=b77e57ef8363 created=2026-09-23T02:08:08 phase=3 -->
+### b77e57ef8363 · discovery · P3.T2 refactor: classification is a pure classify_branch() from the start (phase 3)
+
+Rather than growing _git_worktree_add then extracting, the §3.E table was written directly as `classify_branch(branch, *, local_sha, remote: RemoteView, ahead, behind, base, worktree) -> BranchDecision` (module-level, pure; raises IsolationError for the refused row). Git gathering lives in `_remote_view` (ls-remote --exit-code → 0 exists / 2 absent / else unknown; explicit-refspec fetch; a failed fetch is unknown), `_ahead_behind` (rev-list --left-right --count) and `_rev`; `_ref_exists` now delegates to `_rev`. Cold-start lines append ` (<sha12>)` after the existing text, so 'basing new branch X on origin/main (fetched)' remains a substring.
+
+<!-- fr:journal kind=discovery scope=plan id=7b7b6cf00c2a created=2026-09-23T02:08:08 phase=3 -->
+### 7b7b6cf00c2a · discovery · Rows the §3.E table leaves open, as decided (phase 3)
+
+(1) no local <B>, origin unknown, local origin/<B> ref present, --base given: REFUSED like the exists+--base row (the ref is evidence the name is taken; message says 'was last fetched (origin unreachable)'). (2) --no-fetch: a local origin/<B> ref is treated as 'exists'; no ref is 'unknown' with reason '--no-fetch', so a local <B> prints '(origin not checked: --no-fetch)' and a cold start carries the could-not-check WARNING. (3) ls-remote exit 0 then a failed explicit fetch is 'unknown' per the #354 invariant — with no local ref this still cold-starts (as the table says) even though origin just reported <B> present; the WARNING names the fork risk. (4) No origin remote → 'absent', unchanged from today.
+
+<!-- fr:journal kind=discovery scope=plan id=3f54c04d7371 created=2026-09-23T02:14:48 phase=3 -->
+### 3f54c04d7371 · discovery · phase-3 acceptance row left not-implemented for phase 6 (phase 3)
+
+The #438 row (Isolation lifecycle, 'up --branch <B> on a branch that exists only on origin…') stays not-implemented, matching phase 2's precedent (8af43aee8ee9): 06.yaml flips rows after the live walks. Refs to cite then: tests/integration/test_up_branch_reuses_origin.py (fresh clone, --single-branch clone, --base refusal, behind+WARNING) and tests/unit/test_isolation_branch_classify.py (every §3.E row, ls-remote exit codes, --no-fetch).
