@@ -434,3 +434,8 @@ restore() prints the notice after deciding: with the live path and 'the next fr 
 ### p4-n9 · finding [fixed] · The decline hint printed a literal <worktree> (phase 4)
 
 _decline takes the real worktree; the hint is cp -R <aside>/files/. <worktree path>/. Test: tests/unit/test_isolation_preserve.py::test_p4_n9_the_decline_hint_names_the_real_worktree.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-09-23T04:06:50 phase=4 -->
+### p4-review · review · Phase 4 review (independent reviewer, 3 rounds): 4+3+1 majors, all closed (phase 4)
+
+Round 1: p4-f1..f16 (4 major data-loss holes, each reproduced by probe) fixed in a4790043. Round 2 re-verify: p4-n1..n6 (3 majors) + orchestrator decision p4-d1 (restore never deletes) fixed in fb3ce370. Round 3 re-verify: p4-n7 (fresh commit deleted an unrestored record) + n8/n9 fixed in 7540e57e with the invariant 'nothing deletes preserved data unless restored_at'. Orchestrator audited all 5 deletion sites in preserve.py against it. Reviewer: no other path found where down --force loses an uncommitted docs/superpowers file or up writes content the operator did not have.
