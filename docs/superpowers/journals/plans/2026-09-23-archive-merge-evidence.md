@@ -59,3 +59,18 @@ Restored both facts in plugins/super-fr/skills/fr-progress/SKILL.md (allowlist n
 ### rev-p2 · review · Phase 2 review (dispatched feature-dev:code-reviewer + orchestrator skill diff): 1 minor finding, fixed (phase 2)
 
 Reviewer: no findings >=80 - buckets exhaustive/disjoint, f-p2-local-phases fix real and tested, wording matches spec, --all never printed, archivable only narrows, fetch only on sweep path, tests real. Sub-threshold note (unparseable plan listed in in_progress and in the unparsed note) is intentional per _Sweep docstring. Reviewer could not diff SKILL.md; orchestrator diffed it and filed f-p2-skill-trim (fixed).
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-gate-adapter created=2026-09-23T17:56:59 phase=3 -->
+### d-p3-gate-adapter · discovery · archive_gate gained two optional wording kwargs; fr.archive.archive_blockers is the one adapter (phase 3)
+
+Beyond the spec's (plan, observed, *, landed): archive_gate also takes optional ref (for 'not on origin/main') and unknown_reason (for 'merge state unknown (<reason>)'); landed itself stays required with no default. fr.archive.landed_for(evidence, name) maps ref=None to landed=None and an absent plan to frozenset(). fr.archive.archive_blockers(plan, observed, evidence) feeds all of it from one MergeEvidence, and is now the only archive_gate caller outside tests (archive_cmd, status_cmd text+JSON, apply_cmd). status_cmd imports it lazily, matching the sweep's existing lazy fr.archive imports.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-apply-fetch created=2026-09-23T17:56:59 phase=3 -->
+### d-p3-apply-fetch · discovery · fr apply now fetches once per invocation; direct _apply_one callers read their plan's repo (phase 3)
+
+apply_command calls merge_evidence(resolve_repo_root(), fetch=True) once (also under --all) and passes evidence= to _apply_one. _apply_one's evidence kwarg defaults to None, in which case it reads plan.repo_root itself, so existing direct callers (test_v2_apply, test_reachability) keep working; their repos have no remote or a file remote, so no network. archive_cmd prints a note when the fetch failed and the local ref is used.
+
+<!-- fr:journal kind=discovery scope=plan id=d-p3-vacuous-nudge created=2026-09-23T17:57:00 phase=3 -->
+### d-p3-vacuous-nudge · discovery · Old nudge assertions were satisfied by drift-warning text, not the nudge (phase 3)
+
+test_status_cmd and test_archive_cmd's apply nudge test asserted 'fr archive' in output, which the never-dispatched drift warning ('fr archive if this plan is done') also contains, so they would stay green with the nudge gone. Migrated onto landed repos (file-path origin) and tightened to the nudge line 'plan complete — run fr archive'. No test gained --force. A shared tests.unit.test_merge_evidence.stub_fetch now owns hermetic git config + the recording _fetch stub for all four CLI test modules.
