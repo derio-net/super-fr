@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from fr.isolation.local import GcAction, Runner, subprocess_runner
+from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -229,7 +230,9 @@ class ExternalTarget:
         """External `down` has no refusal guard — it only retires fr's claim."""
         return None
 
-    def down(self, state: IsolationState, force: bool = False) -> None:
+    def down(
+        self, state: IsolationState, force: bool = False, preserve: bool = True
+    ) -> TeardownReport:
         """Retire fr's state file and the marker's branch claim ONLY. The checkout
         and container belong to the preparer — no worktree removal, no docker, and
         the marker file itself is never unlinked.
@@ -241,6 +244,8 @@ class ExternalTarget:
         """
         delete_state(state.repo_root, state.branch)
         self._set_marker_branch("")
+        # Nothing is destroyed, so nothing is preserved or ended (spec §3.F).
+        return TeardownReport(branch=state.branch)
 
     def gc(self, dry_run: bool = False) -> list[GcAction]:
         """Report the containment; never reap it (#423).

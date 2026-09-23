@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import IO, Any, ClassVar
 
 from fr._hosts import detect_backend
+from fr.isolation import preserve as _preserve
+from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -216,7 +218,9 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     lines.append(
         f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
         "which removes the worktree and fr's record of it (the branch and any "
-        "commits on it remain in the repo; uncommitted changes do not)."
+        "commits on it remain in the repo; uncommitted changes do not survive, except "
+        "fr's own records under `docs/superpowers/`, which are preserved and restored "
+        "by the next `up`)."
     )
     return "\n".join(lines)
 
@@ -1196,7 +1200,9 @@ class LocalWorktreeDevcontainerTarget:
             )
         return None
 
-    def down(self, state: IsolationState, force: bool = False) -> None:
+    def down(
+        self, state: IsolationState, force: bool = False, preserve: bool = True
+    ) -> TeardownReport:
         """Tear down the workspace, verifying each destructive step's
         POST-CONDITION before deleting the bookkeeping (#354 Task A).
 
@@ -1216,9 +1222,14 @@ class LocalWorktreeDevcontainerTarget:
         reap-hazard guard (#467 phase 3: dirty worktree, unlanded content,
         unverifiable) — but it never skips THIS verification (that would
         re-introduce the invisible-leak bug).
+
+        Before destroying anything it preserves fr's own records under
+        `docs/superpowers/` (#575, spec §3.D) — `preserve=False` discards them,
+        and is accepted only together with `force`. Returns what it ended.
         """
-        self._down_worktree_tail(state, force)
+        report = self._down_worktree_tail(state, force, preserve=preserve)
         self._spawn_gc()
+        return report
 
     def _open_pr_refusal(self, state: IsolationState) -> str | None:
         """The open-PR guard's refusal text, or None when no PR is open."""
@@ -1234,27 +1245,51 @@ class LocalWorktreeDevcontainerTarget:
         """PURE QUERY (#533): the reason a non-forced `down` would refuse this
         workspace, or None if it would proceed. Asks the SAME two guards, in
         the same order, that `_down_worktree_tail` enforces — so `down --all`'s
-        blast-radius listing predicts rather than guesses."""
+        blast-radius listing predicts rather than guesses — including the
+        `holds run <id> at step <cursor>` prefix (#575, spec §3.D.1)."""
+        runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None:
-            return open_pr
+            return _preserve.name_runs(runs, open_pr)
         hazard = self._reap_hazard(state)
-        return hazard.detail if hazard is not None else None
+        return _preserve.name_runs(runs, hazard.detail) if hazard is not None else None
 
-    def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
-        """PR guard → reap-hazard guard → environment teardown → verified
-        worktree removal → marker + state retirement. Shared with
-        `HostWorktreeTarget` (#... isolation host modes): the ONLY per-mode
-        difference is `_teardown_container`, which the host-worktree mode
-        overrides to a no-op (no docker), so both guards, the post-condition
-        verification, and the marker/state cleanup stay identical across modes."""
+    def held_runs(self, state: IsolationState) -> str:
+        """PURE QUERY: the `holds run <id> at step <cursor>` line(s) for the
+        branch's active runs ('' when none) — `down --all` shows it for every
+        workspace, even under `--force`, where no refusal carries it."""
+        return _preserve.runs_line(_preserve.branch_runs(state.worktree, state.branch))
+
+    def _down_worktree_tail(
+        self, state: IsolationState, force: bool, preserve: bool = True
+    ) -> TeardownReport:
+        """PR guard → reap-hazard guard → STAGE fr's records → environment
+        teardown → verified worktree removal → COMMIT the tombstone → marker +
+        state retirement. Shared with `HostWorktreeTarget` (#... isolation host
+        modes): the ONLY per-mode difference is `_teardown_container`, which the
+        host-worktree mode overrides to a no-op (no docker), so both guards, the
+        post-condition verification, and the marker/state cleanup stay identical
+        across modes.
+
+        #575 (spec §3.D): the branch's runs are computed ONCE and name every
+        refusal. Preservation is two-phase — staged after the guards (a copy
+        failure raises here, with the workspace intact), committed only after
+        the removal is verified — and keyed on `state.repo_root`, so gc's
+        host-wide sweep files each record under the workspace's own repo."""
+        if not preserve and not force:
+            raise IsolationError(
+                "--no-preserve is only valid with --force — it discards fr's records "
+                "under docs/superpowers/, an explicit per-call decision."
+            )
+        runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None and not force:
-            raise IsolationError(open_pr)
+            raise IsolationError(_preserve.name_runs(runs, open_pr))
         if not force:
             hazard = self._reap_hazard(state)
             if hazard is not None:
-                raise ReapRefused(hazard)
+                raise ReapRefused(ReapHazard(hazard.kind, _preserve.name_runs(runs, hazard.detail)))
+        record = _preserve.stage(state, self.run, runs=runs) if preserve else None
         self._teardown_container(state)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
@@ -1269,8 +1304,26 @@ class LocalWorktreeDevcontainerTarget:
         # still-present worktree, so the workspace stays a valid isolation
         # workspace. When the worktree is gone the marker went with it — the
         # unlink is then an idempotent no-op.
+        preserved: Path | None = None
+        if record is not None:
+            try:
+                preserved = _preserve.commit(record, forced=force)
+            except Exception as e:
+                # The worktree is already gone: failing now would strand the
+                # state record of a workspace that no longer exists. Say where
+                # the staged copies are instead.
+                print(
+                    f"WARNING: could not record {state.branch}'s teardown ({e}) — its staged "
+                    f"records are at {record.root / 'staging'}",
+                    file=sys.stderr,
+                )
         self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
+        return TeardownReport(
+            branch=state.branch,
+            preserved_dir=preserved,
+            ended_runs=[(r.id, r.cursor) for r in runs if r.active],
+        )
 
     def _teardown_container(self, state: IsolationState) -> None:
         """Stop + rm the devcontainer and reclaim its image, verifying the
@@ -1444,10 +1497,13 @@ class LocalWorktreeDevcontainerTarget:
             # (down() keys git/gh off its repo_root) — substrate-neutral: gc
             # orchestrates Targets, it doesn't reach past them. The sibling
             # gets the NO-OP spawner so a reap never re-triggers a sweep.
-            type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
+            report = type(self)(state.repo_root, runner=self.run, gc_spawner=_noop_gc_spawn).down(
                 state, force=False
             )
-            return GcAction(wt, state.branch, verdict, "reaped")
+            ended = "; ".join(f"ended run {i} at step {c}" for i, c in report.ended_runs)
+            if ended and report.preserved_dir is not None:
+                ended += f" — record preserved at {report.preserved_dir}"
+            return GcAction(wt, state.branch, verdict, "reaped", ended)
         except ReapRefused as e:
             return GcAction(wt, state.branch, verdict, "skipped", e.hazard.detail)
         except Exception as e:
@@ -1838,6 +1894,17 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
         if track:
             self._set_upstream(branch)
+        # #575 (spec §3.D.4): only a worktree this call CREATED gets the
+        # branch's preserved records back — a reuse returned above. A restore
+        # problem never fails the `up`: the worktree is already correct.
+        try:
+            _preserve.restore(self.repo_root, branch, worktree, self.run)
+        except Exception as e:
+            print(
+                f"WARNING: could not restore {branch}'s preserved records ({e}) — they stay "
+                f"at {_preserve.preserved_dir(self.repo_root, branch)}",
+                file=sys.stderr,
+            )
 
     def _set_upstream(self, branch: str) -> None:
         """branch.<B>.{remote,merge} — what --track would have written. A

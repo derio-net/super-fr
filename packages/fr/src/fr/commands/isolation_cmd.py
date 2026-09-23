@@ -23,6 +23,7 @@ from fr.isolation.local import (
     _detached_gc_spawn,
     subprocess_runner,
 )
+from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -490,7 +491,15 @@ def down(
         help="Tear down even when a guard refuses (an open PR, or a reap "
         "hazard — uncommitted changes, or content not on origin). Removes "
         "the worktree and fr's record of it; the branch and any landed "
-        "commits stay in the repo, but uncommitted changes do not survive.",
+        "commits stay in the repo, but uncommitted changes do not survive — "
+        "except fr's own records under docs/superpowers/, which are preserved "
+        "and restored by the next `up`.",
+    ),
+    no_preserve: bool = typer.Option(
+        False,
+        "--no-preserve",
+        help="With --force: discard fr's records under docs/superpowers/ instead "
+        "of preserving them (a full disk, an unreadable tree). Refused without --force.",
     ),
     all_: bool = typer.Option(
         False,
@@ -547,6 +556,13 @@ def down(
     if dry_run and not all_:
         # A dry run that silently acted would be the worst possible failure.
         _fail(IsolationError("--dry-run is only supported with --all."))
+    if no_preserve and not force:
+        _fail(
+            IsolationError(
+                "--no-preserve is only valid with --force — it discards fr's records "
+                "under docs/superpowers/ that a teardown otherwise preserves."
+            )
+        )
     # The caller is the ambient session when --session is not given — the same
     # rule `up` binds with (debug journal 2026-09-21 C4). Without it, a session
     # that ran `up` then `down --all` was told its OWN workspace was another
@@ -559,7 +575,14 @@ def down(
     else:
         root = _resolve_repo(repo)
         if all_:
-            _down_all(root, force=force, session=session, dry_run=dry_run, yes=yes)
+            _down_all(
+                root,
+                force=force,
+                session=session,
+                dry_run=dry_run,
+                yes=yes,
+                preserve=not no_preserve,
+            )
             return
         state = _resolve_single(root, branch)
     others = [b.session_id for b in state.sessions if b.session_id != session]
@@ -569,10 +592,11 @@ def down(
             err=True,
         )
     try:
-        _target(root).down(state, force=force)
+        report = _target(root).down(state, force=force, preserve=not no_preserve)
     except IsolationError as err:
         _fail(err)
         return
+    _echo_ended_runs(report)
     # Only after a SUCCESSFUL teardown: a refused `down` (open PR, or a reap
     # hazard — #467 phase 3) keeps the workspace, so it keeps its bindings too.
     bound = [b.session_id for b in state.sessions] + ([session] if session else [])
@@ -600,6 +624,26 @@ def _down_refusal(target: Target, state: IsolationState, force: bool) -> str | N
     return probe(state) if probe is not None else None
 
 
+def _echo_ended_runs(report: TeardownReport) -> None:
+    """One stderr line per active run a teardown ended (spec §3.D.3)."""
+    for run_id, cursor in report.ended_runs:
+        if report.preserved_dir is not None:
+            tail = (
+                f"its record is preserved at {report.preserved_dir}; "
+                f"`fr isolation up --branch {report.branch}` restores it"
+            )
+        else:
+            tail = "its record was NOT preserved (--no-preserve)"
+        typer.echo(f"down: ended run {run_id} at step {cursor} here — {tail}", err=True)
+
+
+def _held_runs(target: Target, state: IsolationState) -> str:
+    """The active-run line(s) for the blast radius; '' for a target without
+    the probe (test doubles, external — which destroys nothing)."""
+    probe = getattr(target, "held_runs", None)
+    return probe(state) if probe is not None else ""
+
+
 def _sessions_text(state: IsolationState) -> str:
     return ", ".join(b.session_id for b in state.sessions) or "none"
 
@@ -610,6 +654,7 @@ def _down_all(
     session: str | None = None,
     dry_run: bool = False,
     yes: bool = False,
+    preserve: bool = True,
 ) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
 
@@ -635,11 +680,18 @@ def _down_all(
     header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
     typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
     for state, refusal in plan:
+        # #575: the run a workspace holds is named for EVERY workspace, even
+        # under --force (where no refusal carries it). A refusal already
+        # starts with that line, so the keep line shows the actual reason.
+        held = _held_runs(target, state)
         if refusal is None:
             typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
         else:
-            first = refusal.splitlines()[0] if refusal else ""
+            why = [ln for ln in refusal.splitlines() if ln not in held.splitlines()]
+            first = why[0] if why else ""
             typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
+        for line in held.splitlines():
+            typer.echo(f"      {line}")
     foreign = [
         (state.branch, [b.session_id for b in state.sessions if b.session_id != session])
         for state, refusal in plan
@@ -667,11 +719,12 @@ def _down_all(
             kept.append((state.branch, refusal))
             continue
         try:
-            target.down(state, force=force)
+            report = target.down(state, force=force, preserve=preserve)
             torn.append(state.branch)
         except IsolationError as err:
             kept.append((state.branch, str(err)))
             continue
+        _echo_ended_runs(report)
         _sessions.detach_all(state)  # kept workspaces keep their bindings
     cleared = clear_repo_sentinels(root)
     summary = f"isolation down --all: {len(torn)} torn down"

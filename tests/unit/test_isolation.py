@@ -1116,8 +1116,13 @@ def test_down_raises_when_worktree_remove_fails(
         stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
     )
     _orphan_worktree(repo, st, keep_dir=True)
-    with pytest.raises(IsolationError, match="worktree remove failed"):
+    # #575: --force alone now first tries to preserve fr's records, and a tree
+    # git cannot read refuses that (workspace intact); --no-preserve is the
+    # documented escape for exactly this unreadable tree.
+    with pytest.raises(IsolationError, match="--no-preserve"):
         target.down(st, force=True)
+    with pytest.raises(IsolationError, match="worktree remove failed"):
+        target.down(st, force=True, preserve=False)
     assert load_state(repo, "vk-iso/test") is not None, "state must survive a worktree failure"
 
 

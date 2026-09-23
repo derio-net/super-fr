@@ -269,3 +269,33 @@ Autouse fixtures in tests/unit/test_isolation_branch_classify.py and tests/integ
 ### p3-review · review · Phase 3 review (independent reviewer): 1 major, 6 minor, 5 nits (phase 3)
 
 Departure (a) --no-track + manual upstream accepted (reproduced git 2.53 refusal). p3-f1 (confirmed-but-unfetched cold start = #438 again) fixed by refusing; p3-f2..f7, f9..f12 fixed with tests; p3-f8 refuted (no repo-wide fetch refspec rewrite; limitation recorded). 563392ab; isolation suites re-run by orchestrator.
+
+<!-- fr:journal kind=discovery scope=plan id=cf0f06832b13 created=2026-09-23T02:53:59 phase=4 -->
+### cf0f06832b13 · discovery · P4.T3 refactor: one refusal-naming helper from the start (phase 4)
+
+Refactored, not no-refactor: `preserve.name_runs(runs, refusal)` is the single prefixing helper; `_down_worktree_tail` and `down_refusal` both call it (runs computed once per call via `branch_runs`). `held_runs(state)` (pure query on the target, `preserve.runs_line`) feeds the `down --all` blast radius so the line shows under --force too.
+
+<!-- fr:journal kind=discovery scope=plan id=5eda16e6d196 created=2026-09-23T02:54:00 phase=4 -->
+### 5eda16e6d196 · discovery · Deviation: stage copies into staging/, commit promotes into files/ (phase 4)
+
+Spec §3.D.2 says stage copies into `files/`. Built as `<preserved>/staging/` (cleared at each stage) promoted into `files/` by `commit` after the verified removal. Reason: on a SECOND teardown whose removal then fails, copying straight into `files/` would overwrite the prior snapshot while its tombstone still records the old base_blob, so a later restore could overwrite on a stale base. Staging keeps "files/ and teardown.json always agree". A failed down still leaves the copies (in staging/) and no new tombstone, as the spec requires.
+
+<!-- fr:journal kind=discovery scope=plan id=eb6c376495b8 created=2026-09-23T02:54:00 phase=4 -->
+### eb6c376495b8 · discovery · Decisions the spec leaves open in preserve (as built) (phase 4)
+
+(1) branch_runs: a mapping with NO `branch` key is schema-foreign -> kept as active+unreadable; a mapping whose branch differs is excluded; `steps` not a mapping of mappings on a matching branch -> unreadable. id = `run` field else file stem; cursor = `cursor` else `?`. Line: `holds run <id> at step <cursor>` (+ ` (unreadable run file <file>)`), one line per active run, as the first line(s) of the refusal. (2) restore is skipped once the tombstone carries `restored_at`; a new teardown drops it. (3) the `restored N` count is copied/overwritten files only; re-applied deletions are silent; each conflict gets its own stderr line naming the cache copy. (4) a deletion base_blob is not stored: restore derives it as `git rev-parse <tombstone head>:<path>`, keeping the §3.D schema. (5) a commit() failure AFTER the verified removal is a stderr WARNING naming staging/, never a raise (worktree already gone; raising would strand state). (6) `preserve=False` without `force` is refused at the target as well as the CLI. (7) `down --all` also accepts `--force --no-preserve`. (8) a gc reap GcAction detail carries `ended run <id> at step <c> — record preserved at <dir>`.
+
+<!-- fr:journal kind=discovery scope=plan id=71d6e81c74d0 created=2026-09-23T02:54:01 phase=4 -->
+### 71d6e81c74d0 · discovery · Forced down of a tree git cannot read now needs --no-preserve (phase 4)
+
+stage() runs `git status --porcelain=v1 -z -uall`; when it fails (dir exists, not a git checkout) the down aborts with the workspace intact and the message names `--force --no-preserve`, the spec escape for an unreadable tree. tests/unit/test_isolation.py::test_down_raises_when_worktree_remove_fails updated: force=True now refuses naming --no-preserve; force=True+preserve=False reaches the worktree-remove post-condition it targets.
+
+<!-- fr:journal kind=discovery scope=plan id=c1fec7563b6c created=2026-09-23T02:54:01 phase=4 -->
+### c1fec7563b6c · discovery · Phase 6 owes: fr-isolation SKILL.md --force sentence (phase 4)
+
+plugins/super-fr/skills/fr-isolation/SKILL.md (~line 110) still reads "uncommitted changes do not." The code sentence (_hazard_detail, down --force help) now adds "except fr's own records under docs/superpowers/, which are preserved and restored by the next up", and `--no-preserve` exists. Left for 06.yaml (skills/docs + both mirror syncs) per the plan split.
+
+<!-- fr:journal kind=discovery scope=plan id=83e667284b0b created=2026-09-23T03:00:44 phase=4 -->
+### 83e667284b0b · discovery · phase-4 acceptance row left not-implemented for phase 6 (phase 4)
+
+isolation-down-preserves-run stays not-implemented, matching phases 2/3 (8af43aee8ee9, 3f54c04d7371): 06.yaml flips rows after the live walks, and the #575 integration walk (spec Test Plan 9) is phase 5. Unit refs to cite then: tests/unit/test_isolation_preserve.py (discovery, refusal naming, stage/commit, restore, gc keying, CLI lines).

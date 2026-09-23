@@ -11,12 +11,15 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 from fr.artifacts.atomic import write_text_atomic
+
+if TYPE_CHECKING:  # preserve imports this module; the protocol only names it
+    from fr.isolation.preserve import TeardownReport
 
 
 def _home() -> Path:
@@ -521,4 +524,6 @@ class Target(Protocol):
 
     def status(self, state: IsolationState) -> dict[str, Any]: ...
 
-    def down(self, state: IsolationState, force: bool = False) -> None: ...
+    def down(
+        self, state: IsolationState, force: bool = False, preserve: bool = True
+    ) -> TeardownReport: ...
