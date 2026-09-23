@@ -179,3 +179,8 @@ tests/unit/test_isolation_cmd.py fake_run now keys live containers on the devcon
 ### p2-f13 · finding [fixed] · up restamped the marker's created_at while the state kept the old one (phase 2)
 
 _write_isolation_marker takes created_at; local and host-worktree up pass the carried state's created_at. Test: tests/unit/test_isolation_container_verbs.py::test_up_marker_created_at_matches_the_carried_record.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-23T02:00:53 phase=2 -->
+### p2-review · review · Phase 2 review (independent reviewer): 0 major, 6 minor, 7 nits (phase 2)
+
+All 13 (p2-f1..p2-f13) verified real and fixed with tests in 3387b79f; full suite 4579 passed / 88 skipped per executor, isolation suites re-run by orchestrator.
