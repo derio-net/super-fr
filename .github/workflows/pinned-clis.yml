@@ -1,0 +1,21 @@
+name: Pinned CLIs
+# Re-downloads every glab/tea asset `fr init scaffold` pins
+# (fr.isolation.scaffold.HOST_CLI_PINS) and fails if any sha256 no longer
+# matches or any asset is gone (gh#576).
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - packages/fr/src/fr/isolation/scaffold.py
+      - scripts/check-pinned-clis.py
+      - .github/workflows/pinned-clis.yml
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv run python scripts/check-pinned-clis.py
