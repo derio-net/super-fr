@@ -514,3 +514,8 @@ Fixed: `not path.exists()`, OSError branch kept. No dedicated test: the only beh
 ### e9c5d1f3c8ae · discovery · Integration walk leaves fr-goal's shipped manifest unexercised after a restore (phase 5)
 
 test_run_survives_teardown.py uses the custom `walk` shape, so no test yet advances the SHIPPED fr-goal manifest on a restored cursor (manifest resolution, gates, agent-step briefs after restore). Phase 6's live walk covers it.
+
+<!-- fr:journal kind=review scope=plan id=p5-review created=2026-09-23T04:47:04 phase=5 -->
+### p5-review · review · Phase 5 review (independent reviewer): 1 major, 3 minor, 5 nits — all fixed (phase 5)
+
+p5-f1 (crashed teardown answered 'no record') fixed with an unfinished-teardown answer; p5-f2..f4 truthfulness of preserved/committed/restore claims fixed (persisted git-computed 'changed' flag, restored-tombstone wording, branch/head reachability check); p5-f5..f9 nits fixed. Decisions a99bdd74ec5d, a685cf24b981 accepted; 7aae8ece5011 corrected by f2. 09a89293; suites re-run by orchestrator.
