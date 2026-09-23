@@ -61,6 +61,25 @@ from a broken untiered one — the proof rested on the agent *name* alone. Pick
 three models that differ from each other **and** from the session model, or the
 same ambiguity returns on camera.
 
+### Declare the session model, and probe everything before trusting it
+
+**Bind the session's own model as the `orchestrator` tier.** It is never
+dispatched to, but `fr run start` and `advance` warn when the session runs on
+something else — so #560's "no tier equals the session model" becomes a
+declared value fr checks, not a sentence in this runbook.
+
+**Probe every bound model live before recording.** On 2026-09-23 the entire
+gpt-5.6 generation had been retired from Copilot — each answered `The requested
+model is not supported` — while `opencode models` still listed all three, even
+after `--refresh`. The list is a catalogue, not a statement of what the provider
+will serve. And `fr models set` accepts any string and materialises it, so a
+retired model surfaces only when a phase is dispatched to it: the operator had a
+`standard` agent bound to a dead model with no signal from anything.
+
+A changed session model also resets the gate evidence. Attempt 1's question
+gates fired on the old model; whether a new one follows the same *advisory*
+prose is unmeasured, and has to be watched as closely as the first time.
+
 ## Identity inverts from bc88
 
 bc88's bug was the work identity landing on a public open-source commit. Here
