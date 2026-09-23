@@ -3567,7 +3567,12 @@ rows:
       clause alone does not change behaviour (gh#582). FIX: every phase-member brief
       now carries the harness''s rule as long_commands, and fr-goal copies it into the
       task prompt verbatim (tests/unit/test_run_cli.py, tests/unit/test_long_command_rule.py).
-      A live re-walk of the smoke is owed after release.'
+      RE-WALK (2026-09-23, fr 4.17.2, same smoke, executor fr-phase-executor-mechanical
+      on claude-haiku-4.5): the orchestrator copied the brief''s long_commands rule
+      into the task prompt verbatim, and ALL three of the executor''s full-suite calls,
+      the first included, passed timeout=600000; each ran 150 s with nothing killed
+      and no process left behind. PASS. Side observation: the review-phase reviewer=
+      id was mis-copied by one character (advisory on OpenCode, per #536''s stated limit).'
   - id: phase-executor-description-rules-out-second-worktree
     capability: fr-goal phase executor dispatch
     acceptance: The phase-executor description check fails a description that merely
