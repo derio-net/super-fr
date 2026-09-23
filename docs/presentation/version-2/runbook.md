@@ -201,6 +201,35 @@ as verified would be the bug.
 - `bash` is ungated by the edit gate.
 - The idle adapter's behaviour is unproven, as above.
 
+## Resetting between attempts
+
+Attempts repeat, so the reset is a script kept beside the recording assets,
+outside this repo (it names third-party identities). What it has to get right is
+not obvious, and each point below was learned by getting it wrong:
+
+- **Discard fr's records; do not preserve them.** Since #575, `fr isolation down
+  --force` preserves `docs/superpowers/` records, and **the next `up` restores
+  them.** A reset that preserves hands one attempt's cursor, spec and plan to the
+  next whenever the branch name repeats. Use `--force --no-preserve`.
+- **fr's state lives inside the clone's git directory** — `.git/fr/isolation`
+  and `.git/fr/preserved` — which `git clean -fdx` never reaches. Only a fresh
+  clone is pristine.
+- **Sweep containers by label, not by name** — `devcontainer.local_folder` under
+  this repo's worktree root — so nothing belonging to another repo is touched.
+  Remove the built image as well: a cached one skips the container build on
+  camera, and the build is a wait the talk means to show.
+- **Delete a secrets file only if it holds no assignments.** A placeholder can
+  go; a real secret must not.
+- **Archive evidence, numbered; never delete it.** Attempt 1 is the evidence
+  behind #574, #575 and #576.
+- **Strip `CLAUDE_*` in the launcher**, rather than asking the operator to
+  unset them. An IDE terminal exports several harmless ones; only
+  `CLAUDE_CODE_SESSION_ID` affects fr (#537). A check that flags them all sends
+  the operator on an errand; a launcher that strips them all makes it moot.
+- **Report what actually happened.** `fr isolation down --all` exits 0 with
+  "0 torn down"; a reset that prints "ok" there is the defect this repo keeps
+  filing issues about, reproduced in its own tooling.
+
 ## Assets never enter this repo
 
 Casts, renders and stills stay outside it. super-fr is a Skill cloned onto every
