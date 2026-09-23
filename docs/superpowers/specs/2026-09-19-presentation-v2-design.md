@@ -323,6 +323,38 @@ Checked before anything is torn down, because the evidence is perishable.
 5. **The merge request exists** on the operator's fork.
 6. **Annotation offsets were noted live**, not reconstructed afterwards.
 
+## Current state (2026-09-23) — presenting 2026-10-02
+
+**The whole spine exists as a clickable deck**, start to finish, in HyperFrames: title ·
+Hook · Skills · The run · Worth it? · Extensibility · **Quickstart** (replacing the
+hands-on beat, reusing version-1's "Run it / first goal in four moves / takeaways") ·
+Discussion. Unwritten slides render with a TODO or DRAFT badge, so the full flow can be
+rehearsed while it is being written. Of the run's five beats, Security is built from the
+recording; the other four are placeholders listing their planned stops.
+
+**All text lives in one YAML file** beside the deck, outside this repo — it quotes the
+recording, which shows third-party names. A builder computes the run's stills and
+fast-forwards from the cast and writes the composition; stills are cached by what
+determines them, so a text-only edit rebuilds in well under a second.
+
+**Decisions since the concept draft:**
+
+- **Brackets, not frames.** A block is marked by a `[` in its angle's colour in the gutter
+  beside the terminal; a block in two angles gets `[[`, one per colour. The angle names
+  are not repeated on the block — the chips in the header band light up instead.
+- **Palette is version-1's**: theme yellow `#f5b301` (Security), theme green `#35d07f`
+  (Quality), image blue `#58a6ff` (Continuity). v1 had no fourth accent, so Extensibility
+  takes Primer purple `#d2a8ff`, from the family v1's images already use. Red is reserved
+  for failure, never an angle.
+- **The counter reads "# times you were needed: N".**
+- **A fast-forward after an attention stop says so.** The 7.2 minutes after the fr-init
+  questions were the agent waiting for its operator; labelling them "nobody waits" would
+  contradict the talk's own through-line.
+
+**Open:** a re-recording on another repo to show a Test Plan is possible but not
+committed to, given the date. The pipeline keeps it cheap — a new cast and new anchor texts
+in the YAML regenerate every still, bracket and fast-forward.
+
 ## Narration and annotation concept (draft, 2026-09-23)
 
 A first HyperFrames spike played each beat as a single real-time clip — mostly
