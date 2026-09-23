@@ -25,9 +25,9 @@ re-`advance` on failure. `kind: agent` never executes itself: it prints a dispat
 <run-id> --step <id> --state done|failed [--emitted name=path ...]` (each `name` must be one
 the step `emits`; a `spec`/`plan` path must exist and is stored repo-relative). `gate:
 operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next `advance`). Another shape, same mechanics.
-**Operator updates** only at the Q&A gate, a block or failure, and delivery. Each update is the
-result in 1–3 lines, then the next step. Evidence goes to the journal and the PR body, not the
-chat. Blocked → stop, give the result, ask.
+**Operator updates** only at the Q&A gate, a block or failure, and delivery. Each update is the result in 1–3 lines, then the next step.
+Short means split, not packed: plain words, name what an id refers to, keep the "because". Evidence goes to the journal and the
+PR body, not the chat. Blocked → stop, give the result, ask.
 
 **`fr` refused with "artifacts … must be migrated"?** Expected — a pod, CI and an agent's Bash
 tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate

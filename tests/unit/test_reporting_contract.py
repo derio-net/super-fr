@@ -8,6 +8,11 @@ import pytest
 
 SKILLS = Path(__file__).resolve().parents[2] / "plugins/super-fr/skills"
 CONTRACT = "Each update is the result in 1–3 lines, then the next step."
+# Brevity alone invites compressed, jargon-dense updates, and the clarity
+# rules of the opt-in style never reach an operator who does not select it.
+CLARITY = (
+    'Short means split, not packed: plain words, name what an id refers to, keep the "because".'
+)
 # Each skill states the table form in its own sentence, so a bare token match
 # cannot pass on text that says the opposite (phase 8 review, M5).
 TABLES = {
@@ -24,6 +29,11 @@ def _skill(name: str) -> str:
 @pytest.mark.parametrize("name", ["fr-goal", "fr-debugging"])
 def test_the_reporting_contract_is_in_the_skill(name: str) -> None:
     assert CONTRACT in _skill(name)
+
+
+@pytest.mark.parametrize("name", ["fr-goal", "fr-debugging"])
+def test_short_updates_stay_plain(name: str) -> None:
+    assert CLARITY in _skill(name)
 
 
 def test_fr_goal_no_longer_asks_to_say_what_you_tried() -> None:

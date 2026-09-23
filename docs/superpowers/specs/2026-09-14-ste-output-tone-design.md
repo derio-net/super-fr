@@ -2,7 +2,7 @@
 
 Status: revised (fr-brainstorming, 2026-09-15). First version 2026-09-14.
 Branch: `feat/ste-output-tone`
-Operator decisions: §4 (d1–d10). d2 is superseded by d7.
+Operator decisions: §4 (d1–d11). d2 is superseded by d7.
 
 This spec is written in the style it specifies.
 
@@ -138,6 +138,9 @@ Asked 2026-09-15:
   plan's spec is checked by the same function.
 - **d10 — Measure and reports.** Record the baseline (§2). Re-measure after
   merge. fr-goal updates are the result in 1–3 lines, then the next step.
+- **d11 — Short, not obscure** (2026-09-23). A cap on length invites packed,
+  jargon-dense updates. The plain-word rules of §5.D reach only an operator who
+  selects the style, so the contract carries its own clarity sentence (§5.A).
 
 ## 5. Design
 
@@ -150,6 +153,11 @@ stop, say what you tried, ask." with:
 > Each update is the result in 1–3 lines, then the next step. Evidence goes to
 > the journal and the PR body, not the chat. Blocked → stop, give the result,
 > ask.
+
+Both skills also carry one clarity sentence (d11), after "then the next step":
+
+> Short means split, not packed: plain words, name what an id refers to, keep
+> the "because".
 
 The file stays at or below 120 lines. Reflow other paragraphs to make room;
 do not remove content.
@@ -260,21 +268,24 @@ cleanup is needed.
   - each strip rule in §5.C removes its text;
   - a filler word is found, and a quoted filler word is ignored;
   - a 25-word sentence passes, and a 26-word sentence warns.
-- `tests/unit/test_journal_add_prose_warning.py`: a long body prints a warning
-  and exits 0; a clean entry prints nothing; a duplicate id is refused (exit 2) and prints
-  nothing; output stops after five lines.
+- `tests/unit/test_journal_add_prose_warning.py`:
+  - a long body prints a warning and exits 0;
+  - a clean entry prints nothing;
+  - a duplicate id is refused (exit 2) and prints nothing;
+  - output stops after five lines.
 - `tests/unit/test_self_review_prose.py`: warnings for a pending step, for
   `_prose.md` and for the spec; a ticked step is exempt; prose warnings do not
   change the exit code.
 - `tests/unit/test_reporting_contract.py`: fr-goal and fr-debugging contain the
-  contract sentence; fr-brainstorming and fr-acceptance contain the table form;
+  contract sentence and the clarity sentence (d11); fr-brainstorming and
+  fr-acceptance contain the table form;
   fr-goal no longer contains "say what you tried".
 - The tripwire for `FILLER_WORDS` against the style text.
 
 ### G. Release
 
-Minor bump to **4.15.0**: new warnings, a new opt-in style, and changed skill
-behaviour. `main` reached 4.14.3 while this branch was open, so this branch
+Minor bump to **4.18.0**: new warnings, a new opt-in style, and changed skill
+behaviour. `main` reached 4.17.1 while this branch was open, so this branch
 takes the next minor.
 
 ## 6. Risks and mitigations
@@ -286,6 +297,10 @@ takes the next minor.
 - **Fewer updates hide progress.** The run file, the journal and
   `fr run status` still show every step. Blocks and failures still report at
   once.
+- **Short updates become obscure.** A length cap pushes toward noun stacks,
+  bare ids and dropped reasons. The clarity sentence (d11) asks for splitting,
+  not packing. No code can detect obscurity, so Test Plan step 3 is a human
+  read.
 - **fr-goal line cap.** The contract replaces one sentence and the text is
   reflowed. `test_skill_validation.py` enforces the cap.
 - **Measurement gaps.** The script misses nudges and may miss compacted text.
@@ -307,7 +322,9 @@ Post-merge (operator-driven):
    Then select your normal style again.
 3. Run `/fr-goal` on a small goal. Make sure that the agent speaks only at the
    Q&A, at a block or failure, and at delivery. Make sure that each update is
-   the result, then the next step. When it presents new acceptance rows, make
+   the result, then the next step. Make sure that it reads plainly: no
+   unexplained ids or jargon, and each decision keeps its reason. When it
+   presents new acceptance rows, make
    sure that they arrive as one table, not a paragraph for each row.
 4. Run Appendix A over that session. Compare words per tool call and the
    end-of-turn share with the baseline in §2.

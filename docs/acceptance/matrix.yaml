@@ -1883,15 +1883,17 @@ rows:
   - id: fr-goal-reports-result-and-next-step
     capability: output-tone
     acceptance: During fr-goal and fr-debugging runs, the operator gets updates only
-      at gates, blocks and delivery, each as the result then the next step.
+      at gates, blocks and delivery, each as the result then the next step, in
+      plain words that name what an id refers to and keep the reason.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
     levels:
       unit:
       - super-fr:tests/unit/test_reporting_contract.py
     status: skipped
-    notes: Unit pins the skill text in CI. Live behaviour and the re-measure are the
-      post-merge operator walk (spec §7, steps 3-4).
+    notes: Unit pins the skill text in CI, including the d11 clarity sentence. Live
+      behaviour, plainness and the re-measure are the post-merge operator walk (spec
+      §7, steps 3-4). No code detects obscurity, so step 3 is a human read.
   - id: acceptance-rows-presented-as-table
     capability: output-tone
     acceptance: New acceptance rows reach the operator as one short table, not a paragraph

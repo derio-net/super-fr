@@ -59,3 +59,8 @@ Record the 2026-09-15 baseline in the spec (11 super-fr sessions: 68% end-of-tur
 ### spec-review-rev2 · review · Revised spec review: 1 finding, fixed
 
 Checked the revised spec against d6-d10 and the codebase. Code claims hold: plan_cmd exits 1 only on error issues; Plan (fr/parser.py) has dir, repo_root, prose, prose_path() and spec_path; journal add writes through err_console-capable code; both sync scripts delete a mirror whose source is gone; fr-goal is at the 120-line cap; explainer 01-fr-goal.md:329 stays true with a defense column. R5-1: the spec had 5 sentences over 25 words, so it failed its own lint. Fixed by splitting them; a re-check finds 0.
+
+<!-- fr:journal kind=decision scope=spec id=d11-short-not-obscure created=2026-09-23T10:53:56 -->
+### d11-short-not-obscure · decision · d11: short means split, not packed
+
+Operator asked if less chattiness risks more obscure language. It does: the contract caps length, and the plain-word rules live only in the opt-in style. So fr-goal and fr-debugging now carry one clarity sentence, pinned by test_reporting_contract.py. Test Plan step 3 adds a human read for plainness, because no code detects obscurity.
