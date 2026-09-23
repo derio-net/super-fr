@@ -426,7 +426,7 @@ def _teardown_then_checkout(tmp_path: Path, mutate: Any = None) -> tuple[Path, R
     return repo, runner, wt, "docs/superpowers/runs/r1.yaml"
 
 
-def test_restore_absent_copied_base_blob_overwritten_deleted_reapplied(
+def test_restore_absent_copied_base_blob_overwritten_deletion_reported(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo, runner, wt, run_path = _teardown_then_checkout(tmp_path)
@@ -435,7 +435,8 @@ def test_restore_absent_copied_base_blob_overwritten_deleted_reapplied(
     assert result is not None
     assert "cursor: plan" in (wt / run_path).read_text(), "base_blob match overwritten"
     assert (wt / "docs/superpowers/new.md").read_text() == "new\n", "absent copied back"
-    assert not (wt / "docs/superpowers/gone.md").exists(), "deletion re-applied"
+    # p4-d1: restore never deletes — the recorded deletion is reported instead.
+    assert (wt / "docs/superpowers/gone.md").exists(), "restore never deletes"
     assert result.conflicts == []
     err = capsys.readouterr().err
     assert "isolation: restored 2 preserved file(s) (run r1 at plan)" in err
@@ -485,8 +486,10 @@ def test_restore_refuses_a_non_descendant_head(
     assert result is not None and result.restored == []
     assert not (wt / "docs/superpowers/runs/r1.yaml").exists()
     err = capsys.readouterr().err
-    assert str(_tomb_dir(repo)) in err and old_head[:12] in err and orphan[:12] in err
-    assert "restored_at" not in _tomb(repo)
+    (aside,) = _declined_dirs(repo)  # p4-n3: declined → moved aside
+    assert str(aside) in err and old_head[:12] in err and orphan[:12] in err
+    moved = json.loads((aside / "teardown.json").read_text())
+    assert "restored_at" not in moved and "declined_at" in moved
 
 
 def test_restore_without_a_tombstone_is_none(tmp_path: Path) -> None:
@@ -626,7 +629,7 @@ def test_p4_f1_down_after_a_restore_starts_a_fresh_tombstone(tmp_path: Path) -> 
     (sp / "J.md").write_text("j1\n")
     target.down(st, force=True)
     wt = target.up(None, BRANCH).worktree
-    assert not (wt / "docs/superpowers/F.md").exists()
+    assert (wt / "docs/superpowers/F.md").exists(), "p4-d1: restore never deletes"
     _git(wt, "checkout", "HEAD", "--", "docs/superpowers/F.md")
     _commit(wt, "keep F, commit J")
     (wt / "docs/superpowers/J.md").write_text("j0\n")
@@ -736,11 +739,14 @@ def test_p4_f5_cold_start_recreation_does_not_restore(
     wt = target.up(None, BRANCH).worktree
     assert not (wt / "docs/superpowers/runs/r1.yaml").exists()
     err = capsys.readouterr().err
-    assert str(_tomb_dir(repo)) in err and "cp -R" in err
-    assert "restored_at" not in _tomb(repo)
+    (aside,) = _declined_dirs(repo)  # p4-n3: declined → moved aside
+    assert str(aside) in err and "cp -R" in err
+    assert "restored_at" not in json.loads((aside / "teardown.json").read_text())
 
 
-def test_p4_f6_rename_source_is_not_resurrected(tmp_path: Path) -> None:
+def test_p4_f6_rename_source_is_recorded_and_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo, _, target, st = _upped(tmp_path)
     sp = st.worktree / "docs/superpowers"
     sp.mkdir(parents=True, exist_ok=True)
@@ -749,8 +755,11 @@ def test_p4_f6_rename_source_is_not_resurrected(tmp_path: Path) -> None:
     _git(st.worktree, "mv", "docs/superpowers/old.md", "docs/superpowers/new name\nx.md")
     target.down(st, force=True)
     assert "docs/superpowers/old.md" in _tomb(repo)["deleted"]
+    capsys.readouterr()
     wt = target.up(None, BRANCH).worktree
-    assert not (wt / "docs/superpowers/old.md").exists()
+    # p4-d1: the source half is reported, never re-deleted.
+    assert (wt / "docs/superpowers/old.md").exists()
+    assert "were not re-deleted: docs/superpowers/old.md" in capsys.readouterr().err
     assert (wt / "docs/superpowers/new name\nx.md").read_text() == "o\n"
 
 
@@ -893,3 +902,210 @@ def test_p4_f15_restore_rejects_escaping_paths(
     assert not (wt.parent / "escape.md").exists()
     assert (tmp_path / "abs.md").read_text() == "keep\n"
     assert "../escape.md" in capsys.readouterr().err
+
+
+# ------------------------------------------------ phase-4 re-review (p4-n1..n6)
+
+
+def _declined_dirs(repo: Path) -> list[Path]:
+    return sorted((repo / ".git/fr/preserved").glob(BRANCH.replace("/", "__") + "@*"))
+
+
+def test_p4_d1_restore_never_deletes_and_reports_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, runner, wt, _ = _teardown_then_checkout(tmp_path)
+    capsys.readouterr()
+    result = preserve.restore(repo, BRANCH, wt, runner)
+    assert result is not None
+    assert (wt / "docs/superpowers/gone.md").exists(), "restore never deletes"
+    assert _tomb(repo)["deleted"] == ["docs/superpowers/gone.md"]
+    assert (
+        "isolation: 1 path(s) deleted before teardown were not re-deleted: docs/superpowers/gone.md"
+    ) in capsys.readouterr().err
+
+
+def test_p4_n1_clean_tree_partial_remove_is_protected(tmp_path: Path) -> None:
+    repo, runner, target, st = _upped(tmp_path)
+    sp = st.worktree / "docs/superpowers/specs"
+    sp.mkdir(parents=True)
+    (sp / "p.md").write_text("p\n")
+    _commit(st.worktree, "spec")
+    runner.fail = ["git", "worktree", "remove"]
+    with pytest.raises(IsolationError):
+        target.down(st, force=True)
+    stage_json = json.loads((_tomb_dir(repo) / "staging/stage.json").read_text())
+    assert stage_json["removal_attempted"] is True, "a clean tree is protected too"
+    shutil.rmtree(st.worktree / "docs")  # the half of the tree the failed rm got to
+    runner.fail = None
+    target.down(st, force=True)
+    tomb_path = _tomb_dir(repo) / "teardown.json"
+    assert not tomb_path.exists() or _tomb(repo)["deleted"] == []
+    wt = target.up(None, BRANCH).worktree
+    assert (wt / "docs/superpowers/specs/p.md").exists()
+
+
+def test_p4_n2_intact_retry_drops_stale_staged_entries(tmp_path: Path) -> None:
+    repo, runner, target, st = _upped(tmp_path)
+    sp = st.worktree / "docs/superpowers"
+    sp.mkdir(parents=True, exist_ok=True)
+    (sp / "D.md").write_text("d\n")
+    (sp / "J.md").write_text("j0\n")
+    _commit(st.worktree, "base")
+    (sp / "D.md").unlink()
+    (sp / "J.md").write_text("j1\n")
+    _write_run(st.worktree, "r1")
+    runner.fail = ["git", "worktree", "remove"]
+    with pytest.raises(IsolationError):
+        target.down(st, force=True)
+    runner.fail = None
+    _git(st.worktree, "checkout", "HEAD", "--", "docs/superpowers/D.md", "docs/superpowers/J.md")
+    _commit(st.worktree, "cursor")
+    (sp / "K.md").write_text("k\n")
+
+    target.down(st, force=True)
+
+    tomb = _tomb(repo)
+    paths = {f["path"] for f in tomb["files"]}
+    assert "docs/superpowers/J.md" not in paths, "the tree's J wins over the stale copy"
+    assert "docs/superpowers/K.md" in paths
+    assert tomb["deleted"] == [], "D exists in the tree: the stale deletion is dropped"
+    wt = target.up(None, BRANCH).worktree
+    assert (wt / "docs/superpowers/D.md").exists()
+    assert (wt / "docs/superpowers/J.md").read_text() == "j0\n"
+
+
+def test_p4_n3_a_declined_tombstone_is_moved_aside(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, _, target, st = _upped(tmp_path)
+    _write_run(st.worktree, "old", cursor="implement")
+    target.down(st, force=True)
+    _git(repo, "branch", "-D", BRANCH)
+    capsys.readouterr()
+    st2 = target.up(None, BRANCH)  # cold start: declined
+    (aside,) = _declined_dirs(repo)
+    assert str(aside) in capsys.readouterr().err
+    assert "declined_at" in json.loads((aside / "teardown.json").read_text())
+    assert not (_tomb_dir(repo) / "teardown.json").exists()
+    (st2.worktree / "docs/superpowers").mkdir(parents=True, exist_ok=True)
+    (st2.worktree / "docs/superpowers/new.md").write_text("n\n")
+    _commit(st2.worktree, "new work")
+    (st2.worktree / "docs/superpowers/new.md").write_text("n2\n")
+    st2b = load_state(repo, BRANCH)
+    assert st2b is not None
+    target.down(st2b, force=True)
+    assert "old" not in {r["id"] for r in _tomb(repo)["runs"]}
+    st3 = target.up(None, BRANCH)
+    assert not (st3.worktree / "docs/superpowers/runs/old.yaml").exists()
+    assert (st3.worktree / "docs/superpowers/new.md").read_text() == "n2\n"
+
+
+def test_p4_n3_commit_starts_fresh_over_an_unrelated_prior_head(tmp_path: Path) -> None:
+    repo, runner, _, st = _upped(tmp_path)
+    tree = _git(repo, "rev-parse", "HEAD^{tree}")
+    orphan = _git(repo, "commit-tree", tree, "-m", "unrelated")
+    root = _tomb_dir(repo)
+    (root / "files/docs/superpowers").mkdir(parents=True)
+    (root / "files/docs/superpowers/stale.md").write_text("s\n")
+    (root / "teardown.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "branch": BRANCH,
+                "head": orphan,
+                "runs": [{"id": "stale", "cursor": "x", "active": True, "file": "f"}],
+                "files": [{"path": "docs/superpowers/stale.md", "base_blob": None}],
+                "deleted": [],
+            }
+        )
+    )
+    _write_run(st.worktree, "r1")
+    preserve.commit(preserve.stage(st, runner), forced=True)
+    tomb = _tomb(repo)
+    assert {r["id"] for r in tomb["runs"]} == {"r1"}
+    assert "docs/superpowers/stale.md" not in {f["path"] for f in tomb["files"]}
+
+
+def test_p4_n4_commit_keeps_the_prior_head_when_git_less(tmp_path: Path) -> None:
+    repo, runner, _, st = _upped(tmp_path)
+    _write_run(st.worktree, "r1")
+    preserve.commit(preserve.stage(st, runner), forced=True)
+    h1 = _tomb(repo)["head"]
+    assert h1
+    (st.worktree / "docs/superpowers/n.md").write_text("n\n")
+    record = preserve.stage(st, runner)
+    record.head = None  # what the git-less fallback yields
+    preserve.commit(record, forced=True)
+    assert _tomb(repo)["head"] == h1
+
+
+def test_p4_n4_null_head_restores_nothing_and_moves_aside(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, runner, wt, run_path = _teardown_then_checkout(tmp_path)
+    tomb = _tomb(repo)
+    tomb["head"] = None
+    (_tomb_dir(repo) / "teardown.json").write_text(json.dumps(tomb))
+    capsys.readouterr()
+    result = preserve.restore(repo, BRANCH, wt, runner)
+    assert result is not None and result.restored == []
+    assert "cursor: spec" in (wt / run_path).read_text()
+    (aside,) = _declined_dirs(repo)
+    assert str(aside) in capsys.readouterr().err
+
+
+def test_p4_n5_a_promoted_but_unrecorded_copy_survives_a_retry(tmp_path: Path) -> None:
+    repo, runner, _, st = _upped(tmp_path)
+    _write_run(st.worktree, "r1")
+    record = preserve.stage(st, runner)
+    preserve.mark_removal_attempted(record)
+    root = _tomb_dir(repo)
+    # the crash window: promoted by os.replace, tombstone never written
+    dst = root / "files/docs/superpowers/runs/r1.yaml"
+    dst.parent.mkdir(parents=True)
+    os.replace(root / "staging/files/docs/superpowers/runs/r1.yaml", dst)
+    _git(repo, "worktree", "remove", "--force", str(st.worktree))
+
+    preserve.commit(preserve.stage(st, runner), forced=True)
+
+    assert "docs/superpowers/runs/r1.yaml" in {f["path"] for f in _tomb(repo)["files"]}
+    assert "cursor: plan" in dst.read_text()
+
+
+def test_p4_n6_ignored_caches_and_oversize_are_skipped(tmp_path: Path) -> None:
+    repo, _, target, st = _upped(tmp_path)
+    (st.worktree / ".gitignore").write_text("docs/superpowers/scratch/\n")
+    _commit(st.worktree, "ignore scratch")
+    scratch = st.worktree / "docs/superpowers/scratch"
+    for cache in (".venv", "__pycache__", "node_modules"):
+        (scratch / cache).mkdir(parents=True)
+        (scratch / cache / "x").write_text("x\n")
+    (scratch / "keep.md").write_text("k\n")
+    with open(scratch / "huge.bin", "wb") as fh:
+        fh.truncate(51 * 1024 * 1024)
+    _write_run(st.worktree, "r1")
+
+    report = target.down(st, force=True)
+
+    paths = {f["path"] for f in _tomb(repo)["files"]}
+    assert "docs/superpowers/scratch/keep.md" in paths
+    assert not any(("/.venv/" in p or "__pycache__" in p or "node_modules" in p) for p in paths)
+    assert "docs/superpowers/scratch/huge.bin" not in paths
+    assert any("huge.bin" in s for s in report.skipped)
+    assert any(".venv" in s for s in report.skipped)
+
+
+def test_p4_n6_restore_refuses_a_destination_outside_the_worktree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, runner, wt, run_path = _teardown_then_checkout(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    runs = wt / "docs/superpowers/runs"
+    shutil.rmtree(runs)
+    runs.symlink_to(outside)
+    capsys.readouterr()
+    preserve.restore(repo, BRANCH, wt, runner)
+    assert list(outside.iterdir()) == []
+    assert "outside the worktree" in capsys.readouterr().err

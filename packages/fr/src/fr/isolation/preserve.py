@@ -55,6 +55,12 @@ TOMBSTONE = "teardown.json"
 STAGE_JSON = "stage.json"
 VERSION = 1
 NO_PRESERVE = "--no-preserve"
+# Never copied from inside an ignored match, and a cap on what ignored files
+# may add in total — an ignored tree is often a cache, not a record (p4-n6).
+CACHE_DIRS = frozenset(
+    {".venv", "__pycache__", "node_modules", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+)
+IGNORED_CAP_BYTES = 50 * 1024 * 1024
 
 
 # ------------------------------------------------------------------ records
@@ -154,7 +160,9 @@ class TeardownReport:
 @dataclass
 class RestoreResult:
     restored: list[str] = field(default_factory=list)
-    removed: list[str] = field(default_factory=list)
+    # Recorded deletions still present in the checkout: reported, never
+    # re-applied — restore never deletes (p4-d1).
+    not_redeleted: list[str] = field(default_factory=list)
     conflicts: list[str] = field(default_factory=list)
     refused: str | None = None  # the notice, when a guard declined to restore
 
@@ -345,32 +353,40 @@ class _Collector:
         self.unchanged: set[str] = set()
         self.deleted: list[str] = []
         self.skipped: list[str] = []
+        self.ignored_bytes = 0
 
-    def add(self, path: str, base_blob: str | None) -> None:
+    def add(self, path: str, base_blob: str | None, ignored: bool = False) -> None:
         p = self.worktree / path
         if p.is_symlink() or not p.is_file():
             if path not in self.skipped:
                 self.skipped.append(path)
             return
+        if ignored and path not in self.files:
+            size = p.stat().st_size
+            if self.ignored_bytes + size > IGNORED_CAP_BYTES:
+                self.skipped.append(f"{path} (over the 50 MB cap for ignored files)")
+                return
+            self.ignored_bytes += size
         self.files.setdefault(path, base_blob)
+        self.skipped = [s for s in self.skipped if not s.startswith(f"{path} (")]
 
-    def walk(self, rel_dir: str, blob: Callable[[str], str | None]) -> None:
-        """Every regular file under `rel_dir`, never following a link and
-        never descending into a nested repository (p4-f7)."""
+    def walk(self, rel_dir: str, blob: Callable[[str], str | None], ignored: bool = False) -> None:
+        """Every regular file under `rel_dir`, never following a link, never
+        descending into a nested repository (p4-f7) or a cache dir (p4-n6)."""
         top = self.worktree / rel_dir
-        if (top / ".git").exists():
+        if (top / ".git").exists() or top.name in CACHE_DIRS:
             self.skipped.append(rel_dir.rstrip("/") + "/")
             return
         for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
             here = Path(dirpath)
             for d in list(dirnames):
                 sub = here / d
-                if sub.is_symlink() or (sub / ".git").exists():
+                if sub.is_symlink() or (sub / ".git").exists() or d in CACHE_DIRS:
                     dirnames.remove(d)
                     self.skipped.append(_rel_posix(sub, self.worktree) + "/")
-            for name in filenames:
+            for name in sorted(filenames):
                 rel = _rel_posix(here / name, self.worktree)
-                self.add(rel, blob(rel))
+                self.add(rel, blob(rel), ignored=ignored)
 
 
 def _rel_posix(path: Path, worktree: Path) -> str:
@@ -385,7 +401,7 @@ def _collect(run: Runner, worktree: Path, runs: list[BranchRun]) -> _Collector:
         # base_blob null, so a restore only fills absent paths or reports a
         # conflict — never overwrites on a guess.
         if (worktree / RECORDS_PREFIX).is_dir():
-            c.walk(RECORDS_PREFIX, lambda _p: None)
+            c.walk(RECORDS_PREFIX, lambda _p: None, ignored=True)
         return c
     for xy, path, source in entries:
         if source is not None and source.startswith(RECORDS_PREFIX):
@@ -393,14 +409,15 @@ def _collect(run: Runner, worktree: Path, runs: list[BranchRun]) -> _Collector:
                 c.deleted.append(source)  # a rename's source half (p4-f6)
         if not path.startswith(RECORDS_PREFIX):
             continue
+        ignored = xy == "!!"
         if path.endswith("/"):
-            c.walk(path, lambda p: _blob(run, worktree, "HEAD", p))
+            c.walk(path, lambda p: _blob(run, worktree, "HEAD", p), ignored=ignored)
             continue
         target = worktree / path
         if "D" in xy and not target.exists() and not target.is_symlink():
             c.deleted.append(path)
             continue
-        c.add(path, _blob(run, worktree, "HEAD", path))
+        c.add(path, None if ignored else _blob(run, worktree, "HEAD", path), ignored=ignored)
     # Every run file of the branch, listed or not — a cursor a status did not
     # show (ignored, or committed and unchanged) is still the run (p4-f3).
     for r in runs:
@@ -424,9 +441,11 @@ def stage(
 
     A staging/ whose removal was ATTEMPTED is a previous down's only copy of
     what that removal may have destroyed (p4-f2): it is never wiped. This
-    stage merges into it — new copies win per path, earlier ones are kept,
-    the earlier deletions and runs stand, and no deletion is added that the
-    first attempt did not record (a half-removed tree reads as deletions)."""
+    stage merges into it: where the path still exists in the tree, the tree
+    wins; an earlier entry survives only for a path now absent or unreadable
+    (p4-n2), and no deletion is added that the first attempt did not record
+    (a half-removed tree reads as deletions). stage.json is written for every
+    preserving down, a clean tree included (p4-n1)."""
     root = preserved_dir(state.repo_root, state.branch)
     worktree = Path(state.worktree)
     if runs is None:
@@ -449,17 +468,19 @@ def stage(
         deleted=sorted(set(c.deleted)),
         skipped=c.skipped,
     )
+    current = set(c.files)
     if retry and prior is not None:
-        _merge_prior(record, prior)
+        _merge_prior(record, prior, current)
     if not retry and staging.exists():
         shutil.rmtree(staging)  # nothing was destroyed after it: safe to redo
-    if not record.worthwhile and not retry:
-        return record
+    # stage.json is written for EVERY preserving down — a clean tree too — so
+    # the removal is always marked and a retry never mistakes a half-removed
+    # tree for fresh work (p4-n1).
     try:
         for f in record.files:
+            if f.path not in current:
+                continue  # an earlier attempt's copy: kept, never re-copied (p4-n2)
             src = worktree / f.path
-            if not src.is_file() or src.is_symlink():
-                continue  # a prior attempt's copy, kept as is
             dst = staging / "files" / f.path
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst, follow_symlinks=False)
@@ -473,22 +494,49 @@ def stage(
     return record
 
 
-def _merge_prior(record: PreserveRecord, prior: dict[str, Any]) -> None:
-    ours = {f.path for f in record.files}
+def _gone(worktree: Path, path: str) -> bool:
+    """Absent or unreadable in the tree — the only case in which an earlier
+    attempt's entry still speaks for the path (p4-n2)."""
+    p = worktree / path
+    return p.is_symlink() or not p.is_file()
+
+
+def _merge_prior(record: PreserveRecord, prior: dict[str, Any], current: set[str]) -> None:
+    """Fold an earlier, removal-attempted stage into this one. Where the path
+    still exists in the tree the tree wins and the earlier entry is dropped —
+    a retry on an intact tree must not resurrect what the operator has since
+    settled (p4-n2). Each kept snapshot keeps its own base_blob.
+
+    A copy may sit in `files/` rather than staging/ when a commit crashed
+    between its promotions and the tombstone write: accepted when no tombstone
+    lists it (p4-n5)."""
+    worktree = record.worktree
+    listed = {
+        f.get("path")
+        for f in (_load_json(record.root / TOMBSTONE) or {}).get("files", [])
+        if isinstance(f, dict)
+    }
     for entry in prior.get("files", []):
-        if isinstance(entry, dict) and _safe(entry.get("path")) and entry["path"] not in ours:
-            if (record.staging / "files" / entry["path"]).is_file():
-                record.files.append(
-                    PreservedFile(
-                        entry["path"], entry.get("base_blob"), bool(entry.get("changed", True))
-                    )
-                )
+        if not isinstance(entry, dict) or not _safe(entry.get("path")):
+            continue
+        path = entry["path"]
+        if path in current or not _gone(worktree, path):
+            continue
+        staged = (record.staging / "files" / path).is_file()
+        promoted = (record.root / "files" / path).is_file() and path not in listed
+        if staged or promoted:
+            record.files.append(
+                PreservedFile(path, entry.get("base_blob"), bool(entry.get("changed", True)))
+            )
     record.files.sort(key=lambda f: f.path)
-    record.deleted = sorted(p for p in prior.get("deleted", []) if _safe(p))
+    # Deletions: the first attempt's only, and only while still absent.
+    record.deleted = sorted(
+        p for p in prior.get("deleted", []) if _safe(p) and not (worktree / p).exists()
+    )
     known = {r.id for r in record.runs}
     for data in prior.get("runs", []):
         r = BranchRun.from_json(data)
-        if r is not None and r.id not in known:
+        if r is not None and r.id not in known and (not r.file or _gone(worktree, r.file)):
             record.runs.append(r)
     if record.head is None and isinstance(prior.get("head"), str):
         record.head = prior["head"]
@@ -516,15 +564,25 @@ def _write_stage(record: PreserveRecord, removal_attempted: bool) -> None:
 
 def mark_removal_attempted(record: PreserveRecord) -> None:
     """Called just before `git worktree remove`: from here on staging/ may be
-    the only copy, so it is protected (never wiped, merged on retry)."""
-    if (record.staging / STAGE_JSON).is_file():
-        _write_stage(record, removal_attempted=True)
+    the only copy, so it is protected (never wiped, merged on retry). Creates
+    stage.json if the stage wrote none (p4-n1)."""
+    _write_stage(record, removal_attempted=True)
 
 
 # ------------------------------------------------------------------- commit
 
 
-def commit(record: PreserveRecord, forced: bool) -> Path | None:
+def _default_run(argv: list[str], cwd: Path | None = None, **_kw: Any) -> Any:
+    return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+
+
+def _is_ancestor(run: Runner, root: Path, older: str, newer: str) -> bool:
+    common = root.parent.parent.parent  # <common>/fr/preserved/<branch>
+    res = run(["git", f"--git-dir={common}", "merge-base", "--is-ancestor", older, newer])
+    return res.returncode == 0
+
+
+def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> Path | None:
     """Promote the staged copies (`os.replace`) and write the tombstone — call
     ONLY after the worktree removal is verified. The tombstone is written
     atomically BEFORE staging/ is removed (p4-f9).
@@ -538,9 +596,25 @@ def commit(record: PreserveRecord, forced: bool) -> Path | None:
     staging = record.staging
     if not record.worthwhile:
         shutil.rmtree(staging, ignore_errors=True)
+        try:
+            root.rmdir()  # only when empty
+        except OSError:
+            pass
         return None
     prior = _load_json(root / TOMBSTONE)
-    fresh = prior is None or bool(prior.get("restored_at"))
+    prior_head = prior.get("head") if prior else None
+    if record.head is None and isinstance(prior_head, str) and prior_head:
+        record.head = prior_head  # a git-less teardown keeps the lineage (p4-n4)
+    # Fresh unless the prior tombstone is unrestored AND of this lineage: a
+    # null head, or one this teardown's head does not descend from, is not
+    # something to merge into (p4-n3).
+    fresh = (
+        prior is None
+        or bool(prior.get("restored_at"))
+        or not (isinstance(prior_head, str) and prior_head)
+        or record.head is None
+        or not _is_ancestor(run, root, prior_head, record.head)
+    )
     old_files = root / "files.old"
     if fresh:
         prior = {}
@@ -607,10 +681,36 @@ def _short(sha: str | None) -> str:
     return (sha or "?")[:12]
 
 
-def _refuse(result: RestoreResult, notice: str) -> RestoreResult:
+def _decline(root: Path, tomb: dict[str, Any], result: RestoreResult, why: str) -> RestoreResult:
+    """Restore declined: move the whole preserved dir aside to
+    `<branch>@<UTC>` with `declined_at` stamped, so no later teardown of the
+    same name merges it back (p4-n3), and say where it went."""
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    aside = root.parent / f"{root.name}@{stamp}"
+    n = 1
+    while aside.exists():
+        n += 1
+        aside = root.parent / f"{root.name}@{stamp}-{n}"
+    try:
+        os.replace(root, aside)
+        tomb["declined_at"] = _now()
+        _write_json(aside / TOMBSTONE, tomb)
+    except OSError:
+        aside = root
+    notice = (
+        f"isolation: NOT restoring the preserved records — {why}. They were moved to "
+        f"{aside}; if they belong here: cp -R {aside / 'files'}/. <worktree>/"
+    )
     result.refused = notice
     print(notice, file=sys.stderr)
     return result
+
+
+def _inside(worktree: Path, dst: Path) -> bool:
+    try:
+        return dst.resolve().is_relative_to(worktree.resolve())
+    except OSError:
+        return False
 
 
 def restore(
@@ -636,35 +736,35 @@ def restore(
     if tomb is None or tomb.get("restored_at"):
         return None
     result = RestoreResult()
+    torn = tomb.get("torn_down_at", "?")
     if new_branch:
-        return _refuse(
+        return _decline(
+            root,
+            tomb,
             result,
-            f"isolation: {branch} was created as a NEW branch, so the records preserved "
-            f"from an earlier {branch} (torn down {tomb.get('torn_down_at', '?')}) were NOT "
-            f"restored. They stay at {root}; if they belong here: "
-            f"cp -R {root / 'files'}/. {worktree}/",
+            f"{branch} was created as a NEW branch, unrelated to the {branch} torn down {torn}",
         )
     old_head = tomb.get("head")
-    new_head = _head(run, worktree)
-    if isinstance(old_head, str) and old_head:
-        exists = run(["git", "cat-file", "-e", f"{old_head}^{{commit}}"], cwd=worktree)
-        if exists.returncode != 0:
-            return _refuse(
-                result,
-                f"isolation: NOT restoring the preserved records at {root} — the commit "
-                f"{branch} was torn down at ({_short(old_head)}) no longer exists in this "
-                "repo, so fr cannot tell whether they still apply. The record stays there; "
-                "copy what you need by hand.",
-            )
-        ancestor = run(["git", "merge-base", "--is-ancestor", old_head, "HEAD"], cwd=worktree)
-        if ancestor.returncode != 0:
-            return _refuse(
-                result,
-                f"isolation: NOT restoring the preserved records at {root} — {branch} is now "
-                f"{_short(new_head)}, which does not descend from {_short(old_head)} (the "
-                "commit it was torn down at), so the branch was re-created unrelated to it. "
-                "The record stays there; copy what you need by hand.",
-            )
+    if not (isinstance(old_head, str) and old_head):
+        return _decline(root, tomb, result, "the teardown recorded no commit (null head)")
+    exists = run(["git", "cat-file", "-e", f"{old_head}^{{commit}}"], cwd=worktree)
+    if exists.returncode != 0:
+        return _decline(
+            root,
+            tomb,
+            result,
+            f"the commit {branch} was torn down at ({_short(old_head)}) no longer exists "
+            "in this repo, so fr cannot tell whether they still apply",
+        )
+    ancestor = run(["git", "merge-base", "--is-ancestor", old_head, "HEAD"], cwd=worktree)
+    if ancestor.returncode != 0:
+        return _decline(
+            root,
+            tomb,
+            result,
+            f"{branch} is now {_short(_head(run, worktree))}, which does not descend from "
+            f"{_short(old_head)} (the commit it was torn down at)",
+        )
     for entry in tomb.get("files", []):
         path = entry.get("path") if isinstance(entry, dict) else None
         if not _safe(path):
@@ -677,6 +777,13 @@ def restore(
         src, dst = root / "files" / path, worktree / path
         if not src.is_file():
             continue
+        if not _inside(worktree, dst):
+            print(
+                f"isolation: refusing to restore {path}: it resolves outside the worktree "
+                f"(a symlink in the checkout); the preserved copy stays at {src}",
+                file=sys.stderr,
+            )
+            continue
         if not dst.exists() and not dst.is_symlink():
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -688,6 +795,8 @@ def restore(
             result.restored.append(path)
         else:
             result.conflicts.append(path)
+    # Restore NEVER deletes (p4-d1): a recorded deletion that is present in
+    # the checkout is reported, and the operator decides.
     for path in tomb.get("deleted", []):
         if not _safe(path):
             print(
@@ -695,16 +804,8 @@ def restore(
                 file=sys.stderr,
             )
             continue
-        dst = worktree / path
-        base = _blob(run, worktree, old_head, path) if isinstance(old_head, str) else None
-        if (
-            dst.is_file()
-            and not dst.is_symlink()
-            and base
-            and _hash_object(run, worktree, path) == base
-        ):
-            dst.unlink()
-            result.removed.append(path)
+        if (worktree / path).exists():
+            result.not_redeleted.append(path)
     tomb["restored_at"] = _now()
     _write_json(root / TOMBSTONE, tomb)
     active = [r for r in tomb.get("runs", []) if isinstance(r, dict) and r.get("active")]
@@ -713,6 +814,12 @@ def restore(
         print(
             f"isolation: restored {len(result.restored)} preserved file(s)"
             + (f" ({which})" if which else ""),
+            file=sys.stderr,
+        )
+    if result.not_redeleted:
+        print(
+            f"isolation: {len(result.not_redeleted)} path(s) deleted before teardown were "
+            f"not re-deleted: {', '.join(result.not_redeleted)}",
             file=sys.stderr,
         )
     for path in result.conflicts:

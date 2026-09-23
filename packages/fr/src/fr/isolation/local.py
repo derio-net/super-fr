@@ -1311,7 +1311,7 @@ class LocalWorktreeDevcontainerTarget:
         reason: str | None = None if preserve else _preserve.NO_PRESERVE
         if record is not None:
             try:
-                preserved = _preserve.commit(record, forced=force)
+                preserved = _preserve.commit(record, forced=force, run=self.run)
             except Exception as e:
                 # The worktree is already gone: failing now would strand the
                 # state record of a workspace that no longer exists. The

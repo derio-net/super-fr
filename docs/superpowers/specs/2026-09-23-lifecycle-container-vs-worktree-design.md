@@ -193,8 +193,11 @@ and the function never raises.
    when it reuses one), it calls `preserve.restore(repo_root, branch, worktree)`:
    - **Descendant guard.** If the tombstone's `head` is not an ancestor of the new
      worktree's HEAD, the branch was re-created unrelated to the teardown. Nothing
-     is restored. A stderr notice names the preserved directory and the two
-     commits, and the record stays in place.
+     is restored. The same happens when the head is null or no longer exists,
+     and when `up` cold-started a brand-new branch of the same name. The
+     preserved directory is moved aside to `<sanitized-branch>@<UTC>/` with
+     `declined_at` stamped, so no later teardown merges it back, and the stderr
+     notice names that path (and the commits, where there are any).
    - **Per file:**
      - absent → copy back.
      - present and hashing (`git hash-object`) to the recorded `base_blob` → the
@@ -204,8 +207,10 @@ and the function never raises.
      - present and identical to the snapshot → nothing to do.
      - anything else → a **conflict**: left in place, reported by path, and the
        copy stays in the cache.
-   - A `deleted` path that is present in the checkout at its `base_blob` is
-     removed again, so the tree matches its pre-teardown state.
+   - **Restore never deletes** (decision p4-d1). `deleted` stays in
+     `teardown.json` as information only. A recorded deletion that is present
+     in the checkout is left in place and reported on stderr:
+     `isolation: N path(s) deleted before teardown were not re-deleted: <paths>`.
    - The tombstone is stamped `restored_at`, and the stderr line reads
      `isolation: restored N preserved file(s) (run <id> at <cursor>)`.
    - `fr run start` reaches `up` through `ensure_run_workspace` case 3. After a
@@ -306,6 +311,10 @@ When the branch exists, fr fetches it with an explicit refspec, `git fetch origi
 - **Restoring the wrong past.** A reused branch name could get stale records
   back. The descendant guard handles it: an unrelated history restores nothing
   and says where the record is.
+- **A deletion comes back.** Restore never re-applies a deletion, so a file
+  deleted before the teardown reappears in the new checkout. Accepted over the
+  alternative: a restore that deletes can destroy content committed after the
+  record was taken. The stderr line names every such path.
 - **Growth of the preserved directory.** It holds one small directory per
   torn-down branch, and nothing reaps it yet. That is recorded as a known gap
   (a follow-up can age it out via gc), not left silent.

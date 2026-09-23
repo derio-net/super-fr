@@ -379,3 +379,43 @@ _safe() (TypeGuard) requires a relative path under docs/superpowers/ with no '..
 ### p4-f16 · finding [fixed] · Rename source-half assertion missing (phase 4)
 
 test_force_down_preserves_only_docs_superpowers now asserts deleted == [gone.md, old.md]; test_p4_f6 checks the source is not resurrected after up.
+
+<!-- fr:journal kind=decision scope=plan id=p4-d1 created=2026-09-23T03:36:57 -->
+### p4-d1 · decision · Restore never deletes; recorded deletions are reported, not re-applied
+
+Phase-4 re-review N1/N2 (and f1, f6 before them) all trace to restore re-applying recorded deletions: a stale or bogus deletion silently deletes a committed file. Orchestrator decision (safety over fidelity): restore only ever writes absent/base-blob-matching files; deletions stay in teardown.json and are listed on stderr as 'not re-deleted'. A resurrected file is visible and harmless; a vanished committed file is neither. Spec §3.D.4 updated accordingly.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n1 created=2026-09-23T03:41:47 phase=4 state=fixed -->
+### p4-n1 · finding [fixed] · A clean tree got no staging protection (phase 4)
+
+stage() writes stage.json for every preserving down (no files, no runs included) and mark_removal_attempted() creates it if missing, so the retry after a partial removal is always recognised and adds no deletions; commit() of an unworthy record removes staging and the empty dir. The n1 probe's outcome (committed spec re-deleted) is gone, also by p4-d1. tests/unit/test_isolation_preserve.py::test_p4_n1_clean_tree_partial_remove_is_protected.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n2 created=2026-09-23T03:41:48 phase=4 state=fixed -->
+### p4-n2 · finding [fixed] · A retry on an intact tree merged stale entries (phase 4)
+
+_merge_prior keeps an earlier file entry only when the path is absent or unreadable in the tree (the tree wins otherwise), keeps an earlier deletion only while the path is still absent, and an earlier run only when its file is gone; paths that came only from the earlier attempt are never re-copied; each snapshot keeps its own base_blob. tests/unit/test_isolation_preserve.py::test_p4_n2_intact_retry_drops_stale_staged_entries.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n3 created=2026-09-23T03:41:48 phase=4 state=fixed -->
+### p4-n3 · finding [fixed] · A declined tombstone was merged back by the next teardown (phase 4)
+
+restore() declines (cold start, non-descendant, vanished or null head) by moving the preserved dir to preserved/<branch>@<UTC> with declined_at, naming it in the notice; commit() starts fresh whenever the prior head is null or not an ancestor of record.head (git --git-dir=<common> merge-base --is-ancestor). tests/unit/test_isolation_preserve.py::test_p4_n3_a_declined_tombstone_is_moved_aside, ::test_p4_n3_commit_starts_fresh_over_an_unrelated_prior_head; test_restore_refuses_a_non_descendant_head and test_p4_f5 now read the moved-aside dir.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n4 created=2026-09-23T03:41:49 phase=4 state=fixed -->
+### p4-n4 · finding [fixed] · The git-less fallback nulled the head (phase 4)
+
+commit() keeps the prior head when record.head is None and then merges (the one reading of n3's 'either is null' that honours n4: a null PRIOR head starts fresh, a null record head inherits); restore() treats a null head like a vanished one (declined, moved aside). tests/unit/test_isolation_preserve.py::test_p4_n4_commit_keeps_the_prior_head_when_git_less, ::test_p4_n4_null_head_restores_nothing_and_moves_aside.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n5 created=2026-09-23T03:41:49 phase=4 state=fixed -->
+### p4-n5 · finding [fixed] · A crash between promotion and tombstone write lost copies (phase 4)
+
+_merge_prior also accepts a copy at <root>/files/<path> that no tombstone lists (and commit leaves it in place). tests/unit/test_isolation_preserve.py::test_p4_n5_a_promoted_but_unrecorded_copy_survives_a_retry.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n6 created=2026-09-23T03:41:50 phase=4 state=fixed -->
+### p4-n6 · finding [fixed] · Ignored caches, unbounded ignored copies, symlinked restore destinations (phase 4)
+
+walk() skips .venv, __pycache__, node_modules, .pytest_cache, .mypy_cache, .ruff_cache (and a match that IS one); ignored files are capped at 50 MB in total, the rest listed in skipped with the reason (run files bypass the cap); restore refuses a destination whose resolved path is not under worktree.resolve(). tests/unit/test_isolation_preserve.py::test_p4_n6_ignored_caches_and_oversize_are_skipped, ::test_p4_n6_restore_refuses_a_destination_outside_the_worktree.
+
+<!-- fr:journal kind=discovery scope=plan id=a6146db3145b created=2026-09-23T03:41:50 phase=4 -->
+### a6146db3145b · discovery · p4-d1 applied: restore never deletes (phase 4)
+
+Deletion re-application and its restore-time base-blob lookup removed; recorded deletions still present in the checkout are reported as 'isolation: N path(s) deleted before teardown were not re-deleted: <paths>' (RestoreResult.not_redeleted). Tests updated: test_restore_absent_copied_base_blob_overwritten_deletion_reported, test_p4_f1 (F survives the first up), test_p4_f6_rename_source_is_recorded_and_reported; new test_p4_d1_restore_never_deletes_and_reports_it. Spec §3.D.4 deletion bullet rewritten, the decline bullet widened (null/vanished head, cold start, moved aside), and a §4 Risks line added.
