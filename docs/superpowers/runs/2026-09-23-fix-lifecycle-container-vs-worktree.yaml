@@ -3,7 +3,7 @@ run: 2026-09-23-fix-lifecycle-container-vs-worktree
 workflow: fr-goal@1
 branch: fix/lifecycle-container-vs-worktree
 started: '2026-09-22T22:49:31+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -333,6 +333,17 @@ steps:
           reviewer: a97fa1b115958601e
           findings: p6-f1,p6-f2,p6-f3,p6-f4,p6-f5,p6-f6,p6-f7,p6-f8,p6-f9,p6-f10,p6-f11,p6-f12
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-23T03:39:48+00:00'
+    exit: 0
+    stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-23T03:49:01+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-23T03:49:01+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
