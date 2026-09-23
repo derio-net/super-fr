@@ -90,12 +90,20 @@ KNOWN_TOOLS: dict[str, ToolSpec] = {
 
 
 def parse_tool(arg: str) -> tuple[str, str | None]:
-    """`<tool>[@<version>]` → (name, version or None). An empty name or an
-    empty version after `@` is refused."""
+    """`<tool>[@<version>]` → (name, version or None). An empty name, an empty
+    version, whitespace in the version, or a second `@` is refused."""
     name, sep, version = arg.partition("@")
-    if not name or (sep and not version):
+    if not name or (sep and not version) or "@" in version or any(c.isspace() for c in version):
         raise IsolationError(f"--tool {arg!r} is malformed — expected <tool> or <tool>@<version>.")
     return name, (version if sep else None)
+
+
+def _untagged(ref: str) -> str:
+    """A feature ref without its `:tag` / `@digest` (only in the last path
+    segment, so a registry `host:port` survives)."""
+    head, slash, last = ref.rpartition("/")
+    last = last.partition("@")[0].partition(":")[0]
+    return f"{head}{slash}{last}"
 
 
 def _set_option(
@@ -119,8 +127,10 @@ def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, 
     parsed = [(arg, *parse_tool(arg)) for arg in tools]
     unknown = [name for _, name, _ in parsed if name not in KNOWN_TOOLS]
     if unknown:
+        hints = [f"did you mean {u.lower()!r}?" for u in unknown if u.lower() in KNOWN_TOOLS]
+        hint = f" ({'; '.join(hints)})" if hints else ""
         raise IsolationError(
-            f"unknown --tool {', '.join(repr(u) for u in unknown)} — known tools: "
+            f"unknown --tool {', '.join(repr(u) for u in unknown)}{hint} — known tools: "
             f"{', '.join(sorted(KNOWN_TOOLS))}. For anything else pass the devcontainer "
             "feature ref directly with --feature <ref>."
         )
@@ -137,6 +147,18 @@ def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, 
             raise IsolationError(
                 f"--feature {ref!r} is not a feature ref — it must be non-empty and "
                 "contain no whitespace."
+            )
+        # A known tool's feature at ANOTHER tag (or untagged) would add a second
+        # copy of the same feature; the identical ref merges as before.
+        shadowed = sorted(
+            name
+            for name, spec in KNOWN_TOOLS.items()
+            if ref != spec.feature and _untagged(ref) == _untagged(spec.feature)
+        )
+        if shadowed:
+            raise IsolationError(
+                f"--feature {ref!r} is a known tool's feature at another tag — use "
+                f"{' or '.join(f'--tool {n}' for n in shadowed)} (with @<version> to pin it)."
             )
         resolved.setdefault(ref, {})
     return resolved

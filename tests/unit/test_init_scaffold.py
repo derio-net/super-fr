@@ -348,6 +348,26 @@ def test_an_unknown_tool_is_refused_and_writes_nothing(repo: Path, tmp_path: Pat
     assert _log_subjects(repo) == before
 
 
+def test_an_unknown_tool_is_refused_before_the_exists_check(repo: Path) -> None:
+    """p3r-f4: tool resolution runs FIRST — rerunning over an existing profile
+    with a bad --tool reports the tool, not "--force", and touches nothing."""
+    assert scaffold(repo).exit_code == 0
+    profiles = repo / ".devcontainer" / "fr-profiles.yaml"
+    before = profiles.read_bytes()
+    res = scaffold(repo, "--tool", "nosuchtool")
+    assert res.exit_code == 2, res.output
+    assert "nosuchtool" in res.stderr
+    assert "--force" not in res.stderr
+    assert profiles.read_bytes() == before
+
+
+def test_tool_help_lists_the_known_tools() -> None:
+    """p3r-f6: the known set is discoverable from --help, not only from an error."""
+    res = runner.invoke(app, ["init", "scaffold", "--help"], env={"COLUMNS": "400"})
+    assert res.exit_code == 0, res.output
+    assert ", ".join(sorted(KNOWN_TOOLS)) in " ".join(res.output.split())
+
+
 @pytest.mark.parametrize("reserved", ["host", "external"])
 def test_a_reserved_profile_name_is_refused(repo: Path, reserved: str) -> None:
     """spec §3.C: legacy states with no `target` infer the mode from `profile`

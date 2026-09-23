@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from fr.isolation.migrate import SECRETS_BLOCK, migrate_repo
-from fr.isolation.scaffold import scaffold_profile
+from fr.isolation.scaffold import KNOWN_TOOLS, scaffold_profile
 from fr.isolation.types import IsolationError
 
 init_app = typer.Typer(
@@ -24,8 +24,8 @@ def scaffold(
     purpose: str = typer.Option(..., help="One-line purpose, recorded in fr-profiles.yaml."),
     tool: list[str] = typer.Option(
         [],
-        help="Tool to include (repeatable; <tool>[@<version>]; unknown tools are "
-        "refused — see --feature).",
+        help="Tool to include (repeatable; <tool>[@<version>]; known tools: "
+        f"{', '.join(sorted(KNOWN_TOOLS))}; unknown tools are refused — see --feature).",
     ),
     feature: list[str] = typer.Option(
         [],

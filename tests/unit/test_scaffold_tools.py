@@ -92,12 +92,51 @@ def test_a_feature_that_is_empty_or_has_whitespace_is_refused(bad: str) -> None:
         resolve_tools([], [bad])
 
 
-@pytest.mark.parametrize("bad", ["java@", "@17", ""])
-def test_an_empty_name_or_version_is_refused(bad: str) -> None:
-    with pytest.raises(IsolationError):
+@pytest.mark.parametrize(
+    "bad", ["java@", "@17", "", "java@ 17", "java@17 ", "java@1\t7", "java@17@x", "java@@17"]
+)
+def test_a_malformed_tool_arg_is_refused_naming_it(bad: str) -> None:
+    """Empty name/version, whitespace in the version, or a second `@` (p3r-f1/f5)."""
+    with pytest.raises(IsolationError) as exc:
         resolve_tools([bad], [])
+    assert repr(bad) in str(exc.value)
 
 
 def test_parse_tool() -> None:
     assert parse_tool("java") == ("java", None)
     assert parse_tool("maven@3.9.6") == ("maven", "3.9.6")
+    for bad in ("java@ 17", "java@17 ", "java@17@x", "java@@17"):
+        with pytest.raises(IsolationError, match="malformed"):
+            parse_tool(bad)
+
+
+def test_an_unknown_tool_differing_only_in_case_gets_a_hint() -> None:
+    with pytest.raises(IsolationError) as exc:
+        resolve_tools(["Java"], [])
+    assert "did you mean 'java'?" in str(exc.value)
+
+
+def test_a_truly_unknown_tool_gets_no_hint() -> None:
+    with pytest.raises(IsolationError) as exc:
+        resolve_tools(["nosuchtool"], [])
+    assert "did you mean" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("tools", "feature"),
+    [
+        (["java"], "ghcr.io/devcontainers/features/java:2"),
+        ([], "ghcr.io/devcontainers/features/java:2"),
+        (["java"], "ghcr.io/devcontainers/features/java"),
+        ([], "ghcr.io/devcontainers/features/node:2"),
+    ],
+)
+def test_a_feature_shadowing_a_known_tool_at_another_tag_is_refused(
+    tools: list[str], feature: str
+) -> None:
+    """p3r-f2: a known tool's ref at another tag would yield a SECOND copy of the
+    same feature; point at --tool instead."""
+    with pytest.raises(IsolationError) as exc:
+        resolve_tools(tools, [feature])
+    msg = str(exc.value)
+    assert feature in msg and "--tool" in msg
