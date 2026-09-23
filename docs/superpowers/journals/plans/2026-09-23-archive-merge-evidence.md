@@ -44,3 +44,18 @@ Spec 3.B lists archivable, merged_manual_open, complete_unmerged, in_progress, d
 ### 0fc64d146f12 · discovery · fr-progress SKILL.md sits at the 120-line cap (phase 2)
 
 test_skill_validation::test_under_120_lines caps SKILL.md at 120 lines and fr-progress was already at 120, so describing the four buckets forced tightening unrelated prose in the same file (how-it-works, audit-drift, spec-rollup, acceptance-debt, v1-archive paragraphs; meaning kept). The archive-gate paragraph was left as-is for phase 3 to update when archive_gate changes.
+
+<!-- fr:journal kind=finding scope=plan id=f-p2-skill-trim created=2026-09-23T17:35:27 phase=2 state=open -->
+### f-p2-skill-trim · finding [open] · fr-progress trim dropped two instructions: single-plan status is safe to allowlist; archive moves are staged, the operator commits (phase 2)
+
+Orchestrator's own diff of 24b48bf1..9bf54ada (the reviewer had no git access for the before/after). Other trims preserved meaning.
+
+<!-- fr:journal kind=finding scope=plan id=f-p2-skill-trim-resolved created=2026-09-23T17:35:27 state=fixed resolves=f-p2-skill-trim -->
+### f-p2-skill-trim-resolved · finding [fixed] · resolves f-p2-skill-trim: fr-progress trim dropped two instructions: single-plan status is safe to allowlist; archive moves are staged, the operator commits
+
+Restored both facts in plugins/super-fr/skills/fr-progress/SKILL.md (allowlist note now says it may git fetch remote-tracking refs); folded the apply empty-diff sentence into a code comment to stay at 119/120 lines; mirrors regenerated; skill + mirror tripwires green (134 passed).
+
+<!-- fr:journal kind=review scope=plan id=rev-p2 created=2026-09-23T17:35:28 phase=2 -->
+### rev-p2 · review · Phase 2 review (dispatched feature-dev:code-reviewer + orchestrator skill diff): 1 minor finding, fixed (phase 2)
+
+Reviewer: no findings >=80 - buckets exhaustive/disjoint, f-p2-local-phases fix real and tested, wording matches spec, --all never printed, archivable only narrows, fetch only on sweep path, tests real. Sub-threshold note (unparseable plan listed in in_progress and in the unparsed note) is intentional per _Sweep docstring. Reviewer could not diff SKILL.md; orchestrator diffed it and filed f-p2-skill-trim (fixed).

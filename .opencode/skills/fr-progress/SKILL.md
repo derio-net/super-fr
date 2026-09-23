@@ -62,10 +62,8 @@ projection (Issue body / labels / state, spec row) is computed on demand, and
 fr apply <plan-dir>             # default: dry-run; prints what would change
 fr apply <plan-dir> --yes       # apply the changes
 fr apply --all                  # walk every plan in docs/superpowers/plans/
-fr apply <plan-dir> --format json   # machine-readable
+fr apply <plan-dir> --format json   # machine-readable; empty diff = in sync
 ```
-
-An empty diff means in sync; otherwise it lists the label / state / body changes.
 
 ## Spec rollup
 
@@ -81,7 +79,8 @@ degrade to `Unreachable`. `.github/workflows/fr-spec-status.yml` posts this
 as a PR comment when a PR touching plans merges.
 
 `fr status <plan-dir>` is the read-only single-plan report: per-phase table,
-completion-guard refusals, drift warnings, archive nudge. Never mutates.
+completion-guard refusals, drift warnings, archive nudge. Safe to allowlist:
+it never mutates the repo or gh (it may `git fetch` remote-tracking refs).
 
 ## Acceptance debt
 
@@ -112,8 +111,8 @@ fr archive <plan-dir>     # gate-checked git mv to docs/superpowers/implemented/
 
 The gate requires every phase complete (gh evidence, or fully-ticked
 never-dispatched); `--force` overrides for a single plan. The owning spec
-moves to `implemented/specs/` once all its rows resolve as implemented;
-archiving never fires without intent (the v1 footgun).
+moves to `implemented/specs/` once all its rows resolve as implemented. The
+moves are staged `git mv`s: you commit them. Never fires without intent.
 
 Rows reported Unreachable/Missing mean stale refs — normalize with
 `fr repair --yes` (see preflight above). Legacy `archived-plans/` layouts
