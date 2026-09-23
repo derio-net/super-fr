@@ -715,7 +715,9 @@ def test_p4_f4_failed_commit_keeps_staging_says_why_and_is_found_again(
 
     monkeypatch.setattr(preserve, "commit", real)
     wt = target.up(None, BRANCH).worktree
-    assert str(staging) in capsys.readouterr().err, "up points at the orphaned staging"
+    err = capsys.readouterr().err
+    assert str(staging) in err, "up points at the orphaned staging"
+    assert "merges them" in err, "not declined: the next down does merge it (p4-n8)"
     (wt / "docs/superpowers").mkdir(parents=True, exist_ok=True)
     (wt / "docs/superpowers/x.md").write_text("x\n")
     st2 = load_state(repo, BRANCH)
@@ -1109,3 +1111,114 @@ def test_p4_n6_restore_refuses_a_destination_outside_the_worktree(
     preserve.restore(repo, BRANCH, wt, runner)
     assert list(outside.iterdir()) == []
     assert "outside the worktree" in capsys.readouterr().err
+
+
+# ------------------------------------------------ phase-4 final (p4-n7..n9)
+
+
+def _aside_dirs(repo: Path) -> list[Path]:
+    return sorted((repo / ".git/fr/preserved").glob(BRANCH.replace("/", "__") + "@*"))
+
+
+def _lineage_break(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Any, Any]:
+    """The n7 probe up to the second teardown: a restore that failed (so the
+    tombstone stays UNRESTORED), then a rewritten head (amend)."""
+    repo, _, target, st = _upped(tmp_path)
+    _write_run(st.worktree, "r1")
+    target.down(st, force=True)
+    real = preserve.restore
+
+    def eio(*_a: Any, **_k: Any) -> Any:
+        raise OSError(5, "EIO")
+
+    monkeypatch.setattr(preserve, "restore", eio)
+    st2 = target.up(None, BRANCH)
+    monkeypatch.setattr(preserve, "restore", real)
+    assert "restored_at" not in _tomb(repo)
+    _git(st2.worktree, "commit", "--allow-empty", "--amend", "-qm", "rewritten")
+    (st2.worktree / "docs/superpowers").mkdir(parents=True, exist_ok=True)
+    (st2.worktree / "docs/superpowers/other.md").write_text("o\n")
+    st2b = load_state(repo, BRANCH)
+    return repo, target, st2b
+
+
+def test_p4_n7_fresh_commit_over_an_unrestored_tombstone_sets_it_aside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, target, st = _lineage_break(tmp_path, monkeypatch)
+    target.down(st, force=True)
+
+    (aside,) = _aside_dirs(repo)
+    moved = json.loads((aside / "teardown.json").read_text())
+    assert moved["set_aside_reason"] == "lineage-break" and "set_aside_at" in moved
+    assert "cursor: plan" in (aside / "files/docs/superpowers/runs/r1.yaml").read_text()
+    tomb = _tomb(repo)
+    assert {f["path"] for f in tomb["files"]} == {"docs/superpowers/other.md"}
+
+
+def test_p4_n7_no_rmtree_touches_an_unrestored_record_on_the_fresh_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, target, st = _lineage_break(tmp_path, monkeypatch)
+    root = _tomb_dir(repo)
+    removed: list[Path] = []
+    real_rmtree = preserve.shutil.rmtree
+    real_unlink = Path.unlink
+
+    def rmtree(path: Any, *a: Any, **k: Any) -> None:
+        removed.append(Path(path))
+        real_rmtree(path, *a, **k)
+
+    def unlink(self: Path, *a: Any, **k: Any) -> None:
+        removed.append(self)
+        real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(preserve.shutil, "rmtree", rmtree)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    target.down(st, force=True)
+    monkeypatch.setattr(Path, "unlink", real_unlink)
+    touched = [p for p in removed if root in p.parents or p == root]
+    assert all(p == root / "staging" for p in touched), touched
+
+
+def test_p4_n8_the_unfinished_teardown_notice_is_true_after_a_decline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, _, target, st = _upped(tmp_path)
+    _write_run(st.worktree, "r1")
+
+    def enospc(*_a: Any, **_k: Any) -> Any:
+        raise OSError(28, "No space left on device")
+
+    real = preserve.commit
+    monkeypatch.setattr(preserve, "commit", enospc)
+    target.down(st, force=True)  # unpromoted, removal-attempted staging/
+    monkeypatch.setattr(preserve, "commit", real)
+    # an earlier tombstone for the same branch, then a cold-start re-creation
+    root = _tomb_dir(repo)
+    (root / "teardown.json").write_text(
+        json.dumps({"version": 1, "branch": BRANCH, "head": None, "files": [], "runs": []})
+    )
+    _git(repo, "branch", "-D", BRANCH)
+    capsys.readouterr()
+    target.up(None, BRANCH)
+    err = capsys.readouterr().err
+    (aside,) = _aside_dirs(repo)
+    assert f"{aside / 'staging' / 'files'}" in err
+    assert f"{root / 'staging'}" not in err.replace(str(aside), "")
+    assert "merges them" not in err
+
+
+def test_p4_n9_the_decline_hint_names_the_real_worktree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, _, target, st = _upped(tmp_path)
+    _write_run(st.worktree, "r1")
+    target.down(st, force=True)
+    _git(repo, "branch", "-D", BRANCH)
+    capsys.readouterr()
+    wt = target.up(None, BRANCH).worktree
+    err = capsys.readouterr().err
+    (aside,) = _aside_dirs(repo)
+    assert f"cp -R {aside / 'files'}/. {wt}/" in err
+    assert "<worktree>" not in err

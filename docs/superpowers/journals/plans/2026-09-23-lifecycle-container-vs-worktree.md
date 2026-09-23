@@ -419,3 +419,18 @@ walk() skips .venv, __pycache__, node_modules, .pytest_cache, .mypy_cache, .ruff
 ### a6146db3145b · discovery · p4-d1 applied: restore never deletes (phase 4)
 
 Deletion re-application and its restore-time base-blob lookup removed; recorded deletions still present in the checkout are reported as 'isolation: N path(s) deleted before teardown were not re-deleted: <paths>' (RestoreResult.not_redeleted). Tests updated: test_restore_absent_copied_base_blob_overwritten_deletion_reported, test_p4_f1 (F survives the first up), test_p4_f6_rename_source_is_recorded_and_reported; new test_p4_d1_restore_never_deletes_and_reports_it. Spec §3.D.4 deletion bullet rewritten, the decline bullet widened (null/vanished head, cold start, moved aside), and a §4 Risks line added.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n7 created=2026-09-23T03:57:05 phase=4 state=fixed -->
+### p4-n7 · finding [fixed] · A fresh commit over an unrestored tombstone deleted the only preserved copy (phase 4)
+
+Invariant stated in preserve.py's module docstring and at each site: nothing deletes preserved data (a tombstone and the files/ it lists) unless that tombstone carries restored_at. commit() now sets an unrestored prior aside via _set_aside (<branch>@<UTC>, set_aside_reason lineage-break | null-prior-head, staging/ kept live) instead of files -> files.old -> rmtree; files.old is only used and removed for a restored prior, and an existing files.old (interrupted commit) is no longer rmtree'd; a later deletion no longer unlinks a preserved copy (the copy stays listed, deletion recorded only for unpreserved paths). _decline shares _set_aside. Tests: tests/unit/test_isolation_preserve.py::test_p4_n7_fresh_commit_over_an_unrestored_tombstone_sets_it_aside (the n7 probe), ::test_p4_n7_no_rmtree_touches_an_unrestored_record_on_the_fresh_path (spies shutil.rmtree and Path.unlink; only root/staging may be touched).
+
+<!-- fr:journal kind=finding scope=plan id=p4-n8 created=2026-09-23T03:57:06 phase=4 state=fixed -->
+### p4-n8 · finding [fixed] · The unfinished-teardown notice promised a merge after the decline had moved staging (phase 4)
+
+restore() prints the notice after deciding: with the live path and 'the next fr isolation down merges them' when not declined, with <branch>@<UTC>/staging/files and 'set aside with the declined record and will not be merged' when declined. Tests: tests/unit/test_isolation_preserve.py::test_p4_n8_the_unfinished_teardown_notice_is_true_after_a_decline; test_p4_f4 now asserts 'merges them' on the non-declined path.
+
+<!-- fr:journal kind=finding scope=plan id=p4-n9 created=2026-09-23T03:57:06 phase=4 state=fixed -->
+### p4-n9 · finding [fixed] · The decline hint printed a literal <worktree> (phase 4)
+
+_decline takes the real worktree; the hint is cp -R <aside>/files/. <worktree path>/. Test: tests/unit/test_isolation_preserve.py::test_p4_n9_the_decline_hint_names_the_real_worktree.

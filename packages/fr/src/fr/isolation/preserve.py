@@ -26,6 +26,15 @@ guarded: nothing is restored onto a branch that does not descend from the
 torn-down head (or whose head is gone, p4-f8), and a file changed since is a
 reported conflict, never overwritten. A tombstone that was restored is
 history: the next teardown starts a fresh one (p4-f1).
+
+INVARIANT (p4-n7): NOTHING deletes preserved data unless its tombstone carries
+`restored_at`. Preserved data is a tombstone and the `files/` it lists. Every
+other "start fresh" — a declined restore, a lineage break, a null prior head —
+MOVES the whole prior record aside to `<branch>@<UTC>/` with the reason
+stamped (`_set_aside`), never deletes it. The only other removals are of
+copies that are not preserved data: a staging/ written before any removal was
+attempted (the tree it copied is intact), and a staging/ whose every needed
+copy was promoted before the tombstone naming them was written.
 """
 
 from __future__ import annotations
@@ -582,6 +591,30 @@ def _is_ancestor(run: Runner, root: Path, older: str, newer: str) -> bool:
     return res.returncode == 0
 
 
+def _set_aside(root: Path, stamps: dict[str, str], keep_staging: bool = False) -> Path:
+    """Move a preserved record aside to `<branch>@<UTC>` — the one way a record
+    whose tombstone lacks `restored_at` leaves the live slot (p4-n7). The
+    tombstone there is stamped with `stamps`. `keep_staging` leaves the live
+    staging/ behind (a commit in progress still needs it). Raises OSError."""
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    aside = root.parent / f"{root.name}@{stamp}"
+    n = 1
+    while aside.exists():
+        n += 1
+        aside = root.parent / f"{root.name}@{stamp}-{n}"
+    if keep_staging:
+        aside.mkdir(parents=True)
+        for child in list(root.iterdir()):
+            if child.name != "staging":
+                os.replace(child, aside / child.name)
+    else:
+        os.replace(root, aside)
+    tomb = _load_json(aside / TOMBSTONE) or {}
+    tomb.update(stamps)
+    _write_json(aside / TOMBSTONE, tomb)
+    return aside
+
+
 def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> Path | None:
     """Promote the staged copies (`os.replace`) and write the tombstone — call
     ONLY after the worktree removal is verified. The tombstone is written
@@ -595,6 +628,8 @@ def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> 
     root = record.root
     staging = record.staging
     if not record.worthwhile:
+        # Not preserved data: an unworthy record's staged copies are all of
+        # committed, unchanged blobs (worthwhile == any changed copy).
         shutil.rmtree(staging, ignore_errors=True)
         try:
             root.rmdir()  # only when empty
@@ -605,23 +640,44 @@ def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> 
     prior_head = prior.get("head") if prior else None
     if record.head is None and isinstance(prior_head, str) and prior_head:
         record.head = prior_head  # a git-less teardown keeps the lineage (p4-n4)
-    # Fresh unless the prior tombstone is unrestored AND of this lineage: a
-    # null head, or one this teardown's head does not descend from, is not
-    # something to merge into (p4-n3).
-    fresh = (
-        prior is None
-        or bool(prior.get("restored_at"))
-        or not (isinstance(prior_head, str) and prior_head)
-        or record.head is None
-        or not _is_ancestor(run, root, prior_head, record.head)
-    )
+    # Fresh unless the prior tombstone is unrestored AND of this lineage.
+    # Which fresh decides what may happen to the prior record (INVARIANT):
+    #   restored   → history; its files/ may be deleted (after the new
+    #                tombstone is written);
+    #   null prior head / lineage break → it is set aside, never deleted.
+    restored = prior is not None and bool(prior.get("restored_at"))
+    aside_reason: str | None = None
+    if prior is not None and not restored:
+        if not (isinstance(prior_head, str) and prior_head):
+            aside_reason = "null-prior-head"
+        elif record.head is None or not _is_ancestor(run, root, prior_head, record.head):
+            aside_reason = "lineage-break"
+    fresh = prior is None or restored or aside_reason is not None
     old_files = root / "files.old"
+    fallback: Path | None = None  # where an interrupted commit's copies may sit
+    fallback_listed: set[str] = set()
+    if aside_reason is not None:
+        assert prior is not None
+        fallback_listed = {
+            str(f.get("path")) for f in prior.get("files", []) if isinstance(f, dict)
+        }
+        aside = _set_aside(
+            root,
+            {"set_aside_at": _now(), "set_aside_reason": aside_reason},
+            keep_staging=True,
+        )
+        fallback = aside / "files"
+    elif restored:
+        # Deletable history: parked in files.old only so an interrupted
+        # commit's promoted copies can be recovered, then removed below.
+        # A files.old already present means an earlier restored-prior commit
+        # was interrupted: it holds that history, and files/ holds only what
+        # the interrupted commit promoted — so neither is deleted here.
+        if not old_files.exists() and (root / "files").exists():
+            os.replace(root / "files", old_files)
+        fallback = old_files
     if fresh:
         prior = {}
-        if old_files.exists():
-            shutil.rmtree(old_files)
-        if (root / "files").exists():
-            os.replace(root / "files", old_files)
     assert prior is not None
     files: dict[str, str | None] = {
         f["path"]: f.get("base_blob")
@@ -635,17 +691,24 @@ def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> 
     for f in record.files:
         dst = root / "files" / f.path
         src = staging / "files" / f.path
-        if not src.is_file() and fresh and (old_files / f.path).is_file():
-            src = old_files / f.path  # promoted by an earlier, interrupted commit
+        if (
+            not src.is_file()
+            and fallback is not None
+            and f.path not in fallback_listed
+            and (fallback / f.path).is_file()
+        ):
+            src = fallback / f.path  # promoted by an earlier, interrupted commit
         if src.is_file():
             dst.parent.mkdir(parents=True, exist_ok=True)
             os.replace(src, dst)
         files[f.path] = f.base_blob
         deleted.discard(f.path)
     for path in record.deleted:
-        deleted.add(path)
-        files.pop(path, None)
-        (root / "files" / path).unlink(missing_ok=True)
+        # A preserved copy is never deleted to honour a later deletion
+        # (INVARIANT): the copy stays listed, restorable; the deletion is
+        # recorded only for a path nothing preserves.
+        if path not in files:
+            deleted.add(path)
     for r in record.runs:
         runs[r.id] = r.to_json()
     _write_json(
@@ -662,7 +725,10 @@ def commit(record: PreserveRecord, forced: bool, run: Runner = _default_run) -> 
             "deleted": sorted(deleted),
         },
     )
-    shutil.rmtree(old_files, ignore_errors=True)
+    if restored:
+        shutil.rmtree(old_files, ignore_errors=True)  # restored_at: deletable history
+    # Every needed staged copy was promoted (os.replace) before the tombstone
+    # above named it; what remains is stage.json and superseded copies (p4-n2).
     shutil.rmtree(staging, ignore_errors=True)
     return root
 
@@ -681,29 +747,39 @@ def _short(sha: str | None) -> str:
     return (sha or "?")[:12]
 
 
-def _decline(root: Path, tomb: dict[str, Any], result: RestoreResult, why: str) -> RestoreResult:
-    """Restore declined: move the whole preserved dir aside to
-    `<branch>@<UTC>` with `declined_at` stamped, so no later teardown of the
-    same name merges it back (p4-n3), and say where it went."""
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    aside = root.parent / f"{root.name}@{stamp}"
-    n = 1
-    while aside.exists():
-        n += 1
-        aside = root.parent / f"{root.name}@{stamp}-{n}"
+def _decline(
+    root: Path, tomb: dict[str, Any], result: RestoreResult, why: str, worktree: Path
+) -> tuple[RestoreResult, Path]:
+    """Restore declined: move the whole preserved dir (staging/ included)
+    aside to `<branch>@<UTC>` with `declined_at` stamped, so no later teardown
+    of the same name merges it back (p4-n3), and say where it went."""
     try:
-        os.replace(root, aside)
-        tomb["declined_at"] = _now()
-        _write_json(aside / TOMBSTONE, tomb)
+        aside = _set_aside(root, {"declined_at": _now()})
     except OSError:
         aside = root
     notice = (
         f"isolation: NOT restoring the preserved records — {why}. They were moved to "
-        f"{aside}; if they belong here: cp -R {aside / 'files'}/. <worktree>/"
+        f"{aside}; if they belong here: cp -R {aside / 'files'}/. {worktree}/"
     )
     result.refused = notice
     print(notice, file=sys.stderr)
-    return result
+    return result, aside
+
+
+def _staging_notice(branch: str, base: Path, merged: bool) -> None:
+    """The unfinished-teardown notice, printed with the path staging/ is at
+    NOW and a promise that is true for it (p4-n8)."""
+    where = base / "staging" / "files"
+    then = (
+        f"or the next `fr isolation down --branch {branch}` merges them"
+        if merged
+        else "it was set aside with the declined record and will not be merged"
+    )
+    print(
+        f"isolation: an unfinished teardown of {branch} left fr's records at {where} "
+        f"(never promoted, so NOT restored) — copy what belongs here, {then}.",
+        file=sys.stderr,
+    )
 
 
 def _inside(worktree: Path, dst: Path) -> bool:
@@ -725,46 +801,43 @@ def restore(
     root = preserved_dir(repo_root, branch)
     worktree = Path(worktree)
     stage_state = _load_json(root / "staging" / STAGE_JSON)
-    if stage_state and stage_state.get("removal_attempted"):
-        print(
-            f"isolation: an unfinished teardown of {branch} left fr's records at "
-            f"{root / 'staging' / 'files'} (never promoted, so NOT restored) — copy what "
-            f"belongs here, or the next `fr isolation down --branch {branch}` merges them.",
-            file=sys.stderr,
-        )
+    pending = bool(stage_state and stage_state.get("removal_attempted"))
     tomb = _load_json(root / TOMBSTONE)
     if tomb is None or tomb.get("restored_at"):
+        if pending:
+            _staging_notice(branch, root, merged=True)
         return None
     result = RestoreResult()
+
+    def _declined(why: str) -> RestoreResult:
+        assert tomb is not None
+        declined, aside = _decline(root, tomb, result, why, worktree)
+        if pending:
+            _staging_notice(branch, aside, merged=aside == root)
+        return declined
+
     torn = tomb.get("torn_down_at", "?")
     if new_branch:
-        return _decline(
-            root,
-            tomb,
-            result,
+        return _declined(
             f"{branch} was created as a NEW branch, unrelated to the {branch} torn down {torn}",
         )
     old_head = tomb.get("head")
     if not (isinstance(old_head, str) and old_head):
-        return _decline(root, tomb, result, "the teardown recorded no commit (null head)")
+        return _declined("the teardown recorded no commit (null head)")
     exists = run(["git", "cat-file", "-e", f"{old_head}^{{commit}}"], cwd=worktree)
     if exists.returncode != 0:
-        return _decline(
-            root,
-            tomb,
-            result,
+        return _declined(
             f"the commit {branch} was torn down at ({_short(old_head)}) no longer exists "
             "in this repo, so fr cannot tell whether they still apply",
         )
     ancestor = run(["git", "merge-base", "--is-ancestor", old_head, "HEAD"], cwd=worktree)
     if ancestor.returncode != 0:
-        return _decline(
-            root,
-            tomb,
-            result,
+        return _declined(
             f"{branch} is now {_short(_head(run, worktree))}, which does not descend from "
             f"{_short(old_head)} (the commit it was torn down at)",
         )
+    if pending:
+        _staging_notice(branch, root, merged=True)
     for entry in tomb.get("files", []):
         path = entry.get("path") if isinstance(entry, dict) else None
         if not _safe(path):
