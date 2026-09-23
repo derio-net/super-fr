@@ -14,7 +14,7 @@ from fr.isolation.scaffold import (
     GH_FEATURE,
     HOST_CLI_FEATURE,
     HOST_CLI_POST_CREATE,
-    KNOWN_TOOL_FEATURES,
+    KNOWN_TOOLS,
     scaffold_profile,
 )
 from typer.testing import CliRunner
@@ -280,7 +280,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     )
     # baseline: gh feature present; requested tool mapped to its feature
     assert any("github-cli" in k for k in cfg["features"])
-    assert any(KNOWN_TOOL_FEATURES["uv"] in k for k in cfg["features"])
+    assert any(KNOWN_TOOLS["uv"].feature in k for k in cfg["features"])
     # vk installed in postCreate; secrets env-file wired with localEnv HOME
     assert "super-fr#subdirectory=packages/fr" in cfg["postCreateCommand"]
     # host-path workspace mount — linked-worktree git breaks without it
@@ -331,11 +331,58 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
     assert set(profiles["profiles"]) == {"dev", "readonly"}
 
 
-def test_unknown_tool_recorded_in_notes(repo: Path) -> None:
-    res = scaffold(repo, "--tool", "frobnicator9000")
+def test_an_unknown_tool_is_refused_and_writes_nothing(repo: Path, tmp_path: Path) -> None:
+    """gh#574: an unknown --tool used to exit 0 with the tool parked in a
+    `notes:` line — the profile built without it. Now: exit 2, stderr names the
+    sorted known set and --feature, and nothing is written or committed."""
+    _initial_commit(repo)
+    before = _log_subjects(repo)
+    res = scaffold(repo, "--tool", "nosuchtool", "--secret", "GH_TOKEN")
+    assert res.exit_code == 2, res.output
+    assert "nosuchtool" in res.stderr
+    assert ", ".join(sorted(KNOWN_TOOLS)) in res.stderr
+    assert "--feature" in res.stderr
+    assert not (repo / ".devcontainer" / "dev" / "devcontainer.json").exists()
+    assert not (repo / ".devcontainer" / "fr-profiles.yaml").exists()
+    assert not (tmp_path / "home" / ".config" / "fr" / "secrets" / "myrepo" / "dev.env").exists()
+    assert _log_subjects(repo) == before
+
+
+@pytest.mark.parametrize("reserved", ["host", "external"])
+def test_a_reserved_profile_name_is_refused(repo: Path, reserved: str) -> None:
+    """spec §3.C: legacy states with no `target` infer the mode from `profile`
+    (`host` → worktree, `external` → external), permanently — so a real
+    devcontainer profile with either name would be misrouted. Refused at birth."""
+    res = runner.invoke(
+        app,
+        ["init", "scaffold", "--repo", str(repo), "--profile", reserved, "--purpose", "p"],
+    )
+    assert res.exit_code == 2, res.output
+    assert reserved in res.stderr and "reserved" in res.stderr
+    assert not (repo / ".devcontainer" / reserved).exists()
+
+
+def test_java_and_maven_write_one_java_feature_with_maven(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--tool", "java", "--tool", "maven")
     assert res.exit_code == 0, res.output
-    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
-    assert "frobnicator9000" in " ".join(profiles["profiles"]["dev"].get("notes", []))
+    features = _config(repo)["features"]
+    assert features["ghcr.io/devcontainers/features/java:1"] == {"installMaven": True}
+
+
+def test_a_raw_feature_lands_in_features(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--feature", "ghcr.io/acme/x:1")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"]["ghcr.io/acme/x:1"] == {}
+
+
+def test_a_versioned_uv_still_separates_its_environment(repo: Path) -> None:
+    from fr.isolation.scaffold import UV_CONTAINER_PROJECT_ENV
+
+    res = scaffold(repo, "--no-commit", "--tool", "uv@0.5.0")
+    assert res.exit_code == 0, res.output
+    cfg = _config(repo)
+    assert cfg["features"][KNOWN_TOOLS["uv"].feature] == {"version": "0.5.0"}
+    assert cfg["containerEnv"] == {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
 
 
 def test_scaffold_outside_repo_exits_2(tmp_path: Path) -> None:
@@ -565,7 +612,7 @@ def test_this_repos_own_uv_profiles_carry_it() -> None:
     uv_profiles = [
         p
         for p in sorted(root.glob("*/devcontainer.json"))
-        if KNOWN_TOOL_FEATURES["uv"] in json.loads(p.read_text()).get("features", {})
+        if KNOWN_TOOLS["uv"].feature in json.loads(p.read_text()).get("features", {})
     ]
     assert uv_profiles, "expected at least one uv-enabled profile in this repo"
     for path in uv_profiles:

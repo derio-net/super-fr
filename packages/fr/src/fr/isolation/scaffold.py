@@ -13,7 +13,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 import yaml
 
@@ -49,18 +52,101 @@ BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 # It stays on the bind mount, which is exactly as fast as `.venv` was before.
 UV_CONTAINER_PROJECT_ENV = ".venv-container"
 
-# Known tool → devcontainer feature mapping. Unknown tools land in the
-# profile's notes for the skill/operator to wire via postCreateCommand.
-KNOWN_TOOL_FEATURES: dict[str, str] = {
-    "uv": "ghcr.io/jsburckhardt/devcontainer-features/uv:1",
-    "node": "ghcr.io/devcontainers/features/node:1",
-    "python": "ghcr.io/devcontainers/features/python:1",
-    "go": "ghcr.io/devcontainers/features/go:1",
-    "rust": "ghcr.io/devcontainers/features/rust:1",
-    "kubectl": "ghcr.io/devcontainers/features/kubectl-helm-minikube:1",
-    "docker-in-docker": "ghcr.io/devcontainers/features/docker-in-docker:2",
-    "terraform": "ghcr.io/devcontainers/features/terraform:1",
+
+# Known tool → devcontainer feature mapping (gh#574, spec §3.A). A tool NOT in
+# this table is REFUSED by `resolve_tools` — it used to be recorded in the
+# profile's notes and silently left uninstalled; `--feature <ref>` is the
+# escape hatch for anything the table does not know. Tools that share a feature
+# ref (java, maven) merge their options into ONE feature entry.
+@dataclass(frozen=True)
+class ToolSpec:
+    """One `--tool` name: its devcontainer feature, the options it always sets,
+    and the option key a `<tool>@<version>` writes."""
+
+    feature: str
+    options: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    version_option: str = "version"
+
+
+JAVA_FEATURE = "ghcr.io/devcontainers/features/java:1"
+
+KNOWN_TOOLS: dict[str, ToolSpec] = {
+    "uv": ToolSpec("ghcr.io/jsburckhardt/devcontainer-features/uv:1"),
+    "node": ToolSpec("ghcr.io/devcontainers/features/node:1"),
+    "python": ToolSpec("ghcr.io/devcontainers/features/python:1"),
+    "go": ToolSpec("ghcr.io/devcontainers/features/go:1"),
+    "rust": ToolSpec("ghcr.io/devcontainers/features/rust:1"),
+    "kubectl": ToolSpec("ghcr.io/devcontainers/features/kubectl-helm-minikube:1"),
+    "docker-in-docker": ToolSpec("ghcr.io/devcontainers/features/docker-in-docker:2"),
+    "terraform": ToolSpec("ghcr.io/devcontainers/features/terraform:1"),
+    "java": ToolSpec(JAVA_FEATURE),
+    # `installMaven` is a JSON boolean — the java feature's own manifest types it so.
+    "maven": ToolSpec(
+        JAVA_FEATURE,
+        options=MappingProxyType({"installMaven": True}),
+        version_option="mavenVersion",
+    ),
 }
+
+
+def parse_tool(arg: str) -> tuple[str, str | None]:
+    """`<tool>[@<version>]` → (name, version or None). An empty name or an
+    empty version after `@` is refused."""
+    name, sep, version = arg.partition("@")
+    if not name or (sep and not version):
+        raise IsolationError(f"--tool {arg!r} is malformed — expected <tool> or <tool>@<version>.")
+    return name, (version if sep else None)
+
+
+def _set_option(
+    resolved: dict[str, dict[str, object]], ref: str, key: str, value: object, origin: str
+) -> None:
+    opts = resolved.setdefault(ref, {})
+    if key in opts and opts[key] != value:
+        raise IsolationError(
+            f"conflicting values for {ref} option {key!r}: {opts[key]!r} and {value!r} "
+            f"(from {origin}) — pass one."
+        )
+    opts[key] = value
+
+
+def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, object]]:
+    """Resolve `--tool` / `--feature` args to devcontainer `features` (ref → options).
+
+    Pure, and meant to run BEFORE anything is written: an unknown tool raises
+    IsolationError naming the known set and pointing at `--feature`.
+    """
+    parsed = [(arg, *parse_tool(arg)) for arg in tools]
+    unknown = [name for _, name, _ in parsed if name not in KNOWN_TOOLS]
+    if unknown:
+        raise IsolationError(
+            f"unknown --tool {', '.join(repr(u) for u in unknown)} — known tools: "
+            f"{', '.join(sorted(KNOWN_TOOLS))}. For anything else pass the devcontainer "
+            "feature ref directly with --feature <ref>."
+        )
+    resolved: dict[str, dict[str, object]] = {}
+    for arg, name, version in parsed:
+        spec = KNOWN_TOOLS[name]
+        resolved.setdefault(spec.feature, {})
+        for key, value in spec.options.items():
+            _set_option(resolved, spec.feature, key, value, arg)
+        if version is not None:
+            _set_option(resolved, spec.feature, spec.version_option, version, arg)
+    for ref in features:
+        if not ref or any(c.isspace() for c in ref):
+            raise IsolationError(
+                f"--feature {ref!r} is not a feature ref — it must be non-empty and "
+                "contain no whitespace."
+            )
+        resolved.setdefault(ref, {})
+    return resolved
+
+
+# Profile names `fr isolation` gives a meaning of its own: a legacy state with
+# no `target` infers its mode from the recorded profile (types.py), so a real
+# devcontainer profile by either name would be routed to the wrong target
+# (spec §3.C, journal p3-f1-reserve-external-profile).
+RESERVED_PROFILES: frozenset[str] = frozenset({"host", "external"})
 
 GH_FEATURE = "ghcr.io/devcontainers/features/github-cli:1"
 
@@ -128,6 +214,7 @@ def scaffold_profile(
     commit: bool = True,
     backend: HostBackend = "github",
     host: str | None = None,
+    features: list[str] | None = None,
 ) -> Path:
     """Write the profile and (by default) commit it. Returns the devcontainer.json path.
 
@@ -148,6 +235,17 @@ def scaffold_profile(
             f"{repo_root} is not a git repo — fr init scaffold only runs inside one."
         )
 
+    if profile in RESERVED_PROFILES:
+        raise IsolationError(
+            f"profile name {profile!r} is reserved — fr infers a workspace's mode from "
+            "its recorded profile when the state predates `target` (host → host-worktree, "
+            "external → external), so a devcontainer profile by that name would be "
+            "misrouted. Pick another name."
+        )
+    # Before ANY write (gh#574): an unknown tool must leave no file behind.
+    resolved = resolve_tools(tools, list(features or []))
+    tool_names = {parse_tool(t)[0] for t in tools}
+
     profile_dir = repo_root / ".devcontainer" / profile
     config_path = profile_dir / "devcontainer.json"
     if config_path.exists() and not force:
@@ -156,13 +254,9 @@ def scaffold_profile(
             "(the host secrets file is preserved either way)."
         )
 
-    known = {t: KNOWN_TOOL_FEATURES[t] for t in tools if t in KNOWN_TOOL_FEATURES}
-    unknown = [t for t in tools if t not in KNOWN_TOOL_FEATURES]
-
     host_feature = HOST_CLI_FEATURE.get(backend)
-    features: dict[str, dict[str, str]] = {host_feature: {}} if host_feature else {}
-    for feature in known.values():
-        features[feature] = {}
+    feature_map: dict[str, dict[str, object]] = {host_feature: {}} if host_feature else {}
+    feature_map.update(resolved)
 
     post_create = POST_CREATE
     host_post_create = HOST_CLI_POST_CREATE.get(backend)
@@ -173,7 +267,7 @@ def scaffold_profile(
     config = {
         "name": f"{repo_root.name} — {profile}",
         "image": BASE_IMAGE,
-        "features": features,
+        "features": feature_map,
         "postCreateCommand": post_create,
         # Mount the workspace at its HOST path (not /workspaces/<name>):
         # linked-worktree gitdir back-pointers record host abspaths, so git
@@ -187,7 +281,7 @@ def scaffold_profile(
         ],
         "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
-    if "uv" in known:
+    if "uv" in tool_names:
         # `containerEnv`, not `remoteEnv`: it is set on the container itself, so
         # EVERY process in it sees it — `devcontainer exec` (what `fr isolation
         # exec` runs), the postCreateCommand, and a raw `docker exec` alike.
@@ -197,7 +291,7 @@ def scaffold_profile(
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
-    _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default, backend, host)
+    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, backend, host)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
@@ -260,7 +354,6 @@ def _update_profiles_yaml(
     profile: str,
     purpose: str,
     secrets: list[str],
-    unknown_tools: list[str],
     default: bool,
     backend: HostBackend = "github",
     host: str | None = None,
@@ -270,11 +363,6 @@ def _update_profiles_yaml(
     data = data or {}
     data.setdefault("profiles", {})
     entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
-    if unknown_tools:
-        entry["notes"] = [
-            f"tool {t!r} has no known devcontainer feature — wire it via postCreateCommand"
-            for t in unknown_tools
-        ]
     data["profiles"][profile] = entry
     if default or "default" not in data:
         data["default"] = profile if default else data.get("default", profile)
