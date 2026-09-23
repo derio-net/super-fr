@@ -211,18 +211,29 @@ steps:
             cache_read_input_tokens: 5486344
             output_tokens: 1010
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-23T00:31:10+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: ec61d713-0539-4679-a830-b48e724c8675
+          returned: '2026-09-23T00:42:11+00:00'
+          outcome: done
           estimate:
             journal_entries: 43
             journal_lines: 216
             handoff_chars: 9300
             spec_bytes: 17731
             plan_bytes: 34984
+          measured:
+            input_tokens: 40
+            cache_creation_input_tokens: 130953
+            cache_read_input_tokens: 924652
+            output_tokens: 5525
+        evidence:
+          review: p4-review
+          reviewer: ad78ac42d930700cd
+          findings: p4r-f1-vendor-digits,p4r-f2-implausible-major,p4r-f3-pom-precedence,p4r-f4-feature-triggers-detection
   journal-check:
     state: pending
   deliver:
