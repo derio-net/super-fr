@@ -78,11 +78,31 @@ def _push_origin(repo: Path) -> None:
 def fake_run(monkeypatch: pytest.MonkeyPatch):
     calls: list[list[str]] = []
 
-    def run(argv, cwd=None, check=False, capture=True):
+    # Stateful containers, one per workspace: `devcontainer up` brings a
+    # container up running for its --workspace-folder, a successful `docker rm`
+    # removes it — so exec's _ensure_running sees a live container and down's
+    # post-condition re-query sees it gone. Keyed on the workspace (the ps
+    # label filter) so multi-workspace tests never share one container.
+    live: dict[str, str] = {}  # workspace folder -> container id
+
+    def _flag(argv: list[str], prefix: str) -> str | None:
+        return next((a[len(prefix) :] for a in argv if a.startswith(prefix)), None)
+
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         calls.append(list(argv))
         out = '{"state": "MERGED", "url": "u"}' if argv[0] == "gh" else ""
+        if argv[:2] == ["devcontainer", "up"]:
+            folder = _flag(argv, "--workspace-folder=") or ""
+            live[folder] = f"cid{len(live)}"
+        elif argv[:2] == ["docker", "rm"]:
+            for folder in [f for f, cid in live.items() if cid in argv[2:]]:
+                del live[folder]
+        elif argv[:2] == ["docker", "ps"] and "--all" in argv:
+            folder = _flag(argv, "--filter=label=devcontainer.local_folder=")
+            if folder in live:
+                out = f"{live[folder]} running"
         return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
 
     monkeypatch.setattr(isolation_cmd, "_runner", run)
@@ -919,7 +939,7 @@ def test_down_all_keeps_open_pr_without_force(
 ) -> None:
     calls: list[list[str]] = []
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         calls.append(list(argv))
@@ -951,7 +971,7 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     _push_origin(repo)  # the hazard guard's content check needs a real origin
     monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if argv[0] == "gh" and argv[1] == "pr" and argv[2] == "view":
@@ -1144,7 +1164,7 @@ def test_down_single_hazard_refusal_keeps_bindings_and_sentinel(
 
 
 def _docker_run(container: str = "cid running"):
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         out = ""
@@ -1175,8 +1195,65 @@ def test_restart_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None
     assert "--branch" in res.output
 
 
+def _stoppable_docker_run(record: list | None = None):
+    """Stateful docker fake for `stop` (#471): `docker ps` reports `running`
+    until a `docker stop` lands, `exited` after — so the verification re-query
+    sees the stop took effect. `record` collects every docker argv."""
+    stopped: set[str] = set()
+
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
+        if argv[0] == "git":
+            return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+        if record is not None and argv[0] == "docker":
+            record.append(list(argv))
+        out = ""
+        if argv[:2] == ["docker", "stop"]:
+            stopped.update(argv[2:])
+        elif argv[:2] == ["docker", "ps"]:
+            out = "cid exited" if "cid" in stopped else "cid running"
+        elif argv[0] == "gh":
+            out = '{"state": "OPEN", "url": "u"}'
+        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+    return run
+
+
+def test_stop_with_branch_prints_stopped_line(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list = []
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run(calls))
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/s"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo), "--branch", "feat/s"])
+    assert res.exit_code == 0, res.output
+    assert "isolation stop:" in res.output and "stopped" in res.output
+    assert "already" not in res.output
+    assert ["docker", "stop", "cid"] in calls
+    from fr.isolation.types import list_states
+
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/s"], "state kept"
+
+
+def test_stop_resolves_single_workspace_no_branch(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list = []
+    monkeypatch.setattr(isolation_cmd, "_runner", _stoppable_docker_run(calls))
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/only"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "stopped" in res.output and "already" not in res.output
+    assert ["docker", "stop", "cid"] in calls
+
+
+def test_stop_multiple_workspaces_exits_2(repo: Path, fake_run: list) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/a"])
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
+    res = runner.invoke(app, ["isolation", "stop", "--repo", str(repo)])
+    assert res.exit_code == 2
+    assert "--branch" in res.output
+
+
 def _stats_run(record: list | None = None):
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         if record is not None:
@@ -1336,7 +1413,7 @@ def _host_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: str = "f
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
     repo = _init_git_repo(tmp_path / "repo")
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv and argv[0] == "docker":
             raise FileNotFoundError("docker: not found (docker-less host)")
         if argv and argv[0] == "git":
@@ -1580,8 +1657,19 @@ class _RoutedStub:
             "pr": None,
         }
 
-    def down(self, state, force=False):
+    def down(self, state, force=False, preserve=True):
+        from fr.isolation.preserve import TeardownReport
+
         self.calls.append("down")
+        return TeardownReport()
+
+    def stop(self, state):
+        self.calls.append("stop")
+        return "stopped"
+
+    def rebuild(self, state, no_cache=False):
+        self.calls.append("rebuild")
+        return "recreated"
 
     def down_refusal(self, state):
         self.calls.append("down_refusal")
@@ -1633,6 +1721,8 @@ def _host_workspace_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     [
         (["exec", "--", "true"], "exec"),
         (["restart"], "restart"),
+        (["stop"], "stop"),
+        (["rebuild"], "rebuild"),
         (["status"], "status"),
         (["down", "--branch", "feat/x"], "down"),
         (["down", "--all", "--yes"], "down"),

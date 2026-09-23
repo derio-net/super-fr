@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.cli import app
@@ -48,12 +49,17 @@ class RecordingRunner:
         self.calls: list[list[str]] = []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         if argv[:1] == ["gh"]:
             return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
-        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture)
+        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture, **kw)
 
 
 def _base_repo_with_origin(tmp_path: Path) -> Path:

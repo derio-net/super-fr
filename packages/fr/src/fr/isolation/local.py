@@ -22,10 +22,13 @@ from pathlib import Path
 from typing import IO, Any, ClassVar, cast
 
 from fr._hosts import detect_backend
+from fr.isolation import preserve as _preserve
+from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
+    carried_state,
     delete_state,
     harden_secret_file,
     list_states,
@@ -39,12 +42,42 @@ from fr.plan_validator_wrapper import REPAIR_COMMAND
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
+def _missing_binary(err: FileNotFoundError, context: str) -> str:
+    """One line naming the binary the runner could not find — from the error
+    itself, never an assumed name."""
+    missing = err.filename or (err.args[0] if err.args else "a required binary")
+    return f"{missing} not found on PATH — {context}."
+
+
 def subprocess_runner(
-    argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+    argv: list[str],
+    cwd: Path | None = None,
+    check: bool = False,
+    capture: bool = True,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """capture=False inherits stdio — exec passthrough must stream the
-    container's output live (long builds/test runs), not swallow it."""
-    return subprocess.run(argv, cwd=cwd, check=check, capture_output=capture, text=True)
+    container's output live (long builds/test runs), not swallow it.
+
+    `timeout` makes the call bounded AND non-interactive: stdin is /dev/null,
+    and an expiry returns exit 124 with a `timed out` stderr instead of
+    raising, so a caller reads it as a failure (for a probe: `unknown`)."""
+    try:
+        return subprocess.run(
+            argv,
+            cwd=cwd,
+            check=check,
+            capture_output=capture,
+            text=True,
+            env=env,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL if timeout is not None else None,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            argv, 124, stdout="", stderr=f"{argv[0]}: timed out after {timeout:g}s\n"
+        )
 
 
 def _home() -> Path:
@@ -197,7 +230,9 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     lines.append(
         f"Or reap it anyway with `fr isolation down --branch {branch} --force`, "
         "which removes the worktree and fr's record of it (the branch and any "
-        "commits on it remain in the repo; uncommitted changes do not)."
+        "commits on it remain in the repo; uncommitted changes do not survive, except "
+        "fr's own records under `docs/superpowers/`, which are preserved and restored "
+        "by the next `up`)."
     )
     return "\n".join(lines)
 
@@ -324,6 +359,180 @@ def _main_worktree_root(repo_root: Path) -> Path:
     return common.parent if common.name == ".git" else repo_root
 
 
+# ----- `up --branch <B>` classification (#438, spec 2026-09-23 §3.E) -----
+
+
+@dataclass(frozen=True)
+class RemoteView:
+    """What fr knows about `origin/<B>`.
+
+    `state` is one of:
+    - `exists` — probed and fetched (or, under `--no-fetch`, a local ref);
+    - `unfetched` — ls-remote says it exists but the explicit fetch failed;
+    - `absent` — ls-remote exit 2, or no origin remote at all;
+    - `unknown` — any other probe failure (never read as absence, #354);
+    - `unchecked` — `--no-fetch` with no local `origin/<B>` ref.
+
+    `sha` is the local `origin/<B>` ref's commit when one exists: freshly
+    fetched for `exists`, the last-fetched value otherwise.
+    """
+
+    state: str
+    sha: str | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class BranchDecision:
+    """`local` checks `<B>` out as-is; `remote` creates `<B>` from `ref`
+    (`origin/<B>`); `cold` hands off to the cold-start base resolution.
+    `lines` go to stderr before the worktree is added."""
+
+    action: str
+    ref: str | None
+    lines: tuple[str, ...]
+
+
+# A git call that talks to origin is bounded and never prompts (#438 review).
+_NETWORK_TIMEOUT_S = 60.0
+_BATCH_SSH = "ssh -o BatchMode=yes -o ConnectTimeout=15"
+
+
+def _why(what: str, result: subprocess.CompletedProcess[str]) -> str:
+    """`<what> exited <rc>`, plus the last stderr line git printed."""
+    lines = [ln for ln in (result.stderr or "").splitlines() if ln.strip()]
+    head = f"{what} exited {result.returncode}"
+    return f"{head}: {lines[-1].strip()}" if lines else head
+
+
+def _short(sha: str | None) -> str:
+    return (sha or "")[:12]
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _local_row(
+    branch: str,
+    local_sha: str,
+    remote: RemoteView,
+    relation: tuple[int, int] | None,
+    worktree: Path,
+) -> BranchDecision:
+    """The `local <B> exists` rows. #322 corner 1: always reuse as-is."""
+    remote_ref = f"origin/{branch}"
+    line = f"isolation: reusing local branch {branch} at {_short(local_sha)}"
+    if remote.state in ("unknown", "unfetched", "unchecked"):
+        return BranchDecision("local", branch, (f"{line} (origin not checked: {remote.reason})",))
+    if remote.state != "exists" or remote.sha is None or remote.sha == local_sha:
+        return BranchDecision("local", branch, (line,))
+    if relation is None:
+        return BranchDecision(
+            "local",
+            branch,
+            (f"{line} (differs from {remote_ref} at {_short(remote.sha)}; relation unknown)",),
+        )
+    ahead, behind = relation
+    if behind == 0:
+        return BranchDecision(
+            "local", branch, (f"{line} ({_plural(ahead, 'commit')} ahead of {remote_ref})",)
+        )
+    if ahead == 0:
+        relation_text, catch_up = "is behind", f"merge --ff-only {remote_ref}"
+    else:
+        relation_text, catch_up = "has diverged from", f"merge {remote_ref}"
+    return BranchDecision(
+        "local",
+        branch,
+        (
+            f"WARNING: local {branch} ({_short(local_sha)}) {relation_text} {remote_ref} "
+            f"({_short(remote.sha)}, +{ahead}/−{behind}) — using local; "
+            f"`git -C {worktree} {catch_up}` to catch up",
+        ),
+    )
+
+
+def classify_branch(
+    branch: str,
+    *,
+    local_sha: str | None,
+    remote: RemoteView,
+    relation: tuple[int, int] | None,
+    base: str | None,
+    worktree: Path,
+) -> BranchDecision:
+    """The §3.E table as a pure function — no git, no I/O.
+
+    `relation` is (ahead, behind) of local `<B>` against `origin/<B>`, or None
+    when it could not be counted; it is only read when both exist and differ.
+    Raises IsolationError for the refused rows: `--base` beside a known
+    `origin/<B>` (it would fork a second history under one name), and an
+    `origin/<B>` that exists but could neither be fetched nor found locally
+    (a cold start there is #438 itself).
+    """
+    if local_sha is not None:
+        return _local_row(branch, local_sha, remote, relation, worktree)
+
+    remote_ref = f"origin/{branch}"
+    fetch_hint = f"`git fetch origin +refs/heads/{branch}:refs/remotes/origin/{branch}`"
+    if remote.state == "unfetched" and remote.sha is None:
+        raise IsolationError(
+            f"{remote_ref} exists but could not be fetched ({remote.reason}) — retry, "
+            f"or {fetch_hint}"
+        )
+    known = remote.state == "exists" or (
+        remote.state in ("unknown", "unfetched") and remote.sha is not None
+    )
+    if known and base is not None:
+        seen = {
+            "exists": "exists",
+            "unfetched": "exists (fetch failed)",
+            "unknown": "was last fetched (origin unreachable)",
+        }[remote.state]
+        raise IsolationError(
+            f"{remote_ref} {seen} — --base would fork a second history under the same "
+            "name; drop --base to reuse it, or choose another branch name"
+        )
+    if remote.state == "exists":
+        return BranchDecision(
+            "remote",
+            remote_ref,
+            (f"isolation: reusing remote branch {branch} at {remote_ref} ({_short(remote.sha)})",),
+        )
+    if remote.sha is not None:  # unknown / unfetched with a last-fetched ref
+        why = (
+            f"fetch of {remote_ref} failed" if remote.state == "unfetched" else "origin unreachable"
+        )
+        return BranchDecision(
+            "remote",
+            remote_ref,
+            (
+                f"WARNING: {why} — reusing the last-fetched {remote_ref} "
+                f"({_short(remote.sha)}); it may be stale",
+            ),
+        )
+    if remote.state == "unknown":
+        return BranchDecision(
+            "cold",
+            None,
+            (
+                f"WARNING: origin could not be checked for {branch} ({remote.reason}) — "
+                "cold-starting it; if it exists on origin this forks a second history",
+            ),
+        )
+    if remote.state == "unchecked":
+        return BranchDecision(
+            "cold",
+            None,
+            (
+                f"isolation: {remote_ref} not checked (--no-fetch, no local ref) — "
+                "starting a new branch",
+            ),
+        )
+    return BranchDecision("cold", None, ())
+
+
 class LocalWorktreeDevcontainerTarget:
     # The mode this class implements — pinned on the background gc it spawns
     # (gh#569). HostWorktreeTarget overrides it.
@@ -399,50 +608,182 @@ class LocalWorktreeDevcontainerTarget:
                     f"worktree can't see it — run `fr init scaffold --profile {name}` (which now "
                     "commits) or commit .devcontainer/ yourself, then retry `fr isolation up`."
                 )
-        self._ensure_mounted_env_file(config)
-        # Resolve the shared common dir, not <repo_root>/.git: correct even if
-        # repo_root is a worktree (a gitfile), independent of normalization (#292).
-        git_dir = _git_common_dir(self.repo_root)
-        result = self.run(
-            [
-                "devcontainer",
-                "up",
-                f"--workspace-folder={worktree}",
-                f"--config={config}",
-                f"--mount=type=bind,source={git_dir},target={git_dir}",
-            ],
-            cwd=worktree,
-        )
-        if result.returncode != 0:
-            raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
+        self._devcontainer_up(worktree, name)
 
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=worktree,
-            profile=name,
-            created_at=datetime.now(UTC).isoformat(),
-            target="devcontainer",
-        )
+        state = carried_state(self.repo_root, branch, worktree, name, "devcontainer")
         save_state(state)
-        self._write_isolation_marker(worktree, branch)
+        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
         self._spawn_gc()
         return state
 
+    @staticmethod
+    def _config_path(worktree: Path, profile: str) -> Path:
+        """The BRANCH's own profile config — `<worktree>/.devcontainer/<profile>/
+        devcontainer.json`, never the base clone's."""
+        return worktree / ".devcontainer" / profile / "devcontainer.json"
+
+    def _devcontainer_argv(self, worktree: Path, profile: str, *sub: str) -> list[str]:
+        """`devcontainer <sub…> --workspace-folder=<wt> --config=<cfg>`: the
+        addressing every devcontainer call shares (up, exec, the ssh probe)."""
+        return [
+            "devcontainer",
+            *sub,
+            f"--workspace-folder={worktree}",
+            f"--config={self._config_path(worktree, profile)}",
+        ]
+
+    def _devcontainer_up(
+        self,
+        worktree: Path,
+        profile: str,
+        *,
+        remove_existing: bool = False,
+        no_cache: bool = False,
+    ) -> None:
+        """The one `devcontainer up` — shared by `up`, `rebuild` and exec's
+        resume, so the mount and config rules cannot drift between them."""
+        self._ensure_mounted_env_file(self._config_path(worktree, profile))
+        # Resolve the shared common dir, not <repo_root>/.git: correct even if
+        # repo_root is a worktree (a gitfile), independent of normalization (#292).
+        git_dir = _git_common_dir(self.repo_root)
+        argv = [
+            *self._devcontainer_argv(worktree, profile, "up"),
+            f"--mount=type=bind,source={git_dir},target={git_dir}",
+        ]
+        if remove_existing:
+            argv.append("--remove-existing-container")
+        if no_cache:
+            argv.append("--build-no-cache")
+        try:
+            result = self.run(argv, cwd=worktree)
+        except FileNotFoundError as err:
+            raise IsolationError(_missing_binary(err, "cannot run `devcontainer up`")) from err
+        if result.returncode != 0:
+            raise IsolationError(f"devcontainer up failed: {result.stderr or result.stdout}")
+
     def exec(self, state: IsolationState, argv: list[str]) -> int:
-        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
-        result = self.run(
-            [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
-                *argv,
-            ],
-            cwd=state.worktree,
-            capture=False,
-        )
+        """Run `argv` in the workspace's container, resuming a stopped one first
+        (`_ensure_running`, spec §3.B). A missing binary is an IsolationError,
+        never a traceback."""
+        if not state.worktree.is_dir():
+            raise IsolationError(
+                f"worktree {state.worktree} for {state.branch} is gone — "
+                f"run `fr isolation up --branch {state.branch}`."
+            )
+        self._ensure_running(state)
+        try:
+            result = self.run(
+                [*self._devcontainer_argv(state.worktree, state.profile, "exec"), *argv],
+                cwd=state.worktree,
+                capture=False,
+            )
+        except FileNotFoundError as err:
+            raise IsolationError(_missing_binary(err, f"cannot run in {state.branch}")) from err
         return result.returncode
+
+    # Docker states `exec` runs in directly, and the ones it resumes with
+    # `devcontainer up` (which re-runs postStartCommand; a bare `docker start`
+    # would skip it).
+    _RUNNING: ClassVar[frozenset[str]] = frozenset({"running", "restarting"})
+    _RESUMABLE: ClassVar[frozenset[str]] = frozenset({"exited", "created"})
+
+    def _ensure_running(self, state: IsolationState) -> None:
+        """Bring the workspace's container to a state `devcontainer exec` can
+        use, or raise (spec §3.B). A failed `docker ps` raises `docker is
+        unreachable` via `_ps_pairs_strict` — never read as absence (#354).
+        Absent or dead is never recreated silently: that is a build, not a
+        resume, so the error names `rebuild`."""
+        branch = state.branch
+        rebuild = f"`fr isolation rebuild --branch {branch}` recreates it (worktree kept)."
+        pairs = self._ps_pairs_strict(state)
+        if any(current in self._RUNNING for _, current in pairs):
+            return
+        # Several containers can share the label: the first usable one wins,
+        # a resumable one before a paused one; only none usable raises.
+        resumable = next((cid for cid, cur in pairs if cur in self._RESUMABLE), None)
+        paused = next((cid for cid, cur in pairs if cur == "paused"), None)
+        if resumable is not None:
+            print(
+                f"isolation: container for {branch} was stopped — resuming (devcontainer up)",
+                file=sys.stderr,
+            )
+            try:
+                self._devcontainer_up(state.worktree, state.profile)
+            except IsolationError as err:
+                # The hint leads: devcontainer's output is multi-line (p2-f6).
+                raise IsolationError(
+                    f"could not resume the container for {branch} — {rebuild}\n{err}"
+                ) from err
+            return
+        if paused is not None:
+            result = self.run(["docker", "unpause", paused])
+            if result.returncode != 0:
+                raise IsolationError(
+                    f"could not unpause the container for {branch} ({paused}) — {rebuild}\n"
+                    f"{(result.stderr or result.stdout or '').strip()}"
+                )
+            return
+        if not pairs:
+            raise IsolationError(f"no usable container for {branch} — {rebuild}")
+        container, current = pairs[0]
+        raise IsolationError(
+            f"no usable container for {branch} ({container}, docker state {current}) — {rebuild}"
+        )
+
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        """Recreate the container against the existing worktree and the
+        branch's own profile config (#577, spec §3.A). The state record,
+        worktree, marker, bindings and run cursor are never touched.
+
+        On success the old image is reclaimed if the rebuild changed it: the
+        rebuild retags the same `vsc-…` name, so the old image becomes `<none>`
+        and gc's `vsc-`-prefix sweep would never reach it. On failure nothing
+        is reclaimed — `--remove-existing-container` may already have removed
+        the old container, and the retry needs its image."""
+        branch = state.branch
+        if not state.worktree.is_dir():
+            raise IsolationError(
+                f"worktree {state.worktree} for {branch} is gone — there is nothing to "
+                f"rebuild against; run `fr isolation up --branch {branch}`."
+            )
+        config = self._config_path(state.worktree, state.profile)
+        before = self._ps_pairs_strict(state)
+        old = before[0][0] if before else None
+        old_image = self._image_for(old) if old else None
+        try:
+            self._devcontainer_up(
+                state.worktree, state.profile, remove_existing=True, no_cache=no_cache
+            )
+        except IsolationError as err:
+            raise IsolationError(
+                f"rebuild of {branch} failed: {err}\n"
+                f"The old container ({old or 'none'}) may already have been removed; the "
+                "worktree and run are intact. Fix the profile and retry with "
+                f"`fr isolation rebuild --branch {branch}`."
+            ) from err
+        # The container WAS recreated: a failed re-query must not report the
+        # rebuild as failed (p2-f1). Without the new id, skip the reclaim.
+        new: str | None = None
+        try:
+            after = self._ps_pairs_strict(state)
+        except IsolationError as err:
+            print(
+                f"warning: {branch} was rebuilt, but the new container could not be "
+                f"queried ({err}); the old image was not reclaimed.",
+                file=sys.stderr,
+            )
+        else:
+            known = {cid for cid, _ in before}
+            new = next((cid for cid, _ in after if cid not in known), None)
+            if new is None and after:
+                new = after[0][0]
+        new_image = self._image_for(new) if new else None
+        if old_image and new_image and new_image != old_image:
+            self._reclaim_image(old_image)
+        return (
+            f"{branch} recreated ({old or 'none'} → {new or 'unknown'}) from {config}; "
+            "worktree untouched"
+        )
 
     def restart(self, state: IsolationState, force: bool = False) -> str:
         """Bounce the devcontainer without dropping the worktree (#341 Task 3).
@@ -453,12 +794,7 @@ class LocalWorktreeDevcontainerTarget:
         `--time=0` (immediate SIGKILL then start) for a container too wedged to
         stop gracefully. Returns the restarted container id.
         """
-        container = self._container_id(state)
-        if not container:
-            raise IsolationError(
-                f"no container for {state.branch} — nothing to restart "
-                "(run `fr isolation up` first)."
-            )
+        container, _ = self._require_container(state, "nothing to restart")
         argv = ["docker", "restart", *(["--time=0"] if force else []), container]
         result = self.run(argv)
         if result.returncode != 0:
@@ -467,6 +803,86 @@ class LocalWorktreeDevcontainerTarget:
                 "is too wedged to stop gracefully, retry with --force."
             )
         return container
+
+    # Docker states in which the container's process tree is not running —
+    # `stop` has nothing to do for these (#471).
+    _NOT_RUNNING: ClassVar[frozenset[str]] = frozenset({"exited", "created", "dead"})
+
+    def stop(self, state: IsolationState) -> str:
+        """Halt the devcontainer, keeping the worktree, state, marker and
+        bindings (#471, spec §3.B). `up`, `restart` or the next `exec` resumes it.
+
+        The stop is verified by re-querying `docker ps --all`, never inferred
+        from `docker stop`'s exit code; a query that FAILS is an error, never
+        read as 'no container' (the #354 rule). An already-stopped container is
+        a no-op success whose message says so."""
+        container, current = self._require_container(state, "nothing to stop")
+        if current == "dead":
+            # Not resumable: `up`/`restart`/`exec` cannot bring a dead container
+            # back, so do not promise they will (phase-1 review f4).
+            return (
+                f"{state.branch}'s container {container} is dead — "
+                f"`fr isolation rebuild --branch {state.branch}` recreates it (worktree kept)."
+            )
+        if current in self._NOT_RUNNING:
+            return f"{state.branch} already stopped ({container}, docker state {current})."
+        result = self.run(["docker", "stop", container])
+        if result.returncode != 0:
+            raise IsolationError(
+                f"docker stop failed for {state.branch} ({container}): "
+                f"{(result.stderr or result.stdout or '').strip()}"
+            )
+        # Verify THIS container by id, not whatever line comes first: the label
+        # filter can list several containers for one worktree (phase-1 review
+        # f1). Absent from the re-query means it was removed (`--rm`) — stopped.
+        after = dict(self._ps_pairs_strict(state)).get(container)
+        if after is not None and after not in self._NOT_RUNNING:
+            raise IsolationError(
+                f"container {container} for {state.branch} is still running "
+                f"(docker state {after}) after `docker stop`."
+            )
+        return (
+            f"{state.branch} stopped ({container}) — worktree, state and bindings kept; "
+            "`fr isolation up`, `restart` or the next `exec` resumes it."
+        )
+
+    def _ps_parts_strict(self, state: IsolationState) -> list[str]:
+        """`[id, state]` of the first container from `docker ps --all`, `[]`
+        when there is none. Raises like `_ps_pairs_strict`."""
+        pairs = self._ps_pairs_strict(state)
+        return list(pairs[0]) if pairs else []
+
+    def _ps_pairs_strict(self, state: IsolationState) -> list[tuple[str, str]]:
+        """Every `(id, state)` from `docker ps --all` for this worktree. Unlike
+        `_docker_ps_line`, a failed query — or a missing docker binary — raises
+        instead of reading as absence (#354)."""
+        try:
+            result = self._docker_ps(state)
+        except FileNotFoundError as err:
+            raise IsolationError(
+                f"docker is unreachable — cannot query the container for {state.branch}."
+            ) from err
+        if result.returncode != 0:
+            raise IsolationError(
+                f"docker is unreachable — `docker ps` failed for {state.branch}: "
+                f"{(result.stderr or result.stdout or '').strip()}"
+            )
+        pairs = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                pairs.append((parts[0], parts[1]))
+        return pairs
+
+    def _require_container(self, state: IsolationState, nothing: str) -> tuple[str, str]:
+        """The workspace's `(container id, docker state)`; raise with the `up`
+        hint when there is none. Shared by `restart` and `stop`."""
+        parts = self._ps_parts_strict(state)
+        if not parts:
+            raise IsolationError(
+                f"no container for {state.branch} — {nothing} (run `fr isolation up` first)."
+            )
+        return parts[0], parts[1]
 
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         """Host-side `docker stats --no-stream` for a RUNNING container (#341
@@ -502,7 +918,7 @@ class LocalWorktreeDevcontainerTarget:
             "profile": state.profile,
             "worktree": str(state.worktree),
             "worktree_exists": state.worktree.is_dir(),
-            "container": self._container_state(state) or "not running",
+            "container": self._shown_container_state(state),
             "pr": self._pr(state),
         }
 
@@ -552,7 +968,6 @@ class LocalWorktreeDevcontainerTarget:
         the env var is set and, if set, whether the socket path exists, never
         the path itself or any key material (no `ssh-add -l`, no reading the
         socket)."""
-        config = state.worktree / ".devcontainer" / state.profile / "devcontainer.json"
         probe_script = (
             'if [ -n "$SSH_AUTH_SOCK" ]; then '
             'if [ -S "$SSH_AUTH_SOCK" ]; then echo set:socket-exists; '
@@ -561,10 +976,7 @@ class LocalWorktreeDevcontainerTarget:
         )
         result = self.run(
             [
-                "devcontainer",
-                "exec",
-                f"--workspace-folder={state.worktree}",
-                f"--config={config}",
+                *self._devcontainer_argv(state.worktree, state.profile, "exec"),
                 "sh",
                 "-c",
                 probe_script,
@@ -804,7 +1216,9 @@ class LocalWorktreeDevcontainerTarget:
             )
         return None
 
-    def down(self, state: IsolationState, force: bool = False) -> None:
+    def down(
+        self, state: IsolationState, force: bool = False, preserve: bool = True
+    ) -> TeardownReport:
         """Tear down the workspace, verifying each destructive step's
         POST-CONDITION before deleting the bookkeeping (#354 Task A).
 
@@ -824,9 +1238,14 @@ class LocalWorktreeDevcontainerTarget:
         reap-hazard guard (#467 phase 3: dirty worktree, unlanded content,
         unverifiable) — but it never skips THIS verification (that would
         re-introduce the invisible-leak bug).
+
+        Before destroying anything it preserves fr's own records under
+        `docs/superpowers/` (#575, spec §3.D) — `preserve=False` discards them,
+        and is accepted only together with `force`. Returns what it ended.
         """
-        self._down_worktree_tail(state, force)
+        report = self._down_worktree_tail(state, force, preserve=preserve)
         self._spawn_gc()
+        return report
 
     def _open_pr_refusal(self, state: IsolationState) -> str | None:
         """The open-PR guard's refusal text, or None when no PR is open."""
@@ -842,28 +1261,59 @@ class LocalWorktreeDevcontainerTarget:
         """PURE QUERY (#533): the reason a non-forced `down` would refuse this
         workspace, or None if it would proceed. Asks the SAME two guards, in
         the same order, that `_down_worktree_tail` enforces — so `down --all`'s
-        blast-radius listing predicts rather than guesses."""
+        blast-radius listing predicts rather than guesses — including the
+        `isolation: <b> holds active run <id> …` prefix (#575, spec §3.D.1)."""
+        runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None:
-            return open_pr
+            return _preserve.name_runs(runs, open_pr, state.branch)
         hazard = self._reap_hazard(state)
-        return hazard.detail if hazard is not None else None
+        return (
+            _preserve.name_runs(runs, hazard.detail, state.branch) if hazard is not None else None
+        )
 
-    def _down_worktree_tail(self, state: IsolationState, force: bool) -> None:
-        """PR guard → reap-hazard guard → environment teardown → verified
-        worktree removal → marker + state retirement. Shared with
-        `HostWorktreeTarget` (#... isolation host modes): the ONLY per-mode
-        difference is `_teardown_container`, which the host-worktree mode
-        overrides to a no-op (no docker), so both guards, the post-condition
-        verification, and the marker/state cleanup stay identical across modes."""
+    def held_runs(self, state: IsolationState) -> str:
+        """PURE QUERY: the `holds run <id> at step <cursor>` line(s) for the
+        branch's active runs ('' when none) — `down --all` shows it for every
+        workspace, even under `--force`, where no refusal carries it."""
+        return _preserve.runs_line(_preserve.branch_runs(state.worktree, state.branch))
+
+    def _down_worktree_tail(
+        self, state: IsolationState, force: bool, preserve: bool = True
+    ) -> TeardownReport:
+        """PR guard → reap-hazard guard → STAGE fr's records → environment
+        teardown → verified worktree removal → COMMIT the tombstone → marker +
+        state retirement. Shared with `HostWorktreeTarget` (#... isolation host
+        modes): the ONLY per-mode difference is `_teardown_container`, which the
+        host-worktree mode overrides to a no-op (no docker), so both guards, the
+        post-condition verification, and the marker/state cleanup stay identical
+        across modes.
+
+        #575 (spec §3.D): the branch's runs are computed ONCE and name every
+        refusal. Preservation is two-phase — staged after the guards (a copy
+        failure raises here, with the workspace intact), committed only after
+        the removal is verified — and keyed on `state.repo_root`, so gc's
+        host-wide sweep files each record under the workspace's own repo."""
+        if not preserve and not force:
+            raise IsolationError(
+                "--no-preserve is only valid with --force — it discards fr's records "
+                "under docs/superpowers/, an explicit per-call decision."
+            )
+        runs = _preserve.branch_runs(state.worktree, state.branch)
         open_pr = self._open_pr_refusal(state)
         if open_pr is not None and not force:
-            raise IsolationError(open_pr)
+            raise IsolationError(_preserve.name_runs(runs, open_pr, state.branch))
         if not force:
             hazard = self._reap_hazard(state)
             if hazard is not None:
-                raise ReapRefused(hazard)
+                raise ReapRefused(
+                    ReapHazard(hazard.kind, _preserve.name_runs(runs, hazard.detail, state.branch))
+                )
+        record = _preserve.stage(state, self.run, runs=runs) if preserve else None
         self._teardown_container(state)
+        if record is not None:
+            # From here staging/ may be the only copy: protect it (p4-f2).
+            _preserve.mark_removal_attempted(record)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
@@ -877,8 +1327,33 @@ class LocalWorktreeDevcontainerTarget:
         # still-present worktree, so the workspace stays a valid isolation
         # workspace. When the worktree is gone the marker went with it — the
         # unlink is then an idempotent no-op.
+        preserved: Path | None = None
+        reason: str | None = None if preserve else _preserve.NO_PRESERVE
+        if record is not None:
+            try:
+                preserved = _preserve.commit(record, forced=force, run=self.run)
+            except Exception as e:
+                # The worktree is already gone: failing now would strand the
+                # state record of a workspace that no longer exists. The
+                # staged copies are protected (removal_attempted) and the next
+                # down merges them; the report says where they are (p4-f4).
+                reason = (
+                    f"could not record the teardown ({e}); the staged copies are at "
+                    f"{record.staging}"
+                )
         self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
+        # A retry's record carries the first attempt's runs too (p4-f2).
+        ended = record.runs if record is not None else runs
+        return TeardownReport(
+            branch=state.branch,
+            preserved_dir=preserved,
+            ended_runs=[(r.id, r.cursor) for r in ended if r.active],
+            reason=reason,
+            preserved_files=len(record.files) if record is not None and preserved else 0,
+            skipped=list(record.skipped) if record is not None else [],
+            unpreserved_runs=record.unpreserved_runs() if record is not None else [],
+        )
 
     def _teardown_container(self, state: IsolationState) -> None:
         """Stop + rm the devcontainer and reclaim its image, verifying the
@@ -1077,8 +1552,11 @@ class LocalWorktreeDevcontainerTarget:
             # Tear down through a Target rooted at the workspace's OWN repo
             # (down() keys git/gh off its repo_root) — substrate-neutral: gc
             # orchestrates Targets, it doesn't reach past them.
-            sibling.down(state, force=False)
-            return GcAction(wt, state.branch, verdict, "reaped")
+            report = sibling.down(state, force=False)
+            ended = "; ".join(f"ended run {i} at step {c}" for i, c in report.ended_runs)
+            if ended and report.preserved_dir is not None:
+                ended += f" — record preserved at {report.preserved_dir}"
+            return GcAction(wt, state.branch, verdict, "reaped", ended)
         except ReapRefused as e:
             return GcAction(wt, state.branch, verdict, "skipped", e.hazard.detail)
         except Exception as e:
@@ -1438,28 +1916,163 @@ class LocalWorktreeDevcontainerTarget:
         if worktree.exists():
             self._ensure_validator_wrapper_in_worktree(worktree)
             return  # already provisioned — up() is idempotent on the worktree
-        branches = self.run(["git", "branch", "--list", branch], cwd=self.repo_root)
-        if branches.stdout.strip():
-            # Reuse: check the existing branch out as-is. Never fetch or rebase —
-            # continuation/reuse must inherit the branch's own tip (#322 corner 1).
-            self._ensure_validator_wrapper_in_ref(branch)
+        # Classify <B> against origin/<B> (#438, spec §3.E). The probe runs
+        # for the local rows too, best-effort: an unknown origin never blocks
+        # a reuse, and a local branch is never fetched into or rebased (#322
+        # corner 1) — only the remote-tracking ref moves.
+        local_sha = self._rev(f"refs/heads/{branch}")
+        remote = self._remote_view(branch, no_fetch)
+        decision = classify_branch(
+            branch,
+            local_sha=local_sha,
+            remote=remote,
+            relation=self._relation(local_sha, remote.sha),
+            base=base,
+            worktree=worktree,
+        )
+        # stderr, always: `--print-path` and `fr run start` own stdout (§3.C).
+        for line in decision.lines:
+            print(line, file=sys.stderr)
+        track = False
+        if decision.action == "local":
+            checkout = branch
             argv = ["git", "worktree", "add", str(worktree), branch]
+        elif decision.action == "remote":
+            checkout = f"origin/{branch}"
+            # --no-track + explicit upstream config: git's --track refuses a
+            # remote-tracking ref no fetch refspec maps (a --single-branch or
+            # narrow-refspec clone — exactly where pods and CI live).
+            argv = ["git", "worktree", "add", "--no-track", "-b", branch, str(worktree), checkout]
+            track = True
         else:
             # Genuine cold-start: a brand-new branch. Default to freshly-fetched
             # origin/<default> instead of the base repo's current HEAD (#322).
-            start_point, log_line = self._cold_start_base(branch, base, no_fetch)
-            print(log_line, file=sys.stderr if log_line.startswith("WARNING") else sys.stdout)
-            self._ensure_validator_wrapper_in_ref(start_point or "HEAD")
+            # An unknown probe already failed to reach origin: no second fetch.
+            start_point, log_line = self._cold_start_base(
+                branch, base, no_fetch, origin_reachable=remote.state != "unknown"
+            )
+            checkout = start_point or "HEAD"
+            sha = self._rev(checkout)
+            print(f"{log_line} ({_short(sha)})" if sha else log_line, file=sys.stderr)
             argv = ["git", "worktree", "add", str(worktree), "-b", branch]
             if start_point is not None:
                 argv.append(start_point)
+        self._ensure_validator_wrapper_in_ref(checkout)
         result = self.run(argv, cwd=self.repo_root)
         if result.returncode != 0:
             raise IsolationError(f"git worktree add failed: {result.stderr}")
+        if track:
+            self._set_upstream(branch)
+        # #575 (spec §3.D.4): only a worktree this call CREATED gets the
+        # branch's preserved records back — a reuse returned above. A restore
+        # problem never fails the `up`: the worktree is already correct.
+        # A cold start is a NEW branch that merely reuses the name: its restore
+        # only points at the old records, never applies them (p4-f5).
+        try:
+            _preserve.restore(
+                self.repo_root,
+                branch,
+                worktree,
+                self.run,
+                new_branch=decision.action not in ("local", "remote"),
+            )
+        except Exception as e:
+            print(
+                f"WARNING: could not restore {branch}'s preserved records ({e}) — they stay "
+                f"at {_preserve.preserved_dir(self.repo_root, branch)}",
+                file=sys.stderr,
+            )
+
+    def _set_upstream(self, branch: str) -> None:
+        """branch.<B>.{remote,merge} — what --track would have written. A
+        failure is reported, never fatal: the worktree is already correct."""
+        for key, value in (("remote", "origin"), ("merge", f"refs/heads/{branch}")):
+            res = self.run(["git", "config", f"branch.{branch}.{key}", value], cwd=self.repo_root)
+            if res.returncode != 0:
+                print(
+                    f"WARNING: could not set {branch}'s upstream to origin/{branch} "
+                    f"({_why('git config', res)}) — set branch.{branch}.remote=origin and "
+                    f"branch.{branch}.merge=refs/heads/{branch} yourself",
+                    file=sys.stderr,
+                )
+                return
+
+    def _rev(self, ref: str) -> str | None:
+        """The commit `ref` names, or None when it names none."""
+        result = self.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=self.repo_root
+        )
+        sha = (result.stdout or "").strip()
+        return sha if result.returncode == 0 and sha else None
+
+    def _network_env(self) -> dict[str, str]:
+        """The environment for a git call that talks to origin: never prompt
+        (no terminal credential prompt; ssh in BatchMode with a connect
+        timeout) — unless the operator already chose an ssh command, which a
+        GIT_SSH_COMMAND of ours would silently override."""
+        env = dict(os.environ)
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        if not env.get("GIT_SSH_COMMAND") and not env.get("GIT_SSH"):
+            configured = self.run(["git", "config", "--get", "core.sshCommand"], cwd=self.repo_root)
+            if configured.returncode != 0 or not (configured.stdout or "").strip():
+                env["GIT_SSH_COMMAND"] = _BATCH_SSH
+        return env
+
+    def _run_network(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
+        """A bounded, non-interactive git call against origin. A timeout comes
+        back as a non-zero, non-2 exit — `unknown`, never `absent`."""
+        return self.run(
+            argv, cwd=self.repo_root, env=self._network_env(), timeout=_NETWORK_TIMEOUT_S
+        )
+
+    def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
+        """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,
+        anything else unknown — never absence, #354), then an explicit-refspec
+        fetch so `origin/<B>` updates even in a --single-branch clone."""
+        tracking = f"refs/remotes/origin/{branch}"
+        if not self._has_origin_remote():
+            return RemoteView("absent", None, "no origin remote")
+        if no_fetch:
+            sha = self._rev(tracking)
+            return RemoteView("exists", sha) if sha else RemoteView("unchecked", None, "--no-fetch")
+        probe = self._run_network(
+            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"]
+        )
+        if probe.returncode == 2:
+            return RemoteView("absent")
+        if probe.returncode != 0:
+            return RemoteView("unknown", self._rev(tracking), _why("git ls-remote", probe))
+        fetch = self._run_network(["git", "fetch", "origin", f"+refs/heads/{branch}:{tracking}"])
+        sha = self._rev(tracking)
+        if fetch.returncode != 0:
+            return RemoteView("unfetched", sha, _why("git fetch", fetch))
+        if sha is None:
+            return RemoteView("unfetched", None, f"no origin/{branch} after the fetch")
+        return RemoteView("exists", sha)
+
+    def _relation(self, local_sha: str | None, remote_sha: str | None) -> tuple[int, int] | None:
+        """(ahead, behind) of local `<B>` against `origin/<B>`; None when
+        either is missing, they agree, or git cannot count."""
+        if local_sha is None or remote_sha is None or local_sha == remote_sha:
+            return None
+        result = self.run(
+            ["git", "rev-list", "--left-right", "--count", f"{local_sha}...{remote_sha}"],
+            cwd=self.repo_root,
+        )
+        parts = (result.stdout or "").split()
+        if result.returncode != 0 or len(parts) != 2 or not all(p.isdigit() for p in parts):
+            return None
+        return int(parts[0]), int(parts[1])
 
     # ----- .fr-isolation marker lifecycle (#328 Task 3) -----
 
-    def _write_isolation_marker(self, worktree: Path, branch: str, mode: str = "worktree") -> None:
+    def _write_isolation_marker(
+        self,
+        worktree: Path,
+        branch: str,
+        mode: str = "worktree",
+        created_at: str | None = None,
+    ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
 
         The marker is what the `fr-isolation-required` PreToolUse hook reads to
@@ -1478,7 +2091,9 @@ class LocalWorktreeDevcontainerTarget:
                     "toplevel": str(worktree.resolve()),
                     "branch": branch,
                     "mode": mode,
-                    "created_at": datetime.now(UTC).isoformat(),
+                    # the state record's own created_at, so an `up` that
+                    # carries the record forward does not restamp the marker
+                    "created_at": created_at or datetime.now(UTC).isoformat(),
                 },
                 indent=2,
             )
@@ -1498,14 +2113,14 @@ class LocalWorktreeDevcontainerTarget:
     # ----- cold-start base resolution (#322) -----
 
     def _cold_start_base(
-        self, branch: str, base: str | None, no_fetch: bool
+        self, branch: str, base: str | None, no_fetch: bool, origin_reachable: bool = True
     ) -> tuple[str | None, str]:
         """Resolve the start-point for a NEW branch per the spec matrix.
 
         Returns (start_point, log_line). start_point is the ref to append after
         `-b <branch>`, or None meaning "append nothing" — git then defaults to
         the current HEAD (byte-identical to the legacy behaviour). The log_line
-        is printed by the caller; a `WARNING`-prefixed line goes to stderr.
+        is printed by the caller, to stderr (every line `up` prints does).
         """
         # Operator named an explicit start-point — use it verbatim, no fetch, no
         # default-branch resolution. `--base HEAD` is the documented opt-in to the
@@ -1528,6 +2143,11 @@ class LocalWorktreeDevcontainerTarget:
         if not self._has_origin_remote():
             return None, f"WARNING: no origin remote — basing {branch} on local HEAD"
 
+        if not origin_reachable:
+            # The <B> probe just failed to reach origin; a second, full fetch
+            # would only repeat that wait (#438 review).
+            return None, f"WARNING: origin unreachable — basing {branch} on local HEAD"
+
         if not self._fetch_origin():
             return None, f"WARNING: git fetch origin failed — basing {branch} on local HEAD"
 
@@ -1544,12 +2164,12 @@ class LocalWorktreeDevcontainerTarget:
     def _fetch_origin(self) -> bool:
         """git fetch origin; return success. Never raises — a fetch problem
         degrades to the local-HEAD fallback, it does not abort the run."""
-        result = self.run(["git", "fetch", "origin"], cwd=self.repo_root)
+        result = self._run_network(["git", "fetch", "origin"])
         if result.returncode != 0:
             return False
         # Refresh origin/HEAD so _resolve_default_branch's symbolic-ref hits.
         # Best-effort: a failure here just falls through to the gh/main chain.
-        self.run(["git", "remote", "set-head", "origin", "--auto"], cwd=self.repo_root)
+        self._run_network(["git", "remote", "set-head", "origin", "--auto"])
         return True
 
     def _resolve_default_branch(self) -> str:
@@ -1616,10 +2236,7 @@ class LocalWorktreeDevcontainerTarget:
         return "main"
 
     def _ref_exists(self, ref: str) -> bool:
-        result = self.run(
-            ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=self.repo_root
-        )
-        return result.returncode == 0
+        return self._rev(ref) is not None
 
     def _ensure_mounted_env_file(self, config: Path) -> None:
         """Ensure the env-file the profile's devcontainer.json mounts exists.
@@ -1666,10 +2283,6 @@ class LocalWorktreeDevcontainerTarget:
         the #354 leak under a down daemon), only a successful-but-empty one."""
         return (self._docker_ps(state).stdout or "").strip()
 
-    def _container_id(self, state: IsolationState) -> str | None:
-        line = self._docker_ps_line(state)
-        return line.split()[0] if line else None
-
     def _image_for(self, container: str) -> str | None:
         """The image id backing a container (for post-teardown reclamation)."""
         result = self.run(["docker", "inspect", "--format", "{{.Image}}", container])
@@ -1685,16 +2298,29 @@ class LocalWorktreeDevcontainerTarget:
         if not image:
             return
         result = self.run(["docker", "rmi", image])
-        if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        # Already gone is reclaimed, not a failure: a features profile's rebuild
+        # can leave the old image id removed before fr gets to it (live walk,
+        # phase-6 p6-f1). Only an image that is still there earns the warning.
+        if result.returncode != 0 and "No such image" not in detail:
             print(
-                f"warning: could not remove image {image} (shared or in use?): "
-                f"{(result.stderr or result.stdout or '').strip()}",
+                f"warning: could not remove image {image} (shared or in use?): {detail}",
                 file=sys.stderr,
             )
 
-    def _container_state(self, state: IsolationState) -> str | None:
-        parts = self._docker_ps_line(state).split()
-        return parts[1] if len(parts) > 1 else None
+    def _shown_container_state(self, state: IsolationState) -> str:
+        """`status`'s rendering of the docker state: `exited` reads as `stopped`
+        (the state `fr isolation stop` leaves, #471); every other state passes
+        through; no container is `not running`. A FAILED query is not absence
+        (#354, phase-1 review f7): it reads `unknown (docker unreachable)`."""
+        try:
+            pairs = self._ps_pairs_strict(state)
+        except IsolationError:
+            return "unknown (docker unreachable)"
+        current = pairs[0][1] if pairs else None
+        if current is None:
+            return "not running"
+        return "stopped" if current == "exited" else current
 
     def _pr(self, state: IsolationState) -> dict[str, Any] | None:
         return self._pr_from(self.repo_root, state.branch)

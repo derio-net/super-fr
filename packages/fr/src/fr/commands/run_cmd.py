@@ -27,7 +27,7 @@ import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import typer
 from rich.console import Console
@@ -2420,6 +2420,12 @@ def start_cmd(
         raise typer.Exit(2)
     if path.exists():
         err_console.print(f"[red]run {rid!r} already exists at {path}[/red]")
+        # After `up` restored a torn-down run (#575 §3.D.4) this is the usual
+        # way here: the run is back, and it is resumed, not restarted.
+        err_console.print(
+            f"  inspect it:  fr run status {rid}\n  resume it:   fr run advance {rid}",
+            soft_wrap=True,
+        )
         raise typer.Exit(2)
     existing = _existing_run_for_workflow(workspace, manifest.workflow, branch)
     if existing is not None:
@@ -2555,14 +2561,33 @@ def _fan_out_items(state: RunState) -> dict[str, str]:
     return units.fan_out_states(state)
 
 
+def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:
+    """Exit 2 with an HONEST run-not-found (#575, spec §3.D.5): the run may be
+    in another live workspace, or preserved by a teardown, or never existed —
+    `preserve.explain_missing` says which. Imported lazily, here at the CLI
+    layer, so `fr/run/model.py`'s `load_run_state` stays import-free."""
+    from fr.isolation.preserve import explain_missing
+
+    err_console.print(f"[red]{explain_missing(repo_root, run_id, path)}[/red]", soft_wrap=True)
+    raise typer.Exit(2)
+
+
 def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
-    """Load a run, or exit 2 naming the FILE (review r5-e3).
+    """Load a run, or exit 2 naming the FILE (review r5-e3) — or, when there is
+    no file, explaining where the run went (`_missing_run_exit`).
+
+    Every load site in this module goes through here (the three that also
+    resolve a manifest call it inside their own `try`; `typer.Exit` passes
+    through their `except`).
 
     Every `fr run` subcommand needs this and each did it slightly differently.
     A missing or unparseable run file is an ordinary operator situation — a
     typo'd id, a half-written file, a bad merge — and must never be a
     traceback; `RunStateError` already carries the path.
     """
+    path = run_path(repo_root, run_id)
+    if not path.exists():  # a present-but-unreadable file keeps its own error (p5-f9)
+        _missing_run_exit(repo_root, run_id, path)
     try:
         return load_run_state(repo_root, run_id)
     except RunStateError as e:
@@ -2873,7 +2898,7 @@ def advance_cmd(
     """
     repo_root = resolve_repo_root()
     try:
-        state = load_run_state(repo_root, run_id)
+        state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         step = _step_by_id(manifest, state.cursor)
     except (RunStateError, WorkflowError, AdoptError) as e:
@@ -3282,7 +3307,7 @@ def resolve_cmd(
 
     repo_root = resolve_repo_root()
     try:
-        state = load_run_state(repo_root, run_id)
+        state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         step, parent = _find_step(manifest, step_id)
         # A member validates against its own declared emits, falling back to
@@ -3633,7 +3658,7 @@ def claim_cmd(
 
     repo_root = resolve_repo_root()
     try:
-        state = load_run_state(repo_root, run_id)
+        state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         step, parent = _find_step(manifest, step_id)
         key = _unit_key(repo_root, state, step, parent, item)

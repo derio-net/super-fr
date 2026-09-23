@@ -22,15 +22,16 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fr.isolation.local import GcAction, Runner, subprocess_runner
+from fr.isolation.preserve import TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
     _git_common_dir,
+    carried_state,
     delete_state,
     save_state,
 )
@@ -172,14 +173,7 @@ class ExternalTarget:
                 file=sys.stderr,
             )
         self._ensure_branch(branch)
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=self.repo_root,
-            profile="external",
-            created_at=datetime.now(UTC).isoformat(),
-            target="external",
-        )
+        state = carried_state(self.repo_root, branch, self.repo_root, "external", "external")
         save_state(state)
         self._set_marker_branch(branch)
         self._exclude_marker()
@@ -211,6 +205,12 @@ class ExternalTarget:
     def restart(self, state: IsolationState, force: bool = False) -> str:
         raise IsolationError(_EXTERNAL)
 
+    def stop(self, state: IsolationState) -> str:
+        raise IsolationError(_EXTERNAL)
+
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        raise IsolationError(_EXTERNAL)
+
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)
 
@@ -236,7 +236,9 @@ class ExternalTarget:
         """External `down` has no refusal guard — it only retires fr's claim."""
         return None
 
-    def down(self, state: IsolationState, force: bool = False) -> None:
+    def down(
+        self, state: IsolationState, force: bool = False, preserve: bool = True
+    ) -> TeardownReport:
         """Retire fr's state file and the marker's branch claim ONLY. The checkout
         and container belong to the preparer — no worktree removal, no docker, and
         the marker file itself is never unlinked.
@@ -246,8 +248,15 @@ class ExternalTarget:
         container is scope creep, and there is nothing here for it to reconcile —
         `gc` in this mode reports rather than reaps.
         """
+        if not preserve and not force:
+            raise IsolationError(
+                "--no-preserve is only valid with --force — the same rule as every "
+                "other target, even though an external down destroys nothing."
+            )
         delete_state(state.repo_root, state.branch)
         self._set_marker_branch("")
+        # Nothing is destroyed, so nothing is preserved or ended (spec §3.F).
+        return TeardownReport(branch=state.branch)
 
     def gc(self, dry_run: bool = False) -> list[GcAction]:
         """Report the containment; never reap it (#423).

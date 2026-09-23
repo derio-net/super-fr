@@ -402,7 +402,17 @@ strong{font-weight:600;color:#f2ecdd}.lead-in{color:var(--paper-dim)}
     <div class="cmd rv"><span class="p">fr isolation up</span>   --branch feat/rate-limit --profile dev   <span class="cm"># worktree + container</span>
 <span class="p">fr isolation exec</span> --branch feat/rate-limit -- uv run pytest -q
 <span class="p">fr isolation status</span>                                       <span class="cm"># worktree · container · PR</span>
+<span class="p">fr isolation stop</span> --branch feat/rate-limit                <span class="cm"># free the container; the next exec resumes it</span>
+<span class="p">fr isolation rebuild</span> --branch feat/rate-limit             <span class="cm"># profile changed: new container, same worktree</span>
 <span class="p">fr isolation down</span> --branch feat/rate-limit                <span class="cm"># after the PR merges</span></div>
+    <p class="rv" style="margin-top:1.4em">The container is disposable; the worktree is the work. So the verbs
+      that touch only the container — <code>restart</code>, <code>stop</code>, <code>rebuild</code> — never
+      touch your uncommitted files or the run's cursor, and a changed profile is a <code>rebuild</code>, not a
+      teardown. Even a forced <code>down</code> keeps fr's own records under <code>docs/superpowers/</code>
+      (unless you pass <code>--no-preserve</code>): it preserves them inside the repository's git directory, and
+      the <code>up --branch</code> that re-creates the worktree puts them back. The restore only ever adds: a file
+      that changed since the teardown is reported as a conflict and its copy kept, a recorded deletion is
+      reported but never re-applied, and a different branch re-created under the same name gets nothing.</p>
     <p class="rv" style="margin-top:1.4em">Or watch the boundary bite with no container at all: in any
       isolation-enabled repo, have an agent edit a tracked file from the base clone with no active workspace.
       The hook refuses it before the write touches disk. That single denial is the whole thesis — the sandbox

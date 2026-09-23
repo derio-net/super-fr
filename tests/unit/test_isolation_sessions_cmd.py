@@ -62,7 +62,7 @@ def fake_run(monkeypatch: pytest.MonkeyPatch):
     """git runs for real; gh answers "no PR" (empty), everything else is a no-op."""
     calls: list[list[str]] = []
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         calls.append(list(argv))
@@ -242,7 +242,7 @@ def test_down_refused_by_open_pr_keeps_bindings(
     refused teardown (open PR, no --force) keeps the workspace — and its
     bindings, so a later status/attach still sees the session."""
 
-    def run(argv, cwd=None, check=False, capture=True):
+    def run(argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
         out = '{"state": "OPEN", "url": "u"}' if argv[0] == "gh" else ""

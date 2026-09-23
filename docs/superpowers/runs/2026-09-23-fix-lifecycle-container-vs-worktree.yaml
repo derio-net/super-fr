@@ -1,0 +1,355 @@
+schema_version: 5
+run: 2026-09-23-fix-lifecycle-container-vs-worktree
+workflow: fr-goal@1
+branch: fix/lifecycle-container-vs-worktree
+started: '2026-09-22T22:49:31+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-22T22:55:51+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-23-lifecycle-container-vs-worktree-design.md
+  spec-review:
+    state: done
+    at: '2026-09-22T23:03:58+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-22T22:55:56+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-22T23:03:58+00:00'
+          outcome: done
+  plan:
+    state: done
+    at: '2026-09-22T23:05:56+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-23-lifecycle-container-vs-worktree
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-22T23:03:59+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-22T23:05:56+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-22T23:05:58+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-23T03:39:45+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-22T23:06:06+00:00'
+          agent: a4d5103a282144d15
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-22T23:17:35+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 8
+            journal_lines: 41
+            handoff_chars: 883
+            spec_bytes: 21999
+            plan_bytes: 20821
+          measured:
+            input_tokens: 98
+            cache_creation_input_tokens: 342380
+            cache_read_input_tokens: 3378371
+            output_tokens: 887
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-22T23:17:36+00:00'
+          agent: a427776881c226b19
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-22T23:28:37+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 10
+            journal_lines: 51
+            handoff_chars: 2327
+            spec_bytes: 21999
+            plan_bytes: 20970
+          measured:
+            input_tokens: 84
+            cache_creation_input_tokens: 183747
+            cache_read_input_tokens: 2279107
+            output_tokens: 7461
+        evidence:
+          review: p1-review
+          reviewer: a427776881c226b19
+          findings: p1-f1,p1-f2,p1-f3,p1-f4,p1-f5,p1-f6,p1-f7,p1-f8
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-22T23:28:44+00:00'
+          agent: a8e973b3bf68cba29
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-22T23:43:22+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 19
+            journal_lines: 96
+            handoff_chars: 3589
+            spec_bytes: 21999
+            plan_bytes: 20970
+          measured:
+            input_tokens: 146
+            cache_creation_input_tokens: 462562
+            cache_read_input_tokens: 7246632
+            output_tokens: 1110
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-22T23:43:23+00:00'
+          agent: a0cdb21839fc524ba
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T00:00:55+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 23
+            journal_lines: 116
+            handoff_chars: 6632
+            spec_bytes: 21999
+            plan_bytes: 21140
+          measured:
+            input_tokens: 64
+            cache_creation_input_tokens: 172809
+            cache_read_input_tokens: 2890598
+            output_tokens: 1023
+        evidence:
+          review: p2-review
+          reviewer: a0cdb21839fc524ba
+          findings: p2-f1,p2-f2,p2-f3,p2-f4,p2-f5,p2-f6,p2-f7,p2-f8,p2-f9,p2-f10,p2-f11,p2-f12,p2-f13
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T00:00:56+00:00'
+          agent: ab60cdfabb3db9d63
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T00:15:21+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 37
+            journal_lines: 186
+            handoff_chars: 5312
+            spec_bytes: 21999
+            plan_bytes: 21140
+          measured:
+            input_tokens: 136
+            cache_creation_input_tokens: 446006
+            cache_read_input_tokens: 6109721
+            output_tokens: 1025
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T00:15:22+00:00'
+          agent: ac52067c489566962
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T00:40:58+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 41
+            journal_lines: 206
+            handoff_chars: 8491
+            spec_bytes: 21999
+            plan_bytes: 21268
+          measured:
+            input_tokens: 68
+            cache_creation_input_tokens: 207828
+            cache_read_input_tokens: 2828127
+            output_tokens: 1450
+        evidence:
+          review: p3-review
+          reviewer: ac52067c489566962
+          findings: p3-f1,p3-f2,p3-f3,p3-f4,p3-f5,p3-f6,p3-f7,p3-f8,p3-f9,p3-f10,p3-f11,p3-f12
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T00:40:59+00:00'
+          agent: a50059ca6a528902c
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T01:01:23+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 54
+            journal_lines: 271
+            handoff_chars: 12084
+            spec_bytes: 22353
+            plan_bytes: 21363
+          measured:
+            input_tokens: 180
+            cache_creation_input_tokens: 635221
+            cache_read_input_tokens: 10918259
+            output_tokens: 1077
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T01:01:24+00:00'
+          agent: a9aebf5d38b48ecd4
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T02:06:54+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 60
+            journal_lines: 301
+            handoff_chars: 16470
+            spec_bytes: 22353
+            plan_bytes: 21533
+          measured:
+            input_tokens: 126
+            cache_creation_input_tokens: 745221
+            cache_read_input_tokens: 8061791
+            output_tokens: 3717
+        evidence:
+          review: p4-review
+          reviewer: a9aebf5d38b48ecd4
+          findings: p4-f1,p4-f2,p4-f3,p4-f4,p4-f5,p4-f6,p4-f7,p4-f8,p4-f9,p4-f10,p4-f11,p4-f12,p4-f13,p4-f14,p4-f15,p4-f16,p4-n1,p4-n2,p4-n3,p4-n4,p4-n5,p4-n6,p4-n7,p4-n8,p4-n9
+      phase/5/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T02:06:55+00:00'
+          agent: a83f21a5bc9873bf1
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T02:27:32+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 88
+            journal_lines: 441
+            handoff_chars: 14583
+            spec_bytes: 23049
+            plan_bytes: 21533
+          measured:
+            input_tokens: 188
+            cache_creation_input_tokens: 535037
+            cache_read_input_tokens: 9958138
+            output_tokens: 6317
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T02:27:32+00:00'
+          agent: a0d05fe0fc57f3527
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T02:47:06+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 93
+            journal_lines: 466
+            handoff_chars: 18780
+            spec_bytes: 23049
+            plan_bytes: 21661
+          measured:
+            input_tokens: 74
+            cache_creation_input_tokens: 192610
+            cache_read_input_tokens: 3491402
+            output_tokens: 2022
+        evidence:
+          review: p5-review
+          reviewer: a0d05fe0fc57f3527
+          findings: p5-f1,p5-f2,p5-f3,p5-f4,p5-f5,p5-f6,p5-f7,p5-f8,p5-f9
+      phase/6/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T02:47:06+00:00'
+          agent: ac46445874b130ea6
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T03:08:49+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 104
+            journal_lines: 521
+            handoff_chars: 15463
+            spec_bytes: 23049
+            plan_bytes: 21661
+          measured:
+            input_tokens: 260
+            cache_creation_input_tokens: 562235
+            cache_read_input_tokens: 13632456
+            output_tokens: 2010
+      phase/6/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-23T03:08:49+00:00'
+          agent: a97fa1b115958601e
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T03:39:45+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 108
+            journal_lines: 622
+            handoff_chars: 23588
+            spec_bytes: 23049
+            plan_bytes: 22135
+          measured:
+            input_tokens: 104
+            cache_creation_input_tokens: 270625
+            cache_read_input_tokens: 5675388
+            output_tokens: 1867
+        evidence:
+          review: p6-review
+          reviewer: a97fa1b115958601e
+          findings: p6-f1,p6-f2,p6-f3,p6-f4,p6-f5,p6-f6,p6-f7,p6-f8,p6-f9,p6-f10,p6-f11,p6-f12
+  journal-check:
+    state: done
+    at: '2026-09-23T03:39:48+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-09-23T04:08:05+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/581
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-23T03:49:01+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+          returned: '2026-09-23T04:08:05+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-tests-3.log@bf158ce6d364

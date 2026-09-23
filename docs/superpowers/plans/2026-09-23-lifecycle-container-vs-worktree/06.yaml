@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Skills, docs, version, and the live walks
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - isolation-rebuild-keeps-worktree
+  - isolation-stop-and-resume
+  - isolation-down-preserves-run
+  - run-missing-explains-teardown
+  - isolation-up-reuses-remote-branch
+  tier: standard
+tasks:
+- number: 1
+  title: Skills, mirrors, explainer, version
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-isolation/SKILL.md (lifecycle block gains stop and rebuild, a container-vs-worktree table, the profile-change line per spec §3.G), and add the one-sentence repair rule to fr-goal and fr-debugging SKILL.md; keep them harness-neutral; run scripts/sync-opencode.py and scripts/sync-hermes.py and confirm `--check` passes for both
+  - id: P6.T1.S2
+    text: |-
+      Edit docs/explainers/fr-isolation.html in place (targeted line replacements only, never a full read or rewrite) where it lists lifecycle verbs; run `uv run --no-project python scripts/bump-version.py minor` and commit manifests plus uv.lock
+  - id: P6.T1.S3
+    text: |-
+      Run the full `uv run pytest -q --no-cov` (skill validation, neutrality, mirror and explainer tripwires, version sync) green
+- number: 2
+  title: Live walks and matrix flips
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      Live walk #471 on this host from the worktree with `uv run fr`: pick a throwaway workspace (fr isolation up --branch tmp/live-stop), install a package in-container via exec, fr isolation stop → status shows stopped → fr isolation exec -- <tool> resumes with the notice and the install survived; fr isolation down that workspace; record the transcript (no third-party hosts) as a plan-journal discovery
+  - id: P6.T2.S2
+    text: |-
+      Live walk #577 on the same throwaway pattern: uncommitted scratch file plus an fr run start cursor in the workspace, add a devcontainer feature to its profile uncommitted, fr isolation rebuild → the feature's tool answers via exec, scratch file and `fr run status <id>` intact; tear the throwaway down; record as a plan-journal discovery
+  - id: P6.T2.S3
+    text: |-
+      Flip the five acceptance rows with `fr acceptance set-status` to ci (unit/integration refs) with notes naming the live walks, add the test refs as levels, and confirm `fr acceptance check` is green
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T02:50:06+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-09-23T02:50:42+00:00'
+      note: null
+    P6.T1.S3:
+      state: x
+      ticked_at: '2026-09-23T03:08:11+00:00'
+      note: 4714 passed, 88 skipped (exit 0 from log)
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-09-23T02:52:27+00:00'
+      note: 'journal p6-live-471; the throwaway is torn down after the #577/#575 walk
+        on the same workspace (S2)'
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-09-23T02:58:59+00:00'
+      note: journals p6-live-577 (rebuild) and p6-live-575 (down/advance/up restore,
+        shipped fr-goal advance); throwaway torn down, branch + preserved dir deleted;
+        finding p6-f1 fixed
+    P6.T2.S3:
+      state: x
+      ticked_at: '2026-09-23T02:59:52+00:00'
+      note: null
+  completion:
+    at: '2026-09-23T03:08:11+00:00'
+    note: null
+    observed_prs: []

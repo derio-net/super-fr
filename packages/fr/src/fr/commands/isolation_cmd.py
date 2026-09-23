@@ -23,6 +23,7 @@ from fr.isolation.local import (
     _detached_gc_spawn,
     subprocess_runner,
 )
+from fr.isolation.preserve import NO_PRESERVE, TeardownReport
 from fr.isolation.routing import target_for_state
 from fr.isolation.types import (
     IsolationError,
@@ -268,6 +269,9 @@ def up(
 ) -> None:
     """Create worktree + start the profile's devcontainer against it.
 
+    On an existing workspace this is a resume: a stopped container is started
+    again, and the state record's session bindings and creation time are kept.
+
     With --print-path (spec 2026-09-04 §5.B.3) the LAST non-empty stdout line
     is the worktree path — the contract a WorktreeCreate hook relies on — and
     the human-facing lines move to stderr.
@@ -317,7 +321,12 @@ def exec(  # noqa: A001 - typer command name
         None, help="Isolation branch (default: the single active workspace)."
     ),
 ) -> None:
-    """Run a command inside the isolation container (exit code passthrough)."""
+    """Run a command inside the isolation container (exit code passthrough).
+
+    A stopped container is resumed first (devcontainer up); a paused one is
+    unpaused. An absent or dead one is never recreated silently — the error
+    names `fr isolation rebuild`.
+    """
     root = _resolve_repo(repo)
     # super-fr#299 part 3: with --branch omitted, resolve to the single active
     # workspace instead of a hardcoded vk-iso/work default — so `exec` after an
@@ -330,7 +339,13 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
-    raise typer.Exit(_target_for_or_exit(root, state).exec(state, argv))
+    try:
+        # the workspace's recorded mode, never the env (gh#569)
+        rc = _target_for(root, state).exec(state, argv)
+    except IsolationError as err:
+        _fail(err)
+        return
+    raise typer.Exit(rc)
 
 
 @isolation_app.command()
@@ -349,6 +364,8 @@ def restart(
 
     Unlike `down` + `up`, `restart` cycles only the container process tree — the
     worktree, node_modules, local DB stack, and in-container installs survive.
+    It also resumes a stopped container. It does NOT apply profile changes
+    (devcontainer.json edits) — use `fr isolation rebuild` for that.
     """
     root = _resolve_repo(repo)
     # Mirror exec's no-branch resolution: the single active workspace, or error.
@@ -359,6 +376,58 @@ def restart(
         _fail(err)
         return
     typer.echo(f"isolation restart: {state.branch} bounced ({container}).")
+
+
+@isolation_app.command()
+def rebuild(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
+    no_cache: bool = typer.Option(
+        False, "--no-cache", help="Rebuild the image without the docker build cache."
+    ),
+) -> None:
+    """Recreate the devcontainer against the existing worktree.
+
+    Uses the BRANCH's own profile config (<worktree>/.devcontainer/<profile>/
+    devcontainer.json): a profile fix merged to main applies only once the
+    branch has it. The worktree, state, marker, session bindings and run cursor
+    are untouched; in-container installs are lost (use `restart` to keep them).
+    Host-worktree mode has no container (no-op); external mode refuses.
+    """
+    root = _resolve_repo(repo)
+    state = _resolve_single(root, branch)
+    try:
+        message = _target_for(root, state).rebuild(state, no_cache=no_cache)
+    except IsolationError as err:
+        _fail(err)
+        return
+    typer.echo(f"isolation rebuild: {message}")
+
+
+@isolation_app.command()
+def stop(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+    branch: str | None = typer.Option(
+        None, help="Isolation branch (default: the single active workspace)."
+    ),
+) -> None:
+    """Stop a workspace's devcontainer to free its resources, keeping the rest.
+
+    The worktree, state, marker and session bindings are kept — only the
+    container halts. `fr isolation up`, `restart` or the next `exec` resumes it.
+    Already stopped is a no-op; host-worktree mode has no container (no-op);
+    external mode refuses.
+    """
+    root = _resolve_repo(repo)
+    state = _resolve_single(root, branch)
+    try:
+        message = _target_for(root, state).stop(state)
+    except IsolationError as err:
+        _fail(err)
+        return
+    typer.echo(f"isolation stop: {message}")
 
 
 @isolation_app.command()
@@ -454,7 +523,15 @@ def down(
         help="Tear down even when a guard refuses (an open PR, or a reap "
         "hazard — uncommitted changes, or content not on origin). Removes "
         "the worktree and fr's record of it; the branch and any landed "
-        "commits stay in the repo, but uncommitted changes do not survive.",
+        "commits stay in the repo, but uncommitted changes do not survive — "
+        "except fr's own records under docs/superpowers/, which are preserved "
+        "and restored by the next `up`.",
+    ),
+    no_preserve: bool = typer.Option(
+        False,
+        "--no-preserve",
+        help="With --force: discard fr's records under docs/superpowers/ instead "
+        "of preserving them (a full disk, an unreadable tree). Refused without --force.",
     ),
     all_: bool = typer.Option(
         False,
@@ -511,6 +588,13 @@ def down(
     if dry_run and not all_:
         # A dry run that silently acted would be the worst possible failure.
         _fail(IsolationError("--dry-run is only supported with --all."))
+    if no_preserve and not force:
+        _fail(
+            IsolationError(
+                "--no-preserve is only valid with --force — it discards fr's records "
+                "under docs/superpowers/ that a teardown otherwise preserves."
+            )
+        )
     # The caller is the ambient session when --session is not given — the same
     # rule `up` binds with (debug journal 2026-09-21 C4). Without it, a session
     # that ran `up` then `down --all` was told its OWN workspace was another
@@ -523,7 +607,14 @@ def down(
     else:
         root = _resolve_repo(repo)
         if all_:
-            _down_all(root, force=force, session=session, dry_run=dry_run, yes=yes)
+            _down_all(
+                root,
+                force=force,
+                session=session,
+                dry_run=dry_run,
+                yes=yes,
+                preserve=not no_preserve,
+            )
             return
         state = _resolve_single(root, branch)
     others = [b.session_id for b in state.sessions if b.session_id != session]
@@ -533,10 +624,11 @@ def down(
             err=True,
         )
     try:
-        _target_for(root, state).down(state, force=force)
+        report = _target_for(root, state).down(state, force=force, preserve=not no_preserve)
     except IsolationError as err:
         _fail(err)
         return
+    _echo_ended_runs(report)
     # Only after a SUCCESSFUL teardown: a refused `down` (open PR, or a reap
     # hazard — #467 phase 3) keeps the workspace, so it keeps its bindings too.
     bound = [b.session_id for b in state.sessions] + ([session] if session else [])
@@ -564,6 +656,42 @@ def _down_refusal(target: Target, state: IsolationState, force: bool) -> str | N
     return probe(state) if probe is not None else None
 
 
+def _echo_ended_runs(report: TeardownReport) -> None:
+    """What a teardown ended and where its records went, on stderr (spec
+    §3.D.3). Never claims "preserved" for a run whose file was not copied, and
+    never blames --no-preserve for a failure that was not one (p4-f3/f4)."""
+    for run_id, cursor in report.ended_runs:
+        if report.preserved_dir is not None and run_id not in report.unpreserved_runs:
+            tail = (
+                f"its record is preserved at {report.preserved_dir}; "
+                f"`fr isolation up --branch {report.branch}` restores it"
+            )
+        elif report.preserved_dir is not None:
+            tail = "its run file could NOT be copied, so its record was NOT preserved"
+        else:
+            tail = f"its record was NOT preserved ({report.reason or 'nothing to copy'})"
+        typer.echo(f"down: ended run {run_id} at step {cursor} here — {tail}", err=True)
+    if not report.ended_runs:
+        if report.preserved_dir is not None:
+            typer.echo(
+                f"down: preserved {report.preserved_files} file(s) at {report.preserved_dir}",
+                err=True,
+            )
+        elif report.reason and report.reason != NO_PRESERVE:
+            typer.echo(f"down: fr's records were NOT preserved — {report.reason}", err=True)
+    if report.skipped:
+        typer.echo(
+            "down: not preserved (not a regular file): " + ", ".join(report.skipped), err=True
+        )
+
+
+def _held_runs(target: Target, state: IsolationState) -> str:
+    """The active-run line(s) for the blast radius; '' for a target without
+    the probe (test doubles, external — which destroys nothing)."""
+    probe = getattr(target, "held_runs", None)
+    return probe(state) if probe is not None else ""
+
+
 def _sessions_text(state: IsolationState) -> str:
     return ", ".join(b.session_id for b in state.sessions) or "none"
 
@@ -574,6 +702,7 @@ def _down_all(
     session: str | None = None,
     dry_run: bool = False,
     yes: bool = False,
+    preserve: bool = True,
 ) -> None:
     """Tear down every workspace + drop session sentinel(s) (#341 Task 2A).
 
@@ -611,12 +740,21 @@ def _down_all(
         plan.append((state, routed, _down_refusal(routed, state, force)))
     header = "isolation down --all --dry-run" if dry_run else "isolation down --all"
     typer.echo(f"{header} blast radius: {len(plan)} workspace(s)")
-    for state, _t, refusal in plan:
+    for state, owner, refusal in plan:
+        # #575: the run a workspace holds is named for EVERY workspace, even
+        # under --force (where no refusal carries it). A refusal already
+        # starts with a sentence naming it, so the keep line shows the actual reason.
+        held = _held_runs(owner, state) if owner is not None else ""
         if refusal is None:
             typer.echo(f"  tear down {state.branch} (sessions: {_sessions_text(state)})")
         else:
-            first = refusal.splitlines()[0] if refusal else ""
+            # the refusal's run sentences are shown bare below, from `held`
+            ran = f"isolation: {state.branch} holds active run "
+            why = [ln for ln in refusal.splitlines() if not ln.startswith(ran)]
+            first = why[0] if why else ""
             typer.echo(f"  keep {state.branch} — {first} (sessions: {_sessions_text(state)})")
+        for line in held.splitlines():
+            typer.echo(f"      {line}")
     foreign = [
         (state.branch, [b.session_id for b in state.sessions if b.session_id != session])
         for state, _t, refusal in plan
@@ -644,11 +782,12 @@ def _down_all(
             kept.append((state.branch, refusal or "no backend"))
             continue
         try:
-            target.down(state, force=force)
+            report = target.down(state, force=force, preserve=preserve)
             torn.append(state.branch)
         except IsolationError as err:
             kept.append((state.branch, str(err)))
             continue
+        _echo_ended_runs(report)
         _sessions.detach_all(state)  # kept workspaces keep their bindings
     cleared = clear_repo_sentinels(root)
     summary = f"isolation down --all: {len(torn)} torn down"
