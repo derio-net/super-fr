@@ -118,10 +118,16 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-09-23T13:01:55+00:00'
+    state: done
+    at: '2026-09-23T13:13:22+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/586
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-09-23T13:01:55+00:00'
           harness: opencode
+          returned: '2026-09-23T13:13:22+00:00'
+          outcome: done
+        evidence:
+          tests: fr-457-tests.log@257aef35e97d
