@@ -49,7 +49,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture()
 def target(tmp_path: Path, home: Path) -> HostWorktreeTarget:
     repo = make_repo(tmp_path)
-    return HostWorktreeTarget(repo, runner=_fake_run, gc_spawner=lambda _r: None)
+    return HostWorktreeTarget(repo, runner=_fake_run, gc_spawner=lambda _r, _m: None)
 
 
 def _cache(home: Path) -> Path:

@@ -55,8 +55,9 @@ Cover, with scan-informed recommended options:
    review/exploration vs `admin` with deploy credentials)? Profiles differ
    by CREDENTIALS first, tools second — same binaries, different env-files
    is the normal shape.
-3. **Tools** — confirm the scan's toolchain list; surface what CI installs
-   that local work also needs (kubectl, terraform, docker-in-docker...).
+3. **Tools** — confirm the scan's toolchain against the known set (`fr init scaffold --help`)
+   and what CI installs that local work needs. JVM (maven implies java): confirm the Java major
+   from version files/pom.xml AND project notes (README, CONTRIBUTING, CI `setup-java` steps).
 4. **Credentials per profile** — which env KEYS each profile expects
    (names only, never values). **Do NOT ask for a host-forge token by
    default:** push, PR/MR creation, and every `fr`-driven `gh`/`glab`/`tea`
@@ -64,7 +65,7 @@ Cover, with scan-informed recommended options:
    — the container needs none for the standard pipeline. Offer it only
    for an explicit in-container-writes profile (e.g. `admin`).
 5. **Working patterns** — test/build/run commands worth recording in the
-   profile's purpose/notes so future runs know the repo's verbs.
+   profile's purpose so future runs know the repo's verbs.
 
 ## 3. Scaffold per profile
 
@@ -86,16 +87,15 @@ Each call writes:
   checksummed `glab`/`tea` binary install for GitLab/Gitea — no official
   devcontainer feature exists for either) + mapped tool features + vk
   installed in postCreate + `--env-file` pointing at the host secrets path.
-- `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile,
-  purpose, expected secret keys, notes for tools without a feature mapping,
-  and the repo-level `backend`/`host` keys (github is the implicit default
-  and not written explicitly).
+- `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile, purpose, expected
+  secret keys, and the repo-level `backend`/`host` keys (github, the default, is not written).
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
 
-Unknown tools land in the profile's notes — wire them into
-`postCreateCommand` by editing the devcontainer.json, and say so.
+Tools take `<tool>[@<version>]`; an unknown tool is refused — pass an unmapped toolchain's
+devcontainer feature ref with `--feature <ref>`. For java/maven ALWAYS pass the confirmed major
+as `--tool java@<major>`: scaffold's own detection reads only version files and pom.xml.
 
 ## 4. Hand back
 

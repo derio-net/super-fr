@@ -68,7 +68,7 @@ def test_up_from_inside_agent_worktree_files_under_main_checkout(
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
-    target = HostWorktreeTarget(layout["agent"], runner=_fake_run, gc_spawner=lambda _r: None)
+    target = HostWorktreeTarget(layout["agent"], runner=_fake_run, gc_spawner=lambda _r, _m: None)
 
     state = target.up(profile=None, branch="feat/from-inside", base="HEAD")
 

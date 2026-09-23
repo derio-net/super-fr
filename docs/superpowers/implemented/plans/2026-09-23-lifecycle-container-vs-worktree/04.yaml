@@ -1,0 +1,77 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Preserve the run record across teardown (#575)
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-down-preserves-run
+  tier: hard
+tasks:
+- number: 1
+  title: Red - run discovery and refusal naming
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Write failing tests for a new packages/fr/src/fr/isolation/preserve.py branch_runs(worktree, branch) (spec §3.D): raw yaml.safe_load, only files whose branch field matches, active when any steps.*.state is not done, an unparseable or schema-foreign file is reported active and unreadable, never raises
+  - id: P4.T1.S2
+    text: |-
+      Write failing tests that an active run of the branch prefixes `holds run <id> at step <cursor>` onto the open-PR refusal, the dirty-worktree hazard and the unlanded-content hazard (both from _down_worktree_tail and down_refusal), that the `down --all --dry-run` listing shows it with and without --force, that a finished run and a foreign branch's run are not named, and that _hazard_detail's --force sentence now names the preserved docs/superpowers records
+- number: 2
+  title: Red - stage, tombstone, restore
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Write failing tests for preserve.stage and commit (spec §3.D.2): parses `git status --porcelain=v1 -z -uall` including a rename, a deletion and a non-ASCII path; copies only docs/superpowers/** into <git-common-dir>/fr/preserved/<sanitized-branch>/files with each path's base_blob; teardown.json (version 1) written only after verified worktree removal; a failed worktree remove leaves no tombstone; a copy failure aborts down with the workspace intact; `force=True, preserve=False` skips it; a second teardown merges
+  - id: P4.T2.S2
+    text: |-
+      Write failing tests for preserve.restore (spec §3.D.4): absent copied, base_blob match overwritten, identical no-op, other reported as conflict with the cache copy kept, deleted paths re-removed, a tombstone head that is not an ancestor of the new HEAD restores nothing and prints the notice, restored_at stamped, restore only runs when _git_worktree_add creates the worktree; plus down returning a TeardownReport listing ended runs and the CLI printing the `down: ended run` line; run all and confirm red for the right reason
+- number: 3
+  title: Green - preserve module and wiring
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Implement preserve.py (branch_runs, stage, commit, restore, TeardownReport/PreserveRecord dataclasses) keyed on state.repo_root's git common dir, never self.repo_root, so gc's host-wide sweep preserves into the right repo
+  - id: P4.T3.S2
+    text: |-
+      Wire it: _down_worktree_tail stages after the guards, commits after verified removal, returns TeardownReport; down() returns it on all three targets (external: empty); refusals are prefixed with the active-run line; add `--no-preserve` to the down command (valid only with --force); _down_all and gc's _reap_or_classify accept the report; _git_worktree_add calls restore on creation; restore/notice lines go to stderr
+  - id: P4.T3.S3
+    text: |-
+      Run ruff, mypy and the full pytest suite green; refactor the refusal-prefixing into one helper used by both _down_worktree_tail and down_refusal if duplicated, else record no-refactor-because for P4.T3 in the plan journal
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T01:00:33+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-23T01:00:33+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-23T01:00:34+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-23T01:00:34+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-23T01:00:35+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-23T01:00:35+00:00'
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-23T01:00:36+00:00'
+      note: null
+  completion:
+    at: '2026-09-23T01:00:36+00:00'
+    note: null
+    observed_prs: []

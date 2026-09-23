@@ -259,6 +259,62 @@ class TestMissingBinary:
 
 
 class TestUninstall:
+    def _extract_installed_rule_filenames(self) -> set[str]:
+        """Extract rule filenames from install.sh's installation declarations."""
+        script = INSTALL_SH.read_text()
+        import re
+
+        # Prefer the install-side array so this remains coupled to the same
+        # authoritative list used by both install and uninstall.
+        array = re.search(r"CLAUDE_RULES=\(([^)]*)\)", script)
+        assert array, "CLAUDE_RULES array not found in install.sh"
+        return set(re.findall(r"[\w.-]+\.md", array.group(1)))
+
+    def test_removes_all_installed_rules_on_uninstall(self, fake_home: Path) -> None:
+        """Uninstall removes every rule that install.sh installs.
+
+        This derives the rule filenames from install.sh, installs, and asserts
+        each is absent after uninstall.
+        """
+        # Install
+        _run_install(fake_home)
+
+        # Get expected installed rules from install.sh
+        installed_rules = self._extract_installed_rule_filenames()
+        assert installed_rules, "No rules found in install.sh"
+
+        # Verify they were actually installed
+        rules_dir = fake_home / ".claude" / "rules"
+        for rule_file in installed_rules:
+            assert (rules_dir / rule_file).exists(), (
+                f"Rule {rule_file} should be installed by install.sh"
+            )
+
+        # Uninstall
+        _run_install(fake_home, "--uninstall")
+
+        # Verify all installed rules are removed
+        for rule_file in installed_rules:
+            assert not (rules_dir / rule_file).exists(), (
+                f"Rule {rule_file} should be removed by --uninstall but still exists"
+            )
+
+    def test_removes_retired_vk_plan_override_on_uninstall(self, fake_home: Path) -> None:
+        """Uninstall removes the retired vk-plan-override.md rule, even if not currently installed.
+
+        vk-plan-override.md was the old name before the rename; --uninstall must clean it up.
+        """
+        # Simulate an older install that left behind vk-plan-override.md
+        rules_dir = fake_home / ".claude" / "rules"
+        rules_dir.mkdir(parents=True, exist_ok=True)
+        retired = rules_dir / "vk-plan-override.md"
+        retired.write_text("old rule content")
+
+        # Uninstall should remove it even though we never installed it in this test
+        _run_install(fake_home, "--uninstall")
+
+        assert not retired.exists(), "Retired vk-plan-override.md should be removed by --uninstall"
+
     def test_removes_rules(self, fake_home: Path) -> None:
         _run_install(fake_home)
         _run_install(fake_home, "--uninstall")

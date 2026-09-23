@@ -14,17 +14,18 @@ enforcement.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
-from fr.isolation.types import IsolationError, IsolationState, save_state
+from fr.isolation.types import IsolationError, IsolationState, carried_state, save_state
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"
 
 
 class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
+    _MODE: ClassVar[str] = "worktree"
+
     def up(
         self,
         profile: str | None,
@@ -36,15 +37,9 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
         worktree = self._worktree_up_core(branch, path)
         self._git_worktree_add(worktree, branch, base=base, no_fetch=no_fetch)
 
-        state = IsolationState(
-            repo_root=self.repo_root,
-            branch=branch,
-            worktree=worktree,
-            profile="host",
-            created_at=datetime.now(UTC).isoformat(),
-        )
+        state = carried_state(self.repo_root, branch, worktree, "host", "worktree")
         save_state(state)
-        self._write_isolation_marker(worktree, branch)
+        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
         self._spawn_gc()
         return state
 
@@ -57,12 +52,21 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
     def restart(self, state: IsolationState, force: bool = False) -> str:
         raise IsolationError(_EXTERNAL)
 
+    def stop(self, state: IsolationState) -> str:
+        """No container in this mode — nothing to stop, and docker is never
+        touched (a docker-less pod has no binary to call)."""
+        return f"{state.branch} runs in host-worktree mode — no container to stop (no-op)."
+
+    def rebuild(self, state: IsolationState, no_cache: bool = False) -> str:
+        """No container in this mode — nothing to rebuild, docker never touched."""
+        return "nothing to rebuild — host-worktree mode has no container"
+
     def stats(self, state: IsolationState) -> dict[str, str] | None:
         raise IsolationError(_EXTERNAL)
 
     def status(self, state: IsolationState) -> dict[str, Any]:
         """Same shape as the local target's status MINUS the docker probe: this
-        mode has no container, so `_container_state` (which shells out to
+        mode has no container, so `_shown_container_state` (which shells out to
         `docker ps`) must never run — on a docker-less pod that raises
         FileNotFoundError. `container` is the fixed sentinel "n/a (host)"; the
         worktree/PR fields are unchanged (git + gh work on the host)."""

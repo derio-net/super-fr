@@ -51,6 +51,16 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
+# Authoritative list of Claude rules to install to ~/.claude/rules/.
+# Used for both install copy operations and --uninstall removal.
+CLAUDE_RULES=(
+  fr-plan-override.md
+  fr-isolation-required.md
+  no-claude-p-batch.md
+  fr-worktree-override.md
+)
+# Retired rule name, no longer installed but must be removed on --uninstall.
+RETIRED_CLAUDE_RULES=(vk-plan-override.md)
 # Legacy user-level copies from pre-plugin installs (old vk-* names).
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
@@ -93,9 +103,15 @@ fi
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   echo "Uninstalling super-fr extras..."
-  rm -f "$RULES_DIR/fr-plan-override.md" "$RULES_DIR/vk-plan-override.md"
-  rm -f "$RULES_DIR/fr-worktree-override.md"
-  echo "  Removed fr/vk plan-override and fr-worktree-override rules"
+  # Remove all currently installed rules
+  for rule in "${CLAUDE_RULES[@]}"; do
+    rm -f "$RULES_DIR/$rule"
+  done
+  # Remove retired rules that may be left over from older installations
+  for rule in "${RETIRED_CLAUDE_RULES[@]}"; do
+    rm -f "$RULES_DIR/$rule"
+  done
+  echo "  Removed Claude rules (including retired vk-plan-override.md)"
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
     if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
       jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
@@ -285,11 +301,15 @@ if command -v jq &>/dev/null; then
     echo "  Registered $MARKETPLACE_NAME in extraKnownMarketplaces"
   fi
 
-  # Add to known_marketplaces.json
+  # Add to known_marketplaces.json. `lastUpdated` is required: Claude Code's
+  # `/plugin` rejects the WHOLE file ("Marketplace configuration file is
+  # corrupted: <name>.lastUpdated: Invalid input") when one entry lacks it,
+  # and this line replaces the entry wholesale, so it must write every field.
+  # This same install re-syncs the marketplace dir below, so "now" is true.
   if [ -f "$KNOWN_MARKETPLACES" ]; then
     jq --arg name "$MARKETPLACE_NAME" --argjson src "$MARKETPLACE_SOURCE" \
-      --arg loc "$MARKETPLACE_DIR" \
-      '.[$name] = {"source":$src,"installLocation":$loc}' \
+      --arg loc "$MARKETPLACE_DIR" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+      '.[$name] = {"source":$src,"installLocation":$loc,"lastUpdated":$now}' \
       "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
     echo "  Registered $MARKETPLACE_NAME in known_marketplaces.json"
   fi
@@ -515,15 +535,14 @@ done
 echo ""
 echo "Installing rules..."
 mkdir -p "$RULES_DIR"
-rm -f "$RULES_DIR/vk-plan-override.md" "$RULES_DIR/fr-plan-override.md"
-cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-plan-override.md" "$RULES_DIR/fr-plan-override.md"
-echo "  Installed $RULES_DIR/fr-plan-override.md (retired vk-plan-override.md)"
-cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-isolation-required.md" "$RULES_DIR/fr-isolation-required.md"
-echo "  Installed $RULES_DIR/fr-isolation-required.md (#328 isolation Edit/Write guard)"
-cp "$PLUGIN_ROOT/plugins/super-fr/rules/no-claude-p-batch.md" "$RULES_DIR/no-claude-p-batch.md"
-echo "  Installed $RULES_DIR/no-claude-p-batch.md (#328 batch-LLM convention)"
-cp "$PLUGIN_ROOT/plugins/super-fr/rules/fr-worktree-override.md" "$RULES_DIR/fr-worktree-override.md"
-echo "  Installed $RULES_DIR/fr-worktree-override.md (worktree-skill routing)"
+# Remove stale vk-plan-override.md from older installations
+rm -f "$RULES_DIR/vk-plan-override.md"
+# Remove any stale versions of current rules (including symlinks) before installing fresh
+for rule in "${CLAUDE_RULES[@]}"; do
+  rm -f "$RULES_DIR/$rule"
+  cp "$PLUGIN_ROOT/plugins/super-fr/rules/$rule" "$RULES_DIR/$rule"
+  echo "  Installed $RULES_DIR/$rule"
+done
 
 # 7a. Allowlist the fr-phase-executor subagent in the org agent-worktree hook.
 # fr-goal dispatches each plan phase to this narrow, serial, already-isolated

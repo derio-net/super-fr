@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Remove all installed rules and validate the change
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - invariants-tripwires
+  tier: mechanical
+tasks:
+- number: 1
+  title: Green - use one authoritative install-side list
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Refactor scripts/install.sh to define and use one Claude rule filename list for copying and --uninstall removal, while continuing to remove retired vk-plan-override.md; make the failing focused regression test pass
+  - id: P2.T1.S2
+    text: |-
+      Add the integration test path to the invariants-tripwires acceptance row and run focused uninstall and rule-install tests plus fr acceptance check
+  - id: P2.T1.S3
+    text: |-
+      Refactor any duplication in the rule-list handling and rerun the focused tests green
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T12:57:31+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-23T12:57:34+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-23T12:57:37+00:00'
+      note: null
+  completion:
+    at: '2026-09-23T12:58:01+00:00'
+    note: null
+    observed_prs: []

@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.cli import app
@@ -48,12 +49,17 @@ class RecordingRunner:
         self.calls: list[list[str]] = []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         if argv[:1] == ["gh"]:
             return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
-        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture)
+        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture, **kw)
 
 
 def _base_repo_with_origin(tmp_path: Path) -> Path:
@@ -88,7 +94,7 @@ def test_a_run_started_from_the_base_clone_is_born_in_the_worktree(
     repo = _base_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "where.yaml").write_text(_SHAPE)
@@ -135,7 +141,7 @@ def test_starting_a_second_run_reuses_the_same_workspace(
     repo = _base_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "where.yaml").write_text(_SHAPE)
