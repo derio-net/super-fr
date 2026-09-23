@@ -40,6 +40,11 @@ scaffolds and builds on camera, and declares `backend: gitlab` through
 the container. That key's absence is what made fr assume GitHub before #487, so
 the interview asking for it is where the GitLab story becomes visible.
 
+**Pin the language version.** The scaffold falls back to the Java feature's
+*latest* JDK when it cannot detect a version, and says so. For a project on an
+older LTS, that line is the moment to pin (`--tool java@<major>`) — otherwise
+the container builds and the project does not.
+
 **Waits are shown as waits**, compressed hard with the compression labelled on
 screen. Pre-pulling base image layers is legitimate and unlabelled.
 
@@ -75,6 +80,10 @@ after `--refresh`. The list is a catalogue, not a statement of what the provider
 will serve. And `fr models set` accepts any string and materialises it, so a
 retired model surfaces only when a phase is dispatched to it: the operator had a
 `standard` agent bound to a dead model with no signal from anything.
+
+Model churn is now tracked as #591 (probe live, fall back by family then tier,
+ask when interactive, decide and record when not); until it lands, probing is
+the operator's job.
 
 A changed session model also resets the gate evidence. Attempt 1's question
 gates fired on the old model; whether a new one follows the same *advisory*
