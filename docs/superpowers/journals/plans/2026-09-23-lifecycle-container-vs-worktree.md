@@ -264,3 +264,8 @@ Autouse fixtures in tests/unit/test_isolation_branch_classify.py and tests/integ
 ### p3-f12 · finding [fixed] · --no-fetch/no-origin ordering and wording (phase 3)
 
 `_remote_view` checks `_has_origin_remote()` first (no origin → absent, output unchanged); --no-fetch without a local origin/<B> ref is a new `unchecked` state: local <B> prints '(origin not checked: --no-fetch)', a cold start prints the soft 'isolation: origin/<B> not checked (--no-fetch, no local ref) — starting a new branch' instead of the second-history WARNING. Tests: tests/unit/test_isolation_branch_classify.py::test_no_fetch_without_origin_ref_is_a_soft_line, ::test_no_origin_output_unchanged.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-09-23T02:40:56 phase=3 -->
+### p3-review · review · Phase 3 review (independent reviewer): 1 major, 6 minor, 5 nits (phase 3)
+
+Departure (a) --no-track + manual upstream accepted (reproduced git 2.53 refusal). p3-f1 (confirmed-but-unfetched cold start = #438 again) fixed by refusing; p3-f2..f7, f9..f12 fixed with tests; p3-f8 refuted (no repo-wide fetch refspec rewrite; limitation recorded). 563392ab; isolation suites re-run by orchestrator.
