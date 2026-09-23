@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Pin rule cleanup in the installer integration test
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  tier: mechanical
+tasks:
+- number: 1
+  title: Red - reproduce incomplete rule uninstall
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Extend the existing fake-home installer integration coverage so it enumerates the rule filenames from the install side and asserts that each is absent after install then uninstall, retaining an explicit assertion for retired vk-plan-override.md; run the focused test and confirm failure on the current uninstall path
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T12:48:15+00:00'
+      note: 'RED: Test added to test_install_sh.py that derives installed rule filenames
+        from install.sh cp commands and asserts they''re removed after uninstall.
+        Currently fails because no-claude-p-batch.md and fr-isolation-required.md
+        are not removed (they''re installed but uninstall.sh only removes fr-plan-override.md,
+        vk-plan-override.md, and fr-worktree-override.md). Retired vk-plan-override.md
+        removal test passes. This pins the incomplete cleanup in the current uninstall
+        implementation.'
+  completion:
+    at: null
+    note: null
+    observed_prs: []
