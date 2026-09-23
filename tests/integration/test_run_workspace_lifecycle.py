@@ -94,7 +94,7 @@ def test_a_run_started_from_the_base_clone_is_born_in_the_worktree(
     repo = _base_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "where.yaml").write_text(_SHAPE)
@@ -141,7 +141,7 @@ def test_starting_a_second_run_reuses_the_same_workspace(
     repo = _base_repo_with_origin(tmp_path)
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "where.yaml").write_text(_SHAPE)

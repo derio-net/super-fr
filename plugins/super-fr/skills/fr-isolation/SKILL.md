@@ -19,11 +19,11 @@ commands in the profile's devcontainer, base repo untouched while the run is liv
 
 - Inside a git repo. **devcontainer mode** (default) needs ≥1 profile (`.devcontainer/<profile>/devcontainer.json`); missing →
   exit 2 pointing at fr-init. NEVER proceed unisolated; offer the fr-init interview (pause, resume).
-- **host-worktree** mode (`FR_ISOLATION_TARGET=worktree`, same contract, docker-less): fr worktree, the host process env as-is — NO
-  profile, no secrets provisioning. A host-level declaration, never a per-call flag. restart/stats refuse; stop/rebuild are no-ops.
+- **host-worktree** (`FR_ISOLATION_TARGET=worktree`, docker-less): host env as-is, NO profile/secrets; restart/stats refuse, stop/rebuild no-op.
 - **external** mode (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout — `up --branch`
   ensures the branch in place; restart/stop/rebuild/stats refuse, gc reports (the container's owner runs them).
-- Any other `FR_ISOLATION_TARGET` value fails closed naming `devcontainer|worktree`.
+- Any other `FR_ISOLATION_TARGET` value fails closed (`devcontainer|worktree`). **It selects the mode at `up` only:** every later command
+  follows the workspace's recorded mode, so agents, hooks and fresh shells need no env; only `up`, `gc`'s sweep and a reaped `verify-merge` read it.
 
 ## Lifecycle
 

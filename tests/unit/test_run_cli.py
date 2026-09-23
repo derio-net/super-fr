@@ -2064,6 +2064,49 @@ def test_advance_grouped_step_member_brief_resolved_tier_is_none_when_the_phase_
     assert brief["resolved_tier"] is None
 
 
+# --- gh#582: the long-command rule reaches the executor through the brief ---
+#
+# The rule lived only near the end of the executor's agent file. On the #564
+# OpenCode smoke the orchestrator's task prompt named the exact suite command,
+# the executor ran it with no `timeout`, and OpenCode killed it at 120 s —
+# twice. The member brief now carries the rule for the harness `advance`
+# detects, so the orchestrator relays it at the moment the executor acts.
+
+
+def _member_brief_as(tmp_path: Path, harness_env: dict[str, str | None]) -> dict:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    result = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], harness_env)
+    assert result.exit_code == 0, result.output
+    return _brief_of(result.output)
+
+
+def test_member_brief_carries_opencodes_long_command_rule(tmp_path: Path) -> None:
+    brief = _member_brief_as(tmp_path, {"FR_HARNESS": "opencode"})
+    rule = brief["long_commands"]
+    assert "timeout" in rule and "600000" in rule, rule
+
+
+def test_member_brief_carries_claude_codes_long_command_rule(tmp_path: Path) -> None:
+    brief = _member_brief_as(tmp_path, {"FR_HARNESS": "claude-code"})
+    assert "run_in_background" in brief["long_commands"]
+
+
+def test_member_brief_carries_hermes_long_command_rule(tmp_path: Path) -> None:
+    brief = _member_brief_as(tmp_path, {"FR_HARNESS": "hermes"})
+    assert "background=true" in brief["long_commands"]
+
+
+def test_member_brief_on_an_unrecognised_harness_still_warns(tmp_path: Path) -> None:
+    """No harness detected is exactly when a reader most needs telling: the
+    brief falls back to the harness-neutral rule, never to nothing."""
+    brief = _member_brief_as(tmp_path, {})
+    rule = brief["long_commands"]
+    assert rule and "2 minutes" in rule, rule
+
+
 def test_build_brief_the_group_step_itself_carries_no_resolved_tier() -> None:
     """A group spans every phase, so there is no single tier to resolve —
     only an item-scoped member brief can answer the question (D5).

@@ -11,7 +11,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -24,6 +24,10 @@ if TYPE_CHECKING:  # preserve imports this module; the protocol only names it
 
 def _home() -> Path:
     return Path(os.environ.get("HOME", str(Path.home())))
+
+
+IsolationMode = Literal["devcontainer", "worktree", "external"]
+"""Which isolation target owns a workspace (spec 2026-09-23 §3.C, gh#569)."""
 
 
 class IsolationError(Exception):
@@ -47,12 +51,33 @@ class IsolationState(BaseModel):
     branch: str
     worktree: Path
     profile: str
+    # The mode that created this workspace, written by each target's `up`
+    # (spec 2026-09-23 §3.C). An older fr on PATH may drop it when it rewrites
+    # the file (sessions.attach -> save_state), so `recorded_mode`'s legacy
+    # inference from `profile` is permanent, not a transitional fallback.
+    target: IsolationMode | None = None
     created_at: str
     # Sessions bound to this workspace (spec 2026-09-04 §5.A). Default keeps
     # pre-feature state files loadable; frozen models still `model_copy(update=)`.
     sessions: list[SessionBinding] = Field(default_factory=list)
 
     model_config = {"frozen": True}
+
+
+def recorded_mode(state: IsolationState) -> IsolationMode:
+    """The mode a workspace was created in, read from its state alone.
+
+    Pure: never consults the environment. ``state.target`` wins when recorded;
+    otherwise infer from the legacy profile sentinels (``host`` -> worktree,
+    ``external`` -> external, anything else -> devcontainer).
+    """
+    if state.target is not None:
+        return state.target
+    if state.profile == "host":
+        return "worktree"
+    if state.profile == "external":
+        return "external"
+    return "devcontainer"
 
 
 def _sanitize(branch: str) -> str:
@@ -126,7 +151,9 @@ def load_state(repo_root: Path, branch: str) -> IsolationState | None:
     return IsolationState.model_validate_json(p.read_text())
 
 
-def carried_state(repo_root: Path, branch: str, worktree: Path, profile: str) -> IsolationState:
+def carried_state(
+    repo_root: Path, branch: str, worktree: Path, profile: str, target: IsolationMode
+) -> IsolationState:
     """The record `up` saves, for every target (spec 2026-09-23 §3.C).
 
     An `up` on an existing workspace is a resume path, so an existing record's
@@ -134,7 +161,8 @@ def carried_state(repo_root: Path, branch: str, worktree: Path, profile: str) ->
     would unbind every other session holding the workspace. Only a record for
     THIS worktree carries: one pointing at another path is a different
     workspace. An unreadable record (corrupt, empty, truncated) never breaks
-    `up`: it is replaced by a fresh one, with a warning."""
+    `up`: it is replaced by a fresh one, with a warning. `target` is the mode
+    of the target saving it (gh#569) — always the caller's, never carried."""
     prior: IsolationState | None = None
     try:
         prior = load_state(repo_root, branch)
@@ -151,16 +179,34 @@ def carried_state(repo_root: Path, branch: str, worktree: Path, profile: str) ->
         branch=branch,
         worktree=worktree,
         profile=profile,
+        target=target,
         created_at=prior.created_at if prior else datetime.now(UTC).isoformat(),
         sessions=list(prior.sessions) if prior else [],
     )
 
 
 def list_states(repo_root: Path) -> list[IsolationState]:
+    """Every readable state record for the repo.
+
+    A record this fr cannot validate (e.g. a newer fr's unknown `target` mode)
+    is skipped and named on stderr rather than raised: one foreign file must not
+    blind `status`/`gc` to every other workspace. `load_state` stays strict, so
+    the workspace that file describes still fails closed when addressed.
+    """
     d = state_dir(repo_root)
     if not d.is_dir():
         return []
-    return [IsolationState.model_validate_json(f.read_text()) for f in sorted(d.glob("*.json"))]
+    states: list[IsolationState] = []
+    for f in sorted(d.glob("*.json")):
+        try:
+            states.append(IsolationState.model_validate_json(f.read_text()))
+        except ValidationError as err:
+            print(
+                f"warning: skipping unreadable isolation state {f} "
+                f"({err.error_count()} validation error(s)) — written by a newer fr?",
+                file=sys.stderr,
+            )
+    return states
 
 
 def sentinel_dir() -> Path:

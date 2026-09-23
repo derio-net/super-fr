@@ -517,17 +517,21 @@ rows:
       - super-fr:tests/unit/test_acceptance_init.py
       - super-fr:tests/unit/test_acceptance_cmd.py
     status: ci
-    notes: 'scaffold_profile() picks HOST_CLI_FEATURE/HOST_CLI_POST_CREATE (versioned
-      + checksummed glab/tea installs, verified against real release artifacts) by
-      backend; fr acceptance init picks WORKFLOW_TEMPLATE_GITEA (.gitea/workflows/,
-      same YAML shape as GitHub Actions) / WORKFLOW_TEMPLATE_GITLAB (.gitlab-ci.yml,
-      genuinely different schema) via fr._hosts.detect_backend. Also fixed a real
-      blocker this surfaced: resolve_identity()''s remote-parsing regex was
-      GitHub-only, which would have hard-failed fr acceptance init on a fresh
-      GitLab/Gitea repo. Residual documented gap: fr acceptance report --link-mode
-      has no gitea/gitlab mode yet (source links in the generated report still point
-      at github.com). Not yet proven against a live GitLab/Gitea instance -- owed
-      to Phase 9''s manual verification.'
+    notes: 'scaffold_profile() picks the host CLI by backend: HOST_CLI_FEATURE for GitHub,
+      and for GitLab/Gitea a postCreate snippet rendered from HOST_CLI_PINS (versioned,
+      per-architecture, sha256-verified glab/tea installs; gh#576 replaced the amd64-only
+      HOST_CLI_POST_CREATE). fr acceptance init picks WORKFLOW_TEMPLATE_GITEA (.gitea/workflows/,
+      same YAML shape as GitHub Actions) or WORKFLOW_TEMPLATE_GITLAB (.gitlab-ci.yml,
+      a genuinely different schema) via fr._hosts.detect_backend. This work also fixed
+      a real blocker it surfaced: resolve_identity()''s remote-parsing regex was GitHub-only,
+      which would have hard-failed fr acceptance init on a fresh GitLab/Gitea repo.
+      Residual documented gap: fr acceptance report --link-mode has no gitea/gitlab
+      mode yet, so source links in the generated report still point at github.com. The
+      CLI install has been proven live in an arm64 container (2026-09-23, glab 1.107.0
+      / tea 0.14.2, row scaffold-host-cli-arch; the separate pinned-host-cli-assets-resolve
+      row checks the pinned downloads and checksums on a schedule, not a container install).
+      Not yet proven against a live GitLab/Gitea instance; that is owed to the multi-backend
+      spec''s Phase 9 manual verification.'
   - id: plan-validator-wrapper-lifecycle
     capability: Isolation
     acceptance: Plan repos cannot enter isolated autonomous work unless the tracked
@@ -839,9 +843,13 @@ rows:
       int:
       - super-fr:tests/integration/test_hostworktree_lifecycle.py
     status: ci
-    notes: 'Type 2: worktree half only; host env is the env — no secrets provisioning.
-      Lifecycle + no-docker/devcontainer-argv (Runner seam) unit+int-pinned; live pod
-      walk = spec Test Plan step 2, which also unblocks hermes-agent-compat Phase 8.'
+    notes: 'Type 2: worktree half only; the host env is the env, with no secrets provisioning.
+      The host declaration (FR_ISOLATION_TARGET=worktree) is read at up and gc only.
+      up records the mode in the workspace state, and exec/status/down follow the recorded
+      mode even with the variable unset (gh#569, row isolation-mode-from-state). Lifecycle
+      and the no-docker/devcontainer argv (Runner seam) are pinned by unit and integration
+      tests. Live host walk 2026-09-23 (journal p6-live-569). The live pod walk is spec
+      Test Plan step 2, which also unblocks hermes-agent-compat Phase 8.'
   - id: isolation-no-silent-degradation
     capability: Isolation host modes
     acceptance: 'Operator machines never silently degrade: absent the host declaration
@@ -3551,13 +3559,28 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_skill_tool_neutrality.py
       - super-fr:tests/unit/test_phase_executor_agent.py
+      - super-fr:tests/unit/test_long_command_rule.py
+      - super-fr:tests/unit/test_run_cli.py
     status: ci
     notes: 'Spec 3.D. ci pins the PROSE: tests/unit/test_phase_executor_agent.py checks
       each harness''s arm carries its own mechanism and none of another''s (review p3r-4).
       Sources: OpenCode timeout/kill from its bash tool source; Hermes terminal/process
       from its tools reference; the OpenCode detach recipe (PID file, exit-code capture)
       is the one arm not verified from source. The BEHAVIOUR — a long suite not killed,
-      nothing left running — is the post-merge Test Plan smoke''s to show (review p3r-m1/m2).'
+      nothing left running — is the post-merge Test Plan smoke''s to show (review p3r-m1/m2).
+      LIVE SMOKE (#564 Test Plan step 2, 2026-09-23, OpenCode 1.18.32, mechanical tier
+      on claude-haiku-4.5): the executor ran the full suite with no timeout twice, and
+      it was killed at 120 s both times before it passed timeout=600000 and the suite
+      passed (150 s). The orchestrator passed timeouts correctly. So the agent-file
+      clause alone does not change behaviour (gh#582). FIX: every phase-member brief
+      now carries the harness''s rule as long_commands, and fr-goal copies it into the
+      task prompt verbatim (tests/unit/test_run_cli.py, tests/unit/test_long_command_rule.py).
+      RE-WALK (2026-09-23, fr 4.17.2, same smoke, executor fr-phase-executor-mechanical
+      on claude-haiku-4.5): the orchestrator copied the brief''s long_commands rule
+      into the task prompt verbatim, and ALL three of the executor''s full-suite calls,
+      the first included, passed timeout=600000; each ran 150 s with nothing killed
+      and no process left behind. PASS. Side observation: the review-phase reviewer=
+      id was mis-copied by one character (advisory on OpenCode, per #536''s stated limit).'
   - id: phase-executor-description-rules-out-second-worktree
     capability: fr-goal phase executor dispatch
     acceptance: The phase-executor description check fails a description that merely
@@ -3733,3 +3756,98 @@ rows:
       exit codes, fetch-failure and --no-fetch paths. Not walked live against github.com:
       the phase-6 live walks exercised the local-branch reuse row only (up after a forced
       down: ''reusing local branch'').'
+  - id: scaffold-unknown-tool-refused
+    capability: fr init scaffold
+    acceptance: An unrecognised --tool fails loudly, names the known set, and writes
+      nothing; --feature <ref> is the explicit escape
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scaffold_tools.py
+      - super-fr:tests/unit/test_init_scaffold.py
+    status: ci
+    notes: 'gh#574: resolve_tools refuses an unknown --tool before anything is written.
+      The refusal names the known set and the --feature <ref> escape; unit tests pin
+      this, including that the check runs before the profile-exists check. Live 2026-09-23
+      on arm64: ''fr init scaffold --tool nosuchtool'' exits 2 and leaves no .devcontainer
+      (journal p6-live-574).'
+  - id: scaffold-jvm-toolchain
+    capability: fr init scaffold
+    acceptance: --tool java/maven yields a container where java -version (at the project's
+      detected version) and mvn -v succeed
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#a-tool-resolution-gh574
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scaffold_java_version.py
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_scaffold_tools.py
+    status: skipped
+    notes: 'gh#574: --tool java/maven map to the java devcontainer feature (installMaven).
+      The version is detected from version files, then the root pom.xml; unit tests
+      pin this. Live walk 2026-09-23 on arm64 (journal p6-live-574, recorded in the
+      PR): with pom.xml maven.compiler.release 17, scaffold printed ''java 17 (from
+      pom.xml maven.compiler.release)''. In the container, mvn -v reported Maven 3.9.16
+      on Java 17.0.20.1 and java -version reported 17.0.20.1. The status is skipped
+      because that live container walk is not in CI.'
+  - id: scaffold-host-cli-arch
+    capability: fr init scaffold
+    acceptance: glab/tea postCreate installs the binary for the container's own architecture,
+      and an unsupported architecture fails naming it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    levels:
+      unit:
+      - super-fr:tests/unit/test_scaffold_host_cli_snippet.py
+    status: ci
+    notes: 'gh#576: the rendered glab/tea postCreate snippet picks the asset for the
+      container''s architecture (dpkg --print-architecture, with uname -m as fallback)
+      and verifies that architecture''s pinned sha256 from HOST_CLI_PINS. An unsupported
+      architecture fails with a message naming it. Unit tests pin this, and the snippet
+      was also run under real dash. Live 2026-09-23 in an arm64 container (journal p6-live-576):
+      arm64 with glab 1.107.0, and arm64 with tea 0.14.2.'
+  - id: pinned-host-cli-assets-resolve
+    capability: fr init scaffold
+    acceptance: Every pinned glab/tea asset still downloads and matches its recorded
+      checksum, checked on a schedule
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#b-per-architecture-host-clis-gh576
+    levels:
+      unit:
+      - super-fr:tests/unit/test_check_pinned_clis.py
+      - super-fr:tests/unit/test_workflow_pinned_clis.py
+      int:
+      - super-fr:scripts/check-pinned-clis.py
+      - super-fr:.github/workflows/pinned-clis.yml
+    status: scheduled
+    notes: 'gh#576: scripts/check-pinned-clis.py downloads every pinned glab/tea asset
+      (amd64 and arm64) and checks it against HOST_CLI_PINS. .github/workflows/pinned-clis.yml
+      runs it weekly (Mondays), on workflow_dispatch, and on PRs that touch the pins.
+      Live run 2026-09-23: all four assets OK, exit 0 (journal p5-pinned-clis-live).
+      The first scheduled run happens after merge (spec Test Plan item 10). Post-merge
+      walk (PR #579, 2026-09-23): workflow_dispatch of pinned-clis.yml on main, run
+      35864970032, succeeded with all four assets OK (glab 1.107.0 amd64/arm64, tea
+      0.14.2 amd64/arm64). The first CRON run (Mondays 06:17 UTC) had not fired yet
+      when this was recorded.'
+  - id: isolation-mode-from-state
+    capability: fr isolation
+    acceptance: Commands addressing an existing workspace route by its recorded mode,
+      whatever FR_ISOLATION_TARGET says in the caller's env
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-scaffold-batch-574-576-569-design.md#c-mode-from-state-gh569
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_recorded_mode.py
+      - super-fr:tests/unit/test_isolation_routing.py
+      - super-fr:tests/unit/test_isolation_gc_routing.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+      int:
+      - super-fr:tests/integration/test_hostworktree_lifecycle.py
+    status: ci
+    notes: 'gh#569: up records IsolationState.target. Commands that address an existing
+      workspace route by that recorded mode; a legacy state''s mode is inferred. FR_ISOLATION_TARGET
+      selects the backend only for up and gc, and fails closed there. The integration
+      test was verified red against the pre-change source (journal p2-t4-not-characterization).
+      Live 2026-09-23 (journal p6-live-569): worktree-mode up, then exec, status and
+      down with the env unset, all exit 0.'

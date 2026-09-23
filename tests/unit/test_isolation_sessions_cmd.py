@@ -23,7 +23,7 @@ runner = CliRunner()
 @pytest.fixture(autouse=True)
 def _no_real_gc_spawn(monkeypatch: pytest.MonkeyPatch):
     """Never fork a real `fr isolation gc` during CLI tests (#354)."""
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
 
 @pytest.fixture(autouse=True)

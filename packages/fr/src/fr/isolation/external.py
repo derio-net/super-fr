@@ -38,6 +38,12 @@ from fr.isolation.types import (
 
 _MARKER = ".fr-isolation"
 _EXTERNAL = "externally managed — restart/inspect the container via its owner, not fr"
+# gc's verdict detail for an adopted checkout — shared with the worktree gc,
+# which classifies but never reaps a workspace recorded as external (gh#569).
+GC_EXTERNAL_DETAIL = (
+    "externally managed — the preparer owns cleanup (tear the container "
+    "down through its owner); fr never removes an adopted checkout"
+)
 
 
 def _container_evidence() -> bool:
@@ -167,7 +173,7 @@ class ExternalTarget:
                 file=sys.stderr,
             )
         self._ensure_branch(branch)
-        state = carried_state(self.repo_root, branch, self.repo_root, "external")
+        state = carried_state(self.repo_root, branch, self.repo_root, "external", "external")
         save_state(state)
         self._set_marker_branch(branch)
         self._exclude_marker()
@@ -276,7 +282,6 @@ class ExternalTarget:
                 branch or None,
                 "external",
                 "skipped",
-                "externally managed — the preparer owns cleanup (tear the container "
-                "down through its owner); fr never removes an adopted checkout",
+                GC_EXTERNAL_DETAIL,
             )
         ]
