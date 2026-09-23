@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -36,11 +37,16 @@ class RecordingRunner:
         self.captures: list[bool] = []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(argv))
         self.captures.append(capture)
-        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture)
+        return subprocess_runner(argv, cwd=cwd, check=check, capture=capture, **kw)
 
     def argv_for(self, binary: str) -> list[list[str]]:
         return [c for c in self.calls if c and c[0] == binary]
@@ -215,14 +221,19 @@ class GhRecordingRunner(RecordingRunner):
         self.pr_by_branch = pr_by_branch or {}
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
         if argv[0:3] == ["gh", "pr", "view"]:
             self.calls.append(list(argv))
             self.captures.append(capture)
             body = self.pr_by_branch.get(argv[3], "")
             return subprocess.CompletedProcess(argv, 0 if body else 1, stdout=body, stderr="")
-        return super().__call__(argv, cwd=cwd, check=check, capture=capture)
+        return super().__call__(argv, cwd=cwd, check=check, capture=capture, **kw)
 
 
 def _gc_env(
@@ -389,7 +400,7 @@ def test_up_and_down_fire_the_gc_spawner(tmp_path: Path, monkeypatch: pytest.Mon
     repo, _origin = make_repo_with_origin(tmp_path)
     spawns: list[Path] = []
     target = HostWorktreeTarget(
-        repo, runner=GhRecordingRunner(), gc_spawner=lambda root: spawns.append(root)
+        repo, runner=GhRecordingRunner(), gc_spawner=lambda root, _mode: spawns.append(root)
     )
 
     st = target.up(profile=None, branch="feat/x")

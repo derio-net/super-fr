@@ -13,8 +13,8 @@ from fr.isolation.scaffold import (
     BASE_IMAGE,
     GH_FEATURE,
     HOST_CLI_FEATURE,
-    HOST_CLI_POST_CREATE,
-    KNOWN_TOOL_FEATURES,
+    HOST_CLI_PINS,
+    KNOWN_TOOLS,
     scaffold_profile,
 )
 from typer.testing import CliRunner
@@ -280,7 +280,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     )
     # baseline: gh feature present; requested tool mapped to its feature
     assert any("github-cli" in k for k in cfg["features"])
-    assert any(KNOWN_TOOL_FEATURES["uv"] in k for k in cfg["features"])
+    assert any(KNOWN_TOOLS["uv"].feature in k for k in cfg["features"])
     # vk installed in postCreate; secrets env-file wired with localEnv HOME
     assert "super-fr#subdirectory=packages/fr" in cfg["postCreateCommand"]
     # host-path workspace mount — linked-worktree git breaks without it
@@ -331,11 +331,135 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
     assert set(profiles["profiles"]) == {"dev", "readonly"}
 
 
-def test_unknown_tool_recorded_in_notes(repo: Path) -> None:
-    res = scaffold(repo, "--tool", "frobnicator9000")
+def test_an_unknown_tool_is_refused_and_writes_nothing(repo: Path, tmp_path: Path) -> None:
+    """gh#574: an unknown --tool used to exit 0 with the tool parked in a
+    `notes:` line — the profile built without it. Now: exit 2, stderr names the
+    sorted known set and --feature, and nothing is written or committed."""
+    _initial_commit(repo)
+    before = _log_subjects(repo)
+    res = scaffold(repo, "--tool", "nosuchtool", "--secret", "GH_TOKEN")
+    assert res.exit_code == 2, res.output
+    assert "nosuchtool" in res.stderr
+    assert ", ".join(sorted(KNOWN_TOOLS)) in res.stderr
+    assert "--feature" in res.stderr
+    assert not (repo / ".devcontainer" / "dev" / "devcontainer.json").exists()
+    assert not (repo / ".devcontainer" / "fr-profiles.yaml").exists()
+    assert not (tmp_path / "home" / ".config" / "fr" / "secrets" / "myrepo" / "dev.env").exists()
+    assert _log_subjects(repo) == before
+
+
+def test_an_unknown_tool_is_refused_before_the_exists_check(repo: Path) -> None:
+    """p3r-f4: tool resolution runs FIRST — rerunning over an existing profile
+    with a bad --tool reports the tool, not "--force", and touches nothing."""
+    assert scaffold(repo).exit_code == 0
+    profiles = repo / ".devcontainer" / "fr-profiles.yaml"
+    before = profiles.read_bytes()
+    res = scaffold(repo, "--tool", "nosuchtool")
+    assert res.exit_code == 2, res.output
+    assert "nosuchtool" in res.stderr
+    assert "--force" not in res.stderr
+    assert profiles.read_bytes() == before
+
+
+def test_tool_help_lists_the_known_tools() -> None:
+    """p3r-f6: the known set is discoverable from --help, not only from an error."""
+    res = runner.invoke(app, ["init", "scaffold", "--help"], env={"COLUMNS": "400"})
     assert res.exit_code == 0, res.output
-    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
-    assert "frobnicator9000" in " ".join(profiles["profiles"]["dev"].get("notes", []))
+    assert ", ".join(sorted(KNOWN_TOOLS)) in " ".join(res.output.split())
+
+
+@pytest.mark.parametrize("reserved", ["host", "external"])
+def test_a_reserved_profile_name_is_refused(repo: Path, reserved: str) -> None:
+    """spec §3.C: legacy states with no `target` infer the mode from `profile`
+    (`host` → worktree, `external` → external), permanently — so a real
+    devcontainer profile with either name would be misrouted. Refused at birth."""
+    res = runner.invoke(
+        app,
+        ["init", "scaffold", "--repo", str(repo), "--profile", reserved, "--purpose", "p"],
+    )
+    assert res.exit_code == 2, res.output
+    assert reserved in res.stderr and "reserved" in res.stderr
+    assert not (repo / ".devcontainer" / reserved).exists()
+
+
+def test_java_and_maven_write_one_java_feature_with_maven(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--tool", "java", "--tool", "maven")
+    assert res.exit_code == 0, res.output
+    features = _config(repo)["features"]
+    assert features["ghcr.io/devcontainers/features/java:1"] == {"installMaven": True}
+
+
+JAVA = "ghcr.io/devcontainers/features/java:1"
+
+
+def _pom_release(repo: Path, version: str) -> None:
+    (repo / "pom.xml").write_text(
+        '<project xmlns="http://maven.apache.org/POM/4.0.0"><properties>'
+        f"<maven.compiler.release>{version}</maven.compiler.release>"
+        "</properties></project>\n"
+    )
+
+
+def test_maven_applies_the_detected_java_version_and_reports_it(repo: Path) -> None:
+    """gh#574: maven implies java — its version comes from the project's pom."""
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "maven")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA] == {"installMaven": True, "version": "17"}
+    assert "java 17 (from pom.xml maven.compiler.release)" in res.stderr
+
+
+def test_an_explicit_java_version_wins_over_detection(repo: Path) -> None:
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "java@21", "--tool", "maven")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA]["version"] == "21"
+    assert "from pom.xml" not in res.stderr
+    assert "not detected" not in res.stderr
+
+
+def test_an_undetected_java_version_warns_and_keeps_the_default(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--tool", "java")
+    assert res.exit_code == 0, res.output
+    assert "version" not in _config(repo)["features"][JAVA]
+    assert (
+        "java version not detected — the java feature's default (latest) will be used; "
+        "pass --tool java@<major> to pin it"
+    ) in res.stderr
+
+
+def test_java_detection_never_runs_without_java(repo: Path) -> None:
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--tool", "uv")
+    assert res.exit_code == 0, res.output
+    assert "java" not in res.stderr
+    assert JAVA not in _config(repo)["features"]
+
+
+def test_a_raw_java_feature_does_not_trigger_detection(repo: Path) -> None:
+    """p4r-f4: detection is gated on --tool java/maven, not on the feature ref —
+    a bare --feature is taken as written."""
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--feature", JAVA)
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA] == {}
+    assert "java" not in res.stderr
+
+
+def test_a_raw_feature_lands_in_features(repo: Path) -> None:
+    res = scaffold(repo, "--no-commit", "--feature", "ghcr.io/acme/x:1")
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"]["ghcr.io/acme/x:1"] == {}
+
+
+def test_a_versioned_uv_still_separates_its_environment(repo: Path) -> None:
+    from fr.isolation.scaffold import UV_CONTAINER_PROJECT_ENV
+
+    res = scaffold(repo, "--no-commit", "--tool", "uv@0.5.0")
+    assert res.exit_code == 0, res.output
+    cfg = _config(repo)
+    assert cfg["features"][KNOWN_TOOLS["uv"].feature] == {"version": "0.5.0"}
+    assert cfg["containerEnv"] == {"UV_PROJECT_ENVIRONMENT": UV_CONTAINER_PROJECT_ENV}
 
 
 def test_scaffold_outside_repo_exits_2(tmp_path: Path) -> None:
@@ -480,8 +604,8 @@ def test_host_cli_feature_table_shape() -> None:
     assert HOST_CLI_FEATURE["gitea"] is None
 
 
-def test_host_cli_post_create_table_has_gitlab_and_gitea_only() -> None:
-    assert set(HOST_CLI_POST_CREATE) == {"gitlab", "gitea"}
+def test_host_cli_pins_table_has_gitlab_and_gitea_only() -> None:
+    assert set(HOST_CLI_PINS) == {"gitlab", "gitea"}
 
 
 def test_cli_backend_flag_reaches_scaffold_profile(repo: Path) -> None:
@@ -565,7 +689,7 @@ def test_this_repos_own_uv_profiles_carry_it() -> None:
     uv_profiles = [
         p
         for p in sorted(root.glob("*/devcontainer.json"))
-        if KNOWN_TOOL_FEATURES["uv"] in json.loads(p.read_text()).get("features", {})
+        if KNOWN_TOOLS["uv"].feature in json.loads(p.read_text()).get("features", {})
     ]
     assert uv_profiles, "expected at least one uv-enabled profile in this repo"
     for path in uv_profiles:

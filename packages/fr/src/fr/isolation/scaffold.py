@@ -11,9 +11,15 @@ Writes three things per profile:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
+from typing import Literal
 
 import yaml
 
@@ -49,18 +55,252 @@ BASE_IMAGE = "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
 # It stays on the bind mount, which is exactly as fast as `.venv` was before.
 UV_CONTAINER_PROJECT_ENV = ".venv-container"
 
-# Known tool → devcontainer feature mapping. Unknown tools land in the
-# profile's notes for the skill/operator to wire via postCreateCommand.
-KNOWN_TOOL_FEATURES: dict[str, str] = {
-    "uv": "ghcr.io/jsburckhardt/devcontainer-features/uv:1",
-    "node": "ghcr.io/devcontainers/features/node:1",
-    "python": "ghcr.io/devcontainers/features/python:1",
-    "go": "ghcr.io/devcontainers/features/go:1",
-    "rust": "ghcr.io/devcontainers/features/rust:1",
-    "kubectl": "ghcr.io/devcontainers/features/kubectl-helm-minikube:1",
-    "docker-in-docker": "ghcr.io/devcontainers/features/docker-in-docker:2",
-    "terraform": "ghcr.io/devcontainers/features/terraform:1",
+
+# Known tool → devcontainer feature mapping (gh#574, spec §3.A). A tool NOT in
+# this table is REFUSED by `resolve_tools` — it used to be recorded in the
+# profile's notes and silently left uninstalled; `--feature <ref>` is the
+# escape hatch for anything the table does not know. Tools that share a feature
+# ref (java, maven) merge their options into ONE feature entry.
+@dataclass(frozen=True)
+class ToolSpec:
+    """One `--tool` name: its devcontainer feature, the options it always sets,
+    and the option key a `<tool>@<version>` writes."""
+
+    feature: str
+    options: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    version_option: str = "version"
+
+
+JAVA_FEATURE = "ghcr.io/devcontainers/features/java:1"
+
+KNOWN_TOOLS: dict[str, ToolSpec] = {
+    "uv": ToolSpec("ghcr.io/jsburckhardt/devcontainer-features/uv:1"),
+    "node": ToolSpec("ghcr.io/devcontainers/features/node:1"),
+    "python": ToolSpec("ghcr.io/devcontainers/features/python:1"),
+    "go": ToolSpec("ghcr.io/devcontainers/features/go:1"),
+    "rust": ToolSpec("ghcr.io/devcontainers/features/rust:1"),
+    "kubectl": ToolSpec("ghcr.io/devcontainers/features/kubectl-helm-minikube:1"),
+    "docker-in-docker": ToolSpec("ghcr.io/devcontainers/features/docker-in-docker:2"),
+    "terraform": ToolSpec("ghcr.io/devcontainers/features/terraform:1"),
+    "java": ToolSpec(JAVA_FEATURE),
+    # `installMaven` is a JSON boolean — the java feature's own manifest types it so.
+    "maven": ToolSpec(
+        JAVA_FEATURE,
+        options=MappingProxyType({"installMaven": True}),
+        version_option="mavenVersion",
+    ),
 }
+
+
+def parse_tool(arg: str) -> tuple[str, str | None]:
+    """`<tool>[@<version>]` → (name, version or None). An empty name, an empty
+    version, whitespace in the version, or a second `@` is refused."""
+    name, sep, version = arg.partition("@")
+    if not name or (sep and not version) or "@" in version or any(c.isspace() for c in version):
+        raise IsolationError(f"--tool {arg!r} is malformed — expected <tool> or <tool>@<version>.")
+    return name, (version if sep else None)
+
+
+def _untagged(ref: str) -> str:
+    """A feature ref without its `:tag` / `@digest` (only in the last path
+    segment, so a registry `host:port` survives)."""
+    head, slash, last = ref.rpartition("/")
+    last = last.partition("@")[0].partition(":")[0]
+    return f"{head}{slash}{last}"
+
+
+def _set_option(
+    resolved: dict[str, dict[str, object]], ref: str, key: str, value: object, origin: str
+) -> None:
+    opts = resolved.setdefault(ref, {})
+    if key in opts and opts[key] != value:
+        raise IsolationError(
+            f"conflicting values for {ref} option {key!r}: {opts[key]!r} and {value!r} "
+            f"(from {origin}) — pass one."
+        )
+    opts[key] = value
+
+
+def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, object]]:
+    """Resolve `--tool` / `--feature` args to devcontainer `features` (ref → options).
+
+    Pure, and meant to run BEFORE anything is written: an unknown tool raises
+    IsolationError naming the known set and pointing at `--feature`.
+    """
+    parsed = [(arg, *parse_tool(arg)) for arg in tools]
+    unknown = [name for _, name, _ in parsed if name not in KNOWN_TOOLS]
+    if unknown:
+        hints = [f"did you mean {u.lower()!r}?" for u in unknown if u.lower() in KNOWN_TOOLS]
+        hint = f" ({'; '.join(hints)})" if hints else ""
+        raise IsolationError(
+            f"unknown --tool {', '.join(repr(u) for u in unknown)}{hint} — known tools: "
+            f"{', '.join(sorted(KNOWN_TOOLS))}. For anything else pass the devcontainer "
+            "feature ref directly with --feature <ref>."
+        )
+    resolved: dict[str, dict[str, object]] = {}
+    for arg, name, version in parsed:
+        spec = KNOWN_TOOLS[name]
+        resolved.setdefault(spec.feature, {})
+        for key, value in spec.options.items():
+            _set_option(resolved, spec.feature, key, value, arg)
+        if version is not None:
+            _set_option(resolved, spec.feature, spec.version_option, version, arg)
+    for ref in features:
+        if not ref or any(c.isspace() for c in ref):
+            raise IsolationError(
+                f"--feature {ref!r} is not a feature ref — it must be non-empty and "
+                "contain no whitespace."
+            )
+        # A known tool's feature at ANOTHER tag (or untagged) would add a second
+        # copy of the same feature; the identical ref merges as before.
+        shadowed = sorted(
+            name
+            for name, spec in KNOWN_TOOLS.items()
+            if ref != spec.feature and _untagged(ref) == _untagged(spec.feature)
+        )
+        if shadowed:
+            raise IsolationError(
+                f"--feature {ref!r} is a known tool's feature at another tag — use "
+                f"{' or '.join(f'--tool {n}' for n in shadowed)} (with @<version> to pin it)."
+            )
+        resolved.setdefault(ref, {})
+    return resolved
+
+
+# A plausible Java major; anything outside is a miss, never a pin.
+JAVA_MAJOR_RANGE = range(6, 41)
+
+
+def _java_major(raw: str) -> str | None:
+    """The Java major in a version string, or None (p4r-f1/f2).
+
+    A `+javaN` suffix (graalvm) wins. Otherwise the first number that does NOT
+    continue a word — so `openjdk64-11.0.2` is 11 and `semeru-openj9-17` is 17 —
+    with `1.N` read as N. A major outside JAVA_MAJOR_RANGE is a miss."""
+    suffix = re.search(r"\+java(\d+)", raw)
+    if suffix:
+        major = suffix.group(1)
+    else:
+        m = re.search(r"(?<![A-Za-z0-9])(\d+)(?:\.(\d+))?", raw)
+        if not m:
+            return None
+        major = m.group(2) if m.group(1) == "1" and m.group(2) else m.group(1)
+    return major if int(major) in JAVA_MAJOR_RANGE else None
+
+
+def _java_from_java_version(text: str) -> str | None:
+    return _java_major(text.strip().splitlines()[0]) if text.strip() else None
+
+
+def _java_from_sdkmanrc(text: str) -> str | None:
+    for line in text.splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key.strip() == "java":
+            return _java_major(value)
+    return None
+
+
+def _java_from_tool_versions(text: str) -> str | None:
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "java":
+            return _java_major(parts[1])
+    return None
+
+
+# pom.xml: maven-compiler-plugin `<configuration>` children first (build/plugins,
+# then build/pluginManagement/plugins), then root `<properties>` keys, which
+# only feed the plugin's defaults — Maven's own precedence (spec §3.A, p4r-f3).
+# Profile-scoped properties are deliberately not read.
+POM_JAVA_PROPERTIES = (
+    "maven.compiler.release",
+    "maven.compiler.target",
+    "maven.compiler.source",
+    "java.version",
+)
+POM_COMPILER_PLUGIN_KEYS = ("release", "target")
+
+
+def _local(tag: object) -> str:
+    """An element tag without its `{namespace}`."""
+    return str(tag).rpartition("}")[2]
+
+
+def _child(elem: ET.Element, name: str) -> ET.Element | None:
+    return next((c for c in elem if _local(c.tag) == name), None)
+
+
+def _text(elem: ET.Element | None) -> str:
+    return (elem.text or "").strip() if elem is not None else ""
+
+
+def _java_from_pom(path: Path) -> tuple[str, str] | None:
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return None
+    props_elem = _child(root, "properties")
+    props = {_local(c.tag): _text(c) for c in props_elem} if props_elem is not None else {}
+
+    def resolve(value: str) -> str | None:
+        # ONE level of `${property}` indirection; anything deeper is skipped.
+        m = re.fullmatch(r"\$\{([^}]+)\}", value)
+        if m:
+            value = props.get(m.group(1), "")
+        return None if not value or "${" in value else _java_major(value)
+
+    candidates: list[tuple[str, str]] = []
+    build = _child(root, "build")
+    management = _child(build, "pluginManagement") if build is not None else None
+    for parent in (build, management):
+        plugins = _child(parent, "plugins") if parent is not None else None
+        for plugin in plugins if plugins is not None else ():
+            config = _child(plugin, "configuration")
+            if _text(_child(plugin, "artifactId")) != "maven-compiler-plugin" or config is None:
+                continue
+            for key in POM_COMPILER_PLUGIN_KEYS:
+                source = f"pom.xml maven-compiler-plugin {key}"
+                candidates.append((_text(_child(config, key)), source))
+    candidates += [(props.get(key, ""), f"pom.xml {key}") for key in POM_JAVA_PROPERTIES]
+    for value, source in candidates:
+        major = resolve(value)
+        if major:
+            return major, source
+    return None
+
+
+# Version files in precedence order; the root pom.xml is consulted after them.
+JAVA_VERSION_FILES = (
+    (".java-version", _java_from_java_version),
+    (".sdkmanrc", _java_from_sdkmanrc),
+    (".tool-versions", _java_from_tool_versions),
+)
+
+
+def detect_java_version(repo_root: Path) -> tuple[str, str] | None:
+    """The project's Java major and where it came from, or None (gh#574).
+
+    Deterministic sources only — version files, then the root pom.xml. Project
+    notes (README, CI setup-java) need judgement and belong to the fr-init
+    skill, which passes `--tool java@<major>` explicitly. Never raises.
+    """
+    for name, parse in JAVA_VERSION_FILES:
+        try:
+            text = (repo_root / name).read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        major = parse(text)
+        if major:
+            return major, name
+    pom = repo_root / "pom.xml"
+    return _java_from_pom(pom) if pom.is_file() else None
+
+
+# Profile names `fr isolation` gives a meaning of its own: a legacy state with
+# no `target` infers its mode from the recorded profile (types.py), so a real
+# devcontainer profile by either name would be routed to the wrong target
+# (spec §3.C, journal p3-f1-reserve-external-profile).
+RESERVED_PROFILES: frozenset[str] = frozenset({"host", "external"})
 
 GH_FEATURE = "ghcr.io/devcontainers/features/github-cli:1"
 
@@ -68,7 +308,7 @@ GH_FEATURE = "ghcr.io/devcontainers/features/github-cli:1"
 # the containers.dev registry during the multi-backend design's research —
 # only an unrelated "gitlab-ci-local" runner feature turned up). `None` here
 # means "no feature — install via POST_CREATE instead" (see
-# HOST_CLI_POST_CREATE below). See docs/superpowers/specs/
+# HOST_CLI_PINS below). See docs/superpowers/specs/
 # 2026-07-09-multi-backend-git-host-adapters-design.md §9.
 HOST_CLI_FEATURE: dict[HostBackend, str | None] = {
     "github": GH_FEATURE,
@@ -76,35 +316,111 @@ HOST_CLI_FEATURE: dict[HostBackend, str | None] = {
     "gitea": None,
 }
 
-# Versioned + checksummed installs (linux-amd64 only — the devcontainer
-# base image's other architectures, e.g. arm64 hosts under Docker Desktop
-# emulation, are a known gap, not solved here) — pinned to a specific
-# released version, NOT "latest", matching BASE_IMAGE's own reproducibility
-# rationale. Versions/checksums verified directly against each project's
-# real release artifacts during this design (glab v1.107.0 via the GitLab
-# releases API + its published checksums.txt; tea v0.14.2 via its Gitea
-# release page + published checksums.txt) — reconfirm against current
-# releases before reusing this snippet long after this PR merges.
-HOST_CLI_POST_CREATE: dict[str, str] = {
-    "gitlab": (
-        "curl -fsSL "
-        "'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/"
-        "1.107.0/glab_1.107.0_linux_amd64.tar.gz' -o /tmp/glab.tar.gz && "
-        "echo 'eb42f56eb1a789cf4f22aa5960ff0ef60cf1e7fc1295327501f9f59030d5ae2c  "
-        "/tmp/glab.tar.gz' | sha256sum -c - && "
-        "tar -xzf /tmp/glab.tar.gz -C /tmp && "
-        "sudo install -m 755 $(find /tmp -maxdepth 2 -name glab -type f | head -1) "
-        "/usr/local/bin/glab"
+# Versioned + checksummed installs, one asset per supported architecture
+# (gh#576, spec 2026-09-23-scaffold-batch-574-576-569 §3.B). Pinned to a
+# specific released version, NOT "latest", matching BASE_IMAGE's own
+# reproducibility rationale. Only amd64 and arm64 are carried: any other
+# architecture fails postCreate loudly, naming itself, before any download.
+# Every sha256 was taken from the project's published checksums.txt for the
+# pinned version (2026-09-23) — never typed. That they still match is not a
+# comment's promise: scripts/check-pinned-clis.py re-downloads every asset and
+# .github/workflows/pinned-clis.yml runs it weekly.
+HostCliArch = Literal["amd64", "arm64"]
+
+
+@dataclass(frozen=True)
+class HostCliPin:
+    """One pinned host CLI: per-arch (url, sha256) and how to install the asset."""
+
+    name: str
+    version: str
+    assets: Mapping[HostCliArch, tuple[str, str]]
+    kind: Literal["tarball", "binary"]
+    # tarball only: the executable's path inside the archive (glab 1.107.0: bin/glab,
+    # read from the real asset with `tar -tzf`, 2026-09-23).
+    tarball_member: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.kind == "tarball") != bool(self.tarball_member):
+            raise ValueError(
+                f"{self.name}: tarball_member is required for, and only for, a tarball"
+            )
+
+
+_GLAB_BASE = "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0"
+_TEA_BASE = "https://gitea.com/gitea/tea/releases/download/v0.14.2"
+
+HOST_CLI_PINS: dict[str, HostCliPin] = {
+    "gitlab": HostCliPin(
+        name="glab",
+        version="1.107.0",
+        assets=MappingProxyType(
+            {
+                "amd64": (
+                    f"{_GLAB_BASE}/glab_1.107.0_linux_amd64.tar.gz",
+                    "eb42f56eb1a789cf4f22aa5960ff0ef60cf1e7fc1295327501f9f59030d5ae2c",
+                ),
+                "arm64": (
+                    f"{_GLAB_BASE}/glab_1.107.0_linux_arm64.tar.gz",
+                    "8356e442ed42ff6973cbe267dd7371c65f9b810b01e7d70bb557cd284e7b35ba",
+                ),
+            }
+        ),
+        kind="tarball",
+        tarball_member="bin/glab",
     ),
-    "gitea": (
-        "curl -fsSL "
-        "'https://gitea.com/gitea/tea/releases/download/v0.14.2/tea-0.14.2-linux-amd64' "
-        "-o /tmp/tea && "
-        "echo 'be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3  "
-        "/tmp/tea' | sha256sum -c - && "
-        "sudo install -m 755 /tmp/tea /usr/local/bin/tea"
+    "gitea": HostCliPin(
+        name="tea",
+        version="0.14.2",
+        assets=MappingProxyType(
+            {
+                "amd64": (
+                    f"{_TEA_BASE}/tea-0.14.2-linux-amd64",
+                    "be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3",
+                ),
+                "arm64": (
+                    f"{_TEA_BASE}/tea-0.14.2-linux-arm64",
+                    "f201f6ba4136f1129e99e6318af07900c0c16a92030648bd186ff27067b34568",
+                ),
+            }
+        ),
+        kind="binary",
     ),
 }
+
+
+def render_host_cli_post_create(pin: HostCliPin) -> str:
+    """The POSIX-sh install snippet for `pin` (devcontainer runs it under dash).
+
+    A subshell, so its `exit 1` ends only the snippet — and, being the last
+    command of postCreateCommand, sets that command's status.
+    """
+    dl = f"/tmp/{pin.name}.dl"
+    arms = " ".join(
+        f"{arch}) url='{url}'; sha='{sha}';;" for arch, (url, sha) in pin.assets.items()
+    )
+    supported = " ".join(pin.assets)
+    if pin.kind == "tarball":
+        # A fresh dir of its own, and the exact path the release tarball carries:
+        # nothing else sitting in a shared /tmp can be what gets installed (p5r-f2).
+        xdir = f"/tmp/{pin.name}-x"
+        install = (
+            f"rm -rf {xdir} && mkdir -p {xdir} && tar -xzf {dl} -C {xdir} && "
+            f"sudo install -m 755 {xdir}/{pin.tarball_member} /usr/local/bin/{pin.name}"
+        )
+    else:
+        install = f"sudo install -m 755 {dl} /usr/local/bin/{pin.name}"
+    return (
+        "( arch=$(dpkg --print-architecture 2>/dev/null || uname -m); "
+        'case "$arch" in x86_64) arch=amd64;; aarch64) arch=arm64;; esac; '
+        f'case "$arch" in {arms} '
+        f"*) echo \"{pin.name} {pin.version}: unsupported architecture '$arch' "
+        f'(supported: {supported})" >&2; exit 1;; esac; '
+        f'curl -fsSL "$url" -o {dl} && '
+        f'echo "$sha  {dl}" | sha256sum -c - && '
+        f"{install} )"
+    )
+
 
 # Baseline: vk itself, installed from the repo's main branch at create time.
 POST_CREATE = (
@@ -128,6 +444,7 @@ def scaffold_profile(
     commit: bool = True,
     backend: HostBackend = "github",
     host: str | None = None,
+    features: list[str] | None = None,
 ) -> Path:
     """Write the profile and (by default) commit it. Returns the devcontainer.json path.
 
@@ -148,6 +465,17 @@ def scaffold_profile(
             f"{repo_root} is not a git repo — fr init scaffold only runs inside one."
         )
 
+    if profile in RESERVED_PROFILES:
+        raise IsolationError(
+            f"profile name {profile!r} is reserved — fr infers a workspace's mode from "
+            "its recorded profile when the state predates `target` (host → host-worktree, "
+            "external → external), so a devcontainer profile by that name would be "
+            "misrouted. Pick another name."
+        )
+    # Before ANY write (gh#574): an unknown tool must leave no file behind.
+    resolved = resolve_tools(tools, list(features or []))
+    tool_names = {parse_tool(t)[0] for t in tools}
+
     profile_dir = repo_root / ".devcontainer" / profile
     config_path = profile_dir / "devcontainer.json"
     if config_path.exists() and not force:
@@ -156,24 +484,26 @@ def scaffold_profile(
             "(the host secrets file is preserved either way)."
         )
 
-    known = {t: KNOWN_TOOL_FEATURES[t] for t in tools if t in KNOWN_TOOL_FEATURES}
-    unknown = [t for t in tools if t not in KNOWN_TOOL_FEATURES]
+    # Gated on the TOOLS, not the feature ref: a bare `--feature <java ref>` is
+    # taken exactly as written (p4r-f4).
+    java_opts = resolved.get(JAVA_FEATURE)
+    if tool_names & {"java", "maven"} and java_opts is not None and "version" not in java_opts:
+        _apply_detected_java_version(repo_root, java_opts)
 
     host_feature = HOST_CLI_FEATURE.get(backend)
-    features: dict[str, dict[str, str]] = {host_feature: {}} if host_feature else {}
-    for feature in known.values():
-        features[feature] = {}
+    feature_map: dict[str, dict[str, object]] = {host_feature: {}} if host_feature else {}
+    feature_map.update(resolved)
 
     post_create = POST_CREATE
-    host_post_create = HOST_CLI_POST_CREATE.get(backend)
-    if host_post_create:
-        post_create = f"{POST_CREATE}; {host_post_create}"
+    host_pin = HOST_CLI_PINS.get(backend)
+    if host_pin is not None:
+        post_create = f"{POST_CREATE}; {render_host_cli_post_create(host_pin)}"
 
     env_file = env_file_path(repo_root, profile)
     config = {
         "name": f"{repo_root.name} — {profile}",
         "image": BASE_IMAGE,
-        "features": features,
+        "features": feature_map,
         "postCreateCommand": post_create,
         # Mount the workspace at its HOST path (not /workspaces/<name>):
         # linked-worktree gitdir back-pointers record host abspaths, so git
@@ -187,7 +517,7 @@ def scaffold_profile(
         ],
         "customizations": {"fr": {"profile": profile, "purpose": purpose}},
     }
-    if "uv" in known:
+    if "uv" in tool_names:
         # `containerEnv`, not `remoteEnv`: it is set on the container itself, so
         # EVERY process in it sees it — `devcontainer exec` (what `fr isolation
         # exec` runs), the postCreateCommand, and a raw `docker exec` alike.
@@ -197,7 +527,7 @@ def scaffold_profile(
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
-    _update_profiles_yaml(repo_root, profile, purpose, secrets, unknown, default, backend, host)
+    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, backend, host)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
@@ -209,6 +539,22 @@ def scaffold_profile(
     if commit:
         _commit_profile(repo_root, profile, include_validator_wrapper=include_validator_wrapper)
     return config_path
+
+
+def _apply_detected_java_version(repo_root: Path, java_opts: dict[str, object]) -> None:
+    """Pin the java feature to the project's detected major, reporting where it
+    came from — or warn that the feature's default will be used (spec §3.A)."""
+    detected = detect_java_version(repo_root)
+    if detected is None:
+        print(
+            "java version not detected — the java feature's default (latest) will be "
+            "used; pass --tool java@<major> to pin it",
+            file=sys.stderr,
+        )
+        return
+    major, source = detected
+    java_opts["version"] = major
+    print(f"java {major} (from {source})", file=sys.stderr)
 
 
 def _commit_profile(
@@ -260,7 +606,6 @@ def _update_profiles_yaml(
     profile: str,
     purpose: str,
     secrets: list[str],
-    unknown_tools: list[str],
     default: bool,
     backend: HostBackend = "github",
     host: str | None = None,
@@ -270,11 +615,6 @@ def _update_profiles_yaml(
     data = data or {}
     data.setdefault("profiles", {})
     entry: dict[str, object] = {"purpose": purpose, "secrets": secrets}
-    if unknown_tools:
-        entry["notes"] = [
-            f"tool {t!r} has no known devcontainer feature — wire it via postCreateCommand"
-            for t in unknown_tools
-        ]
     data["profiles"][profile] = entry
     if default or "default" not in data:
         data["default"] = profile if default else data.get("default", profile)

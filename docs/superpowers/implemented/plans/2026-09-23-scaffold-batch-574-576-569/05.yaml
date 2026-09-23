@@ -1,0 +1,105 @@
+schema_version: 2
+phase:
+  number: 5
+  title: '#576 — per-architecture glab/tea installs and the scheduled pin check'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - scaffold-host-cli-arch
+  - pinned-host-cli-assets-resolve
+  tier: standard
+tasks:
+- number: 1
+  title: HostCliPin data and the arch-resolving renderer
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_scaffold_host_cli_snippet.py. Render each backend's snippet via
+      fr.isolation.scaffold.render_host_cli_post_create(pin) and EXECUTE it with
+      `subprocess.run(["sh", "-c", snippet], env={"PATH": stubdir + ":/usr/bin:/bin"})` where
+      stubdir holds executable stubs: `dpkg` (prints $STUB_ARCH, or exits 1 when STUB_DPKG=absent),
+      `uname` (prints $STUB_UNAME), `curl` (appends its args to $LOG, writes an empty file to its
+      -o path), `sha256sum` (appends stdin to $LOG; exits $STUB_SHA_RC, default 0), `tar`, `sudo`
+      (append args to $LOG). Assert: arch amd64 → curl URL is the linux_amd64 asset and the
+      checksum line is the amd64 sha; arm64 → linux_arm64 asset + arm64 sha; dpkg absent +
+      uname x86_64 → amd64, aarch64 → arm64; s390x → exit != 0, stderr contains "s390x" and
+      "supported: amd64 arm64", and curl was never called; STUB_SHA_RC=1 → exit != 0 and sudo
+      never called. Also: the full postCreateCommand from scaffold_profile(backend="gitlab")
+      ends with the snippet (so its status is the command's status). Confirm red.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: replace HOST_CLI_POST_CREATE with `HostCliPin(name, version, assets: Mapping[arch,
+      (url, sha256)], kind: "tarball"|"binary")` and `HOST_CLI_PINS: dict[str, HostCliPin]`
+      with the four (url, sha) pairs of spec §3.B. The spec table abbreviates the sums; take
+      every FULL sha256 by fetching the published checksum files (never type one from memory):
+      `curl -fsSL 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1.107.0/checksums.txt' | grep 'linux_\(amd64\|arm64\).tar.gz'`
+      and `curl -fsSL https://gitea.com/gitea/tea/releases/download/v0.14.2/checksums.txt | grep -E 'linux-(amd64|arm64)$'`;
+      the amd64 values must equal the ones already in the current source. Renderer emits a POSIX-sh subshell
+      `( arch=$(dpkg --print-architecture 2>/dev/null || uname -m); case "$arch" in x86_64) arch=amd64;; aarch64) arch=arm64;; esac; case "$arch" in amd64) url=...; sha=...;; arm64) ...;; *) echo "<name> <ver>: unsupported architecture '$arch' (supported: amd64 arm64)" >&2; exit 1;; esac; curl -fsSL "$url" -o /tmp/<name>.dl && echo "$sha  /tmp/<name>.dl" | sha256sum -c - && <install> )`
+      with install = tar -xzf + `sudo install -m 755 $(find ...)` for tarball, `sudo install -m 755 /tmp/<name>.dl /usr/local/bin/<name>`
+      for binary. scaffold_profile uses render_host_cli_post_create(HOST_CLI_PINS[backend]).
+      Replace the old "linux-amd64 only … known gap" comment with the new truth. Tests green;
+      rewrite the existing test pinning HOST_CLI_POST_CREATE's keys (~test_init_scaffold.py:484)
+      to HOST_CLI_PINS.
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR: ruff + mypy clean; commit `fix(scaffold): install glab/tea for the container's architecture (gh#576)`.
+- number: 2
+  title: scripts/check-pinned-clis.py + scheduled workflow
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: tests/unit/test_check_pinned_clis.py: load scripts/check-pinned-clis.py via
+      importlib (spec_from_file_location) and call its `check(pins, fetch)` with an injected
+      fetch(url)->bytes: all bytes hashing to their recorded sha → returns 0 and prints one
+      "OK <name> <version> <arch>" line per asset; one mismatching → returns 1 and prints
+      "MISMATCH ... expected <sha> got <sha>"; fetch raising → returns 1 with "FETCH-FAILED".
+      Confirm red.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: write scripts/check-pinned-clis.py (imports HOST_CLI_PINS from
+      fr.isolation.scaffold; default fetch = urllib.request with a 60s timeout; `main()` exits
+      with check()'s code). Write .github/workflows/pinned-clis.yml: on schedule (weekly,
+      e.g. '17 6 * * 1'), workflow_dispatch, and pull_request with paths
+      [packages/fr/src/fr/isolation/scaffold.py, scripts/check-pinned-clis.py,
+      .github/workflows/pinned-clis.yml]; one job: checkout, astral-sh/setup-uv (match the
+      action versions ci.yml uses), `uv run python scripts/check-pinned-clis.py`. Run the
+      script locally for real — all four assets OK — and record its output with
+      `fr journal add --scope plan --kind discovery --phase 5`.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR: check tests/unit for a tripwire enumerating workflows or scripts that needs
+      the new files registered (grep "workflows/" in tests/unit); satisfy any. Commit
+      `ci: scheduled check that pinned glab/tea assets still match (gh#576)`.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T00:44:41+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-23T00:44:42+00:00'
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: '2026-09-23T00:44:42+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-23T00:46:49+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-23T00:46:50+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-09-23T00:46:50+00:00'
+      note: null
+  completion:
+    at: '2026-09-23T00:53:59+00:00'
+    note: null
+    observed_prs: []

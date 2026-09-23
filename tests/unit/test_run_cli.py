@@ -6412,3 +6412,54 @@ def test_a_middle_manual_phase_is_refused_at_group_start(tmp_path: Path) -> None
     assert "{" not in result.stdout, result.stdout
     assert units.unit_states(load_run_state(repo, "r1").steps["implement"]) == {}
     assert load_run_state(repo, "r1").steps["implement"].state == "pending"
+
+
+# --- #575 spec §3.D.5: an honest run-not-found at every load site ------------
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["run", "status", "nope"],
+        ["run", "gates", "nope"],
+        ["run", "advance", "nope"],
+        ["run", "resolve", "nope", "--step", "hello", "--state", "done"],
+        ["run", "claim", "nope", "--step", "hello", "--agent", "a1"],
+        ["run", "check", "--idle", "nope"],
+    ],
+    ids=["status", "gates", "advance", "resolve", "claim", "check-idle"],
+)
+def test_a_missing_run_is_explained_at_every_load_site(tmp_path: Path, argv: list[str]) -> None:
+    """`_load_or_exit` and the three direct `load_run_state` call sites all
+    answer through `preserve.explain_missing`, not a bare `no run state at`."""
+    repo = _repo(tmp_path, branch="feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    started = _invoke(
+        repo, shipped, ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"]
+    )
+    assert started.exit_code == 0, started.output
+
+    result = _invoke(repo, shipped, argv)
+
+    assert result.exit_code == 2, result.output
+    assert "no run state at" not in result.output
+    assert "and fr has no record of one (never started here, or a mistyped id)" in result.stderr
+    assert "Runs in this checkout: r1." in result.stderr
+
+
+def test_start_refusing_an_existing_run_id_names_advance(tmp_path: Path) -> None:
+    """After `up` restores a run, `fr run start` again with the same id is
+    refused — and the refusal names `fr run advance <id>` as the way on
+    (spec §3.D.4)."""
+    repo = _repo(tmp_path, branch="feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    argv = ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"]
+    assert _invoke(repo, shipped, argv).exit_code == 0
+
+    result = _invoke(repo, shipped, argv)
+
+    assert result.exit_code == 2, result.output
+    assert "already exists" in result.output
+    assert "fr run advance r1" in result.output

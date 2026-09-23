@@ -46,7 +46,9 @@ included; "just check X first" never reorders this:
   fr-init, resume.)
 
 From here on follow fr-isolation's exec-bridge discipline: read/edit files in
-the worktree, run every command through `fr isolation exec -- …`.
+the worktree, run every command through `fr isolation exec -- …`. A broken
+environment is repaired with `fr isolation restart`, then `rebuild` (worktree, cursor and
+uncommitted work kept), never `down --force`; a forced down preserves the run record, but the workspace and its uncommitted fix are gone.
 
 ## 1. Debug
 

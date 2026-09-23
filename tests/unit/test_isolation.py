@@ -10,6 +10,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
@@ -186,6 +187,7 @@ class FakeRunner:
         pr_by_branch: dict[str, str] | None = None,
         docker_images: list[tuple[str, str]] | None = None,
         referenced_images: list[str] | None = None,
+        stop_sticks: bool = True,
     ):
         self.calls: list[list[str]] = []
         self.git_calls: list[list[str]] = []
@@ -193,6 +195,11 @@ class FakeRunner:
         self.fail_on = fail_on
         self.stdout = stdout or {}
         self.removed: set[str] = set()
+        # #471: a successful `docker stop <id>` flips that id's `docker ps`
+        # state to `exited` — unless `stop_sticks=False`, which models a
+        # container that is still running after the stop returned 0.
+        self.stopped: set[str] = set()
+        self.stop_sticks = stop_sticks
         # gc host-wide discovery: (container_id, worktree_path) pairs the
         # `docker ps -a --filter label=... --format '{{.ID}}\t{{.Label ...}}'`
         # call returns (minus already-rm'd ids).
@@ -206,7 +213,12 @@ class FakeRunner:
         self.referenced_images = referenced_images or []
 
     def __call__(
-        self, argv: list[str], cwd: Path | None = None, check: bool = False, capture: bool = True
+        self,
+        argv: list[str],
+        cwd: Path | None = None,
+        check: bool = False,
+        capture: bool = True,
+        **kw: Any,
     ):
         self.captures.append(capture)
         if argv[0] == "git":
@@ -214,11 +226,15 @@ class FakeRunner:
             # tests can assert mechanism (e.g. a fetch ran / did not run) on top of
             # the resulting repo state.
             self.git_calls.append(list(argv))
-            return subprocess.run(argv, cwd=cwd, check=check, capture_output=True, text=True)
+            return subprocess.run(
+                argv, cwd=cwd, check=check, capture_output=True, text=True, env=kw.get("env")
+            )
         self.calls.append(list(argv))
         rc = 1 if (self.fail_on and self.fail_on in argv[0:2]) else 0
         if argv[0:2] == ["docker", "rm"] and rc == 0:
             self.removed.update(argv[2:])
+        if argv[0:2] == ["docker", "stop"] and rc == 0 and self.stop_sticks:
+            self.stopped.update(argv[2:])
         out = self.stdout.get(argv[0], "")
         if argv[0:2] == ["docker", "ps"]:
             if any(".Label" in a for a in argv):
@@ -240,7 +256,11 @@ class FakeRunner:
         """Per-state `docker ps` line, minus any container id already `rm`'d."""
         out = self.stdout.get("docker", "")
         first = out.split()[0] if out.split() else ""
-        return "" if first in self.removed else out
+        if first in self.removed:
+            return ""
+        if first in self.stopped:
+            return f"{first} exited\n"
+        return out
 
     def _docker_labels_out(self) -> str:
         """gc discovery listing: `id\\tpath` per labelled container, minus rm'd."""
@@ -642,11 +662,12 @@ def test_up_new_branch_bases_on_origin_default_not_local_head(
     assert _fetched(runner.git_calls)  # the default path fetched
 
 
-def test_up_logs_chosen_base_on_stdout(
+def test_up_logs_chosen_base_on_stderr(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    """The non-warning 'basing new branch …' line is informational → stdout
-    (WARNING fallbacks go to stderr; this pins the split)."""
+    """Every line `up` prints goes to stderr (2026-09-23 lifecycle spec §3.C):
+    `--print-path` and `fr run start` own stdout, so even the informational
+    'basing new branch …' line must not land there."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     repo, _origin = make_repo_with_origin(tmp_path, ["dev"], default="dev")
     target = LocalWorktreeDevcontainerTarget(repo, runner=FakeRunner())
@@ -654,7 +675,8 @@ def test_up_logs_chosen_base_on_stdout(
     target.up(profile="dev", branch="feat/x")
 
     captured = capsys.readouterr()
-    assert "basing new branch feat/x on origin/main (fetched)" in captured.out
+    assert "basing new branch feat/x on origin/main (fetched)" in captured.err
+    assert "basing new branch" not in captured.out
     assert "WARNING" not in captured.err
 
 
@@ -986,7 +1008,8 @@ def _upped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **runner_kw):
 
 
 def test_exec_passthrough(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _, runner, target, st = _upped(tmp_path, monkeypatch)
+    # a running container: exec's _ensure_running execs directly (spec §3.B)
+    _, runner, target, st = _upped(tmp_path, monkeypatch, stdout={"docker": "cid1 running"})
     rc = target.exec(st, ["pytest", "-q", "--no-cov"])
     assert rc == 0
     (call,) = runner.argv_for("devcontainer")
@@ -1093,6 +1116,8 @@ def test_down_raises_when_worktree_remove_fails(
         stdout={"docker": "abc123 running\n", "gh": '{"state": "MERGED", "url": "u"}'},
     )
     _orphan_worktree(repo, st, keep_dir=True)
+    # #575 p4-f10: a tree git cannot read no longer blocks preservation — it
+    # falls back to a git-less copy — so --force still reaches the post-condition.
     with pytest.raises(IsolationError, match="worktree remove failed"):
         target.down(st, force=True)
     assert load_state(repo, "vk-iso/test") is not None, "state must survive a worktree failure"
@@ -2197,7 +2222,7 @@ def _spawn_target(tmp_path, monkeypatch, spawner, **runner_kw):
 
 def test_up_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spawns: list[int] = []
-    _, _, target = _spawn_target(tmp_path, monkeypatch, lambda _root: spawns.append(1))
+    _, _, target = _spawn_target(tmp_path, monkeypatch, lambda _root, _mode: spawns.append(1))
     target.up(None, "feat/a")
     assert spawns == [1], "up() fires exactly one background gc after its work"
 
@@ -2205,7 +2230,10 @@ def test_up_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_down_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spawns: list[int] = []
     repo, runner, target = _spawn_target(
-        tmp_path, monkeypatch, lambda _root: spawns.append(1), stdout={"gh": '{"state": "MERGED"}'}
+        tmp_path,
+        monkeypatch,
+        lambda _root, _mode: spawns.append(1),
+        stdout={"gh": '{"state": "MERGED"}'},
     )
     st = target.up(None, "feat/a")
     spawns.clear()
@@ -2214,7 +2242,7 @@ def test_down_spawns_background_gc(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def boom(_root: Path) -> None:
+    def boom(_root: Path, _mode: str) -> None:
         raise RuntimeError("no fork today")
 
     _, _, target = _spawn_target(tmp_path, monkeypatch, boom)
@@ -2789,6 +2817,154 @@ class TestRestart:
         with pytest.raises(IsolationError, match="--force"):
             target.restart(st)
 
+    def test_failed_docker_ps_is_unreachable_not_absent(self, tmp_path: Path) -> None:
+        """Phase-1 review f2: a failed query is not 'no container — run up'."""
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="unreachable"):
+            target.restart(st)
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["restart"]]
+
+
+class TestStop:
+    """#471 / spec §3.B: `stop` halts the container, keeps everything else,
+    and verifies the stop with a re-query rather than trusting docker's rc."""
+
+    def test_stop_runs_docker_stop_then_verifies(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        docker = runner.argv_for("docker")
+        stops = [c for c in docker if c[1:2] == ["stop"]]
+        assert stops == [["docker", "stop", "cid1"]]
+        # the verification re-query comes AFTER the stop, and asks `--all`
+        after = docker[docker.index(stops[0]) + 1 :]
+        assert any(c[1:2] == ["ps"] and "--all" in c for c in after)
+        assert "cid1" in msg and "stopped" in msg and "already" not in msg
+
+    def test_already_exited_is_noop_success(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 exited"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        assert "already stopped" in msg
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_no_container_errors_with_up_hint(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="fr isolation up"):
+            target.stop(st)
+
+    def test_failed_docker_ps_is_an_error_never_absence(self, tmp_path: Path) -> None:
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="unreachable"):
+            target.stop(st)
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_missing_docker_binary_is_unreachable(self, tmp_path: Path) -> None:
+        def no_docker(argv, cwd=None, check=False, capture=True):
+            if argv[0] == "git":
+                return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+            raise FileNotFoundError(argv[0])
+
+        target, st = _target_state(tmp_path, FakeRunner())
+        target.run = no_docker
+        with pytest.raises(IsolationError, match="unreachable"):
+            target.stop(st)
+
+    def test_verifies_this_container_by_id_not_first_line(self, tmp_path: Path) -> None:
+        """Phase-1 review f1: the label filter can list a stale sibling FIRST.
+        A still-running cid1 behind an exited cid0 must not read as stopped."""
+        ps_outputs = iter(["cid1 running\n", "cid0 exited\ncid1 running\n"])
+
+        def run(argv, cwd=None, check=False, capture=True, **_kw):
+            if argv[0] == "git":
+                return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+            out = next(ps_outputs) if argv[:2] == ["docker", "ps"] else ""
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+        target, st = _target_state(tmp_path, FakeRunner())
+        target.run = run
+        with pytest.raises(IsolationError, match="cid1 .*still running"):
+            target.stop(st)
+
+    def test_dead_container_points_at_rebuild(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 dead"})
+        target, st = _target_state(tmp_path, runner)
+        msg = target.stop(st)
+        assert "dead" in msg and "fr isolation rebuild --branch feat/x" in msg
+        assert "resumes" not in msg
+        assert not [c for c in runner.argv_for("docker") if c[1:2] == ["stop"]]
+
+    def test_still_running_after_stop_raises(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"}, stop_sticks=False)
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="still running"):
+            target.stop(st)
+
+    def test_docker_stop_failure_raises(self, tmp_path: Path) -> None:
+        runner = FakeRunner(fail_on="stop", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        with pytest.raises(IsolationError, match="docker stop failed"):
+            target.stop(st)
+
+    def test_host_worktree_stop_is_noop_without_docker(self, tmp_path: Path) -> None:
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        target = HostWorktreeTarget(repo, runner=runner)
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            worktree=tmp_path / "wt",
+            profile="host",
+            created_at="2026-09-23T00:00:00Z",
+        )
+        msg = target.stop(st)
+        assert "no-op" in msg
+        assert runner.argv_for("docker") == []
+
+    def test_external_stop_refuses(self, tmp_path: Path) -> None:
+        from fr.isolation.external import ExternalTarget
+
+        runner = FakeRunner(stdout={"docker": "cid1 running"})
+        repo = make_repo(tmp_path, ["dev"], default="dev")
+        st = IsolationState(
+            repo_root=repo,
+            branch="feat/x",
+            worktree=repo,
+            profile="external",
+            created_at="2026-09-23T00:00:00Z",
+        )
+        with pytest.raises(IsolationError, match="externally managed"):
+            ExternalTarget(repo, runner=runner).stop(st)
+        assert runner.argv_for("docker") == []
+
+
+class TestStatusStopped:
+    """Spec §3.B: docker's `exited` reads as `stopped`; others pass through."""
+
+    @pytest.mark.parametrize(
+        ("ps", "shown"),
+        [
+            ("cid1 exited", "stopped"),
+            ("cid1 running", "running"),
+            ("cid1 paused", "paused"),
+            ("cid1 created", "created"),
+            ("", "not running"),
+        ],
+    )
+    def test_status_container_state(self, tmp_path: Path, ps: str, shown: str) -> None:
+        runner = FakeRunner(stdout={"docker": ps})
+        target, st = _target_state(tmp_path, runner)
+        assert target.status(st)["container"] == shown
+
+    def test_failed_query_is_unknown_not_absent(self, tmp_path: Path) -> None:
+        """Phase-1 review f7 (#354): a down daemon must not read as no container."""
+        runner = FakeRunner(fail_on="ps", stdout={"docker": "cid1 running"})
+        target, st = _target_state(tmp_path, runner)
+        assert target.status(st)["container"] == "unknown (docker unreachable)"
+
 
 class _DockerRunner:
     """Runner distinguishing `docker ps` from `docker stats` (FakeRunner keys
@@ -2801,7 +2977,7 @@ class _DockerRunner:
         self.stats_rc = stats_rc
         self.calls: list[list[str]] = []
 
-    def __call__(self, argv, cwd=None, check=False, capture=True):
+    def __call__(self, argv, cwd=None, check=False, capture=True, **_kw):
         if argv[0] == "git":
             return subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
         self.calls.append(list(argv))
