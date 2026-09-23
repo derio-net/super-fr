@@ -323,6 +323,59 @@ Checked before anything is torn down, because the evidence is perishable.
 5. **The merge request exists** on the operator's fork.
 6. **Annotation offsets were noted live**, not reconstructed afterwards.
 
+## Narration and annotation concept (draft, 2026-09-23)
+
+A first HyperFrames spike played each beat as a single real-time clip — mostly
+waiting, no annotation, no narration. It had dropped two decisions already made
+here (1.5–2× with pauses at annotation moments; compression labelled on screen).
+This section replaces "clips" with a model built for a live talk.
+
+**Narration is your live voice; the script lives in the presenter notes.** One
+line per stop. Written as a script first, so the same text can later become a
+voiceover for a recorded version — the script is the source, the voice one
+rendering of it.
+
+**Stops, not playback.** The unit is a *stop*: one frozen terminal frame, one
+annotation, one spoken line. A beat is 3–5 stops, each a slideshow fragment (a
+deterministic hold advanced with →). Between stops, a **visible fast-forward
+bridge**: a few seconds of the recording at 10–30× with a "⏩ 2 m 40 s" label —
+the compression shown, not hidden, and the agent visibly working while nobody
+waits. Controls: →/← step stops; a presenter-only control plays a bridge in real
+time on request; no video chrome on the audience surface.
+
+**Through-line: your attention.** A persistent counter — "you were needed: N".
+From the session log, the operator was needed **twice, both before any code**
+(the fr-init interview, the fr-goal batch), then not at all for 18 wall-clock
+minutes through three phases, three independent reviews, a broken suite, its
+diagnosis and fix, and the merge request.
+
+**The four angles are the visual language, front and centre.** Each angle has a
+colour, and every terminal block is framed in its angle's colour — blocks running
+`fr isolation` framed in Security yellow, and so on. A persistent header band
+shows the four angle chips beside the attention counter; the chip of the angle
+currently framed lights up. The audience learns the code on the first beat and
+then watches the run fill with colour. Proposed palette (never colour alone —
+always paired with the angle's label):
+
+| angle | colour | typical blocks |
+|---|---|---|
+| Security | yellow | `fr init`, `fr isolation up/exec`, the refusal to run unisolated |
+| Quality | green | tests failing and passing, `self-review`, independent reviewers, acceptance |
+| Continuity | blue | spec, `fr plan create`, `fr run advance/resolve`, journal, the MR |
+| Extensibility | magenta | phase dispatched to `fr-phase-executor-<tier>`, per-tier models |
+
+**Annotations are anchored to text, not pixels.** The cast is text: replaying it
+through a terminal emulator gives the exact screen at any moment, so each block's
+row and column are computed, and its angle derived from its command. Verified on
+the real cast at the dispatch moment — every command block located and
+classified. Frames therefore survive font changes, re-cropping and retiming.
+The mapping must be an **authored, ordered rule table**, most specific first: a
+naive regex classified `fr plan self-review` as Continuity, where it is a Quality
+moment.
+
+**Each spoken line follows one shape**, to keep the talk about *her*, not about
+the tool: the pain she has felt → the moment on screen → what it buys her.
+
 ## Time budget — a working hypothesis, not a contract
 
 **Operator correction, 2026-09-20.** The beats below are a first sketch. Beats
