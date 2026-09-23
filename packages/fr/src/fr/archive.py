@@ -12,11 +12,22 @@ nudge so the three surfaces can't disagree. The spec decision is
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.git import (
+    GIT_TIMEOUT_SECONDS,
+    GitRefusal,
+    GitUnavailableError,
+    git_answer,
+    remote_default_ref,
+    remote_name,
+)
 from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
 from fr.run.legacy import RunStateV4, parse_run_state_v4
@@ -31,52 +42,266 @@ from fr.run.model import (
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
+    from fr.parser import Plan
 
 __all__ = [
+    "FETCH_TIMEOUT_SECONDS",
     "ArchiveError",
+    "DefaultRef",
+    "MergeEvidence",
     "SpecSweepResult",
     "archive_plan_dir",
     "completed_unarchived_plans",
     "find_run_for_plan",
+    "merge_evidence",
     "paths_dirty",
     "spec_archive_sweep",
 ]
 
+PLANS_REL = Path("docs/superpowers/plans")
+
 
 def completed_unarchived_plans(repo_root: Path) -> list[str]:
     """Plan-dir names under ``docs/superpowers/plans/`` that are fully locally
-    complete and therefore should have been archived (#334).
-
-    The gh-free ("merged-but-unarchived") signal, shared by the ``fr status``
-    repo sweep and the ``test_tripwire_unarchived_plans`` CI backstop so there
-    is exactly one definition of the drift.
+    complete (#334).
 
     A plan counts iff it has at least one phase and *every* phase satisfies
     ``render.plan_locally_complete`` (``completion.at`` set, or all steps
-    ticked). This is the same offline arm ``archive_gate`` uses for
-    never-dispatched plans, so it never flags a plan the mover would refuse.
-    Deliberately offline (no gh observation) so plain ``pytest`` can enforce
-    it. Malformed plan dirs are skipped, not flagged — a parse failure is a
-    different problem and must not wedge the check red.
+    ticked). Deliberately offline (no gh observation, no ref).
+
+    Local completeness is NOT "merged", and this is not the archive gate's
+    answer: a plan can be complete in the working tree without ever having
+    reached the default branch, and the mover must refuse that (#526/#544).
+    "Merged" has one definition, ``merge_evidence``, whose ``complete_on_ref``
+    applies this same per-phase predicate to the default ref's copy of the
+    plans — the tripwire's signal. Malformed plan dirs are skipped, not
+    flagged — a parse failure is a different problem and must not wedge the
+    check red.
     """
+    return [
+        name
+        for name, plan in _parsed_plans(repo_root / PLANS_REL)
+        if plan is not None and _fully_complete(plan)
+    ]
+
+
+def _parsed_plans(plans_dir: Path) -> Iterator[tuple[str, Plan | None]]:
+    """Every plan dir (one with a ``_meta.yaml``) under ``plans_dir``, sorted,
+    with its parse — ``None`` when the current parser rejects it."""
     from fr.parser import PlanSchemaError, parse
-    from fr.render import plan_locally_complete
 
-    plans_dir = repo_root / "docs" / "superpowers" / "plans"
     if not plans_dir.is_dir():
-        return []
-
-    complete: list[str] = []
+        return
     for plan_dir in sorted(plans_dir.iterdir()):
         if not (plan_dir / "_meta.yaml").exists():
             continue
         try:
-            plan = parse(plan_dir)
+            yield plan_dir.name, parse(plan_dir)
         except PlanSchemaError:
-            continue
-        if plan.phases and all(plan_locally_complete(p) for p in plan.phases):
-            complete.append(plan_dir.name)
-    return complete
+            yield plan_dir.name, None
+
+
+def _complete_phases(plan: Plan) -> frozenset[int]:
+    """Phase numbers ``render.plan_locally_complete`` accepts."""
+    from fr.render import plan_locally_complete
+
+    return frozenset(p.phase.number for p in plan.phases if plan_locally_complete(p))
+
+
+def _fully_complete(plan: Plan) -> bool:
+    """At least one phase, and every phase locally complete."""
+    return bool(plan.phases) and len(_complete_phases(plan)) == len(plan.phases)
+
+
+# --- merge evidence: the one definition of "merged" (spec 2026-09-23 §3.A) ---
+
+FETCH_TIMEOUT_SECONDS = 30
+"""Cap on `_fetch`: a hanging fetch must not stall `fr status` (spec §4)."""
+
+
+@dataclass(frozen=True)
+class DefaultRef:
+    ref: str
+    """e.g. ``origin/main``: a remote-tracking ref, never a local branch."""
+    sha: str
+    """Short SHA read, so a stale ref is visible in output."""
+
+
+@dataclass(frozen=True)
+class MergeEvidence:
+    """What the default branch's remote-tracking ref says has landed.
+
+    ``ref is None`` means "unknown" — never "merged" — and ``ref_error`` says
+    why. A failed fetch is not fatal: ``fetch_error`` is set and every set
+    below is read from the stale local ref.
+    """
+
+    ref: DefaultRef | None
+    ref_error: str | None
+    fetched: bool
+    """A fetch was attempted and succeeded."""
+    fetch_error: str | None
+    """A fetch was attempted and failed (offline, auth, timeout)."""
+    landed_phases: Mapping[str, frozenset[int]]
+    """Plan name → phase numbers locally complete on the ref."""
+    agentic_landed: frozenset[str]
+    """Plans on the ref whose every agentic phase is in ``landed_phases``.
+
+    Manual phases are excluded: fr-goal ships its trailing ``[manual]`` phase
+    unticked and the operator ticks it after merge, so requiring it on the ref
+    would make every fr-goal plan unarchivable. A plan with no agentic phase is
+    landed once its dir exists on the ref. Judged from the REF's copy of the
+    plan: a phase that exists only in the working tree is not in it, so a
+    caller judging a local phase must consult ``landed_phases``.
+    """
+    complete_on_ref: frozenset[str]
+    """Plans with EVERY phase (manual included) complete on the ref."""
+    unparsed_on_ref: tuple[str, ...]
+    """Ref-side plan dirs the current fr could not parse — reported, never
+    silently treated as unmerged."""
+
+
+def _fetch(repo_root: Path, remote: str) -> None:
+    """``git fetch`` the default remote, prompt-free and time-boxed.
+
+    A module-level seam (the ``_make_gh_client`` pattern) so tests never touch
+    a network. Raises ``CalledProcessError``/``TimeoutExpired``/``OSError`` on
+    failure; ``merge_evidence`` records that and falls back to the local ref.
+    A fetch moves only remote-tracking refs, so read-only callers stay so.
+    """
+    subprocess.run(
+        ["git", "-C", str(repo_root), "fetch", "--quiet", "--no-tags", remote],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=FETCH_TIMEOUT_SECONDS,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+
+
+def _describe_fetch_failure(e: Exception) -> str:
+    if isinstance(e, subprocess.TimeoutExpired):
+        return f"git fetch timed out after {e.timeout:g}s"
+    if isinstance(e, subprocess.CalledProcessError):
+        detail = e.stderr.strip() if isinstance(e.stderr, str) else ""
+        return f"git fetch failed (exit {e.returncode})" + (f": {detail}" if detail else "")
+    return f"git fetch could not run: {e}"
+
+
+def _unknown(reason: str, *, fetched: bool, fetch_error: str | None) -> MergeEvidence:
+    """Evidence for an unresolvable ref: "unknown", with nothing merged."""
+    return MergeEvidence(
+        ref=None,
+        ref_error=reason,
+        fetched=fetched,
+        fetch_error=fetch_error,
+        landed_phases={},
+        agentic_landed=frozenset(),
+        complete_on_ref=frozenset(),
+        unparsed_on_ref=(),
+    )
+
+
+def merge_evidence(repo_root: Path, *, fetch: bool) -> MergeEvidence:
+    """The single definition of "merged": plans as they exist on the default
+    branch's remote-tracking ref (spec 2026-09-23 §3.A).
+
+    With ``fetch=True`` the default remote is fetched first through ``_fetch``;
+    a failure degrades to the local ref with ``fetch_error`` set. The ref's
+    ``docs/superpowers/plans`` tree is materialised with ``git archive`` and
+    parsed per phase — the evidence is plan CONTENT on the ref, not commit
+    ancestry, so a squash merge counts.
+    """
+    fetched = False
+    fetch_error: str | None = None
+    try:
+        remote = remote_name(repo_root)
+        if isinstance(remote, GitRefusal):
+            return _unknown(remote.reason, fetched=False, fetch_error=None)
+        if remote is None:
+            return _unknown(
+                "no git remote, so nothing can be shown to have merged",
+                fetched=False,
+                fetch_error=None,
+            )
+        if fetch:
+            try:
+                _fetch(repo_root, remote)
+                fetched = True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+                fetch_error = _describe_fetch_failure(e)
+        ref = remote_default_ref(repo_root)
+        if isinstance(ref, GitRefusal):
+            return _unknown(ref.reason, fetched=fetched, fetch_error=fetch_error)
+        if ref is None:
+            return _unknown(
+                f"no remote-tracking default branch for {remote} "
+                f"(no {remote}/HEAD and no {remote}/main|master|trunk|develop)",
+                fetched=fetched,
+                fetch_error=fetch_error,
+            )
+        sha = git_answer(repo_root, "rev-parse", "--short", ref).stdout.strip()
+        landed, agentic, complete, unparsed = _plans_on_ref(repo_root, ref)
+    except GitUnavailableError as e:
+        return _unknown(str(e), fetched=fetched, fetch_error=fetch_error)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        return _unknown(
+            f"could not read the plans on {ref}: {e}", fetched=fetched, fetch_error=fetch_error
+        )
+    return MergeEvidence(
+        ref=DefaultRef(ref=ref, sha=sha),
+        ref_error=None,
+        fetched=fetched,
+        fetch_error=fetch_error,
+        landed_phases=landed,
+        agentic_landed=agentic,
+        complete_on_ref=complete,
+        unparsed_on_ref=unparsed,
+    )
+
+
+_PlanSets = tuple[dict[str, frozenset[int]], frozenset[str], frozenset[str], tuple[str, ...]]
+
+
+def _plans_on_ref(repo_root: Path, ref: str) -> _PlanSets:
+    """Materialise ``ref``'s plans tree in a temp dir and judge it per phase.
+
+    Returns ``(landed_phases, agentic_landed, complete_on_ref,
+    unparsed_on_ref)``; all empty when the ref has no plans tree.
+    """
+    listed = git_answer(repo_root, "ls-tree", "-d", ref, "--", str(PLANS_REL))
+    if listed.returncode != 0 or not listed.stdout.strip():
+        return {}, frozenset(), frozenset(), ()
+
+    landed: dict[str, frozenset[int]] = {}
+    agentic: set[str] = set()
+    complete: set[str] = set()
+    unparsed: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        archived = subprocess.run(
+            ["git", "-C", str(repo_root), "archive", ref, "--", str(PLANS_REL)],
+            capture_output=True,
+            check=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+        subprocess.run(
+            ["tar", "-x", "-C", td],
+            input=archived.stdout,
+            capture_output=True,
+            check=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+        for name, plan in _parsed_plans(Path(td) / PLANS_REL):
+            if plan is None:
+                unparsed.append(name)
+                continue
+            done = _complete_phases(plan)
+            landed[name] = done
+            if all(p.phase.number in done for p in plan.phases if p.phase.tag == "agentic"):
+                agentic.add(name)
+            if _fully_complete(plan):
+                complete.add(name)
+    return landed, frozenset(agentic), frozenset(complete), tuple(unparsed)
 
 
 class ArchiveError(Exception):

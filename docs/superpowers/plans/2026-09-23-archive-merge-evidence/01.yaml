@@ -40,34 +40,43 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-23T15:02:09+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:02:09+00:00'
+      note: 'red: collection ImportError, DefaultRef/merge_evidence/fr.git helpers
+        absent'
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:03:51+00:00'
+      note: GitRefusal/GitUnavailableError/git_answer/remote_name/remote_default_ref
+        now live in fr.git; commit.py re-exports; migration_commit+trigger tests green
+        (94)
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:05:14+00:00'
+      note: merge_evidence/_fetch/DefaultRef/MergeEvidence in fr.archive; 23 new tests
+        green
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:07:14+00:00'
+      note: tripwire _offenders -> merge_evidence(fetch=False).complete_on_ref, None
+        => explicit skip; private git archive code deleted; added skip-not-pass fixture
+        test
     P1.T2.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:07:14+00:00'
+      note: 304 passed across merge_evidence/tripwire/completed_unarchived/migration_commit/migration_trigger/isolation;
+        ruff format+check clean; mypy clean (131 files)
     P1.T2.S5:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-23T15:18:18+00:00'
+      note: extracted _parsed_plans/_complete_phases/_fully_complete shared by completed_unarchived_plans
+        and merge_evidence; remote default ref only in fr.git; full suite 4943 passed,
+        88 skipped
   completion:
-    at: null
+    at: '2026-09-23T15:18:18+00:00'
     note: null
     observed_prs: []

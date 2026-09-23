@@ -6,28 +6,28 @@ guard fails loud when a plan that merged COMPLETE to origin/main is still
 sitting in plans/ — so a forgotten post-merge archive turns CI red until it is
 done, while in-progress work is deliberately NOT flagged.
 
-Signal = "complete on origin/main" ∩ "still present in the working-tree plans/",
-both computed with the one `fr.archive.completed_unarchived_plans` predicate:
-- the origin/main arm materializes origin/main's plans/ subtree and runs the
-  predicate on it, so it fires only on plans that genuinely merged complete —
+Signal = "complete on the default ref" ∩ "still present in the working-tree
+plans/":
+- the ref arm is `fr.archive.merge_evidence(...).complete_on_ref` — the ONE
+  definition of "merged" (spec 2026-09-23 §3.A), shared with `fr status` and
+  `fr archive`. It fires only on plans that genuinely merged complete —
   excluding a brand-new plan (not on main) AND the PR that FINISHES a multi-PR
   plan whose dir landed on main incomplete (main is still incomplete there);
 - the working-tree arm lets the PR that ARCHIVES/removes a stale plan pass (the
   dir is gone from the tree).
-Offline apart from reading the local origin/main ref (CI fetches it via
-fetch-depth: 0); skips cleanly when origin/main is unavailable.
+Offline (`fetch=False`: reads the local remote-tracking ref, which CI fetches
+via fetch-depth: 0); skips explicitly when no default ref resolves.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 import yaml as _yaml
-from fr.archive import completed_unarchived_plans
+from fr.archive import completed_unarchived_plans, merge_evidence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
@@ -56,42 +56,6 @@ def test_predicate_ignores_in_progress_plan(tmp_path: Path) -> None:
     assert completed_unarchived_plans(tmp_path) == []
 
 
-def _origin_main_available(repo_root: Path) -> bool:
-    return (
-        subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", "origin/main"],
-            capture_output=True,
-        ).returncode
-        == 0
-    )
-
-
-def _completed_plans_on_origin_main(repo_root: Path) -> list[str]:
-    """Plans that are complete AS THEY EXIST ON origin/main.
-
-    Materialize origin/main's plans/ subtree and run the same predicate on it.
-    Completeness-on-main (not mere presence) is what excludes the PR that
-    *finishes* a plan whose dir landed on main incomplete in an earlier PR —
-    main is still incomplete there, so it is not an offender. Returns [] when
-    origin/main has no plans/ tree."""
-    ls = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-tree", "origin/main", "docs/superpowers/plans"],
-        capture_output=True,
-        text=True,
-    )
-    if not ls.stdout.strip():
-        return []
-    archived = subprocess.run(
-        ["git", "-C", str(repo_root), "archive", "origin/main", "docs/superpowers/plans"],
-        capture_output=True,
-    )
-    if archived.returncode != 0:
-        return []
-    with tempfile.TemporaryDirectory() as td:
-        subprocess.run(["tar", "-x", "-C", td], input=archived.stdout, check=True)
-        return completed_unarchived_plans(Path(td))
-
-
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", *args],
@@ -100,11 +64,14 @@ def _git(repo: Path, *args: str) -> None:
     )
 
 
-def _offenders(repo: Path) -> list[str]:
+def _offenders(repo: Path) -> list[str] | None:
+    """Plans complete on the default ref and still in the working tree's
+    plans/, or `None` when no default ref resolves (the caller skips)."""
+    evidence = merge_evidence(repo, fetch=False)
+    if evidence.ref is None:
+        return None
     plans_dir = repo / "docs" / "superpowers" / "plans"
-    return [
-        n for n in _completed_plans_on_origin_main(repo) if (plans_dir / n / "_meta.yaml").exists()
-    ]
+    return sorted(n for n in evidence.complete_on_ref if (plans_dir / n / "_meta.yaml").exists())
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
@@ -158,6 +125,18 @@ def test_complete_on_main_but_archived_in_tree_is_not_flagged(tmp_path: Path) ->
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+def test_no_default_ref_means_skip_not_pass(tmp_path: Path) -> None:
+    """A checkout with no remote-tracking default ref must SKIP the backstop,
+    never pass it silently: `_offenders` answers None, not []."""
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir(parents=True)
+    _add_plan(tmp_path, "2026-03-04-done", complete=True)
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "local main only, no remote")
+    assert _offenders(tmp_path) is None
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
 def test_no_merged_but_unarchived_plans() -> None:
     """The backstop. A plan complete ON origin/main that is still sitting in
     the working tree's plans/ was merged and never archived — run
@@ -168,14 +147,12 @@ def test_no_merged_but_unarchived_plans() -> None:
     (excludes the finishing PR of a multi-PR plan). The working-tree arm lets
     the PR that archives/removes a stale plan pass (the dir is gone from the
     tree)."""
-    if not _origin_main_available(REPO_ROOT):
-        pytest.skip("origin/main not available (shallow checkout?)")
-    plans_dir = REPO_ROOT / "docs" / "superpowers" / "plans"
-    offenders = [
-        n
-        for n in _completed_plans_on_origin_main(REPO_ROOT)
-        if (plans_dir / n / "_meta.yaml").exists()
-    ]
+    offenders = _offenders(REPO_ROOT)
+    if offenders is None:
+        pytest.skip(
+            "no remote-tracking default ref resolvable (shallow checkout? no remote?): "
+            f"{merge_evidence(REPO_ROOT, fetch=False).ref_error}"
+        )
     assert offenders == [], (
         "merged-but-unarchived plan(s) — complete on origin/main but still in "
         f"docs/superpowers/plans/: {offenders}. Run `fr archive --all` to move "
