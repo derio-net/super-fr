@@ -121,6 +121,14 @@ def test_valid_marker_in_worktree_allows(tmp_path: Path) -> None:
     assert allowed(run_hook(payload(wt / "a.py")))
 
 
+def test_valid_marker_allows_a_symlink_that_stays_inside_the_worktree(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    (wt / "inside-link.md").symlink_to(wt / "README.md")
+    assert allowed(run_hook(payload(wt / "inside-link.md")))
+
+
 def test_allowlist_path_allows(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)
     wt = linked_worktree(repo)  # fr-enabled linked worktree, NO marker
@@ -129,13 +137,49 @@ def test_allowlist_path_allows(tmp_path: Path) -> None:
     assert allowed(run_hook(payload(wt / "notes" / "x.md")))
 
 
+def notebook_payload(notebook_path: Path) -> dict:
+    """The shape NotebookEdit really sends: its schema requires `notebook_path` and
+    sets additionalProperties false, so it can never carry a `file_path`."""
+    return {
+        "tool_name": "NotebookEdit",
+        "tool_input": {"notebook_path": str(notebook_path), "new_source": "print(1)"},
+    }
+
+
+def test_a_notebook_edit_in_a_valid_workspace_allows(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    assert allowed(run_hook(notebook_payload(wt / "analysis.ipynb")))
+
+
 # ---------- deny paths ----------
+
+
+def test_a_notebook_edit_blocks_like_any_other_edit(tmp_path: Path) -> None:
+    """The gate named NotebookEdit in its matcher, header and `case`, yet read only
+    `file_path`. NotebookEdit's target is `notebook_path`, so the path arrived empty
+    and `fr_isolation_decide_edit` allows an empty path. Every notebook edit went
+    through ungated: declared coverage, not observed enforcement (#550's Claude-side
+    twin, found by the fr-triage post-merge walk)."""
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)  # fr-enabled, no marker
+    assert decision(run_hook(notebook_payload(wt / "analysis.ipynb"))) == "deny"
 
 
 def test_no_marker_blocks(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)
     wt = linked_worktree(repo)  # fr-enabled, no marker
     assert decision(run_hook(payload(wt / "a.py"))) == "deny"
+
+
+@pytest.mark.parametrize("target", ["README.md", "does-not-exist.md"])
+def test_marked_worktree_symlink_to_base_clone_blocks(tmp_path: Path, target: str) -> None:
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    write_marker(wt, wt)
+    (wt / f"base-{target}").symlink_to(repo / target)
+    assert decision(run_hook(payload(wt / f"base-{target}"))) == "deny"
 
 
 def test_mismatched_toplevel_blocks(tmp_path: Path) -> None:

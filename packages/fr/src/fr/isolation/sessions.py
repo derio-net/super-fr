@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -26,6 +27,35 @@ from .types import (
     stamp_sentinel_workspace,
     state_path,
 )
+
+
+def ambient_binding(
+    session: str | None, harness: str, env: Mapping[str, str]
+) -> tuple[str | None, str]:
+    """The (session, harness) to bind when the caller named none — `fr run
+    start` and `fr isolation up` both default through this, so the two
+    entry points cannot drift (2026-09-21 debug journal, C4).
+
+    An explicit `--session` always wins. Otherwise the session is the one fr
+    already stamps on every run attempt (`fr.run.telemetry.current_session`,
+    one rule, not a second `env.get`), and the harness is detected. Before
+    this, binding was left to a PostToolUse hook whose start-anchored `^fr …`
+    regex never matched `uv run fr …` — the form this repo's own AGENTS.md
+    mandates — so fr-goal workspaces reported `sessions=none` and the Stop
+    idle guard, which finds a run only through the binding, stayed inert.
+    Never invents a session: none in the environment means none bound.
+    """
+    from fr.harness.detect import detect_harness
+    from fr.run.telemetry import current_session
+
+    if session:
+        return session, harness
+    ambient = current_session(env)
+    if ambient is None:
+        return None, harness
+    if harness == "unknown":
+        harness = detect_harness(env) or "unknown"
+    return ambient, harness
 
 
 def sessions_dir() -> Path:

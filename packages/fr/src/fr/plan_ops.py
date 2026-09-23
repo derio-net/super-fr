@@ -1607,15 +1607,38 @@ def _skeleton_issues(plan: Plan) -> list[ReviewIssue]:
     """
     first: int | None = None
     marked: list[int] = []
+    agentic = 0
     for ph in plan.phases:
         if ph.phase.tag != "agentic":
             continue
+        agentic += 1
         if first is None:
             first = ph.phase.number
         if ph.phase.skeleton:
             marked.append(ph.phase.number)
     if first is None:
         return []  # no agentic phase: nothing to build on, nothing to smoke
+    # A skeleton with nothing agentic after it is not a smoke before the
+    # expensive part — it IS the expensive part, carrying the marker (2026-09-21
+    # debug journal C2: a one-phase plan held the whole change and the per-phase
+    # implement → review loop ran exactly once). Manual phases do not count as
+    # the work the skeleton de-risks. Same override as the unmarked case.
+    if agentic == 1 and first in marked and not _skeleton_overridden(plan):
+        return [
+            ReviewIssue(
+                severity="error",
+                message=(
+                    f"phase {first} is the walking skeleton AND the only agentic "
+                    f"phase — a skeleton smokes delivery infrastructure (CI green on "
+                    f"a trivial test) BEFORE the real work, so split the work into "
+                    f"later phases, or, for a change too small to smoke separately, "
+                    f"log an operator override: `fr journal add --scope spec "
+                    f"--slug <spec-slug> --kind decision "
+                    f"--id skeleton-override-{plan.meta.plan} --title <why> "
+                    f"--body <why-no-separate-smoke>`."
+                ),
+            )
+        ]
     out: list[ReviewIssue] = []
     misplaced = [n for n in marked if n != first]
     if misplaced:

@@ -31,6 +31,7 @@ Pinned here:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -147,6 +148,19 @@ class TestInstallsUnderOwnName:
 
         source = _settings(home_with_plugin_state)["extraKnownMarketplaces"][MARKETPLACE_NAME]
         assert source["source"] == {"source": "github", "repo": "derio-net/super-fr"}
+
+    def test_registered_entry_carries_the_fields_claude_code_requires(
+        self, home_with_plugin_state: Path
+    ) -> None:
+        """Claude Code's `/plugin` refuses the WHOLE registry — "Marketplace
+        configuration file is corrupted: <name>.lastUpdated: Invalid input" — when
+        one entry lacks `lastUpdated`. Writing our key unconditionally must not
+        mean writing it incompletely (found live 2026-09-22, after a re-install)."""
+        _run_install(home_with_plugin_state)
+
+        entry = _known(home_with_plugin_state)[MARKETPLACE_NAME]
+        assert set(entry) == {"source", "installLocation", "lastUpdated"}
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", entry["lastUpdated"]), entry
 
     def test_plugin_ids_are_namespaced_to_the_new_name(self, home_with_plugin_state: Path) -> None:
         _run_install(home_with_plugin_state)

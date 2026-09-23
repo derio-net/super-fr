@@ -497,7 +497,13 @@ def with_estimate(
     )
 
 
-def with_measured(state: RunState, step_id: str, key: str, measured: MeasuredTokens) -> RunState:
+def with_measured(
+    state: RunState,
+    step_id: str,
+    key: str,
+    measured: MeasuredTokens,
+    served_model: str | None = None,
+) -> RunState:
     """`state` with `measured` recorded BESIDE the estimate of `key`'s last
     attempt under `step_id`.
 
@@ -506,11 +512,18 @@ def with_measured(state: RunState, step_id: str, key: str, measured: MeasuredTok
     across its turns) and `fr run status` is built on showing both. A unit
     whose last attempt has no estimate has no measurement window either, so
     there is nothing to measure against and `state` comes back unchanged.
+
+    `served_model` is the one exception to "beside": it REPLACES the attempt's
+    `model`, because `model` is the same fact — which model ran this unit — and
+    before a measurement it can only be a claim (a tier resolution, or the alias
+    an orchestrator passed to `claim --model`). A measured model outranks every
+    claim (2026-09-21 debug journal C3). `None` leaves the claim in place.
     """
     record = state.steps.get(step_id)
     recorded = attempts(record, key) if record is not None else ()
     if not recorded or recorded[-1].estimate is None:
         return state
-    return _with_last_attempt(
-        state, step_id, key, recorded[-1].model_copy(update={"measured": measured})
-    )
+    update: dict[str, object] = {"measured": measured}
+    if served_model is not None:
+        update["model"] = served_model
+    return _with_last_attempt(state, step_id, key, recorded[-1].model_copy(update=update))

@@ -1,0 +1,66 @@
+schema_version: 2
+phase:
+  number: 3
+  title: PR judgements with delivery and check set
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-pr-judgement
+  tier: standard
+tasks:
+- number: 1
+  title: Red - delivery judgement tests
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Write failing tests for Judgement delivery values delivers partial drift unanchored with reason, tier inheritance from judged anchor issue, and key grammar shared with issues, following superpowers:test-driven-development red step
+  - id: P3.T1.S2
+    text: |-
+      Write failing tests for check reporting unranked PRs while issue sets stay unchanged and exit code remains 0
+  - id: P3.T1.S3
+    text: |-
+      Run the judgement tests and confirm they fail for the right reason
+- number: 2
+  title: Green - judgements and check
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Extend Judgement with optional delivery plus reason and validation, implementing tier-from-anchor rule without changing existing issue behaviour
+  - id: P3.T2.S2
+    text: |-
+      Extend check classify with unranked PRs set and JSON output, keeping settled orphaned unreachable semantics for issues
+  - id: P3.T2.S3
+    text: |-
+      Run judgement plus triage suite green with lint and format, refactoring as needed
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-22T13:44:38+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-22T13:44:39+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-22T13:44:41+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-22T13:45:24+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-22T13:45:25+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-22T13:45:27+00:00'
+      note: null
+  completion:
+    at: '2026-09-22T13:45:37+00:00'
+    note: null
+    observed_prs: []

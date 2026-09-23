@@ -52,7 +52,17 @@ surfaces:
       claude-code: {state: enforced}
       opencode:
         state: partial
-        scope_note: edit/write/patch/multiedit only — bash is ungated (#436)
+        scope_note: >-
+          All file-writing tools, including nested arguments and patch-body
+          targets, are gated (index.test.ts); bash remains ungated (#436).
+          Delivered to consumers by install.sh
+          (scripts/deliver-opencode-plugin.sh, gh#563); the real opencode
+          binary loads the delivered copy and that copy refuses a base-clone
+          edit (tests/integration/test_opencode_plugin_live.py, CI). A
+          model-driven session's tool call reaching the hook was shown live
+          on 1.18.32 through the project-local copy (acceptance row
+          opencode-isolation-enforcement); the delivered copy is the same
+          module, and only its load path is new.
       hermes: {state: enforced}
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
@@ -111,7 +121,8 @@ surfaces:
           disk here; this note said "the installed 1.18.31 SDK types" until
           phase 6 went looking. That a plugin-originated prompt on idle
           actually EXECUTES is NOT live-proven (the gh#494 standard) — a green
-          `bun test` does not show it.
+          `bun test` does not show it. Delivered to consumers by install.sh
+          since gh#563, as the same module as the edit gate.
       hermes:
         state: absent
         scope_note: >-
@@ -180,7 +191,7 @@ surfaces:
 
   - id: operator-gate
     kind: interaction
-    summary: A `gate operator` run step blocks until a human answers via the harness's own question tool.
+    summary: A `gate operator` run step blocks until a human answers via the harness's own question tool. On claude-code `fr run resolve` VERIFIES it — an answered AskUserQuestion in the session transcript since the gate blocked, else refused (bypass only via `--no-questions --reason`, recorded); with no readable transcript `fr run advance` degrades loudly instead (debug journal 2026-09-21 C1).
     harnesses:
       claude-code: {state: enforced}
       opencode:

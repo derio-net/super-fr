@@ -46,6 +46,7 @@ LEGACY_CACHE_BASE="$CLAUDE_DIR/plugins/cache/$LEGACY_MARKETPLACE_NAME"
 OPENCODE_SKILLS_DIR="$HOME/.config/opencode/skills"
 OPENCODE_COMMANDS_DIR="$HOME/.config/opencode/commands"
 OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agent"
+OPENCODE_PLUGINS_DIR="$HOME/.config/opencode/plugins"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
@@ -133,6 +134,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
         echo "  Removed $OPENCODE_AGENTS_DIR/$agent"
       fi
     done
+  fi
+  if [ -e "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin.ts" ] || [ -d "$OPENCODE_PLUGINS_DIR/fr-opencode-plugin" ]; then
+    bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" uninstall "$OPENCODE_PLUGINS_DIR"
+    echo "  Removed fr-opencode-plugin from $OPENCODE_PLUGINS_DIR"
   fi
   # Hermes: run the uninstall from THIS checkout, not whichever `fr` happens
   # to be installed globally. Upgrade removals may rename shipped inputs; a
@@ -280,11 +285,15 @@ if command -v jq &>/dev/null; then
     echo "  Registered $MARKETPLACE_NAME in extraKnownMarketplaces"
   fi
 
-  # Add to known_marketplaces.json
+  # Add to known_marketplaces.json. `lastUpdated` is required: Claude Code's
+  # `/plugin` rejects the WHOLE file ("Marketplace configuration file is
+  # corrupted: <name>.lastUpdated: Invalid input") when one entry lacks it,
+  # and this line replaces the entry wholesale, so it must write every field.
+  # This same install re-syncs the marketplace dir below, so "now" is true.
   if [ -f "$KNOWN_MARKETPLACES" ]; then
     jq --arg name "$MARKETPLACE_NAME" --argjson src "$MARKETPLACE_SOURCE" \
-      --arg loc "$MARKETPLACE_DIR" \
-      '.[$name] = {"source":$src,"installLocation":$loc}' \
+      --arg loc "$MARKETPLACE_DIR" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+      '.[$name] = {"source":$src,"installLocation":$loc,"lastUpdated":$now}' \
       "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
     echo "  Registered $MARKETPLACE_NAME in known_marketplaces.json"
   fi
@@ -682,6 +691,14 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # `|| true` did — an unbound tier, a missing `fr`, or a hand-edited agent
   # file must never fail the install.
   fr models apply --harness opencode || true
+  # The plugin behind OpenCode's edit gate and idle adapter (gh#563). Without
+  # this step `fr harness parity` credits both to OpenCode users who never
+  # received them. A failure here fails the install: an OpenCode user
+  # without the gate is exactly the silent state this step exists to end.
+  echo ""
+  echo "Installing fr-opencode-plugin ($OPENCODE_PLUGINS_DIR)..."
+  bash "$PLUGIN_ROOT/scripts/deliver-opencode-plugin.sh" install "$OPENCODE_PLUGINS_DIR"
+  echo "  Installed $OPENCODE_PLUGINS_DIR/fr-opencode-plugin.ts (+ fr-opencode-plugin/)"
 else
   echo ""
   echo "Skipping OpenCode skill/command/agent delivery (no ~/.config/opencode found; set"

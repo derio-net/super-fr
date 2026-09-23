@@ -11,6 +11,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from typing import TypeVar
+from urllib.parse import quote
 
 from fr.labels import LabelDef
 
@@ -75,6 +76,12 @@ def view_issue(repo: str, number: int) -> dict[str, object]:
     out = _run_gh(["issue", "view", str(number), "--repo", repo, "--json", ISSUE_VIEW_FIELDS])
     result: dict[str, object] = json.loads(out)
     return result
+
+
+def read_file_at_ref(*, repo: str, path: str, ref: str) -> str:
+    """Read a repository file at *ref* through GitHub's contents API."""
+    endpoint = f"repos/{repo}/contents/{quote(path, safe='/')}?ref={quote(ref, safe='')}"
+    return _run_gh(["api", "-H", "Accept: application/vnd.github.raw+json", endpoint])
 
 
 def edit_issue(
@@ -254,6 +261,9 @@ def list_repos(
 
 ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
 PR_LIST_FIELDS = "number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences"
+OPEN_PR_LIST_FIELDS = (
+    PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision"
+)
 
 
 def list_issues(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
@@ -302,6 +312,26 @@ def list_prs(*, repo: str, state: str, limit: int) -> list[dict[str, object]]:
     )
     prs: list[dict[str, object]] = json.loads(out) if out else []
     return prs
+
+
+def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
+    import json
+
+    out = _run_gh(
+        [
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            str(limit),
+            "--json",
+            OPEN_PR_LIST_FIELDS,
+        ]
+    )
+    return json.loads(out) if out else []
 
 
 def delete_label(*, repo: str, name: str) -> None:

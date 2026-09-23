@@ -90,7 +90,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr-opencode-plugin`'s marker comments) independently of the
     declaration, and `check.py` is the only bridge between the two. CLI:
     `fr harness parity` (`commands/harness_cmd.py`). `prose.py`'s
-    `scan_prose` is the sibling tool-neutrality scanner over skill prose.
+    `scan_prose` is the sibling tool/argument-neutrality scanner (`TOOL_VOCABULARY`,
+    `ARGUMENT_VOCABULARY`) over skill, agent and rule prose.
   - **`fr/triage`** (2026-09-21 spec, `fr-triage`) — backlog triage, split
     into a deterministic **engine** (`fr triage {collect,check,render}`,
     `commands/triage_cmd.py`) and a thin **skill**
@@ -337,12 +338,13 @@ exists and how it's checked, not a restatement:
   **Prose only — no tripwire yet**, and the rule says so; building one needs a
   curated allowlist of the fictional domains the fixtures legitimately use.
 - **harness parity** (2026-09-18) — every shipped enforcement/interaction
-  surface must own a `parity.yaml` row, and no skill may name a
-  harness-specific tool outside a scoped per-harness clause. Tripwires:
-  `tests/unit/test_tripwire_harness_parity.py` (every shipped hook script
-  is paired to a row) and `tests/unit/test_tripwire_skill_tool_neutrality.py`
-  (`fr.harness.prose.scan_prose` over the canonical skills plus both
-  mirrors). CLI: `fr harness parity --check`.
+  surface must own a `parity.yaml` row, and no skill, agent or rule may name a
+  harness-specific tool or argument outside a scoped per-harness clause.
+  Tripwires: `tests/unit/test_tripwire_harness_parity.py` (every shipped hook
+  script is paired to a row) and `tests/unit/test_tripwire_skill_tool_neutrality.py`
+  (`fr.harness.prose.scan_prose`, `TOOL_VOCABULARY` + `ARGUMENT_VOCABULARY`,
+  over the canonical skills/agents/rules plus every generated mirror, skipping
+  Markdown headings outside code fences). CLI: `fr harness parity --check`.
 
 ## PR workflow
 

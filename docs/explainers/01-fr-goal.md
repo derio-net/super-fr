@@ -101,7 +101,7 @@ flowchart TD
 This is autonomous work, not blind work. `fr-goal` stops when a choice belongs
 to you, when an action needs human access, or when it encounters a blocker it
 cannot safely resolve. It never interprets an unanswered question as consent
-(`plugins/super-fr/skills/fr-goal/SKILL.md:14-30`, `:42-53`). The reviews shown above are
+(`plugins/super-fr/skills/fr-goal/SKILL.md:14-30`, `:45-56`). The reviews shown above are
 agent-driven and disclosed in the pull request; you still perform the human
 review and decide whether to merge.
 
@@ -189,7 +189,21 @@ that could call a language model even by accident.
 **A step can carry a gate.** `gate: operator` means the run stops there until a
 person answers. The shipped shape declares exactly one such gate, on the
 batched question round — the single operator touchpoint the pipeline promises.
-An unanswered gate is a stop, not a timeout with a default.
+An unanswered gate is a stop, not a timeout with a default. On Claude Code the
+tool checks the stop really happened: clearing the gate needs an answered
+question in the session's transcript since the run paused there. An agent that
+decides the request already settled everything can still clear it without
+asking, but only by writing down why, and that reason lands in the pull
+request. Where the transcript cannot be read, the tool says the gate is only
+advisory rather than implying it is enforced.
+
+The same rule, *evidence you did not write yourself*, governs the two other
+places a run could vouch for its own work. A phase's review has to name the
+separate reviewer that performed it, and never the agent that wrote the code.
+Delivery has to name the log of a test run the orchestrator did itself, not a
+report it received from a helper. The tool can confirm who wrote that log and
+when; it cannot confirm the command was a real test suite. That check is aimed
+at a relayed "all green", not at deliberate forgery.
 
 **A step declares what it needs and what it emits.** Artifacts are named —
 `spec`, `plan`, `pr` — so a later step can find the specification an earlier
@@ -289,15 +303,17 @@ dispatch is still refused; but while the phase is running the honest answer to
 only arrives afterwards. The tool now says which harness is which, rather than
 describing the better case as if it were the only one.
 
-One more limit on what the record may say. The model written down is the one
-the phase's tier resolves to, and that is a fact about work that was
-*dispatched*. A step the orchestrating agent performs itself — a review it
-does inline, say — was never handed to a tier at all; it runs on whatever
-model that session happens to be using, which the tool cannot see. For a while
-it wrote the tier's model beside those steps anyway, and the archive of this
-very project holds seven reviews credited to a model that did not perform
-them. It now records a model only for work it actually dispatched, and leaves
-the rest blank unless the orchestrator says what it ran on.
+One more limit on what the record may say: a model is written down only when
+the tool has *seen* it. A tier binding says which model a dispatched phase
+*should* get, and that is a promise, not an observation. For a while the tool
+wrote the tier's model beside steps the orchestrating agent performed itself,
+and the archive of this very project holds seven reviews credited to a model
+that did not perform them. Now it reads the session's own transcript, where
+every reply names the model that produced it. A dispatched phase records the
+model that actually served it, not the alias it was asked for, and a step the
+orchestrator ran records the orchestrator's model. If you bind an
+`orchestrator` model and the session is running on something else, every
+`fr run advance` warns you. It never blocks: which model you run is your call.
 
 The same record doubles as a lock. Ask `fr run advance` to brief a phase whose
 dispatch is still open and it refuses: exit code 2, naming the holder, printing

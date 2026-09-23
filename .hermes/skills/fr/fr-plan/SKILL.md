@@ -65,9 +65,9 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a separate
   `REFACTOR + quality gate` **task** for larger ones. Omit only with justification; `fr plan
   self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
-- **Walking skeleton first:** the first agentic phase smokes delivery infrastructure (CI green on a
-  trivial test, minimum runtime exercised, fixtures captured never constructed). Mark it `skeleton:
-  true` — self-review errors without it (override: spec-scope `skeleton-override-*`).
+- **Walking skeleton first:** the first agentic phase smokes delivery (CI green on a trivial test,
+  fixtures captured never constructed); mark it `skeleton: true`. Self-review errors without it AND
+  when it is the only agentic phase — real work goes in later phases (override: `skeleton-override-*`).
 - **Pure agentic phases:** an agentic phase must be fully agent-completable end-to-end. Collect
   ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a
   dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer

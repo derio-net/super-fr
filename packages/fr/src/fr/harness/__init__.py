@@ -13,6 +13,7 @@ the repo).
 from __future__ import annotations
 
 import importlib.resources
+import re
 
 from fr.harness.model import (
     HARNESSES,
@@ -25,6 +26,7 @@ from fr.harness.model import (
 )
 
 __all__ = [
+    "ARGUMENT_VOCABULARY",
     "HARNESSES",
     "STATES",
     "TOOL_VOCABULARY",
@@ -77,6 +79,39 @@ empty frozenset rather than a missing key. No name may appear under two
 harnesses — checked by `test_no_tool_name_is_claimed_by_two_harnesses` —
 because an ambiguous name would leave the tripwire unable to say which
 harness a bare mention serves."""
+
+ARGUMENT_VOCABULARY: dict[str, dict[str, re.Pattern[str]]] = {
+    "claude-code": {
+        'isolation: "worktree"': re.compile(
+            r"""isolation["'`]?\s*[:=]\s*["'`]?worktree(?![\w-])"""
+        ),
+        "run_in_background": re.compile(r"\brun_in_background\b"),
+    },
+    # OpenCode's `timeout` is deliberately NOT registered (spec §3.A): it is
+    # ordinary English and would fire on every sentence about a timeout — the
+    # same trade TOOL_VOCABULARY states for `task`. A limit, not an oversight.
+    "opencode": {},
+    "hermes": {
+        "background=true": re.compile(r"\bbackground\s*[:=]\s*(?:true|True)\b"),
+        "notify_on_complete": re.compile(r"\bnotify_on_complete\b"),
+    },
+    "codex": {},
+    "copilot-cli": {},
+}
+"""2026-09-22 harness-argument-neutrality spec §3.A. `TOOL_VOCABULARY`'s
+sibling, over a different kind of harness-specific name: not a tool a skill
+invokes (`Agent`, `delegate_task`), but an ARGUMENT a skill passes one — a
+flag or field name that means something only on its own harness (Claude
+Code's `isolation: "worktree"` dispatch flag, Hermes's `background=true`).
+Same closed-world rule, keyed by every member of `HARNESSES`. Each harness
+maps an argument name (what a violation reports) to a compiled-at-import
+regex rather than a bare string, because an argument can be spelled several
+ways in prose (`isolation: "worktree"` vs. `isolation="worktree"`) where a
+tool name is one literal token. Patterns are case-sensitive and are the
+spec §3.A table verbatim. `scan_prose` scans them under exactly the same
+clause rules as `TOOL_VOCABULARY`, and no name may be claimed by two
+harnesses across the two vocabularies together
+(`test_no_name_is_claimed_by_two_harnesses_across_both_vocabularies`)."""
 
 
 def load_matrix() -> Matrix:
