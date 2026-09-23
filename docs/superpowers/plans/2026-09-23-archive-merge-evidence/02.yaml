@@ -1,0 +1,66 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr status sweep reports four buckets from merge evidence
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - status-sweep-merge-evidence
+  tier: standard
+tasks:
+- number: 1
+  title: Red - failing sweep tests
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Following superpowers:test-driven-development, extend tests/unit/test_status_sweep.py with failing tests per spec section 5 item 4, using temp git repos with a file-path remote and fr.archive._fetch monkeypatched: archivable plans listed under a heading naming the ref and short SHA with their own fr archive docs/superpowers/plans/<name> line; merged plans with open manual phases listed with the phase numbers and no command; locally complete but unlanded plans listed as waiting for merge with no command; the text archive --all never appears; ref=None wording with ref_error and the git fetch / git remote set-head hint; fetch-failed note; unparsed_on_ref note; JSON keys archivable, merged_manual_open, complete_unmerged, in_progress and default_ref. Update the existing sweep tests whose expectations encoded the old merged label, keeping test_sweep_never_calls_gh_mutations meaningful
+  - id: P2.T1.S2
+    text: |-
+      Run uv run pytest tests/unit/test_status_sweep.py -q --no-cov and confirm the new tests fail on the old labels and JSON shape
+- number: 2
+  title: Green - implement the sweep and its prose
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Rewrite status_cmd._sweep_lists and _sweep_text over merge_evidence(repo_root, fetch=True) per spec section 3.B, and update status_command's docstring and --help so they describe the four buckets and no longer present the offline proxy as merged
+  - id: P2.T2.S2
+    text: |-
+      Update both places plugins/super-fr/skills/fr-progress/SKILL.md prescribes fr archive --all (the preflight block and the when-a-plan-is-finished block) to the four buckets and the per-plan command, then run uv run --no-project python scripts/sync-opencode.py and uv run --no-project python scripts/sync-hermes.py so both mirror sets regenerate
+  - id: P2.T2.S3
+    text: |-
+      Run uv run pytest tests/unit/test_status_sweep.py tests/unit/test_skill_validation.py tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_opencode_agent_mirror.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov until green, then ruff format, ruff check and mypy on touched code
+  - id: P2.T2.S4
+    text: |-
+      Refactor the sweep rendering for clarity (one small formatter per bucket if it reads better), re-run the same tests green, and commit
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

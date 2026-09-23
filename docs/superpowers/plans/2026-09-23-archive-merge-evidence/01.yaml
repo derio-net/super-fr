@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton - shared merge-evidence helper, tripwire rewired onto it
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - status-sweep-merge-evidence
+  skeleton: true
+  tier: standard
+tasks:
+- number: 1
+  title: Red - failing tests for remote_default_ref and merge_evidence
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Following superpowers:test-driven-development, write failing tests in tests/unit/test_merge_evidence.py over real temp git repos with a file-path remote, covering spec section 5 item 1: origin/HEAD resolution and fallback to a remote well-known branch; a local-only main never counts; no remote gives ref=None with ref_error; two remotes with no checkout.defaultRemote gives ref=None; landed_phases per phase for a partly landed plan (a phase added and ticked only locally is absent); agentic_landed ignores an unticked trailing manual phase on the ref while complete_on_ref does not include that plan; a plan the current parser rejects on the ref lands in unparsed_on_ref; fetch=True through a file remote sets fetched=True and sees a commit pushed after the last fetch; a failing and a timing-out fr.archive._fetch (monkeypatched) set fetch_error and still report from the local ref. Also add tests for the public fr.git.remote_default_ref / remote_name helpers
+  - id: P1.T1.S2
+    text: |-
+      Run uv run pytest tests/unit/test_merge_evidence.py -q --no-cov and confirm every test fails because the helpers do not exist yet
+- number: 2
+  title: Green - implement the helpers and rewire the tripwire
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Move the remote-tracking half of fr.artifacts.commit._default_branch (its steps 1-2) and _remote_name into public fr.git.remote_default_ref(root) and fr.git.remote_name(root), returning str, GitRefusal or None, and make _default_branch call them so its existing tests (grep tests/ for _default_branch and default_branch) stay green unchanged
+  - id: P1.T2.S2
+    text: |-
+      Implement DefaultRef, MergeEvidence, the module-level _fetch seam and merge_evidence(repo_root, *, fetch) in packages/fr/src/fr/archive.py per spec section 3.A: git fetch --quiet --no-tags with GIT_TERMINAL_PROMPT=0 and a 30 s timeout, failure recorded not raised; git archive of the ref's docs/superpowers/plans into a temp dir; a per-phase parse producing landed_phases, agentic_landed (manual phases excluded; a plan with no agentic phase is landed when its dir exists on the ref), complete_on_ref and unparsed_on_ref; export the new names in __all__; correct completed_unarchived_plans' docstring claim that it never flags a plan the mover would refuse
+  - id: P1.T2.S3
+    text: |-
+      Rewire tests/unit/test_tripwire_unarchived_plans.py onto fr.archive.merge_evidence(REPO_ROOT, fetch=False).complete_on_ref, deleting its private git archive code, keeping an explicit pytest.skip when ref is None, its failure message and its fixture tests
+  - id: P1.T2.S4
+    text: |-
+      Run uv run pytest tests/unit/test_merge_evidence.py tests/unit/test_tripwire_unarchived_plans.py tests/unit/test_completed_unarchived_plans.py and every test file that exercises _default_branch -q --no-cov until green, then uv run ruff format and uv run ruff check on touched files and uv run mypy packages/fr/src
+  - id: P1.T2.S5
+    text: |-
+      Refactor for naming and duplication so no second definition of merged or of the remote default ref remains in fr.archive, fr.artifacts.commit or the tripwire, re-run the same tests green, and commit
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
