@@ -242,6 +242,11 @@ class ExternalTarget:
         container is scope creep, and there is nothing here for it to reconcile —
         `gc` in this mode reports rather than reaps.
         """
+        if not preserve and not force:
+            raise IsolationError(
+                "--no-preserve is only valid with --force — the same rule as every "
+                "other target, even though an external down destroys nothing."
+            )
         delete_state(state.repo_root, state.branch)
         self._set_marker_branch("")
         # Nothing is destroyed, so nothing is preserved or ended (spec §3.F).

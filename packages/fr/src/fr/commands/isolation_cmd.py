@@ -23,7 +23,7 @@ from fr.isolation.local import (
     _detached_gc_spawn,
     subprocess_runner,
 )
-from fr.isolation.preserve import TeardownReport
+from fr.isolation.preserve import NO_PRESERVE, TeardownReport
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -625,16 +625,32 @@ def _down_refusal(target: Target, state: IsolationState, force: bool) -> str | N
 
 
 def _echo_ended_runs(report: TeardownReport) -> None:
-    """One stderr line per active run a teardown ended (spec §3.D.3)."""
+    """What a teardown ended and where its records went, on stderr (spec
+    §3.D.3). Never claims "preserved" for a run whose file was not copied, and
+    never blames --no-preserve for a failure that was not one (p4-f3/f4)."""
     for run_id, cursor in report.ended_runs:
-        if report.preserved_dir is not None:
+        if report.preserved_dir is not None and run_id not in report.unpreserved_runs:
             tail = (
                 f"its record is preserved at {report.preserved_dir}; "
                 f"`fr isolation up --branch {report.branch}` restores it"
             )
+        elif report.preserved_dir is not None:
+            tail = "its run file could NOT be copied, so its record was NOT preserved"
         else:
-            tail = "its record was NOT preserved (--no-preserve)"
+            tail = f"its record was NOT preserved ({report.reason or 'nothing to copy'})"
         typer.echo(f"down: ended run {run_id} at step {cursor} here — {tail}", err=True)
+    if not report.ended_runs:
+        if report.preserved_dir is not None:
+            typer.echo(
+                f"down: preserved {report.preserved_files} file(s) at {report.preserved_dir}",
+                err=True,
+            )
+        elif report.reason and report.reason != NO_PRESERVE:
+            typer.echo(f"down: fr's records were NOT preserved — {report.reason}", err=True)
+    if report.skipped:
+        typer.echo(
+            "down: not preserved (not a regular file): " + ", ".join(report.skipped), err=True
+        )
 
 
 def _held_runs(target: Target, state: IsolationState) -> str:

@@ -299,3 +299,83 @@ plugins/super-fr/skills/fr-isolation/SKILL.md (~line 110) still reads "uncommitt
 ### 83e667284b0b · discovery · phase-4 acceptance row left not-implemented for phase 6 (phase 4)
 
 isolation-down-preserves-run stays not-implemented, matching phases 2/3 (8af43aee8ee9, 3f54c04d7371): 06.yaml flips rows after the live walks, and the #575 integration walk (spec Test Plan 9) is phase 5. Unit refs to cite then: tests/unit/test_isolation_preserve.py (discovery, refusal naming, stage/commit, restore, gc keying, CLI lines).
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1 created=2026-09-23T03:15:41 phase=4 state=fixed -->
+### p4-f1 · finding [fixed] · A teardown merged into an already-restored tombstone (phase 4)
+
+commit() starts fresh (files/ moved aside, lists emptied) when the prior tombstone has restored_at; only an unrestored one merges. tests/unit/test_isolation_preserve.py::test_p4_f1_down_after_a_restore_starts_a_fresh_tombstone (down, up, commit fixes, down, up).
+
+<!-- fr:journal kind=finding scope=plan id=p4-f2 created=2026-09-23T03:15:41 phase=4 state=fixed -->
+### p4-f2 · finding [fixed] · Partial worktree remove + retry destroyed the staged cursor (phase 4)
+
+staging/stage.json (head, runs, files, deleted, removal_attempted) is written at stage time; mark_removal_attempted() flips it just before git worktree remove. A protected staging/ is never rmtree'd; a retry merges (new copies win per path, earlier kept), keeps the first attempt's deleted/runs, adds no new deletions, and ended_runs is the union. tests/unit/test_isolation_preserve.py::test_p4_f2_partial_remove_then_retry_keeps_the_staged_cursor.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f3 created=2026-09-23T03:15:41 phase=4 state=fixed -->
+### p4-f3 · finding [fixed] · Gitignored cursor claimed preserved but never copied (phase 4)
+
+porcelain now runs with --ignored=matching limited to docs/superpowers (ignored dirs walked), and every run file branch_runs returned is copied whether listed or not (base_blob HEAD:<file> or null). TeardownReport.unpreserved_runs lists active runs whose file was not copied and the CLI never says preserved for them. tests/unit/test_isolation_preserve.py::test_p4_f3_a_gitignored_cursor_is_preserved.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f4 created=2026-09-23T03:15:42 phase=4 state=fixed -->
+### p4-f4 · finding [fixed] · Failed commit left staging unprotected and blamed --no-preserve (phase 4)
+
+TeardownReport.reason (NO_PRESERVE or 'could not record the teardown (...); the staged copies are at <staging>'); CLI prints it instead of the --no-preserve text; restore() prints a notice pointing at an unpromoted protected staging/; the next down merges it; promotion uses os.replace. tests/unit/test_isolation_preserve.py::test_p4_f4_failed_commit_keeps_staging_says_why_and_is_found_again.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5 created=2026-09-23T03:15:42 phase=4 state=fixed -->
+### p4-f5 · finding [fixed] · Cold-start re-creation of the branch name passed the descendant guard (phase 4)
+
+_git_worktree_add passes new_branch=True on the cold-start path; restore then restores nothing and prints the preserved dir plus a cp -R command. tests/unit/test_isolation_preserve.py::test_p4_f5_cold_start_recreation_does_not_restore; the up spy asserts new_branch=False for an existing branch.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f6 created=2026-09-23T03:15:43 phase=4 state=fixed -->
+### p4-f6 · finding [fixed] · A rename lost its source half (phase 4)
+
+The -z rename source under docs/superpowers/ is recorded in deleted (copies keep their source). tests/unit/test_isolation_preserve.py::test_p4_f6_rename_source_is_not_resurrected (path with a space and newline).
+
+<!-- fr:journal kind=finding scope=plan id=p4-f7 created=2026-09-23T03:15:43 phase=4 state=fixed -->
+### p4-f7 · finding [fixed] · Non-regular entries aborted down --force (phase 4)
+
+Symlinks (dangling or to a dir) and nested repositories are skipped, never followed, never fatal, and listed in TeardownReport.skipped / a 'down: not preserved (not a regular file)' line. tests/unit/test_isolation_preserve.py::test_p4_f7_non_regular_entries_are_skipped_not_fatal.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f8 created=2026-09-23T03:15:44 phase=4 state=fixed -->
+### p4-f8 · finding [fixed] · Descendant guard lacked a vanished-head check (phase 4)
+
+restore runs git cat-file -e <head>^{commit} first, with its own 'no longer exists in this repo' notice. tests/unit/test_isolation_preserve.py::test_p4_f8_a_vanished_head_is_named_and_nothing_restored.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f9 created=2026-09-23T03:15:44 phase=4 state=fixed -->
+### p4-f9 · finding [fixed] · Tombstone written after staging was removed (phase 4)
+
+commit promotes, writes teardown.json atomically (write_text_atomic), and only then removes staging/ and files.old/. tests/unit/test_isolation_preserve.py::test_p4_f9_tombstone_is_written_before_staging_is_removed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f10 created=2026-09-23T03:15:45 phase=4 state=fixed -->
+### p4-f10 · finding [fixed] · git status failure forced --no-preserve (phase 4)
+
+When git status fails on an existing dir, stage falls back to a git-less copy of docs/superpowers/** with base_blob null (restore only fills absent paths or reports a conflict). tests/unit/test_isolation_preserve.py::test_p4_f10_git_less_fallback_when_status_fails; test_isolation.py::test_down_raises_when_worktree_remove_fails reverted to force=True alone.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f11 created=2026-09-23T03:15:45 phase=4 state=fixed -->
+### p4-f11 · finding [fixed] · Tombstones for clean downs and a 'restored 0' line (phase 4)
+
+PreserveRecord.worthwhile = a changed file, a deletion or an active run; otherwise no staging and no tombstone (committed-unchanged run files are copied but flagged changed=False). The restored line prints only when N>0. tests/unit/test_isolation_preserve.py::test_p4_f11_clean_down_and_identical_restore_are_silent.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f12 created=2026-09-23T03:15:45 phase=4 state=fixed -->
+### p4-f12 · finding [fixed] · Undecodable porcelain raised a raw UnicodeDecodeError (phase 4)
+
+_porcelain catches it and raises IsolationError naming --force --no-preserve. tests/unit/test_isolation_preserve.py::test_p4_f12_undecodable_porcelain_is_an_isolation_error.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f13 created=2026-09-23T03:15:46 phase=4 state=fixed -->
+### p4-f13 · finding [fixed] · ExternalTarget.down accepted preserve=False without force (phase 4)
+
+Refused with the same rule as the other targets. tests/unit/test_isolation_preserve.py::test_p4_f13_external_down_refuses_no_preserve_without_force.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f14 created=2026-09-23T03:15:46 phase=4 state=fixed -->
+### p4-f14 · finding [fixed] · No line when files were preserved but no run was active (phase 4)
+
+CLI prints 'down: preserved N file(s) at <dir>'. tests/unit/test_isolation_preserve.py::test_p4_f14_cli_names_preserved_files_without_a_run.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f15 created=2026-09-23T03:15:47 phase=4 state=fixed -->
+### p4-f15 · finding [fixed] · Restore trusted tombstone paths (phase 4)
+
+_safe() (TypeGuard) requires a relative path under docs/superpowers/ with no '..'; others are skipped with a stderr line, for files and deleted alike, and at merge time. tests/unit/test_isolation_preserve.py::test_p4_f15_restore_rejects_escaping_paths.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f16 created=2026-09-23T03:15:47 phase=4 state=fixed -->
+### p4-f16 · finding [fixed] · Rename source-half assertion missing (phase 4)
+
+test_force_down_preserves_only_docs_superpowers now asserts deleted == [gone.md, old.md]; test_p4_f6 checks the source is not resurrected after up.

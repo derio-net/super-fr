@@ -1291,6 +1291,9 @@ class LocalWorktreeDevcontainerTarget:
                 raise ReapRefused(ReapHazard(hazard.kind, _preserve.name_runs(runs, hazard.detail)))
         record = _preserve.stage(state, self.run, runs=runs) if preserve else None
         self._teardown_container(state)
+        if record is not None:
+            # From here staging/ may be the only copy: protect it (p4-f2).
+            _preserve.mark_removal_attempted(record)
         wt = self.run(
             ["git", "worktree", "remove", "--force", str(state.worktree)],
             cwd=self.repo_root,
@@ -1305,24 +1308,31 @@ class LocalWorktreeDevcontainerTarget:
         # workspace. When the worktree is gone the marker went with it — the
         # unlink is then an idempotent no-op.
         preserved: Path | None = None
+        reason: str | None = None if preserve else _preserve.NO_PRESERVE
         if record is not None:
             try:
                 preserved = _preserve.commit(record, forced=force)
             except Exception as e:
                 # The worktree is already gone: failing now would strand the
-                # state record of a workspace that no longer exists. Say where
-                # the staged copies are instead.
-                print(
-                    f"WARNING: could not record {state.branch}'s teardown ({e}) — its staged "
-                    f"records are at {record.root / 'staging'}",
-                    file=sys.stderr,
+                # state record of a workspace that no longer exists. The
+                # staged copies are protected (removal_attempted) and the next
+                # down merges them; the report says where they are (p4-f4).
+                reason = (
+                    f"could not record the teardown ({e}); the staged copies are at "
+                    f"{record.staging}"
                 )
         self._remove_isolation_marker(state.worktree)
         delete_state(state.repo_root, state.branch)
+        # A retry's record carries the first attempt's runs too (p4-f2).
+        ended = record.runs if record is not None else runs
         return TeardownReport(
             branch=state.branch,
             preserved_dir=preserved,
-            ended_runs=[(r.id, r.cursor) for r in runs if r.active],
+            ended_runs=[(r.id, r.cursor) for r in ended if r.active],
+            reason=reason,
+            preserved_files=len(record.files) if record is not None and preserved else 0,
+            skipped=list(record.skipped) if record is not None else [],
+            unpreserved_runs=record.unpreserved_runs() if record is not None else [],
         )
 
     def _teardown_container(self, state: IsolationState) -> None:
@@ -1897,8 +1907,16 @@ class LocalWorktreeDevcontainerTarget:
         # #575 (spec §3.D.4): only a worktree this call CREATED gets the
         # branch's preserved records back — a reuse returned above. A restore
         # problem never fails the `up`: the worktree is already correct.
+        # A cold start is a NEW branch that merely reuses the name: its restore
+        # only points at the old records, never applies them (p4-f5).
         try:
-            _preserve.restore(self.repo_root, branch, worktree, self.run)
+            _preserve.restore(
+                self.repo_root,
+                branch,
+                worktree,
+                self.run,
+                new_branch=decision.action not in ("local", "remote"),
+            )
         except Exception as e:
             print(
                 f"WARNING: could not restore {branch}'s preserved records ({e}) — they stay "
