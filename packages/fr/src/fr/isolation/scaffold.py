@@ -166,13 +166,25 @@ def resolve_tools(tools: list[str], features: list[str]) -> dict[str, dict[str, 
     return resolved
 
 
+# A plausible Java major; anything outside is a miss, never a pin.
+JAVA_MAJOR_RANGE = range(6, 41)
+
+
 def _java_major(raw: str) -> str | None:
-    """`1.8` → `8`; otherwise the first integer (`17.0.9`, `21.0.1-tem`,
-    `temurin-17.0.9+9` → `17`/`21`/`17`). No integer → None."""
-    m = re.search(r"(\d+)(?:\.(\d+))?", raw)
-    if not m:
-        return None
-    return m.group(2) if m.group(1) == "1" and m.group(2) else m.group(1)
+    """The Java major in a version string, or None (p4r-f1/f2).
+
+    A `+javaN` suffix (graalvm) wins. Otherwise the first number that does NOT
+    continue a word — so `openjdk64-11.0.2` is 11 and `semeru-openj9-17` is 17 —
+    with `1.N` read as N. A major outside JAVA_MAJOR_RANGE is a miss."""
+    suffix = re.search(r"\+java(\d+)", raw)
+    if suffix:
+        major = suffix.group(1)
+    else:
+        m = re.search(r"(?<![A-Za-z0-9])(\d+)(?:\.(\d+))?", raw)
+        if not m:
+            return None
+        major = m.group(2) if m.group(1) == "1" and m.group(2) else m.group(1)
+    return major if int(major) in JAVA_MAJOR_RANGE else None
 
 
 def _java_from_java_version(text: str) -> str | None:
@@ -195,8 +207,10 @@ def _java_from_tool_versions(text: str) -> str | None:
     return None
 
 
-# pom.xml `<properties>` keys, then maven-compiler-plugin `<configuration>`
-# children — first resolvable hit wins (spec §3.A).
+# pom.xml: maven-compiler-plugin `<configuration>` children first (build/plugins,
+# then build/pluginManagement/plugins), then root `<properties>` keys, which
+# only feed the plugin's defaults — Maven's own precedence (spec §3.A, p4r-f3).
+# Profile-scoped properties are deliberately not read.
 POM_JAVA_PROPERTIES = (
     "maven.compiler.release",
     "maven.compiler.target",
@@ -234,15 +248,19 @@ def _java_from_pom(path: Path) -> tuple[str, str] | None:
             value = props.get(m.group(1), "")
         return None if not value or "${" in value else _java_major(value)
 
-    candidates = [(props.get(key, ""), f"pom.xml {key}") for key in POM_JAVA_PROPERTIES]
+    candidates: list[tuple[str, str]] = []
     build = _child(root, "build")
-    plugins = _child(build, "plugins") if build is not None else None
-    for plugin in plugins if plugins is not None else ():
-        config = _child(plugin, "configuration")
-        if _text(_child(plugin, "artifactId")) != "maven-compiler-plugin" or config is None:
-            continue
-        for key in POM_COMPILER_PLUGIN_KEYS:
-            candidates.append((_text(_child(config, key)), f"pom.xml maven-compiler-plugin {key}"))
+    management = _child(build, "pluginManagement") if build is not None else None
+    for parent in (build, management):
+        plugins = _child(parent, "plugins") if parent is not None else None
+        for plugin in plugins if plugins is not None else ():
+            config = _child(plugin, "configuration")
+            if _text(_child(plugin, "artifactId")) != "maven-compiler-plugin" or config is None:
+                continue
+            for key in POM_COMPILER_PLUGIN_KEYS:
+                source = f"pom.xml maven-compiler-plugin {key}"
+                candidates.append((_text(_child(config, key)), source))
+    candidates += [(props.get(key, ""), f"pom.xml {key}") for key in POM_JAVA_PROPERTIES]
     for value, source in candidates:
         major = resolve(value)
         if major:
@@ -389,8 +407,10 @@ def scaffold_profile(
             "(the host secrets file is preserved either way)."
         )
 
+    # Gated on the TOOLS, not the feature ref: a bare `--feature <java ref>` is
+    # taken exactly as written (p4r-f4).
     java_opts = resolved.get(JAVA_FEATURE)
-    if java_opts is not None and "version" not in java_opts:
+    if tool_names & {"java", "maven"} and java_opts is not None and "version" not in java_opts:
         _apply_detected_java_version(repo_root, java_opts)
 
     host_feature = HOST_CLI_FEATURE.get(backend)

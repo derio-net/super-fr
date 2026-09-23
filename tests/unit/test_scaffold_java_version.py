@@ -155,3 +155,93 @@ def test_unparseable_version_file_falls_through(tmp_path: Path) -> None:
     (tmp_path / ".java-version").write_text("temurin-latest\n")
     _pom(tmp_path, _props(**{"maven.compiler.release": "17"}))
     assert detect_java_version(tmp_path) == ("17", "pom.xml maven.compiler.release")
+
+
+# --- phase-4 review (p4r-f1..f4) ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "major"),
+    [
+        # p4r-f1: vendor/arch digits and graalvm's own version used to win.
+        ("openjdk64-11.0.2", "11"),
+        ("oracle64-1.8.0.181", "8"),
+        ("zulu64-17", "17"),
+        ("adoptopenjdk-openj9-11.0.11+9", "11"),
+        ("semeru-openj9-17", "17"),
+        ("graalvm-22.3.0+java17", "17"),
+        # regressions that must hold
+        ("corretto-1.8.0.392", "8"),
+        ("1.8", "8"),
+        ("17", "17"),
+        ("temurin-21", "21"),
+        ("java=8.0.392-tem", "8"),
+        ("java=11.0.21-amzn", "11"),
+        ("adoptopenjdk-8.0.272+10", "8"),
+        ("corretto-17.0.9.8.1", "17"),
+        ("openjdk-21", "21"),
+        ("zulu-8.74.0.17", "8"),
+        ("temurin-17.0.9+9", "17"),
+    ],
+)
+def test_java_major_ignores_vendor_digits(raw: str, major: str) -> None:
+    from fr.isolation.scaffold import _java_major
+
+    assert _java_major(raw) == major
+
+
+@pytest.mark.parametrize("raw", ["1", "5", "41", "64", "temurin-latest"])
+def test_java_major_outside_plausible_range_is_a_miss(raw: str) -> None:
+    """p4r-f2: a bare `1` (or 64, or 5) is no Java major."""
+    from fr.isolation.scaffold import _java_major
+
+    assert _java_major(raw) is None
+
+
+def test_implausible_version_file_falls_through_to_pom(tmp_path: Path) -> None:
+    (tmp_path / ".java-version").write_text("1\n")
+    _pom(tmp_path, _props(**{"maven.compiler.release": "17"}))
+    assert detect_java_version(tmp_path) == ("17", "pom.xml maven.compiler.release")
+
+
+_PLUGIN = (
+    "<plugin><artifactId>maven-compiler-plugin</artifactId>"
+    "<configuration><release>17</release></configuration></plugin>"
+)
+
+
+def test_pom_compiler_plugin_wins_over_properties(tmp_path: Path) -> None:
+    """p4r-f3: Maven semantics — the plugin's explicit configuration beats the
+    `maven.compiler.*` properties that only feed its defaults."""
+    _pom(
+        tmp_path,
+        _props(**{"maven.compiler.source": "1.8"}) + f"<build><plugins>{_PLUGIN}</plugins></build>",
+    )
+    assert detect_java_version(tmp_path) == ("17", "pom.xml maven-compiler-plugin release")
+
+
+def test_pom_plugin_management_is_read(tmp_path: Path) -> None:
+    _pom(
+        tmp_path,
+        f"<build><pluginManagement><plugins>{_PLUGIN}</plugins></pluginManagement></build>",
+    )
+    assert detect_java_version(tmp_path) == ("17", "pom.xml maven-compiler-plugin release")
+
+
+def test_pom_profile_properties_are_ignored(tmp_path: Path) -> None:
+    _pom(
+        tmp_path,
+        "<profiles><profile><id>x</id>"
+        + _props(**{"maven.compiler.release": "21"})
+        + "</profile></profiles>",
+    )
+    assert detect_java_version(tmp_path) is None
+
+
+def test_pom_xml_comment_is_ignored(tmp_path: Path) -> None:
+    _pom(
+        tmp_path,
+        "<properties><!-- <maven.compiler.release>21</maven.compiler.release> -->"
+        "<maven.compiler.release>17</maven.compiler.release></properties>",
+    )
+    assert detect_java_version(tmp_path) == ("17", "pom.xml maven.compiler.release")

@@ -88,12 +88,23 @@ feature ref, fixed options, and the option key a `@version` sets.
   1. `.java-version`;
   2. `.sdkmanrc` (`java=17.0.9-tem`);
   3. `.tool-versions` (`java temurin-17.0.9`);
-  4. the root `pom.xml`: properties `maven.compiler.release`,
-     `maven.compiler.target`, `maven.compiler.source`, `java.version`, then the
-     `maven-compiler-plugin` `<release>` / `<target>`. One level of
-     `${property}` indirection is resolved. XML namespaces are handled.
+  4. the root `pom.xml`:
+     - first the `maven-compiler-plugin` `<release>` / `<target>` under
+       `build/plugins`, then under `build/pluginManagement/plugins`. An
+       explicit plugin value overrides the properties in Maven itself, so it
+       wins here too (phase-4 review p4r-f3);
+     - then the root properties `maven.compiler.release`,
+       `maven.compiler.target`, `maven.compiler.source` and `java.version`.
+       `<profiles>` are ignored.
 
-  Versions are normalised to the major (`1.8` → `8`, `17.0.9` → `17`). A hit is
+     One level of `${property}` indirection is resolved. XML namespaces are
+     handled.
+
+  Versions are normalised to the major (`1.8` → `8`, `17.0.9` → `17`). The
+  major must be a number that does not follow a letter or digit, so jenv's
+  `openjdk64-11.0.2` gives 11 and never 64. A `+javaN` suffix wins
+  (`graalvm-22.3.0+java17` → 17). A major outside 6–40 is not plausible and
+  falls through to the next source. A hit is
   written as the feature's `version` and reported on stderr as `java 17 (from
   pom.xml maven.compiler.release)`. No hit keeps the feature default and warns
   `java version not detected — the java feature's default (latest) will be

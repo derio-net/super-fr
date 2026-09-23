@@ -436,6 +436,16 @@ def test_java_detection_never_runs_without_java(repo: Path) -> None:
     assert JAVA not in _config(repo)["features"]
 
 
+def test_a_raw_java_feature_does_not_trigger_detection(repo: Path) -> None:
+    """p4r-f4: detection is gated on --tool java/maven, not on the feature ref —
+    a bare --feature is taken as written."""
+    _pom_release(repo, "17")
+    res = scaffold(repo, "--no-commit", "--feature", JAVA)
+    assert res.exit_code == 0, res.output
+    assert _config(repo)["features"][JAVA] == {}
+    assert "java" not in res.stderr
+
+
 def test_a_raw_feature_lands_in_features(repo: Path) -> None:
     res = scaffold(repo, "--no-commit", "--feature", "ghcr.io/acme/x:1")
     assert res.exit_code == 0, res.output
