@@ -1,0 +1,25 @@
+schema_version: 5
+run: 2026-09-23-fix-526-status-archivable-merged
+workflow: fr-goal@1
+branch: fix/526-status-archivable-merged
+started: '2026-09-23T13:44:34+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: blocked
+    at: '2026-09-23T13:44:38+00:00'
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
