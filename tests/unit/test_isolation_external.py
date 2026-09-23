@@ -86,6 +86,7 @@ def test_up_adopts_marker_saves_state(tmp_path: Path) -> None:
         worktree=repo.resolve(),
         profile="external",
         created_at=st.created_at,
+        target="external",  # gh#569: every up records its own mode
     )
     assert load_state(repo, "feat/x") == st
     # marker rewritten with the branch filled in, mode preserved

@@ -20,7 +20,7 @@ runner = CliRunner()
 def _no_real_gc_spawn(monkeypatch: pytest.MonkeyPatch):
     """Never fork a real `fr isolation gc` during CLI tests — up/down would
     otherwise reap the developer's live workspaces (#354)."""
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
 
 @pytest.fixture(autouse=True)
@@ -722,10 +722,11 @@ def test_verify_merge_cmd_verified(
     repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    # The workspace exists, so verify-merge routes by its recorded mode (gh#569).
     monkeypatch.setattr(
         isolation_cmd,
-        "_target",
-        lambda root: _StubTarget(
+        "_target_for",
+        lambda root, state: _StubTarget(
             {
                 "branch": "feat/v",
                 "verified": True,
@@ -749,8 +750,8 @@ def test_verify_merge_cmd_not_verified_exits_1(
     runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
     monkeypatch.setattr(
         isolation_cmd,
-        "_target",
-        lambda root: _StubTarget(
+        "_target_for",
+        lambda root, state: _StubTarget(
             {
                 "branch": "feat/v",
                 "verified": False,
@@ -948,7 +949,7 @@ def test_down_all_reports_each_kept_workspaces_actual_reason(
     # keep BOTH kinds of refusal and state each workspace's ACTUAL reason,
     # never hardcode "open PR" for a hazard refusal.
     _push_origin(repo)  # the hazard guard's content check needs a real origin
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
     def run(argv, cwd=None, check=False, capture=True):
         if argv[0] == "git":
@@ -1405,12 +1406,25 @@ def test_status_push_check_host_mode_refuses(
     assert "host-worktree" in res.output
 
 
-# --- finding 4: bogus FR_ISOLATION_TARGET → clean exit 2 in every command ---
+# --- finding 4: bogus FR_ISOLATION_TARGET → clean exit 2 wherever the env is read ---
+#
+# gh#569 narrowed "wherever": the env selects a mode only where no workspace
+# exists (up, gc, reaped verify-merge). Commands addressing existing workspaces
+# follow each one's recorded mode, so a bogus env is IGNORED there.
 
 
-def test_status_bogus_target_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_status_bogus_target_is_ignored(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
     res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "no isolation workspaces." in res.output
+    assert "bogus" not in res.output
+    assert "Traceback" not in res.output
+
+
+def test_up_bogus_target_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/b"])
     assert res.exit_code == 2
     assert "bogus" in res.output
     assert "devcontainer | worktree" in res.output
@@ -1426,11 +1440,12 @@ def test_gc_bogus_target_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "Traceback" not in res.output
 
 
-def test_down_all_bogus_target_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_down_all_bogus_target_is_ignored(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
     res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all"])
-    assert res.exit_code == 2
-    assert "bogus" in res.output
+    assert res.exit_code == 0, res.output
+    assert "0 workspace(s)" in res.output
+    assert "bogus" not in res.output
 
 
 # --- finding 5: external mode refuses worktree-ops subcommands cleanly ---
@@ -1535,3 +1550,216 @@ def test_gc_deleted_cwd_exits_cleanly(tmp_path: Path, monkeypatch: pytest.Monkey
     assert res.exit_code == 2
     assert "no longer exist" in res.output
     assert "Traceback" not in res.output
+
+
+# ---------- gh#569: addressing commands route by the RECORDED mode ----------
+
+
+class _RoutedStub:
+    """Duck-typed Target returned by a stub `_target_for` — records each call."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def exec(self, state, argv):
+        self.calls.append("exec")
+        return 0
+
+    def restart(self, state, force=False):
+        self.calls.append("restart")
+        return "cid"
+
+    def status(self, state):
+        self.calls.append("status")
+        return {
+            "repo": str(state.repo_root),
+            "branch": state.branch,
+            "profile": state.profile,
+            "worktree": str(state.worktree),
+            "container": "n/a (host)",
+            "pr": None,
+        }
+
+    def down(self, state, force=False):
+        self.calls.append("down")
+
+    def down_refusal(self, state):
+        self.calls.append("down_refusal")
+        return None
+
+    def verify_merge(self, state, default_branch="main"):
+        self.calls.append("verify_merge")
+        return {
+            "branch": state.branch,
+            "verified": True,
+            "changes_present": True,
+            "missing": [],
+            "pr_state": "MERGED",
+            "fetched": True,
+        }
+
+
+def _route_via_stub(monkeypatch: pytest.MonkeyPatch) -> tuple[_RoutedStub, list]:
+    """Install a stub over `_target_for` (recording the state it routed) and make
+    the env-based `_target` explode, so a test proves which seam was used."""
+    stub, seen = _RoutedStub(), []
+
+    def _for(root, state):
+        seen.append(state)
+        return stub
+
+    def _no_env_target(root):
+        raise AssertionError("_target (env-based) used for an existing workspace")
+
+    monkeypatch.setattr(isolation_cmd, "_target_for", _for)
+    monkeypatch.setattr(isolation_cmd, "_target", _no_env_target)
+    return stub, seen
+
+
+def _host_workspace_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A host-worktree workspace created under FR_ISOLATION_TARGET=worktree, then
+    the env removed — the #569 shape (a dispatched agent, a hook, a new shell)."""
+    repo = _host_repo(tmp_path, monkeypatch)
+    monkeypatch.delenv("FR_ISOLATION_TARGET", raising=False)
+    from fr.isolation.types import load_state as _load
+
+    st = _load(repo.resolve(), "feat/x")
+    assert st is not None and st.target == "worktree"
+    return repo
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["exec", "--", "true"], "exec"),
+        (["restart"], "restart"),
+        (["status"], "status"),
+        (["down", "--branch", "feat/x"], "down"),
+        (["down", "--all", "--yes"], "down"),
+        (["verify-merge", "--branch", "feat/x"], "verify_merge"),
+    ],
+)
+def test_addressing_commands_route_by_recorded_mode_with_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], expected: str
+) -> None:
+    repo = _host_workspace_env_unset(tmp_path, monkeypatch)
+    stub, seen = _route_via_stub(monkeypatch)
+    # --repo right after the subcommand: after `exec --` it would be argv.
+    res = runner.invoke(app, ["isolation", argv[0], "--repo", str(repo), *argv[1:]])
+    assert res.exit_code == 0, res.output
+    assert expected in stub.calls
+    assert seen and all(s.branch == "feat/x" and s.target == "worktree" for s in seen)
+
+
+def test_down_worktree_routes_by_recorded_mode_with_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fr-worktree-remove.sh` calls `down --worktree <path>` and never sets the env."""
+    repo = _host_workspace_env_unset(tmp_path, monkeypatch)
+    from fr.isolation.types import load_state as _load
+
+    st = _load(repo.resolve(), "feat/x")
+    assert st is not None
+    stub, seen = _route_via_stub(monkeypatch)
+    res = runner.invoke(app, ["isolation", "down", "--worktree", str(st.worktree)])
+    assert res.exit_code == 0, res.output
+    assert stub.calls == ["down"]
+    assert [s.branch for s in seen] == ["feat/x"]
+
+
+def test_down_all_probes_refusal_through_the_routed_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _host_workspace_env_unset(tmp_path, monkeypatch)
+    stub, _seen = _route_via_stub(monkeypatch)
+    res = runner.invoke(app, ["isolation", "down", "--all", "--yes", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert stub.calls == ["down_refusal", "down"]
+
+
+def test_host_workspace_exec_works_for_real_with_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No stub: the real routing reaches HostWorktreeTarget, whose exec runs the
+    argv directly — the docker-raising runner proves devcontainer was never tried."""
+    repo = _host_workspace_env_unset(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "exec", "--repo", str(repo), "--", "git", "status"])
+    assert res.exit_code == 0, res.output
+
+
+def test_devcontainer_workspace_not_rerouted_when_env_says_worktree(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reverse case: env says worktree, the workspace was built as devcontainer →
+    exec still goes through `devcontainer exec` (real routing, no stub)."""
+    assert runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/d"])
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    routed: list[type] = []
+    real = isolation_cmd._target_for
+
+    def _spy(root, state):
+        t = real(root, state)
+        routed.append(type(t))
+        return t
+
+    monkeypatch.setattr(isolation_cmd, "_target_for", _spy)
+    res = runner.invoke(
+        app, ["isolation", "exec", "--repo", str(repo), "--branch", "feat/d", "--", "echo", "hi"]
+    )
+    assert res.exit_code == 0, res.output
+    assert routed == [LocalWorktreeDevcontainerTarget]
+    assert [c for c in fake_run if c[:2] == ["devcontainer", "exec"]]
+
+
+def test_status_stats_over_host_row_refused_with_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _host_workspace_env_unset(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo), "--stats"])
+    assert res.exit_code == 2
+    assert "require devcontainer mode" in res.output
+
+
+def test_status_zero_workspaces_selects_no_target(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "bogus")
+
+    def _boom(*_a, **_k):
+        raise AssertionError("no target may be selected for zero workspaces")
+
+    monkeypatch.setattr(isolation_cmd, "_target", _boom)
+    monkeypatch.setattr(isolation_cmd, "_target_for", _boom)
+    res = runner.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "no isolation workspaces." in res.output
+
+
+def test_down_all_keeps_an_unroutable_row_and_tears_down_the_rest(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Review p2-f3: one workspace whose backend cannot be built (an external
+    record whose checkout is gone) is reported as kept — it never aborts the
+    sweep over the others."""
+    from fr.isolation.types import IsolationState, list_states, state_path
+
+    _push_origin(repo)
+    res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/ok"])
+    assert res.exit_code == 0, res.output
+    gone = tmp_path / "gone-checkout"
+    lost = IsolationState(
+        repo_root=gone,
+        branch="feat/lost",
+        worktree=gone,
+        profile="external",
+        created_at="2026-09-23T00:00:00+00:00",
+        target="external",
+    )
+    state_path(repo.resolve(), "feat/lost").write_text(lost.model_dump_json(indent=2) + "\n")
+
+    res = runner.invoke(app, ["isolation", "down", "--repo", str(repo), "--all", "--yes"])
+    assert res.exit_code == 0, res.output
+    assert "Traceback" not in res.output
+    assert "keep feat/lost" in res.output
+    assert "1 torn down" in res.output and "1 kept" in res.output
+    assert [s.branch for s in list_states(repo.resolve())] == ["feat/lost"]

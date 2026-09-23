@@ -64,7 +64,7 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
 
     runner = RecordingRunner()
     monkeypatch.setattr(isolation_cmd, "_runner", runner)
-    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root: None)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
 
     # Selection: the env declaration routes to the host-worktree backend.
     target = isolation_cmd._target(repo)
@@ -107,3 +107,48 @@ def test_hostworktree_full_lifecycle_no_docker_base_untouched(
     binaries = {c[0] for c in runner.calls if c}
     assert "docker" not in binaries
     assert "devcontainer" not in binaries
+
+
+def test_later_commands_follow_the_recorded_mode_without_the_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """gh#569: `up` under FR_ISOLATION_TARGET=worktree, then every later command
+    with the variable GONE — the shape of a dispatched agent, a hook, or a new
+    shell. The workspace's recorded mode routes them, never the env."""
+    from fr.cli import app
+    from typer.testing import CliRunner
+
+    cli = CliRunner()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("FR_ISOLATION_TARGET", "worktree")
+    repo = _base_repo_with_origin(tmp_path)
+    runner = RecordingRunner()
+    monkeypatch.setattr(isolation_cmd, "_runner", runner)
+    monkeypatch.setattr(isolation_cmd, "_gc_spawner", lambda _root, _mode: None)
+
+    res = cli.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/env"])
+    assert res.exit_code == 0, res.output
+    st = load_state(repo, "feat/env")
+    assert st is not None and st.target == "worktree"
+
+    monkeypatch.delenv("FR_ISOLATION_TARGET")
+    capfd.readouterr()
+    res = cli.invoke(
+        app, ["isolation", "exec", "--repo", str(repo), "--", "git", "rev-parse", "--show-toplevel"]
+    )
+    assert res.exit_code == 0, res.output
+    # host-worktree exec streams (capture=False), so the child writes the real fd
+    printed = capfd.readouterr().out + res.output
+    assert str(st.worktree.resolve()) in printed
+
+    res = cli.invoke(app, ["isolation", "status", "--repo", str(repo)])
+    assert res.exit_code == 0, res.output
+    assert "container=n/a (host)" in res.output
+
+    res = cli.invoke(app, ["isolation", "down", "--repo", str(repo), "--branch", "feat/env"])
+    assert res.exit_code == 0, res.output
+    assert not st.worktree.exists()
+    assert load_state(repo, "feat/env") is None
+
+    binaries = {c[0] for c in runner.calls if c}
+    assert "docker" not in binaries and "devcontainer" not in binaries

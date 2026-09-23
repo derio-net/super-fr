@@ -389,7 +389,7 @@ def test_up_and_down_fire_the_gc_spawner(tmp_path: Path, monkeypatch: pytest.Mon
     repo, _origin = make_repo_with_origin(tmp_path)
     spawns: list[Path] = []
     target = HostWorktreeTarget(
-        repo, runner=GhRecordingRunner(), gc_spawner=lambda root: spawns.append(root)
+        repo, runner=GhRecordingRunner(), gc_spawner=lambda root, _mode: spawns.append(root)
     )
 
     st = target.up(profile=None, branch="feat/x")

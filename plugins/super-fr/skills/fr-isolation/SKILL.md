@@ -23,11 +23,11 @@ devcontainer, base repo untouched while the run is live. Plain shell, any agent 
 
 ### Modes (`FR_ISOLATION_TARGET`) — same contract, docker-less environment half
 
-- **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO profile, no secrets provisioning. A host-level
-  declaration, never a per-call flag.
+- **host-worktree** (`=worktree`): fr worktree, the host process env as-is — NO profile, no secrets provisioning.
 - **external** (valid preparer-written `.fr-isolation` marker, `mode:external`): fr adopts the container's checkout — `up --branch`
   ensures the branch in place; restart/stats refuse, gc reports (the container's owner runs both).
-- Any other value fails closed naming `devcontainer|worktree`.
+- Any other value fails closed (`devcontainer|worktree`). **It selects the mode at `up` only:** every later command follows the
+  workspace's recorded mode, so agents, hooks and fresh shells need no env; only `up`, `gc`'s sweep and a reaped `verify-merge` read it.
 
 ## Lifecycle
 

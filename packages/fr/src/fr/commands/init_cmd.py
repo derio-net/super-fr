@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from fr.isolation.migrate import SECRETS_BLOCK, migrate_repo
-from fr.isolation.scaffold import scaffold_profile
+from fr.isolation.scaffold import KNOWN_TOOLS, scaffold_profile
 from fr.isolation.types import IsolationError
 
 init_app = typer.Typer(
@@ -23,7 +23,15 @@ def scaffold(
     profile: str = typer.Option(..., help="Profile name (e.g. dev, readonly, admin)."),
     purpose: str = typer.Option(..., help="One-line purpose, recorded in fr-profiles.yaml."),
     tool: list[str] = typer.Option(
-        [], help="Tool to include (repeatable; known tools map to features)."
+        [],
+        help="Tool to include (repeatable; <tool>[@<version>]; known tools: "
+        f"{', '.join(sorted(KNOWN_TOOLS))}; unknown tools are refused — see --feature).",
+    ),
+    feature: list[str] = typer.Option(
+        [],
+        "--feature",
+        help="Raw devcontainer feature ref to include with no options (repeatable) — "
+        "the escape hatch for a tool --tool does not know.",
     ),
     secret: list[str] = typer.Option(
         [], help="Secret KEY the profile expects (repeatable; placeholder scaffolded)."
@@ -52,7 +60,9 @@ def scaffold(
     host secrets placeholders. The commit is what lets `fr isolation up` see the
     profile; pass --no-commit to write only."""
     if backend not in ("github", "gitlab", "gitea"):
-        typer.echo(f"error: --backend must be one of github, gitlab, gitea; got {backend!r}")
+        typer.echo(
+            f"error: --backend must be one of github, gitlab, gitea; got {backend!r}", err=True
+        )
         raise typer.Exit(2)
     try:
         path = scaffold_profile(
@@ -66,9 +76,10 @@ def scaffold(
             commit=not no_commit,
             backend=backend,  # type: ignore[arg-type]
             host=host,
+            features=list(feature),
         )
     except IsolationError as err:
-        typer.echo(f"error: {err}")
+        typer.echo(f"error: {err}", err=True)
         raise typer.Exit(2) from err
     typer.echo(f"scaffolded: {path}")
 
