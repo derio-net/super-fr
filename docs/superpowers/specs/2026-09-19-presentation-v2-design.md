@@ -364,6 +364,14 @@ always paired with the angle's label):
 | Continuity | blue | spec, `fr plan create`, `fr run advance/resolve`, journal, the MR |
 | Extensibility | magenta | phase dispatched to `fr-phase-executor-<tier>`, per-tier models |
 
+**Blocks that belong to two angles get a split frame** (decided 2026-09-23): one
+frame drawn in both colours — top and left in the first angle, right and bottom in
+the second — with both labels on its tag. The overlap is common and real: across
+the whole run, 20 of 54 kinds of block matched more than one angle, including the
+most frequent ones (`fr isolation exec -- mvn test` is Security and Quality: the
+tests run, inside the sandbox). The overlaps are material, not noise — they show
+the angles are one system seen from four sides.
+
 **Annotations are anchored to text, not pixels.** The cast is text: replaying it
 through a terminal emulator gives the exact screen at any moment, so each block's
 row and column are computed, and its angle derived from its command. Verified on
