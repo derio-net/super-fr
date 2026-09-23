@@ -1,0 +1,214 @@
+schema_version: 5
+run: 2026-09-15-feat-ste-output-tone
+workflow: fr-goal@1
+branch: feat/ste-output-tone
+started: '2026-09-15T18:21:24+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-15T18:23:10+00:00'
+    emitted:
+      spec: docs/superpowers/specs/2026-09-14-ste-output-tone-design.md
+  spec-review:
+    state: done
+    at: '2026-09-15T18:26:16+00:00'
+  plan:
+    state: done
+    at: '2026-09-15T18:33:07+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-14-ste-output-tone
+  plan-review:
+    state: done
+    at: '2026-09-15T18:33:11+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-16T05:59:14+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:33:13+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 4939
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:10+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 4939
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:14+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 9612
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:17+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 9612
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:21+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 12311
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:25+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 12311
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:29+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 10323
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:33+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 10323
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/5/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:34:37+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 6942
+            spec_bytes: 17728
+            plan_bytes: 54995
+          synthesized: true
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:44:45+00:00'
+          estimate:
+            journal_entries: 38
+            journal_lines: 191
+            handoff_chars: 6942
+            spec_bytes: 17728
+            plan_bytes: 55148
+          synthesized: true
+      phase/6/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T18:57:18+00:00'
+          estimate:
+            journal_entries: 45
+            journal_lines: 226
+            handoff_chars: 6802
+            spec_bytes: 17823
+            plan_bytes: 55409
+          synthesized: true
+      phase/6/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-15T19:04:51+00:00'
+          estimate:
+            journal_entries: 46
+            journal_lines: 231
+            handoff_chars: 7330
+            spec_bytes: 17823
+            plan_bytes: 55558
+          synthesized: true
+      phase/7/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-16T04:53:47+00:00'
+          estimate:
+            journal_entries: 55
+            journal_lines: 276
+            handoff_chars: 9345
+            spec_bytes: 18461
+            plan_bytes: 56810
+          synthesized: true
+      phase/7/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-16T05:08:34+00:00'
+          estimate:
+            journal_entries: 58
+            journal_lines: 291
+            handoff_chars: 11368
+            spec_bytes: 18461
+            plan_bytes: 56959
+          synthesized: true
+      phase/8/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-16T05:28:39+00:00'
+          estimate:
+            journal_entries: 66
+            journal_lines: 331
+            handoff_chars: 11541
+            spec_bytes: 18526
+            plan_bytes: 56959
+          synthesized: true
+      phase/8/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-16T05:41:53+00:00'
+          estimate:
+            journal_entries: 67
+            journal_lines: 336
+            handoff_chars: 12183
+            spec_bytes: 18526
+            plan_bytes: 57129
+          synthesized: true
+  deliver:
+    state: done
+    at: '2026-09-16T06:18:02+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/474

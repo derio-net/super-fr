@@ -372,6 +372,7 @@ def self_review_cmd(
         # "move the dispatch into a [manual] phase" rendered as "into a
         # phase", i.e. the escape route the message offers disappeared —
         # and so did every issue's own "[error]"/"[warn]" severity prefix.
-        console.print(escape(str(issue)))
+        # soft_wrap=True: one issue on one line, not 3-6 wrapped ones.
+        console.print(escape(str(issue)), soft_wrap=True)
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)

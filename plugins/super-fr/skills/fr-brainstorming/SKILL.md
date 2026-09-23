@@ -83,9 +83,9 @@ implementation continue in it; cleanup belongs to whoever finishes the run
 Each key "operator can do X" claim in the design becomes a matrix row:
 `fr acceptance add --status not-implemented --origin <repo>:<new-spec-path>`
 (run `fr acceptance init` first if the repo has no matrix). **The brainstorm
-ENDS by presenting the rows to the operator with a one-line defense each** —
-the business claim it pins, the target verification level, why it is
-business-level rather than an implementation detail. Silent row creation is
+ENDS by presenting the rows as one table — `id | claim | level | defense`,
+one short line per cell** — the claim it pins, the target verification
+level, and why it is business-level, not an implementation detail. Silent row creation is
 not acceptance-of-scope; the presentation is. Under fr-goal the presentation
 rides the spec-review step. Hand-off checklist: rows added AND presented.
 

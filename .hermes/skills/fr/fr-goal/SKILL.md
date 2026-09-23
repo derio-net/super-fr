@@ -24,7 +24,10 @@ re-`advance` on failure. `kind: agent` never executes itself: it prints a dispat
 (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then `fr run resolve
 <run-id> --step <id> --state done|failed [--emitted name=path ...]` (each `name` must be one
 the step `emits`; a `spec`/`plan` path must exist and is stored repo-relative). `gate:
-operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next `advance`). Blocked → stop, say what you tried, ask. Another shape, same mechanics.
+operator` blocks until you resolve it (same command; a gated `cli` step then runs on the next `advance`). Another shape, same mechanics.
+**Operator updates** only at the Q&A gate, a block or failure, and delivery. Each update is the result in 1–3 lines, then the next step.
+Short means split, not packed: plain words, name what an id refers to, keep the "because". Evidence goes to the journal and the
+PR body, not the chat. Blocked → stop, give the result, ask.
 
 **`fr` refused with "artifacts … must be migrated"?** Expected — a pod, CI and an agent's Bash
 tool are all non-interactive, where fr never migrates or commits by itself. Run `fr migrate
@@ -104,8 +107,8 @@ summary + spec/plan paths; findings + fixes (+ refutations, + deferrals with the
 verbatim from `fr run gates <run-id>` (never blank — a run that never asked says so itself); the
 back-loaded manual phase marked "unimplemented — operator pushes to this PR"; the Test Plan
 verbatim ("post-merge — operator-driven"); acceptance debt (`fr acceptance status`) and
-rows-added-since-brainstorm (`fr acceptance check --added-since origin/main`), each with a
-one-line defense. The body carries a Ready-checklist guard (CI green, explicit review ok, no
+rows-added-since-brainstorm (`fr acceptance check --added-since origin/main`) as one table
+(`id | claim | level | defense`). The body carries a Ready-checklist guard (CI green, explicit review ok, no
 commits since the ok). ONLY when all three hold: `gh pr ready`, remove the guard — never say
 "ready to merge" before this, never self-merge, never flip it manually. Resolve `deliver` done
 with that `tests=` log (fr checks YOU wrote it, this session, during delivery — not that it is a real suite); nothing follows it. Stop; the operator merges.

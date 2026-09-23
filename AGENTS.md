@@ -169,7 +169,7 @@ tripwire will catch drift anyway:
 
 - Canonical: `plugins/super-fr/skills/<name>/SKILL.md`,
   `plugins/super-fr/rules/*.md` (currently `fr-isolation-required.md`,
-  `fr-plan-override.md`, `no-claude-p-batch.md`), plus the FOUR
+  `fr-plan-override.md`, `no-claude-p-batch.md`, `fr-worktree-override.md`), plus the FOUR
   repo-local-only rules with no plugin counterpart —
   `.claude/rules/acceptance-matrix.md`, `.claude/rules/artifact-versioning.md`,
   `.claude/rules/explainers-currency.md` and
