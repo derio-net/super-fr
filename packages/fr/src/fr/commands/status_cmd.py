@@ -28,7 +28,6 @@ from fr.commands.common import (
 )
 from fr.labels import FR_SYNCED
 from fr.parser import PlanSchemaError
-from fr.render import archive_gate
 
 if TYPE_CHECKING:
     from fr.archive import DefaultRef, MergeEvidence
@@ -75,7 +74,9 @@ def _phase_line(report: PlanReport, phase_n: int) -> str:
     return f"  phase {phase_n}: {ticked}/{len(steps)} steps · {tracking} · {status}"
 
 
-def _report_text(report: PlanReport) -> str:
+def _report_text(report: PlanReport, evidence: MergeEvidence) -> str:
+    from fr.archive import archive_blockers
+
     lines = [report.header]
     for phase in report.plan.phases:
         lines.append(_phase_line(report, phase.phase.number))
@@ -89,7 +90,7 @@ def _report_text(report: PlanReport) -> str:
         lines.append("warnings:")
         for w in report.rendered.warnings:
             lines.append(f"  [{w.severity}] {w.message}")
-    if not archive_gate(report.plan, report.observed):
+    if not archive_blockers(report.plan, report.observed, evidence):
         lines.append("")
         lines.append(
             f"plan complete — run `fr archive {report.plan.repo_relative_dir}` to move it "
@@ -98,7 +99,8 @@ def _report_text(report: PlanReport) -> str:
     return "\n".join(lines)
 
 
-def _report_json(report: PlanReport) -> dict[str, Any]:
+def _report_json(report: PlanReport, evidence: MergeEvidence) -> dict[str, Any]:
+    from fr.archive import archive_blockers
     from fr.commands.apply_cmd import _mutation_to_json
 
     return {
@@ -123,7 +125,7 @@ def _report_json(report: PlanReport) -> dict[str, Any]:
             }
             for p in report.plan.phases
         ],
-        "archive_ready": not archive_gate(report.plan, report.observed),
+        "archive_ready": not archive_blockers(report.plan, report.observed, evidence),
     }
 
 
@@ -325,10 +327,14 @@ def status_command(
         err_console.print(f"parse error: {e}")
         raise typer.Exit(5) from e
 
+    # The nudge and `archive_ready` share one merge-evidence read (#544).
+    from fr.archive import merge_evidence
+
+    evidence = merge_evidence(resolve_repo_root(), fetch=True)
     if output_format == "json":
-        console.print_json(_json.dumps({"plans": [_report_json(report)]}))
+        console.print_json(_json.dumps({"plans": [_report_json(report, evidence)]}))
     else:
-        console.print(_report_text(report))
+        console.print(_report_text(report, evidence))
         section = _acceptance_section(resolve_repo_root())
         if section:
             console.print(section)

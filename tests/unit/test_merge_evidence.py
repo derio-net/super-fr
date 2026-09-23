@@ -33,6 +33,21 @@ def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
+def stub_fetch(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Hermetic git plus a recorder in place of ``fr.archive._fetch``.
+
+    Shared by every test module that drives a merge-evidence surface through
+    the CLI (sweep, archive gate, nudges): no operator git config, no network,
+    and the returned list records one remote name per fetch, so a test can
+    assert "one ``merge_evidence(fetch=True)`` per invocation".
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    fetched: list[str] = []
+    monkeypatch.setattr(archive_mod, "_fetch", lambda root, remote: fetched.append(remote))
+    return fetched
+
+
 def _git(repo: Path, *args: str) -> str:
     done = subprocess.run(
         [

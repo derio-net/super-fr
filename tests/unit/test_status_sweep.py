@@ -14,7 +14,6 @@ Every repo is a real temp git repo whose remote is a FILE PATH, and
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -34,6 +33,7 @@ from tests.unit.test_merge_evidence import (
     _init,
     _publish,
     _write_plan,
+    stub_fetch,
 )
 
 MERGED = "2026-05-01-merged"
@@ -47,11 +47,7 @@ GROWN = "2026-05-05-grown"
 def _hermetic(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Cut off operator git config and replace the network fetch with a
     recorder (the sweep must fetch: decision d3-evidence)."""
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    fetched: list[str] = []
-    monkeypatch.setattr(archive_mod, "_fetch", lambda root, remote: fetched.append(remote))
-    return fetched
+    return stub_fetch(monkeypatch)
 
 
 def _four_bucket_repo(tmp_path: Path) -> Path:

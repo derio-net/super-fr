@@ -28,7 +28,12 @@ from rich.console import Console
 
 from fr import plan_ops
 from fr.apply import apply
-from fr.commands.common import PlanReport, build_plan_report, require_migrated_layout
+from fr.commands.common import (
+    PlanReport,
+    build_plan_report,
+    require_migrated_layout,
+    resolve_repo_root,
+)
 from fr.diff import (
     Diff,
     IssueBodyChange,
@@ -39,11 +44,11 @@ from fr.diff import (
 )
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import PlanEditError
-from fr.render import archive_gate
 from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import workflow_for_plan
 
 if TYPE_CHECKING:
+    from fr.archive import MergeEvidence
     from fr.ghclient import GhClient
 
 console = Console()
@@ -233,11 +238,20 @@ def _mutation_to_json(m: Any) -> dict[str, Any]:
 
 
 def _apply_one(
-    plan_dir: Path, gh: GhClient, *, yes: bool, force: bool = False, to: str | None = None
+    plan_dir: Path,
+    gh: GhClient,
+    *,
+    yes: bool,
+    force: bool = False,
+    to: str | None = None,
+    evidence: MergeEvidence | None = None,
 ) -> tuple[int, str, dict[str, Any]]:
     """Apply one plan with an injected GhClient.
 
     Returns (exit_code, text_output, json_output). `yes=False` is dry-run.
+    `evidence` feeds the archive nudge (#544); `apply_command` reads it once
+    per invocation and passes it in, and a direct caller that omits it gets
+    one read of the plan's own repo.
     `force=True` re-enables IssueCreate for locally-complete phases
     (overrides the completion guard — see `fr.diff.SuppressedCreate`).
     `to=<runner>` queues phases to a registry runner: queue lifecycle +
@@ -264,7 +278,11 @@ def _apply_one(
         for w in rendered.warnings:
             parts.append(f"  [{w.severity}] {w.message}")
     # Archive nudge — same gate as `fr archive`, so the surfaces agree.
-    if not archive_gate(plan, report.observed):
+    from fr.archive import archive_blockers, merge_evidence
+
+    if evidence is None:
+        evidence = merge_evidence(plan.repo_root or resolve_repo_root(), fetch=True)
+    if not archive_blockers(plan, report.observed, evidence):
         parts.append(
             f"\nplan complete — run `fr archive {plan.repo_relative_dir}` to move it "
             f"to implemented/."
@@ -517,12 +535,18 @@ def apply_command(
             raise typer.Exit(2)
         targets = [plan_dir]
 
+    from fr.archive import merge_evidence
+
     gh = _make_gh_client()
+    # One merge-evidence read per invocation, not per plan (#544).
+    evidence = merge_evidence(resolve_repo_root(), fetch=True)
     overall_rc = 0
     json_results: list[dict[str, Any]] = []
     text_outputs: list[str] = []
     for t in targets:
-        rc, text_output, json_output = _apply_one(t, gh, yes=yes, force=force, to=to)
+        rc, text_output, json_output = _apply_one(
+            t, gh, yes=yes, force=force, to=to, evidence=evidence
+        )
         text_outputs.append(text_output)
         json_results.append(json_output)
         if rc != 0:

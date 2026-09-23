@@ -1,4 +1,11 @@
-"""`fr archive` — gate, plan/spec moves, --all sweep (2026-06-05 spec, Phase 5)."""
+"""`fr archive` — gate, plan/spec moves, --all sweep (2026-06-05 spec, Phase 5).
+
+Since #544 (spec 2026-09-23-archive-merge-evidence §3.C) the gate also needs
+merge evidence: an undispatched agentic phase must be complete on the default
+branch's remote-tracking ref. Every repo here is a real temp git repo whose
+origin is a FILE PATH (`_seed`), and `fr.archive._fetch` is monkeypatched, so
+nothing touches a network.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +13,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from fr.commands import archive_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
+from tests.unit.test_merge_evidence import _add_remote, _git, _publish, _write_plan, stub_fetch
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -54,23 +63,36 @@ def _add_spec(repo: Path, name: str, rows: list[tuple[str, str, str]]) -> Path:
     return spec
 
 
-def _git_seed(repo: Path) -> None:
-    for cmd in (
-        ["git", "init", "-q"],
-        ["git", "add", "-A"],
-        [
-            "git",
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-qm",
-            "seed",
-            "--allow-empty",
-        ],
-    ):
-        subprocess.run(cmd, cwd=repo, check=True)
+@pytest.fixture(autouse=True)
+def _hermetic(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Cut off operator git config and replace the network fetch with a
+    recorder: `fr archive` must fetch once per invocation (spec §3.C)."""
+    return stub_fetch(monkeypatch)
+
+
+def _seed(repo: Path, *, landed: bool = True, remote: bool = True) -> None:
+    """Commit the fixture repo and wire a FILE-PATH origin (#544).
+
+    ``landed=True`` publishes the whole tree to ``origin/main``, so every
+    plan in it counts as merged; ``landed=False`` publishes only an empty
+    base commit, so the plans exist on the branch alone. ``remote=False``
+    leaves the repo without a remote (merge state unknown). Later branch-only
+    work goes through ``_commit``; ``_publish`` lands it.
+    """
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "base")
+    if remote:
+        _add_remote(repo, repo.parent / f"{repo.name}.origin.git")
+        if not landed:
+            _publish(repo)
+    _commit(repo, "seed")
+    if remote and landed:
+        _publish(repo)
+
+
+def _commit(repo: Path, msg: str) -> None:
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", msg)
 
 
 def _invoke(monkeypatch, repo, gh, argv):
@@ -87,7 +109,7 @@ def test_archive_moves_ticked_undispatched_plan(tmp_path, monkeypatch):
     """The bookmarks shape archives: all steps ticked, never dispatched."""
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -105,7 +127,7 @@ def test_archive_moves_ticked_undispatched_plan(tmp_path, monkeypatch):
 def test_archive_refuses_incomplete_plan_with_reasons(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-06-01-active", ticked=False)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -117,7 +139,7 @@ def test_archive_refuses_incomplete_plan_with_reasons(tmp_path, monkeypatch):
 def test_archive_force_overrides_gate(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-06-01-known-done", ticked=False)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch,
         repo,
@@ -131,7 +153,7 @@ def test_archive_force_overrides_gate(tmp_path, monkeypatch):
 def test_archive_refuses_dirty_plan_paths(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
-    _git_seed(repo)
+    _seed(repo)
     (plan_dir / "01.yaml").write_text((plan_dir / "01.yaml").read_text() + "# dirty\n")
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
@@ -154,7 +176,7 @@ def test_archive_moves_spec_when_last_local_plan_archives(tmp_path, monkeypatch)
         "2026-05-25-bm-design.md",
         [("bm", "derio-net/test", "docs/superpowers/plans/2026-05-25-bookmarks")],
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -178,7 +200,7 @@ def test_archive_leaves_spec_with_active_plan(tmp_path, monkeypatch):
             ("second", "derio-net/test", "docs/superpowers/plans/2026-06-01-second"),
         ],
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -201,7 +223,7 @@ def test_archive_resolves_cross_repo_row_via_gh(tmp_path, monkeypatch):
             ("remote", "derio-net/other", "docs/superpowers/plans/2026-05-02-remote-plan"),
         ],
     )
-    _git_seed(repo)
+    _seed(repo)
     gh = FakeGhClient()
     gh.remote_files.add(
         ("derio-net/other", "docs/superpowers/implemented/plans/2026-05-02-remote-plan")
@@ -225,7 +247,7 @@ def test_archive_keeps_spec_when_cross_repo_row_unresolved(tmp_path, monkeypatch
             ("remote", "derio-net/other", "docs/superpowers/plans/2026-05-02-remote-plan"),
         ],
     )
-    _git_seed(repo)
+    _seed(repo)
     gh = FakeGhClient()  # remote_files empty -> unresolved
     result = _invoke(monkeypatch, repo, gh, ["archive", str(plan_dir.relative_to(repo))])
     assert result.exit_code == 0, result.output
@@ -251,7 +273,7 @@ def test_archive_all_sweeps_and_decides_specs_at_end(tmp_path, monkeypatch):
             ("b", "derio-net/test", "docs/superpowers/plans/2026-05-02-b"),
         ],
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
     assert result.exit_code == 0, result.output
     sp = repo / "docs" / "superpowers"
@@ -265,21 +287,22 @@ def test_archive_all_sweeps_and_decides_specs_at_end(tmp_path, monkeypatch):
 
 def test_archive_all_refuses_force(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all", "--force"])
     assert result.exit_code == 2, result.output
 
 
 def test_apply_dry_run_prints_archive_nudge(tmp_path, monkeypatch):
-    """apply's dry-run nudges toward fr archive when the gate passes."""
+    """apply's dry-run nudges toward fr archive when the gate passes (the
+    plan has landed on origin/main: `_seed`)."""
     from fr.commands import apply_cmd
 
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
-    _git_seed(repo)
+    _seed(repo)
     rc, text, _json = apply_cmd._apply_one(plan_dir, FakeGhClient(), yes=False)
     assert rc == 0
-    assert "fr archive" in text
+    assert "plan complete — run `fr archive" in text
 
 
 # --- Phase 7 (2026-08-14 workflow-shapes-and-workitem-dispatch): run state ---
@@ -320,7 +343,7 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
         "    emitted: {plan: docs/superpowers/plans/2026-08-20-goal-output}\n"
         "  plan-review: {state: pending}\n"
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -349,7 +372,7 @@ def test_archive_does_not_move_an_unrelated_run_file_of_the_same_name(tmp_path, 
         "steps:\n"
         "  isolate: {state: pending}\n"
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -363,7 +386,7 @@ def test_archive_is_a_no_op_when_no_run_file_exists(tmp_path, monkeypatch):
     did before this phase — no `implemented/runs/` directory materializes."""
     repo = _repo(tmp_path)
     plan_dir = _add_plan(repo, "2026-05-25-bookmarks", ticked=True)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -387,7 +410,7 @@ def test_archive_all_sweeps_stranded_spec_with_no_plan_moves(tmp_path, monkeypat
         "2026-05-01-a-design.md",
         [("a", "derio-net/test", "docs/superpowers/plans/2026-05-01-a")],
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
     assert result.exit_code == 0, result.output
     sp = repo / "docs" / "superpowers"
@@ -397,7 +420,7 @@ def test_archive_all_sweeps_stranded_spec_with_no_plan_moves(tmp_path, monkeypat
 def test_archive_refuses_plan_dir_outside_repo(tmp_path, monkeypatch):
     """Out-of-repo plan dir: clean exit 2, not a ValueError traceback."""
     repo = _repo(tmp_path / "repo-a")
-    _git_seed(repo)
+    _seed(repo)
     other = tmp_path / "repo-b" / "docs" / "superpowers" / "plans" / "2026-05-25-elsewhere"
     shutil.copytree(FIXTURE, other)
     phase = other / "01.yaml"
@@ -422,7 +445,7 @@ def test_archive_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
         [("Plan X", "`derio-net/test`", "docs/superpowers/plans/2026-06-06-done/")],
     )
     plan_dir = _add_plan(repo, "2026-06-06-done", ticked=True, spec_name=spec.name)
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
     )
@@ -451,7 +474,7 @@ def test_no_spec_sweep_flag_skips_sweep(tmp_path, monkeypatch):
         "2026-05-25-bm-design.md",
         [("bm", "derio-net/test", "docs/superpowers/plans/2026-05-25-bookmarks")],
     )
-    _git_seed(repo)
+    _seed(repo)
     result = _invoke(
         monkeypatch,
         repo,
@@ -508,7 +531,7 @@ def test_sweep_only_archives_stranded_eligible_spec(tmp_path, monkeypatch):
         # Row already points at the ARCHIVED plan — the stranded state.
         [("bm", "derio-net/test", "docs/superpowers/implemented/plans/2026-05-25-bookmarks")],
     )
-    _git_seed(repo)
+    _seed(repo)
     # Seed AFTER the fixture so the tree is clean (moves stage changes).
     _strand_plan(repo, "2026-05-25-bookmarks")
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
@@ -531,7 +554,7 @@ def test_sweep_only_leaves_ineligible_spec_with_a_note(tmp_path, monkeypatch):
             ("second", "derio-net/test", "docs/superpowers/plans/2026-06-01-active"),
         ],
     )
-    _git_seed(repo)
+    _seed(repo)
     _strand_plan(repo, "2026-05-25-bookmarks")
 
     result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
@@ -542,7 +565,7 @@ def test_sweep_only_leaves_ineligible_spec_with_a_note(tmp_path, monkeypatch):
 
 def test_sweep_only_refuses_plan_dir_and_all_and_force(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
-    _git_seed(repo)
+    _seed(repo)
     for argv in (
         ["archive", "--sweep-only", "docs/superpowers/plans/x"],
         ["archive", "--sweep-only", "--all"],
@@ -551,3 +574,117 @@ def test_sweep_only_refuses_plan_dir_and_all_and_force(tmp_path, monkeypatch):
     ):
         result = _invoke(monkeypatch, repo, FakeGhClient(), argv)
         assert result.exit_code == 2, (argv, result.output)
+
+
+# --- #544: the gate requires landed evidence (spec 2026-09-23 §3.C, §5 item 6) ---
+
+
+def test_archive_refuses_a_plan_that_is_complete_locally_but_not_on_the_ref(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-06-01-unmerged", ticked=True)
+    _seed(repo, landed=False)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 2, result.output
+    assert "Phase 1: complete locally, not on origin/main; merge the PR first" in result.output
+    assert plan_dir.exists()
+
+
+def test_archive_refuses_a_plan_whose_newest_phase_exists_only_locally(tmp_path, monkeypatch):
+    """Phase 1 merged; phase 2 was added and ticked on the branch afterwards.
+    `landed` is per phase, so the local-only phase 2 blocks (f-p2-local-phases)."""
+    repo = _repo(tmp_path)
+    _write_plan(repo, "2026-06-01-grown", [("agentic", True)])
+    _seed(repo)
+    plan_dir = _write_plan(repo, "2026-06-01-grown", [("agentic", True), ("agentic", True)])
+    _commit(repo, "phase 2 on the branch")
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 2, result.output
+    assert "Phase 2: complete locally, not on origin/main" in result.output
+    assert "Phase 1" not in result.output
+    assert plan_dir.exists()
+
+
+def test_archive_refuses_when_the_merge_state_is_unknown(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-06-01-no-remote", ticked=True)
+    _seed(repo, remote=False)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 2, result.output
+    assert "merge state unknown (" in result.output
+    assert "add a remote or use --force" in result.output
+    assert plan_dir.exists()
+
+
+def test_archive_all_skips_unlanded_plans_and_archives_landed_ones(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _add_plan(repo, "2026-05-01-landed", ticked=True)
+    _seed(repo)
+    _add_plan(repo, "2026-05-02-unmerged", ticked=True)
+    _commit(repo, "branch-only plan")
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    sp = repo / "docs" / "superpowers"
+    assert (sp / "implemented" / "plans" / "2026-05-01-landed").is_dir()
+    assert (sp / "plans" / "2026-05-02-unmerged").is_dir()
+    assert "2026-05-02-unmerged: skipped" in result.output
+    assert "not on origin/main" in result.output
+
+
+def test_archive_moves_a_landed_plan_whose_manual_phase_is_ticked_only_locally(
+    tmp_path, monkeypatch
+):
+    """The fr-goal close-out: the trailing manual phase merged unticked and
+    was ticked after merge on the operator's checkout."""
+    repo = _repo(tmp_path)
+    name = "2026-06-01-closeout"
+    _write_plan(repo, name, [("agentic", True), ("manual", False)])
+    _seed(repo)
+    plan_dir = _write_plan(repo, name, [("agentic", True), ("manual", True)])
+    _commit(repo, "close-out: tick the manual phase")
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert not plan_dir.exists()
+    assert (repo / "docs" / "superpowers" / "implemented" / "plans" / name).is_dir()
+
+
+def test_archive_force_still_archives_a_single_unlanded_plan(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-06-01-unmerged", ticked=True)
+    _seed(repo, landed=False)
+    result = _invoke(
+        monkeypatch,
+        repo,
+        FakeGhClient(),
+        ["archive", str(plan_dir.relative_to(repo)), "--force"],
+    )
+    assert result.exit_code == 0, result.output
+    assert not plan_dir.exists()
+
+
+def test_archive_all_computes_merge_evidence_once_per_invocation(tmp_path, monkeypatch, _hermetic):
+    repo = _repo(tmp_path)
+    for slug in ("2026-05-01-a", "2026-05-02-b", "2026-05-03-c"):
+        _add_plan(repo, slug, ticked=True)
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert _hermetic == ["origin"]
+
+
+def test_archive_single_plan_fetches_once(tmp_path, monkeypatch, _hermetic):
+    repo = _repo(tmp_path)
+    plan_dir = _add_plan(repo, "2026-05-01-a", ticked=True)
+    _seed(repo)
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert _hermetic == ["origin"]

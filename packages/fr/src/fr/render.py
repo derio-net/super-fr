@@ -253,15 +253,30 @@ def plan_locally_complete(phase: PhaseDoc) -> bool:
     return bool(steps) and all(s.state in ("x", "-") for s in steps.values())
 
 
-def archive_gate(plan: Plan, observed: GhState) -> tuple[str, ...]:
+def archive_gate(
+    plan: Plan,
+    observed: GhState,
+    *,
+    landed: frozenset[int] | None,
+    ref: str = "the default branch",
+    unknown_reason: str | None = None,
+) -> tuple[str, ...]:
     """Per-phase blockers for `fr archive`; empty tuple = plan may archive.
 
-    A phase clears the gate when it is `_phase_complete` (gh agrees the
-    work landed) OR it was never dispatched and `plan_locally_complete`
-    (the bookmarks shape: ticked but no Issue ever existed — dispatch
-    refuses it, so archive is its terminal state). Broader than
-    `RenderedState.archive_decision` (strict all-`_phase_complete`), which
-    this gate consumes for the dispatched arm.
+    ``landed`` is the set of phase numbers locally complete on the default
+    branch's remote-tracking ref (``ref``, e.g. ``origin/main``); ``None``
+    means the merge state is unknown, for ``unknown_reason``. It is required
+    and has no default, so no caller can skip the question (#544, spec
+    2026-09-23 §3.C). A phase clears the gate when:
+
+    - it was dispatched: `_phase_complete` (gh agrees the work landed) —
+      the arm `RenderedState.archive_decision` also uses, unchanged;
+    - it is an undispatched AGENTIC phase: `plan_locally_complete` AND its
+      number is in ``landed``. A phase that exists only in the working tree
+      is not on the ref, so it is absent from ``landed`` and blocks;
+    - it is an undispatched MANUAL phase: `plan_locally_complete` alone.
+      fr-goal's trailing manual phase is ticked after merge, so requiring it
+      on the ref would make every fr-goal plan unarchivable (spec §3.A).
 
     Shared by `fr archive` (the actual gate), and `fr apply` / `fr status`
     (the "plan complete — run fr archive" nudge) so the three surfaces
@@ -270,16 +285,31 @@ def archive_gate(plan: Plan, observed: GhState) -> tuple[str, ...]:
     blockers: list[str] = []
     for phase in plan.phases:
         n = phase.phase.number
-        obs = observed.phases.get(n)
-        if _phase_complete(phase, obs):
+        undispatched = phase.phase.tracking_issue is None
+        if undispatched and plan_locally_complete(phase):
+            if phase.phase.tag == "manual" or (landed is not None and n in landed):
+                continue
+            blockers.append(_not_landed_blocker(n, landed, ref, unknown_reason))
             continue
-        if phase.phase.tracking_issue is None and plan_locally_complete(phase):
+        if _phase_complete(phase, observed.phases.get(n)):
             continue
         steps = phase.state.steps
         ticked = sum(1 for s in steps.values() if s.state in ("x", "-"))
-        state = "undispatched" if phase.phase.tracking_issue is None else "dispatched"
+        state = "undispatched" if undispatched else "dispatched"
         blockers.append(f"Phase {n}: {ticked}/{len(steps)} steps ticked, {state} — not complete")
     return tuple(blockers)
+
+
+def _not_landed_blocker(
+    n: int, landed: frozenset[int] | None, ref: str, unknown_reason: str | None
+) -> str:
+    if landed is None:
+        reason = unknown_reason or "no remote-tracking default branch"
+        return (
+            f"Phase {n}: complete locally, merge state unknown ({reason}); "
+            f"add a remote or use --force"
+        )
+    return f"Phase {n}: complete locally, not on {ref}; merge the PR first"
 
 
 def spec_url(plan: Plan) -> str | None:

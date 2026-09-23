@@ -11,11 +11,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from fr.commands import status_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
+from tests.unit.test_merge_evidence import _add_remote, _publish, stub_fetch
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -28,7 +30,15 @@ _MUTATION_METHODS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No operator git config, and no network: `fr status <plan>` fetches
+    for its archive nudge (#544), so the fetch seam is stubbed."""
+    stub_fetch(monkeypatch)
+
+
 def _plan_repo(tmp_path: Path, *, tick: bool = False, tracking: str | None = None) -> Path:
+    """The fixture plan, committed and landed on a FILE-PATH origin/main."""
     plan_dir = tmp_path / "docs" / "superpowers" / "plans" / "2026-05-09-fixture-minimal"
     shutil.copytree(FIXTURE, plan_dir)
     if tick:
@@ -45,6 +55,8 @@ def _plan_repo(tmp_path: Path, *, tick: bool = False, tracking: str | None = Non
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"],
     ):
         subprocess.run(cmd, cwd=tmp_path, check=True)
+    _add_remote(tmp_path, tmp_path.parent / f"{tmp_path.name}.origin.git")
+    _publish(tmp_path)
     return plan_dir
 
 
@@ -92,8 +104,8 @@ def test_status_reports_header_table_and_refusal(tmp_path, monkeypatch):
     # Per-phase table line: ticks + no tracking issue + would-refuse.
     assert "phase 1" in result.output
     assert "would refuse" in result.output
-    # Archive nudge — the gate passes (undispatched + locally complete).
-    assert "fr archive" in result.output
+    # Archive nudge — the gate passes (undispatched, locally complete, landed).
+    assert "plan complete — run `fr archive" in result.output
     # Drift warning from the renderer surfaces here.
     assert "never dispatched —" in result.output or "warnings" in result.output
 

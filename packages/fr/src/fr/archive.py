@@ -43,16 +43,19 @@ from fr.run.model import (
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
     from fr.parser import Plan
+    from fr.states import GhState
 
 __all__ = [
     "FETCH_TIMEOUT_SECONDS",
     "ArchiveError",
+    "archive_blockers",
     "DefaultRef",
     "MergeEvidence",
     "SpecSweepResult",
     "archive_plan_dir",
     "completed_unarchived_plans",
     "find_run_for_plan",
+    "landed_for",
     "merge_evidence",
     "paths_dirty",
     "spec_archive_sweep",
@@ -257,6 +260,34 @@ def merge_evidence(repo_root: Path, *, fetch: bool) -> MergeEvidence:
         agentic_landed=agentic,
         complete_on_ref=complete,
         unparsed_on_ref=unparsed,
+    )
+
+
+def landed_for(evidence: MergeEvidence, name: str) -> frozenset[int] | None:
+    """Phase numbers of plan ``name`` locally complete on the ref; ``None``
+    when the ref itself is unknown (never "merged"). A plan absent from the
+    ref has an empty set, not ``None``: its merge state is known — unmerged."""
+    if evidence.ref is None:
+        return None
+    return evidence.landed_phases.get(name, frozenset())
+
+
+def archive_blockers(plan: Plan, observed: GhState, evidence: MergeEvidence) -> tuple[str, ...]:
+    """``render.archive_gate`` fed from one ``MergeEvidence`` (#544).
+
+    The single adapter the three gate surfaces share — `fr archive`, the
+    `fr status <plan>` nudge + ``archive_ready``, and `fr apply`'s nudge — so
+    each passes the same ``landed``, ref name and unknown-reason. Callers
+    compute ``evidence`` ONCE per invocation (``merge_evidence(fetch=True)``).
+    """
+    from fr.render import archive_gate
+
+    return archive_gate(
+        plan,
+        observed,
+        landed=landed_for(evidence, plan.dir.name),
+        ref=evidence.ref.ref if evidence.ref else "the default branch",
+        unknown_reason=evidence.ref_error,
     )
 
 
