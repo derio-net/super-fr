@@ -29,3 +29,8 @@ Spec §3.3 now adds .fr-deliver/ to .gitignore in this change.
 ### sr1 · review · Independent spec review (fr-spec-reviewer): 1 finding, s1 (in scope), fixed
 
 Every file:line, the PurePosixPath semantics and the §2 consequences were verified by the reviewer. s1 was fixed in spec §3.3.
+
+<!-- fr:journal kind=decision scope=spec id=skeleton-override-2026-09-25-writes-dot-dir-prefix created=2026-09-25T00:47:27 -->
+### skeleton-override-2026-09-25-writes-dot-dir-prefix · decision · No walking skeleton: a one-function fix inside fr, already exercised by the existing suite
+
+There is no new runtime to smoke. Live proof is this run's own deliver (spec §3.3).

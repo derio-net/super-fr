@@ -71,3 +71,9 @@ it. Also out of scope is gh#607 (a backgrounded suite cannot satisfy the gate).
    `.fr-deliver/` is added to `.gitignore` in this change, so the suite log
    the dogfood step writes can never be swept into a commit of this public
    repo (spec-review s1).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-25-writes-dot-dir-prefix | `derio-net/super-fr` | `2026-09-25-writes-dot-dir-prefix` | — |
