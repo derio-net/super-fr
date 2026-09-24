@@ -60,6 +60,7 @@ from fr.run.model import (
     AnsweredBy,
     ContextEstimate,
     DispatchOutcome,
+    MainSessionUsage,
     MeasuredTokens,
     RunState,
     RunStateError,
@@ -657,6 +658,10 @@ def _complete_step(
         "stdout": stdout,
         "emitted": dict(emitted) if emitted else None,
     }
+    if outcome == "done":
+        main_session = _measure_main_session(state, manifest, step_id, str(completion["at"]))
+        if main_session is not None:
+            completion["main_session"] = main_session
     new_record = (
         prior.model_copy(update=completion)
         if prior is not None
@@ -668,6 +673,47 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
+
+
+def _step_window_start(state: RunState, manifest: WorkflowManifest, step_id: str) -> str:
+    """Where `step_id`'s main-session window opens (spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D): the `at` of the
+    nearest EARLIER top-level step that is `done` — fr-goal's top-level steps
+    run in sequence, and a done step's `at` never moves — else the run's
+    `started`. Turns before `fr run start` belong to no step."""
+    ids = [s.id for s in manifest.steps]
+    if step_id in ids:
+        for earlier in reversed(ids[: ids.index(step_id)]):
+            record = state.steps.get(earlier)
+            if record is not None and record.state == "done" and record.at:
+                return record.at
+    return state.started
+
+
+def _measure_main_session(
+    state: RunState, manifest: WorkflowManifest, step_id: str, at: str
+) -> MainSessionUsage | None:
+    """`fr.run.telemetry.measure_step_main_session` over `step_id`'s window,
+    for `_complete_step` — the one place every `done` path meets (agent
+    `resolve`, cli `advance`, and the group's completion).
+
+    Catches EVERYTHING, on top of the callee's own guarantee: this runs inside
+    the act of completing a step, and no telemetry failure — a raising reader,
+    an unresolvable repo root — may turn a finished step into a failed
+    command. Absent `main_session` reads as "not observable", never zero.
+    """
+    from fr.run import telemetry
+
+    try:
+        return telemetry.measure_step_main_session(
+            state,
+            os.environ,
+            resolve_repo_root(),
+            _step_window_start(state, manifest, step_id),
+            at,
+        )
+    except Exception:  # noqa: BLE001 — observability never fails a completion
+        return None
 
 
 def _gate_degradation_notice() -> str | None:
