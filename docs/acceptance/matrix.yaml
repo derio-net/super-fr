@@ -3877,9 +3877,11 @@ rows:
       - super-fr:tests/unit/test_merge_evidence.py
       - super-fr:tests/unit/test_status_sweep.py
     status: ci
-    notes: 'Unit tests at CI (gh#526, phases 1-2): merge_evidence per phase on origin/<default>
-      with a stubbed fetch seam, and the four-bucket sweep that prints per-plan archive
-      commands only for merged plans. Live walk is the trailing manual phase.'
+    notes: 'Unit-pinned in CI; live-verified 2026-09-24 on derio-net/super-fr: pre-merge
+      on the PR branch the plan was not called merged and fr archive refused (exit 2);
+      post-merge on main (a5b83567) it read ''merged, manual phases still open'', then
+      after the manual tick ''merged but not archived'' with its own fr archive line,
+      which archived it.'
   - id: archive-refuses-unmerged-plan
     capability: Plan lifecycle
     acceptance: fr archive refuses a plan whose undispatched phases are not complete
@@ -3892,8 +3894,8 @@ rows:
       - super-fr:tests/unit/test_archive_cmd.py
       - super-fr:tests/unit/test_archive_nudge_landed.py
     status: ci
-    notes: 'Unit tests at CI (gh#544, phase 3): archive_gate needs landed evidence per
-      phase; fr archive refuses (single, exit 2) or skips (--all) an unmerged plan,
-      archives the manual close-out, keeps --force for a single plan, and reads merge
-      evidence once per invocation; status/apply nudges follow. Live walk is the trailing
-      manual phase.'
+    notes: 'Unit-pinned in CI; live-verified 2026-09-24 on derio-net/super-fr: pre-merge
+      on the PR branch the plan was not called merged and fr archive refused (exit 2);
+      post-merge on main (a5b83567) it read ''merged, manual phases still open'', then
+      after the manual tick ''merged but not archived'' with its own fr archive line,
+      which archived it.'
