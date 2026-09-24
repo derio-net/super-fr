@@ -81,7 +81,7 @@ import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeGuard
 
 from fr.harness.detect import detect_harness
@@ -882,7 +882,13 @@ def subagent_dispatch_since(
 _WRITE_TARGET = re.compile(r"""(?:>>?|\btee(?:\s+-a)?)\s*(["']?)([^\s;&|'"<>]+)\1""")
 """A shell redirect or `tee` and the path it writes. Deliberately syntactic: it
 answers "did this command claim to WRITE that file", which a `cat` or `ls` of
-the log — accepted before review r1-1 — does not."""
+the log — accepted before review r1-1 — does not.
+
+A relative target is compared by path SEGMENTS (gh#606): it matches when its
+segments, `.` dropped, are the trailing segments of the log's. Leading `..`
+segments are dropped too, deliberately: the command's cwd is not in the
+transcript, so a parent hop cannot be resolved, and `../x.log` keeps matching
+`…/x.log` as it always has. A `..` mid-path is not collapsed and fails closed."""
 
 
 def _writes(command: str, log: Path) -> bool:
@@ -890,7 +896,11 @@ def _writes(command: str, log: Path) -> bool:
         if Path(target).is_absolute():
             if Path(target) == log:
                 return True
-        elif str(log).endswith("/" + target.lstrip("./")) or log.name == target:
+            continue
+        parts = PurePosixPath(target).parts
+        while parts and parts[0] == "..":
+            parts = parts[1:]
+        if parts and log.parts[-len(parts) :] == parts:
             return True
     return False
 

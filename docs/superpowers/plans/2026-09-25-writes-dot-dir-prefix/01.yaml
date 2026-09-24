@@ -61,26 +61,27 @@ tasks:
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T22:49:08+00:00'
+      note: 'red: test_a_relative_dot_directory_log_is_matched fails ([] != window)'
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T22:49:21+00:00'
+      note: 'green: segment-wise match in _writes; 54 passed'
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T22:49:37+00:00'
+      note: 10 spec-§2 pins (redirect + tee -a); 64 passed; ruff format/check + mypy
+        green
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T22:49:41+00:00'
+      note: git check-ignore confirms .gitignore:46
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T22:49:55+00:00'
+      note: 4.20.0 -> 4.20.1; bump-version --check ok
   completion:
-    at: null
+    at: '2026-09-24T22:49:56+00:00'
     note: null
     observed_prs: []
