@@ -180,3 +180,23 @@ f63afffb: rename, deleted-file touch and binary-file tests added.
 ### r-p3 · review · Phase 3 review (independent reviewer): 6 in-scope findings p3-f1..f6, all fixed; deviations 1-6 accepted, 7 = p3-f1 (phase 3)
 
 Reviewer: dispatched general-purpose subagent a1948efadec1089eb (ran the phase tests, workflow check, the report itself). Fixes by the phase executor in c5c81a30, f63afffb; orchestrator re-ran the phase tests.
+
+<!-- fr:journal kind=decision scope=plan id=d-p4-flat-target created=2026-09-24T23:15:45 phase=4 -->
+### d-p4-flat-target · decision · flat evidence target chosen by emits journal:spec, not by step id; spec review dated by created >= opened (phase 4)
+
+_evidence_target: a phase unit -> plan journal + phase; a flat step whose manifest emits journal:spec -> the run's emitted spec's journal (spec_journal_slug of the spec stem), no phase; any other flat step keeps the 'names no phase' refusal (pinned). The review entry must be kind=review with created (local, via journal_stamp_as_utc) >= the unit's last attempt dispatched, falling back to the step record's at for an attempt-less (adopted) cursor. findings folds EVERY spec-journal finding (a spec journal has no phases). A phase-executor dispatch is still refused as a spec reviewer.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p4-org-hook-by-name created=2026-09-24T23:15:45 phase=4 -->
+### x-p4-org-hook-by-name · discovery · org agent-worktree hook forces a worktree on read-only agents too: generalised the allowlist script (phase 4)
+
+The stock hook (captured as STOCK_HOOK in test_ensure_phase_executor_allowlist.py) exempts by subagent NAME only; anything else must pass isolation worktree, whatever its tools. A worktree cut from main cannot see the feature branch's spec, so ensure-phase-executor-allowlist.sh now takes an optional plugin-qualified id (default super-fr:fr-phase-executor) and install.sh runs it for super-fr:fr-spec-reviewer too. Its membership probe no longer requires adjacency to the Explore anchor, which two managed ids would otherwise break (re-insert every run). The hook is not installed on this machine; verified against the captured stock hook only.
+
+<!-- fr:journal kind=decision scope=plan id=v-p4-opencode-readonly-denies created=2026-09-24T23:15:46 phase=4 -->
+### v-p4-opencode-readonly-denies · decision · DEVIATION: sync-opencode default-denies edit and bash for agents whose tools grant neither (phase 4)
+
+Not in the plan. _PERMISSION_DEFAULT_DENIES only covered task/webfetch, so the OpenCode mirror of a Read/Grep/Glob agent would inherit OpenCode's permissive edit/bash defaults, strictly more powerful than its source. Added edit: deny and bash: deny as defaults (a grant still wins, so fr-phase-executor's mirror is byte-identical). test_every_known_tool_maps_or_is_explicitly_implicit's expectation moved accordingly; new test_a_read_only_agent_mirror_denies_edit_and_bash.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p4-shipped-walkers created=2026-09-24T23:15:46 phase=4 -->
+### x-p4-shipped-walkers · discovery · tests walking the SHIPPED fr-goal shape past spec-review now record its evidence (phase 4)
+
+18 tests (test_run_cli walker, test_run_adopt _drive_to_plan_step, three test_fr_goal_shape walkers, two agent-count pins) broke on the new spec-review evidence and agent. Fixed via tests/unit/spec_review_support.spec_review_evidence (a spec-journal review entry through append_journal_entry + --evidence review/reviewer); _drive_to_plan_step's brainstorm now emits its spec. Also the review-phase manifest comment gained spec §A's in/out tag brief (spec §A lists it as a classification moment; no phase owned it) and the manifest header's stale 'fr run is start/.../check only' now lists cost.

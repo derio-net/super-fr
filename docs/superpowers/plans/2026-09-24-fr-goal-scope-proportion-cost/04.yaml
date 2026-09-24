@@ -110,21 +110,23 @@ state:
       note: _EvidenceTarget(scope, phase) value type threaded through _verified_evidence/_verify_reviewer/_verify_review_entry/_closed_findings_witness;
         ruff+mypy clean
     P4.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:15:32+00:00'
+      note: agent file, tool-neutral
     P4.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:15:32+00:00'
+      note: manifests, parity row, allowlist generalised (org hook exempts by name),
+        install wiring
     P4.T2.S3:
       state: ' '
       ticked_at: null
       note: null
     P4.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:18:12+00:00'
+      note: fr-goal §2/§6/§8/close-out + frontmatter, fr-plan files/estimate_lines;
+        both mirrors synced; neutrality + skill tripwires green
     P4.T3.S2:
       state: ' '
       ticked_at: null

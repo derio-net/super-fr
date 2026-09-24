@@ -120,7 +120,7 @@ flowchart TD
     Spec --> Plan["fr-plan: phase-structured plan<br/>_meta.yaml + NN.yaml per phase"]
     Plan --> SR["fr plan self-review"]
     SR --> Exec["fr-execute (local mode)<br/>TDD per step; every command via<br/>fr isolation exec"]
-    Exec --> Review["code review after each phase<br/>(superpowers:requesting-code-review)<br/>fix every finding"]
+    Exec --> Review["code review after each phase<br/>(superpowers:requesting-code-review)<br/>fix in-scope findings, file the rest"]
     Review --> PR["single PR<br/>(agent never self-merges)"]
     PR -. back-loaded manual phase .-> Manual["operator implements it<br/>(secrets, UI ops, deploys)<br/>and pushes to the same PR"] -.-> Merge
     PR --> Merge["operator reviews & merges"]

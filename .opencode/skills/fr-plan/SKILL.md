@@ -84,7 +84,7 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   never ironed over.
 - **Tier:** every agentic phase declares `tier: mechanical | standard | hard` (`fr.types.PHASE_TIERS`;
   manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
-  dispatch is untiered, inheriting the session model — self-review warns when missing.
+  dispatch is untiered, inheriting the session model — self-review warns when missing. It also declares `files:` (repo-relative globs it will touch; `*` spans `/`) and `estimate_lines:` (added + deleted) — `fr plan proportionality` reports touches outside them and size above 2× at deliver; self-review warns on no `files`.
 - No placeholders: every step has actual code, commands, expected output.
 - Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the accumulated
   handoff, so cost grows superlinearly with phase count (`fr run status` shows the per-phase accounting).
