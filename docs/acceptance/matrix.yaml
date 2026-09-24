@@ -4039,3 +4039,13 @@ rows:
       (tripwire) and is walked end to end with spec-review evidence (test_fr_goal_shape);
       read-only agent mirror and worktree-hook allowlist pinned. Live dispatch of fr-spec-reviewer
       is spec Test Plan 15, post-merge.
+  - id: deliver-tests-log-dot-dir
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a log the orchestrator wrote under
+      a dot-directory (e.g. .fr-deliver/tests.log)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-writes-dot-dir-prefix-design.md
+    levels: {}
+    status: not-implemented
+    notes: gh#606. Unit-level red→green in tests/unit/test_run_telemetry.py; live proof
+      is this change's own deliver.
