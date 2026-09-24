@@ -1834,3 +1834,95 @@ class TestResolveOutOfScope:
             app, ["journal", "check", "--scope", "plan", "--slug", "S", "--require-reviews"]
         )
         assert res.exit_code == 0, res.output
+
+
+class TestReviewScope:
+    """The reviewer's in/out tag, persisted on the finding (spec 2026-09-24 §A)
+    so the PR body can show when the orchestrator moved a finding the reviewer
+    called in-scope out of the change."""
+
+    def _finding(self, root: Path, monkeypatch, fid: str, *extra: str):
+        monkeypatch.chdir(root)
+        return _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "finding", "--state", "open"),
+            *("--title", f"bug {fid}", "--id", fid, "--phase", "1", *extra),
+        )
+
+    def _render(self):
+        return runner.invoke(
+            app, ["journal", "render", "--scope", "plan", "--slug", "S", "--section", "findings"]
+        )
+
+    @pytest.mark.parametrize("tag", ["in", "out"])
+    def test_add_writes_the_tag(self, tmp_path: Path, monkeypatch, tag: str) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        res = self._finding(root, monkeypatch, "f1", "--review-scope", tag)
+        assert res.exit_code == 0, res.output
+        text = _journal_file(root, "S").read_text()
+        assert f"review_scope={tag}" in text.splitlines()[2]
+        assert parse_journal(text)[0].review_scope == tag
+
+    @pytest.mark.parametrize("tag", ["maybe", "IN", ""])
+    def test_any_other_value_exits_2(self, tmp_path: Path, monkeypatch, tag: str) -> None:
+        root = _init_repo(tmp_path)
+        res = self._finding(root, monkeypatch, "f1", "--review-scope", tag)
+        assert res.exit_code == 2, res.output
+        assert not _journal_file(root, "S").exists()
+
+    def test_it_is_only_for_a_finding(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "decision", "--title", "d"),
+            *("--phase", "1", "--review-scope", "in"),
+        )
+        assert res.exit_code == 2, res.output
+
+    def test_render_shows_each_findings_tag(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        self._finding(root, monkeypatch, "f2", "--review-scope", "out")
+        out = self._render().output
+        heading = {ln.split(" · ")[0][4:]: ln for ln in out.splitlines() if ln.startswith("### ")}
+        assert "reviewer: in scope" in heading["f1"]
+        assert "reviewer: out of scope" in heading["f2"]
+
+    def test_render_groups_out_of_scope_findings_and_marks_a_reclassification(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        self._finding(root, monkeypatch, "f2", "--review-scope", "out")
+        self._finding(root, monkeypatch, "f3", "--review-scope", "in")
+        for fid in ("f1", "f2"):
+            res = runner.invoke(
+                app,
+                [
+                    *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", fid),
+                    *("--state", "out-of-scope", "--note", "pre-existing"),
+                ],
+            )
+            assert res.exit_code == 0, res.output
+        out = self._render().output
+        head = "## Out-of-scope findings"
+        assert out.count(head) == 1
+        before, after = out.split(head)
+        # f3 is still this change's; f1/f2 and their records sit under the heading.
+        assert "### f3 " in before and "### f3 " not in after
+        for fid in ("f1", "f2", "f1-resolved", "f2-resolved"):
+            assert f"### {fid} " in after and f"### {fid} " not in before
+        # The reviewer said f1 was in scope; the orchestrator moved it out. Said.
+        f1_block = after.split("### f1 ")[1].split("### ")[0]
+        f2_block = after.split("### f2 ")[1].split("### ")[0]
+        assert "reclassified by the orchestrator" in f1_block
+        assert "reclassified" not in f2_block
+        assert "reclassified" not in before
+
+    def test_no_out_of_scope_heading_when_there_are_none(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        assert "Out-of-scope" not in self._render().output

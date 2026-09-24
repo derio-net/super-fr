@@ -23,6 +23,7 @@ from rich.console import Console
 from fr.commands.common import resolve_repo_root
 from fr.journal.model import (
     TRACKED_BY_RE,
+    EffectiveFindingState,
     JournalEntry,
     JournalParseError,
     append_journal_entry,
@@ -133,6 +134,13 @@ def add(
         help="finding only: this entry is a resolution record for that finding id "
         "(`fr journal resolve` is the ergonomic form; use this to RE-OPEN one).",
     ),
+    review_scope: str | None = typer.Option(
+        None,
+        "--review-scope",
+        help="finding only: the reviewer's tag — in | out. Copied from the review, "
+        "so a finding later resolved out-of-scope against the reviewer's `in` "
+        "renders as reclassified.",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
@@ -165,6 +173,9 @@ def add(
                 "either scoped to one phase or explicitly global, not both"
             )
             raise typer.Exit(2)
+    if review_scope is not None and review_scope not in ("in", "out"):
+        err_console.print(f"[red]--review-scope must be in | out (got {review_scope!r})[/red]")
+        raise typer.Exit(2)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -184,6 +195,7 @@ def add(
             body=body,
             state=state,  # type: ignore[arg-type]
             resolves=resolves,
+            review_scope=review_scope,  # type: ignore[arg-type]
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -364,6 +376,39 @@ def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:
     return [(fid, refs[fid]) for fid, st in states.items() if st == "deferred" and fid in refs]
 
 
+def _group_findings(
+    entries: list[JournalEntry], states: dict[str, EffectiveFindingState]
+) -> tuple[list[str], list[str]]:
+    """Serialized blocks split into (this change's, out-of-scope).
+
+    A finding whose EFFECTIVE state is out-of-scope moves — with every record
+    naming it — to its own section, so the PR body can ask the operator which
+    to file as issues. `states` is the fold over the WHOLE journal, not the
+    section-filtered slice, so the grouping cannot depend on `--section`.
+
+    A finding the REVIEWER tagged in-scope that ended out-of-scope was moved by
+    the orchestrator, and says so under its heading: that decision is the one
+    the PR reader most needs to be able to question.
+    """
+    main: list[str] = []
+    out: list[str] = []
+    for e in entries:
+        fid = e.resolves if e.resolves is not None else e.id
+        block = serialize_entry(e)
+        if e.kind != "finding" or states.get(fid) != "out-of-scope":
+            main.append(block)
+            continue
+        if e.review_scope == "in":
+            head, _, rest = block.partition("\n### ")
+            heading, _, body = rest.partition("\n")
+            block = (
+                f"{head}\n### {heading}\n\n> reclassified by the orchestrator — the "
+                f"reviewer tagged this in scope\n{body}"
+            )
+        out.append(block)
+    return main, out
+
+
 _SECTION_KINDS = {
     "findings": {"finding"},
     "decisions": {"decision"},
@@ -389,14 +434,18 @@ def render(
         entries = _load(path)
     except JournalParseError:
         return  # fail-open: never block a render on a malformed file
+    states = effective_finding_states(entries)
     keep = _SECTION_KINDS.get(section)
     if keep is not None:
         entries = [e for e in entries if e.kind in keep]
     if not entries:
         return
+    main, out = _group_findings(entries, states)
+    if out:
+        main.append("## Out-of-scope findings\n\n" + "\n".join(out))
     # Emit RAW — this feeds a PR body. A Rich console would treat `[...]` in a
     # finding title/body (Markdown links, `[PR #12]`) as markup and drop it.
-    typer.echo("\n".join(serialize_entry(e) for e in entries))
+    typer.echo("\n".join(main))
 
 
 @journal_app.command("check")

@@ -35,6 +35,9 @@ JournalKind = Literal[
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
+# The reviewer's classification of a finding it raised (spec 2026-09-24 §A).
+ReviewScope = Literal["in", "out"]
+_REVIEW_SCOPE_LABEL: dict[str, str] = {"in": "in scope", "out": "out of scope"}
 # What the FOLD can say about a finding. Two of its states are carried by a
 # TOKEN, never written as a `state=` value, because an older fr would reject an
 # unknown value and fail to parse the whole journal:
@@ -106,6 +109,10 @@ class JournalEntry(BaseModel):
     # not caused by this change (spec 2026-09-24 §A). Folds to `out-of-scope`;
     # header token `out_of_scope=true`, serialized only when set.
     out_of_scope: bool = False
+    # The REVIEWER's in/out tag, copied onto the finding when the orchestrator
+    # journals it. Kept beside the fold's verdict so a finding the reviewer
+    # called in-scope and the orchestrator moved out renders as reclassified.
+    review_scope: ReviewScope | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -146,6 +153,11 @@ class JournalEntry(BaseModel):
             raise ValueError(
                 "`out_of_scope` is only valid on an `open` resolution record that is not "
                 "a deferral: it says the finding is true but not this change's"
+            )
+        if self.review_scope is not None and (self.kind != "finding" or self.resolves):
+            raise ValueError(
+                "`review_scope` is only valid on a `finding` entry that is not a "
+                "resolution record — it is the reviewer's tag on what it raised"
             )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
@@ -208,6 +220,7 @@ _HEADER_FIELDS = (
     "resolves",
     "tracked_by",
     "out_of_scope",
+    "review_scope",
 )
 
 
@@ -228,6 +241,8 @@ def serialize_entry(entry: JournalEntry) -> str:
         state_bit = f" [deferred → {entry.tracked_by}]"
     elif entry.out_of_scope:
         state_bit = " [out-of-scope]"
+    if entry.review_scope is not None:
+        state_bit += f" (reviewer: {_REVIEW_SCOPE_LABEL[entry.review_scope]})"
     heading = f"### {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
     body = entry.body.rstrip("\n")
     return f"{header}\n{heading}\n\n{body}\n" if body else f"{header}\n{heading}\n"
@@ -303,6 +318,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 resolves=fields.get("resolves"),
                 tracked_by=fields.get("tracked_by"),
                 out_of_scope=fields.get("out_of_scope") == "true",
+                review_scope=_review_scope_token(fields.get("review_scope")),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -312,6 +328,13 @@ def parse_journal(text: str) -> list[JournalEntry]:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
         i = j
     return entries
+
+
+def _review_scope_token(value: str | None) -> ReviewScope | None:
+    """A `review_scope=` value this fr does not know is dropped, not fatal: the
+    tag is display-only, and one bad token must not make the whole journal (and
+    every gate reading it) unparseable."""
+    return "in" if value == "in" else "out" if value == "out" else None
 
 
 def _title_from_heading(text: str, entry_id: str) -> str:

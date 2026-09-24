@@ -851,3 +851,17 @@ class TestOutOfScope:
             JournalEntry(**base, state="fixed", resolves="f1", out_of_scope=True)
         with pytest.raises(ValueError, match="out_of_scope"):
             JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", out_of_scope=True)
+
+
+def test_a_review_scope_value_this_fr_does_not_know_is_dropped_not_fatal() -> None:
+    """The tag is display-only: one bad value must not make the journal — and
+    every gate reading it — unparseable."""
+    from fr.journal.model import open_finding_ids, parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+        "state=open review_scope=partly -->\n### f1 · finding [open] · x\n"
+    )
+    entries = parse_journal(text)
+    assert entries[0].review_scope is None
+    assert open_finding_ids(entries) == ["f1"]
