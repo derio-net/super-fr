@@ -282,12 +282,16 @@ class TestWorktreeRemove:
 # exit fails the worktree creation outright. The hook serializes `fr isolation
 # up` per repo+branch so a double registration is harmless.
 
-SLOW_STUB = r"""#!/bin/bash
+SLOW_STUB = (
+    r"""#!/bin/bash
 mkdir "$HOME/in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
 sleep 1
-""" + STUB.split("\n", 1)[1] + r"""
+"""
+    + STUB.split("\n", 1)[1]
+    + r"""
 rmdir "$HOME/in-flight" 2>/dev/null
 """
+)
 
 
 def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str, str]) -> None:
