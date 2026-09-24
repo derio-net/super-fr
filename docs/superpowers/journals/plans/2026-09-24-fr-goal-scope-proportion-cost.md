@@ -1,0 +1,287 @@
+# Journal: 2026-09-24-fr-goal-scope-proportion-cost
+
+<!-- fr:journal kind=discovery scope=plan id=8d08750145d7 created=2026-09-24T20:54:01 phase=3 -->
+### 8d08750145d7 · discovery · no-refactor-because P3.T3 (phase 3)
+
+Two tuple entries in run_cmd.py plus one manifest key in two identical files; no structure to refactor.
+
+<!-- fr:journal kind=discovery scope=plan id=e3399d6b9c1e created=2026-09-24T20:54:02 phase=4 -->
+### e3399d6b9c1e · discovery · no-refactor-because P4.T2 (phase 4)
+
+An agent prose file, manifest keys, a parity row, install wiring and generated mirrors; no code structure to refactor.
+
+<!-- fr:journal kind=discovery scope=plan id=949087891321 created=2026-09-24T20:54:02 phase=4 -->
+### 949087891321 · discovery · no-refactor-because P4.T3 (phase 4)
+
+Skill prose, explainer re-render and a version bump; no code.
+
+<!-- fr:journal kind=decision scope=plan id=d-p1-v6-guard created=2026-09-24T21:01:15 phase=1 -->
+### d-p1-v6-guard · decision · 5->6 guard asks run_unit_record.is_unit_record_body, not cursor_guard (phase 1)
+
+cursor_guard reads with the frozen v4 model, which rejects units, so it cannot certify a v5 cursor. The live-parser tripwire (test_no_run_migration_names_the_live_parser) allows the live model only in run_unit_record.py, so the 5->6 hop routes its readability check through a new public is_unit_record_body there instead of widening the tripwire. Sound only while changes stay additive; the first field removal must freeze RunStateV5 and repoint it.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p1-v5-fixture created=2026-09-24T21:01:15 phase=1 -->
+### x-p1-v5-fixture · discovery · captured a v5 run cursor fixture (phase 1)
+
+tests/fixtures/run_cursors/v5/2026-09-23-fix-457-uninstall-rules.yaml captured byte-for-byte with git show from the archived run at 7dbdc35b; NOTE.md row with sha256 added; population assertions in test_run_cursor_fixtures and test_migration_runner extended to v5 so the parametrised every-cursor-migrates-to-current test exercises the 5->6 hop on a real file.
+
+<!-- fr:journal kind=decision scope=plan id=d-p1-dedupe-then-window created=2026-09-24T21:08:50 phase=1 -->
+### d-p1-dedupe-then-window · decision · main-session reader dedupes before windowing (phase 1)
+
+A message's content-block records can straddle a step boundary by milliseconds; deduplicating by message.id first and windowing second charges it once, to the step its first record fell in. Windowing first would count it in both adjacent steps.
+
+<!-- fr:journal kind=decision scope=plan id=v-p1-measure-step created=2026-09-24T21:08:59 phase=1 -->
+### v-p1-measure-step · decision · DEVIATION: Protocol method is measure_step(env, sessions, start, end, directories); measure_main_session stays per-reader (phase 1)
+
+Plan P1.T3.S2 said add measure_main_session to the TranscriptReader Protocol. The two readers take different inputs (a Claude transcript path vs an OpenCode DB + session id), and OpenCode's candidate fallback (unique top-level session by directory) is reader-specific, so the Protocol gained measure_step(env, sessions, start, end, directories) -> MainSessionUsage|None and each reader keeps its own per-session measure_main_session. candidate_sessions also takes harness= (default claude-code): attempt sessions and current_session are Claude ids, and bindings are filtered by harness (unknown counts as Claude Code), so an OpenCode binding never makes a Claude measurement 'unreadable'. Also: test_run_legacy / test_run_v4_to_v5 fixture globs narrowed to v[1-4] now that v5/ exists.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p1-opencode-schema created=2026-09-24T21:12:26 phase=1 -->
+### x-p1-opencode-schema · discovery · OpenCode DB shape verified live (read-only) (phase 1)
+
+sqlite3 -readonly on ~/.local/share/opencode/opencode.db (2026-09-24): session(id, parent_id, directory, ...), message(id, session_id, time_created INTEGER epoch MILLISECONDS, data TEXT). An assistant row's data keys: agent, cost, finish, mode, modelID, parentID, providerID, role, time{created,completed} (ms), tokens{total,input,output,reasoning,cache{read,write}}. No content or identity copied. The reader windows on time_created/1000 (second precision, same rule as Claude Code), opens the DB with a mode=ro URI, and tests use a fixture DB with that schema subset; conftest now points FR_OPENCODE_DB at a nonexistent path suite-wide.
+
+<!-- fr:journal kind=decision scope=plan id=d-p1-overcount-rule created=2026-09-24T21:23:32 phase=1 -->
+### d-p1-overcount-rule · decision · 'possibly over-counted' is dated by the run's first main_session (phase 1)
+
+No field records which fr measured an attempt, and adding one would be another shape change. The dedupe ships in the same release as main-session measurement, so fr.run.cost.possibly_over_counted flags every measured attempt that returned before the run's earliest main_session-bearing step's at (all of them when no step carries main_session). Conservative by design: a run whose main session was unmeasurable flags every measurement. The pure builder (cost_rows / subagent_total / possibly_over_counted) was written with the command in S2, so S3's refactor had nothing left to extract.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1 created=2026-09-24T21:28:34 phase=1 state=open -->
+### p1-f1 · finding [open] · fr-goal-main-session-cost flipped to ci before the live cross-harness check (plan P4.T3.S3 keeps it skipped) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1-resolved created=2026-09-24T21:28:36 phase=1 state=fixed resolves=p1-f1 -->
+### p1-f1-resolved · finding [fixed] · resolves p1-f1: fr-goal-main-session-cost flipped to ci before the live cross-harness check (plan P4.T3.S3 keeps it skipped) (phase 1)
+
+Row moved back to skipped via fr acceptance set-status; the ci flip waits on the live check.
+
+<!-- fr:journal kind=review scope=plan id=r-p1 created=2026-09-24T21:28:36 phase=1 -->
+### r-p1 · review · Phase 1 review (independent reviewer): 1 finding (p1-f1, fixed); 6 deviations accepted (phase 1)
+
+Reviewer: dispatched code-reviewer subagent a1ea2343c237b8a52. Deviations 1-5 accepted with reasons; deviation 6 = p1-f1.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p2-journal-stamp-tz created=2026-09-24T21:40:38 phase=2 -->
+### x-p2-journal-stamp-tz · discovery · journal created stamps are naive LOCAL time; operator_answered_since reads naive as UTC (phase 2)
+
+fr journal's _timestamp() is datetime.now() with no offset (local wall clock), while fr.run.telemetry.parse_timestamp treats a naive stamp as UTC. Passing an out-of-scope record's created straight into operator_answered_since would open the question window hours late east of UTC (the operator's machine is +02:00) and refuse an operator who answered in between. Added journal_stamp_as_utc (naive -> local -> UTC), pinned by a TZ=Europe/Athens test.
+
+<!-- fr:journal kind=decision scope=plan id=d-p2-guard-shape created=2026-09-24T21:40:39 phase=2 -->
+### d-p2-guard-shape · decision · operator guard: writes succeed, the fold refuses; a later operator record cures (phase 2)
+
+Per P2.T3.S1(a) a fixed record without answered_by=operator is WRITTEN by both resolve and add --resolves, and fr journal check / the review-phase witness then report an unauthorized fix. The one command-side refusal is the Claude Code verification of an --answered-by operator CLAIM (observed False -> exit 2, nothing written). Since the journal is append-only, the cure is a later fixed record with answered_by=operator (ratifies) or any record moving the finding off fixed (clears); the fold tracks that per finding. Unknown answered_by / review_scope token values parse as absent (never fatal; for answered_by that is the fail-closed direction). The verification window opens at the finding's LAST out-of-scope record, else the finding's own created. Advisory notice text comes from the parity row's scope_note, like the brainstorm gate.
+
+<!-- fr:journal kind=decision scope=plan id=v-p2-render-shape created=2026-09-24T21:40:39 phase=2 -->
+### v-p2-render-shape · decision · DEVIATION (scope note): render marks reclassification as a blockquote; deliver's both-journal render left to phase 4 (phase 2)
+
+Reviewer tag renders in the heading as '(reviewer: in scope|out of scope)'; out-of-scope findings and their records move under '## Out-of-scope findings'; a review_scope=in finding ending out-of-scope gets '> reclassified by the orchestrator — the reviewer tagged this in scope' under its heading. Task 2's title mentions 'both scopes at deliver' but none of its steps do; spec §A's deliver change is a manifest/skill edit that 04.yaml (SKILL §8 renders both journals) already owns, so nothing for it was done here.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1 created=2026-09-24T21:56:45 phase=2 state=open review_scope=in -->
+### p2-f1 · finding [open] (reviewer: in scope) · out-of-scope -> deferred -> fixed interleaving is designed behaviour but unpinned by a test (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1-resolved created=2026-09-24T21:56:45 phase=2 state=fixed resolves=p2-f1 -->
+### p2-f1-resolved · finding [fixed] · resolves p2-f1: out-of-scope -> deferred -> fixed interleaving is designed behaviour but unpinned by a test (phase 2)
+
+Added test_a_deferral_in_between_hands_the_finding_back_to_the_change.
+
+<!-- fr:journal kind=review scope=plan id=r-p2 created=2026-09-24T21:56:46 phase=2 -->
+### r-p2 · review · Phase 2 review (independent reviewer): 1 nit taken as finding p2-f1 (fixed); deviations 1-5 accepted (phase 2)
+
+Reviewer: dispatched code-reviewer subagent a6dd9430e2d21f43c (no shell in its toolset; the orchestrator ran the phase-2 tests, 188 passed, and fr harness parity --check, exit 0).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-floor-above-installed created=2026-09-24T22:11:35 phase=3 -->
+### x-p3-floor-above-installed · discovery · 4.20.0 floor is above the installed fr until phase 4's bump (phase 3)
+
+fr plan create re-parses the plan it wrote, and fr.parser enforces fr_version against the installed fr (4.19.2 until P4 bumps to 4.20.0). So a CLI create with files/estimate_lines fails its own re-parse on this branch until the bump lands; tests monkeypatch fr.parser.INSTALLED_FR_VERSION to 4.20.0. Resolves itself at the P4 bump; nothing to fix.
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-floor-severity created=2026-09-24T22:11:35 phase=3 -->
+### d-p3-floor-severity · decision · self-review's files/estimate_lines floor is an error; _version_floor_issue gained severity= (phase 3)
+
+Plan P3.T1.S1 says the floor ERRORS; the older acceptance/tier/skeleton probes warn. Reused _version_floor_issue with a new severity kwarg (default warn, so every existing caller is unchanged) rather than a second comparator. The no-files nudge is a warn and says 'lists no files' (not 'declares no', which test_plan_tier_gates' negative assertion matches). tests/unit/fixtures/v2_plan_minimal/01.yaml gained a files glob, as it gained tier before (its self-review == [] tests).
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-exemptions created=2026-09-24T22:11:36 phase=3 -->
+### d-p3-exemptions · decision · fr artifacts are exempt as referencers and from size, not only as candidates (phase 3)
+
+Spec §C exempts docs/superpowers/** and docs/acceptance/** from sections 1-2. The report also (a) ignores them as REFERENCERS in the unreferenced-file search, because a journal or plan narrating 'added x.json' does not make anything load it (else every journaled scratch file passes), and (b) excludes them from the size total, because estimate_lines estimates the phase's work and never covered plan/journal/run bookkeeping. Both are stated in the module docstring and the size line. Justifiers = plan-journal findings, and decisions whose title contains 'deviation' (the DEVIATION convention). The diff is merge-base..HEAD (committed), so one HEAD yields identical bytes for deliver's hash.
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-witness-fails-closed created=2026-09-24T22:11:36 phase=3 -->
+### d-p3-witness-fails-closed · decision · deliver refuses when no merge-base can be established; CLI exits 2 only on an unparseable plan (phase 3)
+
+The report never blocks, but the WITNESS fails closed like findings: with no determinable base the report is the one line naming --base, and hashing it would record 'proportionality checked' over no diff, so resolve --step deliver --state done exits 2 quoting that line (noting resolve takes no --base: fetch the remote). fr plan proportionality exits 0 on every report outcome incl. no base and git failure; an unparseable plan-dir exits 2 (not a report, same as self-review).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-inflight-run-picks-up created=2026-09-24T22:11:37 phase=3 -->
+### x-p3-inflight-run-picks-up · discovery · this run's deliver will derive proportionality (manifest resolved live by name) (phase 3)
+
+_resolve_manifest_for_state resolves state.workflow by NAME (repo > shipped) and checks only the schema number; drift compares step/member ids only; no repo override of fr-goal exists here. So run 2026-09-24-feat-597-593's deliver, resolved with uv run fr, now requires and derives proportionality, as spec §C intends. It needs origin's default ref resolvable in the worktree (it is: origin/main).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-test-modules-unreferenced created=2026-09-24T22:11:37 phase=3 -->
+### x-p3-test-modules-unreferenced · discovery · first live run: new pytest modules show as unreferenced (phase 3)
+
+fr plan proportionality on this branch lists every new tests/unit/test_*.py as an unreferenced new file: pytest discovers them by convention and nothing names them. Report-first per spec, so left as-is (candidates for a human); the later 'should any section gate' decision should consider a discovery-convention exemption. Scratch files under tests/fixtures are still caught.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1 created=2026-09-24T22:35:19 phase=3 state=open review_scope=in -->
+### p3-f1 · finding [open] (reviewer: in scope) · Unreferenced-files section lists every new test module (runner-discovered by name), drowning the #597 signal (phase 3)
+
+proportionality.py _unreferenced ~143-154. Skip files a test runner discovers by convention (test_*.py, *_test.py, conftest.py) before the grep; keep flagging fixtures/helpers. Test: new test module not listed, sibling new fixture listed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f2 created=2026-09-24T22:35:19 phase=3 state=open review_scope=in -->
+### p3-f2 · finding [open] (reviewer: in scope) · Reference search is substring, not word-bounded; directory-loaded fixtures false-flagged (phase 3)
+
+proportionality.py ~156-164: use git grep -w; treat a reference to any parent directory path as a reference.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f3 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f3 · finding [open] (reviewer: in scope) · Pre-4.20 exact pins (==4.19.3) and ranges escape the floor refusal; self-review probes only 4.19.99 (phase 3)
+
+plan_cmd.py _PRE_4_20_PROBES ~83; plan_ops.py ~1757. Compare exact ==/=== pins directly; self-review reuses _admits_any with the probe set.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f4 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f4 · finding [open] (reviewer: in scope) · Report is not a pure function of HEAD: reads journal/plan from the working tree and prints the base ref name (phase 3)
+
+proportionality.py ~96-101, 185-191. Read plan+journal via git show HEAD:<path>; print only the merge-base SHA, so the stored SHA-256 is reproducible.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f5 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f5 · finding [open] (reviewer: in scope) · git grep failure (exit >1) silently read as unreferenced (phase 3)
+
+proportionality.py ~156-164: raise GitUnavailableError on returncode > 1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f6 created=2026-09-24T22:35:21 phase=3 state=open review_scope=in -->
+### p3-f6 · finding [open] (reviewer: in scope) · No tests for rename, deleted-file touch, binary-file size (phase 3)
+
+Add a small test for each (code already correct: --no-renames, -z, '-' -> 0).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1-resolved created=2026-09-24T22:51:39 phase=3 state=fixed resolves=p3-f1 -->
+### p3-f1-resolved · finding [fixed] · resolves p3-f1: Unreferenced-files section lists every new test module (runner-discovered by name), drowning the #597 signal (phase 3)
+
+f63afffb: runner-discovered test files skipped; test_a_new_test_module_is_not_listed_while_a_sibling_fixture_is.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f2-resolved created=2026-09-24T22:51:39 phase=3 state=fixed resolves=p3-f2 -->
+### p3-f2-resolved · finding [fixed] · resolves p3-f2: Reference search is substring, not word-bounded; directory-loaded fixtures false-flagged (phase 3)
+
+f63afffb: git grep -w; parent-dir reference counts only for directories this branch created (narrowed: a pre-existing dir like tests/unit is named everywhere); tests pin both.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f3-resolved created=2026-09-24T22:51:40 phase=3 state=fixed resolves=p3-f3 -->
+### p3-f3-resolved · finding [fixed] · resolves p3-f3: Pre-4.20 exact pins (==4.19.3) and ranges escape the floor refusal; self-review probes only 4.19.99 (phase 3)
+
+c5c81a30: fr.version_floor.admits_below shared by create and self-review; exact pins compared directly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f4-resolved created=2026-09-24T22:51:40 phase=3 state=fixed resolves=p3-f4 -->
+### p3-f4-resolved · finding [fixed] · resolves p3-f4: Report is not a pure function of HEAD: reads journal/plan from the working tree and prints the base ref name (phase 3)
+
+f63afffb: plan + journal read from HEAD; line 1 prints only the merge-base SHA; uncommitted-edit tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f5-resolved created=2026-09-24T22:51:41 phase=3 state=fixed resolves=p3-f5 -->
+### p3-f5-resolved · finding [fixed] · resolves p3-f5: git grep failure (exit >1) silently read as unreferenced (phase 3)
+
+f63afffb: git grep exit>1 raised; test_a_failing_git_grep_is_reported_not_read_as_no_match.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f6-resolved created=2026-09-24T22:51:41 phase=3 state=fixed resolves=p3-f6 -->
+### p3-f6-resolved · finding [fixed] · resolves p3-f6: No tests for rename, deleted-file touch, binary-file size (phase 3)
+
+f63afffb: rename, deleted-file touch and binary-file tests added.
+
+<!-- fr:journal kind=review scope=plan id=r-p3 created=2026-09-24T22:51:41 phase=3 -->
+### r-p3 · review · Phase 3 review (independent reviewer): 6 in-scope findings p3-f1..f6, all fixed; deviations 1-6 accepted, 7 = p3-f1 (phase 3)
+
+Reviewer: dispatched general-purpose subagent a1948efadec1089eb (ran the phase tests, workflow check, the report itself). Fixes by the phase executor in c5c81a30, f63afffb; orchestrator re-ran the phase tests.
+
+<!-- fr:journal kind=decision scope=plan id=d-p4-flat-target created=2026-09-24T23:15:45 phase=4 -->
+### d-p4-flat-target · decision · flat evidence target chosen by emits journal:spec, not by step id; spec review dated by created >= opened (phase 4)
+
+_evidence_target: a phase unit -> plan journal + phase; a flat step whose manifest emits journal:spec -> the run's emitted spec's journal (spec_journal_slug of the spec stem), no phase; any other flat step keeps the 'names no phase' refusal (pinned). The review entry must be kind=review with created (local, via journal_stamp_as_utc) >= the unit's last attempt dispatched, falling back to the step record's at for an attempt-less (adopted) cursor. findings folds EVERY spec-journal finding (a spec journal has no phases). A phase-executor dispatch is still refused as a spec reviewer.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p4-org-hook-by-name created=2026-09-24T23:15:45 phase=4 -->
+### x-p4-org-hook-by-name · discovery · org agent-worktree hook forces a worktree on read-only agents too: generalised the allowlist script (phase 4)
+
+The stock hook (captured as STOCK_HOOK in test_ensure_phase_executor_allowlist.py) exempts by subagent NAME only; anything else must pass isolation worktree, whatever its tools. A worktree cut from main cannot see the feature branch's spec, so ensure-phase-executor-allowlist.sh now takes an optional plugin-qualified id (default super-fr:fr-phase-executor) and install.sh runs it for super-fr:fr-spec-reviewer too. Its membership probe no longer requires adjacency to the Explore anchor, which two managed ids would otherwise break (re-insert every run). The hook is not installed on this machine; verified against the captured stock hook only.
+
+<!-- fr:journal kind=decision scope=plan id=v-p4-opencode-readonly-denies created=2026-09-24T23:15:46 phase=4 -->
+### v-p4-opencode-readonly-denies · decision · DEVIATION: sync-opencode default-denies edit and bash for agents whose tools grant neither (phase 4)
+
+Not in the plan. _PERMISSION_DEFAULT_DENIES only covered task/webfetch, so the OpenCode mirror of a Read/Grep/Glob agent would inherit OpenCode's permissive edit/bash defaults, strictly more powerful than its source. Added edit: deny and bash: deny as defaults (a grant still wins, so fr-phase-executor's mirror is byte-identical). test_every_known_tool_maps_or_is_explicitly_implicit's expectation moved accordingly; new test_a_read_only_agent_mirror_denies_edit_and_bash.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p4-shipped-walkers created=2026-09-24T23:15:46 phase=4 -->
+### x-p4-shipped-walkers · discovery · tests walking the SHIPPED fr-goal shape past spec-review now record its evidence (phase 4)
+
+18 tests (test_run_cli walker, test_run_adopt _drive_to_plan_step, three test_fr_goal_shape walkers, two agent-count pins) broke on the new spec-review evidence and agent. Fixed via tests/unit/spec_review_support.spec_review_evidence (a spec-journal review entry through append_journal_entry + --evidence review/reviewer); _drive_to_plan_step's brainstorm now emits its spec. Also the review-phase manifest comment gained spec §A's in/out tag brief (spec §A lists it as a classification moment; no phase owned it) and the manifest header's stale 'fr run is start/.../check only' now lists cost.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1 created=2026-09-24T23:45:02 phase=4 state=open review_scope=in -->
+### p4-f1 · finding [open] (reviewer: in scope) · Adopted flat unit: reviewer check gets no 'since', so any reviewer id passes (phase 4)
+
+run_cmd.py _verify_reviewer ~1270: pass the same since (opened or record.at) used for the review entry; test an adopted cursor naming an undispatched reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f2 created=2026-09-24T23:45:02 phase=4 state=open review_scope=in -->
+### p4-f2 · finding [open] (reviewer: in scope) · spec-review reviewer gate accepts any dispatched subagent type, not the manifest's agent (phase 4)
+
+When target.phase is None and step.agent is set, refuse observed.agent_type not matching step.agent (qualified or bare). #497 pattern.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f3 created=2026-09-24T23:45:03 phase=4 state=open review_scope=in -->
+### p4-f3 · finding [open] (reviewer: in scope) · Spec-review date tests don't pin TZ; journal_stamp_as_utc removal only fails west of UTC (phase 4)
+
+Add TZ-pinned tests on both sides of UTC (monkeypatch TZ + time.tzset): review just after open accepted, just before refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f4 created=2026-09-24T23:45:03 phase=4 state=open review_scope=in -->
+### p4-f4 · finding [open] (reviewer: in scope) · SKILL.md new journal resolve examples omit required --slug (phase 4)
+
+fr-goal SKILL §2/§6/close-out: add --slug <s>.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f6 created=2026-09-24T23:45:04 phase=4 state=open review_scope=in -->
+### p4-f6 · finding [open] (reviewer: in scope) · fr-phase-executor-guard.sh does not refuse worktree isolation for fr-spec-reviewer (#420 hazard, new agent) (phase 4)
+
+Widen the guard's case to super-fr:fr-spec-reviewer | fr-spec-reviewer with its own reason; guard test; parity row if needed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5 created=2026-09-24T23:45:04 phase=4 state=open review_scope=out -->
+### p4-f5 · finding [open] (reviewer: out of scope) · Flat-step evidence debt never reported: _unevidenced_units reads unit_state on step/<id> units (None) (phase 4)
+
+run_cmd.py ~1649. Pre-existing (deliver has the same blind spot); not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5-resolved created=2026-09-24T23:45:04 phase=4 state=open resolves=p4-f5 out_of_scope=true -->
+### p4-f5-resolved · finding [out-of-scope] · resolves p4-f5: Flat-step evidence debt never reported: _unevidenced_units reads unit_state on step/<id> units (None) (phase 4)
+
+Pre-existing blind spot in _unevidenced_units (flat units' state lives on the step record); this change did not introduce it. Offered as an issue at delivery.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1-resolved created=2026-09-25T00:00:20 phase=4 state=fixed resolves=p4-f1 -->
+### p4-f1-resolved · finding [fixed] · resolves p4-f1: Adopted flat unit: reviewer check gets no 'since', so any reviewer id passes (phase 4)
+
+c1f458fb: reviewer check uses the same since as the review entry; test_p4_f1_adopted_spec_review_naming_an_undispatched_reviewer_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f2-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f2 -->
+### p4-f2-resolved · finding [fixed] · resolves p4-f2: spec-review reviewer gate accepts any dispatched subagent type, not the manifest's agent (phase 4)
+
+c1f458fb: observed agent_type must match step.agent (qualified or bare); test_p4_f2_* .
+
+<!-- fr:journal kind=finding scope=plan id=p4-f3-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f3 -->
+### p4-f3-resolved · finding [fixed] · resolves p4-f3: Spec-review date tests don't pin TZ; journal_stamp_as_utc removal only fails west of UTC (phase 4)
+
+60f966f7: test_p4_f3_the_review_date_is_compared_in_utc_east_and_west (Tokyo, Los Angeles).
+
+<!-- fr:journal kind=finding scope=plan id=p4-f4-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f4 -->
+### p4-f4-resolved · finding [fixed] · resolves p4-f4: SKILL.md new journal resolve examples omit required --slug (phase 4)
+
+a884307c: --scope/--slug added; test_skill_journal_resolve_examples guards every shipped example.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f6-resolved created=2026-09-25T00:00:22 phase=4 state=fixed resolves=p4-f6 -->
+### p4-f6-resolved · finding [fixed] · resolves p4-f6: fr-phase-executor-guard.sh does not refuse worktree isolation for fr-spec-reviewer (#420 hazard, new agent) (phase 4)
+
+65867491: guard refuses worktree isolation for fr-spec-reviewer; TestSpecReviewerGuard; parity summary + both rule files updated.
+
+<!-- fr:journal kind=review scope=plan id=r-p4 created=2026-09-25T00:00:22 phase=4 -->
+### r-p4 · review · Phase 4 review (independent reviewer): 5 in-scope findings fixed (p4-f1..f4, f6); p4-f5 out-of-scope; deviations 1-4 accepted (phase 4)
+
+Reviewer: dispatched general-purpose subagent a979c488f146166c2 (ran the full suite, sync checks, parity, acceptance). Fixes by the phase executor; orchestrator re-ran the affected tests.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f1 created=2026-09-25T00:25:55 state=open review_scope=out -->
+### dl-f1 · finding [open] (reviewer: out of scope) · tests= gate: _writes uses lstrip('./'), so a log under a dot-directory (.fr-deliver/…) never matches
+
+packages/fr/src/fr/run/telemetry.py _writes: str.lstrip strips characters, not a prefix — '.fr-deliver/x.log' becomes 'fr-deliver/x.log'. Found at this run's deliver.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f1-resolved created=2026-09-25T00:25:55 state=open resolves=dl-f1 out_of_scope=true -->
+### dl-f1-resolved · finding [out-of-scope] · resolves dl-f1: tests= gate: _writes uses lstrip('./'), so a log under a dot-directory (.fr-deliver/…) never matches
+
+Pre-existing in the deliver tests gate; this change did not touch _writes. Offered as an issue.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f2 created=2026-09-25T00:25:56 state=open review_scope=out -->
+### dl-f2 · finding [open] (reviewer: out of scope) · tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
+
+_verify_tests_log requires the log mtime inside [tool_use, tool_result]; a run_in_background Bash returns its tool_result at once, so a >2-min suite (this repo: ~10 min) always falls outside. Worked around at this deliver by running the full suite in 10 foreground chunks (5190 passed, 89 skipped). Pre-existing.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f2-resolved created=2026-09-25T00:25:56 state=open resolves=dl-f2 out_of_scope=true -->
+### dl-f2-resolved · finding [out-of-scope] · resolves dl-f2: tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
+
+Pre-existing interaction between the tests gate and the long_commands brief; not caused by this change. Offered as an issue.

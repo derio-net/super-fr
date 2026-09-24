@@ -291,3 +291,47 @@ class TestCaseArmProbeIgnoresComments:
         arm = next(line for line in hook.read_text().splitlines() if "Explore|Plan|" in line)
         assert "|fr-phase-executor|" not in arm, "the stale bare entry must be removed"
         assert f"{QUALIFIED}|Explore|Plan|" in arm
+
+
+# --- a second read-only type: fr-spec-reviewer (2026-09-24 spec §E, gh#593) --
+#
+# The stock hook decides by NAME, not by tools: anything outside its `case` arm
+# must pass `isolation: "worktree"`, read-only or not. A worktree cut from
+# `main` cannot see the feature branch's spec, so the spec reviewer is
+# allowlisted like the phase executor, by the same script with an id argument.
+
+SPEC_REVIEWER = "super-fr:fr-spec-reviewer"
+
+
+def run_script_for(hook: Path, qualified: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(SCRIPT), str(hook), qualified], capture_output=True, text=True
+    )
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="hook needs jq")
+@pytest.mark.parametrize("order", [(QUALIFIED, SPEC_REVIEWER), (SPEC_REVIEWER, QUALIFIED)])
+def test_both_types_are_allowlisted_idempotently_in_either_order(
+    tmp_path: Path, order: tuple[str, str]
+) -> None:
+    hook = write_hook(tmp_path, STOCK_HOOK)
+    assert not hook_allows(hook, SPEC_REVIEWER)  # precondition: blocked by name
+    for qualified in order:
+        assert run_script_for(hook, qualified).returncode == 0
+    once = hook.read_text()
+    for qualified in (*order, *order):
+        assert run_script_for(hook, qualified).returncode == 0
+    assert hook.read_text() == once, "re-running for either type must be a no-op"
+    assert hook_allows(hook, QUALIFIED)
+    assert hook_allows(hook, SPEC_REVIEWER)
+    assert once.count(f"{SPEC_REVIEWER}|") == 1
+    assert once.count(f"{QUALIFIED}|") == 1
+    message = next(line for line in once.splitlines() if "Explore, Plan," in line)
+    assert SPEC_REVIEWER in message and QUALIFIED in message
+
+
+def test_the_default_id_is_still_the_phase_executor(tmp_path: Path) -> None:
+    hook = write_hook(tmp_path, STOCK_HOOK)
+    assert run_script(hook).returncode == 0
+    assert QUALIFIED in hook.read_text()
+    assert SPEC_REVIEWER not in hook.read_text()

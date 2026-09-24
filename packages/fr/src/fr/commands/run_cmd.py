@@ -26,6 +26,7 @@ import re
 import shlex
 import subprocess
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NoReturn
 
@@ -43,10 +44,14 @@ from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     compose_handoff,
+    effective_finding_states,
+    journal_stamp_as_utc,
     parse_journal,
     phase_finding_states,
     resolve_journal_read_path,
     reviews_phase,
+    spec_journal_slug,
+    unauthorized_fixes,
 )
 from fr.run import liveness as _liveness
 from fr.run import units
@@ -60,6 +65,7 @@ from fr.run.model import (
     AnsweredBy,
     ContextEstimate,
     DispatchOutcome,
+    MainSessionUsage,
     MeasuredTokens,
     RunState,
     RunStateError,
@@ -657,6 +663,10 @@ def _complete_step(
         "stdout": stdout,
         "emitted": dict(emitted) if emitted else None,
     }
+    if outcome == "done":
+        main_session = _measure_main_session(state, manifest, step_id, str(completion["at"]))
+        if main_session is not None:
+            completion["main_session"] = main_session
     new_record = (
         prior.model_copy(update=completion)
         if prior is not None
@@ -668,6 +678,47 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
+
+
+def _step_window_start(state: RunState, manifest: WorkflowManifest, step_id: str) -> str:
+    """Where `step_id`'s main-session window opens (spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D): the `at` of the
+    nearest EARLIER top-level step that is `done` — fr-goal's top-level steps
+    run in sequence, and a done step's `at` never moves — else the run's
+    `started`. Turns before `fr run start` belong to no step."""
+    ids = [s.id for s in manifest.steps]
+    if step_id in ids:
+        for earlier in reversed(ids[: ids.index(step_id)]):
+            record = state.steps.get(earlier)
+            if record is not None and record.state == "done" and record.at:
+                return record.at
+    return state.started
+
+
+def _measure_main_session(
+    state: RunState, manifest: WorkflowManifest, step_id: str, at: str
+) -> MainSessionUsage | None:
+    """`fr.run.telemetry.measure_step_main_session` over `step_id`'s window,
+    for `_complete_step` — the one place every `done` path meets (agent
+    `resolve`, cli `advance`, and the group's completion).
+
+    Catches EVERYTHING, on top of the callee's own guarantee: this runs inside
+    the act of completing a step, and no telemetry failure — a raising reader,
+    an unresolvable repo root — may turn a finished step into a failed
+    command. Absent `main_session` reads as "not observable", never zero.
+    """
+    from fr.run import telemetry
+
+    try:
+        return telemetry.measure_step_main_session(
+            state,
+            os.environ,
+            resolve_repo_root(),
+            _step_window_start(state, manifest, step_id),
+            at,
+        )
+    except Exception:  # noqa: BLE001 — observability never fails a completion
+        return None
 
 
 def _gate_degradation_notice() -> str | None:
@@ -766,7 +817,7 @@ def _gate_provenance(
     - not observable (another harness, no transcript) → the claim stands, as
       before, and on Claude Code it says out loud that it could not verify.
     """
-    from fr.journal.model import append_journal_entry, journal_path, spec_journal_slug
+    from fr.journal.model import append_journal_entry, journal_path
     from fr.run.telemetry import operator_answered_since
 
     if no_questions and not (reason and reason.strip()):
@@ -953,20 +1004,74 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
 # precisely because "the review's findings were dealt with" was prose until
 # something other than the agent's word could witness it.
 PHASE_EXECUTOR_AGENT = "super-fr:fr-phase-executor"
-_VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests")
-_DERIVED_EVIDENCE = frozenset({"findings"})
-# Evidence ABOUT A PHASE — meaningless on a flat `step/<id>` unit, refused
-# there rather than recorded unchecked. `tests` is the one that is not: it is
-# delivery's evidence, on the flat `deliver` unit (debug journal C5).
+_VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests", "proportionality")
+# `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
+# `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
+_DERIVED_EVIDENCE = frozenset({"findings", "proportionality"})
+# Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
+# journal (2026-09-24 spec §E) — verified against an `_EvidenceTarget`. A flat
+# `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
+# recording them unchecked. `tests` is not one: it is delivery's evidence, on
+# the flat `deliver` unit (debug journal C5).
 _PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
-_EVIDENCE_HINTS = {
-    "review": "<journal-entry-id>, naming the `kind=review` plan-journal entry "
-    "recorded for phase {phase}",
-    "reviewer": "<agent-id>, naming the dispatched reviewer subagent (a separate "
-    "context, not phase {phase}'s implementer) by the id its dispatch returned",
-    "tests": "<path-to-log>, naming the output file of the full suite you ran "
-    "yourself, in this session, during this unit",
+_DERIVED_FROM = {
+    "findings": "from the reviewed journal: every finding filed against the phase "
+    "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
+    "out of scope",
+    "proportionality": "by running `fr plan proportionality` on the run's plan and "
+    "hashing the report at its merge-base",
 }
+
+
+@dataclass(frozen=True)
+class _EvidenceTarget:
+    """The journal a review unit's evidence is verified against.
+
+    `review-phase` reviews a PHASE of the plan journal (`scope="plan"`,
+    `phase=N`); `spec-review` reviews the run's spec, in its spec journal
+    (`scope="spec"`, no phase). One value, passed through every rule, so the
+    two review steps cannot drift into two spellings of "reviewed".
+    """
+
+    scope: Literal["plan", "spec"]
+    phase: int | None
+
+    @property
+    def subject(self) -> str:
+        return f"phase {self.phase}" if self.phase is not None else "the spec"
+
+
+def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
+    """Which journal `step`'s review evidence names — or `None` when fr can
+    locate none. A phase unit reviews its phase; a flat step reviews the spec
+    journal only when the manifest says it writes it (`emits: [journal:spec]`,
+    which is what `spec-review` is). Anything else has nothing to check an id
+    against, and fr says so rather than guess."""
+    if phase is not None:
+        return _EvidenceTarget("plan", phase)
+    if "journal:spec" in step.emits:
+        return _EvidenceTarget("spec", None)
+    return None
+
+
+def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
+    if name == "tests":
+        return (
+            "<path-to-log>, naming the output file of the full suite you ran "
+            "yourself, in this session, during this unit"
+        )
+    assert target is not None  # phase-scoped evidence without a target is refused first
+    if name == "review":
+        when = "" if target.phase is not None else ", created after this step opened"
+        return (
+            f"<journal-entry-id>, naming the `kind=review` {target.scope}-journal entry "
+            f"recorded for {target.subject}{when}"
+        )
+    not_impl = f", not {target.subject}'s implementer" if target.phase is not None else ""
+    return (
+        f"<agent-id>, naming the dispatched reviewer subagent (a separate context{not_impl}) "
+        "by the id its dispatch returned"
+    )
 
 
 def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
@@ -1006,38 +1111,62 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
             )
         if name in _DERIVED_EVIDENCE:
             raise RunStateError(
-                f"--evidence {name}= is not yours to pass — fr derives {name!r} from the "
-                "plan journal when the unit resolves `done` (every finding filed against "
-                "the phase must be fixed or refuted), and records what it saw"
+                f"--evidence {name}= is not yours to pass — fr derives {name!r} itself "
+                f"when the unit resolves `done` ({_DERIVED_FROM[name]}), and records "
+                "what it saw"
             )
         result[name] = value.strip()
     return result
 
 
 def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[JournalEntry]]:
-    """`(slug, entries)` of this run's PLAN journal — the one place evidence
-    is verified against. Raises `RunStateError` when the run has not recorded
-    a plan yet, which is fail-closed: a gate that cannot read its source does
-    not know whether it passed."""
+    """`(slug, entries)` of this run's PLAN journal. Raises `RunStateError`
+    when the run has not recorded a plan yet, which is fail-closed: a gate that
+    cannot read its source does not know whether it passed."""
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
         raise RunStateError(
             "cannot verify evidence — no plan recorded yet (resolve the step "
             "that emits `plan` first)"
         )
-    slug = Path(plan_rel).name
-    path = resolve_journal_read_path(repo_root, "plan", slug)
+    return _journal_entries(repo_root, "plan", Path(plan_rel).name, "--phase <n> ")
+
+
+def _review_journal_entries(
+    repo_root: Path, state: RunState, target: _EvidenceTarget
+) -> tuple[str, list[JournalEntry]]:
+    """`(slug, entries)` of the journal `target` names — the plan journal, or
+    the spec journal of the spec this run emitted. Fail-closed like the plan
+    one: no spec recorded is a refusal, not an empty journal."""
+    if target.scope == "plan":
+        return _plan_journal_entries(repo_root, state)
+    spec_rel = next(
+        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
+        None,
+    )
+    if spec_rel is None:
+        raise RunStateError(
+            "cannot verify evidence — no spec recorded yet (resolve the step "
+            "that emits `spec` first)"
+        )
+    return _journal_entries(repo_root, "spec", spec_journal_slug(Path(spec_rel).stem), "")
+
+
+def _journal_entries(
+    repo_root: Path, scope: Literal["plan", "spec"], slug: str, phase_flag: str
+) -> tuple[str, list[JournalEntry]]:
+    path = resolve_journal_read_path(repo_root, scope, slug)
     if not path.exists():
         raise RunStateError(
-            f"cannot verify evidence — the plan journal {path} does not exist. "
-            f"Record the review first: fr journal add --scope plan --slug {slug} "
-            "--kind review --phase <n> ..."
+            f"cannot verify evidence — the {scope} journal {path} does not exist. "
+            f"Record the review first: fr journal add --scope {scope} --slug {slug} "
+            f"--kind review {phase_flag}..."
         )
     try:
         return slug, parse_journal(path.read_text())
     except (JournalParseError, OSError) as e:
         raise RunStateError(
-            f"cannot verify evidence — plan journal {path} is unreadable: {e}"
+            f"cannot verify evidence — {scope} journal {path} is unreadable: {e}"
         ) from e
 
 
@@ -1063,15 +1192,18 @@ def _verified_evidence(
        REFUSED naming the flag. This is gh#430 closed: `review-phase` leaves
        no artifact of its own, so a skipped review used to resolve identically
        to one that did the work. Now it cannot reach `done` at all.
-    3. Each offered id is verified against the plan journal with gh#517's OWN
-       rule (`fr.journal.model.reviews_phase`) — a `kind=review` entry
-       carrying `phase=N` for THIS unit's phase. Without that, any id at all
-       satisfies the gate and "skipped" and "passed clean" are the same state
-       again with extra steps.
+    3. Each offered id is verified against the unit's `_EvidenceTarget`. A
+       phase unit uses gh#517's OWN rule (`fr.journal.model.reviews_phase`) —
+       a `kind=review` plan-journal entry carrying `phase=N` for THIS unit's
+       phase. `spec-review` (2026-09-24 spec §E) uses the spec journal: a
+       `kind=review` entry created after the step opened. Without that, any
+       id at all satisfies the gate and "skipped" and "passed clean" are the
+       same state again with extra steps.
 
-    Fail-closed on a unit that names no phase (a flat `step/<id>`): `review`
-    evidence is evidence about a PHASE, and fr will say it cannot verify
-    rather than store an id nothing checked.
+    Fail-closed on a flat `step/<id>` with no target — one that reviews no
+    journal fr can locate: review evidence is evidence about a reviewed
+    journal, and fr will say it cannot verify rather than store an id nothing
+    checked.
     """
     if not step.evidence:
         # `_parse_evidence` already refused an offered name the step does not
@@ -1089,12 +1221,13 @@ def _verified_evidence(
         known = " and ".join(f"`{name}`" for name in _VERIFIABLE_EVIDENCE)
         err_console.print(
             f"[red]{key}: cannot verify {unverifiable[0]!r} evidence — {known} are the "
-            "obligations fr knows how to verify (against the plan journal)[/red]",
+            "obligations fr knows how to verify[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    target = _evidence_target(step, phase)
     phase_scoped = [n for n in step.evidence if n in _PHASE_EVIDENCE]
-    if phase is None and phase_scoped:
+    if target is None and phase_scoped:
         err_console.print(
             f"[red]{key}: cannot verify `{phase_scoped[0]}` evidence for a unit that names "
             "no phase — a review is evidence about a phase, and fr will not record an "
@@ -1116,7 +1249,7 @@ def _verified_evidence(
         )
         for name in missing:
             err_console.print(
-                f"  pass --evidence {name}={_EVIDENCE_HINTS[name].format(phase=phase)}",
+                f"  pass --evidence {name}={_evidence_hint(name, target)}",
                 markup=False,
                 soft_wrap=True,
             )
@@ -1133,29 +1266,97 @@ def _verified_evidence(
     verified = dict(offered)
     attempt = units.last_attempt(state, key)
     opened = attempt.dispatched if attempt is not None else None
+    # A flat review unit with no attempt (an adopted cursor) is dated by its
+    # step's own `at` — for the review entry AND the reviewer's dispatch, one
+    # window for both (review p4-f1: a None window let any reviewer id pass).
+    flat_record = state.steps.get(step.id) if target is not None and target.phase is None else None
+    since = opened or (flat_record.at if flat_record is not None else None)
     if "reviewer" in offered:
-        assert phase is not None  # phase-scoped, refused above otherwise
-        _verify_reviewer(key, offered["reviewer"], state, phase=phase, opened=opened)
+        assert target is not None  # phase-scoped, refused above otherwise
+        _verify_reviewer(
+            key,
+            offered["reviewer"],
+            state,
+            target=target,
+            opened=since,
+            expected_agent=step.agent if target.phase is None else None,
+        )
     if "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+    if state_value == "done" and "proportionality" in step.evidence:
+        verified["proportionality"] = _proportionality_witness(key, repo_root, state)
     derives = state_value == "done" and "findings" in step.evidence
     if "review" not in offered and not derives:
         return verified
-    assert phase is not None  # `review`/`findings` are phase-scoped, refused above otherwise
+    assert target is not None  # `review`/`findings` are phase-scoped, refused above otherwise
     try:
-        slug, entries = _plan_journal_entries(repo_root, state)
+        slug, entries = _review_journal_entries(repo_root, state, target)
     except RunStateError as e:
         err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     if "review" in offered:
-        _verify_review_entry(key, offered["review"], slug=slug, entries=entries, phase=phase)
+        _verify_review_entry(
+            key, offered["review"], slug=slug, entries=entries, target=target, since=since
+        )
     if not derives:
         return verified
-    return {**verified, "findings": _closed_findings_witness(key, slug, entries, phase)}
+    return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
+
+
+def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
+    """`<merge-base-sha>:<sha256-of-report>` for this run's plan — or exit 2.
+
+    The report itself never blocks (spec §C, report first); what fails closed
+    is only the witness. A report with no merge-base is the single line naming
+    `--base`, and hashing it would record "proportionality checked" over a
+    diff nobody computed, so the resolve is refused with that line instead.
+    """
+    import hashlib
+
+    from fr.parser import PlanSchemaError, parse
+    from fr.proportionality import run_report
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        err_console.print(
+            f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
+            "yet (resolve the step that emits `plan` first)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError as e:
+        err_console.print(
+            f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
+            f"does not parse: {e}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    report = run_report(repo_root, plan, None)
+    if report.merge_base is None:
+        hint = (
+            " (`fr run resolve` takes no --base: fetch the remote so its default branch resolves)"
+            if "--base" in report.text
+            else ""
+        )
+        err_console.print(
+            f"{key}: cannot derive proportionality evidence — {report.text.strip()}{hint}",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
 
 
 def _verify_reviewer(
-    key: str, agent_id: str, state: RunState, *, phase: int, opened: str | None
+    key: str,
+    agent_id: str,
+    state: RunState,
+    *,
+    target: _EvidenceTarget,
+    opened: str | None,
+    expected_agent: str | None = None,
 ) -> None:
     """`agent_id` is a SEPARATE context that reviewed this phase — or exit 2.
 
@@ -1167,17 +1368,30 @@ def _verify_reviewer(
     its own work), and — where the transcript is readable — this session really
     dispatched it after the review unit opened. Unobservable: warned, recorded
     as claimed, never silently.
+
+    A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
+    implementer to exclude — the spec's author is the orchestrator, which has
+    no agent id and so can never pass the dispatch check. On OpenCode and
+    Hermes there is no dispatch reader, so the id is recorded as claimed.
+    When the step names its reviewer (`expected_agent`, spec-review's
+    `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
+    is refused (review p4-f2) — qualified or bare spelling both match.
     """
     from fr.run.telemetry import subagent_dispatch_since
 
-    implementers = {
-        a.agent
-        for record in state.steps.values()
-        for unit_key in (record.units or {})
-        if unit_key.startswith(f"phase/{phase}/")
-        for a in units.attempts(record, unit_key)
-        if a.agent_type is not None and a.agent is not None
-    }
+    phase = target.phase
+    implementers = (
+        {
+            a.agent
+            for record in state.steps.values()
+            for unit_key in (record.units or {})
+            if unit_key.startswith(f"phase/{phase}/")
+            for a in units.attempts(record, unit_key)
+            if a.agent_type is not None and a.agent is not None
+        }
+        if phase is not None
+        else set()
+    )
     if agent_id in implementers:
         err_console.print(
             f"[red]{key}: --evidence reviewer={agent_id} is the agent that IMPLEMENTED phase "
@@ -1196,6 +1410,18 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    if (
+        observed
+        and expected_agent is not None
+        and not _same_agent(observed.agent_type, expected_agent)
+    ):
+        err_console.print(
+            f"[red]{key}: --evidence reviewer={agent_id} is a {observed.agent_type!r} "
+            f"dispatch — this step's reviewer is {expected_agent}. Dispatch that agent "
+            "and name its id.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if observed is False:
         err_console.print(
             f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
@@ -1211,6 +1437,15 @@ def _verify_reviewer(
             "for this session; recorded as claimed, unverified.[/yellow]",
             soft_wrap=True,
         )
+
+
+def _same_agent(observed: str | None, expected: str) -> bool:
+    """`observed` is `expected`, in its plugin-qualified or bare spelling
+    (`super-fr:fr-spec-reviewer` / `fr-spec-reviewer`)."""
+    if observed is None:
+        return False
+    bare = expected.split(":", 1)[-1]
+    return observed in (expected, bare)
 
 
 def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
@@ -1284,37 +1519,88 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
 
 
 def _verify_review_entry(
-    key: str, entry_id: str, *, slug: str, entries: list[JournalEntry], phase: int
+    key: str,
+    entry_id: str,
+    *,
+    slug: str,
+    entries: list[JournalEntry],
+    target: _EvidenceTarget,
+    since: str | None,
 ) -> None:
-    """`entry_id` is a `kind=review` entry for `phase` — or `typer.Exit(2)`."""
+    """`entry_id` is a `kind=review` entry for `target` — or `typer.Exit(2)`.
+
+    A phase: the entry carries `phase=N` (`reviews_phase`, the one rule). The
+    spec: the entry was created at or after the step opened (`since`) — a
+    review recorded before spec-review began is not a review OF it.
+    """
+    from fr.run.telemetry import parse_timestamp
+
+    scope = target.scope
     found = next((e for e in entries if e.id == entry_id), None)
+    phase_flag = f"--phase {target.phase} " if target.phase is not None else ""
     if found is None:
         err_console.print(
-            f"[red]{key}: --evidence review={entry_id} names no entry in the plan "
+            f"[red]{key}: --evidence review={entry_id} names no entry in the {scope} "
             f"journal for {slug}[/red]",
             soft_wrap=True,
         )
         err_console.print(
-            f"  fr journal add --scope plan --slug {slug} --kind review --phase {phase} "
-            f'--title "phase {phase} review" '
+            f"  fr journal add --scope {scope} --slug {slug} --kind review {phase_flag}"
+            f'--title "{target.subject} review" '
             "--body \"<findings raised, by id; or 'no findings'>\"",
             markup=False,
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    if not reviews_phase(found, phase):
+    if target.phase is not None:
+        if not reviews_phase(found, target.phase):
+            err_console.print(
+                f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
+                + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
+                + f" — evidence must be a `kind=review` entry carrying `phase={target.phase}`, "
+                "the same rule `fr journal check --require-reviews` applies[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        return
+    if found.kind != "review":
         err_console.print(
-            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
-            + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
-            + f" — evidence must be a `kind=review` entry carrying `phase={phase}`, "
-            "the same rule `fr journal check --require-reviews` applies[/red]",
+            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry — evidence "
+            "must be a `kind=review` spec-journal entry[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    created = parse_timestamp(journal_stamp_as_utc(found.created))
+    opened = parse_timestamp(since) if since else None
+    if created is None or opened is None or created < opened.replace(microsecond=0):
+        err_console.print(
+            f"[red]{key}: --evidence review={entry_id} was created {found.created} (local), "
+            f"before this step opened at {since} — a review recorded before spec-review "
+            "began is not a review of it. Record the reviewer's findings, then a new "
+            "`kind=review` entry.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
 
 
-def _closed_findings_witness(key: str, slug: str, entries: list[JournalEntry], phase: int) -> str:
-    """The `findings` evidence for `phase` — or `typer.Exit(2)` while any
+def _target_finding_states(entries: list[JournalEntry], target: _EvidenceTarget) -> dict[str, str]:
+    """Every finding filed against `target` -> its effective state. A phase:
+    `phase_finding_states`. The spec: every finding in its journal (a spec
+    journal has no phases), through the SAME fold `fr journal check` reads."""
+    if target.phase is not None:
+        return dict(phase_finding_states(entries, target.phase))
+    states = effective_finding_states(entries)
+    return {
+        e.id: states[e.id]
+        for e in entries
+        if e.kind == "finding" and e.resolves is None and e.id in states
+    }
+
+
+def _closed_findings_witness(
+    key: str, slug: str, entries: list[JournalEntry], target: _EvidenceTarget
+) -> str:
+    """The `findings` evidence for `target` — or `typer.Exit(2)` while any
     finding filed against it is still open.
 
     This is `superpowers:receiving-code-review`'s OUTCOME, which is the only
@@ -1328,12 +1614,31 @@ def _closed_findings_witness(key: str, slug: str, entries: list[JournalEntry], p
     they were raised, or `none`. A finding that genuinely belongs to a later
     phase is filed against THAT phase, and gates that phase's review instead.
     """
-    states = phase_finding_states(entries, phase)
+    subject, scope = target.subject, target.scope
+    states = _target_finding_states(entries, target)
     still_open = [fid for fid, st in states.items() if st == "open"]
+    # The operator guard `fr journal check` applies (spec 2026-09-24 §A), read
+    # from the same fold: an out-of-scope finding fixed without the operator.
+    unauthorized = [fid for fid in unauthorized_fixes(entries) if fid in states]
+    if unauthorized:
+        err_console.print(
+            f"[red]{key}: refused — {len(unauthorized)} unauthorized fix(es) against "
+            f"{subject}: {', '.join(unauthorized)} — moved from out-of-scope to fixed without "
+            "`answered_by=operator`. Ask the operator, then:[/red]",
+            soft_wrap=True,
+        )
+        for fid in unauthorized:
+            err_console.print(
+                f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
+                '--answered-by operator --note "<what the operator decided>"',
+                markup=False,
+                soft_wrap=True,
+            )
+        raise typer.Exit(2)
     if not still_open:
         return ",".join(states) or "none"
     err_console.print(
-        f"[red]{key}: refused — {len(still_open)} finding(s) filed against phase {phase} "
+        f"[red]{key}: refused — {len(still_open)} finding(s) filed against {subject} "
         f"are still open: {', '.join(still_open)}.[/red]",
         soft_wrap=True,
     )
@@ -1345,15 +1650,20 @@ def _closed_findings_witness(key: str, slug: str, entries: list[JournalEntry], p
     )
     for fid in still_open:
         err_console.print(
-            f"  fr journal resolve --scope plan --slug {slug} --id {fid} --state fixed "
+            f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
             '--note "<what changed, and the test that pins it>"',
             markup=False,
             soft_wrap=True,
         )
+    later = (
+        f" One that belongs to a later phase is filed against that phase, not {subject}."
+        if target.phase is not None
+        else ""
+    )
     err_console.print(
-        "  (or `--state refuted` with the reasoning, when the finding is wrong). One "
-        f"that belongs to a later phase is filed against that phase, not phase {phase}. "
-        "`--state failed` needs no evidence.",
+        "  (or `--state refuted` with the reasoning, when the finding is wrong; "
+        "`--state out-of-scope` when this change did not cause it)."
+        f"{later} `--state failed` needs no evidence.",
         soft_wrap=True,
     )
     raise typer.Exit(2)
@@ -2863,6 +3173,74 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
     if units.accounted_attempts(state):
         _print_accounting(state)
+
+
+@run_app.command("cost")
+def cost_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Print what each top-level step cost the MAIN session, and the subagent
+    total beside it — gh#593's table (spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D).
+
+    Read-only: it loads the cursor and prints; nothing is measured or written
+    here (measurement happens once, at `_complete_step`). A figure nobody
+    could observe prints as `—`, never `0`.
+    """
+    from rich.table import Table
+
+    from fr.run.cost import cost_rows, possibly_over_counted, subagent_total
+
+    state = _load_or_exit(resolve_repo_root(), run_id)
+
+    def n(value: int | None) -> str:
+        return "—" if value is None else f"{value:,}"
+
+    table = Table(title=f"Cost — {state.run}")
+    table.add_column("step", overflow="fold", min_width=12)
+    for column in (
+        "turns",
+        "sessions",
+        "input",
+        "cache write",
+        "cache read",
+        "output",
+        "cache read/turn",
+        "cost",
+    ):
+        table.add_column(column, justify="right", overflow="fold")
+    for row in cost_rows(state):
+        table.add_row(
+            row.step,
+            n(row.turns),
+            n(row.sessions),
+            n(row.input_tokens),
+            n(row.cache_creation_input_tokens),
+            n(row.cache_read_input_tokens),
+            n(row.output_tokens),
+            n(row.cache_read_per_turn),
+            "—" if row.cost_usd is None else f"${row.cost_usd:,.2f}",
+        )
+    sub = subagent_total(state)
+    tokens = sub.tokens
+    table.add_section()
+    table.add_row(
+        f"subagents ({sub.measured}/{sub.attempts} measured)",
+        "—",
+        "—",
+        n(None if tokens is None else tokens.input_tokens),
+        n(None if tokens is None else tokens.cache_creation_input_tokens),
+        n(None if tokens is None else tokens.cache_read_input_tokens),
+        n(None if tokens is None else tokens.output_tokens),
+        "—",
+        "—",
+    )
+    console.print(table)
+    flagged = possibly_over_counted(state)
+    if flagged:
+        console.print(
+            "possibly over-counted (measured before per-message dedupe; recorded values "
+            f"are not rewritten): {', '.join(flagged)}",
+            soft_wrap=True,
+        )
 
 
 @run_app.command("advance")

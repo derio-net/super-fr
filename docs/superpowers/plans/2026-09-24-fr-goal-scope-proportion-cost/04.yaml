@@ -1,0 +1,143 @@
+schema_version: 2
+phase:
+  number: 4
+  title: E — fr-spec-reviewer + flat-step evidence; skill prose, mirrors, explainer,
+    4.20.0
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - fr-goal-independent-spec-review
+  - fr-goal-out-of-scope-findings
+  - fr-goal-proportionality-report
+  - fr-goal-main-session-cost
+  tier: hard
+tasks:
+- number: 1
+  title: flat-step evidence target (spec journal) + reviewer dispatch provenance
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_run_evidence_separate_context.py / test_run_evidence.py: a manifest
+      whose flat `spec-review` step declares `evidence: [review, reviewer, findings]` —
+      `resolve --state done` refuses with no spec-journal `kind=review` entry created after the
+      step opened; refuses while a spec-scope finding is effectively open (and on an
+      unauthorized fix from P2); refuses a reviewer id this session did not dispatch after the
+      step opened (Claude Code transcript fixture), records it as claimed with a warning when
+      the transcript is unreadable or the harness is opencode/hermes; accepts the happy path and
+      records the closed-findings witness. review-phase behaviour unchanged (existing tests
+      green). Confirm red.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: generalise `_verified_evidence` / `_verify_reviewer` in run_cmd.py to an evidence
+      TARGET per unit: phase unit -> plan journal + phase (unchanged); flat step -> the spec
+      journal of the run's emitted spec, no phase, no implementer exclusion. Keep refusing
+      phase-scoped evidence on a flat step whose manifest step is not a review of a journal
+      scope fr can locate. Tests green.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: the evidence target (journal scope + phase|None) is one small value type passed through `_verified_evidence`, so phase and flat paths share every rule; ruff/mypy clean.
+- number: 2
+  title: fr-spec-reviewer agent, manifest, parity row, mirrors, install
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN: create plugins/super-fr/agents/fr-spec-reviewer.md (frontmatter matching
+      fr-phase-executor.md's shape; tools Read, Grep, Glob; body = spec §E brief: decisions vs
+      spec, codebase reality with file:line, internal consistency, tag every finding
+      in-scope/out-of-scope with the §A definitions, return a structured list, write nothing).
+      Tool-neutral prose (tests/unit/test_tripwire_skill_tool_neutrality.py).
+  - id: P4.T2.S2
+    text: |-
+      GREEN: spec-review in both fr-goal.yaml copies gains `agent: super-fr:fr-spec-reviewer`,
+      `tier: standard`, `evidence: [review, reviewer, findings]` with a comment citing gh#593.
+      parity.yaml row `spec-review-independence` (interaction): claude-code enforced,
+      opencode/hermes advisory. Check whether the org agent-worktree hook would force a
+      worktree on a read-only agent (read scripts/ensure-phase-executor-allowlist.sh and the hook
+      it edits); only if so, generalise the script to also allowlist fr-spec-reviewer, with a
+      test. Wire the agent into scripts/install.sh wherever fr-phase-executor is shipped.
+  - id: P4.T2.S3
+    text: |-
+      GREEN: run `uv run --no-project python scripts/sync-opencode.py` AND
+      `uv run --no-project python scripts/sync-hermes.py` (both — see AGENTS.md); commit the
+      generated mirrors. Full `uv run pytest -q --no-cov` green, including
+      test_opencode_agent_mirror.py, the opencode/hermes skill tripwires, install and parity
+      tripwires.
+- number: 3
+  title: skill prose, explainer, version
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      GREEN: plugins/super-fr/skills/fr-goal/SKILL.md: frontmatter + §2 replace "fixing every
+      finding"/"Fix every finding" with "fix every finding in scope, file the rest"; §2
+      dispatches fr-spec-reviewer and journals findings with `--review-scope`; §6 review brief
+      asks for in/out tags and the out-of-scope/operator-guard rules; §8 renders both journal
+      scopes, pastes `fr plan proportionality`, adds the out-of-scope section offered at the
+      merge touchpoint, mentions `fr run cost`; post-merge close-out turns "file it" answers
+      into `deferred --tracked-by`. plugins/super-fr/skills/fr-plan/SKILL.md: agentic phases
+      declare `files` + `estimate_lines`. Re-run both sync scripts; tripwires green.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: update docs/explainers/01-fr-goal.md (voice per .claude/rules/explainers-currency.md)
+      and re-render 01-fr-goal.html with the `--isolated` command from that rule, run from `/`,
+      after first confirming the UNMODIFIED .md re-renders byte-identical.
+      tests/unit/test_tripwire_explainers_fresh.py green.
+  - id: P4.T3.S3
+    text: |-
+      GREEN: `uv run --no-project python scripts/bump-version.py minor` (-> 4.20.0), commit
+      manifests + uv.lock; `bump-version.py --check`, ruff, mypy, full pytest, `uv run fr
+      acceptance check`, `uv run fr validate artifacts` all green. Flip each acceptance row
+      whose tests now exist with `fr acceptance set-status --status ci --level unit=...`
+      (fr-goal-main-session-cost stays `skipped` until the live check).
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-24T20:55:21+00:00'
+      note: 'RED: 11 new spec-review tests fail on ''names no phase''; flat no-journal
+        guard passes'
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-24T20:58:39+00:00'
+      note: flat step with emits journal:spec -> spec journal target; review must
+        be kind=review created >= step opened; findings over all spec findings; no
+        implementer exclusion; 49 evidence tests green
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-24T20:58:40+00:00'
+      note: _EvidenceTarget(scope, phase) value type threaded through _verified_evidence/_verify_reviewer/_verify_review_entry/_closed_findings_witness;
+        ruff+mypy clean
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-24T21:15:32+00:00'
+      note: agent file, tool-neutral
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-24T21:15:32+00:00'
+      note: manifests, parity row, allowlist generalised (org hook exempts by name),
+        install wiring
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-24T21:30:38+00:00'
+      note: both syncs run + --check clean; full suite 5162 passed, 89 skipped
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-24T21:18:12+00:00'
+      note: fr-goal §2/§6/§8/close-out + frontmatter, fr-plan files/estimate_lines;
+        both mirrors synced; neutrality + skill tripwires green
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-24T21:19:20+00:00'
+      note: unmodified re-render byte-identical (from /, --isolated); new render diff
+        = prose only (62+/6-); explainers tripwire green
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-24T21:30:39+00:00'
+      note: 4.20.0; bump --check, ruff, mypy, workflow/parity/acceptance/validate
+        checks, full suite green; 3 rows -> ci, main-session-cost stays skipped
+  completion:
+    at: '2026-09-24T21:30:39+00:00'
+    note: null
+    observed_prs: []

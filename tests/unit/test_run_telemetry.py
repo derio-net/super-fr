@@ -181,6 +181,50 @@ def test_no_measurement_is_distinguishable_from_a_measured_zero(tmp_path: Path) 
     assert UsageTotals() is not None
 
 
+# --- (e) one message, many records: dedupe by message.id (spec §D) --------
+
+
+def _content_block_split(record: dict[str, object], blocks: int) -> list[dict[str, object]]:
+    """`blocks` copies of one captured assistant record, as Claude Code writes a
+    message with that many content blocks: one record per block, every copy
+    repeating the WHOLE message's `usage` under the same `message.id`. Only
+    `uuid` varies — confirmed live, 27 of 40 assistant message ids of one real
+    transcript appear on more than one record, each copy with identical usage."""
+    out = []
+    for index in range(blocks):
+        row = copy_of(record)
+        row["uuid"] = f"{row.get('uuid')}-block-{index}"
+        out.append(row)
+    return out
+
+
+def test_a_message_split_across_content_block_records_is_summed_once(tmp_path: Path) -> None:
+    first, second = [r for r in records(ORCHESTRATOR) if r["type"] == "assistant"]
+    path = tmp_path / "t.jsonl"
+    path.write_text(
+        "".join(json.dumps(r) + "\n" for r in [*_content_block_split(first, 3), second])
+    )
+
+    assert read_claude_code(path) == ORCHESTRATOR_TOTALS, (
+        "three records of one message.id are ONE message: summing each copy triples its usage"
+    )
+
+
+def test_records_with_no_message_id_are_kept_never_merged(tmp_path: Path) -> None:
+    first, _ = [r for r in records(ORCHESTRATOR) if r["type"] == "assistant"]
+    rows = _content_block_split(first, 2)
+    for row in rows:
+        del row["message"]["id"]  # type: ignore[attr-defined]
+    path = tmp_path / "t.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+    totals = read_claude_code(path)
+
+    assert totals is not None
+    assert totals.assistant_records == 2
+    assert totals.output_tokens == 2 * 179
+
+
 # --- (b) attribution: file-to-file, keyed on toolUseId --------------------
 
 
@@ -352,7 +396,11 @@ def test_a_missing_session_file_is_no_measurement(tmp_path: Path) -> None:
 
 def test_the_reader_is_harness_scoped() -> None:
     assert reader_for("claude-code") is not None
-    assert reader_for("opencode") is None, "OpenCode keeps V1 estimates until its reader lands"
+    # OpenCode has a reader since spec 2026-09-24 §D — for the MAIN session
+    # only; its dispatch measurement is still nothing (V1 estimates stand).
+    opencode = reader_for("opencode")
+    assert opencode is not None
+    assert opencode.measure(Path("x"), agent=None, start="", end="", same_session=True) is None
     assert reader_for("hermes") is None
     assert reader_for("nonesuch") is None
 

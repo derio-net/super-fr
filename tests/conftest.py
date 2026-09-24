@@ -90,6 +90,15 @@ def _transcript_root_off_the_operators_machine(
 
 
 @pytest.fixture(autouse=True)
+def _opencode_db_off_the_operators_machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The OpenCode half of the fixture above: `fr.run.telemetry.OpenCodeReader`
+    reads `~/.local/share/opencode/opencode.db` unless `FR_OPENCODE_DB` says
+    otherwise, and a test that completes a step under an OpenCode harness
+    signal would otherwise measure the operator's real sessions."""
+    monkeypatch.setenv("FR_OPENCODE_DB", str(tmp_path / "no-opencode-db-here.db"))
+
+
+@pytest.fixture(autouse=True)
 def _sessions_dir_off_the_operators_machine(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

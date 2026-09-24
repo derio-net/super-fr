@@ -31,7 +31,9 @@ SMALLEST = "v1/2026-09-09-feat-issue-464.yaml"
 
 
 def _captured() -> list[Path]:
-    found = sorted(FIXTURES.glob("v*/*.yaml"))
+    # v1-v4 only: the frozen reader (and the 4 -> 5 rewrite) are defined over
+    # the shapes BEFORE `units`; `v5/` feeds the 5 -> 6 hop instead.
+    found = sorted(FIXTURES.glob("v[1-4]/*.yaml"))
     assert found, "no captured cursors — the glob is wrong, not the fixtures"
     return found
 

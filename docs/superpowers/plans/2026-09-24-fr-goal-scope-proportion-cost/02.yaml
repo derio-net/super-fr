@@ -1,0 +1,125 @@
+schema_version: 2
+phase:
+  number: 2
+  title: A — out-of-scope findings, review_scope tag, operator guard, render
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-goal-out-of-scope-findings
+  tier: hard
+tasks:
+- number: 1
+  title: out-of-scope fold state, written as state=open + out_of_scope=true
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_journal_model.py + test_journal_cmd.py: `fr journal resolve --state
+      out-of-scope --note ...` appends a record with `state=open` and `out_of_scope=true`;
+      `effective_finding_states` folds it to "out-of-scope"; `open_finding_ids` excludes it; a
+      later `deferred --tracked-by #N` wins; a parse that ignores the new token (simulate by
+      stripping it) reads open (fail closed). `fr journal check --require-reviews` and the
+      review-phase findings gate (tests/unit/test_run_evidence_findings.py) pass with only
+      out-of-scope findings unresolved. Confirm red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/journal/model.py: `JournalEntry.out_of_scope: bool = False`,
+      parsed by NAME from the header (never `**fields`), serialized only when true;
+      `EffectiveFindingState` gains "out-of-scope"; fold order: tracked_by -> deferred,
+      out_of_scope -> out-of-scope, else state. journal_cmd.py `resolve` accepts the state
+      (help text updated). Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: update the `EffectiveFindingState` comment block to name both token-carried
+      states and why neither is a `state=` value. ruff/mypy clean.
+- number: 2
+  title: review_scope tag + reclassification render + both scopes at deliver
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: `fr journal add --kind finding --review-scope in|out` writes `review_scope=`; any
+      other value exits 2. `fr journal render --section findings` shows each finding's tag,
+      groups out-of-scope findings under their own heading, and marks a `review_scope=in`
+      finding resolved out-of-scope as "reclassified by the orchestrator". Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `JournalEntry.review_scope: Literal["in","out"] | None`, named-token parse;
+      `--review-scope` option on `add`; render changes in journal_cmd.py `render`. Tests green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: render's grouping (in-scope / out-of-scope / reclassified) lives in one helper next to `_deferrals`; ruff/mypy clean.
+- number: 3
+  title: operator guard — enforced in the fold/check, both write paths, verified on
+    Claude Code
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: (a) a `fixed` record following an effective `out-of-scope` without
+      `answered_by=operator` makes `fr journal check` exit non-zero naming an
+      "unauthorized fix", whether written by `resolve` or `add --resolves --state fixed`, and
+      the review-phase findings gate refuses the same way; (b) with `answered_by=operator` both
+      pass; (c) `--answered-by operator` on Claude Code (FR_HARNESS=claude-code, transcript
+      fixture) is REFUSED when `operator_answered_since(<out-of-scope record created>)` is
+      False, accepted when True, recorded with a warning when None (unreadable); on
+      FR_HARNESS=opencode it is recorded as stated. Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: `JournalEntry.answered_by: AnsweredBy | None` (reuse the run model's `AnsweredBy`
+      vocabulary, imported not re-listed), named-token parse; `--answered-by` on `resolve` and
+      on `add --resolves`; a pure `unauthorized_fixes(entries) -> list[str]` in
+      journal/model.py used by `check` and by run_cmd's `_closed_findings_witness`. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      GREEN: parity.yaml row `out-of-scope-operator-guard` (kind interaction): claude-code
+      enforced, opencode/hermes advisory with scope_notes (no question tool), codex/copilot-cli
+      unsupported. Parity check + tripwire green. ruff/mypy clean.
+  - id: P2.T3.S4
+    text: |-
+      REFACTOR: `unauthorized_fixes` and `effective_finding_states` share one fold pass (no second walk of entries); docstrings name both write paths. ruff/mypy clean.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-24T19:31:59+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-24T19:33:42+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-24T19:50:19+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-24T19:34:40+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-24T19:35:23+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-24T19:35:59+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-24T19:37:41+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-24T19:38:47+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-24T19:39:39+00:00'
+      note: null
+    P2.T3.S4:
+      state: x
+      ticked_at: '2026-09-24T19:40:28+00:00'
+      note: null
+  completion:
+    at: '2026-09-24T19:50:20+00:00'
+    note: null
+    observed_prs: []

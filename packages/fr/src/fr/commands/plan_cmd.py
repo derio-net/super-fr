@@ -23,6 +23,7 @@ from fr.plan_ops import (
     self_review,
     tick,
 )
+from fr.version_floor import PRE_4_20_PROBES, PRE_4_PROBES, admits_below
 
 console = Console()
 err_console = Console(stderr=True)
@@ -48,55 +49,17 @@ DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
 # addition will be announced properly, not that 3.x ever was.
 WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
 
-_PRE_4_PROBES = (
-    "0.1.0",
-    "1.0.0",
-    "2.0.0",
-    "2.5.0",
-    "3.0.0",
-    "3.0.1",
-    "3.1.0",
-    "3.5.0",
-    "3.10.0",
-    "3.19.0",
-    "3.20.0",
-    "3.999.999",
-)
-"""Versions probed for "would some real fr 3.x load this plan?".
-
-Denser than the original five (review r5-b6): a probe LIST answers an
-`==3.5.0` constraint with a flat no unless 3.5.0 happens to be in it, and an
-operator pinning one exact 3.x is exactly the case the check exists to
-refuse. `SpecifierSet.filter` over the list is what `_admits_pre_4` runs, so
-adding a probe is the only way to widen coverage; the list deliberately
-includes a 0.x, a 1.x, a 2.x, several 3.minor values and both ends of 3.x.
-"""
+# The floor a plan whose phases set `files` or `estimate_lines` must carry
+# (2026-09-24 fr-goal-scope-proportion-cost spec §C). `PhaseHeader` is
+# extra="forbid", so an fr older than the release that added them fails the
+# parse instead of ignoring the keys — the same reasoning as the `workflow:`
+# floor above, one release-line later.
+SCOPE_FR_VERSION = ">=4.20.0,<5.0.0"
 
 
 def _admits_pre_4(constraint: str) -> bool:
-    """Does `constraint` allow an fr older than 4.0.0 to load the plan?
-
-    Probes rather than parses the specifier's bounds: `SpecifierSet` has no
-    "minimum version" accessor, and probing is what actually matters — the
-    question is whether some real fr 3.x would consider itself allowed.
-    An unparseable constraint answers False; `fr.parser` fails it loudly at
-    parse time and duplicating that error here would only mask it.
-
-    A probe list is only as good as its density (review r5-b6): the original
-    five missed `==3.5.0` and every other exact pin between them, quietly
-    letting through the one constraint shape most likely to be hand-written.
-    """
-    from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-    try:
-        spec = SpecifierSet(constraint)
-    except InvalidSpecifier:
-        return False
-    # `filter` rather than `contains`: it applies the specifier's own
-    # prerelease semantics uniformly over the probe list, which is the same
-    # question `pip` asks. The list is what bounds the answer — see
-    # `_PRE_4_PROBES`.
-    return any(spec.filter(_PRE_4_PROBES))
+    """Does `constraint` allow an fr older than 4.0.0 to load the plan?"""
+    return admits_below(constraint, "4.0.0", PRE_4_PROBES)
 
 
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
@@ -147,6 +110,9 @@ def create_cmd(
           skeleton (bool, walking-skeleton marker for the first agentic phase),
           tier (mechanical|standard|hard, harness-neutral dispatch complexity
             hint; agentic phases should set one, see fr-plan),
+          files ([globs], repo-relative paths the phase expects to touch) and
+          estimate_lines (int, expected added+deleted lines) — proportionality
+            inputs; either one floors fr_version at 4.20.0,
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
@@ -170,6 +136,8 @@ def create_cmd(
                     acceptance=tuple(p.get("acceptance") or ()),
                     skeleton=bool(p.get("skeleton", False)),
                     tier=p.get("tier"),
+                    files=tuple(p.get("files") or ()),
+                    estimate_lines=p.get("estimate_lines"),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
@@ -197,6 +165,18 @@ def create_cmd(
                 f"(PlanMeta forbids unknown keys, so fr < 4.0.0 cannot parse a plan "
                 f"carrying `workflow:`); got {fr_version!r}. Use "
                 f"--fr-version '{WORKFLOW_FR_VERSION}' or drop --workflow."
+            )
+            raise typer.Exit(2)
+    if any(ps.declares_scope for ps in phases):
+        # Checked after `--workflow`, whose 4.0.0 floor this one subsumes.
+        if not explicit:
+            fr_version = SCOPE_FR_VERSION
+        elif admits_below(fr_version, "4.20.0", PRE_4_20_PROBES):  # type: ignore[arg-type]
+            err_console.print(
+                f"[red]error:[/red] phases setting files/estimate_lines require an "
+                f"fr_version floored at 4.20.0 (PhaseHeader forbids unknown keys, so an "
+                f"older fr cannot parse them); got {fr_version!r}. Use "
+                f"--fr-version '{SCOPE_FR_VERSION}' or drop the fields."
             )
             raise typer.Exit(2)
     if fr_version is None:
@@ -375,3 +355,29 @@ def self_review_cmd(
         console.print(escape(str(issue)))
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)
+
+
+@plan_app.command("proportionality")
+def proportionality_cmd(
+    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
+    base: str | None = typer.Option(
+        None,
+        "--base",
+        help="Ref to diff from (via its merge-base with HEAD). Default: the remote default branch.",
+    ),
+) -> None:
+    """Compare the branch's diff with the plan: unreferenced new files,
+    out-of-plan touches, size vs estimate. A report, never a gate — always
+    exits 0 once the plan parses (an unreadable plan is not a report)."""
+    from fr.git import repo_root as git_repo_root
+    from fr.proportionality import build_report
+
+    try:
+        plan = parse(plan_dir)
+    except PlanSchemaError as e:
+        err_console.print(f"[red]parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    root = plan.repo_root or git_repo_root()
+    # Plain echo, not rich: the report is pasted into a PR body verbatim, and
+    # rich would read `[...]` as markup and re-wrap long lines.
+    typer.echo(build_report(root, plan, base), nl=False)

@@ -441,3 +441,117 @@ def test_a_migrated_real_cursor_reports_its_pre_gate_reviews_as_debt(tmp_path: P
             f"implement: phase/{n}/review-phase is done, unevidenced "
             "(predates the evidence gate)" in squashed
         )
+
+
+# --- `proportionality`: derived delivery evidence (2026-09-24 spec §C) -----
+
+_DELIVER_SHAPE = """
+workflow: grouped
+schema: 1
+unit: run
+steps:
+  - id: plan
+    kind: agent
+    emits: [plan]
+  - id: deliver
+    kind: agent
+    needs: [plan]
+    evidence: [tests, proportionality]
+"""
+
+
+def _git(root: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _at_deliver(tmp_path: Path, *, with_origin: bool = True) -> tuple[Path, Path]:
+    """`step/deliver` opened on a run whose workspace has a bare `origin`
+    carrying `main`, and one commit of work on the branch."""
+    repo = _repo(tmp_path)
+    if with_origin:
+        bare = tmp_path / "origin.git"
+        _git(tmp_path, "init", "-q", "--bare", str(bare))
+        _git(repo, "remote", "add", "origin", str(bare))
+        _git(repo, "push", "-q", "origin", "main")
+    (repo / "feature.py").write_text("print('x')\n")
+    _git(repo, "add", "feature.py")
+    _git(repo, "commit", "-qm", "work")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _DELIVER_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    # The report reads the plan at HEAD (review p3-f4), as delivery commits it.
+    _git(repo, "add", "docs/superpowers/plans")
+    _git(repo, "commit", "-qm", "plan")
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0  # deliver
+    # Written after the unit opened, so the unobservable `tests` path accepts it.
+    (repo / "suite.log").write_text("1 passed\n")
+    return repo, shipped
+
+
+def _deliver(repo: Path, shipped: Path, *evidence: str):
+    extra = [x for e in evidence for x in ("--evidence", e)]
+    return _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "deliver", "--state", "done", *extra]
+    )
+
+
+def test_deliver_derives_and_stores_the_proportionality_witness(tmp_path: Path) -> None:
+    """Stored as `<merge-base>:<sha256>` of the very report the command prints
+    at that merge-base — the orchestrator pastes that report into the PR body,
+    and the hash is what makes "the report we saw" checkable later."""
+    import hashlib
+
+    from fr.parser import parse
+    from fr.proportionality import build_report
+
+    repo, shipped = _at_deliver(tmp_path)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 0, result.output
+    # A flat unit names no phase; `proportionality` is not phase evidence.
+    assert "names no phase" not in _squash(result.output)
+    record = load_run_state(repo, "r1").steps["deliver"]
+    stored = units.evidence_of(record, "step/deliver")["proportionality"]
+    merge_base = _git(repo, "merge-base", "HEAD", "origin/main")
+    report = build_report(repo, parse(repo / "docs/superpowers/plans" / PLAN_SLUG), None)
+    assert stored == f"{merge_base}:{hashlib.sha256(report.encode()).hexdigest()}"
+    assert report.splitlines()[0].count(merge_base) == 1
+
+
+def test_a_caller_supplied_proportionality_is_refused_as_derived(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+
+    result = _deliver(repo, shipped, "tests=suite.log", "proportionality=deadbeef:00")
+
+    assert result.exit_code == 2, result.output
+    assert "not yours to pass" in _squash(result.output)
+    assert "proportionality" in _squash(result.output)
+
+
+def test_deliver_does_not_ask_the_caller_for_proportionality(tmp_path: Path) -> None:
+    """Missing `tests` is refused naming only `tests` — a derived obligation
+    is never one the operator is told to pass."""
+    repo, shipped = _at_deliver(tmp_path)
+
+    result = _deliver(repo, shipped)
+
+    assert result.exit_code == 2, result.output
+    assert "--evidence tests=" in _squash(result.output)
+    assert "--evidence proportionality" not in _squash(result.output)
+
+
+def test_deliver_with_no_determinable_base_is_refused_naming_it(tmp_path: Path) -> None:
+    """Fail-closed like `findings`: a witness needs a merge-base, and fr
+    will not record one it could not compute."""
+    repo, shipped = _at_deliver(tmp_path, with_origin=False)
+
+    result = _deliver(repo, shipped, "tests=suite.log")
+
+    assert result.exit_code == 2, result.output
+    assert "--base" in _squash(result.output)
+    assert "proportionality" in _squash(result.output)

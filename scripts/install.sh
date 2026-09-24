@@ -594,6 +594,14 @@ if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
   echo "  WARNING: could not allowlist fr-phase-executor in the agent-worktree hook" >&2
   echo "  (see the error above) — fr-goal will fall back to INLINE phase execution." >&2
 fi
+# The read-only fr-spec-reviewer too (2026-09-24 spec §E, gh#593): the hook
+# decides by name, not by tools, and a worktree cut from `main` cannot see the
+# feature branch's spec the reviewer is dispatched to read.
+if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
+     "$CLAUDE_DIR/hooks/agent-worktree-required.sh" super-fr:fr-spec-reviewer; then
+  echo "  WARNING: could not allowlist fr-spec-reviewer in the agent-worktree hook" >&2
+  echo "  (see the error above) — fr-goal's spec-review dispatch will be blocked." >&2
+fi
 
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
 # because it now shells out to `fr models apply`.

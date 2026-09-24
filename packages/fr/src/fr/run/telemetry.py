@@ -33,9 +33,11 @@ says "elsewhere", and a hostname in a public repo's committed cursor is
 identity nobody needs.
 
 **No harness API is called.** Everything here reads files the harness already
-writes. Claude Code is the one implementation; OpenCode and Hermes keep the V1
-estimates until their readers land (`reader_for` returns `None` for them, which
-is what makes the degradation loud rather than silent).
+writes. Claude Code is the one full implementation. OpenCode has a reader for
+the MAIN session only (its SQLite session store, read-only — spec
+`2026-09-24-fr-goal-scope-proportion-cost-design.md` §D); its dispatched units
+keep the V1 estimates. Hermes has no reader at all (`reader_for` returns `None`,
+which is what makes the degradation loud rather than silent).
 
 ## The shape, as captured — not as first assumed
 
@@ -75,13 +77,19 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Mapping
+import sqlite3
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypeGuard
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeGuard
 
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+
+if TYPE_CHECKING:
+    from fr.isolation.types import IsolationState
+    from fr.run.model import MainSessionUsage, RunState
 
 USAGE_KEYS: tuple[str, ...] = (
     "input_tokens",
@@ -157,6 +165,42 @@ class UsageTotals:
         return {key: getattr(self, key) for key in USAGE_KEYS}
 
 
+@dataclass(frozen=True)
+class SessionUsage:
+    """ONE harness session's main-thread usage over one window — the
+    per-session half of `MainSessionUsage`, which `sum_sessions` folds. A
+    value, like `UsageTotals`: "unreadable" is `None` instead of one."""
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+    turns: int
+    cost_usd: float | None = None
+
+
+def sum_sessions(parts: Sequence[SessionUsage]) -> MainSessionUsage:
+    """Fold per-session usages into the cursor's `MainSessionUsage`.
+
+    `cost_usd` is summed only when EVERY session reported one: a sum over some
+    of them would be a partial figure presented as the step's cost.
+    """
+    from fr.run.model import MainSessionUsage
+
+    costs = [p.cost_usd for p in parts]
+    return MainSessionUsage(
+        **{key: sum(getattr(p, key) for p in parts) for key in USAGE_KEYS},
+        turns=sum(p.turns for p in parts),
+        sessions=len(parts),
+        cost_usd=None if any(c is None for c in costs) else sum(c for c in costs if c is not None),
+    )
+
+
+def _to_second(stamp: _dt.datetime | None) -> _dt.datetime | None:
+    """`stamp` truncated to whole seconds — the precision a step's `at` has."""
+    return None if stamp is None else stamp.replace(microsecond=0)
+
+
 def _read_records(path: Path) -> list[dict[str, Any]] | None:
     """Every complete JSON record of a `.jsonl`, or `None` if unreadable.
 
@@ -226,26 +270,50 @@ def _is_real_model(model: object) -> TypeGuard[str]:
     return isinstance(model, str) and bool(model) and not model.startswith("<")
 
 
-def read_claude_code(path: Path) -> UsageTotals | None:
-    """Summed usage for one Claude Code transcript, or `None` for *no
-    measurement* (the file is missing, unreadable, or holds no record).
+def _distinct_messages(
+    records: list[dict[str, Any]],
+) -> Iterator[tuple[dict[str, Any], Mapping[str, Any]]]:
+    """`(record, usage)` for each usage-bearing record, ONE per `message.id`.
 
-    Works on either file of the pair — the orchestrator's own stream or one
-    subagent's — because both are the same record format. Deciding WHICH file
-    answers for a given unit is the other half of this module's job, below.
+    Claude Code writes one transcript record per CONTENT BLOCK of a message
+    (text, then each tool_use), and every one of them repeats the WHOLE
+    message's `usage`. Summing records therefore counts a three-block message
+    three times — confirmed live on spec §D's own brainstorm transcript, where
+    27 of 40 assistant message ids appear on more than one record, each copy
+    carrying identical usage. The first occurrence of an id wins.
+
+    A record with no `message.id` is kept and never merged with another: an id
+    is the only evidence two records are one message, and without it merging
+    would be a guess. Every Claude Code usage reader iterates this one helper,
+    so the subagent line and the main-session row of `fr run cost` cannot
+    disagree about what a message is.
+
+    `attempts[].measured` values recorded before this dedupe existed were
+    summed per record and are NOT rewritten — they are history; `fr run cost`
+    flags them as possibly over-counted instead.
     """
-    records = _read_records(path)
-    if records is None:
-        return None
-    totals = dict.fromkeys(USAGE_KEYS, 0)
-    seen = 0
-    served: list[str] = []
+    seen: set[str] = set()
     for record in records:
         usage = _usage_of(record)
         if usage is None:
             continue
-        seen += 1
         # `_usage_of` already proved `message` is a Mapping.
+        message_id = record["message"].get("id")
+        if isinstance(message_id, str) and message_id:
+            if message_id in seen:
+                continue
+            seen.add(message_id)
+        yield record, usage
+
+
+def _sum_usage(pairs: Iterable[tuple[dict[str, Any], Mapping[str, Any]]]) -> UsageTotals:
+    """The four figures summed over already-deduplicated `(record, usage)`
+    pairs, with the served models in order of first appearance."""
+    totals = dict.fromkeys(USAGE_KEYS, 0)
+    seen = 0
+    served: list[str] = []
+    for record, usage in pairs:
+        seen += 1
         model = record["message"].get("model")
         if _is_real_model(model) and model not in served:
             served.append(model)
@@ -255,6 +323,22 @@ def read_claude_code(path: Path) -> UsageTotals | None:
             if isinstance(value, int) and not isinstance(value, bool):
                 totals[key] += value
     return UsageTotals(**totals, assistant_records=seen, served_models=tuple(served))
+
+
+def read_claude_code(path: Path) -> UsageTotals | None:
+    """Summed usage for one Claude Code transcript, or `None` for *no
+    measurement* (the file is missing, unreadable, or holds no record).
+
+    Works on either file of the pair — the orchestrator's own stream or one
+    subagent's — because both are the same record format. Deciding WHICH file
+    answers for a given unit is the other half of this module's job, below.
+    Each MESSAGE is counted once (`_distinct_messages`), so `assistant_records`
+    is the number of distinct assistant messages, not of records.
+    """
+    records = _read_records(path)
+    if records is None:
+        return None
+    return _sum_usage(_distinct_messages(records))
 
 
 # --- 2. attributing: which dispatch does a transcript answer for? --------
@@ -462,9 +546,9 @@ def select_for_attempt(
 
 
 class TranscriptReader(Protocol):
-    """What a harness must offer for fr to measure a unit. One implementation
-    exists; the Protocol is here so the second one cannot quietly acquire a
-    different shape."""
+    """What a harness must offer for fr to measure a unit. Two implementations
+    exist (Claude Code; OpenCode, main session only); the Protocol is what
+    keeps them one shape."""
 
     harness: str
 
@@ -477,6 +561,20 @@ class TranscriptReader(Protocol):
     ) -> Measurement | None:
         """What one attempt cost, if measurable — selected by `agent` when it
         has one, else by the window `[start, end]` and only `same_session`."""
+
+    def measure_step(
+        self,
+        env: Mapping[str, str],
+        sessions: Sequence[str],
+        start: str,
+        end: str,
+        *,
+        directories: Sequence[Path],
+    ) -> MainSessionUsage | None:
+        """What the MAIN session burned over one step's window `(start, end]`,
+        summed over the candidate `sessions` — or `None` when any candidate is
+        unreadable (spec §D). `directories` are the run's workspace and base
+        clone, for a harness that can only find a session by where it ran."""
 
 
 def transcript_root(env: Mapping[str, str]) -> Path:
@@ -561,6 +659,63 @@ class ClaudeCodeReader:
         return measure_dispatch(
             session, agent=agent, start=start, end=end, same_session=same_session
         )
+
+    def measure_main_session(self, session: Path, start: str, end: str) -> SessionUsage | None:
+        """The main thread of ONE transcript over the window `(start, end]`.
+
+        Summed over `_distinct_messages` — deduplicated FIRST and windowed
+        second, so a message whose content-block records straddle a step
+        boundary is charged once, to the step its first record fell in.
+        Sidechain records (`isSidechain: true`) are a subagent's and never the
+        main session's; a placeholder model (`<synthetic>`) served nothing.
+
+        **Precision.** A transcript timestamp carries milliseconds; a step's
+        `at` is whole seconds (`_now()`). The transcript side is truncated to
+        the second before the comparison, so a turn at `…:00.9Z` is inside a
+        window that closed at `…:00` and outside the next one that opens
+        there. `turns` counts distinct message ids. `cost_usd` is `None`:
+        Claude Code's transcript reports no cost, and fr computes none.
+        """
+        records = _read_records(session)
+        lower, upper = _to_second(parse_timestamp(start)), _to_second(parse_timestamp(end))
+        if records is None or lower is None or upper is None:
+            return None
+
+        def in_window(record: Mapping[str, Any]) -> bool:
+            if record.get("isSidechain") is True:
+                return False
+            if not _is_real_model(record["message"].get("model")):
+                return False
+            stamp = _to_second(parse_timestamp(record.get("timestamp")))
+            return stamp is not None and lower < stamp <= upper
+
+        totals = _sum_usage(pair for pair in _distinct_messages(records) if in_window(pair[0]))
+        return SessionUsage(**totals.as_fields(), turns=totals.assistant_records)
+
+    def measure_step(
+        self,
+        env: Mapping[str, str],
+        sessions: Sequence[str],
+        start: str,
+        end: str,
+        *,
+        directories: Sequence[Path] = (),
+    ) -> MainSessionUsage | None:
+        """Every candidate session measured and summed; nothing when there is
+        no candidate or any one of them cannot be read. `directories` is
+        unused: a Claude Code session is found by its id alone."""
+        if not sessions:
+            return None
+        parts: list[SessionUsage] = []
+        for session_id in sessions:
+            transcript = claude_code_session(env, session_id)
+            usage = (
+                None if transcript is None else self.measure_main_session(transcript, start, end)
+            )
+            if usage is None:
+                return None
+            parts.append(usage)
+        return sum_sessions(parts)
 
 
 _ORCHESTRATOR_TAIL_BYTES = 512 * 1024
@@ -808,9 +963,196 @@ def orchestrator_wrote_since(
     return windows
 
 
-READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
+OPENCODE_DB_ENV = "FR_OPENCODE_DB"
+"""Override for OpenCode's session database — the same role
+`FR_TRANSCRIPT_ROOT` plays for Claude Code, and what keeps the suite off the
+operator's own sessions."""
+
+OPENCODE_DB = Path(".local") / "share" / "opencode" / "opencode.db"
+"""Where OpenCode keeps its sessions, under `$HOME`."""
+
+
+class OpenCodeReader:
+    """Main-session usage from OpenCode's SQLite session database (spec §D).
+
+    Read-only by construction: the file is opened with a `mode=ro` URI, so a
+    missing database is an error (no measurement), never a new empty file,
+    and nothing here can write the harness's own store.
+
+    Dispatch measurement stays `None`, unchanged: `locate_session` finds
+    nothing and `measure` measures nothing, so a dispatched unit on OpenCode
+    keeps its V1 estimate exactly as before this reader existed.
+
+    **Which session.** OpenCode sessions are never bound automatically —
+    `current_session` reads only `CLAUDE_CODE_SESSION_ID` — so the candidates
+    are normally the workspace bindings made with `fr isolation attach
+    --harness opencode`. With none, `candidate_sessions` falls back to the
+    UNIQUE top-level session in the run's workspace or base clone that has
+    assistant messages in the window; more than one means nothing is
+    recorded, never a guess.
+    """
+
+    harness = "opencode"
+
+    def database(self, env: Mapping[str, str]) -> Path:
+        override = env.get(OPENCODE_DB_ENV)
+        return Path(override) if override else Path.home() / OPENCODE_DB
+
+    def locate_session(self, env: Mapping[str, str], session: str | None = None) -> Path | None:
+        return None
+
+    def measure(
+        self,
+        session: Path,
+        *,
+        agent: str | None = None,
+        start: str,
+        end: str,
+        same_session: bool = True,
+    ) -> Measurement | None:
+        return None
+
+    def measure_main_session(
+        self, db: Path, session: str, start: str, end: str
+    ) -> SessionUsage | None:
+        """One session's assistant messages over `(start, end]`, or `None`
+        when the database or the session cannot be read.
+
+        Tokens are `opencode_tokens`' mapping (reasoning folded into
+        output). `cost_usd` sums `data.cost`, OpenCode's own figure. The
+        window compares `time_created` (epoch milliseconds) truncated to the
+        second, the same precision rule as Claude Code's.
+        """
+        bounds = _epoch_window(start, end)
+        if bounds is None:
+            return None
+        try:
+            with closing(_open_ro(db)) as con:
+                if con.execute("SELECT 1 FROM session WHERE id = ?", (session,)).fetchone() is None:
+                    return None
+                rows = con.execute(
+                    "SELECT data FROM message WHERE session_id = ? "
+                    "AND time_created / 1000 > ? AND time_created / 1000 <= ?",
+                    (session, *bounds),
+                ).fetchall()
+        except sqlite3.Error:
+            return None
+        figures = dict.fromkeys(USAGE_KEYS, 0)
+        turns = 0
+        cost = 0.0
+        for (raw,) in rows:
+            try:
+                data = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, Mapping) or data.get("role") != "assistant":
+                continue
+            for key, count in opencode_tokens(data).items():
+                figures[key] += count
+            value = data.get("cost")
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                cost += float(value)
+            turns += 1
+        return SessionUsage(**figures, turns=turns, cost_usd=cost)
+
+    def candidate_sessions(
+        self, db: Path, directories: Sequence[Path], start: str, end: str
+    ) -> list[str]:
+        """Top-level sessions (`parent_id IS NULL` — a child is a subagent's)
+        whose `directory` is one of `directories` and which have an assistant
+        message in `(start, end]`. `[]` when the database cannot be read."""
+        bounds = _epoch_window(start, end)
+        places = sorted({str(d) for d in directories} | {str(d.resolve()) for d in directories})
+        if bounds is None or not places:
+            return []
+        marks = ", ".join("?" for _ in places)
+        try:
+            with closing(_open_ro(db)) as con:
+                rows = con.execute(
+                    f"SELECT s.id FROM session s WHERE s.parent_id IS NULL "  # noqa: S608 — placeholders only
+                    f"AND s.directory IN ({marks}) AND EXISTS (SELECT 1 FROM message m "
+                    "WHERE m.session_id = s.id AND m.time_created / 1000 > ? "
+                    "AND m.time_created / 1000 <= ? "
+                    "AND json_extract(m.data, '$.role') = 'assistant') ORDER BY s.id",
+                    (*places, *bounds),
+                ).fetchall()
+        except sqlite3.Error:
+            return []
+        return [row[0] for row in rows]
+
+    def measure_step(
+        self,
+        env: Mapping[str, str],
+        sessions: Sequence[str],
+        start: str,
+        end: str,
+        *,
+        directories: Sequence[Path] = (),
+    ) -> MainSessionUsage | None:
+        """The bound sessions summed — or, with none bound, the unique
+        qualifying top-level session. Any unreadable session, or an ambiguous
+        fallback, records nothing."""
+        db = self.database(env)
+        if not sessions:
+            found = self.candidate_sessions(db, directories, start, end)
+            if len(found) != 1:
+                return None
+            sessions = found
+        parts: list[SessionUsage] = []
+        for session in sessions:
+            usage = self.measure_main_session(db, session, start, end)
+            if usage is None:
+                return None
+            parts.append(usage)
+        return sum_sessions(parts)
+
+
+def opencode_tokens(data: Mapping[str, Any]) -> dict[str, int]:
+    """One OpenCode assistant message's `data.tokens`, as fr's four figures.
+
+    `input` -> `input_tokens`, `cache.write` -> `cache_creation_input_tokens`,
+    `cache.read` -> `cache_read_input_tokens`, and **`output + reasoning` ->
+    `output_tokens`**: reasoning is billed as output, and fr records the same
+    four figures for every harness rather than a fifth only OpenCode fills.
+    `tokens.total` is not read — it is the sum of the others. A missing or
+    non-integer field counts 0.
+    """
+    raw_tokens = data.get("tokens")
+    tokens: Mapping[str, Any] = raw_tokens if isinstance(raw_tokens, Mapping) else {}
+    raw_cache = tokens.get("cache")
+    cache: Mapping[str, Any] = raw_cache if isinstance(raw_cache, Mapping) else {}
+    return {
+        "input_tokens": _count(tokens.get("input")),
+        "cache_creation_input_tokens": _count(cache.get("write")),
+        "cache_read_input_tokens": _count(cache.get("read")),
+        "output_tokens": _count(tokens.get("output")) + _count(tokens.get("reasoning")),
+    }
+
+
+def _count(value: object) -> int:
+    """A token count, or 0 — a boolean is not a count."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _epoch_window(start: str, end: str) -> tuple[int, int] | None:
+    """`(start, end]` as whole epoch seconds, or `None` if either is unparseable."""
+    lower, upper = parse_timestamp(start), parse_timestamp(end)
+    if lower is None or upper is None:
+        return None
+    return int(lower.timestamp()), int(upper.timestamp())
+
+
+def _open_ro(db: Path) -> sqlite3.Connection:
+    """`db` opened read-only; raises `sqlite3.Error` when it does not exist."""
+    return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+
+
+READERS: Mapping[str, TranscriptReader] = {
+    ClaudeCodeReader.harness: ClaudeCodeReader(),
+    OpenCodeReader.harness: OpenCodeReader(),
+}
 """Harness key -> reader. Deliberately not a fallback-to-Claude-Code default:
-an unlisted harness measures NOTHING, which `fr run status` then says out loud,
+an unlisted harness (Hermes) measures NOTHING, which `fr run status` then says out loud,
 rather than parsing another harness's transcripts with this one's rules."""
 
 
@@ -904,26 +1246,135 @@ def measure_attempt(
         return None
 
 
+# --- 4. main-session cost per step (spec 2026-09-24 §D) --------------------
+
+_BINDING_HARNESSES: Mapping[str, frozenset[str]] = {
+    ClaudeCodeReader.harness: frozenset({"claude", "claude-code", "unknown"}),
+    "opencode": frozenset({"opencode"}),
+}
+"""Which `SessionBinding.harness` values name a session of each reader's
+harness. `fr isolation attach --harness` defaults to `unknown`, and every
+default-bound session so far has been Claude Code's, so `unknown` is read as
+Claude Code's — never as OpenCode's, whose sessions are bound only explicitly."""
+
+
+def _isolation_state(state: RunState, repo_root: Path) -> IsolationState | None:
+    """The run branch's workspace record, or `None` — no workspace, not a git
+    repository, or an unreadable record all mean "no bindings", never a
+    failure: a binding is traceability, not evidence a session exists."""
+    from fr.isolation.types import load_state
+
+    try:
+        return load_state(repo_root, state.branch)
+    except Exception:  # noqa: BLE001 — observability degrades, never raises
+        return None
+
+
+def candidate_sessions(
+    state: RunState,
+    env: Mapping[str, str],
+    repo_root: Path,
+    *,
+    harness: str | None = ClaudeCodeReader.harness,
+) -> list[str]:
+    """Every session whose main thread may hold this run's turns (spec §D),
+    first-seen order, no repeats:
+
+    1. every distinct `Attempt.session` recorded on the run;
+    2. every session the workspace binding for `state.branch` lists
+       (`fr isolation attach` / `up --session`) whose harness is `harness`'s;
+    3. this process's own session.
+
+    (1) and (3) are Claude Code session ids — `current_session` reads only
+    `CLAUDE_CODE_SESSION_ID`, and `fr run advance` records what it returns —
+    so for any other harness only (2) is a candidate.
+    """
+    found: list[str] = []
+
+    def add(session: str | None) -> None:
+        if session and session not in found:
+            found.append(session)
+
+    claude = harness == ClaudeCodeReader.harness
+    if claude:
+        for record in state.steps.values():
+            for unit in (record.units or {}).values():
+                for attempt in unit.attempts:
+                    add(attempt.session)
+    workspace = _isolation_state(state, repo_root)
+    accepted = _BINDING_HARNESSES.get(harness or "", frozenset())
+    for binding in workspace.sessions if workspace is not None else ():
+        if binding.harness in accepted:
+            add(binding.session_id)
+    if claude:
+        add(current_session(env))
+    return found
+
+
+def measure_step_main_session(
+    state: RunState,
+    env: Mapping[str, str],
+    repo_root: Path,
+    start: str,
+    end: str,
+) -> MainSessionUsage | None:
+    """What the main session(s) burned over one top-level step's window
+    `(start, end]` — or `None` when that is not observable here.
+
+    The window is the caller's (`fr.commands.run_cmd._complete_step`): from
+    the previous top-level step's `at`, or the run's `started` for the first,
+    to this step's `at`. Turns taken before `fr run start` belong to no step
+    and are never measured. Measuring the STEP rather than an attempt is what
+    covers `brainstorm`, which has no attempt, and the whole `implement` loop.
+
+    Never raises — a completion must not fail because a transcript could not
+    be read — and never returns a partial sum (gh#514).
+    """
+    try:
+        harness = detect_harness(env)
+        reader = reader_for(harness)
+        if reader is None:
+            return None
+        workspace = _isolation_state(state, repo_root)
+        directories = [repo_root]
+        if workspace is not None:
+            directories += [workspace.worktree, workspace.repo_root]
+        return reader.measure_step(
+            env,
+            candidate_sessions(state, env, repo_root, harness=harness),
+            start,
+            end,
+            directories=directories,
+        )
+    except Exception:  # noqa: BLE001 — telemetry is observability; it never raises
+        return None
+
+
 __all__ = [
     "READERS",
     "USAGE_KEYS",
     "ClaudeCodeReader",
+    "SessionUsage",
     "Dispatch",
     "Measurement",
+    "OpenCodeReader",
     "TranscriptReader",
     "UsageTotals",
     "attribute_dispatches",
+    "candidate_sessions",
     "claude_code_session",
     "current_session",
     "dispatched_from_this_session",
     "measure_attempt",
     "measure_dispatch",
+    "measure_step_main_session",
     "parse_timestamp",
     "read_claude_code",
     "reader_for",
     "select_dispatch",
     "select_for_attempt",
     "session_dir",
+    "sum_sessions",
     "tool_use_ids",
     "transcript_root",
 ]

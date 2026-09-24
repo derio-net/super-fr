@@ -778,3 +778,201 @@ def test_tracked_by_is_only_valid_on_an_open_resolution_record() -> None:
         JournalEntry(**base, state="fixed", resolves="f1", tracked_by="#1")
     ok = JournalEntry(**base, state="open", resolves="f1", tracked_by="#1")
     assert ok.tracked_by == "#1"
+
+
+# --- out-of-scope (spec 2026-09-24 §A) ------------------------------------
+
+_OOS_TEXT = (
+    "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+    "phase=2 state=open -->\n### f1 · finding [open] · true, not ours (phase 2)\n\nbody\n\n"
+    "<!-- fr:journal kind=finding scope=plan id=f1-resolved created=2026-09-24T00:01:00 "
+    "state=open resolves=f1 out_of_scope=true -->\n"
+    "### f1-resolved · finding [out-of-scope] · resolves f1: true, not ours\n\nwhy\n"
+)
+
+
+class TestOutOfScope:
+    """A finding that is TRUE but not caused by this change. Written the way
+    `deferred` is — `state=open` plus a token — so an fr that predates the
+    token reads the finding as still open (fail closed), never as closed and
+    never as a parse error."""
+
+    def test_the_fold_reads_it_as_out_of_scope_and_the_gates_stop_counting_it(self) -> None:
+        from fr.journal.model import (
+            effective_finding_states,
+            open_finding_ids,
+            parse_journal,
+            phase_finding_states,
+        )
+
+        entries = parse_journal(_OOS_TEXT)
+        record = entries[1]
+        assert record.state == "open" and record.out_of_scope is True
+        assert effective_finding_states(entries) == {"f1": "out-of-scope"}
+        assert open_finding_ids(entries) == []
+        assert phase_finding_states(entries, 2) == {"f1": "out-of-scope"}
+
+    def test_a_reader_that_ignores_the_token_reads_it_open(self) -> None:
+        """Simulates an older fr: the token is stripped before parsing, which is
+        exactly what a named-key projection that does not know it amounts to."""
+        from fr.journal.model import open_finding_ids, parse_journal
+
+        older = _OOS_TEXT.replace(" out_of_scope=true", "")
+        assert open_finding_ids(parse_journal(older)) == ["f1"]
+
+    def test_a_later_deferral_supersedes_it(self) -> None:
+        from fr.journal.model import effective_finding_states, parse_journal
+
+        text = _OOS_TEXT + (
+            "\n<!-- fr:journal kind=finding scope=plan id=f1-resolved-2 "
+            "created=2026-09-24T00:02:00 state=open resolves=f1 tracked_by=#9 -->\n"
+            "### f1-resolved-2 · finding [deferred → #9] · resolves f1: filed\n\nfiled\n"
+        )
+        assert effective_finding_states(parse_journal(text)) == {"f1": "deferred"}
+
+    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        record = _entry(kind="finding", id="r1", state="open", resolves="f1", out_of_scope=True)
+        text = serialize_entry(record)
+        assert "out_of_scope=true" in text.splitlines()[0]
+        assert "[out-of-scope]" in text.splitlines()[1]
+        assert parse_journal(text)[0].out_of_scope is True
+        plain = serialize_entry(_entry(kind="finding", id="f2", state="open"))
+        assert "out_of_scope" not in plain
+
+    def test_only_an_open_resolution_record_may_carry_it(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        base = dict(kind="finding", scope="plan", id="r", created="t", title="x", body="")
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="open", out_of_scope=True)  # no `resolves`
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="fixed", resolves="f1", out_of_scope=True)
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", out_of_scope=True)
+
+
+def test_a_review_scope_value_this_fr_does_not_know_is_dropped_not_fatal() -> None:
+    """The tag is display-only: one bad value must not make the journal — and
+    every gate reading it — unparseable."""
+    from fr.journal.model import open_finding_ids, parse_journal
+
+    text = (
+        "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+        "state=open review_scope=partly -->\n### f1 · finding [open] · x\n"
+    )
+    entries = parse_journal(text)
+    assert entries[0].review_scope is None
+    assert open_finding_ids(entries) == ["f1"]
+
+
+# --- the operator guard (spec 2026-09-24 §A) -------------------------------
+
+
+def _oos_then(*records: dict) -> list:
+    """f1, resolved out-of-scope, then `records` (each a resolution of f1)."""
+    entries = [
+        _entry(kind="finding", id="f1", state="open"),
+        _entry(kind="finding", id="f1-r1", state="open", resolves="f1", out_of_scope=True),
+    ]
+    for n, extra in enumerate(records, start=2):
+        entries.append(_entry(kind="finding", id=f"f1-r{n}", resolves="f1", **extra))
+    return entries
+
+
+class TestUnauthorizedFixes:
+    """Moving a finding from out-of-scope to fixed puts work the orchestrator
+    judged not this change's back INTO the change — the scope ratchet the state
+    exists to stop. Only the operator may do that, so the `fixed` record must
+    carry `answered_by=operator`. Enforced in the fold, where every write path
+    (`resolve`, `add --resolves`) meets."""
+
+    def test_a_fix_after_out_of_scope_without_the_operator_is_unauthorized(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        assert unauthorized_fixes(_oos_then({"state": "fixed"})) == ["f1"]
+        assert unauthorized_fixes(_oos_then({"state": "fixed", "answered_by": "agent"})) == ["f1"]
+
+    def test_the_operator_authorizes_it(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        assert unauthorized_fixes(_oos_then({"state": "fixed", "answered_by": "operator"})) == []
+
+    def test_a_later_operator_record_ratifies_an_unauthorized_fix(self) -> None:
+        """The journal is append-only, so the cure is a new record, not an edit."""
+        from fr.journal.model import unauthorized_fixes
+
+        entries = _oos_then({"state": "fixed"}, {"state": "fixed", "answered_by": "operator"})
+        assert unauthorized_fixes(entries) == []
+
+    def test_a_fix_that_never_passed_through_out_of_scope_needs_nobody(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open"),
+            _entry(kind="finding", id="f1-r", state="fixed", resolves="f1"),
+            _entry(kind="finding", id="f2", state="fixed"),
+        ]
+        assert unauthorized_fixes(entries) == []
+
+    def test_moving_away_from_fixed_clears_it(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        entries = _oos_then({"state": "fixed"}, {"state": "refuted"})
+        assert unauthorized_fixes(entries) == []
+
+    def test_a_deferral_in_between_hands_the_finding_back_to_the_change(self) -> None:
+        """The guard reads the IMMEDIATELY preceding state: once a deferral names
+        the issue that carries the work, out-of-scope is no longer the finding's
+        state, so a later fix is an ordinary one and needs no operator."""
+        from fr.journal.model import effective_finding_states, unauthorized_fixes
+
+        entries = _oos_then({"state": "open", "tracked_by": "#1"}, {"state": "fixed"})
+        assert effective_finding_states(entries)["f1"] == "fixed"
+        assert unauthorized_fixes(entries) == []
+
+    def test_answered_by_round_trips_and_is_only_for_a_resolution_record(self) -> None:
+        from fr.journal.model import JournalEntry, parse_journal, serialize_entry
+
+        record = _entry(
+            kind="finding", id="r", state="fixed", resolves="f1", answered_by="operator"
+        )
+        assert "answered_by=operator" in serialize_entry(record).splitlines()[0]
+        assert parse_journal(serialize_entry(record))[0].answered_by == "operator"
+        base = dict(kind="finding", scope="plan", id="x", created="t", title="x", body="")
+        with pytest.raises(ValueError, match="answered_by"):
+            JournalEntry(**base, state="fixed", answered_by="operator")
+
+    def test_an_unknown_answered_by_value_reads_as_absent(self) -> None:
+        """Fail closed: a value this fr does not know is not `operator`."""
+        from fr.journal.model import parse_journal, unauthorized_fixes
+
+        text = (
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+            "state=open -->\n### f1 · finding [open] · x\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=r1 created=2026-09-24T00:01:00 "
+            "state=open resolves=f1 out_of_scope=true -->\n### r1 · finding · y\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=r2 created=2026-09-24T00:02:00 "
+            "state=fixed resolves=f1 answered_by=committee -->\n### r2 · finding · z\n"
+        )
+        assert unauthorized_fixes(parse_journal(text)) == ["f1"]
+
+
+def test_a_journal_stamp_reads_as_local_time(monkeypatch) -> None:
+    """`fr journal` stamps LOCAL wall-clock time with no offset, while the
+    transcript reader treats a naive stamp as UTC. Handed over raw, a record
+    written at 21:00 in Athens (18:00Z) would open the question window three
+    hours late and refuse an operator who answered in between."""
+    import time
+
+    from fr.journal.model import journal_stamp_as_utc
+
+    monkeypatch.setenv("TZ", "Europe/Athens")
+    time.tzset()
+    try:
+        assert journal_stamp_as_utc("2026-09-24T21:00:00") == "2026-09-24T18:00:00+00:00"
+        assert journal_stamp_as_utc("2026-09-24T21:00:00+00:00") == "2026-09-24T21:00:00+00:00"
+    finally:
+        monkeypatch.undo()
+        time.tzset()

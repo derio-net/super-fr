@@ -23,6 +23,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from fr.run.model import AnsweredBy
+
 JournalKind = Literal[
     "decision",
     "review",
@@ -35,11 +37,17 @@ JournalKind = Literal[
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
-# What the FOLD can say about a finding. `deferred` is never WRITTEN as a
-# `state=` token (an older fr would reject the value and fail to parse the whole
-# journal); it is an `open` resolution record carrying `tracked_by`, which the
-# fold reads as deferred and an older reader reads as still open — fail closed.
-EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred"]
+# The reviewer's classification of a finding it raised (spec 2026-09-24 §A).
+ReviewScope = Literal["in", "out"]
+_REVIEW_SCOPE_LABEL: dict[str, str] = {"in": "in scope", "out": "out of scope"}
+# What the FOLD can say about a finding. Two of its states are carried by a
+# TOKEN, never written as a `state=` value, because an older fr would reject an
+# unknown value and fail to parse the whole journal:
+#   - `deferred`     — an `open` resolution record carrying `tracked_by=`;
+#   - `out-of-scope` — an `open` resolution record carrying `out_of_scope=true`.
+# `parse_journal` projects tokens by name, so an older reader drops the token
+# and reads the finding as still open — fail closed, and no journal stamp bump.
+EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred", "out-of-scope"]
 
 # Where deferred work may be tracked: `#N`, `owner/repo#N`, or an http(s) URL.
 # A reference, not prose — so a deferral always says where the work went.
@@ -99,6 +107,19 @@ class JournalEntry(BaseModel):
     # `tracked_by=`, appended last — ignored by an fr that predates it, exactly
     # as `resolves=` was (see test_a_header_token_this_fr_does_not_know_...).
     tracked_by: str | None = None
+    # OUT OF SCOPE: an `open` resolution record saying the finding is true but
+    # not caused by this change (spec 2026-09-24 §A). Folds to `out-of-scope`;
+    # header token `out_of_scope=true`, serialized only when set.
+    out_of_scope: bool = False
+    # The REVIEWER's in/out tag, copied onto the finding when the orchestrator
+    # journals it. Kept beside the fold's verdict so a finding the reviewer
+    # called in-scope and the orchestrator moved out renders as reclassified.
+    review_scope: ReviewScope | None = None
+    # Who authorized this resolution — the run model's vocabulary, so a gate
+    # and a journal can never disagree about what "operator" means. Required
+    # (`operator`) on a `fixed` record that follows an effective out-of-scope:
+    # see `unauthorized_fixes`.
+    answered_by: AnsweredBy | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -133,6 +154,23 @@ class JournalEntry(BaseModel):
                     "`tracked_by` must name an issue — `#N`, `owner/repo#N` or an "
                     f"http(s) URL — got {self.tracked_by!r}"
                 )
+        if self.out_of_scope and (
+            self.resolves is None or self.state != "open" or self.tracked_by is not None
+        ):
+            raise ValueError(
+                "`out_of_scope` is only valid on an `open` resolution record that is not "
+                "a deferral: it says the finding is true but not this change's"
+            )
+        if self.review_scope is not None and (self.kind != "finding" or self.resolves):
+            raise ValueError(
+                "`review_scope` is only valid on a `finding` entry that is not a "
+                "resolution record — it is the reviewer's tag on what it raised"
+            )
+        if self.answered_by is not None and self.resolves is None:
+            raise ValueError(
+                "`answered_by` is only valid on a resolution record — it says who "
+                "authorized moving the finding it names"
+            )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
         if not self.id or any(c.isspace() for c in self.id):
@@ -184,7 +222,19 @@ _DELIM_SUFFIX = " -->"
 # the byte-for-byte header it already has; an fr that predates the field reads
 # the token and ignores it (`parse_journal` names the fields it wants), so an
 # older reader sees a resolution record as an ordinary fixed/refuted finding.
-_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves", "tracked_by")
+_HEADER_FIELDS = (
+    "kind",
+    "scope",
+    "id",
+    "created",
+    "phase",
+    "state",
+    "resolves",
+    "tracked_by",
+    "out_of_scope",
+    "review_scope",
+    "answered_by",
+)
 
 
 def serialize_entry(entry: JournalEntry) -> str:
@@ -192,14 +242,20 @@ def serialize_entry(entry: JournalEntry) -> str:
     parts: list[str] = []
     for field in _HEADER_FIELDS:
         value = getattr(entry, field)
-        if value is None:
+        # `False` is the default of a boolean token: omitting it keeps every
+        # entry that does not set it byte-identical to what an older fr wrote.
+        if value is None or value is False:
             continue
-        parts.append(f"{field}={value}")
+        parts.append(f"{field}={'true' if value is True else value}")
     header = _DELIM_PREFIX + " ".join(parts) + _DELIM_SUFFIX
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else ""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
     if entry.tracked_by is not None:
         state_bit = f" [deferred → {entry.tracked_by}]"
+    elif entry.out_of_scope:
+        state_bit = " [out-of-scope]"
+    if entry.review_scope is not None:
+        state_bit += f" (reviewer: {_REVIEW_SCOPE_LABEL[entry.review_scope]})"
     heading = f"### {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
     body = entry.body.rstrip("\n")
     return f"{header}\n{heading}\n\n{body}\n" if body else f"{header}\n{heading}\n"
@@ -274,6 +330,9 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 state=fields.get("state"),  # type: ignore[arg-type]
                 resolves=fields.get("resolves"),
                 tracked_by=fields.get("tracked_by"),
+                out_of_scope=fields.get("out_of_scope") == "true",
+                review_scope=_review_scope_token(fields.get("review_scope")),
+                answered_by=_answered_by_token(fields.get("answered_by")),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -283,6 +342,37 @@ def parse_journal(text: str) -> list[JournalEntry]:
             raise JournalParseError(f"journal entry missing required field: {e}") from e
         i = j
     return entries
+
+
+def _review_scope_token(value: str | None) -> ReviewScope | None:
+    """A `review_scope=` value this fr does not know is dropped, not fatal: the
+    tag is display-only, and one bad token must not make the whole journal (and
+    every gate reading it) unparseable."""
+    return "in" if value == "in" else "out" if value == "out" else None
+
+
+def _answered_by_token(value: str | None) -> AnsweredBy | None:
+    """An `answered_by=` value this fr does not know reads as ABSENT — which is
+    the fail-closed direction: whatever it claims, it is not `operator`."""
+    return "operator" if value == "operator" else "agent" if value == "agent" else None
+
+
+def journal_stamp_as_utc(created: str) -> str:
+    """A journal `created` stamp as an aware UTC ISO string.
+
+    `fr journal` stamps LOCAL wall-clock time with no offset, but
+    `fr.run.telemetry.parse_timestamp` reads a naive stamp as UTC (every run
+    producer writes UTC). Handed over raw, a record written at 21:00 in UTC+3
+    opens a question window three hours late. An unparseable stamp is returned
+    unchanged, so the reader reports it as unreadable rather than guessing.
+    """
+    import datetime as _dt
+
+    try:
+        parsed = _dt.datetime.fromisoformat(created)
+    except ValueError:
+        return created
+    return parsed.astimezone(_dt.UTC).isoformat()
 
 
 def _title_from_heading(text: str, entry_id: str) -> str:
@@ -299,6 +389,16 @@ def _title_from_heading(text: str, entry_id: str) -> str:
 
 
 # --- effective finding state (the fold) ----------------------------------
+
+
+def _record_state(e: JournalEntry) -> EffectiveFindingState | None:
+    """What one resolution record says about the finding it names: the token
+    carried states first (they are written as `state=open`), then `state`."""
+    if e.tracked_by is not None:
+        return "deferred"
+    if e.out_of_scope:
+        return "out-of-scope"
+    return e.state
 
 
 def effective_finding_states(entries: list[JournalEntry]) -> dict[str, EffectiveFindingState]:
@@ -322,17 +422,56 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, Effective
     A deferral (an `open` record with `tracked_by`) folds to `deferred`: not
     open, so the gate passes; not fixed or refuted, so nothing claims the work
     was done or the finding was wrong. A later record still wins.
+    An out-of-scope record (an `open` record with `out_of_scope`) folds to
+    `out-of-scope` the same way, and for the same reasons.
+    """
+    return _fold(entries)[0]
+
+
+def _fold(
+    entries: list[JournalEntry],
+) -> tuple[dict[str, EffectiveFindingState], list[str]]:
+    """The ONE walk over a journal's finding records: (effective states,
+    unauthorized fixes). Both public readers are projections of it, so the
+    state a gate sees and the guard on how it got there cannot disagree about
+    which record came last. Every write path lands here equally — `fr journal
+    resolve`, `fr journal add --resolves`, or a hand edit.
     """
     states: dict[str, EffectiveFindingState] = {}
+    flagged: dict[str, None] = {}  # insertion-ordered set
     for e in entries:
-        if e.resolves is not None:
-            if e.tracked_by is not None:
-                states[e.resolves] = "deferred"
-            elif e.state is not None:
-                states[e.resolves] = e.state
-        elif e.kind == "finding" and e.state is not None:
-            states[e.id] = e.state
-    return states
+        if e.resolves is None:
+            if e.kind == "finding" and e.state is not None:
+                states[e.id] = e.state
+            continue
+        fid = e.resolves
+        new = _record_state(e)
+        if new is None:
+            continue
+        if new != "fixed" or e.answered_by == "operator":
+            flagged.pop(fid, None)
+        elif states.get(fid) == "out-of-scope":
+            flagged[fid] = None
+        states[fid] = new
+    return states, list(flagged)
+
+
+def unauthorized_fixes(entries: list[JournalEntry]) -> list[str]:
+    """Findings claimed `fixed` out of an effective `out-of-scope` without the
+    operator, in the order the claim was made (spec 2026-09-24 §A).
+
+    Out-of-scope says the orchestrator judged the work not this change's;
+    fixing it anyway puts that work back into the change — the scope ratchet
+    the state exists to stop — so only the operator may. The rule sits in the
+    FOLD, not the write path, because two verbs write resolution records
+    (`fr journal resolve` and `fr journal add --resolves`) and a hand edit is a
+    third; `fr journal check` and the review-phase findings gate both read it.
+
+    The journal is append-only, so an unauthorized fix is cured by a later
+    `fixed` record carrying `answered_by=operator`, and cleared by any record
+    that moves the finding off `fixed`.
+    """
+    return _fold(entries)[1]
 
 
 def open_finding_ids(entries: list[JournalEntry]) -> list[str]:

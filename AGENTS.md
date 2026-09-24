@@ -55,11 +55,14 @@ uv workspace monorepo, version lockstepped across every manifest (see
     sibling of `fr/workflow`, not inside it; `fr_dispatch.capabilities` is
     a two-line re-export kept for import back-compat.
   - **`fr/run`** — the durable cursor (`docs/superpowers/runs/<run-id>.yaml`,
-    git-tracked), driven by `fr run {start,adopt,status,advance,resolve,check}`
+    git-tracked), driven by `fr run {start,adopt,status,advance,resolve,check,cost}`
     (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
     executes a `kind: cli` step directly and never a `kind: agent` one — it
     emits a dispatch brief instead; `resolve` is the only way an `agent`
-    step's cursor moves past `running`. `plugins/super-fr/workflows/` ships
+    step's cursor moves past `running`. `cost` prints each top-level step's
+    main-session usage (`StepRecord.main_session`); `deliver`'s derived
+    `proportionality` evidence runs `fr plan proportionality`
+    (`fr/proportionality.py`). `plugins/super-fr/workflows/` ships
     the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
     itself now narrates); a repo may override one wholesale under
     `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT

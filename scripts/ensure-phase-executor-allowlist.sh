@@ -8,7 +8,13 @@
 # workspace, so a private worktree is neither needed nor wanted (one shared
 # branch → one PR). super-fr co-manages the hook's allowlist for this one type.
 #
-# Usage: ensure-phase-executor-allowlist.sh <path-to-agent-worktree-required.sh>
+# Usage: ensure-phase-executor-allowlist.sh <hook-path> [<plugin-qualified-id>]
+#
+# The id defaults to `super-fr:fr-phase-executor`. install.sh also passes
+# `super-fr:fr-spec-reviewer` (2026-09-24 spec §E, gh#593): the stock hook
+# decides by NAME, not by tools, so even a read-only agent outside its `case`
+# arm must pass `isolation: "worktree"` — and a worktree cut from `main` cannot
+# see the feature branch's spec it is dispatched to review.
 #
 # - Inserts `fr-phase-executor` into the existing allowlist `case` pattern.
 # - Idempotent: a second run is a no-op.
@@ -17,7 +23,7 @@
 
 set -eu
 
-hook="${1:?usage: ensure-phase-executor-allowlist.sh <hook-path>}"
+hook="${1:?usage: ensure-phase-executor-allowlist.sh <hook-path> [<plugin-qualified-id>]}"
 
 # Absent hook → nothing to manage. Exit success so install.sh flows on.
 [ -f "$hook" ] || exit 0
@@ -27,7 +33,10 @@ hook="${1:?usage: ensure-phase-executor-allowlist.sh <hook-path>}"
 # already-present `hookify:conversation-analyzer` entry is the precedent. An
 # allowlist carrying only the bare name never matches, and every fr-goal phase
 # dispatch is blocked (fr-goal then degrades to inline execution).
-QUALIFIED='super-fr:fr-phase-executor'
+QUALIFIED="${2:-super-fr:fr-phase-executor}"
+# The bare directory name — only ever a STALE entry to strip (the pre-fix
+# script wrote `fr-phase-executor`), never one to insert.
+BARE="${QUALIFIED#*:}"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
@@ -63,13 +72,22 @@ changed=0
 # a file-wide probe, so the real `case` arm is never patched and this script
 # exits 0 reporting success while dispatch stays blocked — re-creating the
 # silent inline-degradation incident it was written to end (rev2-f6).
-if ! grep -v '^[[:space:]]*#' "$hook" | grep -q "$QUALIFIED|Explore|Plan|"; then
-  sed -e '/^[[:space:]]*#/!s/^\([[:space:]]*\)fr-phase-executor|Explore|Plan|/\1Explore|Plan|/' \
-      -e '/^[[:space:]]*#/!s/|fr-phase-executor\([|)]\)/\1/' \
-      -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)Explore|Plan|/\1$QUALIFIED|Explore|Plan|/" \
+#
+# The probe asks "is the qualified id a MEMBER of the arm ahead of the anchor",
+# not "does it sit immediately before `Explore`": with two managed ids the first
+# one inserted is no longer adjacent to the anchor, and an adjacency probe would
+# re-insert it on every run.
+in_arm() {
+  grep -v '^[[:space:]]*#' "$1" |
+    grep -Eq "^[[:space:]]*([^|)#[:space:]]+\|)*$QUALIFIED\|([^|)#[:space:]]+\|)*Explore\|Plan\|"
+}
+if ! in_arm "$hook"; then
+  sed -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)$BARE|Explore|Plan|/\1Explore|Plan|/" \
+      -e "/^[[:space:]]*#/!s/|$BARE\([|)]\)/\1/" \
+      -e "/^[[:space:]]*#/!s/^\([[:space:]]*\)\(\([^|)#[:space:]]*|\)*\)Explore|Plan|/\1\2$QUALIFIED|Explore|Plan|/" \
       "$hook" >"$tmp"
 
-  if ! grep -v '^[[:space:]]*#' "$tmp" | grep -q "$QUALIFIED|Explore|Plan|"; then
+  if ! in_arm "$tmp"; then
     # Anchor not found (hook shape changed). Fail loud rather than silently
     # skip, so drift is visible instead of leaving dispatch mysteriously
     # blocked.
@@ -109,13 +127,13 @@ fi
 # surface can satisfy. The two boundary-qualified strips (`: ` / `, `) replace
 # the stale bare entry in one step, which is what keeps a foreign plugin id like
 # `someplugin:fr-phase-executor` from being eaten mid-token.
-awk -v q="$QUALIFIED" '
+awk -v q="$QUALIFIED" -v b="$BARE" '
   /^[[:space:]]*#/  { print; next }
   index($0, q)      { print; next }
   !/Explore, Plan,/ { print; next }
   {
-    if (!sub(/: fr-phase-executor, Explore, Plan,/, ": " q ", Explore, Plan,") &&
-        !sub(/, fr-phase-executor, Explore, Plan,/, ", " q ", Explore, Plan,"))
+    if (!sub(": " b ", Explore, Plan,", ": " q ", Explore, Plan,") &&
+        !sub(", " b ", Explore, Plan,", ", " q ", Explore, Plan,"))
       sub(/Explore, Plan,/, q ", Explore, Plan,")
     print
   }

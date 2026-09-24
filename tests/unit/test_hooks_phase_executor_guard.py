@@ -150,3 +150,30 @@ class TestShipping:
     def test_hook_is_executable(self) -> None:
         assert SCRIPT.is_file(), f"missing {SCRIPT}"
         assert os.access(SCRIPT, os.X_OK), f"not executable: {SCRIPT}"
+
+
+# --- review p4-f6: the read-only fr-spec-reviewer is refused the flag too ------
+#
+# fr-goal §2 dispatches `super-fr:fr-spec-reviewer` to review a spec that lives
+# on the feature branch. With `isolation: "worktree"` it wakes in a worktree cut
+# from `main` where that spec is invisible — #420 for a reader instead of a
+# writer. Read-only does not help: what it cannot see, it cannot review.
+
+SPEC_REVIEWER_QUALIFIED = "super-fr:fr-spec-reviewer"
+SPEC_REVIEWER_BARE = "fr-spec-reviewer"
+
+
+class TestSpecReviewerGuard:
+    @pytest.mark.parametrize("subagent_type", [SPEC_REVIEWER_QUALIFIED, SPEC_REVIEWER_BARE])
+    def test_spec_reviewer_with_worktree_denied(self, subagent_type: str) -> None:
+        assert decision(run_hook(dispatch(subagent_type, "worktree"))) == "deny"
+
+    def test_spec_reviewer_deny_reason_is_its_own(self) -> None:
+        why = reason(run_hook(dispatch(SPEC_REVIEWER_QUALIFIED, "worktree")))
+        assert "fr-spec-reviewer" in why
+        assert "spec" in why and "invisible" in why
+        assert "#420" in why
+        assert "fr pickup" not in why, "the executor's reason names what an executor reads"
+
+    def test_spec_reviewer_without_flag_allowed(self) -> None:
+        assert decision(run_hook(dispatch(SPEC_REVIEWER_QUALIFIED))) is None

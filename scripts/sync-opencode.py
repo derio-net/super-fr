@@ -300,7 +300,17 @@ _TOOL_PERMISSIONS: dict[str, tuple[str, str] | None] = {
 # grant (review r-p1/f2): applied with `update()` they did, so a canonical
 # `tools:` line granting WebFetch produced a mirror denying it — an inversion
 # of the very allowlist this function exists to carry.
-_PERMISSION_DEFAULT_DENIES: dict[str, str] = {"task": "deny", "webfetch": "deny"}
+#
+# `edit` and `bash` joined them with the first READ-ONLY canonical agent,
+# fr-spec-reviewer (2026-09-24 spec §E): an agent whose `tools:` grants neither
+# must not inherit OpenCode's permissive default for them. An agent that grants
+# them (fr-phase-executor) is unchanged — a default never overrides a grant.
+_PERMISSION_DEFAULT_DENIES: dict[str, str] = {
+    "edit": "deny",
+    "bash": "deny",
+    "task": "deny",
+    "webfetch": "deny",
+}
 
 
 class AgentTranslationError(ValueError):

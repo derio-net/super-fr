@@ -61,7 +61,11 @@ def _no_repo_models_path(tmp_path: Path) -> Path:
 
 def test_canonical_agents_has_base_plus_one_per_tier(tmp_path: Path) -> None:
     agents = sync_opencode.canonical_agents(models_path=_no_repo_models_path(tmp_path))
-    expected = {"fr-phase-executor"} | {f"fr-phase-executor-{tier}" for tier in _phase_tier_names()}
+    expected = {
+        name
+        for stem in ("fr-phase-executor", "fr-spec-reviewer")
+        for name in (stem, *(f"{stem}-{tier}" for tier in _phase_tier_names()))
+    }
     assert set(agents) == expected
 
 
@@ -215,7 +219,22 @@ def test_an_unknown_tool_name_is_refused_rather_than_dropped() -> None:
 def test_every_known_tool_maps_or_is_explicitly_implicit() -> None:
     """Read/Grep/Glob have no OpenCode permission key of their own — they
     must be KNOWN and map to nothing, not be unknown and dropped."""
+    assert set(sync_opencode._agent_permission("Read, Grep, Glob")) == {
+        "edit",
+        "bash",
+        "task",
+        "webfetch",
+    }
+
+
+def test_a_read_only_agent_mirror_denies_edit_and_bash() -> None:
+    """fr-spec-reviewer (2026-09-24 spec §E) is `tools: Read, Grep, Glob`. On
+    Claude Code that allowlist makes it read-only; OpenCode's permission
+    defaults are permissive, so without explicit denies its mirror could
+    edit and run shell commands — strictly more powerful than its source."""
     assert sync_opencode._agent_permission("Read, Grep, Glob") == {
+        "edit": "deny",
+        "bash": "deny",
         "task": "deny",
         "webfetch": "deny",
     }

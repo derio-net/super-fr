@@ -1776,3 +1776,312 @@ class TestResolveDeferred:
         self._resolve("--state", "fixed", "--note", "done after all")
         check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
         assert check.exit_code == 0
+
+
+class TestResolveOutOfScope:
+    """`--state out-of-scope`: a finding that is TRUE but not caused by this
+    change (spec 2026-09-24 §A). Before it, the only non-blocking exit was
+    `deferred --tracked-by`, which needs an issue to exist NOW — so every
+    reviewer finding became code in the feature PR (gh#597's scope ratchet)."""
+
+    def _open(self, root: Path, monkeypatch) -> None:
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+
+    def _resolve(self, *args: str):
+        return runner.invoke(
+            app, ["journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1", *args]
+        )
+
+    def test_it_is_written_open_with_a_token_and_passes_the_gate(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope", "--note", "pre-existing in main")
+        assert res.exit_code == 0, res.output
+
+        text = _journal_file(root, "S").read_text()
+        record = next(e for e in parse_journal(text) if e.resolves == "f1")
+        assert record.state == "open" and record.out_of_scope is True
+        assert "state=open" in text and "out_of_scope=true" in text
+
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert check.exit_code == 0, check.output
+        assert "out-of-scope" in check.output and "f1" in check.output, "said, not hidden"
+
+    def test_it_still_needs_a_note(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope")
+        assert res.exit_code == 2
+
+    def test_tracked_by_is_not_for_it(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope", "--tracked-by", "#9", "--note", "x")
+        assert res.exit_code == 2
+
+    def test_require_reviews_passes_with_only_out_of_scope_findings(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        TestCheckRequireReviews()._write_plan(root, "S")
+        assert self._resolve("--state", "out-of-scope", "--note", "x").exit_code == 0
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "S", "--require-reviews"]
+        )
+        assert res.exit_code == 0, res.output
+
+
+class TestReviewScope:
+    """The reviewer's in/out tag, persisted on the finding (spec 2026-09-24 §A)
+    so the PR body can show when the orchestrator moved a finding the reviewer
+    called in-scope out of the change."""
+
+    def _finding(self, root: Path, monkeypatch, fid: str, *extra: str):
+        monkeypatch.chdir(root)
+        return _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "finding", "--state", "open"),
+            *("--title", f"bug {fid}", "--id", fid, "--phase", "1", *extra),
+        )
+
+    def _render(self):
+        return runner.invoke(
+            app, ["journal", "render", "--scope", "plan", "--slug", "S", "--section", "findings"]
+        )
+
+    @pytest.mark.parametrize("tag", ["in", "out"])
+    def test_add_writes_the_tag(self, tmp_path: Path, monkeypatch, tag: str) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        res = self._finding(root, monkeypatch, "f1", "--review-scope", tag)
+        assert res.exit_code == 0, res.output
+        text = _journal_file(root, "S").read_text()
+        assert f"review_scope={tag}" in text.splitlines()[2]
+        assert parse_journal(text)[0].review_scope == tag
+
+    @pytest.mark.parametrize("tag", ["maybe", "IN", ""])
+    def test_any_other_value_exits_2(self, tmp_path: Path, monkeypatch, tag: str) -> None:
+        root = _init_repo(tmp_path)
+        res = self._finding(root, monkeypatch, "f1", "--review-scope", tag)
+        assert res.exit_code == 2, res.output
+        assert not _journal_file(root, "S").exists()
+
+    def test_it_is_only_for_a_finding(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "decision", "--title", "d"),
+            *("--phase", "1", "--review-scope", "in"),
+        )
+        assert res.exit_code == 2, res.output
+
+    def test_render_shows_each_findings_tag(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        self._finding(root, monkeypatch, "f2", "--review-scope", "out")
+        out = self._render().output
+        heading = {ln.split(" · ")[0][4:]: ln for ln in out.splitlines() if ln.startswith("### ")}
+        assert "reviewer: in scope" in heading["f1"]
+        assert "reviewer: out of scope" in heading["f2"]
+
+    def test_render_groups_out_of_scope_findings_and_marks_a_reclassification(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        self._finding(root, monkeypatch, "f2", "--review-scope", "out")
+        self._finding(root, monkeypatch, "f3", "--review-scope", "in")
+        for fid in ("f1", "f2"):
+            res = runner.invoke(
+                app,
+                [
+                    *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", fid),
+                    *("--state", "out-of-scope", "--note", "pre-existing"),
+                ],
+            )
+            assert res.exit_code == 0, res.output
+        out = self._render().output
+        head = "## Out-of-scope findings"
+        assert out.count(head) == 1
+        before, after = out.split(head)
+        # f3 is still this change's; f1/f2 and their records sit under the heading.
+        assert "### f3 " in before and "### f3 " not in after
+        for fid in ("f1", "f2", "f1-resolved", "f2-resolved"):
+            assert f"### {fid} " in after and f"### {fid} " not in before
+        # The reviewer said f1 was in scope; the orchestrator moved it out. Said.
+        f1_block = after.split("### f1 ")[1].split("### ")[0]
+        f2_block = after.split("### f2 ")[1].split("### ")[0]
+        assert "reclassified by the orchestrator" in f1_block
+        assert "reclassified" not in f2_block
+        assert "reclassified" not in before
+
+    def test_no_out_of_scope_heading_when_there_are_none(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._finding(root, monkeypatch, "f1", "--review-scope", "in")
+        assert "Out-of-scope" not in self._render().output
+
+
+class TestOperatorGuard:
+    """Out-of-scope -> fixed needs `answered_by=operator` (spec 2026-09-24 §A).
+    Enforced by `fr journal check` whatever wrote the record; on Claude Code the
+    `--answered-by operator` claim is itself verified against the transcript."""
+
+    def _out_of_scope(self, root: Path, monkeypatch) -> None:
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+        res = runner.invoke(
+            app,
+            [
+                *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1"),
+                *("--state", "out-of-scope", "--note", "pre-existing"),
+            ],
+        )
+        assert res.exit_code == 0, res.output
+
+    def _fix_by_resolve(self, env: dict[str, str], *extra: str):
+        return runner.invoke(
+            app,
+            [
+                *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1"),
+                *("--state", "fixed", "--note", "fixed after all", *extra),
+            ],
+            env=env,
+        )
+
+    def _fix_by_add(self, env: dict[str, str], *extra: str):
+        return runner.invoke(
+            app,
+            [
+                *("journal", "add", "--scope", "plan", "--slug", "S", "--kind", "finding"),
+                *("--title", "fixed after all", "--state", "fixed", "--resolves", "f1"),
+                *("--phase", "1", *extra),
+            ],
+            env=env,
+        )
+
+    def _check(self):
+        return runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_a_fix_without_the_operator_fails_check(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._out_of_scope(root, monkeypatch)
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix({"FR_HARNESS": "opencode"})
+        assert res.exit_code == 0, res.output
+        check = self._check()
+        assert check.exit_code != 0, check.output
+        assert "unauthorized fix" in check.output and "f1" in check.output
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_with_the_operator_it_passes(self, tmp_path: Path, monkeypatch, path: str) -> None:
+        root = _init_repo(tmp_path)
+        self._out_of_scope(root, monkeypatch)
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix({"FR_HARNESS": "opencode"}, "--answered-by", "operator")
+        assert res.exit_code == 0, res.output
+        assert "answered_by=operator" in _journal_file(root, "S").read_text()
+        # Recorded as stated on OpenCode, and it says the claim is advisory there.
+        assert "advisory" in res.output
+        check = self._check()
+        assert check.exit_code == 0, check.output
+
+    def test_answered_by_needs_a_resolution_record_on_add(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "finding", "--state", "open"),
+            *("--title", "t", "--phase", "1", "--answered-by", "operator"),
+        )
+        assert res.exit_code == 2, res.output
+
+    def _claude(self, tmp_path: Path, session: str) -> dict[str, str]:
+        return {
+            "FR_HARNESS": "claude-code",
+            "FR_TRANSCRIPT_ROOT": str(tmp_path / "projects"),
+            "CLAUDE_CODE_SESSION_ID": session,
+        }
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_on_claude_code_no_answered_question_since_refuses(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        from tests.unit.transcript_sessions import asked_at
+
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        # Answered long BEFORE the out-of-scope record: it answered something else.
+        asked_at(tmp_path / "projects", "2000-01-01T00:00:00.000Z", session_id="s-q")
+        before = _journal_file(root, "S").read_text()
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix(self._claude(tmp_path, "s-q"), "--answered-by", "operator")
+        assert res.exit_code == 2, res.output
+        assert "no answered question" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_on_claude_code_an_answered_question_since_is_accepted(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        from tests.unit.transcript_sessions import asked_at
+
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        asked_at(tmp_path / "projects", "2099-01-01T00:00:00.000Z", session_id="s-q")
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix(self._claude(tmp_path, "s-q"), "--answered-by", "operator")
+        assert res.exit_code == 0, res.output
+        assert self._check().exit_code == 0
+
+    def test_on_claude_code_an_unreadable_transcript_records_with_a_warning(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        res = self._fix_by_resolve(
+            self._claude(tmp_path, "no-such-session"), "--answered-by", "operator"
+        )
+        assert res.exit_code == 0, res.output
+        assert "could not verify" in res.output
+        assert "answered_by=operator" in _journal_file(root, "S").read_text()
+
+
+def test_the_operator_guard_owns_a_parity_row_and_its_notice_quotes_it(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Where the `--answered-by operator` claim is only advisory, the notice is
+    built from the row's own `scope_note`, so it cannot drift from what
+    `fr harness parity` declares."""
+    from fr.harness import load_matrix
+
+    (row,) = [s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard"]
+    assert row.kind == "interaction"
+    states = {h: c.state for h, c in row.harnesses.items()}
+    assert states == {
+        "claude-code": "enforced",
+        "opencode": "advisory",
+        "hermes": "advisory",
+        "codex": "unsupported",
+        "copilot-cli": "unsupported",
+    }
+    root = _init_repo(tmp_path)
+    guard = TestOperatorGuard()
+    guard._out_of_scope(root, monkeypatch)
+    res = guard._fix_by_resolve({"FR_HARNESS": "hermes"}, "--answered-by", "operator")
+    assert res.exit_code == 0, res.output
+    note = row.harnesses["hermes"].scope_note
+    assert note and " ".join(note.split()) in " ".join(res.output.split())

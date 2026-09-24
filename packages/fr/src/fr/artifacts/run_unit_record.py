@@ -91,6 +91,25 @@ def _already_unit_records(text: str, data: object) -> bool:
     return True
 
 
+def is_unit_record_body(text: str) -> bool:
+    """Does `text` parse as a cursor wholly in the v5 shape, stamp aside?
+
+    The public face of `_already_unit_records`, for the 5 -> 6 hop's guard
+    (`fr.artifacts.run_main_session`). That hop is additive, so "can a v5 body
+    be read?" is answered by the live model — and this module is the one place
+    `tests/unit/test_migration_run_unit_record.py::
+    test_no_run_migration_names_the_live_parser` allows the live model to be
+    asked, so the question is routed through here rather than widening that
+    allowance. The first change that REMOVES a field from the live model must
+    freeze a `RunStateV5` and point this at it, exactly as 4 -> 5 did for v4.
+    """
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    return _already_unit_records(text, data)
+
+
 def rewrite_to_unit_records(path: Path) -> None:
     """Rewrite the run cursor at `path` from the v4 shape to the v5 one.
 
