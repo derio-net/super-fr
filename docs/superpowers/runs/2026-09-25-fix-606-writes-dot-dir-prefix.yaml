@@ -3,13 +3,33 @@ run: 2026-09-25-fix-606-writes-dot-dir-prefix
 workflow: fr-goal@1
 branch: fix/606-writes-dot-dir-prefix
 started: '2026-09-24T22:42:22+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-24T22:42:28+00:00'
+    state: done
+    at: '2026-09-24T22:44:39+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-25-writes-dot-dir-prefix-design.md
+      journal:spec: docs/superpowers/journals/specs/2026-09-25-writes-dot-dir-prefix-design.md
+    main_session:
+      input_tokens: 26
+      cache_creation_input_tokens: 18956
+      cache_read_input_tokens: 1288109
+      output_tokens: 7259
+      turns: 13
+      sessions: 1
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-24T22:44:39+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-24T22:44:39+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 0d3c7c4c-bb15-449a-be4d-305ec50abe9f
   plan:
     state: pending
   plan-review:

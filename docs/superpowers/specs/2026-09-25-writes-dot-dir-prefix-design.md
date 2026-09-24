@@ -68,3 +68,6 @@ it. Also out of scope is gh#607 (a backgrounded suite cannot satisfy the gate).
    `--evidence tests=.fr-deliver/tests.log`, written by foreground suite
    chunks, and is resolved through the worktree's `uv run fr`. The run
    cursor records it. There is no post-merge step (operator decision).
+   `.fr-deliver/` is added to `.gitignore` in this change, so the suite log
+   the dogfood step writes can never be swept into a commit of this public
+   repo (spec-review s1).
