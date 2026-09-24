@@ -3961,10 +3961,19 @@ rows:
       Claude Code and OpenCode
     origin:
     - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
-    levels: {}
-    status: not-implemented
-    notes: Target unit (both readers on fixtures, fr run cost rendering); live per-harness
-      check post-merge.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_main_session.py
+      - super-fr:tests/unit/test_run_opencode_reader.py
+      - super-fr:tests/unit/test_run_cost_cmd.py
+      - super-fr:tests/unit/test_migration_run_main_session.py
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'Phase 1 of plan 2026-09-24-fr-goal-scope-proportion-cost: both readers (Claude
+      Code transcript, OpenCode SQLite) on fixtures, the _complete_step hook on every
+      done path, the 5 -> 6 migration, the message.id dedupe, and fr run cost rendering
+      run in CI. A live per-harness check (a real fr-goal run on each harness) is still
+      owed post-merge; OpenCode is not live-proven (parity row partial).'
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
