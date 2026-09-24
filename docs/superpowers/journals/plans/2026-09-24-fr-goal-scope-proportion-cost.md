@@ -285,3 +285,18 @@ _verify_tests_log requires the log mtime inside [tool_use, tool_result]; a run_i
 ### dl-f2-resolved · finding [out-of-scope] · resolves dl-f2: tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
 
 Pre-existing interaction between the tests gate and the long_commands brief; not caused by this change. Offered as an issue.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5-resolved-2 created=2026-09-25T00:36:42 state=open resolves=p4-f5 tracked_by=#605 -->
+### p4-f5-resolved-2 · finding [deferred → #605] · resolves p4-f5: Flat-step evidence debt never reported: _unevidenced_units reads unit_state on step/<id> units (None)
+
+Operator chose to file it after #604 merged.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f1-resolved-2 created=2026-09-25T00:36:43 state=open resolves=dl-f1 tracked_by=#606 -->
+### dl-f1-resolved-2 · finding [deferred → #606] · resolves dl-f1: tests= gate: _writes uses lstrip('./'), so a log under a dot-directory (.fr-deliver/…) never matches
+
+Operator chose to file it after #604 merged.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f2-resolved-2 created=2026-09-25T00:36:43 state=open resolves=dl-f2 tracked_by=#607 -->
+### dl-f2-resolved-2 · finding [deferred → #607] · resolves dl-f2: tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
+
+Operator chose to file it after #604 merged.
