@@ -738,6 +738,12 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     assert checked.exit_code == 0, checked.output
     assert load_run_state(root, "r1").cursor == "deliver"
 
+    # `deliver` hashes the proportionality report, which reads the plan at
+    # HEAD — committed, as it is by the time a real run delivers.
+    import subprocess
+
+    subprocess.run(["git", "-C", str(root), "add", plan_rel], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "plan"], check=True)
     out = _fr(root, ["run", "advance", "r1"])  # deliver brief
     assert out.exit_code == 0, out.output
     assert _walk_brief(out.output)["step"] == "deliver"

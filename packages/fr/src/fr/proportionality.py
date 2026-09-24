@@ -9,13 +9,17 @@ read its output is how false positives become policy.
 
 The diff is taken from `git merge-base HEAD <base>` to `HEAD`: the merge-base,
 not the base tip, because commits landing on the base after the branch forked
-are not this branch's touches. Committed `HEAD`, not the working tree, so the
-same `HEAD` always yields the same bytes — `deliver` hashes them.
+are not this branch's touches. Everything is read at committed `HEAD` — the
+diff, the plan's phase headers and the plan journal — and the first line
+names only the merge-base SHA, never the base's remote name, so the same
+`HEAD` yields the same bytes in any clone: `deliver` hashes them.
 
 Three sections, each a heuristic that names candidates for a human to judge:
 
-1. **Unreferenced new files** — an added file whose repo-relative path, or
-   whose stem when at least 4 characters, appears in no other tracked file.
+1. **Unreferenced new files** — an added file whose repo-relative path, stem
+   (at least 4 characters) or branch-created parent directory appears, as a
+   whole word, in no other tracked file. Modules a test runner discovers by
+   name (`test_*.py`, `*_test.py`, `conftest.py`) are skipped.
    The observed failure (gh#597) was a scratch fixture nothing loaded.
 2. **Out-of-plan touches** — a changed file matching no phase's `files` glob
    (`*` spans `/`, as in `.fr-isolation-allow`), "justified" when a journal
@@ -31,6 +35,7 @@ estimate never covered; and as *referencers*, because a journal that narrates
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
@@ -41,6 +46,7 @@ from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_r
 if TYPE_CHECKING:
     from fr.journal.model import JournalEntry
     from fr.parser import Plan
+    from fr.types import PhaseHeader
 
 EXEMPT_PREFIXES = ("docs/superpowers/", "docs/acceptance/")
 """fr's own artifacts: spec, plan, journals, runs, acceptance matrix + reports."""
@@ -101,14 +107,22 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
         )
     merge_base = mb.stdout.strip()
 
+    phases = _phases_at_head(repo_root, plan)
+    if phases is None:
+        return Report(
+            None,
+            f"proportionality: the plan {_rel(repo_root, plan.dir)} is not committed at "
+            "HEAD; commit it, then rerun.\n",
+        )
     changes = [c for c in _changes(repo_root, merge_base) if not _exempt(c.path)]
-    phases = [ph.phase for ph in plan.phases]
     globs = [g for ph in phases for g in ph.files]
     estimates = [ph.estimate_lines for ph in phases if ph.estimate_lines is not None]
 
-    lines = [f"proportionality: merge-base {merge_base} (HEAD vs {base})", ""]
+    # Only the SHA, never the base's name: `origin/main` in one clone is
+    # `upstream/main` in another, and deliver hashes these bytes.
+    lines = [f"proportionality: merge-base {merge_base}", ""]
     lines += ["## Unreferenced new files", ""]
-    lines += _bullets(_unreferenced(repo_root, changes))
+    lines += _bullets(_unreferenced(repo_root, merge_base, changes))
     lines += ["", "## Out-of-plan touches", ""]
     if not globs:
         lines.append("no phase declares `files`; out-of-plan touches cannot be checked.")
@@ -141,27 +155,57 @@ def _changes(repo_root: Path, merge_base: str) -> list[_Change]:
     return [_Change(path, status[path], *counts.get(path, (0, 0))) for path in sorted(status)]
 
 
-def _unreferenced(repo_root: Path, changes: list[_Change]) -> list[str]:
+def _unreferenced(repo_root: Path, merge_base: str, changes: list[_Change]) -> list[str]:
+    """Needles, matched as whole words (`data` is not in `metadata`): the
+    path, the stem when long enough, and every parent directory the BRANCH
+    created — fixtures are loaded by globbing their directory, and a reference
+    to a new directory is a reference to what is in it. A pre-existing parent
+    (`src`, `tests/unit`) is named all over any repo for unrelated reasons, so
+    counting it would pass every new file beneath it."""
     out: list[str] = []
+    new_dirs: dict[str, bool] = {}
     for c in changes:
-        if c.status != "A":
+        if c.status != "A" or _runner_discovered(c.path):
             continue
         needles = [c.path]
-        stem = PurePosixPath(c.path).stem
-        if len(stem) >= MIN_STEM_CHARS:
-            needles.append(stem)
+        pure = PurePosixPath(c.path)
+        if len(pure.stem) >= MIN_STEM_CHARS:
+            needles.append(pure.stem)
+        for parent in pure.parents:
+            d = str(parent)
+            if d == ".":
+                break
+            if d not in new_dirs:
+                existed = git_answer(repo_root, "cat-file", "-e", f"{merge_base}:{d}")
+                new_dirs[d] = existed.returncode != 0
+            if new_dirs[d]:
+                needles.append(d)
         if not _referenced_elsewhere(repo_root, c.path, needles):
             out.append(c.path)
     return out
 
 
+RUNNER_DISCOVERED = ("test_*.py", "*_test.py", "conftest.py")
+"""Basenames a test runner loads by convention (pytest's defaults): nothing
+names them, so "unreferenced" is their normal state, not a signal (review
+p3-f1 — on this feature's own branch they were every line of the section)."""
+
+
+def _runner_discovered(path: str) -> bool:
+    name = PurePosixPath(path).name
+    return any(fnmatchcase(name, pattern) for pattern in RUNNER_DISCOVERED)
+
+
 def _referenced_elsewhere(repo_root: Path, path: str, needles: list[str]) -> bool:
-    args = ["grep", "-l", "-z", "-F"]
+    args = ["grep", "-l", "-z", "-F", "-w"]
     for n in needles:
         args += ["-e", n]
     args += ["HEAD", "--", "."] + [f":(exclude){p}" for p in EXEMPT_PREFIXES]
     res = git_answer(repo_root, *args)
-    # `git grep` exits 1 for "no match" — an answer, not a failure.
+    # `git grep` exits 1 for "no match" — an answer. Anything above 1 is git
+    # failing, and reading it as "no match" would list the file on no evidence.
+    if res.returncode > 1:
+        raise GitUnavailableError(f"`git grep` failed: {res.stderr.strip()}")
     hits = [h.removeprefix("HEAD:") for h in res.stdout.split("\0") if h]
     return any(h != path for h in hits)
 
@@ -183,13 +227,26 @@ def _justifiers(repo_root: Path, plan: Plan) -> list[JournalEntry]:
     (a reviewer asked for the change) and decisions recorded as deviations
     (the fr-execute convention: a `DEVIATION` title). A missing journal
     justifies nothing; an unreadable one is left to `fr journal check`."""
-    from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
+    from fr.journal.model import (
+        JournalParseError,
+        archived_journal_path,
+        journal_path,
+        parse_journal,
+    )
 
-    path = resolve_journal_read_path(repo_root, "plan", plan.meta.plan)
-    if not path.exists():
+    slug = plan.meta.plan
+    text = None
+    for path in (
+        journal_path(repo_root, "plan", slug),
+        archived_journal_path(repo_root, "plan", slug),
+    ):
+        text = _show_head(repo_root, _rel(repo_root, path))
+        if text is not None:
+            break
+    if text is None:
         return []
     try:
-        entries = parse_journal(path.read_text())
+        entries = parse_journal(text)
     except (JournalParseError, ValueError):
         return []
     return [
@@ -197,6 +254,38 @@ def _justifiers(repo_root: Path, plan: Plan) -> list[JournalEntry]:
         for e in entries
         if e.kind == "finding" or (e.kind == "decision" and "deviation" in e.title.casefold())
     ]
+
+
+def _phases_at_head(repo_root: Path, plan: Plan) -> list[PhaseHeader] | None:
+    """The plan's phase headers as committed at HEAD — None when HEAD has no
+    phase file for it. Read from HEAD, not the parsed working-tree `plan`, so
+    the report is a pure function of HEAD (review p3-f4): an uncommitted edit
+    must not change the bytes `deliver` hashes."""
+    import yaml
+
+    from fr.types import PhaseHeader
+
+    rel = _rel(repo_root, plan.dir)
+    listing = git_answer(repo_root, "ls-tree", "-z", "--name-only", "HEAD", "--", f"{rel}/")
+    names = sorted(
+        n for n in listing.stdout.split("\0") if re.fullmatch(r"\d{2}\.yaml", PurePosixPath(n).name)
+    )
+    headers: list[PhaseHeader] = []
+    for name in names:
+        text = _show_head(repo_root, name)
+        if text is None:
+            continue
+        headers.append(PhaseHeader.model_validate(yaml.safe_load(text)["phase"]))
+    return headers or None
+
+
+def _show_head(repo_root: Path, rel: str) -> str | None:
+    res = git_answer(repo_root, "show", f"HEAD:{rel}")
+    return res.stdout if res.returncode == 0 else None
+
+
+def _rel(repo_root: Path, path: Path) -> str:
+    return path.resolve().relative_to(repo_root.resolve()).as_posix()
 
 
 def _size(changes: list[_Change], estimate: int | None) -> list[str]:

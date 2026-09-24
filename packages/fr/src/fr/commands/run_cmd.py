@@ -1243,10 +1243,13 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
         raise typer.Exit(2) from e
     report = run_report(repo_root, plan, None)
     if report.merge_base is None:
+        hint = (
+            " (`fr run resolve` takes no --base: fetch the remote so its default branch resolves)"
+            if "--base" in report.text
+            else ""
+        )
         err_console.print(
-            f"{key}: cannot derive proportionality evidence — {report.text.strip()} "
-            "(`fr run resolve` takes no --base: fetch the remote so its default "
-            "branch resolves)",
+            f"{key}: cannot derive proportionality evidence — {report.text.strip()}{hint}",
             markup=False,
             soft_wrap=True,
         )

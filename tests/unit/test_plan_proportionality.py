@@ -91,7 +91,11 @@ def _plan(repo: Path):
     return parse_plan(repo / "docs" / "superpowers" / "plans" / SLUG)
 
 
-def _journal(repo: Path, entry_id: str, kind: str, title: str, body: str) -> None:
+def _journal(
+    repo: Path, entry_id: str, kind: str, title: str, body: str, *, commit: bool = True
+) -> None:
+    """Append a plan-journal entry and (by default) commit it — the report
+    reads the journal at HEAD, never the working tree (review p3-f4)."""
     extra = {"state": "open"} if kind == "finding" else {}
     append_journal_entry(
         journal_path(repo, "plan", SLUG),
@@ -107,6 +111,8 @@ def _journal(repo: Path, entry_id: str, kind: str, title: str, body: str) -> Non
             **extra,  # type: ignore[arg-type]
         ),
     )
+    if commit:
+        _commit_all(repo, f"journal {entry_id}")
 
 
 def _section(report: str, heading: str) -> str:
@@ -127,7 +133,9 @@ def test_the_first_line_records_the_merge_base_sha(tmp_path: Path) -> None:
     report = build_report(repo, _plan(repo), None)
 
     assert base_sha in report.splitlines()[0]
-    assert "origin/main" in report.splitlines()[0]
+    # Only the SHA: the base's NAME differs across clones (`origin`,
+    # `upstream`) and would change the bytes deliver hashes (review p3-f4).
+    assert "origin" not in report.splitlines()[0]
 
 
 def test_the_diff_is_from_the_merge_base_not_the_moving_base(tmp_path: Path) -> None:
@@ -416,3 +424,179 @@ def test_the_cli_passes_base_through(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     assert result.exit_code == 0, result.output
     assert _git(repo, "rev-parse", "main") in result.output
+
+
+# ── review p3-f1: runner-discovered test modules ─────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "module", ["tests/unit/test_widget.py", "tests/widget_test.py", "tests/conftest.py"]
+)
+def test_a_new_test_module_is_not_listed_while_a_sibling_fixture_is(
+    tmp_path: Path, module: str
+) -> None:
+    """A test runner loads these by NAME, so "nothing references them" is
+    their normal state — listing them drowned gh#597's signal on this very
+    branch. The scratch fixture beside them is still what the section is for."""
+    repo = _repo(tmp_path)
+    _write(repo, module, "def test_x():\n    pass\n")
+    _write(repo, "tests/fixtures/scratch_payload.json", "{}\n")
+    _commit_all(repo, "work")
+
+    section = _section(build_report(repo, _plan(repo), None), "Unreferenced new files")
+
+    assert module not in section
+    assert "tests/fixtures/scratch_payload.json" in section
+
+
+def test_a_new_helper_module_under_tests_is_still_listed(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _write(repo, "tests/unit/orphan_helpers.py", "def h():\n    pass\n")
+    _commit_all(repo, "work")
+
+    section = _section(build_report(repo, _plan(repo), None), "Unreferenced new files")
+
+    assert "tests/unit/orphan_helpers.py" in section
+
+
+# ── review p3-f2: whole-word references, and directory loads ─────────────────
+
+
+def test_a_stem_inside_a_longer_word_is_not_a_reference(tmp_path: Path) -> None:
+    """`data` inside `metadata` or `dataset` is not a reference to data.py."""
+    repo = _repo(tmp_path)
+    _write(repo, "src/data.py", "D = 1\n")
+    _write(repo, "src/app.py", "import helper\nmetadata = dataset = 1\n")
+    _commit_all(repo, "work")
+
+    section = _section(build_report(repo, _plan(repo), None), "Unreferenced new files")
+
+    assert "src/data.py" in section
+
+
+def test_a_file_in_a_new_directory_loaded_by_its_path_is_not_listed(tmp_path: Path) -> None:
+    """Fixtures are often loaded by globbing their directory: a reference to
+    the directory the branch created is a reference to what is in it."""
+    repo = _repo(tmp_path)
+    _write(repo, "tests/fixtures/cursors_v9/2026-01-01-a.yaml", "a: 1\n")
+    _write(repo, "src/app.py", "import helper\nglob('tests/fixtures/cursors_v9/*.yaml')\n")
+    _commit_all(repo, "work")
+
+    section = _section(build_report(repo, _plan(repo), None), "Unreferenced new files")
+
+    assert "cursors_v9" not in section
+
+
+def test_a_reference_to_a_pre_existing_parent_directory_does_not_count(tmp_path: Path) -> None:
+    """`src` is named all over any repo; if naming an OLD directory counted,
+    every new file under it would pass — the false negative this section
+    exists to avoid. Only directories the branch created count."""
+    repo = _repo(tmp_path)
+    _write(repo, "src/lonely_scratch.json", "{}\n")
+    _write(repo, "README.md", "code lives in src/ and src\n")
+    _commit_all(repo, "work")
+
+    section = _section(build_report(repo, _plan(repo), None), "Unreferenced new files")
+
+    assert "src/lonely_scratch.json" in section
+
+
+# ── review p3-f4: a pure function of HEAD ───────────────────────────────────
+
+
+def test_an_uncommitted_journal_edit_does_not_change_the_report(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _write(repo, "README.md", "readme, edited\n")
+    _commit_all(repo, "work")
+    before = build_report(repo, _plan(repo), None)
+
+    _journal(repo, "p1-f9", "finding", "README drift", "README.md", commit=False)
+
+    assert build_report(repo, _plan(repo), None) == before
+
+
+def test_an_uncommitted_plan_edit_does_not_change_the_report(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _write(repo, "README.md", "readme, edited\n")
+    _commit_all(repo, "work")
+    before = build_report(repo, _plan(repo), None)
+    phase = repo / "docs" / "superpowers" / "plans" / SLUG / "01.yaml"
+    phase.write_text(phase.read_text().replace("- src/**", "- '**'"))
+
+    assert build_report(repo, _plan(repo), None) == before
+
+
+def test_a_plan_not_committed_at_head_is_one_line(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _git(repo, "rm", "-q", "-r", "--cached", "docs/superpowers/plans")
+    _git(repo, "commit", "-q", "-m", "untrack the plan")  # files stay on disk
+
+    result = run_report(repo, _plan(repo), None)
+
+    assert result.merge_base is None
+    assert len(result.text.strip().splitlines()) == 1
+    assert "HEAD" in result.text
+
+
+# ── review p3-f5: git grep failure is not "unreferenced" ─────────────────────
+
+
+def test_a_failing_git_grep_is_reported_not_read_as_no_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess as sp
+
+    import fr.proportionality as prop
+
+    repo = _repo(tmp_path)
+    _write(repo, "src/new_thing.json", "{}\n")
+    _commit_all(repo, "work")
+    real = prop.git_answer
+
+    def broken(root: Path, *args: str, **kw):
+        if args and args[0] == "grep":
+            return sp.CompletedProcess(["git", *args], 128, "", "fatal: boom")
+        return real(root, *args, **kw)
+
+    monkeypatch.setattr(prop, "git_answer", broken)
+
+    result = run_report(repo, _plan(repo), None)
+
+    assert result.merge_base is None
+    assert "src/new_thing.json" not in result.text
+    assert "git could not answer" in result.text
+
+
+# ── review p3-f6: renames, deletions, binaries ───────────────────────────────
+
+
+def test_a_rename_is_a_delete_plus_an_add(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, estimate=100)
+    _git(repo, "mv", "src/helper.py", "src/renamed_helper.py")
+    _commit_all(repo, "rename")
+
+    report = build_report(repo, _plan(repo), None)
+
+    assert "src/renamed_helper.py" in _section(report, "Unreferenced new files")
+    assert "2 lines changed (+1 -1" in _section(report, "Size")
+
+
+def test_a_deleted_file_outside_the_plan_is_an_out_of_plan_touch(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "README.md").unlink()
+    _commit_all(repo, "delete")
+
+    report = build_report(repo, _plan(repo), None)
+
+    assert "README.md" in _section(report, "Out-of-plan touches")
+    assert "README.md" not in _section(report, "Unreferenced new files")
+
+
+def test_a_binary_file_counts_zero_lines(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, estimate=100)
+    (repo / "src" / "blob.bin").write_bytes(b"\x00\x01\x02" * 50)
+    _commit_all(repo, "binary")
+
+    section = _section(build_report(repo, _plan(repo), None), "Size")
+
+    assert "0 lines changed (+0 -0" in section

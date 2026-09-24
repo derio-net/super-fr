@@ -483,6 +483,9 @@ def _at_deliver(tmp_path: Path, *, with_origin: bool = True) -> tuple[Path, Path
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "grouped", _DELIVER_SHAPE)
     _started_grouped_with_plan(repo, shipped)
+    # The report reads the plan at HEAD (review p3-f4), as delivery commits it.
+    _git(repo, "add", "docs/superpowers/plans")
+    _git(repo, "commit", "-qm", "plan")
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0  # deliver
     # Written after the unit opened, so the unobservable `tests` path accepts it.
     (repo / "suite.log").write_text("1 passed\n")
