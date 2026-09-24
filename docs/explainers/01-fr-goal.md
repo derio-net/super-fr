@@ -369,6 +369,17 @@ refuses, instead of leaving you waiting on it, and `fr run claim … --abandoned
 is the way on. Re-briefing then starts from the last commit, because uncommitted
 work did not travel either.
 
+Phases are only part of the bill. The orchestrator — the session you started,
+which brainstorms, reviews, and delivers — spends tokens of its own at every
+step, and until recently nothing measured them. Now, as each top-level step
+finishes, `fr` reads the harness's own session store for the window that step
+occupied and records what the main session used: turns, the four token
+figures, and the cost where the harness reports one. `fr run cost <run-id>`
+prints that as one table, a row per step, with the subagents' total beside it.
+The same honesty rule applies. A step that cannot be measured prints `—`, never
+`0`, and if any one of the sessions a step spanned cannot be read, nothing is
+recorded at all: a partial sum presented as a measurement is worse than none.
+
 ### Ending a turn on a run that is waiting for nobody
 
 The loop has one failure that no amount of recorded state can fix, because it is
@@ -476,7 +487,8 @@ expected path, not an unconditional promise of one conversation turn.
 |---|---:|---|
 | Initial product and architecture decisions | Yes, once | These decisions belong to the operator. |
 | Spec and plan approvals | No | Approval pauses become review-and-fix passes. |
-| A valid code-review finding | No | The agent fixes it and tests the fix. |
+| A valid finding this change caused | No | The agent fixes it and tests the fix. |
+| A true finding this change did not cause | No | Filed as out of scope, listed in the PR for you. |
 | A factually incorrect finding | No | The agent records a reasoned refutation. |
 | Missing access, profile, or required answer | Yes | Guessing would change scope or cross a boundary. |
 | Secret, UI operation, or deployment | Yes | These become manual phases. |
@@ -500,7 +512,19 @@ trust silence.
 Your answers become a **specification**, a document that says what will change
 and why. The next step checks that document against both your answers and the
 existing project. If it refers to a service, helper, or path that does not
-exist, the discrepancy must be resolved before planning. The file lives at
+exist, the discrepancy must be resolved before planning.
+
+That check is not done by the agent that wrote the specification. An author
+re-reading their own document finds what they meant to write, not what they
+wrote, so `spec-review` dispatches a separate, read-only reviewer,
+`fr-spec-reviewer`. It can read and search the project and nothing else. It
+checks the specification against the decisions you gave, cites a file and line
+for every name the document relies on, looks for sections that disagree with
+each other, and hands back a list of findings; it changes nothing itself. The
+step cannot be marked done without that review on record: a review entry
+written after the step began, the reviewer's own identifier — which, where the
+harness lets `fr` read the conversation, must be a reviewer this session really
+dispatched — and no finding left open. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
@@ -641,7 +665,7 @@ updated only when there is honest test evidence
 
 At each completed phase the agent reviews the spec, plan, and code together — the
 review is part of every phase iteration, not a single pass at the end. It fixes every
-valid finding
+valid finding that is in scope
 with tests. It may reject a finding only with explicit, factual reasoning;
 silent dismissal is not allowed. Each finding is recorded as open, fixed, or
 refuted, and that durable list — not anyone's memory of the review — is what
@@ -691,6 +715,21 @@ and holds *that* review open instead. The same check already ran once, at the
 very end, just before delivery. It has simply moved to the moment a finding is
 cheapest to fix: while the phase that caused it is still the one in hand.
 
+"In scope" is doing real work in that sentence. A reviewer who is asked to find
+problems will find them, and not all of them are this change's: an older bug in
+a neighbouring module, a test that was always slow, a tidy-up that would be
+nice. Fix all of those and the pull request quietly grows into several changes
+at once, each one reasonable, together much harder to review. So the reviewer
+tags every finding. In scope means this change is wrong, incomplete, or worse
+than it needs to be — an algorithm asymptotically slower than necessary counts.
+Out of scope means true, but not caused by this change. The agent fixes the
+first kind and files the second as out of scope, with a note saying why; the
+review gate lets it pass, and the pull request lists it in its own section for
+you to decide which become issues. Moving it back to fixed later is your call,
+not the agent's: the record must say the operator answered, and otherwise the
+journal check reports an unauthorized fix. If the agent overrules a reviewer's
+"in scope", the pull request says so as well.
+
 What it deliberately does not do is reach backwards. A review marked done
 before this gate existed is not retroactively failed; it is reported as
 unevidenced debt and the run carries on. An obligation enforced backwards in
@@ -738,8 +777,23 @@ guard, and post-merge content verification now protect that transition
 The final PR discloses the spec and plan, review findings and fixes, refuted
 findings, unfinished manual work, operator-driven Test Plan, and remaining
 acceptance debt — and, because the run's record is committed on the same branch,
-the sequence of steps that produced all of it. The agent then stops. Merge
-remains the operator's decision.
+the sequence of steps that produced all of it. Findings come from both journals,
+the specification's and the plan's, and the out-of-scope ones get a section of
+their own that asks you which to file; you answer when you merge, and nothing
+waits on it. The agent then stops. Merge remains the operator's decision.
+
+Two more things travel in that description. The first is a **proportionality
+report** from `fr plan proportionality`: new files nothing refers to, files
+changed that no phase said it would touch, and the diff's size against the
+plan's own estimate, flagged when it runs past twice that. It exists because an
+autonomous run's usual failure is not a wrong change but a larger one than
+asked for, and a reviewer looking at a green diff has no easy way to see what
+was not supposed to be there. It is a report, not a gate — nothing in it blocks
+delivery — but it is not optional either: marking `deliver` done runs the
+report itself and records a fingerprint of it, so the one pasted into the pull
+request can be checked against the one the tool saw. The second is the
+`fr run cost` table, so what the run spent is written down beside what it
+produced.
 
 ### 9. Confirm the merge, then drive the manual Test Plan
 
@@ -762,7 +816,9 @@ have.
 After merge verification, the agent drives this session interactively. It
 presents the next check, asks the operator to perform or observe the human-only
 part, records the result, and continues until the plan passes or a failure
-requires recovery. It then reports any remaining acceptance debt, confirms plan
+requires recovery. Each out-of-scope finding you chose to file becomes an issue,
+and the journal records the finding as deferred to it; one you did not answer
+stays visibly out of scope. It then reports any remaining acceptance debt, confirms plan
 completion, archives the plan, its journal, and its run record through a
 housekeeping PR, and tears down isolation or lets garbage collection reap it
 (`plugins/super-fr/skills/fr-goal/SKILL.md:113-117`).

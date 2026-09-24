@@ -128,9 +128,10 @@ state:
       note: fr-goal §2/§6/§8/close-out + frontmatter, fr-plan files/estimate_lines;
         both mirrors synced; neutrality + skill tripwires green
     P4.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:19:20+00:00'
+      note: unmodified re-render byte-identical (from /, --isolated); new render diff
+        = prose only (62+/6-); explainers tripwire green
     P4.T3.S3:
       state: ' '
       ticked_at: null
