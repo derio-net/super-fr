@@ -19,9 +19,14 @@ tasks:
 state:
   steps:
     P5.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T19:29:00+00:00'
+      note: 'Walked on Claude Code in the 2026-09-22..24 triage sessions: fr triage
+        collect --repo derio-net/super-fr (--pr-limit 1000); judged issue-less PRs
+        (#560, #536, #567 and later #571, all with delivery verdicts); rendered with
+        --open. The PRs section only showed judged PRs after #567: before it, main
+        rendered ''No unranked pull requests''. Verified side by side against #567''s
+        fr, and on main after it merged. S2 (the same walk on OpenCode) is still open.'
     P5.T1.S2:
       state: ' '
       ticked_at: null
