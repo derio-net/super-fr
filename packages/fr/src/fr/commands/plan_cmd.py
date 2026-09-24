@@ -411,3 +411,29 @@ def self_review_cmd(
         console.print(escape(str(issue)))
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(1)
+
+
+@plan_app.command("proportionality")
+def proportionality_cmd(
+    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
+    base: str | None = typer.Option(
+        None,
+        "--base",
+        help="Ref to diff from (via its merge-base with HEAD). Default: the remote default branch.",
+    ),
+) -> None:
+    """Compare the branch's diff with the plan: unreferenced new files,
+    out-of-plan touches, size vs estimate. A report, never a gate — always
+    exits 0 once the plan parses (an unreadable plan is not a report)."""
+    from fr.git import repo_root as git_repo_root
+    from fr.proportionality import build_report
+
+    try:
+        plan = parse(plan_dir)
+    except PlanSchemaError as e:
+        err_console.print(f"[red]parse error:[/red] {e}")
+        raise typer.Exit(2) from e
+    root = plan.repo_root or git_repo_root()
+    # Plain echo, not rich: the report is pasted into a PR body verbatim, and
+    # rich would read `[...]` as markup and re-wrap long lines.
+    typer.echo(build_report(root, plan, base), nl=False)
