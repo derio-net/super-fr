@@ -200,3 +200,68 @@ Not in the plan. _PERMISSION_DEFAULT_DENIES only covered task/webfetch, so the O
 ### x-p4-shipped-walkers · discovery · tests walking the SHIPPED fr-goal shape past spec-review now record its evidence (phase 4)
 
 18 tests (test_run_cli walker, test_run_adopt _drive_to_plan_step, three test_fr_goal_shape walkers, two agent-count pins) broke on the new spec-review evidence and agent. Fixed via tests/unit/spec_review_support.spec_review_evidence (a spec-journal review entry through append_journal_entry + --evidence review/reviewer); _drive_to_plan_step's brainstorm now emits its spec. Also the review-phase manifest comment gained spec §A's in/out tag brief (spec §A lists it as a classification moment; no phase owned it) and the manifest header's stale 'fr run is start/.../check only' now lists cost.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1 created=2026-09-24T23:45:02 phase=4 state=open review_scope=in -->
+### p4-f1 · finding [open] (reviewer: in scope) · Adopted flat unit: reviewer check gets no 'since', so any reviewer id passes (phase 4)
+
+run_cmd.py _verify_reviewer ~1270: pass the same since (opened or record.at) used for the review entry; test an adopted cursor naming an undispatched reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f2 created=2026-09-24T23:45:02 phase=4 state=open review_scope=in -->
+### p4-f2 · finding [open] (reviewer: in scope) · spec-review reviewer gate accepts any dispatched subagent type, not the manifest's agent (phase 4)
+
+When target.phase is None and step.agent is set, refuse observed.agent_type not matching step.agent (qualified or bare). #497 pattern.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f3 created=2026-09-24T23:45:03 phase=4 state=open review_scope=in -->
+### p4-f3 · finding [open] (reviewer: in scope) · Spec-review date tests don't pin TZ; journal_stamp_as_utc removal only fails west of UTC (phase 4)
+
+Add TZ-pinned tests on both sides of UTC (monkeypatch TZ + time.tzset): review just after open accepted, just before refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f4 created=2026-09-24T23:45:03 phase=4 state=open review_scope=in -->
+### p4-f4 · finding [open] (reviewer: in scope) · SKILL.md new journal resolve examples omit required --slug (phase 4)
+
+fr-goal SKILL §2/§6/close-out: add --slug <s>.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f6 created=2026-09-24T23:45:04 phase=4 state=open review_scope=in -->
+### p4-f6 · finding [open] (reviewer: in scope) · fr-phase-executor-guard.sh does not refuse worktree isolation for fr-spec-reviewer (#420 hazard, new agent) (phase 4)
+
+Widen the guard's case to super-fr:fr-spec-reviewer | fr-spec-reviewer with its own reason; guard test; parity row if needed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5 created=2026-09-24T23:45:04 phase=4 state=open review_scope=out -->
+### p4-f5 · finding [open] (reviewer: out of scope) · Flat-step evidence debt never reported: _unevidenced_units reads unit_state on step/<id> units (None) (phase 4)
+
+run_cmd.py ~1649. Pre-existing (deliver has the same blind spot); not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f5-resolved created=2026-09-24T23:45:04 phase=4 state=open resolves=p4-f5 out_of_scope=true -->
+### p4-f5-resolved · finding [out-of-scope] · resolves p4-f5: Flat-step evidence debt never reported: _unevidenced_units reads unit_state on step/<id> units (None) (phase 4)
+
+Pre-existing blind spot in _unevidenced_units (flat units' state lives on the step record); this change did not introduce it. Offered as an issue at delivery.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f1-resolved created=2026-09-25T00:00:20 phase=4 state=fixed resolves=p4-f1 -->
+### p4-f1-resolved · finding [fixed] · resolves p4-f1: Adopted flat unit: reviewer check gets no 'since', so any reviewer id passes (phase 4)
+
+c1f458fb: reviewer check uses the same since as the review entry; test_p4_f1_adopted_spec_review_naming_an_undispatched_reviewer_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f2-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f2 -->
+### p4-f2-resolved · finding [fixed] · resolves p4-f2: spec-review reviewer gate accepts any dispatched subagent type, not the manifest's agent (phase 4)
+
+c1f458fb: observed agent_type must match step.agent (qualified or bare); test_p4_f2_* .
+
+<!-- fr:journal kind=finding scope=plan id=p4-f3-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f3 -->
+### p4-f3-resolved · finding [fixed] · resolves p4-f3: Spec-review date tests don't pin TZ; journal_stamp_as_utc removal only fails west of UTC (phase 4)
+
+60f966f7: test_p4_f3_the_review_date_is_compared_in_utc_east_and_west (Tokyo, Los Angeles).
+
+<!-- fr:journal kind=finding scope=plan id=p4-f4-resolved created=2026-09-25T00:00:21 phase=4 state=fixed resolves=p4-f4 -->
+### p4-f4-resolved · finding [fixed] · resolves p4-f4: SKILL.md new journal resolve examples omit required --slug (phase 4)
+
+a884307c: --scope/--slug added; test_skill_journal_resolve_examples guards every shipped example.
+
+<!-- fr:journal kind=finding scope=plan id=p4-f6-resolved created=2026-09-25T00:00:22 phase=4 state=fixed resolves=p4-f6 -->
+### p4-f6-resolved · finding [fixed] · resolves p4-f6: fr-phase-executor-guard.sh does not refuse worktree isolation for fr-spec-reviewer (#420 hazard, new agent) (phase 4)
+
+65867491: guard refuses worktree isolation for fr-spec-reviewer; TestSpecReviewerGuard; parity summary + both rule files updated.
+
+<!-- fr:journal kind=review scope=plan id=r-p4 created=2026-09-25T00:00:22 phase=4 -->
+### r-p4 · review · Phase 4 review (independent reviewer): 5 in-scope findings fixed (p4-f1..f4, f6); p4-f5 out-of-scope; deviations 1-4 accepted (phase 4)
+
+Reviewer: dispatched general-purpose subagent a979c488f146166c2 (ran the full suite, sync checks, parity, acceptance). Fixes by the phase executor; orchestrator re-ran the affected tests.
