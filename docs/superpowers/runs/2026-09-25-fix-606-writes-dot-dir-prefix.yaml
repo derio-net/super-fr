@@ -151,8 +151,17 @@ steps:
       turns: 0
       sessions: 1
   deliver:
-    state: running
-    at: '2026-09-24T22:52:12+00:00'
+    state: done
+    at: '2026-09-24T23:09:43+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/609
+    main_session:
+      input_tokens: 46
+      cache_creation_input_tokens: 22414
+      cache_read_input_tokens: 3465510
+      output_tokens: 11431
+      turns: 23
+      sessions: 1
     units:
       step/deliver:
         attempts:
@@ -160,3 +169,8 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 0d3c7c4c-bb15-449a-be4d-305ec50abe9f
+          returned: '2026-09-24T23:09:43+00:00'
+          outcome: done
+        evidence:
+          tests: .fr-deliver/tests.log@eb71b80552ba
+          proportionality: 6d8200df2a3834adfccea7be60d9417c61316d75:fbb095575669835a5303ef28ec7e55f499dd73820d42a1e75f820a172a2675df
