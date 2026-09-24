@@ -29,3 +29,13 @@ tests/fixtures/run_cursors/v5/2026-09-23-fix-457-uninstall-rules.yaml captured b
 ### d-p1-dedupe-then-window · decision · main-session reader dedupes before windowing (phase 1)
 
 A message's content-block records can straddle a step boundary by milliseconds; deduplicating by message.id first and windowing second charges it once, to the step its first record fell in. Windowing first would count it in both adjacent steps.
+
+<!-- fr:journal kind=decision scope=plan id=v-p1-measure-step created=2026-09-24T21:08:59 phase=1 -->
+### v-p1-measure-step · decision · DEVIATION: Protocol method is measure_step(env, sessions, start, end, directories); measure_main_session stays per-reader (phase 1)
+
+Plan P1.T3.S2 said add measure_main_session to the TranscriptReader Protocol. The two readers take different inputs (a Claude transcript path vs an OpenCode DB + session id), and OpenCode's candidate fallback (unique top-level session by directory) is reader-specific, so the Protocol gained measure_step(env, sessions, start, end, directories) -> MainSessionUsage|None and each reader keeps its own per-session measure_main_session. candidate_sessions also takes harness= (default claude-code): attempt sessions and current_session are Claude ids, and bindings are filtered by harness (unknown counts as Claude Code), so an OpenCode binding never makes a Claude measurement 'unreadable'. Also: test_run_legacy / test_run_v4_to_v5 fixture globs narrowed to v[1-4] now that v5/ exists.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p1-opencode-schema created=2026-09-24T21:12:26 phase=1 -->
+### x-p1-opencode-schema · discovery · OpenCode DB shape verified live (read-only) (phase 1)
+
+sqlite3 -readonly on ~/.local/share/opencode/opencode.db (2026-09-24): session(id, parent_id, directory, ...), message(id, session_id, time_created INTEGER epoch MILLISECONDS, data TEXT). An assistant row's data keys: agent, cost, finish, mode, modelID, parentID, providerID, role, time{created,completed} (ms), tokens{total,input,output,reasoning,cache{read,write}}. No content or identity copied. The reader windows on time_created/1000 (second precision, same rule as Claude Code), opens the DB with a mode=ro URI, and tests use a fixture DB with that schema subset; conftest now points FR_OPENCODE_DB at a nonexistent path suite-wide.

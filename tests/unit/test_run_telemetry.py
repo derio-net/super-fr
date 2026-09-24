@@ -396,7 +396,11 @@ def test_a_missing_session_file_is_no_measurement(tmp_path: Path) -> None:
 
 def test_the_reader_is_harness_scoped() -> None:
     assert reader_for("claude-code") is not None
-    assert reader_for("opencode") is None, "OpenCode keeps V1 estimates until its reader lands"
+    # OpenCode has a reader since spec 2026-09-24 §D — for the MAIN session
+    # only; its dispatch measurement is still nothing (V1 estimates stand).
+    opencode = reader_for("opencode")
+    assert opencode is not None
+    assert opencode.measure(Path("x"), agent=None, start="", end="", same_session=True) is None
     assert reader_for("hermes") is None
     assert reader_for("nonesuch") is None
 

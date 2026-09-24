@@ -33,9 +33,11 @@ says "elsewhere", and a hostname in a public repo's committed cursor is
 identity nobody needs.
 
 **No harness API is called.** Everything here reads files the harness already
-writes. Claude Code is the one implementation; OpenCode and Hermes keep the V1
-estimates until their readers land (`reader_for` returns `None` for them, which
-is what makes the degradation loud rather than silent).
+writes. Claude Code is the one full implementation. OpenCode has a reader for
+the MAIN session only (its SQLite session store, read-only — spec
+`2026-09-24-fr-goal-scope-proportion-cost-design.md` §D); its dispatched units
+keep the V1 estimates. Hermes has no reader at all (`reader_for` returns `None`,
+which is what makes the degradation loud rather than silent).
 
 ## The shape, as captured — not as first assumed
 
@@ -75,7 +77,9 @@ import datetime as _dt
 import json
 import os
 import re
+import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeGuard
@@ -542,9 +546,9 @@ def select_for_attempt(
 
 
 class TranscriptReader(Protocol):
-    """What a harness must offer for fr to measure a unit. One implementation
-    exists; the Protocol is here so the second one cannot quietly acquire a
-    different shape."""
+    """What a harness must offer for fr to measure a unit. Two implementations
+    exist (Claude Code; OpenCode, main session only); the Protocol is what
+    keeps them one shape."""
 
     harness: str
 
@@ -959,9 +963,196 @@ def orchestrator_wrote_since(
     return windows
 
 
-READERS: Mapping[str, TranscriptReader] = {ClaudeCodeReader.harness: ClaudeCodeReader()}
+OPENCODE_DB_ENV = "FR_OPENCODE_DB"
+"""Override for OpenCode's session database — the same role
+`FR_TRANSCRIPT_ROOT` plays for Claude Code, and what keeps the suite off the
+operator's own sessions."""
+
+OPENCODE_DB = Path(".local") / "share" / "opencode" / "opencode.db"
+"""Where OpenCode keeps its sessions, under `$HOME`."""
+
+
+class OpenCodeReader:
+    """Main-session usage from OpenCode's SQLite session database (spec §D).
+
+    Read-only by construction: the file is opened with a `mode=ro` URI, so a
+    missing database is an error (no measurement), never a new empty file,
+    and nothing here can write the harness's own store.
+
+    Dispatch measurement stays `None`, unchanged: `locate_session` finds
+    nothing and `measure` measures nothing, so a dispatched unit on OpenCode
+    keeps its V1 estimate exactly as before this reader existed.
+
+    **Which session.** OpenCode sessions are never bound automatically —
+    `current_session` reads only `CLAUDE_CODE_SESSION_ID` — so the candidates
+    are normally the workspace bindings made with `fr isolation attach
+    --harness opencode`. With none, `candidate_sessions` falls back to the
+    UNIQUE top-level session in the run's workspace or base clone that has
+    assistant messages in the window; more than one means nothing is
+    recorded, never a guess.
+    """
+
+    harness = "opencode"
+
+    def database(self, env: Mapping[str, str]) -> Path:
+        override = env.get(OPENCODE_DB_ENV)
+        return Path(override) if override else Path.home() / OPENCODE_DB
+
+    def locate_session(self, env: Mapping[str, str], session: str | None = None) -> Path | None:
+        return None
+
+    def measure(
+        self,
+        session: Path,
+        *,
+        agent: str | None = None,
+        start: str,
+        end: str,
+        same_session: bool = True,
+    ) -> Measurement | None:
+        return None
+
+    def measure_main_session(
+        self, db: Path, session: str, start: str, end: str
+    ) -> SessionUsage | None:
+        """One session's assistant messages over `(start, end]`, or `None`
+        when the database or the session cannot be read.
+
+        Tokens are `opencode_tokens`' mapping (reasoning folded into
+        output). `cost_usd` sums `data.cost`, OpenCode's own figure. The
+        window compares `time_created` (epoch milliseconds) truncated to the
+        second, the same precision rule as Claude Code's.
+        """
+        bounds = _epoch_window(start, end)
+        if bounds is None:
+            return None
+        try:
+            with closing(_open_ro(db)) as con:
+                if con.execute("SELECT 1 FROM session WHERE id = ?", (session,)).fetchone() is None:
+                    return None
+                rows = con.execute(
+                    "SELECT data FROM message WHERE session_id = ? "
+                    "AND time_created / 1000 > ? AND time_created / 1000 <= ?",
+                    (session, *bounds),
+                ).fetchall()
+        except sqlite3.Error:
+            return None
+        figures = dict.fromkeys(USAGE_KEYS, 0)
+        turns = 0
+        cost = 0.0
+        for (raw,) in rows:
+            try:
+                data = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, Mapping) or data.get("role") != "assistant":
+                continue
+            for key, count in opencode_tokens(data).items():
+                figures[key] += count
+            value = data.get("cost")
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                cost += float(value)
+            turns += 1
+        return SessionUsage(**figures, turns=turns, cost_usd=cost)
+
+    def candidate_sessions(
+        self, db: Path, directories: Sequence[Path], start: str, end: str
+    ) -> list[str]:
+        """Top-level sessions (`parent_id IS NULL` — a child is a subagent's)
+        whose `directory` is one of `directories` and which have an assistant
+        message in `(start, end]`. `[]` when the database cannot be read."""
+        bounds = _epoch_window(start, end)
+        places = sorted({str(d) for d in directories} | {str(d.resolve()) for d in directories})
+        if bounds is None or not places:
+            return []
+        marks = ", ".join("?" for _ in places)
+        try:
+            with closing(_open_ro(db)) as con:
+                rows = con.execute(
+                    f"SELECT s.id FROM session s WHERE s.parent_id IS NULL "  # noqa: S608 — placeholders only
+                    f"AND s.directory IN ({marks}) AND EXISTS (SELECT 1 FROM message m "
+                    "WHERE m.session_id = s.id AND m.time_created / 1000 > ? "
+                    "AND m.time_created / 1000 <= ? "
+                    "AND json_extract(m.data, '$.role') = 'assistant') ORDER BY s.id",
+                    (*places, *bounds),
+                ).fetchall()
+        except sqlite3.Error:
+            return []
+        return [row[0] for row in rows]
+
+    def measure_step(
+        self,
+        env: Mapping[str, str],
+        sessions: Sequence[str],
+        start: str,
+        end: str,
+        *,
+        directories: Sequence[Path] = (),
+    ) -> MainSessionUsage | None:
+        """The bound sessions summed — or, with none bound, the unique
+        qualifying top-level session. Any unreadable session, or an ambiguous
+        fallback, records nothing."""
+        db = self.database(env)
+        if not sessions:
+            found = self.candidate_sessions(db, directories, start, end)
+            if len(found) != 1:
+                return None
+            sessions = found
+        parts: list[SessionUsage] = []
+        for session in sessions:
+            usage = self.measure_main_session(db, session, start, end)
+            if usage is None:
+                return None
+            parts.append(usage)
+        return sum_sessions(parts)
+
+
+def opencode_tokens(data: Mapping[str, Any]) -> dict[str, int]:
+    """One OpenCode assistant message's `data.tokens`, as fr's four figures.
+
+    `input` -> `input_tokens`, `cache.write` -> `cache_creation_input_tokens`,
+    `cache.read` -> `cache_read_input_tokens`, and **`output + reasoning` ->
+    `output_tokens`**: reasoning is billed as output, and fr records the same
+    four figures for every harness rather than a fifth only OpenCode fills.
+    `tokens.total` is not read — it is the sum of the others. A missing or
+    non-integer field counts 0.
+    """
+    raw_tokens = data.get("tokens")
+    tokens: Mapping[str, Any] = raw_tokens if isinstance(raw_tokens, Mapping) else {}
+    raw_cache = tokens.get("cache")
+    cache: Mapping[str, Any] = raw_cache if isinstance(raw_cache, Mapping) else {}
+    return {
+        "input_tokens": _count(tokens.get("input")),
+        "cache_creation_input_tokens": _count(cache.get("write")),
+        "cache_read_input_tokens": _count(cache.get("read")),
+        "output_tokens": _count(tokens.get("output")) + _count(tokens.get("reasoning")),
+    }
+
+
+def _count(value: object) -> int:
+    """A token count, or 0 — a boolean is not a count."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _epoch_window(start: str, end: str) -> tuple[int, int] | None:
+    """`(start, end]` as whole epoch seconds, or `None` if either is unparseable."""
+    lower, upper = parse_timestamp(start), parse_timestamp(end)
+    if lower is None or upper is None:
+        return None
+    return int(lower.timestamp()), int(upper.timestamp())
+
+
+def _open_ro(db: Path) -> sqlite3.Connection:
+    """`db` opened read-only; raises `sqlite3.Error` when it does not exist."""
+    return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+
+
+READERS: Mapping[str, TranscriptReader] = {
+    ClaudeCodeReader.harness: ClaudeCodeReader(),
+    OpenCodeReader.harness: OpenCodeReader(),
+}
 """Harness key -> reader. Deliberately not a fallback-to-Claude-Code default:
-an unlisted harness measures NOTHING, which `fr run status` then says out loud,
+an unlisted harness (Hermes) measures NOTHING, which `fr run status` then says out loud,
 rather than parsing another harness's transcripts with this one's rules."""
 
 
@@ -1166,6 +1357,7 @@ __all__ = [
     "SessionUsage",
     "Dispatch",
     "Measurement",
+    "OpenCodeReader",
     "TranscriptReader",
     "UsageTotals",
     "attribute_dispatches",

@@ -266,3 +266,22 @@ surfaces:
         scope_note: same segment script callable; no renderer/registration ships for Hermes
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
+
+  - id: main-session-cost
+    kind: interaction
+    summary: The main session's own token usage per top-level run step (spec 2026-09-24-fr-goal-scope-proportion-cost §D, gh#593 option 0). `_complete_step` writes `StepRecord.main_session` on every `done` path from the harness's own session store — never zero when unobservable, never a partial sum across sessions — and `fr run cost` prints it beside the subagent total.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: partial
+        scope_note: >-
+          not live-proven — read-only from the SQLite session store; sessions
+          come from `fr isolation attach --harness opencode` bindings, else the
+          unique top-level session in the workspace or base clone with
+          messages in the window (two or more records nothing). Dispatched
+          units are still unmeasured (V1 estimates).
+      hermes:
+        state: absent
+        scope_note: no reader — Hermes' session store is not read, so nothing is recorded
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
