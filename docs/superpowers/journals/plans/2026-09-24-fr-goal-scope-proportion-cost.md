@@ -39,3 +39,8 @@ Plan P1.T3.S2 said add measure_main_session to the TranscriptReader Protocol. Th
 ### x-p1-opencode-schema · discovery · OpenCode DB shape verified live (read-only) (phase 1)
 
 sqlite3 -readonly on ~/.local/share/opencode/opencode.db (2026-09-24): session(id, parent_id, directory, ...), message(id, session_id, time_created INTEGER epoch MILLISECONDS, data TEXT). An assistant row's data keys: agent, cost, finish, mode, modelID, parentID, providerID, role, time{created,completed} (ms), tokens{total,input,output,reasoning,cache{read,write}}. No content or identity copied. The reader windows on time_created/1000 (second precision, same rule as Claude Code), opens the DB with a mode=ro URI, and tests use a fixture DB with that schema subset; conftest now points FR_OPENCODE_DB at a nonexistent path suite-wide.
+
+<!-- fr:journal kind=decision scope=plan id=d-p1-overcount-rule created=2026-09-24T21:23:32 phase=1 -->
+### d-p1-overcount-rule · decision · 'possibly over-counted' is dated by the run's first main_session (phase 1)
+
+No field records which fr measured an attempt, and adding one would be another shape change. The dedupe ships in the same release as main-session measurement, so fr.run.cost.possibly_over_counted flags every measured attempt that returned before the run's earliest main_session-bearing step's at (all of them when no step carries main_session). Conservative by design: a run whose main session was unmeasurable flags every measurement. The pure builder (cost_rows / subagent_total / possibly_over_counted) was written with the command in S2, so S3's refactor had nothing left to extract.

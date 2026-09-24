@@ -2911,6 +2911,74 @@ def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         _print_accounting(state)
 
 
+@run_app.command("cost")
+def cost_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
+    """Print what each top-level step cost the MAIN session, and the subagent
+    total beside it — gh#593's table (spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D).
+
+    Read-only: it loads the cursor and prints; nothing is measured or written
+    here (measurement happens once, at `_complete_step`). A figure nobody
+    could observe prints as `—`, never `0`.
+    """
+    from rich.table import Table
+
+    from fr.run.cost import cost_rows, possibly_over_counted, subagent_total
+
+    state = _load_or_exit(resolve_repo_root(), run_id)
+
+    def n(value: int | None) -> str:
+        return "—" if value is None else f"{value:,}"
+
+    table = Table(title=f"Cost — {state.run}")
+    table.add_column("step", overflow="fold", min_width=12)
+    for column in (
+        "turns",
+        "sessions",
+        "input",
+        "cache write",
+        "cache read",
+        "output",
+        "cache read/turn",
+        "cost",
+    ):
+        table.add_column(column, justify="right", overflow="fold")
+    for row in cost_rows(state):
+        table.add_row(
+            row.step,
+            n(row.turns),
+            n(row.sessions),
+            n(row.input_tokens),
+            n(row.cache_creation_input_tokens),
+            n(row.cache_read_input_tokens),
+            n(row.output_tokens),
+            n(row.cache_read_per_turn),
+            "—" if row.cost_usd is None else f"${row.cost_usd:,.2f}",
+        )
+    sub = subagent_total(state)
+    tokens = sub.tokens
+    table.add_section()
+    table.add_row(
+        f"subagents ({sub.measured}/{sub.attempts} measured)",
+        "—",
+        "—",
+        n(None if tokens is None else tokens.input_tokens),
+        n(None if tokens is None else tokens.cache_creation_input_tokens),
+        n(None if tokens is None else tokens.cache_read_input_tokens),
+        n(None if tokens is None else tokens.output_tokens),
+        "—",
+        "—",
+    )
+    console.print(table)
+    flagged = possibly_over_counted(state)
+    if flagged:
+        console.print(
+            "possibly over-counted (measured before per-message dedupe; recorded values "
+            f"are not rewritten): {', '.join(flagged)}",
+            soft_wrap=True,
+        )
+
+
 @run_app.command("advance")
 def advance_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
