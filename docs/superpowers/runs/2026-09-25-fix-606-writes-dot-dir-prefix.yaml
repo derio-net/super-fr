@@ -3,7 +3,7 @@ run: 2026-09-25-fix-606-writes-dot-dir-prefix
 workflow: fr-goal@1
 branch: fix/606-writes-dot-dir-prefix
 started: '2026-09-24T22:42:22+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -79,8 +79,15 @@ steps:
       turns: 0
       sessions: 1
   implement:
-    state: running
-    at: '2026-09-24T22:50:33+00:00'
+    state: done
+    at: '2026-09-24T22:52:04+00:00'
+    main_session:
+      input_tokens: 22
+      cache_creation_input_tokens: 12352
+      cache_read_input_tokens: 1193871
+      output_tokens: 3872
+      turns: 9
+      sessions: 1
     members:
     - implement-phase
     - review-phase
@@ -108,18 +115,29 @@ steps:
             cache_read_input_tokens: 966047
             output_tokens: 287
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-24T22:50:33+00:00'
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5
           session: 0d3c7c4c-bb15-449a-be4d-305ec50abe9f
+          returned: '2026-09-24T22:52:04+00:00'
+          outcome: done
           estimate:
             journal_entries: 2
             journal_lines: 11
             handoff_chars: 718
             spec_bytes: 3794
             plan_bytes: 4436
+          measured:
+            input_tokens: 22
+            cache_creation_input_tokens: 56761
+            cache_read_input_tokens: 493114
+            output_tokens: 76
+        evidence:
+          review: rv1
+          reviewer: a35ad4a8932054280
+          findings: none
   journal-check:
     state: pending
   deliver:
