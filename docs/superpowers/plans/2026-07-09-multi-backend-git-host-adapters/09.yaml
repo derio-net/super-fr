@@ -9,7 +9,7 @@ phase:
   - 4
   - 5
   - 7
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/super-fr/issues/601
 tasks:
 - number: 1
   title: Verify the GitLab adapter against a real GitLab.com project
