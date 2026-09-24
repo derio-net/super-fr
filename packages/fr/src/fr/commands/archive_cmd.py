@@ -1,7 +1,10 @@
 """`fr archive` CLI — move finished plans (and their specs) to implemented/.
 
-Gate per plan (vk.render.archive_gate): every phase `_phase_complete` OR
-(undispatched AND `plan_locally_complete`). `--force` overrides — single
+Gate per plan (vk.render.archive_gate): every dispatched phase
+`_phase_complete`; every undispatched phase `plan_locally_complete` AND, for an
+agentic one, complete on the default branch's remote-tracking ref too (#544 —
+one `merge_evidence(fetch=True)` per invocation, not per plan). Manual phases
+are judged locally, so the fr-goal close-out still archives. `--force` overrides — single
 plan only; `--force --all` is refused because blanket-forcing is how the
 2026-06-05 incident happens in reverse.
 
@@ -20,13 +23,14 @@ from rich.console import Console
 from fr.archive import (
     ArchiveError,
     SpecSweepResult,
+    archive_blockers,
     archive_plan_dir,
+    merge_evidence,
     paths_dirty,
     spec_archive_sweep,
 )
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError
-from fr.render import archive_gate
 from fr.repair import repair_repo
 
 if TYPE_CHECKING:
@@ -129,6 +133,14 @@ def archive_command(
 
     repo_root = resolve_repo_root()
     gh = _make_gh_client()
+    # One merge-evidence read per invocation, never per plan (#544).
+    evidence = merge_evidence(repo_root, fetch=True)
+    if evidence.fetch_error:
+        err_console.print(
+            f"note: {evidence.fetch_error} — judging merge state from the local "
+            f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
+            soft_wrap=True,
+        )
 
     if all_plans:
         plans_root = repo_root / "docs" / "superpowers" / "plans"
@@ -168,12 +180,12 @@ def archive_command(
             skipped.append(f"{target.name}: parse error: {e}")
             continue
 
-        blockers = archive_gate(report.plan, report.observed)
+        blockers = archive_blockers(report.plan, report.observed, evidence)
         if blockers and not force:
             if not all_plans:
-                err_console.print("refusing to archive — plan is not complete:")
+                err_console.print("refusing to archive — plan is not complete or not merged:")
                 for b in blockers:
-                    err_console.print(f"  {b}")
+                    err_console.print(f"  {b}", soft_wrap=True)
                 err_console.print("(override with --force if you know the work is done)")
                 raise typer.Exit(2)
             skipped.append(f"{target.name}: skipped — {'; '.join(blockers)}")

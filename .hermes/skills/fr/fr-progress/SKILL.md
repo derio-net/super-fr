@@ -30,26 +30,31 @@ manually create, move, or archive files under it (#378). Run in order —
 
 ```bash
 fr --help                       # confirm fr is installed / repo is fr-managed
-fr status                       # repo-wide sweep: archivable + in-progress plans
+fr status                       # repo-wide sweep: four buckets, judged against origin/<default>
 fr acceptance check             # matrix gate; exit 2 on failing rows
 fr repair                       # preview stale-ref rewrites
 ls docs/superpowers/plans/*.md 2>/dev/null || true   # hits = legacy v1 plans (v2 is folders)
 fr migrate v1-to-v2             # if the ls above found hits
 fr spec status --all            # per-spec rollup before deciding what's "done"
-fr archive --all                # only now, for plans the sweep marked archivable
+fr archive docs/superpowers/plans/<name>   # only now, one per plan the sweep printed it for
 ```
 
-`.md.v1-archive` files (from `fr migrate v1-to-v2`) are pre-migration
-originals kept for git-history — leave them; `fr archive` only moves
-the plan folder, not the `.v1-archive` sibling (a known gap).
+The sweep fetches, then calls a plan merged only when every agentic phase is
+complete on `origin/<default>`; local ticks never count. Buckets: **merged but
+not archived** (each with its own `fr archive <plan-dir>` line: run those, one
+per plan, never `--all`), **merged, manual phases still open** (tick them
+first), **complete locally, not yet on origin/<default>** (waiting for merge,
+no command), **in progress**. `merge state unknown` = no remote-tracking
+default ref (try `git fetch` / `git remote set-head origin -a`).
+
+`.md.v1-archive` files (from `fr migrate v1-to-v2`) are pre-migration originals
+kept for git-history; leave them (`fr archive` does not move them, a known gap).
 
 ## How it works (no separate state store)
 
-`vk` is a single state machine: the plan files (`_meta.yaml` + `NN.yaml`) are
-the source of truth, and every projection (Issue body / labels / state, spec
-table row) is computed on demand. There's nothing to "sync" — `fr apply`
-diffs the projection against observed gh state and emits the mutations
-needed to bring them in line.
+The plan files (`_meta.yaml` + `NN.yaml`) are the source of truth; every
+projection (Issue body / labels / state, spec row) is computed on demand, and
+`fr apply` diffs it against observed gh state. There is nothing to "sync".
 
 ## Audit drift on a plan
 
@@ -57,11 +62,8 @@ needed to bring them in line.
 fr apply <plan-dir>             # default: dry-run; prints what would change
 fr apply <plan-dir> --yes       # apply the changes
 fr apply --all                  # walk every plan in docs/superpowers/plans/
-fr apply <plan-dir> --format json   # machine-readable
+fr apply <plan-dir> --format json   # machine-readable; empty diff = in sync
 ```
-
-If the diff is empty, plan and gh are in sync. If it's non-empty, you have
-an actionable list of label / state / body changes.
 
 ## Spec rollup
 
@@ -72,21 +74,19 @@ fr spec status --all            # every spec in docs/superpowers/specs/
 
 Output is markdown: per-plan state (Not Started / In Progress / Complete /
 Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
-plans resolve via the gh contents API (same capability `fr archive` uses);
-pass `--no-gh` (or run offline) and cross-repo rows degrade to
-`Unreachable`. `.github/workflows/fr-spec-status.yml` posts this as a PR
-comment when a PR touching `docs/superpowers/{plans,implemented/plans}/` merges.
+plans resolve via the gh contents API; with `--no-gh` (or offline) they
+degrade to `Unreachable`. `.github/workflows/fr-spec-status.yml` posts this
+as a PR comment when a PR touching plans merges.
 
-For a single plan, `fr status <plan-dir>` is the read-only deep report:
-header, per-phase table, completion-guard refusals, drift warnings, and the
-archive nudge. Safe to allowlist — it never mutates.
+`fr status <plan-dir>` is the read-only single-plan report: per-phase table,
+completion-guard refusals, drift warnings, archive nudge. Safe to allowlist:
+it never mutates the repo or gh (it may `git fetch` remote-tracking refs).
 
 ## Acceptance debt
 
-`fr acceptance status` — counts by status + open `skipped` /
-`not-implemented` rows (backfill owed, oldest first); `--brief` is the capped
-session-start form. `fr status <plan-dir>` appends the same summary when the
-repo has `docs/acceptance/matrix.yaml`. See `fr-acceptance` for backfill.
+`fr acceptance status` — counts by status + open `skipped` / `not-implemented`
+rows (oldest first); `--brief` is the session-start form. `fr status <plan-dir>`
+appends the same summary when a matrix exists. See `fr-acceptance`.
 
 ## Tick / complete phases
 
@@ -102,18 +102,18 @@ unticked steps (use rework for deferred items — see `fr-plan`).
 
 ## Archive-on-complete
 
-When a plan is finished, archive it with the verb, never a hand-rolled mv:
+When a plan is finished **and merged** (`fr status` lists it as merged but not
+archived), archive it with the verb it printed, never a hand-rolled mv:
 
 ```bash
 fr archive <plan-dir>     # gate-checked git mv to docs/superpowers/implemented/plans/
-fr archive --all          # sweep every finished plan; specs follow when all their rows are implemented
 ```
 
-The gate requires every phase complete (gh evidence, or fully-ticked
-never-dispatched); `--force` overrides for a single plan. The owning spec
-moves to `implemented/specs/` once all its rows resolve as implemented; the
-operator still runs the command and commits — archiving never fires without
-intent (the v1 footgun), it's one verb, not a manual mv.
+The gate requires every phase complete: a dispatched phase by gh evidence, an
+undispatched agentic one fully ticked AND on `origin/<default>`, a manual one
+ticked locally. `--force` overrides for a single plan. The owning spec
+moves to `implemented/specs/` once all its rows resolve as implemented. The
+moves are staged `git mv`s: you commit them. Never fires without intent.
 
 Rows reported Unreachable/Missing mean stale refs — normalize with
 `fr repair --yes` (see preflight above). Legacy `archived-plans/` layouts

@@ -3865,3 +3865,35 @@ rows:
       test was verified red against the pre-change source (journal p2-t4-not-characterization).
       Live 2026-09-23 (journal p6-live-569): worktree-mode up, then exec, status and
       down with the env unset, all exit 0.'
+  - id: status-sweep-merge-evidence
+    capability: Plan lifecycle
+    acceptance: fr status calls a plan merged-but-unarchived only when it is complete
+      on origin/<default>, reports locally-complete plans as waiting for merge, and
+      suggests archiving merged plans one at a time
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-archive-merge-evidence-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_merge_evidence.py
+      - super-fr:tests/unit/test_status_sweep.py
+    status: ci
+    notes: 'Unit tests at CI (gh#526, phases 1-2): merge_evidence per phase on origin/<default>
+      with a stubbed fetch seam, and the four-bucket sweep that prints per-plan archive
+      commands only for merged plans. Live walk is the trailing manual phase.'
+  - id: archive-refuses-unmerged-plan
+    capability: Plan lifecycle
+    acceptance: fr archive refuses a plan whose undispatched phases are not complete
+      on origin/<default>; --force on a single plan still overrides
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-23-archive-merge-evidence-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_gate_landed.py
+      - super-fr:tests/unit/test_archive_cmd.py
+      - super-fr:tests/unit/test_archive_nudge_landed.py
+    status: ci
+    notes: 'Unit tests at CI (gh#544, phase 3): archive_gate needs landed evidence per
+      phase; fr archive refuses (single, exit 2) or skips (--all) an unmerged plan,
+      archives the manual close-out, keeps --force for a single plan, and reads merge
+      evidence once per invocation; status/apply nudges follow. Live walk is the trailing
+      manual phase.'

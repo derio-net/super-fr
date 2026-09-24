@@ -1,0 +1,84 @@
+schema_version: 2
+phase:
+  number: 3
+  title: archive_gate requires landed evidence - fr archive refuses unmerged plans
+    (#544)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - archive-refuses-unmerged-plan
+  tier: hard
+tasks:
+- number: 1
+  title: Red - failing gate, archive and nudge tests
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Following superpowers:test-driven-development, add failing unit tests for render.archive_gate per spec section 5 item 5: required keyword-only landed (a call without it raises TypeError); an undispatched agentic phase complete locally but not in landed is blocked with not-on-the-default-ref wording; landed=None blocks with merge-state-unknown wording naming the reason and --force; a landed phase passes; a manual phase is judged locally only; the dispatched arm is unchanged
+  - id: P3.T1.S2
+    text: |-
+      In tests/unit/test_archive_cmd.py add one shared helper that commits the fixture repo, wires a file-path origin and monkeypatches fr.archive._fetch, so a plan can be made landed or unlanded. Add failing tests per spec section 5 item 6: fr archive <plan> refuses an unlanded plan with exit 2; fr archive --all skips it and archives only landed plans; a landed plan whose manual phase is ticked only locally archives (the close-out case); --force on a single unlanded plan still archives; merge_evidence runs once per invocation under --all
+  - id: P3.T1.S3
+    text: |-
+      Add failing tests per spec section 5 item 7 that the fr status <plan> nudge, its JSON archive_ready field and fr apply's matching nudge stay silent for a locally complete but unlanded plan and fire once it has landed; run all new tests and confirm each fails for the intended reason
+- number: 2
+  title: Green - gate, callers, migrated tests
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Implement archive_gate(plan, observed, *, landed) per spec section 3.C and pass landed from one merge_evidence(fetch=True) call in archive_cmd (landed_phases.get(name, frozenset())), status_cmd's single-plan text nudge and archive_ready, and apply_cmd's nudge; confirm with a repo-wide grep for archive_gate that no other caller exists
+  - id: P3.T2.S2
+    text: |-
+      Migrate the existing tests in tests/unit/test_archive_cmd.py and any other test that archives or nudges on a plan onto the shared landed-repo helper so each still asserts what it asserted before; never add --force to make an old test pass
+  - id: P3.T2.S3
+    text: |-
+      Run the whole suite with uv run pytest -q --no-cov (per the brief's long-commands rule) until green, then ruff format, ruff check and uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+  - id: P3.T2.S4
+    text: |-
+      Refactor gate messages and the test helper for duplication, re-run the affected tests green, and commit
+- number: 3
+  title: Release housekeeping
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Move status-sweep-merge-evidence and archive-refuses-unmerged-plan to ci with fr acceptance set-status citing the new unit test files as --level unit refs, bump the patch version with uv run --no-project python scripts/bump-version.py patch, confirm scripts/bump-version.py --check, uv run fr acceptance check and uv run fr validate artifacts all pass, and commit the manifests, uv.lock and regenerated reports together
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-23T15:42:13+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-23T15:42:13+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-23T15:42:14+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-23T15:45:34+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-23T15:45:35+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-23T15:55:17+00:00'
+      note: null
+    P3.T2.S4:
+      state: x
+      ticked_at: '2026-09-23T15:56:28+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-23T15:57:29+00:00'
+      note: null
+  completion:
+    at: '2026-09-23T15:57:30+00:00'
+    note: null
+    observed_prs: []

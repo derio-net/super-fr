@@ -1,0 +1,43 @@
+schema_version: 2
+phase:
+  number: 4
+  title: '[manual] Live verification - not merged on this branch, merged on main'
+  tag: manual
+  depends_on:
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - status-sweep-merge-evidence
+  - archive-refuses-unmerged-plan
+tasks:
+- number: 1
+  title: Verify the label before and after merge
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      OPERATOR, on this run's branch after implement completes and before merge. Run uv run fr status from the worktree and confirm 2026-09-23-archive-merge-evidence is NOT listed as merged and no fr archive command is printed for it (it sits under in progress while this phase is open). Then run uv run fr archive docs/superpowers/plans/2026-09-23-archive-merge-evidence and confirm exit 2 naming the missing merge
+  - id: P4.T1.S2
+    text: |-
+      OPERATOR, after the PR merges and fr isolation verify-merge passes, on main. Run fr status and confirm the plan is listed as merged, under merged with manual phases still open (phase 4). In the close-out housekeeping branch tick this phase, re-run fr status and confirm the plan moves to merged but not archived with its own fr archive docs/superpowers/plans/2026-09-23-archive-merge-evidence line, then run that command and confirm it archives
+  - id: P4.T1.S3
+    text: |-
+      OPERATOR. Record the outcome in the housekeeping PR: if both checks pass, note live verification on both rows with fr acceptance set-status; if either fails, file an issue and set that row failing
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

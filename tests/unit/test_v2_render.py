@@ -927,7 +927,8 @@ def test_drift_warning_for_undispatched_locally_complete_phase():
 
 def test_archive_gate_passes_for_ticked_undispatched_plan():
     """The bookmarks shape — fully ticked, never dispatched — must be
-    archivable (dispatch refuses it; archive is its terminal state)."""
+    archivable (dispatch refuses it; archive is its terminal state) once the
+    phase has landed on the default ref (#544)."""
     from dataclasses import replace as dc_replace
 
     from fr import parse
@@ -936,7 +937,7 @@ def test_archive_gate_passes_for_ticked_undispatched_plan():
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", "x")),))
-    assert archive_gate(plan, GhState(phases={})) == ()
+    assert archive_gate(plan, GhState(phases={}), landed=frozenset({1})) == ()
 
 
 def test_archive_gate_blocks_incomplete_phase_with_reason():
@@ -948,7 +949,7 @@ def test_archive_gate_blocks_incomplete_phase_with_reason():
 
     plan = parse(FIXTURE)
     plan = dc_replace(plan, phases=(_phase_for_local_complete(("x", " ")),))
-    blockers = archive_gate(plan, GhState(phases={}))
+    blockers = archive_gate(plan, GhState(phases={}), landed=frozenset({1}))
     assert len(blockers) == 1
     assert "Phase 1" in blockers[0]
 

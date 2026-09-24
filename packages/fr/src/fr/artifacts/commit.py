@@ -45,6 +45,34 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fr.artifacts.runner import MigrationReport, PlannedAction
+from fr.git import (
+    GIT_TIMEOUT_SECONDS,
+    GitRefusal,
+    GitUnavailableError,
+    remote_default_ref,
+    remote_name,
+)
+from fr.git import WELL_KNOWN_DEFAULTS as _WELL_KNOWN_DEFAULTS
+from fr.git import git_answer as _git
+from fr.git import ref_exists as _ref_exists
+
+__all__ = [
+    "GIT_TIMEOUT_SECONDS",
+    "CommitOutcome",
+    "GitContext",
+    "GitRefusal",
+    "GitState",
+    "GitUnavailableError",
+    "NoRepo",
+    "commit_migration",
+    "git_context",
+    "index_lock_held",
+    "lock_path",
+    "migration_commit_message",
+    "on_default_branch",
+    "uncommitted_paths",
+    "uncommitted_veto",
+]
 
 
 @dataclass(frozen=True)
@@ -60,37 +88,6 @@ class CommitOutcome:
     reason: str
     paths: tuple[Path, ...] = ()
     message: str | None = None
-
-
-GIT_TIMEOUT_SECONDS = 30.0
-"""Wall-clock cap on every git subprocess here (review r5-c5).
-
-This layer runs at CLI entry, before the command the operator typed. A
-`pre-commit` hook that waits on the network, a `gpg` signing prompt with no
-agent, or an NFS mount that has gone away turns "fr status" into a process
-that never returns and prints nothing. A timeout converts all of those into a
-refusal that names what hung.
-"""
-
-_GIT_ENV: dict[str, str] = {
-    # Force the C locale: this module PARSES git's stderr to tell "not a git
-    # repository" (proceed) from every other failure (refuse). Under a German
-    # or Japanese locale that string is translated, the match fails, and the
-    # gate flips back to fail-OPEN — the exact regression review r5-c2 closed.
-    "LC_ALL": "C",
-    "LANG": "C",
-    "LANGUAGE": "C",
-    # Never block on credentials: a repo with an http remote can otherwise sit
-    # waiting for a username at CLI entry.
-    "GIT_TERMINAL_PROMPT": "0",
-    # Read-only commands must not take `index.lock`; another fr (or the
-    # operator's editor) may hold it, and we would rather report than contend.
-    "GIT_OPTIONAL_LOCKS": "0",
-}
-
-
-class GitUnavailableError(Exception):
-    """git could not answer — NOT "there is no repository here"."""
 
 
 @dataclass(frozen=True)
@@ -126,43 +123,7 @@ class NoRepo:
     root: Path
 
 
-@dataclass(frozen=True)
-class GitRefusal:
-    """git state could not be established. Fail CLOSED: never act on this."""
-
-    reason: str
-
-
 GitState = GitContext | NoRepo | GitRefusal
-
-
-def _git(
-    root: Path, *args: str, timeout: float = GIT_TIMEOUT_SECONDS
-) -> subprocess.CompletedProcess[str]:
-    """One git call, C-locale, prompt-free, time-boxed.
-
-    Raises `GitUnavailableError` when git could not be RUN or did not finish;
-    a non-zero exit is returned normally, because "this ref does not exist" is
-    an answer.
-    """
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env={**os.environ, **_GIT_ENV},
-        )
-    except FileNotFoundError as e:
-        raise GitUnavailableError("git is not installed or not on PATH") from e
-    except subprocess.TimeoutExpired as e:
-        raise GitUnavailableError(
-            f"`git {' '.join(args)}` did not finish within {timeout:g}s "
-            "(a hook, a credential prompt, or a stalled filesystem?)"
-        ) from e
-    except OSError as e:
-        raise GitUnavailableError(f"could not run git: {e}") from e
 
 
 _NOT_A_REPO_MARKERS = (
@@ -192,45 +153,6 @@ def _classify_failure(what: str, done: subprocess.CompletedProcess[str]) -> NoRe
     return GitRefusal(reason=f"git could not answer `{what}`: {stderr or 'no output'}")
 
 
-def _remote_name(root: Path) -> str | None | GitRefusal:
-    """Which remote speaks for "the default branch" (review r5-c3 / r5-e6).
-
-    `origin` is a convention, not a rule. `checkout.defaultRemote` is git's own
-    answer when there are several; a single remote of any name is unambiguous;
-    two unnamed-by-config remotes are a genuine ambiguity and this module
-    refuses rather than picking one — it is about to decide whether an
-    automatic commit is allowed.
-    """
-    configured = _git(root, "config", "--get", "checkout.defaultRemote")
-    if configured.returncode == 0 and configured.stdout.strip():
-        return configured.stdout.strip()
-    listed = _git(root, "remote")
-    if listed.returncode != 0:
-        return GitRefusal(reason=f"git could not list remotes: {listed.stderr.strip()}")
-    names = [n for n in listed.stdout.split() if n]
-    if not names:
-        return None
-    if len(names) == 1:
-        return names[0]
-    if "origin" in names:
-        return "origin"
-    return GitRefusal(
-        reason=(
-            f"{root} has {len(names)} remotes ({', '.join(sorted(names))}) and no "
-            "`checkout.defaultRemote`, so fr cannot tell which one names the default "
-            "branch. Set `git config checkout.defaultRemote <name>`."
-        )
-    )
-
-
-def _ref_exists(root: Path, ref: str) -> bool:
-    return _git(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0
-
-
-_WELL_KNOWN_DEFAULTS = ("main", "master", "trunk", "develop")
-"""Candidate trunk names, remote-tracking first, then local. Last resort."""
-
-
 def _default_branch(root: Path, *, unborn: bool) -> str | None | GitRefusal:
     """The repository's default branch — or a refusal rather than a guess.
 
@@ -255,21 +177,18 @@ def _default_branch(root: Path, *, unborn: bool) -> str | None | GitRefusal:
     caller is deciding whether to commit automatically; "I could not tell
     which branch is protected" must never read as "none is".
     """
-    remote = _remote_name(root)
+    remote = remote_name(root)
     if isinstance(remote, GitRefusal):
         return remote
 
-    if remote is not None:
-        head = _git(root, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD")
-        if head.returncode == 0 and head.stdout.strip():
-            named = head.stdout.strip().removeprefix(f"{remote}/")
-            # A branch with a `/` in it (`release/main`) survives this: only the
-            # remote prefix is stripped, and only once.
-            if named and _ref_exists(root, f"refs/remotes/{remote}/{named}"):
-                return named
-        for name in _WELL_KNOWN_DEFAULTS:
-            if _ref_exists(root, f"refs/remotes/{remote}/{name}"):
-                return name
+    tracking = remote_default_ref(root)
+    if isinstance(tracking, GitRefusal):
+        return tracking
+    if tracking is not None and remote is not None:
+        # Steps 1–2 live in `fr.git.remote_default_ref` (one definition, shared
+        # with `fr.archive.merge_evidence`); it answers `<remote>/<branch>`.
+        # Strip the remote prefix once, so `release/main` survives.
+        return tracking.removeprefix(f"{remote}/")
 
     if unborn:
         # A freshly `git init`ed repo has no refs at all, so no existence
