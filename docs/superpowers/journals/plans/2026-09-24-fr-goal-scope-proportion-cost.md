@@ -265,3 +265,23 @@ a884307c: --scope/--slug added; test_skill_journal_resolve_examples guards every
 ### r-p4 · review · Phase 4 review (independent reviewer): 5 in-scope findings fixed (p4-f1..f4, f6); p4-f5 out-of-scope; deviations 1-4 accepted (phase 4)
 
 Reviewer: dispatched general-purpose subagent a979c488f146166c2 (ran the full suite, sync checks, parity, acceptance). Fixes by the phase executor; orchestrator re-ran the affected tests.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f1 created=2026-09-25T00:25:55 state=open review_scope=out -->
+### dl-f1 · finding [open] (reviewer: out of scope) · tests= gate: _writes uses lstrip('./'), so a log under a dot-directory (.fr-deliver/…) never matches
+
+packages/fr/src/fr/run/telemetry.py _writes: str.lstrip strips characters, not a prefix — '.fr-deliver/x.log' becomes 'fr-deliver/x.log'. Found at this run's deliver.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f1-resolved created=2026-09-25T00:25:55 state=open resolves=dl-f1 out_of_scope=true -->
+### dl-f1-resolved · finding [out-of-scope] · resolves dl-f1: tests= gate: _writes uses lstrip('./'), so a log under a dot-directory (.fr-deliver/…) never matches
+
+Pre-existing in the deliver tests gate; this change did not touch _writes. Offered as an issue.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f2 created=2026-09-25T00:25:56 state=open review_scope=out -->
+### dl-f2 · finding [open] (reviewer: out of scope) · tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
+
+_verify_tests_log requires the log mtime inside [tool_use, tool_result]; a run_in_background Bash returns its tool_result at once, so a >2-min suite (this repo: ~10 min) always falls outside. Worked around at this deliver by running the full suite in 10 foreground chunks (5190 passed, 89 skipped). Pre-existing.
+
+<!-- fr:journal kind=finding scope=plan id=dl-f2-resolved created=2026-09-25T00:25:56 state=open resolves=dl-f2 out_of_scope=true -->
+### dl-f2-resolved · finding [out-of-scope] · resolves dl-f2: tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
+
+Pre-existing interaction between the tests gate and the long_commands brief; not caused by this change. Offered as an issue.
