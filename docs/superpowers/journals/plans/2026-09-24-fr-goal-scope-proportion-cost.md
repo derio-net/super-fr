@@ -72,3 +72,6 @@ Per P2.T3.S1(a) a fixed record without answered_by=operator is WRITTEN by both r
 ### v-p2-render-shape · decision · DEVIATION (scope note): render marks reclassification as a blockquote; deliver's both-journal render left to phase 4 (phase 2)
 
 Reviewer tag renders in the heading as '(reviewer: in scope|out of scope)'; out-of-scope findings and their records move under '## Out-of-scope findings'; a review_scope=in finding ending out-of-scope gets '> reclassified by the orchestrator — the reviewer tagged this in scope' under its heading. Task 2's title mentions 'both scopes at deliver' but none of its steps do; spec §A's deliver change is a manifest/skill edit that 04.yaml (SKILL §8 renders both journals) already owns, so nothing for it was done here.
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1 created=2026-09-24T21:56:45 phase=2 state=open review_scope=in -->
+### p2-f1 · finding [open] (reviewer: in scope) · out-of-scope -> deferred -> fixed interleaving is designed behaviour but unpinned by a test (phase 2)

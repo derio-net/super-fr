@@ -922,6 +922,16 @@ class TestUnauthorizedFixes:
         entries = _oos_then({"state": "fixed"}, {"state": "refuted"})
         assert unauthorized_fixes(entries) == []
 
+    def test_a_deferral_in_between_hands_the_finding_back_to_the_change(self) -> None:
+        """The guard reads the IMMEDIATELY preceding state: once a deferral names
+        the issue that carries the work, out-of-scope is no longer the finding's
+        state, so a later fix is an ordinary one and needs no operator."""
+        from fr.journal.model import effective_finding_states, unauthorized_fixes
+
+        entries = _oos_then({"state": "open", "tracked_by": "#1"}, {"state": "fixed"})
+        assert effective_finding_states(entries)["f1"] == "fixed"
+        assert unauthorized_fixes(entries) == []
+
     def test_answered_by_round_trips_and_is_only_for_a_resolution_record(self) -> None:
         from fr.journal.model import JournalEntry, parse_journal, serialize_entry
 
