@@ -1534,7 +1534,8 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
 def _version_floor_issue(
     fr_version: str,
     *,
-    probe_version: str,
+    probe_version: str | None = None,
+    floor: str | None = None,
     message: str,
     severity: Literal["warn", "error"] = "warn",
 ) -> ReviewIssue | None:
@@ -1543,9 +1544,20 @@ def _version_floor_issue(
     admit `probe_version` (the highest pre-feature release)? If so, an issue
     of `severity` carrying `message`; otherwise `None`. A malformed constraint
     is left to the parser, which already fails loud elsewhere — swallow
-    silently here rather than duplicate a worse-worded error."""
+    silently here rather than duplicate a worse-worded error.
+
+    `floor` asks the fuller question instead: any version below it, probed
+    densely and with exact pins compared directly (`fr.version_floor`, shared
+    with `fr plan create`). Review p3-f3: one probe passes every constraint
+    that happens to exclude it — `==4.5.0` among them."""
     from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
+    if floor is not None:
+        from fr.version_floor import PRE_4_20_PROBES, admits_below
+
+        admitted = admits_below(fr_version, floor, PRE_4_20_PROBES)
+        return ReviewIssue(severity=severity, message=message) if admitted else None
+    assert probe_version is not None, "pass probe_version or floor"
     try:
         if SpecifierSet(fr_version).contains(probe_version, prereleases=True):
             return ReviewIssue(severity=severity, message=message)
@@ -1758,7 +1770,7 @@ def _scope_field_issues(plan: Plan) -> list[ReviewIssue]:
     if scoped and plan.meta.fr_version:
         floor = _version_floor_issue(
             plan.meta.fr_version,
-            probe_version="4.19.99",
+            floor="4.20.0",
             severity="error",
             message=(
                 f"phases carry files/estimate_lines but fr_version "

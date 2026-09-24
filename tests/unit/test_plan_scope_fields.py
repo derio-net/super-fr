@@ -265,3 +265,38 @@ def test_self_review_has_no_floor_issue_under_a_4_20_floor(
     plan_dir = _programmatic(tmp_path, fr_version=">=4.20.0,<5.0.0", files=("a/*.py",))
 
     assert not _messages(plan_dir, "4.20.0")
+
+
+# ── review p3-f3: exact pins between probes ──────────────────────────────────
+
+
+@pytest.mark.parametrize("pin", ["==4.19.3", "==4.5.0", "===4.19.7", "==4.19.3,<5"])
+def test_create_refuses_an_exact_pre_4_20_pin_between_probes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pin: str
+) -> None:
+    """A probe list only answers for the versions in it; an exact pin is
+    compared directly, so `==4.19.3` cannot slip between `4.19.2` and `4.19.999`."""
+    repo = _repo(tmp_path)
+
+    result = _cli_create(repo, monkeypatch, SCOPED_PHASES, "--fr-version", pin)
+
+    assert result.exit_code == 2, result.output
+
+
+@pytest.mark.parametrize("constraint", ["==4.5.0", ">=4.0,<4.10", "==4.19.3", "~=4.3"])
+def test_self_review_floor_catches_constraints_that_exclude_4_19_99(
+    tmp_path: Path, constraint: str
+) -> None:
+    """Probing only 4.19.99 passed every constraint that happens to exclude it
+    while still admitting an older fr."""
+    plan_dir = _programmatic(tmp_path, fr_version=">=3.0.0,<5.0.0", files=("a/*.py",))
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(meta.read_text().replace("'>=3.0.0,<5.0.0'", repr(constraint)))
+
+    floor = [
+        i
+        for i in self_review(parse_plan(plan_dir, enforce_fr_version=False))
+        if "4.20.0" in i.message
+    ]
+
+    assert [i.severity for i in floor] == ["error"], (constraint, floor)

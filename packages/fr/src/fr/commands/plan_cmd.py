@@ -23,6 +23,7 @@ from fr.plan_ops import (
     self_review,
     tick,
 )
+from fr.version_floor import PRE_4_20_PROBES, PRE_4_PROBES, admits_below
 
 console = Console()
 err_console = Console(stderr=True)
@@ -55,67 +56,10 @@ WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
 # floor above, one release-line later.
 SCOPE_FR_VERSION = ">=4.20.0,<5.0.0"
 
-_PRE_4_PROBES = (
-    "0.1.0",
-    "1.0.0",
-    "2.0.0",
-    "2.5.0",
-    "3.0.0",
-    "3.0.1",
-    "3.1.0",
-    "3.5.0",
-    "3.10.0",
-    "3.19.0",
-    "3.20.0",
-    "3.999.999",
-)
-"""Versions probed for "would some real fr 3.x load this plan?".
-
-Denser than the original five (review r5-b6): a probe LIST answers an
-`==3.5.0` constraint with a flat no unless 3.5.0 happens to be in it, and an
-operator pinning one exact 3.x is exactly the case the check exists to
-refuse. `SpecifierSet.filter` over the list is what `_admits_pre_4` runs, so
-adding a probe is the only way to widen coverage; the list deliberately
-includes a 0.x, a 1.x, a 2.x, several 3.minor values and both ends of 3.x.
-"""
-
-
-_PRE_4_20_PROBES = _PRE_4_PROBES + tuple(
-    f"4.{minor}.{patch}" for minor in range(20) for patch in (0, 1, 2, 999)
-)
-"""`_PRE_4_PROBES` plus every 4.x minor below 4.20 — dense for the same
-reason (an exact `==4.5.0` pin must be caught, not slip between probes)."""
-
 
 def _admits_pre_4(constraint: str) -> bool:
     """Does `constraint` allow an fr older than 4.0.0 to load the plan?"""
-    return _admits_any(constraint, _PRE_4_PROBES)
-
-
-def _admits_any(constraint: str, probes: tuple[str, ...]) -> bool:
-    """Does `constraint` admit any of `probes` (versions below some floor)?
-
-    Probes rather than parses the specifier's bounds: `SpecifierSet` has no
-    "minimum version" accessor, and probing is what actually matters — the
-    question is whether some real fr 3.x would consider itself allowed.
-    An unparseable constraint answers False; `fr.parser` fails it loudly at
-    parse time and duplicating that error here would only mask it.
-
-    A probe list is only as good as its density (review r5-b6): the original
-    five missed `==3.5.0` and every other exact pin between them, quietly
-    letting through the one constraint shape most likely to be hand-written.
-    """
-    from packaging.specifiers import InvalidSpecifier, SpecifierSet
-
-    try:
-        spec = SpecifierSet(constraint)
-    except InvalidSpecifier:
-        return False
-    # `filter` rather than `contains`: it applies the specifier's own
-    # prerelease semantics uniformly over the probe list, which is the same
-    # question `pip` asks. The list is what bounds the answer — see
-    # `_PRE_4_PROBES`.
-    return any(spec.filter(probes))
+    return admits_below(constraint, "4.0.0", PRE_4_PROBES)
 
 
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
@@ -227,7 +171,7 @@ def create_cmd(
         # Checked after `--workflow`, whose 4.0.0 floor this one subsumes.
         if not explicit:
             fr_version = SCOPE_FR_VERSION
-        elif _admits_any(fr_version, _PRE_4_20_PROBES):  # type: ignore[arg-type]
+        elif admits_below(fr_version, "4.20.0", PRE_4_20_PROBES):  # type: ignore[arg-type]
             err_console.print(
                 f"[red]error:[/red] phases setting files/estimate_lines require an "
                 f"fr_version floored at 4.20.0 (PhaseHeader forbids unknown keys, so an "
