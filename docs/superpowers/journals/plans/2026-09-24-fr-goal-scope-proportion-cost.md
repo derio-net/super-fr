@@ -75,3 +75,13 @@ Reviewer tag renders in the heading as '(reviewer: in scope|out of scope)'; out-
 
 <!-- fr:journal kind=finding scope=plan id=p2-f1 created=2026-09-24T21:56:45 phase=2 state=open review_scope=in -->
 ### p2-f1 · finding [open] (reviewer: in scope) · out-of-scope -> deferred -> fixed interleaving is designed behaviour but unpinned by a test (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-f1-resolved created=2026-09-24T21:56:45 phase=2 state=fixed resolves=p2-f1 -->
+### p2-f1-resolved · finding [fixed] · resolves p2-f1: out-of-scope -> deferred -> fixed interleaving is designed behaviour but unpinned by a test (phase 2)
+
+Added test_a_deferral_in_between_hands_the_finding_back_to_the_change.
+
+<!-- fr:journal kind=review scope=plan id=r-p2 created=2026-09-24T21:56:46 phase=2 -->
+### r-p2 · review · Phase 2 review (independent reviewer): 1 nit taken as finding p2-f1 (fixed); deviations 1-5 accepted (phase 2)
+
+Reviewer: dispatched code-reviewer subagent a6dd9430e2d21f43c (no shell in its toolset; the orchestrator ran the phase-2 tests, 188 passed, and fr harness parity --check, exit 0).
