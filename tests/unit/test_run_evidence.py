@@ -418,6 +418,144 @@ def test_status_shows_the_debt_and_the_evidence(tmp_path: Path) -> None:
     assert "evidence: review=rev-p1" in _squash(shown.output)
 
 
+_FLAT_EVIDENCE_SHAPE = """
+workflow: flat-evidence
+schema: 1
+unit: spec
+steps:
+  - id: brainstorm
+    kind: agent
+    emits: [spec]
+  - id: spec-review
+    kind: agent
+    needs: [spec]
+    emits: [journal:spec]
+    evidence: [review, reviewer]
+"""
+
+
+def _at_flat_spec_review(tmp_path: Path, *, with_evidence: bool) -> tuple[Path, Path]:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    shape = _FLAT_EVIDENCE_SHAPE
+    if not with_evidence:
+        shape = shape.replace("    evidence: [review, reviewer]\n", "")
+    _write_shape(shipped, "flat-evidence", shape)
+    assert (
+        _invoke(
+            repo,
+            shipped,
+            ["run", "start", "flat-evidence", "--branch", "b", "--run-id", "r1"],
+        ).exit_code
+        == 0
+    )
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    emitted = repo / "spec.md"
+    emitted.write_text("# Spec\n")
+    assert (
+        _invoke(
+            repo,
+            shipped,
+            [
+                "run",
+                "resolve",
+                "r1",
+                "--step",
+                "brainstorm",
+                "--state",
+                "done",
+                "--emitted",
+                "spec=spec.md",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    if with_evidence:
+        from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+        slug = "spec"
+        append_journal_entry(
+            journal_path(repo, "spec", slug),
+            slug,
+            JournalEntry(
+                kind="review",
+                scope="spec",
+                id="flat-review",
+                created=load_run_state(repo, "r1").steps["spec-review"].at,
+                title="reviewed spec",
+                body="No findings.",
+            ),
+        )
+        assert (
+            _invoke(
+                repo,
+                shipped,
+                [
+                    "run",
+                    "resolve",
+                    "r1",
+                    "--step",
+                    "spec-review",
+                    "--state",
+                    "done",
+                    "--evidence",
+                    "review=flat-review",
+                    "--evidence",
+                    "reviewer=reviewer-1",
+                ],
+            ).exit_code
+            == 0
+        )
+    else:
+        assert (
+            _invoke(
+                repo,
+                shipped,
+                [
+                    "run",
+                    "resolve",
+                    "r1",
+                    "--step",
+                    "spec-review",
+                    "--state",
+                    "done",
+                ],
+            ).exit_code
+            == 0
+        )
+        _write_shape(shipped, "flat-evidence", _FLAT_EVIDENCE_SHAPE)
+    return repo, shipped
+
+
+def test_flat_agent_step_evidence_debt_appears_in_check_and_status(tmp_path: Path) -> None:
+    repo, shipped = _at_flat_spec_review(tmp_path, with_evidence=False)
+
+    check = _invoke(repo, shipped, ["run", "check", "r1"])
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    expected = "step/spec-review is done, unevidenced (predates the evidence gate)"
+    assert check.exit_code == 0, check.output
+    assert expected in _squash(check.output)
+    assert status.exit_code == 0, status.output
+    status_text = _squash(status.output)
+    assert "step/spec-review:" in status_text
+    assert "unevidenced (predates the evidence gate)" in status_text
+
+
+def test_flat_agent_step_with_evidence_has_no_debt(tmp_path: Path) -> None:
+    repo, shipped = _at_flat_spec_review(tmp_path, with_evidence=True)
+
+    check = _invoke(repo, shipped, ["run", "check", "r1"])
+    status = _invoke(repo, shipped, ["run", "status", "r1"])
+
+    assert check.exit_code == 0, check.output
+    assert "unevidenced" not in _squash(check.output)
+    assert status.exit_code == 0, status.output
+    assert "evidence: review=flat-review reviewer=reviewer-1" in _squash(status.output)
+    assert "unevidenced" not in _squash(status.output)
+
+
 def test_a_migrated_real_cursor_reports_its_pre_gate_reviews_as_debt(tmp_path: Path) -> None:
     """End to end on the REAL captured cursor of this very feature's run,
     which carries `phase/1/review-phase: done` and `phase/2/review-phase:

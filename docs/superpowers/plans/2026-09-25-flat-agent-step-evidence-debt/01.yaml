@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Report evidence debt for completed flat agent steps
+  tag: agentic
+  skeleton: true
+  depends_on: []
+  acceptance:
+  - run-flat-step-evidence-debt
+  tracking_issue: null
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_run_evidence.py
+  estimate_lines: 60
+tasks:
+- number: 1
+  title: Detect flat-step evidence debt without changing the unit model
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add regression tests to tests/unit/test_run_evidence.py for a completed flat kind: agent step with declared evidence but no evidence. Assert both `fr run check` (exit 0) and `fr run status` print `step/<id>` debt. Also assert a flat unit whose evidence is satisfied has no debt. Run the focused tests and confirm the missing-debt assertions fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in `_unevidenced_units` in packages/fr/src/fr/commands/run_cmd.py, determine completion for a flat step from its StepRecord.state; retain units.unit_state for grouped members. Keep reading obligations from units.evidence_of. Run tests/unit/test_run_evidence.py and tests/unit/test_run_evidence_separate_context.py.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR + quality gate: run ruff format/check on changed Python files and the focused evidence tests; inspect the diff to confirm grouped-unit debt and existing exit-code behavior remain unchanged.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-24T23:00:22+00:00'
+      note: 'Regression tests confirmed red: check omitted the completed flat unit
+        debt.'
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-24T23:00:23+00:00'
+      note: StepRecord.state now supplies flat completion; unit state remains the
+        grouped-member source.
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-24T23:00:25+00:00'
+      note: Ruff format and focused run-evidence suites pass; reviewed the limited
+        diff.
+  completion:
+    at: null
+    note: null
+    observed_prs: []

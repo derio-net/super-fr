@@ -1,0 +1,109 @@
+schema_version: 6
+run: 2026-09-25-fix-605-agent-step-evidence-debt
+workflow: fr-goal@1
+branch: fix/605-agent-step-evidence-debt
+started: '2026-09-24T22:49:05+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-24T22:54:10+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-25-flat-agent-step-evidence-debt-design.md
+  spec-review:
+    state: done
+    at: '2026-09-24T22:56:34+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-24T22:54:13+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          returned: '2026-09-24T22:56:34+00:00'
+          outcome: done
+        evidence:
+          review: 153d5a20c4d6
+          reviewer: ses_f2a5e8185ffeuOBqJLgKplyqbp
+          findings: s1
+  plan:
+    state: done
+    at: '2026-09-24T22:58:00+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-25-flat-agent-step-evidence-debt
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-24T22:56:38+00:00'
+          returned: '2026-09-24T22:58:00+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-24T22:58:05+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-24T23:04:07+00:00'
+    main_session:
+      input_tokens: 35830
+      cache_creation_input_tokens: 0
+      cache_read_input_tokens: 3862631
+      output_tokens: 6613
+      turns: 32
+      sessions: 1
+      cost_usd: 0.046409234999999986
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-24T22:58:09+00:00'
+          agent: opencode-phase-605
+          agent_type: super-fr:fr-phase-executor
+          harness: opencode
+          returned: '2026-09-24T23:02:55+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 0
+            journal_lines: 1
+            handoff_chars: 131
+            spec_bytes: 2056
+            plan_bytes: 2554
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-24T23:02:56+00:00'
+          model: gpt-6-luna
+          returned: '2026-09-24T23:04:07+00:00'
+          outcome: done
+          estimate:
+            journal_entries: 2
+            journal_lines: 11
+            handoff_chars: 972
+            spec_bytes: 2056
+            plan_bytes: 2874
+        evidence:
+          review: phase-1-review-complete
+          reviewer: ses_f2a579160ffeY6MsaMCSwuNWo0
+          findings: none
+  journal-check:
+    state: done
+    at: '2026-09-24T23:04:09+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: running
+    at: '2026-09-24T23:12:10+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-24T23:04:15+00:00'
+          returned: '2026-09-24T23:12:04+00:00'
+          outcome: failed
+        - dispatched: '2026-09-24T23:12:10+00:00'
+          returned: '2026-09-24T23:16:50+00:00'
+          outcome: abandoned
+        - dispatched: '2026-09-24T23:16:51+00:00'
