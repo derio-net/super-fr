@@ -3,7 +3,7 @@ run: 2026-09-25-fix-606-writes-dot-dir-prefix
 workflow: fr-goal@1
 branch: fix/606-writes-dot-dir-prefix
 started: '2026-09-24T22:42:22+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -139,6 +139,24 @@ steps:
           reviewer: a35ad4a8932054280
           findings: none
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-24T22:52:07+00:00'
+    exit: 0
+    stdout: ''
+    main_session:
+      input_tokens: 0
+      cache_creation_input_tokens: 0
+      cache_read_input_tokens: 0
+      output_tokens: 0
+      turns: 0
+      sessions: 1
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-24T22:52:12+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-24T22:52:12+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 0d3c7c4c-bb15-449a-be4d-305ec50abe9f
