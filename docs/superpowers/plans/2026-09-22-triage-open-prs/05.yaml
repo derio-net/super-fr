@@ -28,10 +28,15 @@ state:
         rendered ''No unranked pull requests''. Verified side by side against #567''s
         fr, and on main after it merged. S2 (the same walk on OpenCode) is still open.'
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T20:08:39+00:00'
+      note: 'Walked on OpenCode 2026-09-24 (fr 4.19.3) with /fr-triage into a fresh
+        --dir: collect + check ran, the three issue-less open PRs (#476, #474, #314)
+        were judged with anchor + delivery verdict + note, and render --open showed
+        them in the PRs section with CI/merge badges. Hermes: not walked (not installed
+        on this machine); stays not-implemented.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-24T20:08:39+00:00'
+    note: Board walk live on Claude Code (S1) and OpenCode (S2), 2026-09-22..24; Hermes
+      not walked.
     observed_prs: []

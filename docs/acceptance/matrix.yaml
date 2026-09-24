@@ -449,7 +449,15 @@ rows:
       diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
       NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
       The unit half now asserts the REQUEST and the real captured error vocabulary,
-      so the arg-blind ''lambda args:'' mocks that hid all of this are gone.'
+      so the arg-blind ''lambda args:'' mocks that hid all of this are gone. LIVE 2026-09-24
+      (multi-backend P9.T1.S1), a self-hosted GitLab (host/user/project redacted; private
+      scratch project, deleted after): every RealGlabClient operation fr apply/observe
+      uses passed when driven directly (ensure_labels create+converge, colour round-trip,
+      create_issue returning /-/work_items/N, view, label add/remove, comment, list_linked_prs
+      via related_merge_requests, pr_status_by_url, file_exists/list_dir/read_file,
+      close). related_merge_requests is eventually consistent (empty right after the
+      MR, populated seconds later). NOT walked: an end-to-end `fr apply` on a GitLab-backed
+      plan, so the status stays skipped.'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -3671,7 +3679,12 @@ rows:
       - super-fr:tests/unit/test_triage_open_prs.py
       - super-fr:tests/unit/test_triage_render.py
     status: ci
-    notes: Render and PR collection tests pass in phase 4.
+    notes: 'Render and PR collection tests pass in phase 4. LIVE 2026-09-22..24 on both
+      harnesses. Claude Code: collect + check + render --open on derio-net/super-fr;
+      after #567 the PRs section lists every open unlinked PR with CI/merge badges (before
+      it, main rendered ''No unranked pull requests''). OpenCode (fr 4.19.3, fresh --dir):
+      the same walk rendered #476/#474/#314 with badges and anchors. Hermes not walked
+      (not installed).'
   - id: triage-pr-judgement
     capability: Backlog triage
     acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
@@ -3682,7 +3695,10 @@ rows:
       - super-fr:tests/unit/test_triage_open_prs.py
       - super-fr:tests/unit/test_triage_render.py
     status: ci
-    notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.
+    notes: 'PR delivery verdict rendering and skill workflow are covered by phase 4
+      tests. LIVE 2026-09-22..24: Claude Code judged issue-less PRs (#560, #536, #567,
+      #571) and OpenCode judged #476/#474/#314, each with an anchor, a delivers|partial|drift
+      verdict and a delivery_note, rendered on the board. Hermes not walked.'
   - id: opencode-plugin-single-idle-nudge
     capability: OpenCode adaptation
     acceptance: When OpenCode loads the plugin twice (global install plus a project-local
