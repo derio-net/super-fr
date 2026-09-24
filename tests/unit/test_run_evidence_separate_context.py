@@ -652,3 +652,41 @@ def test_p4_f2_an_unreadable_transcript_still_records_the_named_step_as_claimed(
 
     assert result.exit_code == 0, result.output
     assert "could not verify reviewer" in _squash(result.stderr)
+
+
+@pytest.fixture
+def _restore_tz():
+    yield
+    time.tzset()
+
+
+def _local_naive(aware_utc_stamp: str, delta_seconds: int) -> str:
+    """A `fr journal add`-shaped stamp (local wall clock, no offset) for the
+    instant `delta_seconds` from `aware_utc_stamp`, in the CURRENT TZ."""
+    from datetime import timedelta
+
+    at = parse_timestamp(aware_utc_stamp)
+    assert at is not None
+    local = (at + timedelta(seconds=delta_seconds)).astimezone()
+    return local.replace(tzinfo=None, microsecond=0).isoformat()
+
+
+@pytest.mark.parametrize("zone", ["Asia/Tokyo", "America/Los_Angeles"])
+@pytest.mark.parametrize(("delta", "accepted"), [(1, True), (-1, False)])
+def test_p4_f3_the_review_date_is_compared_in_utc_east_and_west(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _restore_tz: None,
+    zone: str, delta: int, accepted: bool,
+) -> None:  # fmt: skip
+    """Journal stamps are naive LOCAL time; the cursor's are UTC. A review
+    written one second after the step opened is accepted and one written a
+    second before is refused, whichever side of UTC the operator sits."""
+    monkeypatch.setenv("TZ", zone)
+    time.tzset()
+    repo, shipped, opened = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, {**_REVIEW, "created": _local_naive(opened, delta)})
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert (result.exit_code == 0) is accepted, result.output
+    if not accepted:
+        assert "before this step opened" in _squash(result.output)
