@@ -11,7 +11,7 @@ steps:
     answered_by: operator
     emitted:
       spec: docs/superpowers/specs/2026-09-25-writes-dot-dir-prefix-design.md
-      journal:spec: docs/superpowers/journals/specs/2026-09-25-writes-dot-dir-prefix-design.md
+      journal:spec: docs/superpowers/journals/specs/2026-09-25-writes-dot-dir-prefix.md
     main_session:
       input_tokens: 26
       cache_creation_input_tokens: 18956

@@ -1,4 +1,4 @@
-# Journal: 2026-09-25-writes-dot-dir-prefix-design
+# Journal: 2026-09-25-writes-dot-dir-prefix
 
 <!-- fr:journal kind=decision scope=spec id=d1 created=2026-09-25T00:44:21 -->
 ### d1 · decision · Segment-wise strip for relative redirect targets
