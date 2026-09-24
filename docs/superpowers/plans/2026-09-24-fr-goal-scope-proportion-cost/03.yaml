@@ -99,12 +99,12 @@ state:
       ticked_at: '2026-09-24T20:08:09+00:00'
       note: null
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T20:09:41+00:00'
       note: null
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T20:10:59+00:00'
       note: null
   completion:
     at: null

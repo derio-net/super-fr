@@ -150,4 +150,8 @@ steps:
     # `tests` (debug journal C5): the log of the full suite the ORCHESTRATOR ran
     # during delivery — `--evidence tests=<log>`, hashed onto the cursor. On the
     # #497 run `deliver` resolved in 28s on a PR url and the executor's word.
-    evidence: [tests]
+    # `proportionality` (2026-09-24 spec §C) is DERIVED, never passed: resolve
+    # runs `fr plan proportionality` and stores `<merge-base>:<sha256>` of the
+    # report the orchestrator pastes into the PR body. Report-first — it gates
+    # nothing but its own witness.
+    evidence: [tests, proportionality]

@@ -1000,12 +1000,20 @@ def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
 # precisely because "the review's findings were dealt with" was prose until
 # something other than the agent's word could witness it.
 PHASE_EXECUTOR_AGENT = "super-fr:fr-phase-executor"
-_VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests")
-_DERIVED_EVIDENCE = frozenset({"findings"})
+_VERIFIABLE_EVIDENCE = ("review", "reviewer", "findings", "tests", "proportionality")
+# `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
+# `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
+_DERIVED_EVIDENCE = frozenset({"findings", "proportionality"})
 # Evidence ABOUT A PHASE — meaningless on a flat `step/<id>` unit, refused
 # there rather than recorded unchecked. `tests` is the one that is not: it is
 # delivery's evidence, on the flat `deliver` unit (debug journal C5).
 _PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
+_DERIVED_FROM = {
+    "findings": "from the plan journal: every finding filed against the phase must "
+    "be fixed or refuted",
+    "proportionality": "by running `fr plan proportionality` on the run's plan and "
+    "hashing the report at its merge-base",
+}
 _EVIDENCE_HINTS = {
     "review": "<journal-entry-id>, naming the `kind=review` plan-journal entry "
     "recorded for phase {phase}",
@@ -1053,9 +1061,9 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
             )
         if name in _DERIVED_EVIDENCE:
             raise RunStateError(
-                f"--evidence {name}= is not yours to pass — fr derives {name!r} from the "
-                "plan journal when the unit resolves `done` (every finding filed against "
-                "the phase must be fixed or refuted), and records what it saw"
+                f"--evidence {name}= is not yours to pass — fr derives {name!r} itself "
+                f"when the unit resolves `done` ({_DERIVED_FROM[name]}), and records "
+                "what it saw"
             )
         result[name] = value.strip()
     return result
@@ -1185,6 +1193,8 @@ def _verified_evidence(
         _verify_reviewer(key, offered["reviewer"], state, phase=phase, opened=opened)
     if "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+    if state_value == "done" and "proportionality" in step.evidence:
+        verified["proportionality"] = _proportionality_witness(key, repo_root, state)
     derives = state_value == "done" and "findings" in step.evidence
     if "review" not in offered and not derives:
         return verified
@@ -1199,6 +1209,49 @@ def _verified_evidence(
     if not derives:
         return verified
     return {**verified, "findings": _closed_findings_witness(key, slug, entries, phase)}
+
+
+def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
+    """`<merge-base-sha>:<sha256-of-report>` for this run's plan — or exit 2.
+
+    The report itself never blocks (spec §C, report first); what fails closed
+    is only the witness. A report with no merge-base is the single line naming
+    `--base`, and hashing it would record "proportionality checked" over a
+    diff nobody computed, so the resolve is refused with that line instead.
+    """
+    import hashlib
+
+    from fr.parser import PlanSchemaError, parse
+    from fr.proportionality import run_report
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None:
+        err_console.print(
+            f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
+            "yet (resolve the step that emits `plan` first)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError as e:
+        err_console.print(
+            f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
+            f"does not parse: {e}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    report = run_report(repo_root, plan, None)
+    if report.merge_base is None:
+        err_console.print(
+            f"{key}: cannot derive proportionality evidence — {report.text.strip()} "
+            "(`fr run resolve` takes no --base: fetch the remote so its default "
+            "branch resolves)",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
 
 
 def _verify_reviewer(
