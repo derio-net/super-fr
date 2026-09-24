@@ -18,6 +18,12 @@ comparing the manifest's required evidence with evidence stored on the unit.
 This preserves the existing debt wording and exit-code behavior: debt appears
 in both status and check, but does not make check fail.
 
+## Scope boundary
+
+`fr run check` and `fr run status` are the only affected surfaces because both
+consume `_unevidenced_units`. Grouped member state, resolution-time evidence
+validation, stored unit shape, and check's exit contract remain unchanged.
+
 Regression coverage will exercise flat, completed agent steps with unmet
 evidence through both CLI views, and establish that satisfying the obligations
 removes the debt. Existing grouped-member tests must remain green.
