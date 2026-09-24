@@ -778,3 +778,76 @@ def test_tracked_by_is_only_valid_on_an_open_resolution_record() -> None:
         JournalEntry(**base, state="fixed", resolves="f1", tracked_by="#1")
     ok = JournalEntry(**base, state="open", resolves="f1", tracked_by="#1")
     assert ok.tracked_by == "#1"
+
+
+# --- out-of-scope (spec 2026-09-24 §A) ------------------------------------
+
+_OOS_TEXT = (
+    "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+    "phase=2 state=open -->\n### f1 · finding [open] · true, not ours (phase 2)\n\nbody\n\n"
+    "<!-- fr:journal kind=finding scope=plan id=f1-resolved created=2026-09-24T00:01:00 "
+    "state=open resolves=f1 out_of_scope=true -->\n"
+    "### f1-resolved · finding [out-of-scope] · resolves f1: true, not ours\n\nwhy\n"
+)
+
+
+class TestOutOfScope:
+    """A finding that is TRUE but not caused by this change. Written the way
+    `deferred` is — `state=open` plus a token — so an fr that predates the
+    token reads the finding as still open (fail closed), never as closed and
+    never as a parse error."""
+
+    def test_the_fold_reads_it_as_out_of_scope_and_the_gates_stop_counting_it(self) -> None:
+        from fr.journal.model import (
+            effective_finding_states,
+            open_finding_ids,
+            parse_journal,
+            phase_finding_states,
+        )
+
+        entries = parse_journal(_OOS_TEXT)
+        record = entries[1]
+        assert record.state == "open" and record.out_of_scope is True
+        assert effective_finding_states(entries) == {"f1": "out-of-scope"}
+        assert open_finding_ids(entries) == []
+        assert phase_finding_states(entries, 2) == {"f1": "out-of-scope"}
+
+    def test_a_reader_that_ignores_the_token_reads_it_open(self) -> None:
+        """Simulates an older fr: the token is stripped before parsing, which is
+        exactly what a named-key projection that does not know it amounts to."""
+        from fr.journal.model import open_finding_ids, parse_journal
+
+        older = _OOS_TEXT.replace(" out_of_scope=true", "")
+        assert open_finding_ids(parse_journal(older)) == ["f1"]
+
+    def test_a_later_deferral_supersedes_it(self) -> None:
+        from fr.journal.model import effective_finding_states, parse_journal
+
+        text = _OOS_TEXT + (
+            "\n<!-- fr:journal kind=finding scope=plan id=f1-resolved-2 "
+            "created=2026-09-24T00:02:00 state=open resolves=f1 tracked_by=#9 -->\n"
+            "### f1-resolved-2 · finding [deferred → #9] · resolves f1: filed\n\nfiled\n"
+        )
+        assert effective_finding_states(parse_journal(text)) == {"f1": "deferred"}
+
+    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        record = _entry(kind="finding", id="r1", state="open", resolves="f1", out_of_scope=True)
+        text = serialize_entry(record)
+        assert "out_of_scope=true" in text.splitlines()[0]
+        assert "[out-of-scope]" in text.splitlines()[1]
+        assert parse_journal(text)[0].out_of_scope is True
+        plain = serialize_entry(_entry(kind="finding", id="f2", state="open"))
+        assert "out_of_scope" not in plain
+
+    def test_only_an_open_resolution_record_may_carry_it(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        base = dict(kind="finding", scope="plan", id="r", created="t", title="x", body="")
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="open", out_of_scope=True)  # no `resolves`
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="fixed", resolves="f1", out_of_scope=True)
+        with pytest.raises(ValueError, match="out_of_scope"):
+            JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", out_of_scope=True)

@@ -1776,3 +1776,61 @@ class TestResolveDeferred:
         self._resolve("--state", "fixed", "--note", "done after all")
         check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
         assert check.exit_code == 0
+
+
+class TestResolveOutOfScope:
+    """`--state out-of-scope`: a finding that is TRUE but not caused by this
+    change (spec 2026-09-24 §A). Before it, the only non-blocking exit was
+    `deferred --tracked-by`, which needs an issue to exist NOW — so every
+    reviewer finding became code in the feature PR (gh#597's scope ratchet)."""
+
+    def _open(self, root: Path, monkeypatch) -> None:
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+
+    def _resolve(self, *args: str):
+        return runner.invoke(
+            app, ["journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1", *args]
+        )
+
+    def test_it_is_written_open_with_a_token_and_passes_the_gate(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope", "--note", "pre-existing in main")
+        assert res.exit_code == 0, res.output
+
+        text = _journal_file(root, "S").read_text()
+        record = next(e for e in parse_journal(text) if e.resolves == "f1")
+        assert record.state == "open" and record.out_of_scope is True
+        assert "state=open" in text and "out_of_scope=true" in text
+
+        check = runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+        assert check.exit_code == 0, check.output
+        assert "out-of-scope" in check.output and "f1" in check.output, "said, not hidden"
+
+    def test_it_still_needs_a_note(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope")
+        assert res.exit_code == 2
+
+    def test_tracked_by_is_not_for_it(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        res = self._resolve("--state", "out-of-scope", "--tracked-by", "#9", "--note", "x")
+        assert res.exit_code == 2
+
+    def test_require_reviews_passes_with_only_out_of_scope_findings(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._open(root, monkeypatch)
+        TestCheckRequireReviews()._write_plan(root, "S")
+        assert self._resolve("--state", "out-of-scope", "--note", "x").exit_code == 0
+        res = runner.invoke(
+            app, ["journal", "check", "--scope", "plan", "--slug", "S", "--require-reviews"]
+        )
+        assert res.exit_code == 0, res.output

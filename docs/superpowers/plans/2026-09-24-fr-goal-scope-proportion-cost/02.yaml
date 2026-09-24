@@ -47,10 +47,11 @@ tasks:
       GREEN: `JournalEntry.review_scope: Literal["in","out"] | None`, named-token parse;
       `--review-scope` option on `add`; render changes in journal_cmd.py `render`. Tests green.
   - id: P2.T2.S3
-    text: 'REFACTOR: render''s grouping (in-scope / out-of-scope / reclassified) lives in one helper next
-      to `_deferrals`; ruff/mypy clean.'
+    text: |-
+      REFACTOR: render's grouping (in-scope / out-of-scope / reclassified) lives in one helper next to `_deferrals`; ruff/mypy clean.
 - number: 3
-  title: operator guard — enforced in the fold/check, both write paths, verified on Claude Code
+  title: operator guard — enforced in the fold/check, both write paths, verified on
+    Claude Code
   steps:
   - id: P2.T3.S1
     text: |-
@@ -74,17 +75,17 @@ tasks:
       enforced, opencode/hermes advisory with scope_notes (no question tool), codex/copilot-cli
       unsupported. Parity check + tripwire green. ruff/mypy clean.
   - id: P2.T3.S4
-    text: 'REFACTOR: `unauthorized_fixes` and `effective_finding_states` share one fold pass (no second
-      walk of entries); docstrings name both write paths. ruff/mypy clean.'
+    text: |-
+      REFACTOR: `unauthorized_fixes` and `effective_finding_states` share one fold pass (no second walk of entries); docstrings name both write paths. ruff/mypy clean.
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:31:59+00:00'
       note: null
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:33:42+00:00'
       note: null
     P2.T1.S3:
       state: ' '

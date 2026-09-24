@@ -35,11 +35,14 @@ JournalKind = Literal[
 ]
 JournalScope = Literal["spec", "plan", "debug"]
 FindingState = Literal["fixed", "refuted", "open"]
-# What the FOLD can say about a finding. `deferred` is never WRITTEN as a
-# `state=` token (an older fr would reject the value and fail to parse the whole
-# journal); it is an `open` resolution record carrying `tracked_by`, which the
-# fold reads as deferred and an older reader reads as still open — fail closed.
-EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred"]
+# What the FOLD can say about a finding. Two of its states are carried by a
+# TOKEN, never written as a `state=` value, because an older fr would reject an
+# unknown value and fail to parse the whole journal:
+#   - `deferred`     — an `open` resolution record carrying `tracked_by=`;
+#   - `out-of-scope` — an `open` resolution record carrying `out_of_scope=true`.
+# `parse_journal` projects tokens by name, so an older reader drops the token
+# and reads the finding as still open — fail closed, and no journal stamp bump.
+EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred", "out-of-scope"]
 
 # Where deferred work may be tracked: `#N`, `owner/repo#N`, or an http(s) URL.
 # A reference, not prose — so a deferral always says where the work went.
@@ -99,6 +102,10 @@ class JournalEntry(BaseModel):
     # `tracked_by=`, appended last — ignored by an fr that predates it, exactly
     # as `resolves=` was (see test_a_header_token_this_fr_does_not_know_...).
     tracked_by: str | None = None
+    # OUT OF SCOPE: an `open` resolution record saying the finding is true but
+    # not caused by this change (spec 2026-09-24 §A). Folds to `out-of-scope`;
+    # header token `out_of_scope=true`, serialized only when set.
+    out_of_scope: bool = False
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -133,6 +140,13 @@ class JournalEntry(BaseModel):
                     "`tracked_by` must name an issue — `#N`, `owner/repo#N` or an "
                     f"http(s) URL — got {self.tracked_by!r}"
                 )
+        if self.out_of_scope and (
+            self.resolves is None or self.state != "open" or self.tracked_by is not None
+        ):
+            raise ValueError(
+                "`out_of_scope` is only valid on an `open` resolution record that is not "
+                "a deferral: it says the finding is true but not this change's"
+            )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
         if not self.id or any(c.isspace() for c in self.id):
@@ -184,7 +198,17 @@ _DELIM_SUFFIX = " -->"
 # the byte-for-byte header it already has; an fr that predates the field reads
 # the token and ignores it (`parse_journal` names the fields it wants), so an
 # older reader sees a resolution record as an ordinary fixed/refuted finding.
-_HEADER_FIELDS = ("kind", "scope", "id", "created", "phase", "state", "resolves", "tracked_by")
+_HEADER_FIELDS = (
+    "kind",
+    "scope",
+    "id",
+    "created",
+    "phase",
+    "state",
+    "resolves",
+    "tracked_by",
+    "out_of_scope",
+)
 
 
 def serialize_entry(entry: JournalEntry) -> str:
@@ -192,14 +216,18 @@ def serialize_entry(entry: JournalEntry) -> str:
     parts: list[str] = []
     for field in _HEADER_FIELDS:
         value = getattr(entry, field)
-        if value is None:
+        # `False` is the default of a boolean token: omitting it keeps every
+        # entry that does not set it byte-identical to what an older fr wrote.
+        if value is None or value is False:
             continue
-        parts.append(f"{field}={value}")
+        parts.append(f"{field}={'true' if value is True else value}")
     header = _DELIM_PREFIX + " ".join(parts) + _DELIM_SUFFIX
     phase_bit = f" (phase {entry.phase})" if entry.phase is not None else ""
     state_bit = f" [{entry.state}]" if entry.state is not None else ""
     if entry.tracked_by is not None:
         state_bit = f" [deferred → {entry.tracked_by}]"
+    elif entry.out_of_scope:
+        state_bit = " [out-of-scope]"
     heading = f"### {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
     body = entry.body.rstrip("\n")
     return f"{header}\n{heading}\n\n{body}\n" if body else f"{header}\n{heading}\n"
@@ -274,6 +302,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 state=fields.get("state"),  # type: ignore[arg-type]
                 resolves=fields.get("resolves"),
                 tracked_by=fields.get("tracked_by"),
+                out_of_scope=fields.get("out_of_scope") == "true",
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -322,12 +351,16 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, Effective
     A deferral (an `open` record with `tracked_by`) folds to `deferred`: not
     open, so the gate passes; not fixed or refuted, so nothing claims the work
     was done or the finding was wrong. A later record still wins.
+    An out-of-scope record (an `open` record with `out_of_scope`) folds to
+    `out-of-scope` the same way, and for the same reasons.
     """
     states: dict[str, EffectiveFindingState] = {}
     for e in entries:
         if e.resolves is not None:
             if e.tracked_by is not None:
                 states[e.resolves] = "deferred"
+            elif e.out_of_scope:
+                states[e.resolves] = "out-of-scope"
             elif e.state is not None:
                 states[e.resolves] = e.state
         elif e.kind == "finding" and e.state is not None:

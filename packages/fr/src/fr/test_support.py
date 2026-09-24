@@ -99,7 +99,8 @@ def build_plan_journal(repo_root: Path, slug: str, entries: list[dict[str, Any]]
     """Write a synthetic plan journal at `repo_root` and return its path.
 
     `entries` uses `fr journal add`'s own vocabulary — dicts of
-    `{kind, title, body, phase, state, id, resolves}` — and each is written
+    `{kind, title, body, phase, state, id, resolves, tracked_by, out_of_scope}`
+    — and each is written
     through `append_journal_entry`, the same writer `fr journal add` and
     `fr journal resolve` call. The WRITER is shared; the default-id derivation
     deliberately is not (see `_default_entry_id`), and unlike the CLI this
@@ -131,6 +132,8 @@ def build_plan_journal(repo_root: Path, slug: str, entries: list[dict[str, Any]]
             body=e.get("body", ""),
             state=e.get("state"),
             resolves=e.get("resolves"),
+            tracked_by=e.get("tracked_by"),
+            out_of_scope=e.get("out_of_scope", False),
         )
         append_journal_entry(path, slug, entry)
     return path

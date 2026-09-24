@@ -211,7 +211,7 @@ def add(
     append_journal_entry(path, slug, entry)
 
 
-RESOLUTION_STATES = ("fixed", "refuted", "deferred")
+RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
 """What `resolve` may close a finding to. Re-opening is `add --resolves`:
 `resolve` is the verb for "this is done with", and a re-open is new
 information, which belongs in an entry with a body of its own."""
@@ -237,8 +237,9 @@ def resolve(
     state: str = typer.Option(
         ...,
         "--state",
-        help="fixed | refuted | deferred. `deferred` = the finding is valid but not "
-        "this change's to fix; requires --tracked-by.",
+        help="fixed | refuted | deferred | out-of-scope. `deferred` = the finding is "
+        "valid but not this change's to fix; requires --tracked-by. `out-of-scope` = "
+        "true, but not caused by this change (--note says why); no issue needed yet.",
     ),
     note: str = typer.Option(
         ...,
@@ -261,6 +262,10 @@ def resolve(
     fixed and refuted, so such findings were recorded as refuted — a claim the
     finding was wrong. A deferral must name its issue: it is where the work
     went, not a softer way to drop it.
+
+    `--state out-of-scope` is the step before a deferral: the finding is true
+    but this change did not cause it, and no issue exists yet. The PR body
+    lists it for the operator to file; the gate does not wait on it.
 
     Append-only on purpose: the finding keeps its own text and `state: open`,
     and `fr journal check` folds records into an EFFECTIVE state. A finding
@@ -337,9 +342,11 @@ def resolve(
         # A deferral is WRITTEN as `open` + `tracked_by`: an older fr rejects an
         # unknown `state=` value (and with it the whole journal) but ignores an
         # unknown token, so it reads the finding as still open — fail closed.
-        state="open" if state == "deferred" else state,  # type: ignore[arg-type]
+        # Out-of-scope is written the same way, for the same reason.
+        state="open" if state in ("deferred", "out-of-scope") else state,  # type: ignore[arg-type]
         resolves=entry_id,
         tracked_by=tracked_by,
+        out_of_scope=state == "out-of-scope",
     )
     append_journal_entry(path, slug, record)
     shown = f"deferred → {tracked_by}" if tracked_by else state
@@ -464,6 +471,13 @@ def check(
             f"{len(deferred)} deferred finding(s): "
             + ", ".join(f"{fid} → {ref}" for fid, ref in deferred)
         )
+    # Same for out-of-scope: passes, and is listed, so the operator can still
+    # choose to file each as an issue.
+    out_of_scope = [
+        fid for fid, st in effective_finding_states(entries).items() if st == "out-of-scope"
+    ]
+    if out_of_scope:
+        console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
     still_open = open_finding_ids(entries)
     if still_open:
         # Output shape unchanged ("N open finding(s): <ids>") — things grep it.
