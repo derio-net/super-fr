@@ -123,6 +123,35 @@ class MeasuredTokens(BaseModel):
         )
 
 
+class MainSessionUsage(BaseModel):
+    """What the MAIN session burned during one top-level step — spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D (gh#593 option 0).
+
+    `MeasuredTokens` covers a dispatched subagent; nothing covered the
+    orchestrator's own context, which is where gh#593 found the cost had
+    moved. The window is the step's, `(previous top-level step's at, this
+    step's at]`, so `brainstorm` (no attempt) and the whole `implement` loop
+    (dispatch, handoff and debugging turns) are measured too.
+
+    Atomic like `MeasuredTokens`: the four figures, `turns` (distinct
+    assistant messages) and `sessions` (how many harness sessions were summed)
+    are all required, so a partial measurement cannot be constructed and "not
+    observable" is the absence of the whole record, never zeros. `cost_usd` is
+    set only when the harness itself reports a cost (OpenCode does; Claude
+    Code's transcript does not), never computed from a price table here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+    turns: int
+    sessions: int
+    cost_usd: float | None = None
+
+
 class Attempt(BaseModel):
     """One attempt to hold a unit, carrying its own identity AND its own cost
     (spec §4.A) — `DispatchRecord` plus `session`, `estimate` and `measured`.
@@ -337,6 +366,15 @@ class StepRecord(BaseModel):
     exit: int | None = None
     stdout: str | None = None
 
+    main_session: MainSessionUsage | None = None
+    """The main session's usage over this step's window (spec
+    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D), written by
+    `_complete_step` on a `done` outcome only. Absent means "not observable" —
+    another harness, an unreadable candidate session, or a step completed
+    before this field existed — never zero. **A shape change**
+    (`current_version=6`, migration `fr.artifacts.run_main_session`); additive,
+    so the hop is stamp-only and no prior shape is frozen."""
+
     members: list[str] | None = None
     """Member-step ids of a grouped `for_each` step, recorded at build.
 
@@ -381,6 +419,12 @@ class StepRecord(BaseModel):
     in `fr.run.legacy` and every migration reads with that, never with this.
     """
 
+
+MAIN_SESSION_SCHEMA_VERSION = 6
+"""The `run` artifact version `StepRecord.main_session` FIRST appears in — the
+same kind of fact as `UNIT_RECORD_SCHEMA_VERSION` below, for the same
+validator check: a body carrying the key under an older stamp raises in any fr
+that believes the stamp."""
 
 UNIT_RECORD_SCHEMA_VERSION = 5
 """The `run` artifact version `StepRecord.units` FIRST appears in.

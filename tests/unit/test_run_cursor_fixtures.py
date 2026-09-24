@@ -58,5 +58,5 @@ def test_each_cursor_declares_the_version_its_directory_claims() -> None:
         assert declared == (None if expected == 1 else expected), name
 
 
-def test_all_four_shipped_versions_are_represented() -> None:
-    assert {name.split("/")[0] for name in _on_disk()} == {"v1", "v2", "v3", "v4"}
+def test_every_version_before_the_current_one_is_represented() -> None:
+    assert {name.split("/")[0] for name in _on_disk()} == {"v1", "v2", "v3", "v4", "v5"}

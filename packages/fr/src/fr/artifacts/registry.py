@@ -372,7 +372,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # (`items`, `dispatch`, top-level `accounting`) — which is why the
             # v1-v4 shape is frozen in `fr.run.legacy` and every hop of the
             # chain reads with that, never with the live model.
-            current_version=5,
+            # 6: `StepRecord.main_session` — main-session usage per step (spec
+            # `2026-09-24-fr-goal-scope-proportion-cost-design` §D), migration
+            # `fr.artifacts.run_main_session`. Additive, so stamp-only.
+            current_version=6,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

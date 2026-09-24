@@ -210,7 +210,10 @@ def validate_run(path: Path) -> list[str]:
        else would catch — it is what the 4 -> 5 migration's crash window
        leaves behind, and any fr that believed the stamp would raise on the
        key;
-    3. the unit-key grammar and the state rule of spec
+    3. likewise `main_session` (spec
+       `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D) must sit under
+       a stamp of at least `MAIN_SESSION_SCHEMA_VERSION`;
+    4. the unit-key grammar and the state rule of spec
        `2026-09-20-unit-record-unification-design.md` §4.B
        (`_run_unit_problems`).
 
@@ -221,7 +224,7 @@ def validate_run(path: Path) -> list[str]:
     moving. A v4 file carrying one never reaches this function in the v5
     shape: the migration refuses it and leaves it byte-identical.
     """
-    from fr.run.model import UNIT_RECORD_SCHEMA_VERSION, RunState
+    from fr.run.model import MAIN_SESSION_SCHEMA_VERSION, UNIT_RECORD_SCHEMA_VERSION, RunState
 
     data, problems = _load_mapping(path)
     if problems or data is None:
@@ -242,6 +245,13 @@ def validate_run(path: Path) -> list[str]:
             f"a step carries `units` but `schema_version` is {state.schema_version}; that "
             f"map appeared in version {UNIT_RECORD_SCHEMA_VERSION}, so this file declares a "
             "shape it does not have — `fr migrate artifacts --yes` finishes the job"
+        )
+    carries_main_session = any(r.main_session is not None for r in state.steps.values())
+    if carries_main_session and state.schema_version < MAIN_SESSION_SCHEMA_VERSION:
+        problems.append(
+            f"a step carries `main_session` but `schema_version` is {state.schema_version}; "
+            f"that field appeared in version {MAIN_SESSION_SCHEMA_VERSION}, so this file "
+            "declares a shape it does not have — `fr migrate artifacts --yes` finishes the job"
         )
     problems.extend(_run_unit_problems(state))
     return problems

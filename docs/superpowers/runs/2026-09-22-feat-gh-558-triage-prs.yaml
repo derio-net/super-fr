@@ -1,4 +1,4 @@
-schema_version: 5
+schema_version: 6
 run: 2026-09-22-feat-gh-558-triage-prs
 workflow: fr-goal@1
 branch: feat/gh-558-triage-prs
