@@ -1,0 +1,24 @@
+schema_version: 5
+run: 2026-09-24-feat-597-593
+workflow: fr-goal@1
+branch: feat/597-593
+started: '2026-09-24T17:38:43+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending

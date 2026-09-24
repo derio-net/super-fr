@@ -3934,3 +3934,44 @@ rows:
       post-merge on main (a5b83567) it read ''merged, manual phases still open'', then
       after the manual tick ''merged but not archived'' with its own fr archive line,
       which archived it.'
+  - id: fr-goal-out-of-scope-findings
+    capability: fr-goal-methodology
+    acceptance: A review finding the change did not cause is journaled as out-of-scope
+      and offered to the operator as an issue, not fixed in the feature PR; fixing one
+      needs an operator decision
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    levels: {}
+    status: not-implemented
+    notes: Target unit (journal fold + resolve guard) and int (review-phase gate passes
+      with only out-of-scope findings).
+  - id: fr-goal-proportionality-report
+    capability: fr-goal-methodology
+    acceptance: 'The delivered PR carries a proportionality report: unreferenced new
+      files, out-of-plan touches, and diff size against the plan''s estimate'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    levels: {}
+    status: not-implemented
+    notes: Target unit (report sections on a fixture repo) and int (deliver resolve
+      derives the evidence).
+  - id: fr-goal-main-session-cost
+    capability: fr-goal-cost
+    acceptance: The operator can see what the main session cost per pipeline step, on
+      Claude Code and OpenCode
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    levels: {}
+    status: not-implemented
+    notes: Target unit (both readers on fixtures, fr run cost rendering); live per-harness
+      check post-merge.
+  - id: fr-goal-independent-spec-review
+    capability: fr-goal-methodology
+    acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
+      cannot complete without that review's evidence
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
+    levels: {}
+    status: not-implemented
+    notes: Target unit (spec-review evidence gate) plus the shipped manifest passing
+      fr workflow check.
