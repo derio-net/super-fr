@@ -1266,9 +1266,21 @@ def _verified_evidence(
     verified = dict(offered)
     attempt = units.last_attempt(state, key)
     opened = attempt.dispatched if attempt is not None else None
+    # A flat review unit with no attempt (an adopted cursor) is dated by its
+    # step's own `at` — for the review entry AND the reviewer's dispatch, one
+    # window for both (review p4-f1: a None window let any reviewer id pass).
+    flat_record = state.steps.get(step.id) if target is not None and target.phase is None else None
+    since = opened or (flat_record.at if flat_record is not None else None)
     if "reviewer" in offered:
         assert target is not None  # phase-scoped, refused above otherwise
-        _verify_reviewer(key, offered["reviewer"], state, target=target, opened=opened)
+        _verify_reviewer(
+            key,
+            offered["reviewer"],
+            state,
+            target=target,
+            opened=since,
+            expected_agent=step.agent if target.phase is None else None,
+        )
     if "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
@@ -1283,9 +1295,6 @@ def _verified_evidence(
         err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     if "review" in offered:
-        # A flat unit with no attempt (an adopted cursor) is dated by its step.
-        record = state.steps.get(step.id) if target.phase is None else None
-        since = opened or (record.at if record is not None else None)
         _verify_review_entry(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
@@ -1341,7 +1350,13 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
 
 
 def _verify_reviewer(
-    key: str, agent_id: str, state: RunState, *, target: _EvidenceTarget, opened: str | None
+    key: str,
+    agent_id: str,
+    state: RunState,
+    *,
+    target: _EvidenceTarget,
+    opened: str | None,
+    expected_agent: str | None = None,
 ) -> None:
     """`agent_id` is a SEPARATE context that reviewed this phase — or exit 2.
 
@@ -1358,6 +1373,9 @@ def _verify_reviewer(
     implementer to exclude — the spec's author is the orchestrator, which has
     no agent id and so can never pass the dispatch check. On OpenCode and
     Hermes there is no dispatch reader, so the id is recorded as claimed.
+    When the step names its reviewer (`expected_agent`, spec-review's
+    `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
+    is refused (review p4-f2) — qualified or bare spelling both match.
     """
     from fr.run.telemetry import subagent_dispatch_since
 
@@ -1392,6 +1410,18 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    if (
+        observed
+        and expected_agent is not None
+        and not _same_agent(observed.agent_type, expected_agent)
+    ):
+        err_console.print(
+            f"[red]{key}: --evidence reviewer={agent_id} is a {observed.agent_type!r} "
+            f"dispatch — this step's reviewer is {expected_agent}. Dispatch that agent "
+            "and name its id.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if observed is False:
         err_console.print(
             f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
@@ -1407,6 +1437,15 @@ def _verify_reviewer(
             "for this session; recorded as claimed, unverified.[/yellow]",
             soft_wrap=True,
         )
+
+
+def _same_agent(observed: str | None, expected: str) -> bool:
+    """`observed` is `expected`, in its plugin-qualified or bare spelling
+    (`super-fr:fr-spec-reviewer` / `fr-spec-reviewer`)."""
+    if observed is None:
+        return False
+    bare = expected.split(":", 1)[-1]
+    return observed in (expected, bare)
 
 
 def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:

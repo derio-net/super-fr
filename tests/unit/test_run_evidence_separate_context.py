@@ -571,3 +571,84 @@ def test_a_flat_step_reviewing_no_journal_still_refuses_phase_evidence(tmp_path:
 
     assert result.exit_code == 2, result.output
     assert "names no phase" in _squash(result.output)
+
+
+# --- phase 4 review: p4-f1, p4-f2, p4-f3 --------------------------------------
+
+
+def test_p4_f1_adopted_spec_review_naming_an_undispatched_reviewer_is_refused(
+    tmp_path: Path,
+) -> None:
+    """An adopted cursor's flat unit has no attempt, so `opened` is None. The
+    reviewer check must date the window from the step's own `at` — the same
+    `since` the review entry is dated by — or ANY id passes as "unverified"
+    on a transcript that is perfectly readable."""
+    from tests.unit.test_run_cli import _forget_dispatch_records
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, _ = _at_the_spec_review(tmp_path, root=root)
+    _forget_dispatch_records(repo, "spec-review")
+    assert units.last_attempt(load_run_state(repo, "r1"), "step/spec-review") is None
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, root, "s-x", "review=sr-1", "reviewer=made-up")
+
+    assert result.exit_code == 2, result.output
+    assert "names no subagent this session dispatched" in _squash(result.output)
+    assert _spec_review_evidence(repo) == {}
+
+
+_AGENT_SPEC_SHAPE = _SPEC_SHAPE.replace(
+    "  - id: spec-review\n    kind: agent\n",
+    "  - id: spec-review\n    kind: agent\n    agent: super-fr:fr-spec-reviewer\n",
+)
+
+
+@pytest.mark.parametrize("agent_type", ["general-purpose", "Explore"])
+def test_p4_f2_a_dispatch_of_another_agent_type_is_not_the_spec_reviewer(
+    tmp_path: Path, agent_type: str
+) -> None:
+    """The step names its reviewer (`agent: super-fr:fr-spec-reviewer`); any
+    other subagent this session happened to dispatch is not it."""
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, opened = _at_the_spec_review(tmp_path, root=root, shape=_AGENT_SPEC_SHAPE)
+    dispatched_at(root, _later(opened), session_id="s-x", usage={}, agent_type=agent_type)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, root, "s-x", "review=sr-1", f"reviewer={AGENT_ID}")
+
+    assert result.exit_code == 2, result.output
+    squashed = _squash(result.output)
+    assert agent_type in squashed
+    assert "super-fr:fr-spec-reviewer" in squashed
+    assert _spec_review_evidence(repo) == {}
+
+
+@pytest.mark.parametrize("agent_type", ["super-fr:fr-spec-reviewer", "fr-spec-reviewer"])
+def test_p4_f2_the_named_spec_reviewer_is_accepted_qualified_or_bare(
+    tmp_path: Path, agent_type: str
+) -> None:
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, opened = _at_the_spec_review(tmp_path, root=root, shape=_AGENT_SPEC_SHAPE)
+    dispatched_at(root, _later(opened), session_id="s-x", usage={}, agent_type=agent_type)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, root, "s-x", "review=sr-1", f"reviewer={AGENT_ID}")
+
+    assert result.exit_code == 0, result.output
+    assert _spec_review_evidence(repo)["reviewer"] == AGENT_ID
+
+
+def test_p4_f2_an_unreadable_transcript_still_records_the_named_step_as_claimed(
+    tmp_path: Path,
+) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path, shape=_AGENT_SPEC_SHAPE)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify reviewer" in _squash(result.stderr)
