@@ -95,8 +95,8 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-09-24T23:12:10+00:00'
+    state: done
+    at: '2026-09-24T23:27:48+00:00'
     units:
       step/deliver:
         attempts:
@@ -107,3 +107,8 @@ steps:
           returned: '2026-09-24T23:16:50+00:00'
           outcome: abandoned
         - dispatched: '2026-09-24T23:16:51+00:00'
+          returned: '2026-09-24T23:27:48+00:00'
+          outcome: done
+        evidence:
+          tests: fr-605-delivery-suite.log@5ed5575da5df
+          proportionality: 682d00d87d3e4d1dda191e7d4f5eb82883556557:9d79793442e9bbfb2a996bbf7842cdca34d2aceed1b87ce245854bef971f2a92
