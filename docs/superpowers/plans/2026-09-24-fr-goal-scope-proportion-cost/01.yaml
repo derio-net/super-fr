@@ -1,0 +1,207 @@
+schema_version: 2
+phase:
+  number: 1
+  title: D — dedupe fix (skeleton), run v6 main_session, Claude Code + OpenCode readers, fr run cost
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - fr-goal-main-session-cost
+  skeleton: true
+  tier: hard
+tasks:
+- number: 1
+  title: 'Skeleton: one message.id dedupe shared by every Claude Code usage reader (spec §D, review f5)'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_run_telemetry.py add a transcript fixture where three assistant
+      records share one `message.id` with identical `usage` (the shape Claude Code writes, one
+      record per content block — confirmed live: 27 of 40 ids duplicated) plus one record
+      with a distinct id. Assert `read_claude_code(path)` sums each message ONCE and
+      `assistant_records` counts distinct messages. Run
+      `uv run pytest tests/unit/test_run_telemetry.py -q --no-cov`; confirm it fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/run/telemetry.py add a private helper that yields
+      `(record, usage)` for usage-bearing records with the first occurrence of each
+      `message.id` winning (records with no id are kept, never merged); make
+      `read_claude_code` iterate it. Docstring states the per-content-block duplication and
+      that `measured` values recorded before this release are NOT rewritten. Test green;
+      full `uv run pytest -q --no-cov` green (fix any test that pinned the inflated sum by
+      correcting its expected value, with a comment).
+  - id: P1.T1.S3
+    text: 'REFACTOR: ruff format + ruff check + mypy (commands in AGENTS.md "Dev commands") clean.'
+- number: 2
+  title: MainSessionUsage on StepRecord, run stamp 5 -> 6 with migration + validator
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests: (a) packages/fr/src/fr/run/model.py `MainSessionUsage` requires all four token
+      fields plus `turns` and `sessions`, `cost_usd` optional, frozen, extra=forbid; a
+      StepRecord round-trips `main_session`; (b) in tests/unit/test_migration_runner.py
+      extend the every-hop chain assertion (currently `[2, 3, 4, 5]`, ~line 644) to
+      `[2, 3, 4, 5, 6]`; (c) a v5 cursor fixture migrates to v6 byte-identical except the
+      stamp; (d) `fr.artifacts.structure.validate_run` accepts `main_session` and rejects it
+      on a cursor stamped < 6. Confirm red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `MainSessionUsage` + `StepRecord.main_session: MainSessionUsage | None = None`;
+      bump `run` current_version to 6 in packages/fr/src/fr/artifacts/registry.py ONLY; add a
+      stamp-only SchemaMigration 5 -> 6 in a new packages/fr/src/fr/artifacts/run_main_session.py
+      registered via an import in packages/fr/src/fr/artifacts/__init__.py (a migration nobody
+      imports never runs); extend validate_run. The 5 -> 6 hop reads with
+      `fr.run.legacy`-style frozen parsing is NOT needed (additive) — but the existing hops must
+      still name the frozen reader (test_no_run_migration_names_the_live_parser stays green).
+      Then run `uv run fr migrate artifacts --yes` in the worktree and commit the migrated
+      cursor(s). Tests green.
+  - id: P1.T2.S3
+    text: 'REFACTOR: ruff/mypy clean; `uv run fr validate artifacts` exits 0.'
+- number: 3
+  title: Claude Code main-session reader + session candidate set + _complete_step hook
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_run_main_session.py: (a) `ClaudeCodeReader.measure_main_session(path,
+      start, end)` over a fixture with sidechain records, main-thread records inside and outside
+      the window, duplicate ids, and timestamps with milliseconds differing from the window
+      edges only below one second (truncate to the second; window is `(start, end]`) yields
+      exact sums and `turns` = distinct message ids, `cost_usd` None; (b) a candidate set of
+      two sessions is summed and `sessions == 2`; one unreadable candidate -> None; (c)
+      `_complete_step(..., "done")` in packages/fr/src/fr/commands/run_cmd.py writes
+      `main_session` for an agent resolve, a cli advance and the implement group's completion
+      by advance, with window `(previous top-level step's at | run.started, now]`; "failed"
+      writes none; a reader raising never fails the completion. Use `FR_TRANSCRIPT_ROOT`-style
+      env overrides the existing telemetry tests use. Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `measure_main_session` to the `TranscriptReader` Protocol and ClaudeCodeReader
+      (reuse the P1.T1 dedupe helper; skip `isSidechain is True`; real model only). Add a
+      `candidate_sessions(state, env, repo_root)` helper in packages/fr/src/fr/run/telemetry.py:
+      distinct `Attempt.session` values across `state.steps[*].units`, plus workspace-binding
+      sessions for `state.branch` (read via the isolation sessions module that
+      `fr isolation attach` writes), plus `current_session(env)`. Add `measure_step_main_session`
+      that sums per candidate or returns None if any candidate is unreadable. Call it from
+      `_complete_step` only when outcome == "done", catching every exception (telemetry never
+      raises). Tests green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; docstrings state the window, the precision rule, and that
+      pre-`fr run start` turns are unmeasured.
+- number: 4
+  title: OpenCode reader (read-only SQLite) + parity row
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_run_opencode_reader.py builds a fixture SQLite DB with the real
+      schema subset (tables `session` with id/parent_id/directory, `message` with
+      id/session_id/time_created/data JSON carrying role, tokens{input,output,reasoning,
+      cache{read,write}}, cost, time{created,completed}). Assert: bound session -> exact sums
+      (reasoning folded into output_tokens), `cost_usd` = sum of cost, `turns` = assistant
+      messages; no bound session and exactly one top-level session whose directory is the
+      workspace or base clone -> measured; two qualifying -> None; a child session
+      (parent_id set) is ignored; `FR_OPENCODE_DB` overrides the path; a missing DB -> None;
+      `measure(...)` (dispatch) returns None. Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: `OpenCodeReader` in packages/fr/src/fr/run/telemetry.py (or a sibling module it
+      imports), sqlite3 opened with `mode=ro` URI, registered in `READERS` under "opencode".
+      Candidate resolution per spec §D. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      GREEN: add the `main-session-cost` row (kind: interaction) to
+      packages/fr/src/fr/harness/parity.yaml — claude-code enforced, opencode partial
+      (scope_note: not live-proven; sessions resolved from bindings or a unique top-level
+      session), hermes absent (scope_note: no reader), codex/copilot-cli unsupported.
+      `uv run fr harness parity --check` and tests/unit/test_tripwire_harness_parity.py green.
+  - id: P1.T4.S4
+    text: 'REFACTOR: OpenCodeReader''s candidate-session query and token mapping read as one documented
+      function each; the reasoning->output fold is stated in the docstring. ruff/mypy clean.'
+- number: 5
+  title: fr run cost
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_run_cost_cmd.py via typer CliRunner over a fixture cursor: one row
+      per top-level step with turns, sessions, the four token figures, cache-read/turn and cost
+      when known; an unmeasured step prints `—`, never 0; a subagent line summing
+      `attempts[].measured`; units resolved before this release flagged "possibly over-counted".
+      Confirm red.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `@run_app.command("cost")` in packages/fr/src/fr/commands/run_cmd.py, rendering with
+      the same rich table idiom `status_cmd` uses. Read-only: must not write the cursor.
+      Tests green; ruff/mypy clean.
+  - id: P1.T5.S3
+    text: 'REFACTOR: the cost table''s row builder is a pure function over RunState (testable without
+      CliRunner); ruff/mypy clean.'
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

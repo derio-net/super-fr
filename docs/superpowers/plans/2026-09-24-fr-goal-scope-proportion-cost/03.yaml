@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 3
+  title: C — plan files/estimate_lines, fr plan proportionality, deliver derived evidence
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-goal-proportionality-report
+  tier: hard
+tasks:
+- number: 1
+  title: PhaseHeader.files / estimate_lines, fr_version floor, self-review warning
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests: `PhaseHeader` accepts `files` (tuple of str) and `estimate_lines` (int >= 0 or
+      None), both omitted from dumps when unset (existing plans byte-stable — add a round-trip
+      over one archived plan); `fr plan create` with a phases file setting either floors
+      `fr_version` at '>=4.20.0,<5.0.0' (and refuses an explicit constraint admitting < 4.20.0,
+      mirroring the `--workflow` floor refusal in commands/plan_cmd.py ~line 185);
+      `fr plan self-review` WARNS (not errors) on an agentic phase with no `files`, and errors
+      via the existing `_version_floor_issue` pattern when a plan uses the fields under a
+      pre-4.20 fr_version. Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/types.py fields with the same comment treatment as `tier`/
+      `skeleton`; plan_ops.py/plan_cmd.py floor + self-review checks. No plan schema_version
+      change (Literal[2] stays). Tests green; `uv run fr validate artifacts` green.
+  - id: P3.T1.S3
+    text: 'REFACTOR: the new fr_version floor check reuses `_version_floor_issue` rather than a second
+      comparator; ruff/mypy clean.'
+- number: 2
+  title: fr plan proportionality
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_plan_proportionality.py over a tmp git repo with an `origin/main`
+      ref: (1) an added file referenced nowhere is listed, one referenced by path or by stem
+      (>= 4 chars) is not, fr artifacts (docs/superpowers/**, docs/acceptance/**) exempt; (2)
+      a touch outside every phase `files` glob is flagged, one named in a journal finding or
+      deviation entry is "justified by <entry-id>"; with no phase declaring `files` the section
+      says so; (3) added+deleted lines vs summed `estimate_lines` flagged above 2x, no ratio
+      without an estimate; diff is from `git merge-base HEAD <base>`; first line records the
+      merge-base SHA; no determinable base (no remote) -> a single line naming `--base`; exit
+      code is 0 in every case. Confirm red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: a pure `packages/fr/src/fr/proportionality.py` (`build_report(repo_root, plan,
+      base) -> str`, git via the existing fr.git helpers, default base
+      `fr.git.remote_default_ref`) and `@plan_app.command("proportionality")` in plan_cmd.py.
+      Tests green.
+  - id: P3.T2.S3
+    text: 'REFACTOR: ruff/mypy clean; module docstring says report-first, never blocks.'
+- number: 3
+  title: deliver derives proportionality evidence
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_run_evidence.py: a manifest whose deliver step declares
+      `evidence: [tests, proportionality]` — `resolve --step deliver --state done` stores
+      `proportionality=<merge-base-sha>:<sha256>` equal to the SHA-256 of `build_report` at
+      that merge-base; `--evidence proportionality=x` is refused as derived; a flat step with
+      `proportionality` is NOT refused as phase-scoped. Confirm red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add "proportionality" to `_VERIFIABLE_EVIDENCE` and `_DERIVED_EVIDENCE` (not
+      `_PHASE_EVIDENCE`) in run_cmd.py, derive it in `_verified_evidence` from the run's
+      emitted plan; add `proportionality` to deliver's `evidence:` in BOTH
+      plugins/super-fr/workflows/fr-goal.yaml and packages/fr/src/fr/workflows/fr-goal.yaml
+      (keep them identical) with a comment. `fr workflow check` on both and
+      tests/unit/test_tripwire_shipped_workflows.py green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
