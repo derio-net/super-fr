@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 4
-  title: E — fr-spec-reviewer + flat-step evidence; skill prose, mirrors, explainer, 4.20.0
+  title: E — fr-spec-reviewer + flat-step evidence; skill prose, mirrors, explainer,
+    4.20.0
   tag: agentic
   depends_on:
   - 2
@@ -36,8 +37,8 @@ tasks:
       phase-scoped evidence on a flat step whose manifest step is not a review of a journal
       scope fr can locate. Tests green.
   - id: P4.T1.S3
-    text: 'REFACTOR: the evidence target (journal scope + phase|None) is one small value type passed through
-      `_verified_evidence`, so phase and flat paths share every rule; ruff/mypy clean.'
+    text: |-
+      REFACTOR: the evidence target (journal scope + phase|None) is one small value type passed through `_verified_evidence`, so phase and flat paths share every rule; ruff/mypy clean.
 - number: 2
   title: fr-spec-reviewer agent, manifest, parity row, mirrors, install
   steps:
@@ -93,17 +94,21 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T20:55:21+00:00'
+      note: 'RED: 11 new spec-review tests fail on ''names no phase''; flat no-journal
+        guard passes'
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T20:58:39+00:00'
+      note: flat step with emits journal:spec -> spec journal target; review must
+        be kind=review created >= step opened; findings over all spec findings; no
+        implementer exclusion; 49 evidence tests green
     P4.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T20:58:40+00:00'
+      note: _EvidenceTarget(scope, phase) value type threaded through _verified_evidence/_verify_reviewer/_verify_review_entry/_closed_findings_witness;
+        ruff+mypy clean
     P4.T2.S1:
       state: ' '
       ticked_at: null

@@ -23,6 +23,7 @@ import os
 import time
 from pathlib import Path
 
+import pytest
 from fr.run import units
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
@@ -332,3 +333,241 @@ def test_unobservable_needs_a_fresh_log_and_says_it_could_not_verify(tmp_path: P
     result = _deliver(repo, shipped, None, "s-d", "tests=fresh.log")
     assert result.exit_code == 0, result.output
     assert "could not verify who ran" in _squash(result.stderr)
+
+
+# --- gh#593 option 2: `spec-review` is a flat step reviewed against the SPEC journal ---
+#
+# 2026-09-24 spec §E. Before this, `review`, `reviewer` and `findings` were all
+# phase evidence, so a flat `step/spec-review` unit could carry none of them and
+# the spec was reviewed by the context that wrote it. The verifier now targets
+# the journal a step reviews: `review-phase` -> plan journal + phase (above,
+# unchanged); `spec-review` -> the run's emitted spec's journal, no phase.
+
+_SPEC_SLUG = "2026-09-24-x"
+_SPEC_REL = f"docs/superpowers/specs/{_SPEC_SLUG}-design.md"
+
+_SPEC_SHAPE = """
+workflow: specshape
+schema: 1
+unit: run
+steps:
+  - id: brainstorm
+    kind: agent
+    emits: [spec, journal:spec]
+  - id: spec-review
+    kind: agent
+    needs: [spec]
+    emits: [journal:spec]
+    evidence: [review, reviewer, findings]
+"""
+
+
+def _at_the_spec_review(
+    tmp_path: Path, *, root: Path | None = None, session: str = "s-x", shape: str = _SPEC_SHAPE
+) -> tuple[Path, Path, str]:
+    """`step/spec-review` opened on a run whose brainstorm emitted a spec.
+    Returns the unit's `dispatched`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "specshape", shape)
+    spec = repo / _SPEC_REL
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_text("# x\n")
+    start = ["run", "start", "specshape", "--branch", "b", "--run-id", "r1"]
+    assert _run(repo, shipped, start, root, session).exit_code == 0
+    assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
+    brainstorm = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    result = _run(repo, shipped, [*brainstorm, "--emitted", f"spec={_SPEC_REL}"], root, session)
+    assert result.exit_code == 0, result.output
+    assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "step/spec-review")
+    assert attempt is not None
+    return repo, shipped, attempt.dispatched
+
+
+def _now_local() -> str:
+    """`fr journal add`'s own stamp shape: local wall clock, second precision."""
+    from datetime import datetime
+
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def _spec_journal(repo: Path, *entries: dict[str, object]) -> None:
+    """Spec-scope entries through the ONE journal writer (a capture, never a
+    hand-formatted fixture)."""
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    path = journal_path(repo, "spec", _SPEC_SLUG)
+    for e in entries:
+        append_journal_entry(
+            path,
+            _SPEC_SLUG,
+            JournalEntry(scope="spec", **{"created": _now_local(), "body": "", **e}),  # type: ignore[arg-type]
+        )
+
+
+_REVIEW = {"kind": "review", "id": "sr-1", "title": "spec review"}
+_FINDING = {"kind": "finding", "id": "sf-1", "state": "open", "title": "a spec finding"}
+_FIXED = {
+    "kind": "finding",
+    "id": "sf-1-fixed",
+    "state": "fixed",
+    "resolves": "sf-1",
+    "title": "resolves sf-1",
+}
+
+
+def _spec_review(repo: Path, shipped: Path, root: Path | None, session: str, *evidence: str):
+    argv = ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]
+    extra = [x for e in evidence for x in ("--evidence", e)]
+    return _run(repo, shipped, [*argv, *extra], root, session)
+
+
+def _spec_review_evidence(repo: Path) -> dict[str, str]:
+    record = load_run_state(repo, "r1").steps["spec-review"]
+    return units.evidence_of(record, "step/spec-review")
+
+
+def test_spec_review_happy_path_records_the_closed_findings_witness(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, opened = _at_the_spec_review(tmp_path, root=root)
+    dispatched_at(root, _later(opened), session_id="s-x", usage={}, agent_type=REVIEWER)
+    _spec_journal(repo, _REVIEW, _FINDING, _FIXED)
+
+    result = _spec_review(repo, shipped, root, "s-x", "review=sr-1", f"reviewer={AGENT_ID}")
+
+    assert result.exit_code == 0, result.output
+    assert "names no phase" not in _squash(result.output)
+    assert _spec_review_evidence(repo) == {
+        "review": "sr-1",
+        "reviewer": AGENT_ID,
+        "findings": "sf-1",
+    }
+
+
+def test_spec_review_without_a_review_entry_after_it_opened_is_refused(tmp_path: Path) -> None:
+    """A `review` entry from BEFORE the step opened is not a review of this
+    spec-review — the orchestrator's brainstorm notes would satisfy it."""
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, {**_REVIEW, "created": "2026-01-01T00:00:00"})
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    assert "before" in _squash(result.output)
+    assert _spec_review_evidence(repo) == {}
+
+
+def test_spec_review_naming_a_non_review_entry_is_refused(tmp_path: Path) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, _FINDING)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sf-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    assert "kind=review" in _squash(result.output)
+
+
+def test_spec_review_is_refused_while_a_spec_finding_is_open(tmp_path: Path) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, _REVIEW, _FINDING)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    squashed = _squash(result.output)
+    assert "still open: sf-1" in squashed
+    assert f"--scope spec --slug {_SPEC_SLUG} --id sf-1" in squashed
+
+
+def test_spec_review_passes_when_the_only_unresolved_finding_is_out_of_scope(
+    tmp_path: Path,
+) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    oos = {**_FIXED, "state": "open", "out_of_scope": True, "id": "sf-1-oos"}
+    _spec_journal(repo, _REVIEW, _FINDING, oos)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 0, result.output
+    assert _spec_review_evidence(repo)["findings"] == "sf-1"
+
+
+def test_spec_review_is_refused_on_an_unauthorized_fix(tmp_path: Path) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    oos = {**_FIXED, "state": "open", "out_of_scope": True, "id": "sf-1-oos"}
+    _spec_journal(repo, _REVIEW, _FINDING, oos, _FIXED)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    squashed = _squash(result.output)
+    assert "unauthorized fix" in squashed
+    assert "--scope spec" in squashed
+
+
+def test_spec_review_reviewer_nobody_dispatched_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-x")
+    repo, shipped, _ = _at_the_spec_review(tmp_path, root=root)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, root, "s-x", "review=sr-1", "reviewer=made-up")
+
+    assert result.exit_code == 2, result.output
+    assert "names no subagent this session dispatched" in _squash(result.output)
+
+
+def test_spec_review_unreadable_transcript_records_the_reviewer_as_claimed(
+    tmp_path: Path,
+) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify reviewer" in _squash(result.stderr)
+    assert _spec_review_evidence(repo)["reviewer"] == "r-9"
+
+
+@pytest.mark.parametrize("harness", ["opencode", "hermes"])
+def test_spec_review_on_a_harness_with_no_dispatch_reader_is_claimed(
+    tmp_path: Path, harness: str
+) -> None:
+    from tests.unit.test_run_cli import _invoke_as_harness
+
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+    _spec_journal(repo, _REVIEW)
+    argv = ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]
+    evidence = ["--evidence", "review=sr-1", "--evidence", "reviewer=r-9"]
+    env = {"FR_HARNESS": harness, "CLAUDE_CODE_SESSION_ID": None}
+
+    result = _invoke_as_harness(repo, shipped, [*argv, *evidence], env)
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify reviewer" in _squash(result.stderr)
+    assert _spec_review_evidence(repo)["reviewer"] == "r-9"
+
+
+def test_spec_review_without_a_spec_journal_names_the_command(tmp_path: Path) -> None:
+    repo, shipped, _ = _at_the_spec_review(tmp_path)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    assert f"--scope spec --slug {_SPEC_SLUG} --kind review" in _squash(result.output)
+
+
+def test_a_flat_step_reviewing_no_journal_still_refuses_phase_evidence(tmp_path: Path) -> None:
+    """Only a step that reviews a journal fr can locate (`emits: [journal:spec]`)
+    gets a target; any other flat step keeps the fail-closed refusal."""
+    shape = _SPEC_SHAPE.replace("    emits: [journal:spec]\n    evidence", "    evidence")
+    repo, shipped, _ = _at_the_spec_review(tmp_path, shape=shape)
+    _spec_journal(repo, _REVIEW)
+
+    result = _spec_review(repo, shipped, None, "s-x", "review=sr-1", "reviewer=r-9")
+
+    assert result.exit_code == 2, result.output
+    assert "names no phase" in _squash(result.output)
