@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Live board walk post-merge
+  tag: manual
+  depends_on:
+  - 4
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Operator live verification
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Operator runs fr triage collect on derio-net/super-fr on Claude Code, judges an issue-less PR, renders and opens the board
+  - id: P5.T1.S2
+    text: |-
+      Operator repeats the repo-scope walk on OpenCode to prove harness parity; Hermes stays not-implemented with reason
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-24T19:29:00+00:00'
+      note: 'Walked on Claude Code in the 2026-09-22..24 triage sessions: fr triage
+        collect --repo derio-net/super-fr (--pr-limit 1000); judged issue-less PRs
+        (#560, #536, #567 and later #571, all with delivery verdicts); rendered with
+        --open. The PRs section only showed judged PRs after #567: before it, main
+        rendered ''No unranked pull requests''. Verified side by side against #567''s
+        fr, and on main after it merged. S2 (the same walk on OpenCode) is still open.'
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-24T20:08:39+00:00'
+      note: 'Walked on OpenCode 2026-09-24 (fr 4.19.3) with /fr-triage into a fresh
+        --dir: collect + check ran, the three issue-less open PRs (#476, #474, #314)
+        were judged with anchor + delivery verdict + note, and render --open showed
+        them in the PRs section with CI/merge badges. Hermes: not walked (not installed
+        on this machine); stays not-implemented.'
+  completion:
+    at: '2026-09-24T20:08:39+00:00'
+    note: Board walk live on Claude Code (S1) and OpenCode (S2), 2026-09-22..24; Hermes
+      not walked.
+    observed_prs: []

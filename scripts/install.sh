@@ -51,6 +51,29 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PLUGINS_DIR="$CLAUDE_DIR/plugins"
 KNOWN_MARKETPLACES="$PLUGINS_DIR/known_marketplaces.json"
 INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
+# fr's WorktreeCreate/WorktreeRemove hooks are ALSO registered in settings.json.
+# Live on 2026-09-24 (Claude Code 2.1.281), `claude --worktree <name>` never
+# invoked the plugin-registered WorktreeCreate, and the session landed in
+# Claude's native worktree outside fr. The same scripts registered in
+# settings.json do fire. The command points at the cache's `current` link, so
+# upgrades need no rewrite. WT_HOOKS_STRIP removes every entry naming fr's
+# scripts (current or stale path) and drops an event left empty, leaving a
+# group without a `hooks` array (not ours to judge) untouched; install strips,
+# then appends, so it converges. The path is quoted inside the command because
+# Claude Code runs it through a shell, and a HOME may contain a space.
+WT_HOOKS_DIR="$CACHE_BASE/super-fr/current/hooks"
+WT_HOOKS_STRIP='
+  def strip(ev; s):
+    if .hooks[ev] == null then .
+    else .hooks[ev] |= [ .[]
+           | if (.hooks | type) != "array" then .
+             else (.hooks |= map(select((.command // "") | contains(s) | not)))
+                  | select((.hooks | length) > 0)
+             end ]
+         | if (.hooks[ev] | length) == 0 then del(.hooks[ev]) else . end
+    end;
+  strip("WorktreeCreate"; "fr-worktree-create.sh")
+  | strip("WorktreeRemove"; "fr-worktree-remove.sh")'
 # Authoritative list of Claude rules to install to ~/.claude/rules/.
 # Used for both install copy operations and --uninstall removal.
 CLAUDE_RULES=(
@@ -112,6 +135,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$RULES_DIR/$rule"
   done
   echo "  Removed Claude rules (including retired vk-plan-override.md)"
+  if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
+    jq "$WT_HOOKS_STRIP" "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+    echo "  Removed fr's WorktreeCreate/WorktreeRemove hooks from $SETTINGS"
+  fi
   if [ -f "$MCP_CONFIG" ] && command -v jq &>/dev/null; then
     if jq -e '.mcpServers.vibe_kanban' "$MCP_CONFIG" &>/dev/null; then
       jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "${MCP_CONFIG}.tmp" && mv "${MCP_CONFIG}.tmp" "$MCP_CONFIG"
@@ -321,6 +348,16 @@ if command -v jq &>/dev/null; then
         "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
       echo "  Enabled $plugin_name@$MARKETPLACE_NAME in settings.json"
     done
+  fi
+
+  # Worktree hooks in settings.json too; see WT_HOOKS_STRIP above for why.
+  if [ -f "$SETTINGS" ]; then
+    jq --arg c "bash \"$WT_HOOKS_DIR/fr-worktree-create.sh\"" \
+      --arg r "bash \"$WT_HOOKS_DIR/fr-worktree-remove.sh\"" \
+      "$WT_HOOKS_STRIP"' | .hooks.WorktreeCreate += [{"hooks":[{"type":"command","command":$c}]}]
+        | .hooks.WorktreeRemove += [{"hooks":[{"type":"command","command":$r}]}]' \
+      "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
+    echo "  Registered fr's WorktreeCreate/WorktreeRemove hooks in settings.json"
   fi
 
   # Purge the retired bare-org marketplace. Two repos claimed `derio-net` and

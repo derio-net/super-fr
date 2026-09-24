@@ -271,3 +271,89 @@ class TestWorktreeRemove:
         assert result.returncode == 0
         assert "refused" in result.stderr and str(p) in result.stderr
         assert logged(stub_fr) == [f"isolation down --worktree {p}"]
+
+
+# --- The hook may be registered twice (plugin hooks.json + ~/.claude/settings.json) ---
+#
+# Claude Code 2.1.281 does not invoke a PLUGIN-registered WorktreeCreate for
+# `claude --worktree` (live, 2026-09-24), so install.sh also registers the same
+# script in settings.json. Where Claude Code DOES invoke both, the two copies
+# run concurrently and would race on the same `git worktree add` — a nonzero
+# exit fails the worktree creation outright. The hook serializes `fr isolation
+# up` per repo+branch so a double registration is harmless.
+
+SLOW_STUB = (
+    r"""#!/bin/bash
+mkdir "$HOME/in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
+sleep 1
+"""
+    + STUB.split("\n", 1)[1]
+    + r"""
+rmdir "$HOME/in-flight" 2>/dev/null
+"""
+)
+
+
+def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str, str]) -> None:
+    stub = Path(stub_fr["PATH"].split(":")[0]) / "fr"
+    stub.write_text(SLOW_STUB)
+    # stdin from a file, not a pipe: with pipes, communicate() on the first
+    # process blocks the second on `input=$(cat)` until the first finishes,
+    # so the two never actually overlap and the test proves nothing.
+    payload = Path(stub_fr["HOME"]) / "payload.json"
+    payload.write_text(json.dumps(create_payload("twice", repo)))
+    procs = []
+    for _ in range(2):
+        with payload.open() as stdin:
+            procs.append(
+                subprocess.Popen(
+                    ["bash", str(CREATE)],
+                    stdin=stdin,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=stub_fr,
+                )
+            )
+    outs = [p.communicate(timeout=60) for p in procs]
+    assert all(p.returncode == 0 for p in procs), [o[1] for o in outs]
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped"
+    paths = {o[0].strip().splitlines()[-1] for o in outs}
+    assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}"
+
+
+SLOW_DOWN_STUB = r"""#!/bin/bash
+printf '%s\n' "$*" >> "$FR_STUB_LOG"
+mkdir "$HOME/down-in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
+sleep 1
+rmdir "$HOME/down-in-flight" 2>/dev/null
+"""
+
+
+def test_two_concurrent_removals_do_not_overlap(
+    tmp_path: Path, repo: Path, stub_fr: dict[str, str]
+) -> None:
+    """Same double registration, WorktreeRemove side: two `fr isolation down`
+    runs on one workspace must not tear it down concurrently."""
+    stub = Path(stub_fr["PATH"].split(":")[0]) / "fr"
+    stub.write_text(SLOW_DOWN_STUB)
+    target = tmp_path / "cache" / "wt"
+    payload = tmp_path / "remove.json"
+    payload.write_text(json.dumps(remove_payload(repo, worktree_path=str(target))))
+    procs = []
+    for _ in range(2):
+        with payload.open() as stdin:
+            procs.append(
+                subprocess.Popen(
+                    ["bash", str(REMOVE)],
+                    stdin=stdin,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=stub_fr,
+                )
+            )
+    for p in procs:
+        p.communicate(timeout=60)
+    assert all(p.returncode == 0 for p in procs)
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation down runs overlapped"

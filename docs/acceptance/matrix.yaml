@@ -449,7 +449,15 @@ rows:
       diff never converging because GitLab strips the rendered trailing newline. ''skipped'',
       NOT ''ci'': CI cannot reach a private instance, so the live half is hand-run per-PR.
       The unit half now asserts the REQUEST and the real captured error vocabulary,
-      so the arg-blind ''lambda args:'' mocks that hid all of this are gone.'
+      so the arg-blind ''lambda args:'' mocks that hid all of this are gone. LIVE 2026-09-24
+      (multi-backend P9.T1.S1), a self-hosted GitLab (host/user/project redacted; private
+      scratch project, deleted after): every RealGlabClient operation fr apply/observe
+      uses passed when driven directly (ensure_labels create+converge, colour round-trip,
+      create_issue returning /-/work_items/N, view, label add/remove, comment, list_linked_prs
+      via related_merge_requests, pr_status_by_url, file_exists/list_dir/read_file,
+      close). related_merge_requests is eventually consistent (empty right after the
+      MR, populated seconds later). NOT walked: an end-to-end `fr apply` on a GitLab-backed
+      plan, so the status stays skipped.'
   - id: multibackend-gitea-tracking
     capability: Multi-backend git hosting
     acceptance: An operator can run fr apply against a Gitea-backed repo and see phases
@@ -1472,18 +1480,19 @@ rows:
     status: ci
     notes: 'Unit level (phase 1): fr.isolation.sessions attach/detach/detach_all/stale
       index classification, IsolationState.sessions round-trip, and the CLI surface
-      (attach, detach, status --session / sessions column, up --session, down unbind +
-      warning) pinned per-PR. Hook level (phase 3, filed under int because the matrix
+      (attach, detach, status --session / sessions column, up --session, down unbind
+      + warning) pinned per-PR. Hook level (phase 3, filed under int because the matrix
       has no hook level): fr-session-bind.sh (PostToolUse Bash -> attach on up/exec
-      with and without a leading cd, detach on down, subagent and non-Bash input
-      ignored) and fr-session-unbind.sh (SessionEnd -> detach, resume kept) exercised
-      via subprocess against a stub fr that records argv. The unbind additionally
-      pins the SessionEnd time budget: against a stub fr that blocks 3s, the hook
-      must return inside 1.5s (Claude Code aborts a SessionEnd hook at
-      SESSION_END_HOOK_TIMEOUT_MS_DEFAULT and reports "Hook cancelled"; a plugin
-      cannot raise that floor) and the detach must still land afterwards, so
-      returning early never degrades into dropping the unbind and leaking the
-      binding.'
+      with and without a leading cd, detach on down, subagent and non-Bash input ignored)
+      and fr-session-unbind.sh (SessionEnd -> detach, resume kept) exercised via subprocess
+      against a stub fr that records argv. The unbind additionally pins the SessionEnd
+      time budget: against a stub fr that blocks 3s, the hook must return inside 1.5s
+      (Claude Code aborts a SessionEnd hook at SESSION_END_HOOK_TIMEOUT_MS_DEFAULT and
+      reports "Hook cancelled"; a plugin cannot raise that floor) and the detach must
+      still land afterwards, so returning early never degrades into dropping the unbind
+      and leaking the binding. LIVE 2026-09-24 (P7): a `claude --worktree demo2` session
+      appeared in `fr isolation status` as `wt/demo2 … sessions=<that session''s id>`
+      and disappeared when the session exited.'
   - id: statusline-shows-bound-workspace
     capability: isolation-traceability
     acceptance: The Claude Code status line shows the branch this session works on and
@@ -1499,17 +1508,20 @@ rows:
     status: ci
     notes: 'Contract v2 (spec 2026-09-14). Golden subprocess tests, filed under int
       because the matrix has no golden level. Segment plugins/super-fr/scripts/fr-statusline-segment.sh
-      (test_statusline_segment.py): a live binding wins, a stale binding (worktree
-      gone) is ignored, a cwd inside an fr workspace is fr, plain linked and detached
-      agent worktrees are none, non-repo and missing cwd, the plain / ansi / oneline
-      formats and --cwd, a 0.5 s CI timing guard, and a trap fr on PATH proving the
-      fr CLI is never invoked. Reference status line plugins/super-fr/scripts/fr-statusline-claude.sh
+      (test_statusline_segment.py): a live binding wins, a stale binding (worktree gone)
+      is ignored, a cwd inside an fr workspace is fr, plain linked and detached agent
+      worktrees are none, non-repo and missing cwd, the plain / ansi / oneline formats
+      and --cwd, a 0.5 s CI timing guard, and a trap fr on PATH proving the fr CLI is
+      never invoked. Reference status line plugins/super-fr/scripts/fr-statusline-claude.sh
       (test_statusline_claude.py): three lines (model, ctx and rates; branch row and
-      ~/cwd; worktree row), a symlinked script still finds the segment, a missing
-      segment degrades to purple none rows, and float percentages are floored. Measured
-      on the operator Mac (2026-09-14, /bin/bash 3.2, Xcode git first on PATH): bound
-      about 77 ms, unbound in a repo about 100 ms, non-repo about 65 ms. Operator-side
-      wiring (~/.claude/statusline.sh) is the manual phase 5.'
+      ~/cwd; worktree row), a symlinked script still finds the segment, a missing segment
+      degrades to purple none rows, and float percentages are floored. Measured on the
+      operator Mac (2026-09-14, /bin/bash 3.2, Xcode git first on PATH): bound about
+      77 ms, unbound in a repo about 100 ms, non-repo about 65 ms. Operator-side wiring
+      (~/.claude/statusline.sh) is the manual phase 5. LIVE 2026-09-24 (P7): with ~/.claude/statusline.sh
+      symlinked to the cache''s fr-statusline-claude.sh, the demo2 session showed ''branch:
+      wt/demo2 | ~/.cache/fr/worktrees/super-fr/wt__demo2'' / ''worktree: <that path>'',
+      and a native non-fr worktree showed ''no fr-isolation''.'
   - id: native-worktree-sessions-land-in-fr
     capability: isolation-conformity
     acceptance: claude --worktree <name> and EnterWorktree in an fr-enabled repo create
@@ -1522,19 +1534,28 @@ rows:
       - super-fr:tests/unit/test_isolation_sessions_cmd.py
       int:
       - super-fr:tests/unit/test_hooks_worktree.py
+      - super-fr:tests/integration/test_install_worktree_settings_hooks.py
     status: ci
     notes: 'Unit level (phase 4): fr isolation up --print-path (last non-empty stdout
-      line is the worktree path, human lines on stderr, idempotent for an existing
-      branch+worktree) and fr isolation down --worktree <path> (resolves the workspace
-      by worktree path from any cwd; unknown path exits 2). Hook level (filed under int
-      because the matrix has no hook level): fr-worktree-create.sh (WorktreeCreate ->
-      fr isolation up --repo --branch wt/<name>|<name-with-slash> --session --harness
-      claude --print-path in an fr-enabled repo, FR_ISOLATION_TARGET=worktree exported
-      when no devcontainer profile; agent-* names and non-fr repos reproduce the Claude
-      default <repo>/.claude/worktrees/<name> detached worktree; non-git cwd exits 1)
-      and fr-worktree-remove.sh (WorktreeRemove -> git worktree remove for agent-*,
-      else fr isolation down --worktree, refusal reported on stderr with exit 0)
-      exercised via subprocess against a stub fr that records argv.'
+      line is the worktree path, human lines on stderr, idempotent for an existing branch+worktree)
+      and fr isolation down --worktree <path> (resolves the workspace by worktree path
+      from any cwd; unknown path exits 2). Hook level (filed under int because the matrix
+      has no hook level): fr-worktree-create.sh (WorktreeCreate -> fr isolation up --repo
+      --branch wt/<name>|<name-with-slash> --session --harness claude --print-path in
+      an fr-enabled repo, FR_ISOLATION_TARGET=worktree exported when no devcontainer
+      profile; agent-* names and non-fr repos reproduce the Claude default <repo>/.claude/worktrees/<name>
+      detached worktree; non-git cwd exits 1) and fr-worktree-remove.sh (WorktreeRemove
+      -> git worktree remove for agent-*, else fr isolation down --worktree, refusal
+      reported on stderr with exit 0) exercised via subprocess against a stub fr that
+      records argv. LIVE 2026-09-24 (worktree-traceability P7.T2.S2, Claude Code 2.1.281,
+      fr 4.19.2). On a DEFAULT install it FAILED: the plugin-registered WorktreeCreate
+      is never invoked for `claude --worktree`, and the session landed in <repo>/.claude/worktrees/demo.
+      With the same hooks also registered in ~/.claude/settings.json it PASSED: `claude
+      --worktree demo2` landed in ~/.cache/fr/worktrees/super-fr/wt__demo2, bound its
+      session, and `exit` removed the workspace and container via WorktreeRemove. install.sh
+      now registers them there (tests/integration/test_install_worktree_settings_hooks.py),
+      and the create hook is serialized against a double registration. Startup waits
+      for a full devcontainer up. EnterWorktree was not walked live.'
   - id: nested-up-files-under-main-checkout
     capability: isolation-conformity
     acceptance: fr isolation up run from inside any worktree of a repo files the workspace
@@ -1560,12 +1581,15 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation_gc_hygiene.py
     status: ci
-    notes: 'Unit level (phase 2): gc verdicts `empty-repo-dir` (a child of
-      ~/.cache/fr/worktrees with no subdirectories is removed; files alone do not make
-      it live; populated repo dirs are kept) and `stale-session` (index whose worktree
-      is gone or whose state no longer lists the session is unlinked; a healthy index
-      and its state binding survive), both with `--dry-run` reporting `would-remove`
-      and mutating nothing. Pinned per-PR in host-worktree mode.'
+    notes: 'Unit level (phase 2): gc verdicts `empty-repo-dir` (a child of ~/.cache/fr/worktrees
+      with no subdirectories is removed; files alone do not make it live; populated
+      repo dirs are kept) and `stale-session` (index whose worktree is gone or whose
+      state no longer lists the session is unlinked; a healthy index and its state binding
+      survive), both with `--dry-run` reporting `would-remove` and mutating nothing.
+      Pinned per-PR in host-worktree mode. LIVE 2026-09-24 (P7.T2.S1): gc --dry-run
+      then gc on a real machine reaped the merged workspaces and left open, no-PR and
+      dirty ones untouched. Squash-merged workspaces whose files main later changed
+      are falsely refused (#598).'
   - id: superpowers-worktree-skill-routed-to-fr
     capability: isolation-conformity
     acceptance: In an fr-enabled repo, a request that would invoke using-git-worktrees
@@ -3655,7 +3679,12 @@ rows:
       - super-fr:tests/unit/test_triage_open_prs.py
       - super-fr:tests/unit/test_triage_render.py
     status: ci
-    notes: Render and PR collection tests pass in phase 4.
+    notes: 'Render and PR collection tests pass in phase 4. LIVE 2026-09-22..24 on both
+      harnesses. Claude Code: collect + check + render --open on derio-net/super-fr;
+      after #567 the PRs section lists every open unlinked PR with CI/merge badges (before
+      it, main rendered ''No unranked pull requests''). OpenCode (fr 4.19.3, fresh --dir):
+      the same walk rendered #476/#474/#314 with badges and anchors. Hermes not walked
+      (not installed).'
   - id: triage-pr-judgement
     capability: Backlog triage
     acceptance: triage judges PRs against intent anchor with delivery verdict delivers|partial|drift|unanchored
@@ -3666,7 +3695,10 @@ rows:
       - super-fr:tests/unit/test_triage_open_prs.py
       - super-fr:tests/unit/test_triage_render.py
     status: ci
-    notes: PR delivery verdict rendering and skill workflow are covered by phase 4 tests.
+    notes: 'PR delivery verdict rendering and skill workflow are covered by phase 4
+      tests. LIVE 2026-09-22..24: Claude Code judged issue-less PRs (#560, #536, #567,
+      #571) and OpenCode judged #476/#474/#314, each with an anchor, a delivers|partial|drift
+      verdict and a delivery_note, rendered on the board. Hermes not walked.'
   - id: opencode-plugin-single-idle-nudge
     capability: OpenCode adaptation
     acceptance: When OpenCode loads the plugin twice (global install plus a project-local

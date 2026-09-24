@@ -9,7 +9,7 @@ phase:
   - 4
   - 5
   - 7
-  tracking_issue: null
+  tracking_issue: https://github.com/derio-net/super-fr/issues/601
 tasks:
 - number: 1
   title: Verify the GitLab adapter against a real GitLab.com project
@@ -59,9 +59,20 @@ tasks:
 state:
   steps:
     P9.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T20:08:40+00:00'
+      note: 'Walked 2026-09-24 against a self-hosted GitLab (host, user, project redacted;
+        a private scratch project, deleted afterwards) by driving RealGlabClient directly
+        (fr 4.19.3). All pass: ensure_labels creates then converges on ALREADY-EXISTS;
+        colour d73a4a round-trips as #d73a4a; create_issue returns a /-/work_items/N
+        URL (already parsed, gh-486); view_issue, edit_issue_labels add/remove and
+        comment_issue work; a throwaway MR with ''Closes #N'' surfaced via list_linked_prs
+        (related_merge_requests), which is EVENTUALLY consistent (empty right after
+        MR creation, populated seconds later; closed_by agrees); pr_status_by_url,
+        file_exists present/absent, list_dir and read_file work; edit_issue_state
+        CLOSED works. No field-name or flag mismatch vs Phase 2/4 tests. Environmental:
+        this instance creates projects with issues DISABLED; create_issue then fails
+        with GitLab''s own clear message.'
     P9.T2.S1:
       state: ' '
       ticked_at: null
