@@ -306,3 +306,29 @@ def test_an_out_of_scope_finding_does_not_hold_the_review(tmp_path: Path) -> Non
     assert result.exit_code == 0, result.output
     record, key = _unit(repo)
     assert units.evidence_of(record, key)["findings"] == "f-a"
+
+
+def test_an_unauthorized_fix_of_an_out_of_scope_finding_refuses_done(tmp_path: Path) -> None:
+    """The review-phase gate reads the same operator guard `fr journal check`
+    does, so neither can pass what the other refuses."""
+    record_oos = {**_closes("f-a", "open"), "out_of_scope": True}
+    fixed = _closes("f-a", "fixed", rid="f-a-fix")
+    entries = [REVIEW, _finding("f-a", "open"), record_oos, fixed]
+    repo, shipped = _at_the_review(tmp_path, entries)
+
+    result = _resolve(repo, shipped, "--evidence", "review=rev-p1")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "unauthorized fix" in out and "f-a" in out
+    record, key = _unit(repo)
+    assert units.unit_state(record, key) == "running"
+
+
+def test_an_operator_authorized_fix_of_an_out_of_scope_finding_resolves(tmp_path: Path) -> None:
+    record_oos = {**_closes("f-a", "open"), "out_of_scope": True}
+    fixed = {**_closes("f-a", "fixed", rid="f-a-fix"), "answered_by": "operator"}
+    entries = [REVIEW, _finding("f-a", "open"), record_oos, fixed]
+    repo, shipped = _at_the_review(tmp_path, entries)
+
+    assert _resolve(repo, shipped, "--evidence", "review=rev-p1").exit_code == 0

@@ -1926,3 +1926,162 @@ class TestReviewScope:
         root = _init_repo(tmp_path)
         self._finding(root, monkeypatch, "f1", "--review-scope", "in")
         assert "Out-of-scope" not in self._render().output
+
+
+class TestOperatorGuard:
+    """Out-of-scope -> fixed needs `answered_by=operator` (spec 2026-09-24 §A).
+    Enforced by `fr journal check` whatever wrote the record; on Claude Code the
+    `--answered-by operator` claim is itself verified against the transcript."""
+
+    def _out_of_scope(self, root: Path, monkeypatch) -> None:
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+        res = runner.invoke(
+            app,
+            [
+                *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1"),
+                *("--state", "out-of-scope", "--note", "pre-existing"),
+            ],
+        )
+        assert res.exit_code == 0, res.output
+
+    def _fix_by_resolve(self, env: dict[str, str], *extra: str):
+        return runner.invoke(
+            app,
+            [
+                *("journal", "resolve", "--scope", "plan", "--slug", "S", "--id", "f1"),
+                *("--state", "fixed", "--note", "fixed after all", *extra),
+            ],
+            env=env,
+        )
+
+    def _fix_by_add(self, env: dict[str, str], *extra: str):
+        return runner.invoke(
+            app,
+            [
+                *("journal", "add", "--scope", "plan", "--slug", "S", "--kind", "finding"),
+                *("--title", "fixed after all", "--state", "fixed", "--resolves", "f1"),
+                *("--phase", "1", *extra),
+            ],
+            env=env,
+        )
+
+    def _check(self):
+        return runner.invoke(app, ["journal", "check", "--scope", "plan", "--slug", "S"])
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_a_fix_without_the_operator_fails_check(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._out_of_scope(root, monkeypatch)
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix({"FR_HARNESS": "opencode"})
+        assert res.exit_code == 0, res.output
+        check = self._check()
+        assert check.exit_code != 0, check.output
+        assert "unauthorized fix" in check.output and "f1" in check.output
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_with_the_operator_it_passes(self, tmp_path: Path, monkeypatch, path: str) -> None:
+        root = _init_repo(tmp_path)
+        self._out_of_scope(root, monkeypatch)
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix({"FR_HARNESS": "opencode"}, "--answered-by", "operator")
+        assert res.exit_code == 0, res.output
+        assert "answered_by=operator" in _journal_file(root, "S").read_text()
+        # Recorded as stated on OpenCode, and it says the claim is advisory there.
+        assert "advisory" in res.output
+        check = self._check()
+        assert check.exit_code == 0, check.output
+
+    def test_answered_by_needs_a_resolution_record_on_add(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "plan", "--slug", "S", "--kind", "finding", "--state", "open"),
+            *("--title", "t", "--phase", "1", "--answered-by", "operator"),
+        )
+        assert res.exit_code == 2, res.output
+
+    def _claude(self, tmp_path: Path, session: str) -> dict[str, str]:
+        return {
+            "FR_HARNESS": "claude-code",
+            "FR_TRANSCRIPT_ROOT": str(tmp_path / "projects"),
+            "CLAUDE_CODE_SESSION_ID": session,
+        }
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_on_claude_code_no_answered_question_since_refuses(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        from tests.unit.transcript_sessions import asked_at
+
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        # Answered long BEFORE the out-of-scope record: it answered something else.
+        asked_at(tmp_path / "projects", "2000-01-01T00:00:00.000Z", session_id="s-q")
+        before = _journal_file(root, "S").read_text()
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix(self._claude(tmp_path, "s-q"), "--answered-by", "operator")
+        assert res.exit_code == 2, res.output
+        assert "no answered question" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+    @pytest.mark.parametrize("path", ["resolve", "add"])
+    def test_on_claude_code_an_answered_question_since_is_accepted(
+        self, tmp_path: Path, monkeypatch, path: str
+    ) -> None:
+        from tests.unit.transcript_sessions import asked_at
+
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        asked_at(tmp_path / "projects", "2099-01-01T00:00:00.000Z", session_id="s-q")
+        fix = self._fix_by_resolve if path == "resolve" else self._fix_by_add
+        res = fix(self._claude(tmp_path, "s-q"), "--answered-by", "operator")
+        assert res.exit_code == 0, res.output
+        assert self._check().exit_code == 0
+
+    def test_on_claude_code_an_unreadable_transcript_records_with_a_warning(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        (tmp_path / "repo").mkdir()
+        root = _init_repo(tmp_path / "repo")
+        self._out_of_scope(root, monkeypatch)
+        res = self._fix_by_resolve(
+            self._claude(tmp_path, "no-such-session"), "--answered-by", "operator"
+        )
+        assert res.exit_code == 0, res.output
+        assert "could not verify" in res.output
+        assert "answered_by=operator" in _journal_file(root, "S").read_text()
+
+
+def test_the_operator_guard_owns_a_parity_row_and_its_notice_quotes_it(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Where the `--answered-by operator` claim is only advisory, the notice is
+    built from the row's own `scope_note`, so it cannot drift from what
+    `fr harness parity` declares."""
+    from fr.harness import load_matrix
+
+    (row,) = [s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard"]
+    assert row.kind == "interaction"
+    states = {h: c.state for h, c in row.harnesses.items()}
+    assert states == {
+        "claude-code": "enforced",
+        "opencode": "advisory",
+        "hermes": "advisory",
+        "codex": "unsupported",
+        "copilot-cli": "unsupported",
+    }
+    root = _init_repo(tmp_path)
+    guard = TestOperatorGuard()
+    guard._out_of_scope(root, monkeypatch)
+    res = guard._fix_by_resolve({"FR_HARNESS": "hermes"}, "--answered-by", "operator")
+    assert res.exit_code == 0, res.output
+    note = row.harnesses["hermes"].scope_note
+    assert note and " ".join(note.split()) in " ".join(res.output.split())

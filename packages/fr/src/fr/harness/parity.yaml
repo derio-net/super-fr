@@ -203,6 +203,20 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: out-of-scope-operator-guard
+    kind: interaction
+    summary: A finding resolved `out-of-scope` may be moved to `fixed` only by the operator — the `fixed` record must carry `answered_by=operator`, else `fr journal check` and the review-phase findings gate report an unauthorized fix (the rule is in the journal fold, so it holds on every harness and for both `fr journal resolve` and `fr journal add --resolves`). What differs is the CLAIM. On claude-code `--answered-by operator` is verified against the session transcript — no answered question since the out-of-scope record, and the write is refused; an unreadable transcript records it with a warning (spec 2026-09-24 §A).
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: advisory
+        scope_note: "no operator-question tool fr can read on OpenCode — `--answered-by operator` is recorded as stated; the fold still refuses a fix that does not carry it"
+      hermes:
+        state: advisory
+        scope_note: delegate_task has no operator-question primitive — `--answered-by operator` is recorded as stated; the fold still refuses a fix that does not carry it
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
   - id: phase-sequence
     kind: interaction
     summary: fr run enforces spec/plan before implementation (`implement` declares `needs [spec, plan]`).

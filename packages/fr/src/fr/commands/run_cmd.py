@@ -47,6 +47,7 @@ from fr.journal.model import (
     phase_finding_states,
     resolve_journal_read_path,
     reviews_phase,
+    unauthorized_fixes,
 )
 from fr.run import liveness as _liveness
 from fr.run import units
@@ -1376,6 +1377,24 @@ def _closed_findings_witness(key: str, slug: str, entries: list[JournalEntry], p
     """
     states = phase_finding_states(entries, phase)
     still_open = [fid for fid, st in states.items() if st == "open"]
+    # The operator guard `fr journal check` applies (spec 2026-09-24 §A), read
+    # from the same fold: an out-of-scope finding fixed without the operator.
+    unauthorized = [fid for fid in unauthorized_fixes(entries) if fid in states]
+    if unauthorized:
+        err_console.print(
+            f"[red]{key}: refused — {len(unauthorized)} unauthorized fix(es) against phase "
+            f"{phase}: {', '.join(unauthorized)} — moved from out-of-scope to fixed without "
+            "`answered_by=operator`. Ask the operator, then:[/red]",
+            soft_wrap=True,
+        )
+        for fid in unauthorized:
+            err_console.print(
+                f"  fr journal resolve --scope plan --slug {slug} --id {fid} --state fixed "
+                '--answered-by operator --note "<what the operator decided>"',
+                markup=False,
+                soft_wrap=True,
+            )
+        raise typer.Exit(2)
     if not still_open:
         return ",".join(states) or "none"
     err_console.print(

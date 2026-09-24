@@ -15,7 +15,9 @@ Verbs:
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
+from typing import get_args
 
 import typer
 from rich.console import Console
@@ -29,11 +31,14 @@ from fr.journal.model import (
     append_journal_entry,
     effective_finding_states,
     journal_path,
+    journal_stamp_as_utc,
     open_finding_ids,
     parse_journal,
     resolve_journal_read_path,
     serialize_entry,
+    unauthorized_fixes,
 )
+from fr.run.model import AnsweredBy
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -108,6 +113,87 @@ def _resolve_slug_and_plan_dir(slug: str | None, plan_dir: str | None) -> tuple[
     raise typer.Exit(2)
 
 
+_ANSWERED_BY = get_args(AnsweredBy)
+
+_ANSWERED_BY_HELP = (
+    "who authorized this resolution: operator | agent. Moving an out-of-scope "
+    "finding to fixed needs `operator` (else `fr journal check` reports an "
+    "unauthorized fix); on Claude Code the claim is verified against the "
+    "session transcript."
+)
+
+
+def _validate_answered_by(answered_by: str | None) -> None:
+    if answered_by is not None and answered_by not in _ANSWERED_BY:
+        err_console.print(
+            f"[red]--answered-by must be one of {' | '.join(_ANSWERED_BY)} "
+            f"(got {answered_by!r})[/red]"
+        )
+        raise typer.Exit(2)
+
+
+def _verify_operator_claim(entries: list[JournalEntry], finding_id: str) -> None:
+    """Check an `--answered-by operator` claim where fr can, before it is written.
+
+    The window opens at the finding's LAST out-of-scope record (else the
+    finding itself): an operator answer from before the orchestrator moved it
+    out answered something else. Same observation the brainstorm gate makes
+    (`fr.run.telemetry.operator_answered_since`) with the same three outcomes —
+    observed and answered: record; observed and not: refuse, nothing written;
+    not observable: record, and say so. OpenCode and Hermes have no question
+    tool fr can read, so there the claim is recorded as stated.
+    """
+    from fr.harness.detect import detect_harness
+    from fr.harness.model import HarnessError
+    from fr.run.telemetry import operator_answered_since
+
+    since = next(
+        (
+            e.created
+            for e in reversed(entries)
+            if e.id == finding_id or (e.resolves == finding_id and e.out_of_scope)
+        ),
+        None,
+    )
+    observed = operator_answered_since(os.environ, journal_stamp_as_utc(since)) if since else None
+    if observed is True:
+        return
+    if observed is False:
+        err_console.print(
+            f"[red]{finding_id}: no answered question in this session's transcript since "
+            f"{since} — `--answered-by operator` is a claim fr can check here, and it does "
+            "not hold. Ask the operator with your harness's question tool, then resolve "
+            "again.[/red] Nothing written.",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError as e:
+        err_console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2) from e
+    if harness == "claude-code":
+        err_console.print(
+            f"[yellow]{finding_id}: could not verify `--answered-by operator` — the "
+            "session transcript is not readable here; recorded unverified.[/yellow]",
+            soft_wrap=True,
+        )
+    else:
+        from fr.harness import load_matrix
+
+        # The reason is the parity row's own `scope_note`, never a second
+        # hand-typed copy of it (the same rule the brainstorm gate follows).
+        row = next(s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard")
+        cell = row.harnesses.get(harness) if harness is not None else None
+        why = (cell.scope_note if cell else None) or "fr cannot read an operator answer here"
+        err_console.print(
+            f"{finding_id}: `--answered-by operator` recorded as stated — advisory on "
+            f"{harness or 'an unrecognised harness'}: {why}",
+            markup=False,
+            soft_wrap=True,
+        )
+
+
 @journal_app.command("add")
 def add(
     scope: str = typer.Option(..., "--scope", help="spec | plan | debug."),
@@ -140,6 +226,9 @@ def add(
         help="finding only: the reviewer's tag — in | out. Copied from the review, "
         "so a finding later resolved out-of-scope against the reviewer's `in` "
         "renders as reclassified.",
+    ),
+    answered_by: str | None = typer.Option(
+        None, "--answered-by", help="--resolves only: " + _ANSWERED_BY_HELP
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
@@ -176,6 +265,7 @@ def add(
     if review_scope is not None and review_scope not in ("in", "out"):
         err_console.print(f"[red]--review-scope must be in | out (got {review_scope!r})[/red]")
         raise typer.Exit(2)
+    _validate_answered_by(answered_by)
     root = resolve_repo_root()
     path = journal_path(root, scope, slug)  # type: ignore[arg-type]
 
@@ -196,6 +286,7 @@ def add(
             state=state,  # type: ignore[arg-type]
             resolves=resolves,
             review_scope=review_scope,  # type: ignore[arg-type]
+            answered_by=answered_by,  # type: ignore[arg-type]
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -220,6 +311,8 @@ def add(
             "`--resolves` must name a finding that exists"
         )
         raise typer.Exit(2)
+    if resolves is not None and answered_by == "operator":
+        _verify_operator_claim(existing, resolves)
     append_journal_entry(path, slug, entry)
 
 
@@ -266,6 +359,7 @@ def resolve(
         help="--state deferred only: the issue that now carries the work "
         "(#N, owner/repo#N, or an http(s) URL).",
     ),
+    answered_by: str | None = typer.Option(None, "--answered-by", help=_ANSWERED_BY_HELP),
 ) -> None:
     """Append a resolution record closing one finding (spec §3.G.1).
 
@@ -318,6 +412,7 @@ def resolve(
             "finding has nowhere left to go"
         )
         raise typer.Exit(2)
+    _validate_answered_by(answered_by)
     if tracked_by is not None and not TRACKED_BY_RE.match(tracked_by):
         err_console.print(
             f"[red]--tracked-by must name an issue (#N, owner/repo#N, or an http(s) "
@@ -342,6 +437,8 @@ def resolve(
             "finding has a state to resolve"
         )
         raise typer.Exit(2)
+    if answered_by == "operator":
+        _verify_operator_claim(entries, entry_id)
 
     record = JournalEntry(
         kind="finding",
@@ -359,6 +456,7 @@ def resolve(
         resolves=entry_id,
         tracked_by=tracked_by,
         out_of_scope=state == "out-of-scope",
+        answered_by=answered_by,  # type: ignore[arg-type]
     )
     append_journal_entry(path, slug, record)
     shown = f"deferred → {tracked_by}" if tracked_by else state
@@ -527,6 +625,17 @@ def check(
     ]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
+    unauthorized = unauthorized_fixes(entries)
+    if unauthorized:
+        err_console.print(
+            f"[red]{len(unauthorized)} unauthorized fix(es):[/red] "
+            + ", ".join(unauthorized)
+            + " — fixed out of out-of-scope without `answered_by=operator`. Ask the "
+            "operator, then `fr journal resolve --id <id> --state fixed --answered-by "
+            "operator --note …`; or resolve it out-of-scope again.",
+            soft_wrap=True,
+        )
+        failed = True
     still_open = open_finding_ids(entries)
     if still_open:
         # Output shape unchanged ("N open finding(s): <ids>") — things grep it.

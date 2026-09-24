@@ -865,3 +865,104 @@ def test_a_review_scope_value_this_fr_does_not_know_is_dropped_not_fatal() -> No
     entries = parse_journal(text)
     assert entries[0].review_scope is None
     assert open_finding_ids(entries) == ["f1"]
+
+
+# --- the operator guard (spec 2026-09-24 §A) -------------------------------
+
+
+def _oos_then(*records: dict) -> list:
+    """f1, resolved out-of-scope, then `records` (each a resolution of f1)."""
+    entries = [
+        _entry(kind="finding", id="f1", state="open"),
+        _entry(kind="finding", id="f1-r1", state="open", resolves="f1", out_of_scope=True),
+    ]
+    for n, extra in enumerate(records, start=2):
+        entries.append(_entry(kind="finding", id=f"f1-r{n}", resolves="f1", **extra))
+    return entries
+
+
+class TestUnauthorizedFixes:
+    """Moving a finding from out-of-scope to fixed puts work the orchestrator
+    judged not this change's back INTO the change — the scope ratchet the state
+    exists to stop. Only the operator may do that, so the `fixed` record must
+    carry `answered_by=operator`. Enforced in the fold, where every write path
+    (`resolve`, `add --resolves`) meets."""
+
+    def test_a_fix_after_out_of_scope_without_the_operator_is_unauthorized(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        assert unauthorized_fixes(_oos_then({"state": "fixed"})) == ["f1"]
+        assert unauthorized_fixes(_oos_then({"state": "fixed", "answered_by": "agent"})) == ["f1"]
+
+    def test_the_operator_authorizes_it(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        assert unauthorized_fixes(_oos_then({"state": "fixed", "answered_by": "operator"})) == []
+
+    def test_a_later_operator_record_ratifies_an_unauthorized_fix(self) -> None:
+        """The journal is append-only, so the cure is a new record, not an edit."""
+        from fr.journal.model import unauthorized_fixes
+
+        entries = _oos_then({"state": "fixed"}, {"state": "fixed", "answered_by": "operator"})
+        assert unauthorized_fixes(entries) == []
+
+    def test_a_fix_that_never_passed_through_out_of_scope_needs_nobody(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        entries = [
+            _entry(kind="finding", id="f1", state="open"),
+            _entry(kind="finding", id="f1-r", state="fixed", resolves="f1"),
+            _entry(kind="finding", id="f2", state="fixed"),
+        ]
+        assert unauthorized_fixes(entries) == []
+
+    def test_moving_away_from_fixed_clears_it(self) -> None:
+        from fr.journal.model import unauthorized_fixes
+
+        entries = _oos_then({"state": "fixed"}, {"state": "refuted"})
+        assert unauthorized_fixes(entries) == []
+
+    def test_answered_by_round_trips_and_is_only_for_a_resolution_record(self) -> None:
+        from fr.journal.model import JournalEntry, parse_journal, serialize_entry
+
+        record = _entry(
+            kind="finding", id="r", state="fixed", resolves="f1", answered_by="operator"
+        )
+        assert "answered_by=operator" in serialize_entry(record).splitlines()[0]
+        assert parse_journal(serialize_entry(record))[0].answered_by == "operator"
+        base = dict(kind="finding", scope="plan", id="x", created="t", title="x", body="")
+        with pytest.raises(ValueError, match="answered_by"):
+            JournalEntry(**base, state="fixed", answered_by="operator")
+
+    def test_an_unknown_answered_by_value_reads_as_absent(self) -> None:
+        """Fail closed: a value this fr does not know is not `operator`."""
+        from fr.journal.model import parse_journal, unauthorized_fixes
+
+        text = (
+            "<!-- fr:journal kind=finding scope=plan id=f1 created=2026-09-24T00:00:00 "
+            "state=open -->\n### f1 · finding [open] · x\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=r1 created=2026-09-24T00:01:00 "
+            "state=open resolves=f1 out_of_scope=true -->\n### r1 · finding · y\n\n"
+            "<!-- fr:journal kind=finding scope=plan id=r2 created=2026-09-24T00:02:00 "
+            "state=fixed resolves=f1 answered_by=committee -->\n### r2 · finding · z\n"
+        )
+        assert unauthorized_fixes(parse_journal(text)) == ["f1"]
+
+
+def test_a_journal_stamp_reads_as_local_time(monkeypatch) -> None:
+    """`fr journal` stamps LOCAL wall-clock time with no offset, while the
+    transcript reader treats a naive stamp as UTC. Handed over raw, a record
+    written at 21:00 in Athens (18:00Z) would open the question window three
+    hours late and refuse an operator who answered in between."""
+    import time
+
+    from fr.journal.model import journal_stamp_as_utc
+
+    monkeypatch.setenv("TZ", "Europe/Athens")
+    time.tzset()
+    try:
+        assert journal_stamp_as_utc("2026-09-24T21:00:00") == "2026-09-24T18:00:00+00:00"
+        assert journal_stamp_as_utc("2026-09-24T21:00:00+00:00") == "2026-09-24T21:00:00+00:00"
+    finally:
+        monkeypatch.undo()
+        time.tzset()

@@ -23,6 +23,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from fr.run.model import AnsweredBy
+
 JournalKind = Literal[
     "decision",
     "review",
@@ -113,6 +115,11 @@ class JournalEntry(BaseModel):
     # journals it. Kept beside the fold's verdict so a finding the reviewer
     # called in-scope and the orchestrator moved out renders as reclassified.
     review_scope: ReviewScope | None = None
+    # Who authorized this resolution — the run model's vocabulary, so a gate
+    # and a journal can never disagree about what "operator" means. Required
+    # (`operator`) on a `fixed` record that follows an effective out-of-scope:
+    # see `unauthorized_fixes`.
+    answered_by: AnsweredBy | None = None
 
     @model_validator(mode="after")
     def _finding_state_coupling(self) -> JournalEntry:
@@ -158,6 +165,11 @@ class JournalEntry(BaseModel):
             raise ValueError(
                 "`review_scope` is only valid on a `finding` entry that is not a "
                 "resolution record — it is the reviewer's tag on what it raised"
+            )
+        if self.answered_by is not None and self.resolves is None:
+            raise ValueError(
+                "`answered_by` is only valid on a resolution record — it says who "
+                "authorized moving the finding it names"
             )
         # The delimiter header is space-delimited `key=value` tokens, so an id
         # with whitespace would corrupt the round-trip (F3, review 2026-07-23).
@@ -221,6 +233,7 @@ _HEADER_FIELDS = (
     "tracked_by",
     "out_of_scope",
     "review_scope",
+    "answered_by",
 )
 
 
@@ -319,6 +332,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 tracked_by=fields.get("tracked_by"),
                 out_of_scope=fields.get("out_of_scope") == "true",
                 review_scope=_review_scope_token(fields.get("review_scope")),
+                answered_by=_answered_by_token(fields.get("answered_by")),
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -337,6 +351,30 @@ def _review_scope_token(value: str | None) -> ReviewScope | None:
     return "in" if value == "in" else "out" if value == "out" else None
 
 
+def _answered_by_token(value: str | None) -> AnsweredBy | None:
+    """An `answered_by=` value this fr does not know reads as ABSENT — which is
+    the fail-closed direction: whatever it claims, it is not `operator`."""
+    return "operator" if value == "operator" else "agent" if value == "agent" else None
+
+
+def journal_stamp_as_utc(created: str) -> str:
+    """A journal `created` stamp as an aware UTC ISO string.
+
+    `fr journal` stamps LOCAL wall-clock time with no offset, but
+    `fr.run.telemetry.parse_timestamp` reads a naive stamp as UTC (every run
+    producer writes UTC). Handed over raw, a record written at 21:00 in UTC+3
+    opens a question window three hours late. An unparseable stamp is returned
+    unchanged, so the reader reports it as unreadable rather than guessing.
+    """
+    import datetime as _dt
+
+    try:
+        parsed = _dt.datetime.fromisoformat(created)
+    except ValueError:
+        return created
+    return parsed.astimezone(_dt.UTC).isoformat()
+
+
 def _title_from_heading(text: str, entry_id: str) -> str:
     """Recover an entry's title from its ``### <id> · <kind>[ ...] · <title>`` heading."""
     for line in text.splitlines():
@@ -351,6 +389,16 @@ def _title_from_heading(text: str, entry_id: str) -> str:
 
 
 # --- effective finding state (the fold) ----------------------------------
+
+
+def _record_state(e: JournalEntry) -> EffectiveFindingState | None:
+    """What one resolution record says about the finding it names: the token
+    carried states first (they are written as `state=open`), then `state`."""
+    if e.tracked_by is not None:
+        return "deferred"
+    if e.out_of_scope:
+        return "out-of-scope"
+    return e.state
 
 
 def effective_finding_states(entries: list[JournalEntry]) -> dict[str, EffectiveFindingState]:
@@ -380,15 +428,48 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, Effective
     states: dict[str, EffectiveFindingState] = {}
     for e in entries:
         if e.resolves is not None:
-            if e.tracked_by is not None:
-                states[e.resolves] = "deferred"
-            elif e.out_of_scope:
-                states[e.resolves] = "out-of-scope"
-            elif e.state is not None:
-                states[e.resolves] = e.state
+            new = _record_state(e)
+            if new is not None:
+                states[e.resolves] = new
         elif e.kind == "finding" and e.state is not None:
             states[e.id] = e.state
     return states
+
+
+def unauthorized_fixes(entries: list[JournalEntry]) -> list[str]:
+    """Findings claimed `fixed` out of an effective `out-of-scope` without the
+    operator, in the order the claim was made (spec 2026-09-24 §A).
+
+    Out-of-scope says the orchestrator judged the work not this change's;
+    fixing it anyway puts that work back into the change — the scope ratchet
+    the state exists to stop — so only the operator may. The rule sits in the
+    FOLD, not the write path, because two verbs write resolution records
+    (`fr journal resolve` and `fr journal add --resolves`) and a hand edit is a
+    third; `fr journal check` and the review-phase findings gate both read it.
+
+    The journal is append-only, so an unauthorized fix is cured by a later
+    `fixed` record carrying `answered_by=operator`, and cleared by any record
+    that moves the finding off `fixed`.
+    """
+    states: dict[str, EffectiveFindingState] = {}
+    flagged: dict[str, None] = {}
+    for e in entries:
+        if e.resolves is None:
+            if e.kind == "finding" and e.state is not None:
+                states[e.id] = e.state
+            continue
+        fid = e.resolves
+        new = _record_state(e)
+        if new is None:
+            continue
+        if new != "fixed":
+            flagged.pop(fid, None)
+        elif e.answered_by == "operator":
+            flagged.pop(fid, None)
+        elif states.get(fid) == "out-of-scope":
+            flagged[fid] = None
+        states[fid] = new
+    return list(flagged)
 
 
 def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
