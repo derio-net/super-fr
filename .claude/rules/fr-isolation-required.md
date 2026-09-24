@@ -61,7 +61,9 @@ each enters isolation there itself with `fr isolation up --repo <path>`.
 
 **Harness — subagent worktree:** On Claude Code the second worktree is the Agent
 tool's `isolation: "worktree"` argument: dispatch the executor without it, and
-`fr-phase-executor-guard.sh` refuses it if you do not. OpenCode's task tool and
+`fr-phase-executor-guard.sh` refuses it if you do not (it refuses the flag for
+the read-only `fr-spec-reviewer` too: the spec it reviews is invisible from
+`main`). OpenCode's task tool and
 Hermes' `delegate_task` take no isolation argument, so there is nothing to
 refuse: dispatch the executor as any subagent, into the existing workspace.
 

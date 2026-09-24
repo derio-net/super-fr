@@ -1,6 +1,7 @@
 #!/bin/bash
-# PreToolUse(Agent) hook: refuse dispatching the fr-phase-executor subagent
-# WITH `isolation: "worktree"`. fr's isolation worktree already IS the
+# PreToolUse(Agent) hook: refuse dispatching the fr-phase-executor subagent —
+# or the read-only fr-spec-reviewer (2026-09-24 spec §E, review p4-f6) — WITH
+# `isolation: "worktree"`. fr's isolation worktree already IS the
 # executor's working copy; the two mechanisms are mutually exclusive, not
 # composable, and combining them deadlocks the agent (#420).
 #
@@ -50,9 +51,15 @@ esac
 # hook normally sees `super-fr:fr-phase-executor`. A locally-installed copy of
 # the agent sends the bare directory name instead — the same duality
 # ensure-phase-executor-allowlist.sh documents. Refuse both spellings.
+#
+# fr-spec-reviewer is refused for the same #420 reason seen from a reader: it
+# is dispatched to review a spec that lives on the feature branch, and a
+# worktree cut from `main` does not contain it. Read-only does not help — what
+# it cannot see, it cannot review — so it gets its own reason text.
 subagent_type=$(printf '%s' "$input" | jq -r '.tool_input.subagent_type // empty')
 case "$subagent_type" in
-  super-fr:fr-phase-executor | fr-phase-executor) ;;
+  super-fr:fr-phase-executor | fr-phase-executor) agent=executor ;;
+  super-fr:fr-spec-reviewer | fr-spec-reviewer) agent=spec-reviewer ;;
   *) exit 0 ;;
 esac
 
@@ -61,6 +68,12 @@ esac
 # deny only on a positive match.
 isolation=$(printf '%s' "$input" | jq -r '.tool_input.isolation // empty')
 [ "$isolation" = "worktree" ] || exit 0
+
+if [ "$agent" = spec-reviewer ]; then
+  jq -n --arg reason "fr-spec-reviewer must be dispatched WITHOUT \`isolation: \"worktree\"\` — it reviews the spec in fr's isolation worktree, where the feature branch's spec and spec journal live. With the flag it wakes in a separate worktree cut from \`main\`, where that spec is invisible: there is nothing for it to review, and the review it returns is of nothing. Re-dispatch the same prompt with no \`isolation\` argument. (See super-fr#420.)" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+  exit 0
+fi
 
 jq -n --arg reason "fr-phase-executor must be dispatched WITHOUT \`isolation: \"worktree\"\` — fr's isolation worktree already IS this agent's working copy, so the two mechanisms are mutually exclusive, not composable. With the flag the agent wakes in a separate locked worktree cut from \`main\`: the spec and plan live on the feature branch and are invisible (\`fr pickup\` has nothing to read), Bash is denied by fr-isolation-guard.sh, and Write/Edit by fr-isolation-required.sh. Re-dispatch the same prompt with no \`isolation\` argument. (The executors fr-goal §5 dispatches share this one workspace. A cross-repo agent (fr-goal §2) enters isolation in its own repo with \`fr isolation up --repo\` — the flag cannot do that, it cuts a worktree of THIS repo. See super-fr#420.)" \
   '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'

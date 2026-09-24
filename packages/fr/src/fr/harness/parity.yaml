@@ -81,7 +81,7 @@ surfaces:
   - id: fr-phase-executor-guard
     kind: hook
     script: fr-phase-executor-guard.sh
-    summary: Refuses dispatching fr-phase-executor into its own fresh worktree (super-fr#420).
+    summary: Refuses dispatching fr-phase-executor, or the read-only fr-spec-reviewer, into its own fresh worktree (super-fr#420; the reviewer since spec 2026-09-24 §E).
     harnesses:
       claude-code: {state: enforced}
       opencode: {state: absent}
