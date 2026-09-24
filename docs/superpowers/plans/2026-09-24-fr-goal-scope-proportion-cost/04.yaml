@@ -119,9 +119,9 @@ state:
       note: manifests, parity row, allowlist generalised (org hook exempts by name),
         install wiring
     P4.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:30:38+00:00'
+      note: both syncs run + --check clean; full suite 5162 passed, 89 skipped
     P4.T3.S1:
       state: x
       ticked_at: '2026-09-24T21:18:12+00:00'
@@ -133,10 +133,11 @@ state:
       note: unmodified re-render byte-identical (from /, --isolated); new render diff
         = prose only (62+/6-); explainers tripwire green
     P4.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T21:30:39+00:00'
+      note: 4.20.0; bump --check, ruff, mypy, workflow/parity/acceptance/validate
+        checks, full suite green; 3 rows -> ci, main-session-cost stays skipped
   completion:
-    at: null
+    at: '2026-09-24T21:30:39+00:00'
     note: null
     observed_prs: []
