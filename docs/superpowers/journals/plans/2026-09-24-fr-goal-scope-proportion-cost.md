@@ -57,3 +57,18 @@ Row moved back to skipped via fr acceptance set-status; the ci flip waits on the
 ### r-p1 · review · Phase 1 review (independent reviewer): 1 finding (p1-f1, fixed); 6 deviations accepted (phase 1)
 
 Reviewer: dispatched code-reviewer subagent a1ea2343c237b8a52. Deviations 1-5 accepted with reasons; deviation 6 = p1-f1.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p2-journal-stamp-tz created=2026-09-24T21:40:38 phase=2 -->
+### x-p2-journal-stamp-tz · discovery · journal created stamps are naive LOCAL time; operator_answered_since reads naive as UTC (phase 2)
+
+fr journal's _timestamp() is datetime.now() with no offset (local wall clock), while fr.run.telemetry.parse_timestamp treats a naive stamp as UTC. Passing an out-of-scope record's created straight into operator_answered_since would open the question window hours late east of UTC (the operator's machine is +02:00) and refuse an operator who answered in between. Added journal_stamp_as_utc (naive -> local -> UTC), pinned by a TZ=Europe/Athens test.
+
+<!-- fr:journal kind=decision scope=plan id=d-p2-guard-shape created=2026-09-24T21:40:39 phase=2 -->
+### d-p2-guard-shape · decision · operator guard: writes succeed, the fold refuses; a later operator record cures (phase 2)
+
+Per P2.T3.S1(a) a fixed record without answered_by=operator is WRITTEN by both resolve and add --resolves, and fr journal check / the review-phase witness then report an unauthorized fix. The one command-side refusal is the Claude Code verification of an --answered-by operator CLAIM (observed False -> exit 2, nothing written). Since the journal is append-only, the cure is a later fixed record with answered_by=operator (ratifies) or any record moving the finding off fixed (clears); the fold tracks that per finding. Unknown answered_by / review_scope token values parse as absent (never fatal; for answered_by that is the fail-closed direction). The verification window opens at the finding's LAST out-of-scope record, else the finding's own created. Advisory notice text comes from the parity row's scope_note, like the brainstorm gate.
+
+<!-- fr:journal kind=decision scope=plan id=v-p2-render-shape created=2026-09-24T21:40:39 phase=2 -->
+### v-p2-render-shape · decision · DEVIATION (scope note): render marks reclassification as a blockquote; deliver's both-journal render left to phase 4 (phase 2)
+
+Reviewer tag renders in the heading as '(reviewer: in scope|out of scope)'; out-of-scope findings and their records move under '## Out-of-scope findings'; a review_scope=in finding ending out-of-scope gets '> reclassified by the orchestrator — the reviewer tagged this in scope' under its heading. Task 2's title mentions 'both scopes at deliver' but none of its steps do; spec §A's deliver change is a manifest/skill edit that 04.yaml (SKILL §8 renders both journals) already owns, so nothing for it was done here.

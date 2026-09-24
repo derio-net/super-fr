@@ -425,15 +425,35 @@ def effective_finding_states(entries: list[JournalEntry]) -> dict[str, Effective
     An out-of-scope record (an `open` record with `out_of_scope`) folds to
     `out-of-scope` the same way, and for the same reasons.
     """
+    return _fold(entries)[0]
+
+
+def _fold(
+    entries: list[JournalEntry],
+) -> tuple[dict[str, EffectiveFindingState], list[str]]:
+    """The ONE walk over a journal's finding records: (effective states,
+    unauthorized fixes). Both public readers are projections of it, so the
+    state a gate sees and the guard on how it got there cannot disagree about
+    which record came last. Every write path lands here equally — `fr journal
+    resolve`, `fr journal add --resolves`, or a hand edit.
+    """
     states: dict[str, EffectiveFindingState] = {}
+    flagged: dict[str, None] = {}  # insertion-ordered set
     for e in entries:
-        if e.resolves is not None:
-            new = _record_state(e)
-            if new is not None:
-                states[e.resolves] = new
-        elif e.kind == "finding" and e.state is not None:
-            states[e.id] = e.state
-    return states
+        if e.resolves is None:
+            if e.kind == "finding" and e.state is not None:
+                states[e.id] = e.state
+            continue
+        fid = e.resolves
+        new = _record_state(e)
+        if new is None:
+            continue
+        if new != "fixed" or e.answered_by == "operator":
+            flagged.pop(fid, None)
+        elif states.get(fid) == "out-of-scope":
+            flagged[fid] = None
+        states[fid] = new
+    return states, list(flagged)
 
 
 def unauthorized_fixes(entries: list[JournalEntry]) -> list[str]:
@@ -451,25 +471,7 @@ def unauthorized_fixes(entries: list[JournalEntry]) -> list[str]:
     `fixed` record carrying `answered_by=operator`, and cleared by any record
     that moves the finding off `fixed`.
     """
-    states: dict[str, EffectiveFindingState] = {}
-    flagged: dict[str, None] = {}
-    for e in entries:
-        if e.resolves is None:
-            if e.kind == "finding" and e.state is not None:
-                states[e.id] = e.state
-            continue
-        fid = e.resolves
-        new = _record_state(e)
-        if new is None:
-            continue
-        if new != "fixed":
-            flagged.pop(fid, None)
-        elif e.answered_by == "operator":
-            flagged.pop(fid, None)
-        elif states.get(fid) == "out-of-scope":
-            flagged[fid] = None
-        states[fid] = new
-    return list(flagged)
+    return _fold(entries)[1]
 
 
 def open_finding_ids(entries: list[JournalEntry]) -> list[str]:
