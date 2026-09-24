@@ -161,6 +161,13 @@ def _workspace(tmp_path: Path, branch: str) -> Path:
     (base / "seed.md").write_text("seed\n")
     git(base, "add", "-A")
     git(base, "commit", "-qm", "seed")
+    # A real delivery has an `origin` (the shape `requires: [scm]`), and since
+    # 2026-09-24 spec §C `deliver` derives `proportionality` from the
+    # merge-base with origin's default branch — a local bare repo stands in.
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    git(base, "remote", "add", "origin", str(origin))
+    git(base, "push", "-q", "origin", "main")
 
     root = tmp_path / "workspace"
     git(base, "worktree", "add", "-q", "-b", branch, str(root))
@@ -757,6 +764,9 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     done = load_run_state(root, "r1")
     assert done.cursor == "deliver"
     assert done.steps["deliver"].state == "done"
+    # Derived by resolve itself, never passed: `<merge-base>:<sha256>`.
+    witness = units.evidence_of(done.steps["deliver"], "step/deliver")["proportionality"]
+    assert len(witness.split(":")) == 2
 
     # The toy journal carries no findings — the freshness gate is clean.
     assert (

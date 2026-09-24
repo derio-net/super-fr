@@ -77,6 +77,8 @@ _REPRESENTATIVE_VALUES: dict[str, Any] = {
     "acceptance": ["row-a"],
     "tier": "hard",
     "skeleton": True,
+    "files": ["src/**", "tests/unit/test_x.py"],
+    "estimate_lines": 120,
 }
 
 # Header keys `_build_phase_doc` writes unconditionally. Everything else is
@@ -135,6 +137,9 @@ def test_every_optional_phase_header_field_survives_phases_file(
     phases_file = tmp_path / "phases.yaml"
     phases_file.write_text(yaml.dump([bare, loaded]))
     monkeypatch.chdir(repo)
+    # `files`/`estimate_lines` floor fr_version at 4.20.0, and create re-parses
+    # what it wrote against the installed fr — which may predate the release.
+    monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "4.20.0")
 
     result = _create_via_cli(repo, phases_file)
     assert result.exit_code == 0, result.output

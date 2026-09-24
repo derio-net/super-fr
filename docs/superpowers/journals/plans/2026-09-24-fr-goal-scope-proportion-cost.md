@@ -85,3 +85,33 @@ Added test_a_deferral_in_between_hands_the_finding_back_to_the_change.
 ### r-p2 · review · Phase 2 review (independent reviewer): 1 nit taken as finding p2-f1 (fixed); deviations 1-5 accepted (phase 2)
 
 Reviewer: dispatched code-reviewer subagent a6dd9430e2d21f43c (no shell in its toolset; the orchestrator ran the phase-2 tests, 188 passed, and fr harness parity --check, exit 0).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-floor-above-installed created=2026-09-24T22:11:35 phase=3 -->
+### x-p3-floor-above-installed · discovery · 4.20.0 floor is above the installed fr until phase 4's bump (phase 3)
+
+fr plan create re-parses the plan it wrote, and fr.parser enforces fr_version against the installed fr (4.19.2 until P4 bumps to 4.20.0). So a CLI create with files/estimate_lines fails its own re-parse on this branch until the bump lands; tests monkeypatch fr.parser.INSTALLED_FR_VERSION to 4.20.0. Resolves itself at the P4 bump; nothing to fix.
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-floor-severity created=2026-09-24T22:11:35 phase=3 -->
+### d-p3-floor-severity · decision · self-review's files/estimate_lines floor is an error; _version_floor_issue gained severity= (phase 3)
+
+Plan P3.T1.S1 says the floor ERRORS; the older acceptance/tier/skeleton probes warn. Reused _version_floor_issue with a new severity kwarg (default warn, so every existing caller is unchanged) rather than a second comparator. The no-files nudge is a warn and says 'lists no files' (not 'declares no', which test_plan_tier_gates' negative assertion matches). tests/unit/fixtures/v2_plan_minimal/01.yaml gained a files glob, as it gained tier before (its self-review == [] tests).
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-exemptions created=2026-09-24T22:11:36 phase=3 -->
+### d-p3-exemptions · decision · fr artifacts are exempt as referencers and from size, not only as candidates (phase 3)
+
+Spec §C exempts docs/superpowers/** and docs/acceptance/** from sections 1-2. The report also (a) ignores them as REFERENCERS in the unreferenced-file search, because a journal or plan narrating 'added x.json' does not make anything load it (else every journaled scratch file passes), and (b) excludes them from the size total, because estimate_lines estimates the phase's work and never covered plan/journal/run bookkeeping. Both are stated in the module docstring and the size line. Justifiers = plan-journal findings, and decisions whose title contains 'deviation' (the DEVIATION convention). The diff is merge-base..HEAD (committed), so one HEAD yields identical bytes for deliver's hash.
+
+<!-- fr:journal kind=decision scope=plan id=d-p3-witness-fails-closed created=2026-09-24T22:11:36 phase=3 -->
+### d-p3-witness-fails-closed · decision · deliver refuses when no merge-base can be established; CLI exits 2 only on an unparseable plan (phase 3)
+
+The report never blocks, but the WITNESS fails closed like findings: with no determinable base the report is the one line naming --base, and hashing it would record 'proportionality checked' over no diff, so resolve --step deliver --state done exits 2 quoting that line (noting resolve takes no --base: fetch the remote). fr plan proportionality exits 0 on every report outcome incl. no base and git failure; an unparseable plan-dir exits 2 (not a report, same as self-review).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-inflight-run-picks-up created=2026-09-24T22:11:37 phase=3 -->
+### x-p3-inflight-run-picks-up · discovery · this run's deliver will derive proportionality (manifest resolved live by name) (phase 3)
+
+_resolve_manifest_for_state resolves state.workflow by NAME (repo > shipped) and checks only the schema number; drift compares step/member ids only; no repo override of fr-goal exists here. So run 2026-09-24-feat-597-593's deliver, resolved with uv run fr, now requires and derives proportionality, as spec §C intends. It needs origin's default ref resolvable in the worktree (it is: origin/main).
+
+<!-- fr:journal kind=discovery scope=plan id=x-p3-test-modules-unreferenced created=2026-09-24T22:11:37 phase=3 -->
+### x-p3-test-modules-unreferenced · discovery · first live run: new pytest modules show as unreferenced (phase 3)
+
+fr plan proportionality on this branch lists every new tests/unit/test_*.py as an unreferenced new file: pytest discovers them by convention and nothing names them. Report-first per spec, so left as-is (candidates for a human); the later 'should any section gate' decision should consider a discovery-convention exemption. Scratch files under tests/fixtures are still caught.
