@@ -7,6 +7,8 @@ phase:
   tracking_issue: null
   tier: standard
   skeleton: true
+  files:
+    - docs/fixture/**
 tasks:
   - number: 1
     title: Fixture task

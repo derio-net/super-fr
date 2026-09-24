@@ -48,6 +48,13 @@ DEFAULT_FR_VERSION = ">=3.0.0,<5.0.0"
 # addition will be announced properly, not that 3.x ever was.
 WORKFLOW_FR_VERSION = ">=4.0.0,<5.0.0"
 
+# The floor a plan whose phases set `files` or `estimate_lines` must carry
+# (2026-09-24 fr-goal-scope-proportion-cost spec §C). `PhaseHeader` is
+# extra="forbid", so an fr older than the release that added them fails the
+# parse instead of ignoring the keys — the same reasoning as the `workflow:`
+# floor above, one release-line later.
+SCOPE_FR_VERSION = ">=4.20.0,<5.0.0"
+
 _PRE_4_PROBES = (
     "0.1.0",
     "1.0.0",
@@ -73,8 +80,20 @@ includes a 0.x, a 1.x, a 2.x, several 3.minor values and both ends of 3.x.
 """
 
 
+_PRE_4_20_PROBES = _PRE_4_PROBES + tuple(
+    f"4.{minor}.{patch}" for minor in range(20) for patch in (0, 1, 2, 999)
+)
+"""`_PRE_4_PROBES` plus every 4.x minor below 4.20 — dense for the same
+reason (an exact `==4.5.0` pin must be caught, not slip between probes)."""
+
+
 def _admits_pre_4(constraint: str) -> bool:
-    """Does `constraint` allow an fr older than 4.0.0 to load the plan?
+    """Does `constraint` allow an fr older than 4.0.0 to load the plan?"""
+    return _admits_any(constraint, _PRE_4_PROBES)
+
+
+def _admits_any(constraint: str, probes: tuple[str, ...]) -> bool:
+    """Does `constraint` admit any of `probes` (versions below some floor)?
 
     Probes rather than parses the specifier's bounds: `SpecifierSet` has no
     "minimum version" accessor, and probing is what actually matters — the
@@ -96,7 +115,7 @@ def _admits_pre_4(constraint: str) -> bool:
     # prerelease semantics uniformly over the probe list, which is the same
     # question `pip` asks. The list is what bounds the answer — see
     # `_PRE_4_PROBES`.
-    return any(spec.filter(_PRE_4_PROBES))
+    return any(spec.filter(probes))
 
 
 plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
@@ -147,6 +166,9 @@ def create_cmd(
           skeleton (bool, walking-skeleton marker for the first agentic phase),
           tier (mechanical|standard|hard, harness-neutral dispatch complexity
             hint; agentic phases should set one, see fr-plan),
+          files ([globs], repo-relative paths the phase expects to touch) and
+          estimate_lines (int, expected added+deleted lines) — proportionality
+            inputs; either one floors fr_version at 4.20.0,
           tasks: [{number, title, steps: [{id, text}, ...]}, ...]}
       - ...
 
@@ -170,6 +192,8 @@ def create_cmd(
                     acceptance=tuple(p.get("acceptance") or ()),
                     skeleton=bool(p.get("skeleton", False)),
                     tier=p.get("tier"),
+                    files=tuple(p.get("files") or ()),
+                    estimate_lines=p.get("estimate_lines"),
                 )
             )
     prose = prose_file.read_text() if prose_file is not None else f"# {slug}\n\nPlan-level prose.\n"
@@ -197,6 +221,18 @@ def create_cmd(
                 f"(PlanMeta forbids unknown keys, so fr < 4.0.0 cannot parse a plan "
                 f"carrying `workflow:`); got {fr_version!r}. Use "
                 f"--fr-version '{WORKFLOW_FR_VERSION}' or drop --workflow."
+            )
+            raise typer.Exit(2)
+    if any(ps.declares_scope for ps in phases):
+        # Checked after `--workflow`, whose 4.0.0 floor this one subsumes.
+        if not explicit:
+            fr_version = SCOPE_FR_VERSION
+        elif _admits_any(fr_version, _PRE_4_20_PROBES):  # type: ignore[arg-type]
+            err_console.print(
+                f"[red]error:[/red] phases setting files/estimate_lines require an "
+                f"fr_version floored at 4.20.0 (PhaseHeader forbids unknown keys, so an "
+                f"older fr cannot parse them); got {fr_version!r}. Use "
+                f"--fr-version '{SCOPE_FR_VERSION}' or drop the fields."
             )
             raise typer.Exit(2)
     if fr_version is None:

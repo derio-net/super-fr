@@ -29,8 +29,8 @@ tasks:
       `skeleton`; plan_ops.py/plan_cmd.py floor + self-review checks. No plan schema_version
       change (Literal[2] stays). Tests green; `uv run fr validate artifacts` green.
   - id: P3.T1.S3
-    text: 'REFACTOR: the new fr_version floor check reuses `_version_floor_issue` rather than a second
-      comparator; ruff/mypy clean.'
+    text: |-
+      REFACTOR: the new fr_version floor check reuses `_version_floor_issue` rather than a second comparator; ruff/mypy clean.
 - number: 2
   title: fr plan proportionality
   steps:
@@ -52,7 +52,8 @@ tasks:
       `fr.git.remote_default_ref`) and `@plan_app.command("proportionality")` in plan_cmd.py.
       Tests green.
   - id: P3.T2.S3
-    text: 'REFACTOR: ruff/mypy clean; module docstring says report-first, never blocks.'
+    text: |-
+      REFACTOR: ruff/mypy clean; module docstring says report-first, never blocks.
 - number: 3
   title: deliver derives proportionality evidence
   steps:
@@ -74,16 +75,16 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T20:00:17+00:00'
       note: null
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T20:04:00+00:00'
       note: null
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T20:04:10+00:00'
       note: null
     P3.T2.S1:
       state: ' '

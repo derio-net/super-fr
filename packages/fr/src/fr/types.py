@@ -124,6 +124,15 @@ class PhaseHeader(BaseModel):
     # dumps when unset, so pre-marker plans stay byte-stable and parse on
     # older readers.
     skeleton: bool = False
+    # Proportionality inputs (2026-09-24 fr-goal-scope-proportion-cost spec
+    # §C): the repo-relative globs the phase expects to touch (`*` spans `/`,
+    # as in `.fr-isolation-allow`) and its expected added+deleted lines.
+    # `fr plan proportionality` compares the delivered diff against them.
+    # Same additive treatment as `tier`/`skeleton`: optional, defaulted,
+    # omitted from written phase files when unset, no stamp bump — a plan
+    # using either raises its fr_version floor to 4.20.0 instead.
+    files: tuple[str, ...] = ()
+    estimate_lines: int | None = Field(default=None, ge=0)
 
 
 def phase_tiers(annotation: object | None = None) -> tuple[str, ...]:

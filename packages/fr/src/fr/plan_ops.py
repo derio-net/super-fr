@@ -122,6 +122,14 @@ class PhaseSpec:
     # `create()`'s pre-flight loop, not left to `PhaseHeader`'s Literal at the
     # post-write re-parse (#133: that would strand a half-built folder).
     tier: Literal["mechanical", "standard", "hard"] | None = None
+    # Proportionality inputs (2026-09-24 spec §C) — emitted only when set.
+    files: tuple[str, ...] = ()
+    estimate_lines: int | None = None
+
+    @property
+    def declares_scope(self) -> bool:
+        """Does this phase use a field that needs fr >= 4.20.0 to parse?"""
+        return bool(self.files) or self.estimate_lines is not None
 
 
 def _preflight_phase_error(ps: PhaseSpec) -> str | None:
@@ -139,6 +147,11 @@ def _preflight_phase_error(ps: PhaseSpec) -> str | None:
         return (
             f"phase {ps.number} ({ps.title!r}): tier {ps.tier!r} is not valid, "
             f"must be one of {list(PHASE_TIERS)}"
+        )
+    if ps.estimate_lines is not None and ps.estimate_lines < 0:
+        return (
+            f"phase {ps.number} ({ps.title!r}): estimate_lines must be >= 0, "
+            f"got {ps.estimate_lines}"
         )
     return None
 
@@ -325,6 +338,10 @@ def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:
         phase_header["skeleton"] = True
     if ps.tier is not None:
         phase_header["tier"] = ps.tier
+    if ps.files:
+        phase_header["files"] = list(ps.files)
+    if ps.estimate_lines is not None:
+        phase_header["estimate_lines"] = ps.estimate_lines
     return {
         "schema_version": 2,
         "phase": phase_header,
@@ -1259,6 +1276,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # fr_version floor probe for `tier`, and the untiered-agentic-phase nudge.
     issues.extend(_tier_issues(plan))
 
+    # Proportionality inputs (2026-09-24 spec §C): the `files`/`estimate_lines`
+    # fr_version floor, and the no-`files` agentic-phase nudge.
+    issues.extend(_scope_field_issues(plan))
+
     # Refactor-or-justify gate (fr-goal methodology restoration): every
     # multi-step task ends red → green → refactor, or records why not.
     issues.extend(_refactor_issues(plan))
@@ -1511,19 +1532,23 @@ def _acceptance_link_issues(plan: Plan) -> list[ReviewIssue]:
 
 
 def _version_floor_issue(
-    fr_version: str, *, probe_version: str, message: str
+    fr_version: str,
+    *,
+    probe_version: str,
+    message: str,
+    severity: Literal["warn", "error"] = "warn",
 ) -> ReviewIssue | None:
-    """Shared shape behind the `acceptance:`/`tier:` (and, in principle, any
-    future field's) version-floor probes: does `fr_version` admit
-    `probe_version` (the highest pre-feature release)? If so, a `warn` issue
-    carrying `message`; otherwise `None`. A malformed constraint is left to
-    the parser, which already fails loud elsewhere — swallow silently here
-    rather than duplicate a worse-worded error."""
+    """Shared shape behind the `acceptance:`/`tier:`/`files:` (and, in
+    principle, any future field's) version-floor probes: does `fr_version`
+    admit `probe_version` (the highest pre-feature release)? If so, an issue
+    of `severity` carrying `message`; otherwise `None`. A malformed constraint
+    is left to the parser, which already fails loud elsewhere — swallow
+    silently here rather than duplicate a worse-worded error."""
     from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
     try:
         if SpecifierSet(fr_version).contains(probe_version, prereleases=True):
-            return ReviewIssue(severity="warn", message=message)
+            return ReviewIssue(severity=severity, message=message)
     except InvalidSpecifier:
         pass  # the parser already fails loud on malformed constraints
     return None
@@ -1711,6 +1736,50 @@ def _tier_issues(plan: Plan) -> list[ReviewIssue]:
                     f"it will be dispatched untiered, inheriting the session's "
                     f"model. Add `tier` to the phase header, one of "
                     f"{list(PHASE_TIERS)}."
+                ),
+            )
+        )
+    return out
+
+
+def _scope_field_issues(plan: Plan) -> list[ReviewIssue]:
+    """`files`/`estimate_lines` gates (2026-09-24 spec §C):
+
+    1. Floor probe, an ERROR where the older probes warn: `fr plan create`
+       writes this floor itself, so a plan below it was assembled by hand,
+       and any fr it admits below 4.20.0 dies on it at pickup with a raw
+       "extra field" error rather than a version message.
+    2. No-`files` warning, never an error: the report is report-first, and a
+       plan without globs only loses the out-of-plan section. Manual phases
+       touch no code, so they are exempt.
+    """
+    out: list[ReviewIssue] = []
+    scoped = any(ph.phase.files or ph.phase.estimate_lines is not None for ph in plan.phases)
+    if scoped and plan.meta.fr_version:
+        floor = _version_floor_issue(
+            plan.meta.fr_version,
+            probe_version="4.19.99",
+            severity="error",
+            message=(
+                f"phases carry files/estimate_lines but fr_version "
+                f"{plan.meta.fr_version!r} admits a pre-4.20.0 fr, which cannot parse "
+                f"them — floor it at '>=4.20.0,<5.0.0'."
+            ),
+        )
+        if floor is not None:
+            out.append(floor)
+
+    for ph in plan.phases:
+        if ph.phase.tag != "agentic" or ph.phase.files:
+            continue
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"phase {ph.phase.number} is agentic but lists no files — "
+                    f"`fr plan proportionality` cannot tell its touches from "
+                    f"out-of-plan ones. Add `files` (repo-relative globs) and "
+                    f"`estimate_lines` to the phase header."
                 ),
             )
         )
