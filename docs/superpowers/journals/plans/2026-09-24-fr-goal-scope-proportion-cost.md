@@ -115,3 +115,68 @@ _resolve_manifest_for_state resolves state.workflow by NAME (repo > shipped) and
 ### x-p3-test-modules-unreferenced · discovery · first live run: new pytest modules show as unreferenced (phase 3)
 
 fr plan proportionality on this branch lists every new tests/unit/test_*.py as an unreferenced new file: pytest discovers them by convention and nothing names them. Report-first per spec, so left as-is (candidates for a human); the later 'should any section gate' decision should consider a discovery-convention exemption. Scratch files under tests/fixtures are still caught.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1 created=2026-09-24T22:35:19 phase=3 state=open review_scope=in -->
+### p3-f1 · finding [open] (reviewer: in scope) · Unreferenced-files section lists every new test module (runner-discovered by name), drowning the #597 signal (phase 3)
+
+proportionality.py _unreferenced ~143-154. Skip files a test runner discovers by convention (test_*.py, *_test.py, conftest.py) before the grep; keep flagging fixtures/helpers. Test: new test module not listed, sibling new fixture listed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f2 created=2026-09-24T22:35:19 phase=3 state=open review_scope=in -->
+### p3-f2 · finding [open] (reviewer: in scope) · Reference search is substring, not word-bounded; directory-loaded fixtures false-flagged (phase 3)
+
+proportionality.py ~156-164: use git grep -w; treat a reference to any parent directory path as a reference.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f3 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f3 · finding [open] (reviewer: in scope) · Pre-4.20 exact pins (==4.19.3) and ranges escape the floor refusal; self-review probes only 4.19.99 (phase 3)
+
+plan_cmd.py _PRE_4_20_PROBES ~83; plan_ops.py ~1757. Compare exact ==/=== pins directly; self-review reuses _admits_any with the probe set.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f4 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f4 · finding [open] (reviewer: in scope) · Report is not a pure function of HEAD: reads journal/plan from the working tree and prints the base ref name (phase 3)
+
+proportionality.py ~96-101, 185-191. Read plan+journal via git show HEAD:<path>; print only the merge-base SHA, so the stored SHA-256 is reproducible.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f5 created=2026-09-24T22:35:20 phase=3 state=open review_scope=in -->
+### p3-f5 · finding [open] (reviewer: in scope) · git grep failure (exit >1) silently read as unreferenced (phase 3)
+
+proportionality.py ~156-164: raise GitUnavailableError on returncode > 1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f6 created=2026-09-24T22:35:21 phase=3 state=open review_scope=in -->
+### p3-f6 · finding [open] (reviewer: in scope) · No tests for rename, deleted-file touch, binary-file size (phase 3)
+
+Add a small test for each (code already correct: --no-renames, -z, '-' -> 0).
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1-resolved created=2026-09-24T22:51:39 phase=3 state=fixed resolves=p3-f1 -->
+### p3-f1-resolved · finding [fixed] · resolves p3-f1: Unreferenced-files section lists every new test module (runner-discovered by name), drowning the #597 signal (phase 3)
+
+f63afffb: runner-discovered test files skipped; test_a_new_test_module_is_not_listed_while_a_sibling_fixture_is.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f2-resolved created=2026-09-24T22:51:39 phase=3 state=fixed resolves=p3-f2 -->
+### p3-f2-resolved · finding [fixed] · resolves p3-f2: Reference search is substring, not word-bounded; directory-loaded fixtures false-flagged (phase 3)
+
+f63afffb: git grep -w; parent-dir reference counts only for directories this branch created (narrowed: a pre-existing dir like tests/unit is named everywhere); tests pin both.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f3-resolved created=2026-09-24T22:51:40 phase=3 state=fixed resolves=p3-f3 -->
+### p3-f3-resolved · finding [fixed] · resolves p3-f3: Pre-4.20 exact pins (==4.19.3) and ranges escape the floor refusal; self-review probes only 4.19.99 (phase 3)
+
+c5c81a30: fr.version_floor.admits_below shared by create and self-review; exact pins compared directly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f4-resolved created=2026-09-24T22:51:40 phase=3 state=fixed resolves=p3-f4 -->
+### p3-f4-resolved · finding [fixed] · resolves p3-f4: Report is not a pure function of HEAD: reads journal/plan from the working tree and prints the base ref name (phase 3)
+
+f63afffb: plan + journal read from HEAD; line 1 prints only the merge-base SHA; uncommitted-edit tests.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f5-resolved created=2026-09-24T22:51:41 phase=3 state=fixed resolves=p3-f5 -->
+### p3-f5-resolved · finding [fixed] · resolves p3-f5: git grep failure (exit >1) silently read as unreferenced (phase 3)
+
+f63afffb: git grep exit>1 raised; test_a_failing_git_grep_is_reported_not_read_as_no_match.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f6-resolved created=2026-09-24T22:51:41 phase=3 state=fixed resolves=p3-f6 -->
+### p3-f6-resolved · finding [fixed] · resolves p3-f6: No tests for rename, deleted-file touch, binary-file size (phase 3)
+
+f63afffb: rename, deleted-file touch and binary-file tests added.
+
+<!-- fr:journal kind=review scope=plan id=r-p3 created=2026-09-24T22:51:41 phase=3 -->
+### r-p3 · review · Phase 3 review (independent reviewer): 6 in-scope findings p3-f1..f6, all fixed; deviations 1-6 accepted, 7 = p3-f1 (phase 3)
+
+Reviewer: dispatched general-purpose subagent a1948efadec1089eb (ran the phase tests, workflow check, the report itself). Fixes by the phase executor in c5c81a30, f63afffb; orchestrator re-ran the phase tests.
