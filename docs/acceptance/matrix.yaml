@@ -3968,12 +3968,10 @@ rows:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_migration_run_main_session.py
       - super-fr:tests/unit/test_run_telemetry.py
-    status: ci
-    notes: 'Phase 1 of plan 2026-09-24-fr-goal-scope-proportion-cost: both readers (Claude
-      Code transcript, OpenCode SQLite) on fixtures, the _complete_step hook on every
-      done path, the 5 -> 6 migration, the message.id dedupe, and fr run cost rendering
-      run in CI. A live per-harness check (a real fr-goal run on each harness) is still
-      owed post-merge; OpenCode is not live-proven (parity row partial).'
+    status: skipped
+    notes: Unit-pinned (both readers, _complete_step hook, fr run cost); the cross-harness
+      live check (spec Test Plan 15) is owed post-merge, so not ci yet — phase-1 review
+      p1-f1.
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review

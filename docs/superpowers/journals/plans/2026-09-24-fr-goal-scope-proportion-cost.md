@@ -44,3 +44,16 @@ sqlite3 -readonly on ~/.local/share/opencode/opencode.db (2026-09-24): session(i
 ### d-p1-overcount-rule · decision · 'possibly over-counted' is dated by the run's first main_session (phase 1)
 
 No field records which fr measured an attempt, and adding one would be another shape change. The dedupe ships in the same release as main-session measurement, so fr.run.cost.possibly_over_counted flags every measured attempt that returned before the run's earliest main_session-bearing step's at (all of them when no step carries main_session). Conservative by design: a run whose main session was unmeasurable flags every measurement. The pure builder (cost_rows / subagent_total / possibly_over_counted) was written with the command in S2, so S3's refactor had nothing left to extract.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1 created=2026-09-24T21:28:34 phase=1 state=open -->
+### p1-f1 · finding [open] · fr-goal-main-session-cost flipped to ci before the live cross-harness check (plan P4.T3.S3 keeps it skipped) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1-resolved created=2026-09-24T21:28:36 phase=1 state=fixed resolves=p1-f1 -->
+### p1-f1-resolved · finding [fixed] · resolves p1-f1: fr-goal-main-session-cost flipped to ci before the live cross-harness check (plan P4.T3.S3 keeps it skipped) (phase 1)
+
+Row moved back to skipped via fr acceptance set-status; the ci flip waits on the live check.
+
+<!-- fr:journal kind=review scope=plan id=r-p1 created=2026-09-24T21:28:36 phase=1 -->
+### r-p1 · review · Phase 1 review (independent reviewer): 1 finding (p1-f1, fixed); 6 deviations accepted (phase 1)
+
+Reviewer: dispatched code-reviewer subagent a1ea2343c237b8a52. Deviations 1-5 accepted with reasons; deviation 6 = p1-f1.
