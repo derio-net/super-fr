@@ -75,7 +75,7 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol, TypeGuard
@@ -226,26 +226,50 @@ def _is_real_model(model: object) -> TypeGuard[str]:
     return isinstance(model, str) and bool(model) and not model.startswith("<")
 
 
-def read_claude_code(path: Path) -> UsageTotals | None:
-    """Summed usage for one Claude Code transcript, or `None` for *no
-    measurement* (the file is missing, unreadable, or holds no record).
+def _distinct_messages(
+    records: list[dict[str, Any]],
+) -> Iterator[tuple[dict[str, Any], Mapping[str, Any]]]:
+    """`(record, usage)` for each usage-bearing record, ONE per `message.id`.
 
-    Works on either file of the pair — the orchestrator's own stream or one
-    subagent's — because both are the same record format. Deciding WHICH file
-    answers for a given unit is the other half of this module's job, below.
+    Claude Code writes one transcript record per CONTENT BLOCK of a message
+    (text, then each tool_use), and every one of them repeats the WHOLE
+    message's `usage`. Summing records therefore counts a three-block message
+    three times — confirmed live on spec §D's own brainstorm transcript, where
+    27 of 40 assistant message ids appear on more than one record, each copy
+    carrying identical usage. The first occurrence of an id wins.
+
+    A record with no `message.id` is kept and never merged with another: an id
+    is the only evidence two records are one message, and without it merging
+    would be a guess. Every Claude Code usage reader iterates this one helper,
+    so the subagent line and the main-session row of `fr run cost` cannot
+    disagree about what a message is.
+
+    `attempts[].measured` values recorded before this dedupe existed were
+    summed per record and are NOT rewritten — they are history; `fr run cost`
+    flags them as possibly over-counted instead.
     """
-    records = _read_records(path)
-    if records is None:
-        return None
-    totals = dict.fromkeys(USAGE_KEYS, 0)
-    seen = 0
-    served: list[str] = []
+    seen: set[str] = set()
     for record in records:
         usage = _usage_of(record)
         if usage is None:
             continue
-        seen += 1
         # `_usage_of` already proved `message` is a Mapping.
+        message_id = record["message"].get("id")
+        if isinstance(message_id, str) and message_id:
+            if message_id in seen:
+                continue
+            seen.add(message_id)
+        yield record, usage
+
+
+def _sum_usage(pairs: Iterable[tuple[dict[str, Any], Mapping[str, Any]]]) -> UsageTotals:
+    """The four figures summed over already-deduplicated `(record, usage)`
+    pairs, with the served models in order of first appearance."""
+    totals = dict.fromkeys(USAGE_KEYS, 0)
+    seen = 0
+    served: list[str] = []
+    for record, usage in pairs:
+        seen += 1
         model = record["message"].get("model")
         if _is_real_model(model) and model not in served:
             served.append(model)
@@ -255,6 +279,22 @@ def read_claude_code(path: Path) -> UsageTotals | None:
             if isinstance(value, int) and not isinstance(value, bool):
                 totals[key] += value
     return UsageTotals(**totals, assistant_records=seen, served_models=tuple(served))
+
+
+def read_claude_code(path: Path) -> UsageTotals | None:
+    """Summed usage for one Claude Code transcript, or `None` for *no
+    measurement* (the file is missing, unreadable, or holds no record).
+
+    Works on either file of the pair — the orchestrator's own stream or one
+    subagent's — because both are the same record format. Deciding WHICH file
+    answers for a given unit is the other half of this module's job, below.
+    Each MESSAGE is counted once (`_distinct_messages`), so `assistant_records`
+    is the number of distinct assistant messages, not of records.
+    """
+    records = _read_records(path)
+    if records is None:
+        return None
+    return _sum_usage(_distinct_messages(records))
 
 
 # --- 2. attributing: which dispatch does a transcript answer for? --------

@@ -1,7 +1,8 @@
 schema_version: 2
 phase:
   number: 1
-  title: D — dedupe fix (skeleton), run v6 main_session, Claude Code + OpenCode readers, fr run cost
+  title: D — dedupe fix (skeleton), run v6 main_session, Claude Code + OpenCode readers,
+    fr run cost
   tag: agentic
   depends_on: []
   tracking_issue: null
@@ -11,7 +12,8 @@ phase:
   tier: hard
 tasks:
 - number: 1
-  title: 'Skeleton: one message.id dedupe shared by every Claude Code usage reader (spec §D, review f5)'
+  title: 'Skeleton: one message.id dedupe shared by every Claude Code usage reader
+    (spec §D, review f5)'
   steps:
   - id: P1.T1.S1
     text: |-
@@ -31,7 +33,8 @@ tasks:
       full `uv run pytest -q --no-cov` green (fix any test that pinned the inflated sum by
       correcting its expected value, with a comment).
   - id: P1.T1.S3
-    text: 'REFACTOR: ruff format + ruff check + mypy (commands in AGENTS.md "Dev commands") clean.'
+    text: |-
+      REFACTOR: ruff format + ruff check + mypy (commands in AGENTS.md "Dev commands") clean.
 - number: 2
   title: MainSessionUsage on StepRecord, run stamp 5 -> 6 with migration + validator
   steps:
@@ -56,9 +59,11 @@ tasks:
       Then run `uv run fr migrate artifacts --yes` in the worktree and commit the migrated
       cursor(s). Tests green.
   - id: P1.T2.S3
-    text: 'REFACTOR: ruff/mypy clean; `uv run fr validate artifacts` exits 0.'
+    text: |-
+      REFACTOR: ruff/mypy clean; `uv run fr validate artifacts` exits 0.
 - number: 3
-  title: Claude Code main-session reader + session candidate set + _complete_step hook
+  title: Claude Code main-session reader + session candidate set + _complete_step
+    hook
   steps:
   - id: P1.T3.S1
     text: |-
@@ -115,8 +120,8 @@ tasks:
       session), hermes absent (scope_note: no reader), codex/copilot-cli unsupported.
       `uv run fr harness parity --check` and tests/unit/test_tripwire_harness_parity.py green.
   - id: P1.T4.S4
-    text: 'REFACTOR: OpenCodeReader''s candidate-session query and token mapping read as one documented
-      function each; the reasoning->output fold is stated in the docstring. ruff/mypy clean.'
+    text: |-
+      REFACTOR: OpenCodeReader's candidate-session query and token mapping read as one documented function each; the reasoning->output fold is stated in the docstring. ruff/mypy clean.
 - number: 5
   title: fr run cost
   steps:
@@ -133,33 +138,33 @@ tasks:
       the same rich table idiom `status_cmd` uses. Read-only: must not write the cursor.
       Tests green; ruff/mypy clean.
   - id: P1.T5.S3
-    text: 'REFACTOR: the cost table''s row builder is a pure function over RunState (testable without
-      CliRunner); ruff/mypy clean.'
+    text: |-
+      REFACTOR: the cost table's row builder is a pure function over RunState (testable without CliRunner); ruff/mypy clean.
 state:
   steps:
     P1.T1.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T18:56:42+00:00'
       note: null
     P1.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T18:59:01+00:00'
       note: null
     P1.T1.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:00:50+00:00'
       note: null
     P1.T2.S1:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:00:50+00:00'
       note: null
     P1.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:00:51+00:00'
       note: null
     P1.T2.S3:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-24T19:00:51+00:00'
       note: null
     P1.T3.S1:
       state: ' '
