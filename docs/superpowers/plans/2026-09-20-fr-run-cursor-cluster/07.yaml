@@ -53,26 +53,41 @@ tasks:
 state:
   steps:
     P7.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T15:08:33+00:00'
+      note: 'Walked 2026-09-24 on a scratch fr-goal run (fr 4.19.2, host-worktree):
+        a second advance with phase/1 outstanding exits 2 ''ALREADY HELD … (dispatched
+        <ts>)''; --redispatch re-briefs only that unit (cursor diff: old attempt abandoned,
+        new one appended); with nothing outstanding it exits 2 and the cursor is byte-identical.
+        Scratch run, not mid model-driven run.'
     P7.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T15:08:34+00:00'
+      note: 'Walked 2026-09-24 (scratch run): resolve --step phase/1/implement-phase
+        exits 2 and teaches ''--step implement-phase --item phase/1''; the resolve
+        hint precedes the JSON and advance | tail -1 | jq parses.'
     P7.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T15:08:34+00:00'
+      note: 'Walked 2026-09-24 (scratch run): right after fr run start, isolation
+        status shows sessions=<this session''s uuid>; with the ambient Claude Code
+        session env stripped, fr run start --session <id> --harness claude-code binds
+        exactly that id. Run C (#592) also left its orchestrator session bound.'
     P7.T1.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T15:08:35+00:00'
+      note: 'Run C (#592, live): the trailing [manual] phase 4 got no dispatch, implement
+        completed and deliver opened #592. Walked 2026-09-24 (scratch plan): a MIDDLE
+        manual phase is refused by fr plan self-review (exit 1, ''an agentic phase
+        must never wait on a human'').'
     P7.T1.S5:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T15:08:35+00:00'
+      note: All checks pass. Rows updated with fr acceptance set-status in this PR;
+        notes say which evidence is live (Run C) and which a scratch walk.
   completion:
-    at: null
-    note: null
+    at: '2026-09-24T15:08:42+00:00'
+    note: 'Operator verification walked 2026-09-24: S4 first half live in Run C (#592);
+      S1, S2, S3, S4 second half and #536 C1''s refusal on a scratch fr-goal run (fr
+      4.19.2). All pass.'
     observed_prs: []
