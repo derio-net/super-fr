@@ -48,22 +48,40 @@ tasks:
 state:
   steps:
     P7.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T19:28:18+00:00'
+      note: '2026-09-24: bash scripts/install.sh from main (fr 4.19.2). fr-worktree-override.md
+        present; the plugin cache''s current hooks.json keys = PostToolUse, PreToolUse,
+        SessionEnd, SessionStart, Stop, WorktreeCreate, WorktreeRemove (Stop was added
+        later by gh#518).'
     P7.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T19:28:19+00:00'
+      note: '2026-09-24: satisfied by the v2 successor (spec 2026-09-14). ~/.claude/statusline.sh
+        is a symlink to the cache''s current/scripts/fr-statusline-claude.sh, which
+        renders branch + worktree rows from fr-statusline-segment.sh (mock input verified).
+        The v1 ''Git worktrees'' block and iso: hint this step names no longer exist,
+        so there is nothing to patch.'
     P7.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T19:28:19+00:00'
+      note: '2026-09-24: gc --dry-run then gc. It reaped the 2 merged workspaces.
+        The 5 dirs named here were long gone; it left 2 squash-merged workspaces as
+        false refusals, now #598. Four vetted stale workspaces and 2 orphaned Run-A
+        smoke worktrees were removed with operator OK. ~/.cache/fr/worktrees now holds
+        only real repo folders.'
     P7.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-24T19:28:20+00:00'
+      note: '2026-09-24, Claude Code 2.1.281: FAILED on a default install. The plugin-registered
+        WorktreeCreate is never invoked for claude --worktree, and demo landed in
+        <repo>/.claude/worktrees/demo. With the hooks also registered in settings.json
+        (this PR makes install.sh do that), claude --worktree demo2 landed in ~/.cache/fr/worktrees/super-fr/wt__demo2,
+        fr isolation status showed wt/demo2 sessions=<its id>, the status line showed
+        the fr worktree, and exit removed it (worktree, container, state). Startup
+        waits for a full devcontainer up.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-24T19:28:20+00:00'
+    note: Operator rollout walked live 2026-09-24. T2.S2 needed the settings.json
+      hook registration this PR adds to install.sh.
     observed_prs: []
