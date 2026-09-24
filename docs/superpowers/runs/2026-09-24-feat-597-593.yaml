@@ -3,12 +3,24 @@ run: 2026-09-24-feat-597-593
 workflow: fr-goal@1
 branch: feat/597-593
 started: '2026-09-24T17:38:43+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: pending
+    state: done
+    at: '2026-09-24T18:41:10+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-24T18:41:11+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-24T18:41:11+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
   plan:
     state: pending
   plan-review:
