@@ -52,8 +52,8 @@ until mkdir "$lock" 2>/dev/null; do
   [ "$waited" -ge 900 ] && { echo "fr-worktree-create: gave up waiting for $lock" >&2; exit 1; }
   sleep 1; waited=$((waited + 1))
 done
-echo $$ > "$lock/pid"
 trap 'rm -rf "$lock"' EXIT
+echo $$ > "$lock/pid"
 out=$(fr "${args[@]}") || { echo "fr-worktree-create: fr isolation up failed" >&2; exit 1; }
 path=$(printf '%s\n' "$out" | sed -e 's/\x1b\[[0-9;]*m//g' | awk 'NF{l=$0} END{print l}')
 [ -n "$path" ] && [ -d "$path" ] || {

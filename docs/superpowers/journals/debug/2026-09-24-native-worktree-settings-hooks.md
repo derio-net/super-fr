@@ -24,3 +24,8 @@ install.sh now also registers `bash <cache>/super-fr/current/hooks/fr-worktree-{
 ### f-corpus-floor · finding [fixed] · The dispatch-lint corpus floor assumed at least 3 live plans; archiving a finished plan broke it
 
 Archiving worktree-traceability (required, or test_no_merged_but_unarchived_plans fails on main after merge) left 2 live plans. test_every_corpus_root_contributes demanded a flat MIN_PLANS_PER_ROOT=3 per root, so the two tripwires contradicted each other whenever few plans are in flight. The floor is now min(3, plan dirs present): a renamed root still fails on is_dir (mutation-checked by moving plans/ aside), and every live plan must still be read.
+
+<!-- fr:journal kind=review scope=debug id=0ff25bee5b7b created=2026-09-24T21:47:28 -->
+### 0ff25bee5b7b · review · Independent review: 2 important findings fixed, 2 minor fixed, 1 noted
+
+A separately dispatched reviewer (static reading, no shell) raised: **(1) fixed:** WorktreeRemove is double-registered too but had no lock. fr-worktree-remove.sh now serializes per worktree path; its concurrency test went red (OVERLAP) and then green. **(2) fixed:** an unquoted path in the registered command breaks under a HOME containing a space. The command is now bash \"<path>\", pinned by a HOME-with-space test using shlex. **(3) fixed:** the strip filter aborted on a group without a hooks array; such groups are now left untouched (test). **(4) fixed:** it deleted an intentionally empty hooks object; that step is dropped (test). **(5) fixed:** trap is set before the pid write in the create hook. Not fixed: a HOME containing a double quote or \$ would still break the command, judged out of scope. The corpus-floor change was judged sound.

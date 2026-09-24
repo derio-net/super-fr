@@ -14,6 +14,21 @@ case "$path" in
     exit 0 ;;
 esac
 command -v fr >/dev/null 2>&1 || exit 0
+# Serialized per worktree path, for the same reason as fr-worktree-create.sh:
+# install.sh also registers this script in settings.json, so wherever Claude
+# Code honours both registrations two teardowns of one workspace would run at
+# once. The second waits, then finds nothing to remove.
+locks="$HOME/.cache/fr/locks"; mkdir -p "$locks"
+lock="$locks/worktree-remove.$(printf '%s' "$path" | cksum | cut -d' ' -f1)"
+waited=0
+until mkdir "$lock" 2>/dev/null; do
+  holder=$(cat "$lock/pid" 2>/dev/null || true)
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi
+  [ "$waited" -ge 300 ] && { echo "fr-worktree-remove: gave up waiting for $lock" >&2; exit 0; }
+  sleep 1; waited=$((waited + 1))
+done
+trap 'rm -rf "$lock"' EXIT
+echo $$ > "$lock/pid"
 fr isolation down --worktree "$path" >&2 ||
   echo "fr-worktree-remove: fr isolation down refused for $path; workspace kept (see fr isolation status)" >&2
 exit 0

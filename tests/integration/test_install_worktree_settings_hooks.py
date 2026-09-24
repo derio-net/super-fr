@@ -36,7 +36,9 @@ def _settings(home: Path) -> dict:
 
 
 def _expected(home: Path, script: str) -> str:
-    return f"bash {home}/.claude/plugins/cache/derio-net--super-fr/super-fr/current/hooks/{script}"
+    return (
+        f'bash "{home}/.claude/plugins/cache/derio-net--super-fr/super-fr/current/hooks/{script}"'
+    )
 
 
 def _commands(settings: dict, event: str) -> list[str]:
@@ -105,3 +107,52 @@ def test_uninstall_removes_only_frs_worktree_hooks(home_with_plugin_state: Path)
     assert "WorktreeRemove" not in settings.get("hooks", {}), (
         "an event left with no hooks must be dropped, not kept as an empty list"
     )
+
+
+def test_command_survives_a_home_with_a_space(tmp_path: Path) -> None:
+    """Claude Code runs `command` through a shell, so an unquoted path under a
+    HOME like `/Users/Jane Doe` would word-split into two arguments."""
+    import shlex
+
+    home = tmp_path / "with space" / "home"
+    (home / "bin").mkdir(parents=True)
+    vk = home / "bin" / "vibe-kanban-mcp"
+    vk.write_text("#!/bin/sh\necho stub\n")
+    vk.chmod(0o755)
+    plugins = home / ".claude" / "plugins"
+    plugins.mkdir(parents=True)
+    (plugins / "installed_plugins.json").write_text(json.dumps({"plugins": {}, "version": 2}))
+    (plugins / "known_marketplaces.json").write_text(json.dumps({}))
+    (home / ".claude" / "settings.json").write_text(json.dumps({}))
+    _run_install(home)
+    for event, script in EVENTS.items():
+        (command,) = _commands(_settings(home), event)
+        argv = shlex.split(command)
+        assert argv == [
+            "bash",
+            f"{home}/.claude/plugins/cache/derio-net--super-fr/super-fr/current/hooks/{script}",
+        ], command
+
+
+def test_a_malformed_foreign_group_is_left_alone(home_with_plugin_state: Path) -> None:  # noqa: F811
+    """A group with no `hooks` array must neither abort the install nor vanish."""
+    home = home_with_plugin_state
+    odd = {"matcher": "someone-elses"}
+    (home / ".claude" / "settings.json").write_text(
+        json.dumps({"hooks": {"WorktreeCreate": [odd]}})
+    )
+    _run_install(home)
+    groups = _settings(home)["hooks"]["WorktreeCreate"]
+    assert odd in groups
+    assert _commands(_settings(home), "WorktreeCreate") == [
+        _expected(home, EVENTS["WorktreeCreate"])
+    ]
+
+
+def test_an_intentionally_empty_hooks_object_is_not_deleted(
+    home_with_plugin_state: Path,  # noqa: F811
+) -> None:
+    home = home_with_plugin_state
+    (home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {}}))
+    _run_install(home, "--uninstall")
+    assert _settings(home) == {"hooks": {}}

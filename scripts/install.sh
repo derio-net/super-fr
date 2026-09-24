@@ -57,19 +57,23 @@ INSTALLED_PLUGINS="$PLUGINS_DIR/installed_plugins.json"
 # Claude's native worktree outside fr. The same scripts registered in
 # settings.json do fire. The command points at the cache's `current` link, so
 # upgrades need no rewrite. WT_HOOKS_STRIP removes every entry naming fr's
-# scripts (current or stale path) and drops an event left empty; install
-# strips, then appends, so it converges instead of duplicating.
+# scripts (current or stale path) and drops an event left empty, leaving a
+# group without a `hooks` array (not ours to judge) untouched; install strips,
+# then appends, so it converges. The path is quoted inside the command because
+# Claude Code runs it through a shell, and a HOME may contain a space.
 WT_HOOKS_DIR="$CACHE_BASE/super-fr/current/hooks"
 WT_HOOKS_STRIP='
   def strip(ev; s):
     if .hooks[ev] == null then .
-    else .hooks[ev] |= [ .[] | .hooks |= map(select((.command // "") | contains(s) | not))
-                             | select((.hooks | length) > 0) ]
+    else .hooks[ev] |= [ .[]
+           | if (.hooks | type) != "array" then .
+             else (.hooks |= map(select((.command // "") | contains(s) | not)))
+                  | select((.hooks | length) > 0)
+             end ]
          | if (.hooks[ev] | length) == 0 then del(.hooks[ev]) else . end
     end;
   strip("WorktreeCreate"; "fr-worktree-create.sh")
-  | strip("WorktreeRemove"; "fr-worktree-remove.sh")
-  | if .hooks == {} then del(.hooks) else . end'
+  | strip("WorktreeRemove"; "fr-worktree-remove.sh")'
 # Authoritative list of Claude rules to install to ~/.claude/rules/.
 # Used for both install copy operations and --uninstall removal.
 CLAUDE_RULES=(
@@ -348,8 +352,8 @@ if command -v jq &>/dev/null; then
 
   # Worktree hooks in settings.json too; see WT_HOOKS_STRIP above for why.
   if [ -f "$SETTINGS" ]; then
-    jq --arg c "bash $WT_HOOKS_DIR/fr-worktree-create.sh" \
-      --arg r "bash $WT_HOOKS_DIR/fr-worktree-remove.sh" \
+    jq --arg c "bash \"$WT_HOOKS_DIR/fr-worktree-create.sh\"" \
+      --arg r "bash \"$WT_HOOKS_DIR/fr-worktree-remove.sh\"" \
       "$WT_HOOKS_STRIP"' | .hooks.WorktreeCreate += [{"hooks":[{"type":"command","command":$c}]}]
         | .hooks.WorktreeRemove += [{"hooks":[{"type":"command","command":$r}]}]' \
       "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"

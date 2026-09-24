@@ -320,3 +320,40 @@ def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str
     assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped"
     paths = {o[0].strip().splitlines()[-1] for o in outs}
     assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}"
+
+
+SLOW_DOWN_STUB = r"""#!/bin/bash
+printf '%s\n' "$*" >> "$FR_STUB_LOG"
+mkdir "$HOME/down-in-flight" 2>/dev/null || echo OVERLAP >> "$FR_STUB_LOG"
+sleep 1
+rmdir "$HOME/down-in-flight" 2>/dev/null
+"""
+
+
+def test_two_concurrent_removals_do_not_overlap(
+    tmp_path: Path, repo: Path, stub_fr: dict[str, str]
+) -> None:
+    """Same double registration, WorktreeRemove side: two `fr isolation down`
+    runs on one workspace must not tear it down concurrently."""
+    stub = Path(stub_fr["PATH"].split(":")[0]) / "fr"
+    stub.write_text(SLOW_DOWN_STUB)
+    target = tmp_path / "cache" / "wt"
+    payload = tmp_path / "remove.json"
+    payload.write_text(json.dumps(remove_payload(repo, worktree_path=str(target))))
+    procs = []
+    for _ in range(2):
+        with payload.open() as stdin:
+            procs.append(
+                subprocess.Popen(
+                    ["bash", str(REMOVE)],
+                    stdin=stdin,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=stub_fr,
+                )
+            )
+    for p in procs:
+        p.communicate(timeout=60)
+    assert all(p.returncode == 0 for p in procs)
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation down runs overlapped"
