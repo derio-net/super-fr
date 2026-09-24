@@ -656,14 +656,22 @@ def _drive_to_plan_step(wt: Path, shipped: Path, plan_dir: Path) -> None:
         ).exit_code
         == 0
     )
+    from tests.unit.spec_review_support import spec_review_evidence
+
+    # Since 2026-09-24 spec §E, spec-review is verified against the spec journal
+    # of the spec brainstorm emitted, so brainstorm emits it and the review
+    # carries its evidence.
     for step in ("brainstorm", "spec-review"):
         assert _invoke(wt, shipped, ["run", "advance", "r-first"]).exit_code == 0
-        assert (
-            _invoke(
-                wt, shipped, ["run", "resolve", "r-first", "--step", step, "--state", "done"]
-            ).exit_code
-            == 0
+        extra = (
+            ["--emitted", f"spec={SPEC_REL}"]
+            if step == "brainstorm"
+            else spec_review_evidence(wt, SPEC_REL)
         )
+        resolved = _invoke(
+            wt, shipped, ["run", "resolve", "r-first", "--step", step, "--state", "done", *extra]
+        )
+        assert resolved.exit_code == 0, resolved.output
     assert _invoke(wt, shipped, ["run", "advance", "r-first"]).exit_code == 0
     resolved = _invoke(
         wt,

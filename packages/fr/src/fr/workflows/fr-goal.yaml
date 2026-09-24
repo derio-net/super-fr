@@ -10,10 +10,10 @@
 #
 # 1. `deliver` is `kind: agent`, not `kind: cli` running a nonexistent
 #    `fr run deliver` command — no such subcommand exists (`fr run` is
-#    start/adopt/status/advance/resolve/check only). Composing the PR body from
+#    start/adopt/status/advance/resolve/check/cost). Composing the PR body from
 #    the journal and deciding when to mark it ready is judgment work the
-#    orchestrating agent does itself, the same shape as `spec-review`
-#    below (a bare `agent` step, no subagent dispatch).
+#    orchestrating agent does itself (a bare `agent` step, no subagent
+#    dispatch).
 # 2. There is NO `isolate` step (spec §4.B, review fix r2-f5). A run is
 #    born in its workspace: `fr run start` ensures isolation itself and
 #    writes the run file inside the worktree. As a step it moved the
@@ -63,8 +63,21 @@ steps:
 
   - id: spec-review
     kind: agent
+    # gh#593 option 2 (2026-09-24 spec §E): the spec is reviewed by a
+    # dispatched, read-only `fr-spec-reviewer` — a context separate from the
+    # orchestrator that wrote it — not by the orchestrator re-reading its own
+    # work. The evidence gate verifies it against the SPEC journal (this step
+    # emits `journal:spec`): `review` is a `kind=review` spec entry created
+    # after the step opened; `reviewer` is the reviewer's dispatch id (on
+    # Claude Code, one this session dispatched after the step opened — the
+    # orchestrator has no agent id, so it can never pass); `findings` is
+    # DERIVED — refused while any spec finding is effectively open, or was
+    # fixed out of `out-of-scope` without the operator.
+    agent: super-fr:fr-spec-reviewer
+    tier: standard
     needs: [spec]
     emits: [journal:spec]
+    evidence: [review, reviewer, findings]
 
   - id: plan
     kind: agent
@@ -130,6 +143,13 @@ steps:
         # the phase's own implementer and, where the transcript is readable, an id
         # this session never dispatched after the review opened. The #497 run's
         # review was an entry the orchestrator typed about work nobody reviewed.
+        #
+        # The reviewer tags every finding (2026-09-24 spec §A, gh#597): in
+        # scope — this change is wrong, incomplete, or worse than it needs to be
+        # (an asymptotically worse algorithm than necessary is in scope); out of
+        # scope — true, but not caused by this change. The orchestrator journals
+        # the tag as `--review-scope`, fixes every in-scope finding, and files
+        # the rest with `fr journal resolve --state out-of-scope`.
         evidence: [review, reviewer, findings]
 
   - id: journal-check

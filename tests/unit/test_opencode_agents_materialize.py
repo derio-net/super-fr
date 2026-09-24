@@ -140,8 +140,13 @@ class TestMaterializeAgents:
 
         changes = materialize_agents(config_home, models_cfg={"opencode": {"hard": "model-X"}})
 
-        assert len(changes) == 1
-        change = changes[0]
+        # One `-hard` file per canonical agent: fr-phase-executor and, since
+        # 2026-09-24 spec §E, fr-spec-reviewer.
+        assert sorted(c.path.name for c in changes) == [
+            "fr-phase-executor-hard.md",
+            "fr-spec-reviewer-hard.md",
+        ]
+        change = next(c for c in changes if c.path.name == "fr-phase-executor-hard.md")
         assert change.path == _agent_dir(config_home) / "fr-phase-executor-hard.md"
         assert change.tier == "hard"
         assert change.old_model is None

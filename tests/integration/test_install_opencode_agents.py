@@ -57,11 +57,17 @@ def test_install_delivers_four_agents_to_opencode_dir(
     agent_files = sorted(agent_dir.glob("*.md"))
     # Alphabetical order: '-' (ASCII 45) comes before '.' (ASCII 46), so tiered
     # agents sort before the base agent
+    # fr-spec-reviewer since 2026-09-24 spec §E — base + three tiers, the same
+    # four-file delivery as the phase executor.
     expected_agents = [
         "fr-phase-executor-hard.md",
         "fr-phase-executor-mechanical.md",
         "fr-phase-executor-standard.md",
         "fr-phase-executor.md",
+        "fr-spec-reviewer-hard.md",
+        "fr-spec-reviewer-mechanical.md",
+        "fr-spec-reviewer-standard.md",
+        "fr-spec-reviewer.md",
     ]
     actual_names = sorted(f.name for f in agent_files)
     assert actual_names == expected_agents, f"Expected agents {expected_agents}, got {actual_names}"

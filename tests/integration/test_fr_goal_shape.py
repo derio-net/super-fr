@@ -32,6 +32,8 @@ from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
 
+from tests.unit.spec_review_support import spec_review_evidence
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "workflows"
 SKILL_MD = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"
@@ -318,6 +320,8 @@ def test_the_implement_steps_brief_tells_a_harness_to_fan_out_per_phase(tmp_path
         argv = ["run", "resolve", "r1", "--step", step, "--state", "done"]
         if emitted:
             argv += ["--emitted", emitted]
+        if step == "spec-review":
+            argv += spec_review_evidence(root, "docs/spec.md")
         assert _fr(root, argv).exit_code == 0
 
     # plan-review is `kind: cli` — skip its execution (it shells out to
@@ -398,10 +402,9 @@ def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, pla
         == 0
     )
     _fr(root, ["run", "advance", run_id])  # spec-review brief
-    assert (
-        _fr(root, ["run", "resolve", run_id, "--step", "spec-review", "--state", "done"]).exit_code
-        == 0
-    )
+    spec_review = ["run", "resolve", run_id, "--step", "spec-review", "--state", "done"]
+    reviewed = _fr(root, [*spec_review, *spec_review_evidence(root, spec_rel)])
+    assert reviewed.exit_code == 0, reviewed.output
     _fr(root, ["run", "advance", run_id])  # plan brief
     assert (
         _fr(
@@ -465,7 +468,8 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done",
                "--emitted", "spec=docs/spec.md"])  # fmt: skip
     _fr(root, ["run", "advance", "g1"])
-    _fr(root, ["run", "resolve", "g1", "--step", "spec-review", "--state", "done"])
+    _fr(root, ["run", "resolve", "g1", "--step", "spec-review", "--state", "done",
+               *spec_review_evidence(root, "docs/spec.md")])  # fmt: skip
     _fr(root, ["run", "advance", "g1"])
     _fr(root, ["run", "resolve", "g1", "--step", "plan", "--state", "done",
                "--emitted", f"plan={plan_rel}"])  # fmt: skip

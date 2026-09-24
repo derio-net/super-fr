@@ -217,6 +217,20 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: spec-review-independence
+    kind: interaction
+    summary: fr-goal's `spec-review` is done by a dispatched, read-only `fr-spec-reviewer` subagent — a context separate from the orchestrator that wrote the spec (spec 2026-09-24 §E, gh#593 option 2). `fr run resolve --step spec-review --state done` verifies its evidence against the spec journal on every harness (a `kind=review` entry created after the step opened; spec findings closed, out-of-scope, or deferred). What differs is `reviewer=<agent-id>`. On claude-code it must name a subagent this session dispatched after the step opened (`subagent_dispatch_since`), so the orchestrator — which has no agent id — can never pass; an unreadable transcript records it as claimed with a warning.
+    harnesses:
+      claude-code: {state: enforced}
+      opencode:
+        state: advisory
+        scope_note: "no dispatch reader for OpenCode sessions — `reviewer=<agent-id>` is recorded as claimed, with a warning; the spec-journal review and findings checks still hold"
+      hermes:
+        state: advisory
+        scope_note: no dispatch reader for delegate_task — `reviewer=<agent-id>` is recorded as claimed, with a warning; the spec-journal review and findings checks still hold
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
   - id: phase-sequence
     kind: interaction
     summary: fr run enforces spec/plan before implementation (`implement` declares `needs [spec, plan]`).

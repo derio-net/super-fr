@@ -5522,7 +5522,10 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
         ]
     )
     step(["run", "advance", "r1"])  # spec-review: running
-    step(["run", "resolve", "r1", "--step", "spec-review", "--state", "done"])
+    from tests.unit.spec_review_support import spec_review_evidence
+
+    spec_review = ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]
+    step([*spec_review, *spec_review_evidence(repo, spec_rel)])
     step(["run", "advance", "r1"])  # plan: running
     step(
         [
