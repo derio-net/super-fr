@@ -358,3 +358,8 @@ Found by dogfooding deliver on this run: _closeout_handoff_lines and closeout_br
 ### deliver-bg-suite · finding [open] (reviewer: out of scope) · deliver's tests= gate cannot credit a backgrounded suite run
 
 run_cmd.py:1660-1664 _verify_tests_log requires the log's mtime inside the window of the Bash call naming it; a run_in_background call's window ends at launch, so a backgrounded suite (which the long_commands brief rule tells agents to use) is always refused ('its bytes were not written by the command of yours that names it'). Also a log path held in a shell variable (> $L) is not recognised. Worked around this run by a foreground call (timeout 600000; ~4 min under -n auto).
+
+<!-- fr:journal kind=finding scope=plan id=deliver-bg-suite-resolved created=2026-09-25T15:09:21 state=open resolves=deliver-bg-suite out_of_scope=true -->
+### deliver-bg-suite-resolved · finding [out-of-scope] · resolves deliver-bg-suite: deliver's tests= gate cannot credit a backgrounded suite run
+
+Predates this change (the gate and the long_commands rule both shipped earlier); surfaced by this run's own deliver. Candidate fix: accept a background task's completion window, or match the task's output file.
