@@ -209,7 +209,7 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
             )
         else:
             lines.append(f"  git push -u origin {housekeeping_branch}")
-    lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
+        lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
     lines.append(f"  fr isolation down --branch {state.branch}")
 
     return "\n".join(lines)

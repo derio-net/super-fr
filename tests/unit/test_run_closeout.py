@@ -373,7 +373,8 @@ def test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_the
     assert "plan:" not in brief
     assert "Test Plan" not in brief
     assert "fr archive" not in brief
-    assert "fr isolation up --branch chore/archive-" not in brief
+    assert "fr isolation up --branch chore/" not in brief
+    assert "housekeeping PR" not in brief  # no housekeeping branch was ever created
     assert PR_URL in brief
     assert f"fr isolation verify-merge --branch {BRANCH}" in brief
     assert "fr status" in brief
