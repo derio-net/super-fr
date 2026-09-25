@@ -143,3 +143,8 @@ Full suite (phase 3): tests/unit/test_isolation_branch_classify.py::test_remote_
 ### p3-f1-resolved · finding [fixed] · resolves p3-f1: Phase-2 regression: test_remote_row_checks_the_validator_wrapper_in_origin_ref (phase 3)
 
 Regex updated to the phase-2 wording ('in origin/feat/x but no scripts/validate-plans.sh there'), equally specific to origin/<B>; test file green (35 passed). Done in phase 3 so the full-suite gate is green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-09-25T12:15:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Run commit message drops/misreports state and item (phase 3)
+
+Reviewer (important): _RunWrites.message() takes state from steps[step] — member resolves/claims lose it, gate clears read 'pending', advance omits the item. Spec §3.C format: <verb> <step>[ <item>] <state>.
