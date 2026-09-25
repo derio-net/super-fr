@@ -539,3 +539,8 @@ Predates this change; this branch added unobserved for agent-step gates only.
 ### p3-r11-resolved-2 · finding [deferred → #629] · resolves p3-r11: test_opencode_plugin_live flaky under parallel load
 
 Operator asked to file it; tracked.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cov-rsync-resolved-2 created=2026-09-26T00:15:40 state=open resolves=d-oos-cov-rsync tracked_by=#630 -->
+### d-oos-cov-rsync-resolved-2 · finding [deferred → #630] · resolves d-oos-cov-rsync: Local full suite with coverage races install.sh's rsync of the repo root (.coverage.* vanish, rsync exit 23)
+
+Operator asked to file it; tracked.
