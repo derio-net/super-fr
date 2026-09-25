@@ -223,9 +223,11 @@ state:
       note: legacy V6 pin, chain [2..7], test_migration_run_v7.py red; v6 fixture
         captured from 6d8200df (NOTE.md row)
     P2.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:12:09+00:00'
+      note: RunStateV6 frozen; fields removed; run->7; run_usage_split 6->7 (runner
+        learns companion paths); units cost readers + tripwire gone; status cost column
+        gone; fr run cost reads usage/, --recompute
     P2.T4.S3:
       state: ' '
       ticked_at: null
