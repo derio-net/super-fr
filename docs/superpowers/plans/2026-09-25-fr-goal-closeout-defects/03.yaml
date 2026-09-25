@@ -123,41 +123,46 @@ tasks:
 state:
   steps:
     P3.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:21:13+00:00'
+      note: 'RED: ImportError commit_paths'
     P3.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:21:56+00:00'
+      note: commit_paths extracted; commit_migration delegates; test_migration_commit.py
+        unmodified (103 passed with trigger tests)
     P3.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:21:56+00:00'
+      note: refusal reasons made generic during extraction (_UNCOMMITTED); no test
+        pinned the old 'migrated' wording, test_migration_commit.py untouched
     P3.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:22:56+00:00'
+      note: 'RED: ModuleNotFoundError fr.records_commit (5 tests)'
     P3.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:22:57+00:00'
+      note: fr/records_commit.py; 14 passed
     P3.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:24:37+00:00'
+      note: 'RED: 4 tests — no commit made (HEAD subject ''seed'', HEAD unchanged,
+        count 1!=2, no stderr line)'
     P3.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:51:21+00:00'
+      note: 'run_cmd: start/adopt/advance/resolve/claim wrapped by _commits_run_writes;
+        cursor saves + run_cmd:872 spec-journal append noted and committed once; 4
+        new tests green; run subset fallout fixed (see journal)'
     P3.T3.S3:
       state: ' '
       ticked_at: null
       note: null
     P3.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:27:42+00:00'
+      note: 'RED: 3 tests, HEAD subject still init/seed (no commit)'
     P3.T4.S2:
       state: ' '
       ticked_at: null
