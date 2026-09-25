@@ -158,3 +158,8 @@ Reviewer (important): commit_paths commits without --no-verify; per-command freq
 ### p3-r3 · finding [open] (reviewer: in scope) · index.lock race with a concurrently committing executor (phase 3)
 
 Reviewer (important): fr's record commit can hold index.lock while the executor commits in the same worktree; no retry.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m1 created=2026-09-25T12:15:02 phase=3 state=open review_scope=in -->
+### p3-m1 · finding [open] (reviewer: in scope) · fr plan rework / rework-add stage but never commit (phase 3)
+
+Reviewer (minor, borderline in): same class as the spec's rule 'fr commits its records'.
