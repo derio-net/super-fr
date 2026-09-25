@@ -193,3 +193,8 @@ Reviewer (minor, noted only).
 ### p3-m6-resolved · finding [refuted] · resolves p3-m6: Each record write costs ~9 git processes
 
 Constant per command, no O(n) scan added; reviewer rated it acceptable. A few git processes per fr invocation are negligible next to the command's own work.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-09-25T12:24:20 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Run commit message drops/misreports state and item
+
+692dd2a3: _RunWrites.outcome from resolve --state / claim --abandoned, grouped advance names member+item via _note_subject; pinned by test_run_cli.py::test_commit_subject_of_a_grouped_member_advance_claim_and_resolve, ::test_commit_subject_of_a_gate_clear_is_the_resolved_state, ::test_commit_subject_of_a_flat_resolve_and_a_cli_advance
