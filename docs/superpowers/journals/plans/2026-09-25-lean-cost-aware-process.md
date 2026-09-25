@@ -519,3 +519,8 @@ Not caused by this change: install.sh and coverage config are unchanged here; th
 ### d-oos-tests-window · finding [open] (reviewer: out of scope) · deliver's tests= gate cannot see a run_in_background suite (call window ends at launch)
 
 run_cmd.py _verify_tests_log: orchestrator_wrote_since windows are the Bash call's start..end; a backgrounded call ends immediately, so the log's mtime minutes later is outside it — contradicting the brief's long_commands rule that tells you to background long suites. Workaround used: foreground with a long timeout.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-tests-window-resolved created=2026-09-26T00:09:55 state=open resolves=d-oos-tests-window out_of_scope=true -->
+### d-oos-tests-window-resolved · finding [out-of-scope] · resolves d-oos-tests-window: deliver's tests= gate cannot see a run_in_background suite (call window ends at launch)
+
+Pre-existing gate behaviour (not introduced by this branch); found while delivering it.
