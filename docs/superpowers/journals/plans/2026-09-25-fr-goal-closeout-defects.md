@@ -223,3 +223,8 @@ c7cc8ad2: plan rework commits the rework folder + resolved spec row (— rework)
 ### p3-m3-resolved · finding [fixed] · resolves p3-m3: _staged_among fallback is not actually fail-closed
 
 c7cc8ad2: _staged_among returns None when git cannot answer and _commit_plan_writes commits nothing (one stderr line); docstring says so. Pinned by test_plan_cmd.py::test_staged_among_commits_nothing_when_git_cannot_answer
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-25T12:48:00 phase=3 -->
+### review-p3 · review · Phase 3 review (phase 3)
+
+Dispatched reviewer (opus) over 492b2577. Raised r1-r3 (important, in), m1-m3 (minor, in), m4/m5 (filed against phases 4/5), m6 (refuted: constant cost). r1-r3, m1-m3 fixed in 692dd2a3, 1c02f263, c7cc8ad2 by a dispatched fix agent with RED tests first; r2 settled by spec decision (record commits --no-verify, signing kept, index restored on failure). Full suite after final change: 5245 passed, 0 failed (scratchpad/p3-fixes-full-suite.log); orchestrator's independent pre-fix run 5235 passed, 0 failed.
