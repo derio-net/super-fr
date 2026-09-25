@@ -186,6 +186,27 @@ def test_fr_usage_is_refused_the_same_way(tmp_path: Path, monkeypatch: pytest.Mo
     assert "harness host" in " ".join(result.output.split())
 
 
+def test_fr_usage_checks_the_repo_its_repo_option_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r30: the operated repo is the subcommand's `--repo`, not the cwd's."""
+    plain = _git_repo(tmp_path / "plain")
+    marked = _git_repo(tmp_path / "wt")
+    _marker(marked, "worktree", "devcontainer")
+    _in_container(monkeypatch)
+
+    refused = runner.invoke(
+        app, ["usage", "backfill", "--repo", str(marked)], env={"VK_REPO_ROOT": str(plain)}
+    )
+    assert refused.exit_code == 2
+    assert "harness host" in " ".join(refused.output.split())
+
+    allowed = runner.invoke(
+        app, ["usage", "backfill", "--repo", str(plain)], env={"VK_REPO_ROOT": str(marked)}
+    )
+    assert "harness host" not in allowed.output, allowed.output
+
+
 def test_a_repo_without_a_marker_inside_a_container_is_not_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -45,13 +45,19 @@ usage_app = typer.Typer(
 
 @usage_app.callback()
 def _usage_group() -> None:
+    """What harness sessions and runs cost (read-only)."""
+
+
+def _require_host(repo: Path | None) -> None:
     """Runs on the harness host (spec 2026-09-25 §5.B.6): refused from inside
-    a devcontainer-mode workspace, whose transcripts are on the host."""
+    a devcontainer-mode workspace, whose transcripts are on the host. Checked
+    against the repo the SUBCOMMAND operates on — its `--repo`, else the
+    resolved repo root — not the group's cwd (p2-r30)."""
     from fr.commands.common import resolve_repo_root
     from fr.isolation.where import HostSideError, require_harness_host
 
     try:
-        require_harness_host(resolve_repo_root(), "usage")
+        require_harness_host(repo.resolve() if repo else resolve_repo_root(), "usage")
     except HostSideError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(2) from e
@@ -110,6 +116,7 @@ def collect(
     repo: RepoOpt = None,
 ) -> None:
     """Normalize sessions into the usage cache (`$HOME/.cache/fr/usage/`)."""
+    _require_host(repo)
     _check_harness(harness)
     if not run and not session:
         raise _fail("name at least one --run or --session")
@@ -155,6 +162,7 @@ def report(
     ] = None,
 ) -> None:
     """Render collected usage (reading live for any session not yet collected)."""
+    _require_host(repo)
     _check_harness(harness)
     if fmt not in ("table", "html"):
         raise _fail(f"unknown --format {fmt!r} (table | html)")
@@ -200,6 +208,7 @@ def backfill_cmd(repo: RepoOpt = None) -> None:
     new files only — never a run cursor. Re-running is a no-op."""
     from fr.usage.backfill import backfill
 
+    _require_host(repo)
     root = _repo(repo)
     report = backfill(root, os.environ)
     for run_id, error in report.failed:
