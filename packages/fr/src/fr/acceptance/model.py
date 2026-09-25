@@ -99,12 +99,18 @@ class Matrix(BaseModel):
 
 def load_matrix(path: Path) -> Matrix:
     """Parse + validate `matrix.yaml`; every failure is an AcceptanceError."""
-    import yaml
-
     if not path.exists():
         raise AcceptanceError(f"no acceptance matrix at {path}")
+    return parse_matrix(path.read_text())
+
+
+def parse_matrix(text: str) -> Matrix:
+    """`load_matrix` over text already in memory — what the step-record engine
+    validates a matrix edit against before it writes anything."""
+    import yaml
+
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:
         raise AcceptanceError(f"matrix is not valid YAML: {e}") from e
     if not isinstance(data, dict):

@@ -133,6 +133,9 @@ class _RunWrites:
     loaded_cursor: str | None = None
     last: RunState | None = None
     paths: dict[Path, list[Path]] = field(default_factory=dict)
+    # The outcome of the last commit this command made — the step-record
+    # engine reports it in its one line (spec 2026-09-25 §5.C.2.4).
+    last_outcome: CommitOutcome | None = None
 
     def note(self, repo_root: Path, path: Path) -> None:
         self.paths.setdefault(repo_root, []).append(path)
@@ -163,6 +166,8 @@ class _RunWrites:
         outcome: CommitOutcome | None = None
         for root, paths in pending.items():
             outcome = commit_records(root, paths, self.message())
+        if outcome is not None:
+            self.last_outcome = outcome
         return outcome
 
 
@@ -3538,6 +3543,8 @@ def _resolve_member(
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
     # review this gate exists to make impossible.
+    if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
+        _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
     verified = _verified_evidence(
         repo_root,
         state,
@@ -3585,7 +3592,9 @@ def _resolve_member(
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id to resolve (must be `running`)."),
-    state_value: str = typer.Option(..., "--state", help="done | failed."),
+    state_value: str | None = typer.Option(
+        None, "--state", help="done | failed (required unless --record)."
+    ),
     emitted: list[str] = typer.Option(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
     ),
@@ -3636,6 +3645,13 @@ def resolve_cmd(
     model: str | None = typer.Option(
         None, "--model", help="The model actually dispatched, alongside --agent."
     ),
+    record_file: Path | None = typer.Option(
+        None,
+        "--record",
+        help="The step's record (docs/superpowers/runs/<run>.records/<step>[__<item>].yaml): "
+        "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
+        "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -3666,6 +3682,52 @@ def resolve_cmd(
       verdict; `failed` records a declined gate. `resolve` executes nothing,
       ever.
     """
+    if record_file is not None:
+        if state_value is not None or emitted or evidence:
+            err_console.print(
+                "[red]--record carries the outcome, evidence and emitted artifacts — "
+                "do not pass --state/--evidence/--emitted with it[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        _resolve_with_record(run_id, step_id, item, record_file)
+        return
+    if state_value is None:
+        err_console.print("[red]--state done|failed is required (or pass --record <file>)[/red]")
+        raise typer.Exit(2)
+    _resolve_body(
+        run_id=run_id,
+        step_id=step_id,
+        state_value=state_value,
+        emitted=emitted,
+        evidence=evidence,
+        item=item,
+        no_questions=no_questions,
+        reason=reason,
+        answered_by=answered_by,
+        agent=agent,
+        harness=harness,
+        model=model,
+    )
+
+
+def _resolve_body(
+    *,
+    run_id: str,
+    step_id: str,
+    state_value: str,
+    emitted: list[str],
+    evidence: list[str],
+    item: str | None,
+    no_questions: bool = False,
+    reason: str | None = None,
+    answered_by: str = "agent",
+    agent: str | None = None,
+    harness: str | None = None,
+    model: str | None = None,
+) -> None:
+    """`fr run resolve`'s body, callable in process — the flag form and the
+    step-record engine (`fr.record.apply`) both run exactly this."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
         raise typer.Exit(2)
@@ -3916,6 +3978,180 @@ def resolve_cmd(
             repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
         ):
             console.print(line, soft_wrap=True)
+
+
+# --- step records (spec 2026-09-25-lean-cost-aware-process §5.C.2) ----------
+
+
+@dataclass(frozen=True)
+class InProcessResolve:
+    """What `resolve_in_process` hands the step-record engine back."""
+
+    committed: bool
+    next_step: str | None
+    notices: tuple[str, ...]
+
+
+def _next_unit(
+    repo_root: Path, run_id: str, step_id: str, item: str | None, done: bool
+) -> str | None:
+    """The unit the next `fr run advance` briefs, as `step [item]` — for the
+    step-record line. `None` when the run is complete."""
+    here = f"{step_id} {item}" if item else step_id
+    if not done:
+        return f"{here} (retry)"
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+        _step, parent = _find_step(manifest, step_id)
+    except (RunStateError, WorkflowError, AdoptError):
+        return None
+    if parent is not None:
+        grec = state.steps.get(parent.id)
+        if grec is not None and grec.state != "done":
+            try:
+                agentic, _manual = _group_phases(repo_root, state)
+            except (RunStateError, AdoptError):
+                return parent.id
+            items = units.unit_states(grec)
+            for key in _expected_group_items(parent, agentic):
+                if items.get(key) != "done":
+                    unit, _, member = key.rpartition("/")
+                    return f"{member} {unit}"
+            return parent.id
+    cursor = state.steps.get(state.cursor)
+    if (
+        cursor is not None
+        and cursor.state == "done"
+        and _next_step_id(manifest, state.cursor) is None
+    ):
+        return None
+    return state.cursor
+
+
+def resolve_in_process(
+    repo_root: Path,
+    run_id: str,
+    *,
+    step_id: str,
+    item: str | None,
+    state_value: str,
+    evidence: dict[str, str],
+    emitted: dict[str, str],
+    also_commit: list[Path],
+) -> InProcessResolve:
+    """`fr run resolve` for the step-record engine: the SAME body the flags run
+    (every gate included), with the engine's written paths noted into the same
+    commit, and the body's own stdout held back — the engine prints one line.
+
+    `evidence.answered_by` is the one non-evidence key a record's evidence may
+    carry: who answered the step's operator gate (`--answered-by`).
+    """
+    import contextlib
+    import io
+    import sys
+
+    offered = dict(evidence)
+    answered_by = offered.pop("answered_by", "agent")
+    writes = _RunWrites(verb="resolve", step=step_id, item=item, outcome=state_value)
+    for path in also_commit:
+        writes.note(repo_root, path)
+    token = _RUN_WRITES.set(writes)
+    held = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(held):
+            _resolve_body(
+                run_id=run_id,
+                step_id=step_id,
+                state_value=state_value,
+                emitted=[f"{k}={v}" for k, v in emitted.items()],
+                evidence=[f"{k}={v}" for k, v in offered.items()],
+                item=item,
+                answered_by=answered_by,
+            )
+            _capture_on_new_host(writes, {"step_id": step_id})
+        writes.commit()
+    except BaseException:
+        writes.paths = {}  # a refusal commits nothing; the engine restores the bytes
+        sys.stderr.write(held.getvalue())
+        raise
+    finally:
+        _RUN_WRITES.reset(token)
+    outcome = writes.last_outcome
+    # The body's first line restates what the engine's line says; anything
+    # after it (a group-done line, deliver's closeout handoff) is kept.
+    notices = tuple(line for line in held.getvalue().splitlines()[1:] if line.strip())
+    return InProcessResolve(
+        committed=outcome is not None and (outcome.committed or outcome.unchanged),
+        next_step=_next_unit(repo_root, run_id, step_id, item, state_value == "done"),
+        notices=notices,
+    )
+
+
+def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_file: Path) -> None:
+    """`fr run resolve --record`: parse, fill run/step/item, apply — one line."""
+    from fr.record.apply import RecordRefusedError, apply_record
+    from fr.record.model import RecordError, load_record
+
+    repo_root = resolve_repo_root()
+    path = record_file if record_file.is_absolute() else Path.cwd() / record_file
+    try:
+        record = load_record(path)
+    except RecordError as e:
+        err_console.print(f"[red]{e}[/red] Nothing applied.", soft_wrap=True, markup=False)
+        raise typer.Exit(2) from e
+    for name, flag, value in (("step", "--step", step_id), ("item", "--item", item)):
+        mine = getattr(record, name)
+        if value is not None and mine is not None and mine != value:
+            err_console.print(
+                f"record names {name} {mine!r} but {flag} is {value!r} — nothing applied",
+                markup=False,
+            )
+            raise typer.Exit(2)
+    record = record.model_copy(
+        update={"run": record.run or run_id, "step": step_id, "item": record.item or item}
+    )
+    try:
+        outcome = apply_record(repo_root, run_id, record, record_file=path)
+    except RecordRefusedError as e:
+        err_console.print(f"refused: {e} — nothing applied", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
+    for notice in outcome.notices:
+        err_console.print(notice, markup=False, soft_wrap=True)
+    typer.echo(outcome.line)
+
+
+def _refactor_gate(repo_root: Path, state: RunState, key: str, phase_n: int | None) -> None:
+    """The refactor-or-justify gate, moved here from `fr plan self-review`
+    (spec 2026-09-25 §5.C.2.2): resolving a `plan:ticks` unit `done` needs,
+    for every multi-step task of its phase with no refactor step, a reason —
+    a record's `refactor:` entry (journalled as `no-refactor-because`) or,
+    for a run started before records existed, that journal entry itself."""
+    from fr.parser import PlanSchemaError, parse
+    from fr.record.gates import refactor_gaps
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None or phase_n is None:
+        return
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError:
+        return  # `_group_phases` already refused an unreadable plan
+    gaps = refactor_gaps(plan, phase_n)
+    if not gaps:
+        return
+    err_console.print(
+        f"[red]{key}: refused — task(s) {', '.join(gaps)} have no refactor step and no "
+        "refactor reason.[/red]",
+        soft_wrap=True,
+    )
+    err_console.print(
+        f"  add `refactor: {{{gaps[0]}: <why there was nothing to clean>}}` to the step "
+        "record (or journal a `no-refactor-because` discovery naming the task)",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
