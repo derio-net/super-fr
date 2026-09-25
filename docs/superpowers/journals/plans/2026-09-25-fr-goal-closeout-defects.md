@@ -273,3 +273,8 @@ closeout_brief omits the directory; only the transient handoff line has it. Afte
 ### p4-r4 · finding [open] (reviewer: in scope) · No test that resolved (deferred/fixed) out-of-scope findings are excluded from the brief (phase 4)
 
 test gap on the effective-state fold's exclusion path.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-09-25T14:00:55 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · No test for missing PR / spec / plan fallbacks in the brief (phase 4)
+
+closeout.py:96 and the if spec_path/plan_path guards are uncovered.
