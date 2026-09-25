@@ -139,3 +139,8 @@ opencode.py: ESTIMATED_PROVIDERS (github-copilot prefix, confirmed against a liv
 ### p1-r2-resolved · finding [fixed] · resolves p1-r2: Classifier tests pass even if unwrap/prefix-strip were a no-op; $VAR substitution untested
 
 Added the reviewer's four shapes, but they pass even with _unwrap a no-op. So also added UNWRAP_DEPENDENT cases (isolation exec -- git, bash -lc 'git', GIT_PAGER=cat git, $F and ${F} heredoc writes to plan/code) and test_these_cases_need_the_unwrap, which monkeypatches _unwrap to identity and asserts each case changes answer.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-09-25T20:22:07 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: Hermes/OpenCode readers catch only sqlite3.Error; one bad row crashes the report
+
+hermes.py and opencode.py: body moved to _read(); read() catches sqlite3.Error, then Exception, and returns unavailable (the claude_code.py pattern). Tests over DB copies: non-numeric token_count, bad timestamp, invalid UTF-8 (Hermes); overflowing timestamp, invalid UTF-8, text timestamp (OpenCode).
