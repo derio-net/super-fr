@@ -343,3 +343,8 @@ fr acceptance set-status is the whole task — a CLI invocation that rewrites th
 ### review-p5 · review · Phase 5 review (phase 5)
 
 Dispatched reviewer (sonnet) over 618fba30..HEAD: no in-scope findings; verdict Ready. Checked every new SKILL.md/explainer claim against closeout.py and run_cmd.py; no stale closeout prose elsewhere; e2e test real (only _pr faked); mirrors in sync; line-cap squeeze kept every fact. One observation (plan step broader than needed) — not a defect.
+
+<!-- fr:journal kind=finding scope=plan id=p4-dogfood created=2026-09-25T15:02:33 phase=4 state=open review_scope=in -->
+### p4-dogfood · finding [open] (reviewer: in scope) · Closeout handoff and brief name the feature worktree as 'the base clone' (phase 4)
+
+Found by dogfooding deliver on this run: _closeout_handoff_lines and closeout_brief print repo_root, which inside an fr workspace is the linked feature worktree (reaped by closeout), labelled 'the base clone'. Must resolve the primary checkout (parent of git rev-parse --git-common-dir).
