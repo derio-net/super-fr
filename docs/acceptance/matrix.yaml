@@ -4052,3 +4052,43 @@ rows:
     notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
       test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
       is this change''s own deliver.'
+  - id: closeout-verify-merge-default-branch
+    capability: fr-goal-closeout
+    acceptance: An operator on a repo whose default branch is master verifies a merged
+      PR with 'fr isolation verify-merge --branch <b>' and no flags; a missing merge-base
+      is a clean error naming --default-branch, never a traceback.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+  - id: closeout-wrapper-ships-with-first-plan
+    capability: fr-goal-closeout
+    acceptance: The first 'fr plan create' in a repo ships the validator wrapper with
+      the plan, so a post-merge housekeeping workspace comes up without a hand-committed
+      wrapper; the guard's remedy is the harness-neutral 'fr init validator-wrapper'.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+  - id: closeout-fr-commits-own-records
+    capability: fr-goal-closeout
+    acceptance: fr commits its own record writes (run cursor, plan edits, journal entries)
+      on a feature branch, so fr archive / fr repair / fr isolation down never refuse
+      over fr's own uncommitted state.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+  - id: closeout-pickup-run-handoff
+    capability: fr-goal-closeout
+    acceptance: After deliver, fr prints one exact command; 'fr pickup --run <id>' in
+      a fresh session prints a self-contained closeout brief (verify-merge, Test Plan,
+      archive, down) from the run file.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
