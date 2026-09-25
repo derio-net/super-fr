@@ -59,3 +59,8 @@ tests/unit/test_usage_classify.py:14-33.
 ### p1-r3 · finding [open] (reviewer: in scope) · Hermes/OpenCode readers catch only sqlite3.Error; one bad row crashes the report (phase 1)
 
 readers/hermes.py:93,118; opencode.py:63,72 vs spec §5.A.7.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-09-25T20:03:24 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · NULL per-model Hermes cost coerced to 0.0 and priced at $0 (phase 1)
+
+hermes.py:105,111 + rollup.py:126-133.
