@@ -188,3 +188,8 @@ Reviewer (minor, phase 5): fr now commits its cursor after the review ok; the sk
 ### p3-m6 · finding [open] (reviewer: in scope) · Each record write costs ~9 git processes (phase 3)
 
 Reviewer (minor, noted only).
+
+<!-- fr:journal kind=finding scope=plan id=p3-m6-resolved created=2026-09-25T12:15:06 state=refuted resolves=p3-m6 -->
+### p3-m6-resolved · finding [refuted] · resolves p3-m6: Each record write costs ~9 git processes
+
+Constant per command, no O(n) scan added; reviewer rated it acceptable. A few git processes per fr invocation are negligible next to the command's own work.
