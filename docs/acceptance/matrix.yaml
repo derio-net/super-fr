@@ -4271,7 +4271,11 @@ rows:
       tests were deleted needs no hand-edited YAML.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
-    levels: {}
-    status: not-implemented
-    notes: gh#624. Target level unit (tests/unit/test_acceptance_set_status.py), status
-      ci on merge.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_set_status.py
+    status: ci
+    notes: gh#624. fr acceptance set-status --drop-level removes a stale evidence ref
+      in the same rewrite as the status move. Absent, contradictory and unknown-level
+      drops exit 2 with the matrix and reports byte-identical. Engine refusals are pinned
+      in test_record_apply.py.
