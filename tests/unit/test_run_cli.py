@@ -6424,3 +6424,31 @@ def test_advance_on_an_already_finished_run_reports_the_cursor_as_committed(
     assert f"cursor committed as {head_sha}" in result.stdout
     assert "cursor NOT committed" not in result.stdout
     assert "fr: not committed" not in result.stderr
+
+
+@pytest.mark.parametrize("harness", ["opencode", "hermes"])
+def test_a_gate_on_a_harness_with_no_question_reader_records_unobserved(
+    tmp_path: Path, harness: str
+) -> None:
+    """p2-r28 (spec 2026-09-25-lean-cost-aware-process §5.B.7): wherever the
+    gate cannot observe — any harness fr has no question reader for, not only
+    Claude Code or none — it records `unobserved` in the step's evidence and
+    warns. The `kind: agent` + `gate: operator` shape is fr-goal's brainstorm."""
+    from fr.run import units
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
+    (repo / "s.md").write_text("# spec\n")
+    env = {"FR_HARNESS": harness}
+    start = ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"]
+    _invoke_as_harness(repo, shipped, start, env)
+    _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], env)
+    resolve = ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    result = _invoke_as_harness(repo, shipped, [*resolve, "--emitted", "spec=s.md"], env)
+
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    assert "unobserved=operator-gate" in flat and harness in flat
+    record = load_run_state(repo, "r1").steps["brainstorm"]
+    assert units.evidence_of(record, "step/brainstorm").get("unobserved") == "operator-gate"

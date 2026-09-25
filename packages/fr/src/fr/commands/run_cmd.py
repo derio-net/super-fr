@@ -195,6 +195,8 @@ def _why_unobservable() -> str:
         harness = None
     if harness is None:
         return "no harness detected"
+    if harness != "claude-code":
+        return f"fr has no transcript reader for {harness}'s questions"
     return "no readable transcript for this session"
 
 
@@ -975,21 +977,17 @@ def _gate_provenance(
             soft_wrap=True,
         )
         return "agent"
-    try:
-        harness_now = detect_harness(os.environ)
-    except HarnessError:
-        harness_now = None
-    # Claude Code enforces this gate, so failing to observe it is news; with
-    # NO harness detected nothing observed it at all (§5.B.7). OpenCode and
-    # Hermes were told at `advance` that the gate is not enforced there.
-    if harness_now in ("claude-code", None):
-        _note_unobserved("operator-gate")
-        err_console.print(
-            f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
-            f"so `answered_by: {claimed}` is recorded as claimed, unverified "
-            "(evidence: unobserved=operator-gate).[/yellow]",
-            soft_wrap=True,
-        )
+    # Wherever the gate cannot observe — no harness, no readable transcript,
+    # or a harness fr has no question reader for (OpenCode, Hermes) — it says
+    # so on the record (§5.B.7, p2-r28); `advance` already told the last two
+    # that the gate is not enforced there, which is no reason to be quiet now.
+    _note_unobserved("operator-gate")
+    err_console.print(
+        f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
+        f"so `answered_by: {claimed}` is recorded as claimed, unverified "
+        "(evidence: unobserved=operator-gate).[/yellow]",
+        soft_wrap=True,
+    )
     return claimed  # type: ignore[return-value]  # validated by the caller
 
 
