@@ -219,3 +219,8 @@ fr.usage.file.session_entry/dump_usage build plain mappings field by field (no m
 ### p2-matrix-ref-edit · discovery · Deviation: one matrix ref removed by hand (no verb removes a level) (phase 2)
 
 Deleting tests/unit/test_run_main_session.py (it tested the removed main_session measurement) left row fr-goal-main-session-cost citing a missing file, which fails fr acceptance check. fr acceptance set-status can only ADD levels, so that one ref line was removed by hand, then the row was re-pointed with the T7.S2 set-status command (level test_usage_capture.py) - done in T4 so the suite stayed green; set-status regenerated the reports. Telemetry's attempt-measurement code (measure_attempt / measure_dispatch / TranscriptReader.measure) is left in place with no caller in run_cmd; main-session measurement was deleted with its model.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-backfill-rule created=2026-09-25T21:14:15 phase=2 -->
+### p2-backfill-rule · discovery · Backfill: transcripts win, else the cursor's own figures (phase 2)
+
+Per archived run: if any session the cursor names is readable here, the backfill capture is those sessions read (exact dollars where kept); otherwise the cursor's own figures (v5/v6 estimate/measured/main_session via split_usage, v1-v4 accounting via v4_to_v5 first) are carried with usd_source none beside the unavailable sessions. A run that already has a usage file (active or archived) is skipped, so a re-run is a no-op; archived cursors are only read. no-refactor-because: P2.T5 - one fresh module shaped by its tests.
