@@ -278,3 +278,8 @@ test gap on the effective-state fold's exclusion path.
 ### p4-r5 · finding [open] (reviewer: in scope) · No test for missing PR / spec / plan fallbacks in the brief (phase 4)
 
 closeout.py:96 and the if spec_path/plan_path guards are uncovered.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-09-25T14:06:23 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: Handoff prints 'push it' even when the cursor commit was refused
+
+a216b4a5: commit_records/_RunWrites.commit()/_commit_run_writes_now() return CommitOutcome; closeout handoff threads it as committed=, printing a NOT-committed line instead of a sha when refused. Test: test_run_cli.py::test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pushed
