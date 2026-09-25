@@ -315,3 +315,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f3 created=2026-09-26T00:54:49 phase=3 state=open review_scope=in -->
 ### r3-f3 · finding [open] (reviewer: in scope) · MEDIUM: batch merge never checks collected-config freshness (spec §3.I), yet runs its version.files/set/relock (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f4 created=2026-09-26T00:54:52 phase=3 state=open review_scope=in -->
+### r3-f4 · finding [open] (reviewer: in scope) · MEDIUM: p3-merge-method squash default can silently merge with the wrong method; read the repo default via gh repo view (viewerDefaultMergeMethod/*Allowed), --method as override (phase 3)
