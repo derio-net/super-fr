@@ -204,7 +204,9 @@ class TestModelsApply:
         assert res.exit_code == 0, res.output
         assert "nothing to update (no opencode agent files found)" in res.output.lower()
 
-    def test_apply_reports_discovered_count_when_files_already_correct(self, tmp_path: Path) -> None:
+    def test_apply_reports_discovered_count_when_files_already_correct(
+        self, tmp_path: Path
+    ) -> None:
         """Phase 1.T1: when agent files exist and are already correct, report
         the count as 'already up to date', not the confusing 'nothing to update'
         message that implies there were no files."""
@@ -240,5 +242,6 @@ class TestModelsApply:
         assert res.exit_code == 0, res.output
         # Should report the count of matching agent files, not "nothing to update"
         assert "3 agent files already up to date" in res.output.lower(), (
-            f"apply must report discovered count for idempotent materialization, got: {res.output!r}"
+            f"apply must report discovered count for idempotent "
+            f"materialization, got: {res.output!r}"
         )

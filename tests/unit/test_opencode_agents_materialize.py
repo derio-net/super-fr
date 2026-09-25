@@ -120,9 +120,10 @@ class TestMaterializeAgents:
         for them."""
         from fr.opencode_agents import materialize_agents
 
-        changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
+        result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
 
-        assert changes == []
+        assert result.considered == 0
+        assert result.changes == []
 
     def test_missing_files_in_an_existing_dir_is_also_a_reported_no_op(
         self, tmp_path: Path
@@ -131,22 +132,23 @@ class TestMaterializeAgents:
 
         (tmp_path / "opencode" / "agent").mkdir(parents=True)
 
-        changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
+        result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
 
-        assert changes == []
+        assert result.considered == 0
+        assert result.changes == []
 
     def test_returns_what_it_changed(self, config_home: Path) -> None:
         from fr.opencode_agents import materialize_agents
 
-        changes = materialize_agents(config_home, models_cfg={"opencode": {"hard": "model-X"}})
+        result = materialize_agents(config_home, models_cfg={"opencode": {"hard": "model-X"}})
 
         # One `-hard` file per canonical agent: fr-phase-executor and, since
         # 2026-09-24 spec §E, fr-spec-reviewer.
-        assert sorted(c.path.name for c in changes) == [
+        assert sorted(c.path.name for c in result.changes) == [
             "fr-phase-executor-hard.md",
             "fr-spec-reviewer-hard.md",
         ]
-        change = next(c for c in changes if c.path.name == "fr-phase-executor-hard.md")
+        change = next(c for c in result.changes if c.path.name == "fr-phase-executor-hard.md")
         assert change.path == _agent_dir(config_home) / "fr-phase-executor-hard.md"
         assert change.tier == "hard"
         assert change.old_model is None
@@ -211,10 +213,10 @@ def test_a_file_missing_the_anchor_is_reported_as_a_problem_not_a_change(
     )
     before = path.read_text()
 
-    changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+    result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
 
-    assert len(changes) == 1
-    (change,) = changes
+    assert len(result.changes) == 1
+    (change,) = result.changes
     assert change.problem is not None, "a file that could not be rewritten must say so"
     assert "mode: subagent" in change.problem
     assert change.new_model is None, "must not claim a model it did not write"
@@ -267,9 +269,10 @@ def test_an_already_correct_file_is_not_rewritten(tmp_path: Path) -> None:
     )
     before = path.stat().st_mtime_ns
 
-    changes = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
+    result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "provider/B"}})
 
-    assert changes == []
+    assert result.changes == []
+    assert result.considered == 1, "one tier-suffixed agent file was discovered"
     assert path.stat().st_mtime_ns == before, "an already-correct file must not be rewritten"
 
 
@@ -290,15 +293,15 @@ def test_reports_count_of_discovered_agent_files_separately_from_changes(
 
     result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
 
-    assert hasattr(
-        result, "considered"
-    ), "result must carry a considered count separate from changes"
+    assert hasattr(result, "considered"), (
+        "result must carry a considered count separate from changes"
+    )
     assert result.considered == 0, "unrelated .md files must not count"
     assert result.changes == [], "no tier-suffixed agent files means no changes"
 
     # Case 2: Agent files exist and are already correct — discovered count > 0
     agent_dir = tmp_path / "opencode" / "agent"
-    path = _seed(
+    _seed(
         agent_dir,
         "x-hard.md",
         '---\ndescription: "x"\nmode: subagent\nmodel: model-X\n---\nbody\n',
@@ -307,6 +310,6 @@ def test_reports_count_of_discovered_agent_files_separately_from_changes(
     result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
 
     assert result.considered == 1, "one tier-suffixed agent file was discovered"
-    assert (
-        result.changes == []
-    ), "correct file not rewritten, so changes is empty, but considered is not"
+    assert result.changes == [], (
+        "correct file not rewritten, so changes is empty, but considered is not"
+    )
