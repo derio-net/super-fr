@@ -307,9 +307,8 @@ def test_a_runner_without_from_env_is_refused(
 
 
 def _brief(reserved: str | None = "4.22.0", judgements: str = JUDGEMENTS) -> str:
-    from fr.triage.model import Judgements
-
     import yaml
+    from fr.triage.model import Judgements
 
     j = Judgements.model_validate(yaml.safe_load(judgements))
     return render_brief(
@@ -417,3 +416,299 @@ def test_dispatch_event_records_the_handle(
     assert event.runner == "fake"
     assert event.branch == "feat/batch-lifecycle"
     assert event.reserved_version is None  # no version block declared
+
+
+# ------------------------------------------------ gates (§3.C step 6, Test Plan 8)
+
+DISPATCHED = (
+    JUDGEMENTS
+    + """\
+    events:
+      - {kind: dispatch, at: 2026-09-25T10:00:00Z, runner: fake, handle: "w1:p0",
+         branch: feat/batch-lifecycle, reserved_version: 4.22.0}
+"""
+)
+CANCELLED = (
+    DISPATCHED
+    + """\
+      - {kind: cancel, at: 2026-09-25T11:00:00Z, reason: split}
+"""
+)
+
+
+def _pr(state: str = "OPEN", **kw: Any) -> Any:
+    from fr.triage.model import PullRequest
+
+    return PullRequest(
+        repo=REPO,
+        number=kw.pop("number", 700),
+        title="batch PR",
+        state=state,
+        is_draft=kw.pop("is_draft", True),
+        url=f"https://github.com/{REPO}/pull/700",
+        head_ref="feat/batch-lifecycle",
+        created_at="2026-09-25T10:30:00+00:00",
+        **kw,
+    )
+
+
+@pytest.mark.parametrize("live", [False, True], ids=["runner-idle", "runner-live"])
+@pytest.mark.parametrize("stage", ["dispatched", "pr-open"])
+def test_the_stage_gate_refuses_a_dispatched_or_pr_open_batch(
+    tmp_path: Path,
+    gh: FakeGhClient,
+    runner: FakeRunner,
+    checkout: FakeCheckout,
+    stage: str,
+    live: bool,
+) -> None:
+    facts = _facts(prs=[_pr()]) if stage == "pr-open" else _facts()
+    _state(tmp_path, facts, DISPATCHED)
+    if live:
+        runner.live = {ITEM}
+    before = (tmp_path / "judgements.yaml").read_bytes()
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert stage in out and "--repair" in out
+    assert runner.dispatched == [] and _mutations(gh) == []
+    assert (tmp_path / "judgements.yaml").read_bytes() == before
+
+
+def test_a_cancelled_batch_may_be_dispatched_again_on_its_existing_branch(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=CANCELLED)
+    checkout.remote_branches = {"feat/batch-lifecycle"}  # left by the first run
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert len(runner.dispatched) == 1
+
+
+def test_the_branch_gate_refuses_a_proposed_batch_already_on_origin(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    checkout.remote_branches = {"feat/batch-lifecycle"}
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert "already dispatched from another scope" in out
+    assert runner.calls == [] and _mutations(gh) == []
+
+
+def test_can_dispatch_is_consulted_before_preflight(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Spec §3.C step 6.3 (review r2p-f12b): the cheap routing gate runs first,
+    and a refusal there reaches no backend call at all."""
+    _state(tmp_path)
+    runner.accepts = False
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert "runner `fake` does not take run-unit work" in out
+    assert runner.calls == ["can_dispatch"]
+
+
+def test_the_protocol_calls_run_in_the_spec_order(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert runner.calls == ["can_dispatch", "preflight", "existing_dispatches", "dispatch"]
+
+
+def test_a_preflight_refusal_writes_nothing(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    runner.refusal = "herdr is not on PATH"
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert "herdr is not on PATH" in out
+    assert "dispatch" not in runner.calls and _mutations(gh) == []
+
+
+def test_a_live_item_is_refused_by_name(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    runner.live = {ITEM}
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert ITEM in out
+    assert "dispatch" not in runner.calls and _mutations(gh) == []
+
+
+# ------------------------------------------------------ forge writes (§3.E)
+
+
+def test_label_and_marker_reach_every_member_only_after_the_runner_dispatched(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    order: list[str] = []
+    real_dispatch = runner.dispatch
+
+    def _dispatch_first(item: WorkItem) -> str | None:
+        order.append(f"runner:{len(_mutations(gh))}")
+        return real_dispatch(item)
+
+    runner.dispatch = _dispatch_first  # type: ignore[method-assign]
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert order == ["runner:0"]  # no forge write before the runner accepted
+    for n in MEMBERS:
+        assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+        (comment,) = gh.issue_comments[(REPO, n)]
+        assert comment["body"].startswith(f"<!-- fr-batch:{ITEM} -->")
+        assert "feat/batch-lifecycle" in comment["body"]
+        assert "w2:p1K" not in comment["body"]  # the handle never reaches the forge
+    assert "fr:in-progress" not in gh.issues[(REPO, 420)].labels
+
+
+def test_a_failed_dispatch_writes_nothing(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    runner.fail = RuntimeError("tab create failed")
+    before = (tmp_path / "judgements.yaml").read_bytes()
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 1
+    assert "tab create failed" in out
+    assert _mutations(gh) == []
+    assert (tmp_path / "judgements.yaml").read_bytes() == before
+
+
+def test_a_runner_without_a_handle_records_the_item_id(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Review r2p-handle: `Runner.dispatch` may return None; the event's handle
+    is a required str, so None maps to the item id, the runner's own identity
+    for the dispatch (`existing_dispatches` matches by it)."""
+    _state(tmp_path)
+    runner.handle = None
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    (event,) = load_judgements(tmp_path / "judgements.yaml").batches[0].events
+    assert isinstance(event, DispatchEvent)
+    assert event.handle == ITEM
+
+
+def test_a_forge_failure_after_dispatch_keeps_the_event_and_names_repair(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    gh.fail_on_mutation = 3  # ensure_labels, 577 label + comment, then 575 label fails
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 1
+    assert "super-fr#575" in out and "--repair" in out
+    (event,) = load_judgements(tmp_path / "judgements.yaml").batches[0].events
+    assert isinstance(event, DispatchEvent)
+
+
+def test_a_redispatch_after_cancel_posts_a_new_marker(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=CANCELLED)
+    for n in MEMBERS:
+        gh.issue_comments[(REPO, n)] = [
+            {"body": f"<!-- fr-batch:{ITEM} -->\nDispatched", "created_at": "2026-09-25T10:00Z"},
+            {"body": f"<!-- fr-batch-withdrawn:{ITEM} -->\nbatch withdrawn", "created_at": "x"},
+        ]
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    for n in MEMBERS:
+        assert len(gh.issue_comments[(REPO, n)]) == 3
+
+
+# ------------------------------------------------------------ --repair (§3.C)
+
+
+def test_repair_calls_no_runner_keeps_the_reservation_and_posts_no_duplicate(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, _facts(config=VERSION_CONFIG), DISPATCHED)
+    gh.issue_comments[(REPO, 577)] = [
+        {"body": f"<!-- fr-batch:{ITEM} -->\nDispatched", "created_at": "2026-09-25T10:00Z"}
+    ]
+    checkout.files[("origin/main", "pyproject.toml")] = PYPROJECT.replace("4.21.1", "4.30.0")
+    before = (tmp_path / "judgements.yaml").read_bytes()
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 0, out
+    assert runner.calls == [] and runner.loaded == []  # type: ignore[attr-defined]
+    assert (tmp_path / "judgements.yaml").read_bytes() == before  # no new event
+    assert len(gh.issue_comments[(REPO, 577)]) == 1  # the marker was already there
+    assert len(gh.issue_comments[(REPO, 575)]) == 1  # the missing one was posted
+    for n in MEMBERS:
+        assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+    assert "4.22.0" in out  # the stored reservation, not a new one
+
+
+def test_repair_without_yes_writes_nothing(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=DISPATCHED)
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair")
+    assert code == 0, out
+    assert _mutations(gh) == [] and runner.calls == []
+
+
+def test_repair_refuses_a_batch_whose_last_event_is_not_a_dispatch(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=CANCELLED)
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2
+    assert "--repair" in out
+    assert _mutations(gh) == []
+
+
+def test_an_unsupported_backend_is_refused_with_its_message(
+    tmp_path: Path, runner: FakeRunner, checkout: FakeCheckout, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.real_glabclient import RealGlabClient
+
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: RealGlabClient())
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 2
+    assert "gh#611" in out
+
+
+# ----------------------------------------------------- reservation (§3.D)
+
+
+def test_successive_dispatches_reserve_successive_versions(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    second = JUDGEMENTS.replace(
+        "issues:\n",
+        "issues:\n  super-fr#1: {tier: 1}\n",
+    ) + (
+        '  - id: second\n    title: Second\n    ids: ["super-fr#1"]\n'
+        "    launch: {runner: fake, harness: claude, model: m}\n"
+    )
+    facts = _facts(config=VERSION_CONFIG, issues=[_issue(577), _issue(575), _issue(420), _issue(1)])
+    gh.add_issue(REPO, 1)
+    _state(tmp_path, facts, second)
+    assert _dispatch(tmp_path, "lifecycle", "--yes")[0] == 0  # minor: 4.21.1 -> 4.22.0
+    code, out = _dispatch(tmp_path, "second", "--yes")  # patch, after the live 4.22.0
+    assert code == 0, out
+    events = {b.id: b.events[-1] for b in load_judgements(tmp_path / "judgements.yaml").batches}
+    assert events["lifecycle"].reserved_version == "4.22.0"  # type: ignore[union-attr]
+    assert events["second"].reserved_version == "4.22.1"  # type: ignore[union-attr]
+
+
+def test_the_source_version_is_read_from_the_default_branch_on_origin(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    checkout.default = "trunk"
+    checkout.files = {
+        ("origin/trunk", "pyproject.toml"): PYPROJECT.replace("4.21.1", "5.0.0"),
+        ("HEAD", "pyproject.toml"): PYPROJECT.replace("4.21.1", "9.9.9"),
+    }
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 0, out
+    assert "reserved version: 5.1.0" in out
+    assert checkout.fetched == 1

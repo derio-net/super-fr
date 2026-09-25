@@ -318,20 +318,32 @@ def resolve_launch(batch: Batch, config: TriageConfig) -> Launch:
 # ----------------------------------------------------------------- markers
 
 
-def withdrawn_already(comments: Iterable[dict[str, object]], item_id: str) -> bool:
-    """True when the latest fr-batch marker for *item_id* is a withdrawal.
+def latest_marker(
+    comments: Iterable[dict[str, object]], item_id: str
+) -> Literal["dispatch", "withdrawn"] | None:
+    """The kind of the newest fr-batch marker for *item_id* (comments oldest first).
 
-    Comments are oldest first. Makes `batch cancel` idempotent: a re-run after
-    a partial forge failure posts a withdrawal only where none is current.
+    The two prefixes never match each other (decision p2-withdrawn-marker), so
+    a withdrawal after a dispatch reads `withdrawn`, and a redispatch after it
+    reads `dispatch` again.
     """
-    latest = None
+    latest: Literal["dispatch", "withdrawn"] | None = None
     for c in comments:
         body = str(c.get("body") or "").lstrip()
         if body.startswith(withdrawn_marker(item_id)):
             latest = "withdrawn"
         elif body.startswith(batch_marker(item_id)):
             latest = "dispatch"
-    return latest == "withdrawn"
+    return latest
+
+
+def withdrawn_already(comments: Iterable[dict[str, object]], item_id: str) -> bool:
+    """True when the latest fr-batch marker for *item_id* is a withdrawal.
+
+    Makes `batch cancel` idempotent: a re-run after a partial forge failure
+    posts a withdrawal only where none is current.
+    """
+    return latest_marker(comments, item_id) == "withdrawn"
 
 
 def withdrawal_body(batch: Batch, item_id: str, reason: str) -> str:

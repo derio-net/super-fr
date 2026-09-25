@@ -61,6 +61,7 @@ from fr.triage.batch import (
     batch_repo,
     check_open_membership,
     derive_batch_stage,
+    last_dispatch,
     resolve_launch,
     save_batches,
     suggest,
@@ -68,8 +69,11 @@ from fr.triage.batch import (
     withdrawn_already,
 )
 from fr.triage.batch_dispatch import (
+    DISPATCHABLE,
     TRIAGE_CONFIG_PATH,
     check_config_fresh,
+    dispatch_comment,
+    dispatched_already,
     live_reservations,
     render_brief,
 )
@@ -459,6 +463,88 @@ def _work_item(
     )
 
 
+def _forge_writes(client: GhClient, owner_repo: str, batch: Batch, item_id: str) -> list[str]:
+    """Make the dispatch visible on each member (§3.E); the members NOT written.
+
+    Idempotent, which is what makes `--repair` safe: the label add is a no-op
+    when present, and the comment is skipped when a dispatch marker newer than
+    the latest withdrawal exists. Every member's comments are read BEFORE any
+    write, so a backend that cannot read them is refused (exit 2) with no
+    member half-written (the r2p-f8 pattern of `cancel`).
+    """
+    failed: list[str] = []
+    posted: dict[str, bool] = {}
+    for key in batch.ids:
+        number = int(key.rpartition("#")[2])
+        try:
+            posted[key] = dispatched_already(
+                client.list_issue_comments(owner_repo, number), item_id
+            )
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            failed.append(f"{key}: {exc}")
+    if not posted:
+        return failed
+    try:
+        client.ensure_labels(owner_repo, [FR_IN_PROGRESS])
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except FORGE_ERRORS as exc:
+        return [*failed, *(f"{k}: {exc}" for k in posted)]
+    for key, already in posted.items():
+        number = int(key.rpartition("#")[2])
+        try:
+            client.edit_issue_labels(
+                owner_repo, number, add=frozenset({FR_IN_PROGRESS.name}), remove=frozenset()
+            )
+            if not already:
+                client.comment_issue(owner_repo, number, dispatch_comment(batch, item_id, key))
+        except UnsupportedForgeOperation as exc:
+            _fail(str(exc))
+        except FORGE_ERRORS as exc:
+            failed.append(f"{key}: {exc}")
+    return failed
+
+
+def _report_forge_writes(failed: list[str], batch: Batch) -> None:
+    if failed:
+        _fail(
+            "the dispatch is recorded, but these members were not fully marked on the "
+            f"forge: {'; '.join(failed)}. Complete them with "
+            f"`fr triage batch dispatch {batch.id} --repair --yes`",
+            code=1,
+        )
+
+
+def _repair(batch: Batch, owner_repo: str, client: GhClient, *, yes: bool) -> None:
+    """`dispatch --repair` (§3.C): redo only the forge writes of the last dispatch.
+
+    Never calls the runner and never re-reserves: the event's branch and
+    reserved version stand as recorded.
+    """
+    event = batch.events[-1] if batch.events else None
+    if not isinstance(event, DispatchEvent):
+        _fail(
+            f"batch {batch.id!r} has no dispatch as its last event; --repair only "
+            "completes the forge writes of one"
+        )
+    item_id = batch_item_id(owner_repo, batch.id)
+    console.print(f"repair the forge writes of batch {batch.id} ({item_id})", markup=False)
+    console.print(f"  branch: {event.branch}", markup=False)
+    console.print(f"  reserved version: {event.reserved_version or '(none)'}", markup=False)
+    for key in batch.ids:
+        console.print(
+            f"  {key}: add {FR_IN_PROGRESS.name}, post the marker comment if missing",
+            markup=False,
+        )
+    if not yes:
+        console.print("nothing written; re-run with --yes to act", markup=False)
+        return
+    _report_forge_writes(_forge_writes(client, owner_repo, batch, item_id), batch)
+    console.print(f"repaired batch {batch.id}", markup=False)
+
+
 @batch_app.command("dispatch")
 def batch_dispatch_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to dispatch.")],
@@ -481,6 +567,10 @@ def batch_dispatch_command(
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
+    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    if repair:
+        _repair(batch, owner_repo, client, yes=yes)
+        return
     try:
         launch = resolve_launch(
             batch.model_copy(update={"launch": batch.launch.model_copy(update={"runner": to})})
@@ -490,49 +580,77 @@ def batch_dispatch_command(
         )
     except TriageError as exc:
         _fail(str(exc))
-    assert launch.runner is not None and launch.harness is not None and launch.model is not None
-    runner = load_runner(launch.runner)
+    runner_name, model = str(launch.runner), str(launch.model)
+    runner = load_runner(runner_name)  # step 1
     checkout = _open_checkout(checkout_path, owner_repo)
-    reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
-    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    reserved = _reservation(checkout, facts, judgements, batch, owner_repo)  # step 2
     try:
         refs = [client.closing_ref(owner_repo, int(k.rpartition("#")[2])) for k in batch.ids]
     except UnsupportedForgeOperation as exc:
         _fail(str(exc))
-    brief = render_brief(
+    brief = render_brief(  # step 3
         batch,
         judgements,
         facts,
         repo=owner_repo,
         closing_refs=refs,
         reserved_version=reserved,
-        model=launch.model,
+        model=model,
     )
-    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)  # step 4
     branch = batch_branch(batch.id)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
-    console.print(f"  runner: {launch.runner}", markup=False)
+    console.print(f"  runner: {runner_name}", markup=False)
     console.print(f"  harness: {launch.harness}", markup=False)
-    console.print(f"  model: {launch.model}", markup=False)
+    console.print(f"  model: {model}", markup=False)
     console.print(f"  branch: {branch}", markup=False)
     console.print(f"  reserved version: {reserved or '(none: no version block)'}", markup=False)
     console.print("  brief:", markup=False)
     console.print(brief, markup=False, soft_wrap=True, highlight=False)
-    if not yes:
+    if not yes:  # step 5
         console.print("nothing written; re-run with --yes to act", markup=False)
         return
+    # Step 6, in the spec's order: every gate before the first backend call.
+    stage = derive_batch_stage(batch, facts)
+    if stage not in DISPATCHABLE:
+        last = last_dispatch(batch)
+        _fail(
+            f"batch {batch.id!r} is {stage}; a batch is never started twice "
+            f"(last dispatched to {last.runner if last else '?'}, handle "
+            f"{last.handle if last else '?'}). To complete its forge writes, run "
+            f"`fr triage batch dispatch {batch.id} --repair --yes`"
+        )
+    try:
+        taken = stage == "proposed" and checkout.remote_branch_exists(branch)
+    except TriageError as exc:
+        _fail(str(exc))
+    if taken:
+        _fail(
+            f"branch {branch} is already on origin for proposed batch {batch.id!r}: it was "
+            "already dispatched from another scope"
+        )
+    if not runner.can_dispatch(item):
+        _fail(f"runner `{runner_name}` does not take run-unit work")
+    refusal = runner.preflight([item])
+    if refusal:
+        _fail(f"runner `{runner_name}` refused: {refusal}")
+    if item.id in runner.existing_dispatches([item]):
+        _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
     try:
         handle = runner.dispatch(item)
     except Exception as exc:  # the runner's own failure: nothing is written
-        _fail(f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", code=1)
+        _fail(f"runner `{runner_name}` failed to dispatch {item.id}: {exc}", code=1)
     event = DispatchEvent(
         kind="dispatch",
         at=_now_after(batch),
-        runner=launch.runner,
-        handle=handle,
+        runner=runner_name,
+        # Review r2p-handle: a runner with no handle of its own returns None; the
+        # item id is its identity for the dispatch (`existing_dispatches` matches it).
+        handle=handle if handle else item.id,
         branch=branch,
         reserved_version=reserved,
     )
     dispatched = batch.model_copy(update={"events": [*batch.events, event]})
     _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
+    _report_forge_writes(_forge_writes(client, owner_repo, dispatched, item.id), batch)  # 6.6
     console.print(f"dispatched batch {batch.id}", markup=False)

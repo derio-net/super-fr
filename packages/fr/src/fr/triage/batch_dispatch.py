@@ -17,6 +17,7 @@ from fr.triage.batch import (
     batch_repo,
     derive_batch_stage,
     last_dispatch,
+    latest_marker,
 )
 from fr.triage.errors import TriageError
 from fr.triage.model import (
@@ -24,7 +25,6 @@ from fr.triage.model import (
     Facts,
     Judgements,
     batch_marker,
-    withdrawn_marker,
 )
 
 # Stages whose reservation still stands: the run was briefed with it and has
@@ -108,14 +108,7 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     a cancel still posts a NEW marker: the old one predates the withdrawal
     (decision p2-withdrawn-marker).
     """
-    latest = None
-    for c in comments:
-        body = str(c.get("body") or "").lstrip()
-        if body.startswith(withdrawn_marker(item_id)):
-            latest = "withdrawn"
-        elif body.startswith(batch_marker(item_id)):
-            latest = "dispatch"
-    return latest == "dispatch"
+    return latest_marker(comments, item_id) == "dispatch"
 
 
 def check_config_fresh(collected_at: str, last_change: datetime | None) -> None:
