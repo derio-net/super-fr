@@ -218,3 +218,8 @@ Constant per command, no O(n) scan added; reviewer rated it acceptable. A few gi
 ### p3-m1-resolved · finding [fixed] · resolves p3-m1: fr plan rework / rework-add stage but never commit
 
 c7cc8ad2: plan rework commits the rework folder + resolved spec row (— rework), rework-add its _meta.yaml (— rework-add), both via _commit_plan_writes. Pinned by test_plan_cmd.py::test_plan_rework_and_rework_add_each_commit
+
+<!-- fr:journal kind=finding scope=plan id=p3-m3-resolved created=2026-09-25T12:30:04 state=fixed resolves=p3-m3 -->
+### p3-m3-resolved · finding [fixed] · resolves p3-m3: _staged_among fallback is not actually fail-closed
+
+c7cc8ad2: _staged_among returns None when git cannot answer and _commit_plan_writes commits nothing (one stderr line); docstring says so. Pinned by test_plan_cmd.py::test_staged_among_commits_nothing_when_git_cannot_answer
