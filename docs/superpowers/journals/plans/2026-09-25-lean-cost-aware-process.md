@@ -364,3 +364,8 @@ ea8a6b46: operator gate records unobserved=operator-gate and warns on every harn
 ### p3-t2-order · discovery · Deviation: T2 engine written before its tests; red confirmed against the stashed baseline (phase 3)
 
 The apply engine and run_cmd wiring were drafted before tests/unit/test_record_apply.py. Red was then confirmed by stashing run_cmd.py/plan_ops.py and running the new tests (12 failed: no --record flag, self-review refactor gate) before restoring. Only tests/unit/test_v2_plan_ops.py's self-review refactor tests changed in the rest of the suite (rewritten against fr.record.gates.refactor_gaps; the fully-ticked exemption is dropped since at resolve every task is ticked).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-verbs created=2026-09-25T22:48:11 phase=3 -->
+### p3-verbs · discovery · Verbs via the engine: acceptance verbs now commit; journal add prints a line (phase 3)
+
+fr acceptance add/set-status previously wrote without committing; through the engine they commit once (matrix + three reports) like every other record write. fr journal add previously printed nothing on stdout; it now prints 'added <kind> <id> to <scope>/<slug>'. Refusals the verbs already had stay in the verbs (duplicate id, --phase/--global, answered-by operator transcript check, unknown row/status) so their messages are byte-identical; the engine re-checks and refuses anything else with exit 2. The now-dead acceptance helpers _commit_matrix/_regenerate_reports were removed.
