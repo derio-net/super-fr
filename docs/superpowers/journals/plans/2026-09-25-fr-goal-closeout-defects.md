@@ -133,3 +133,8 @@ Two tests encoded 'fr leaves its write uncommitted' and were adjusted (assertion
 ### p3-brief-last-line · discovery · Commit report must precede the dispatch brief; stderr must flush (phase 3)
 
 run_cmd's contract: the JSON brief is the last line a naive tail -1 reads. The closing commit's stderr line would land after it, so _commit_run_writes_now() commits (and prints) before each of the three brief prints. Also, print(file=sys.stderr) without flush=True made the report appear AFTER the brief under CliRunner (separate text buffers flushed at exit); records_commit now flushes. 25 test_run_cli brief-parsing tests went red on the unflushed version.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1 created=2026-09-25T11:52:46 phase=3 state=open -->
+### p3-f1 · finding [open] · Phase-2 regression: test_remote_row_checks_the_validator_wrapper_in_origin_ref (phase 3)
+
+Full suite (phase 3): tests/unit/test_isolation_branch_classify.py::test_remote_row_checks_the_validator_wrapper_in_origin_ref expects IsolationError matching 'not in origin/feat/x'; 99f3cb7b (phase 2, neutral remedy) reworded local.py's message to 'plan repo has docs/superpowers/plans in origin/feat/x but no scripts/validate-plans.sh there; run fr init validator-wrapper ...'. Not caused by phase 3 (no isolation code or that test touched); outside this phase's files, so left for the orchestrator. The test's intent (the check reads origin/<B>) is still met by the new text, so updating the regex is likely the fix.
