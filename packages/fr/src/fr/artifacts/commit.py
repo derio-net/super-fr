@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +65,7 @@ __all__ = [
     "GitUnavailableError",
     "NoRepo",
     "commit_migration",
+    "commit_paths",
     "git_context",
     "index_lock_held",
     "lock_path",
@@ -464,17 +465,36 @@ def commit_migration(
     paths = report.changed_paths
     if not paths:
         return CommitOutcome(committed=False, reason="nothing was migrated; nothing to commit")
+    if fr_version is None:
+        from fr import __version__
+
+        fr_version = __version__
+    return commit_paths(repo_root, paths, migration_commit_message(report, fr_version=fr_version))
+
+
+_UNCOMMITTED = "the files are in your working tree, uncommitted"
+
+
+def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> CommitOutcome:
+    """Commit exactly `paths` under `message`, or explain why it did not.
+
+    The generic body `commit_migration` delegates to, and the one committer fr's
+    own record writes use (gh#610, spec 2026-09-25 §3.C). Every refusal of the
+    migration commit applies unchanged: no repo, a git refusal, a detached HEAD,
+    the default branch, no HEAD, a held index lock, a path outside the repo.
+    A relative path is read against `repo_root`, not the process cwd.
+    """
+    paths = tuple(p if p.is_absolute() else repo_root / p for p in paths)
+    if not paths:
+        return CommitOutcome(committed=False, reason="no paths were written; nothing to commit")
 
     state = git_context(repo_root)
     if isinstance(state, GitRefusal):
-        return CommitOutcome(
-            committed=False,
-            reason=f"{state.reason}; the migrated files are in your working tree, uncommitted",
-        )
+        return CommitOutcome(committed=False, reason=f"{state.reason}; {_UNCOMMITTED}")
     if isinstance(state, NoRepo):
         return CommitOutcome(
             committed=False,
-            reason=f"{repo_root} is not a git repository; the migrated files are uncommitted",
+            reason=f"{repo_root} is not a git repository; the files are uncommitted",
         )
     toplevel = state.toplevel
     if state.branch is None:
@@ -488,7 +508,7 @@ def commit_migration(
             reason=(
                 "refusing to commit on a detached HEAD (a rebase, a bisect, or a checked-out "
                 "commit): the commit would be folded into the operation in progress or "
-                "orphaned. The migrated files are in your working tree, uncommitted"
+                "orphaned. The files are in your working tree, uncommitted"
             ),
         )
     if state.branch == state.default_branch:
@@ -496,7 +516,7 @@ def commit_migration(
             committed=False,
             reason=(
                 f"refusing to commit on {state.branch!r}, the repository's default branch; "
-                f"the migrated files are in your working tree, uncommitted"
+                f"{_UNCOMMITTED}"
             ),
         )
     if not state.has_head:
@@ -506,16 +526,13 @@ def commit_migration(
         # whatever else happened to be staged.
         return CommitOutcome(
             committed=False,
-            reason=f"{toplevel} has no commits yet; the migrated files are uncommitted",
+            reason=f"{toplevel} has no commits yet; the files are uncommitted",
         )
     held = index_lock_held(toplevel)
     if held is not None:
         return CommitOutcome(
             committed=False,
-            reason=(
-                f"another git process holds {held}; the migrated files are in your "
-                "working tree, uncommitted"
-            ),
+            reason=f"another git process holds {held}; {_UNCOMMITTED}",
         )
 
     # Preconditions, asserted rather than trusted: this writes to git history
@@ -530,9 +547,8 @@ def commit_migration(
                 reason=f"refusing to commit: {path} is outside the git repository {toplevel}",
             )
 
-    # `add` first, so an artifact a migration *created* is tracked and can be
-    # named by the pathspec below. Scoped with `--` so no path is ever read as
-    # an option.
+    # `add` first, so a file the caller *created* is tracked and can be named by
+    # the pathspec below. Scoped with `--` so no path is ever read as an option.
     try:
         added = _git(toplevel, "add", "--", *rel)
     except GitUnavailableError as e:
@@ -547,7 +563,7 @@ def commit_migration(
     # against the index, so the answer does not change when the operator has
     # staged something unrelated. No -> no empty commit, and — the important
     # half — no commit at all, which is what stops an unrelated staged file
-    # from being committed under a migration message.
+    # from being committed under fr's message.
     try:
         pending = _git(toplevel, "diff", "--cached", "--name-only", "HEAD", "--", *rel)
     except GitUnavailableError as e:
@@ -555,14 +571,8 @@ def commit_migration(
     if pending.returncode != 0 or not pending.stdout.strip():
         return CommitOutcome(
             committed=False,
-            reason="the migrated files already match HEAD; no commit made",
+            reason="the files already match HEAD; no commit made",
         )
-
-    if fr_version is None:
-        from fr import __version__
-
-        fr_version = __version__
-    message = migration_commit_message(report, fr_version=fr_version)
 
     # The pathspec on `commit` is what keeps an unrelated *staged* file out:
     # without it git records the whole index. It also leaves that file staged.
@@ -573,7 +583,7 @@ def commit_migration(
     except GitUnavailableError as e:
         return CommitOutcome(
             committed=False,
-            reason=f"the migration is in your working tree but could not be committed: {e}",
+            reason=f"the files are in your working tree but could not be committed: {e}",
             paths=paths,
             message=message,
         )
@@ -581,7 +591,7 @@ def commit_migration(
         return CommitOutcome(
             committed=False,
             reason=(
-                f"the migration is in your working tree but could not be committed: "
+                f"the files are in your working tree but could not be committed: "
                 f"{done.stderr.strip() or done.stdout.strip()}"
             ),
             paths=paths,
@@ -589,7 +599,7 @@ def commit_migration(
         )
     return CommitOutcome(
         committed=True,
-        reason=f"committed {len(rel)} migrated path(s): {', '.join(rel)}",
+        reason=f"committed {len(rel)} path(s): {', '.join(rel)}",
         paths=paths,
         message=message,
     )

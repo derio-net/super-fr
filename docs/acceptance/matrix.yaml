@@ -4091,9 +4091,19 @@ rows:
       over fr's own uncommitted state.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_records_commit.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_plan_cmd.py
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: Pinned by tests/unit/test_records_commit.py (commit_paths path-scoping +
+      default-branch/detached/no-HEAD/index.lock refusals; commit_records never raises),
+      test_run_cli.py (start/advance/resolve/claim commit the cursor; --no-questions
+      resolve commits cursor + spec journal in one commit; default branch leaves it
+      uncommitted), test_plan_cmd.py (plan create incl. validator wrapper; edit tick/complete)
+      and test_journal_cmd.py (journal add/resolve).
   - id: closeout-pickup-run-handoff
     capability: fr-goal-closeout
     acceptance: After deliver, fr prints one exact command; 'fr pickup --run <id>' in

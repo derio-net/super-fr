@@ -38,6 +38,7 @@ from fr.journal.model import (
     serialize_entry,
     unauthorized_fixes,
 )
+from fr.records_commit import commit_records
 from fr.run.model import AnsweredBy
 
 console = Console(highlight=False)
@@ -314,6 +315,7 @@ def add(
     if resolves is not None and answered_by == "operator":
         _verify_operator_claim(existing, resolves)
     append_journal_entry(path, slug, entry)
+    commit_records(root, [path], f"chore(fr): journal {scope}/{slug} — {entry.kind} {entry.id}")
 
 
 RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
@@ -461,6 +463,7 @@ def resolve(
     append_journal_entry(path, slug, record)
     shown = f"deferred → {tracked_by}" if tracked_by else state
     typer.echo(f"{entry_id} → {shown} (record {record.id})")
+    commit_records(root, [path], f"chore(fr): journal {scope}/{slug} — {record.kind} {record.id}")
 
 
 def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:

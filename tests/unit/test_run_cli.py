@@ -502,7 +502,7 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     # (out-of-scope-for-this-phase) completion signal would move it.
     assert state.cursor == "plan"
 
-    brief = json.loads(result.output.split("\n", 1)[1])
+    brief = json.loads(result.stdout.split("\n", 1)[1])
     assert brief["run"] == "r1"
     assert brief["workflow"] == "agentic@1"
     assert brief["step"] == "plan"
@@ -6466,3 +6466,115 @@ def test_start_refusing_an_existing_run_id_names_advance(tmp_path: Path) -> None
     assert result.exit_code == 2, result.output
     assert "already exists" in result.output
     assert "fr run advance r1" in result.output
+
+
+# --- gh#610 §3.C: fr commits its own cursor writes ---------------------------
+
+
+def _git_out(repo: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _runs_clean(repo: Path) -> str:
+    return _git_out(repo, "status", "--porcelain", "--", "docs/superpowers/runs")
+
+
+def _head_files(repo: Path) -> list[str]:
+    return sorted(_git_out(repo, "show", "--name-only", "--format=", "HEAD").splitlines())
+
+
+def _assert_fr_commit(repo: Path, run_id: str, verb: str) -> None:
+    subject = _git_out(repo, "log", "-1", "--format=%s")
+    assert subject.startswith(f"chore(fr): run {run_id} — {verb} "), subject
+    assert _head_files(repo) and all(
+        f.startswith("docs/superpowers/") for f in _head_files(repo)
+    ), _head_files(repo)
+    assert _runs_clean(repo) == ""
+
+
+def test_start_advance_and_resolve_each_commit_the_cursor(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+
+    res = _invoke(
+        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
+    )
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "start")
+    assert _head_files(repo) == ["docs/superpowers/runs/r1.yaml"]
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "advance")
+
+    step = load_run_state(repo, "r1").cursor
+    res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "done"])
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "resolve")
+    subject = _git_out(repo, "log", "-1", "--format=%s")
+    assert subject == f"chore(fr): run r1 — resolve {step} done", subject
+
+
+def test_claim_commits_the_cursor(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    step = load_run_state(repo, "r1").cursor
+    before = _git_out(repo, "rev-parse", "HEAD")
+
+    res = _invoke(repo, shipped, ["run", "claim", "r1", "--step", step, "--agent", "a1f1"])
+
+    assert res.exit_code == 0, res.output
+    assert _git_out(repo, "rev-parse", "HEAD") != before
+    _assert_fr_commit(repo, "r1", "claim")
+
+
+def test_no_questions_resolve_commits_cursor_and_spec_journal_together(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+    before = int(_git_out(repo, "rev-list", "--count", "HEAD"))
+
+    result = _invoke_measurable(
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "x"], root, "s-g"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert int(_git_out(repo, "rev-list", "--count", "HEAD")) == before + 1
+    assert _head_files(repo) == [
+        "docs/superpowers/journals/specs/2026-09-21-x.md",
+        "docs/superpowers/runs/r1.yaml",
+    ]
+    assert _git_out(repo, "status", "--porcelain", "--", "docs/superpowers/journals") == ""
+    _assert_fr_commit(repo, "r1", "resolve")
+
+
+def test_on_the_default_branch_the_cursor_lands_but_is_not_committed(tmp_path: Path) -> None:
+    import subprocess
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git_out(repo, "remote", "add", "origin", str(origin))
+    _git_out(repo, "push", "-q", "origin", "b")
+    _git_out(repo, "remote", "set-head", "origin", "b")
+    before = _git_out(repo, "rev-parse", "HEAD")
+
+    res = _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    assert res.exit_code == 0, res.output
+    assert load_run_state(repo, "r1").cursor == "hello"
+    assert _git_out(repo, "rev-parse", "HEAD") == before
+    assert _runs_clean(repo) != ""
+    assert "fr: not committed (" in res.stderr and "default branch" in res.stderr

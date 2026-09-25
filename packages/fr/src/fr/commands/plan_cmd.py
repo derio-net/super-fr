@@ -11,6 +11,7 @@ from rich.table import Table
 
 from fr import parse
 from fr.commands.common import require_migrated_layout
+from fr.journal.model import journal_path
 from fr.parser import PlanSchemaError
 from fr.plan_ops import (
     PhaseSpec,
@@ -23,6 +24,8 @@ from fr.plan_ops import (
     self_review,
     tick,
 )
+from fr.plan_validator_wrapper import validator_wrapper_path
+from fr.records_commit import commit_records
 from fr.version_floor import PRE_4_20_PROBES, PRE_4_PROBES, admits_below
 
 console = Console()
@@ -69,6 +72,38 @@ plan_app = typer.Typer(help="v2 plan editing commands.", no_args_is_help=True)
 def _plan_guard() -> None:
     """Runs before every `fr plan ...` subcommand (legacy-layout hard-stop)."""
     require_migrated_layout()
+
+
+def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path]:
+    """The candidate paths that differ from HEAD in the index — what `plan_ops`
+    just staged. A foreign file it declined to touch (an untracked, non-fr
+    `scripts/validate-plans.sh`) is not staged, so it is never swept in. Where
+    git cannot answer, the existing candidates go through and `commit_paths`
+    makes the fail-closed decision itself."""
+    from fr.git import GitUnavailableError, git_answer
+
+    existing = [c for c in candidates if c.exists()]
+    rel = [str(c.resolve()) for c in existing]
+    try:
+        top = git_answer(repo_root, "rev-parse", "--show-toplevel")
+        done = git_answer(repo_root, "diff", "--cached", "--name-only", "-z", "HEAD", "--", *rel)
+    except GitUnavailableError:
+        return existing
+    if top.returncode != 0 or done.returncode != 0:
+        return existing
+    toplevel = Path(top.stdout.strip())
+    return [toplevel / name for name in done.stdout.split("\0") if name]
+
+
+def _commit_plan_writes(
+    repo_root: Path | None, candidates: list[Path], slug: str, verb: str
+) -> None:
+    """gh#610 §3.C: `plan_ops` stages, the CLI commits — once, never failing the write."""
+    if repo_root is None or not candidates:
+        return
+    commit_records(
+        repo_root, _staged_among(repo_root, candidates), f"chore(fr): plan {slug} — {verb}"
+    )
 
 
 @plan_app.command("create")
@@ -198,6 +233,14 @@ def create_cmd(
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+    candidates = [
+        plan.dir,
+        journal_path(repo_root, "plan", slug),
+        validator_wrapper_path(repo_root),
+    ]
+    if spec is not None:
+        candidates.append((repo_root / spec).resolve())
+    _commit_plan_writes(repo_root, candidates, slug, "create")
 
 
 @plan_app.command("edit")
@@ -222,14 +265,25 @@ def edit(
                 raise typer.Exit(2)
             tick(plan_dir, tick_step, state=state, note=note)  # type: ignore[arg-type]
             console.print(f"ticked {tick_step} → {state}")
+            verb = f"tick {tick_step}" if state == "x" else f"skip {tick_step}"
         else:
             assert complete_phase_n is not None
             complete_phase(plan_dir, complete_phase_n, note=note)
             console.print(f"phase {complete_phase_n}: marked complete")
             _acceptance_flip_nudge(plan_dir, complete_phase_n)
+            verb = f"complete phase {complete_phase_n}"
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+    resolved = plan_dir.resolve()
+    _commit_plan_writes(_plan_repo_root(resolved), [resolved], resolved.name, verb)
+
+
+def _plan_repo_root(plan_dir: Path) -> Path | None:
+    try:
+        return parse(plan_dir).repo_root
+    except Exception:  # noqa: BLE001 — the write landed; an unreadable plan just skips the commit
+        return None
 
 
 def _acceptance_flip_nudge(plan_dir: Path, phase_n: int) -> None:
