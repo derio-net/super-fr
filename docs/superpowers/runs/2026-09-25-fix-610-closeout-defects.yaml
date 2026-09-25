@@ -3,7 +3,7 @@ run: 2026-09-25-fix-610-closeout-defects
 workflow: fr-goal@1
 branch: fix/610-closeout-defects
 started: '2026-09-25T07:28:08+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -77,8 +77,15 @@ steps:
       turns: 0
       sessions: 1
   implement:
-    state: running
-    at: '2026-09-25T12:41:45+00:00'
+    state: done
+    at: '2026-09-25T12:47:00+00:00'
+    main_session:
+      input_tokens: 322
+      cache_creation_input_tokens: 193066
+      cache_read_input_tokens: 37556404
+      output_tokens: 88359
+      turns: 135
+      sessions: 1
     members:
     - implement-phase
     - review-phase
@@ -313,19 +320,30 @@ steps:
             cache_read_input_tokens: 25407412
             output_tokens: 3119
       phase/5/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T12:41:45+00:00'
           agent: acc4b13ea417f0a53
           harness: claude-code
           model: claude-sonnet-5
           session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+          returned: '2026-09-25T12:47:00+00:00'
+          outcome: done
           estimate:
             journal_entries: 62
             journal_lines: 340
             handoff_chars: 10778
             spec_bytes: 15632
             plan_bytes: 26149
+          measured:
+            input_tokens: 78
+            cache_creation_input_tokens: 136550
+            cache_read_input_tokens: 4395106
+            output_tokens: 275
+        evidence:
+          review: review-p5
+          reviewer: acc4b13ea417f0a53
+          findings: p3-m5
   journal-check:
     state: pending
   deliver:
