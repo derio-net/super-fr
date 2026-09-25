@@ -3,7 +3,7 @@ run: 2026-09-23-feat-triage-batches
 workflow: fr-goal@1
 branch: feat/triage-batches
 started: '2026-09-23T13:31:29+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -127,6 +127,10 @@ steps:
           reviewer: a9bca9286ced70018
           findings: r1-docs,r2p-f10,r2p-f11,r2p-f12b,r2p-handle,r2p-f14,r3-f1,r3-f2,r3-f3,r3-f4,r3-f5,r3-f6,r3-f7,r3-f8,r3-f9,r3-f10,r3-f11,r3-f12,r3-f13,r3-f14
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-25T23:28:30+00:00'
+    exit: 0
+    stdout: |
+      4 out-of-scope finding(s): r1-5, r1-6, r2p-envtest, r3-f14
   deliver:
     state: pending
