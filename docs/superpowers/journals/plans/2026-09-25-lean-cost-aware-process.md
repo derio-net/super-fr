@@ -429,3 +429,8 @@ tests/unit/test_record_apply.py; P3.T2.S1(c).
 ### p3-r8 · finding [open] (reviewer: in scope) · fr plan edit --complete-phase no longer enforces the refactor check (phase 3)
 
 apply.py:445-465 + prose in fr-phase-executor.md:82-88, fr-execute SKILL.md:55. Call refactor_gaps in _plan_writes on any phase completion.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-09-25T23:23:37 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · --record deletes and commits any parseable path; relative path resolved against cwd (phase 3)
+
+apply.py:687-694, run_cmd.py:4120. Resolve against repo root, require under records_dir(run).
