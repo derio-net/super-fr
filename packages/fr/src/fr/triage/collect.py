@@ -547,13 +547,14 @@ def _batch_prs(
         repo = by_name.get(name.lower())
         if repo is None:
             continue
-
-        def ours(p: PullRequest, repo: str = repo, branch: str = branch, at: datetime = at) -> bool:
-            return p.repo == repo and p.head_ref == branch and _created_since(p, at)
-
-        if any(ours(p) for p in seen):
+        ours = [
+            p
+            for p in [*seen, *known]
+            if p.repo == repo and p.head_ref == branch and _created_since(p, at)
+        ]
+        if any(p in seen for p in ours):
             continue
-        terminal = [p for p in known if ours(p) and p.state in {"MERGED", "CLOSED"}]
+        terminal = [p for p in ours if p in known and p.state in {"MERGED", "CLOSED"}]
         if terminal:
             found.extend(terminal)
             continue

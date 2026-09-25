@@ -156,7 +156,7 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
                     key=i.key,
                     title=i.title,
                     url=i.url,
-                    marker_at=i.dispatch_marker_at,
+                    marker_at=i.dispatch_marker_at or "",
                     days=age.days,
                 )
             )
