@@ -44,7 +44,10 @@ touches, copied from a 2026-09-25 `sqlite3 .schema` of this operator's own
 `~/.local/share/opencode/opencode.db` (columns never read are omitted; names and
 types verbatim); the `message.data` / `part.data` JSON follows live rows of the
 same capture. Rows are fictional: `ses_paid` (one paid assistant message with a
-`bash` tool part) and `ses_free` (one `$0` free-model message).
+`bash` tool part), `ses_free` (one `$0` free-model message), `ses_copilot` (one
+`github-copilot`-routed message whose non-zero `cost` is OpenCode's own estimate;
+providerID and figures copied from a live row of the same capture) and
+`ses_mixed` (one `anthropic` + one `github-copilot` message).
 
 ## hermes/
 
@@ -59,6 +62,6 @@ assumption, not a capture. Includes an ACP-style session with zero tokens
 
 | file | sha256 |
 |---|---|
-| `opencode/opencode.db` | `aca0251028daf382f993665644a03d922571c5b40316a25c57a03dfd506d168f` |
+| `opencode/opencode.db` | `33f89d0a29eefcbb3a3cb97013cd1b81b3493283c372486888f28e450c3bc25b` |
 | `hermes/schema.sql` | `342e5bfaf785b6a9281de19d9296b3199f04fb98a723c54abf39454c1ecdd4a7` |
 | `hermes/state.db` | `46a42617cd2774d0a9a0bdaddb430b004c5b6e7bff352ab52e7b27387ac602be` |

@@ -6,9 +6,10 @@ into input/cache/output. Each message's `token_count` is carried as `input`
 (ratio 1), which makes the price-weighted split degenerate to a
 token-count-weighted one — the record says so with `attribution: coarse`.
 
-Dollars: `sessions.actual_cost_usd` when Hermes has it (`exact`), else
-`estimated_cost_usd` (`estimated`), summed over the session and its delegate
-children; per-model figures from `session_model_usage`. An ACP session stores
+Dollars: per session row, `sessions.actual_cost_usd` when Hermes has it, else
+`estimated_cost_usd`, summed over the session and its delegate children —
+`exact` only when every row was actual (see `_cost`); per-model figures from
+`session_model_usage`. An ACP session stores
 zero tokens everywhere (hermes-agent#6775): that is recorded as `unavailable`,
 never as a session that cost nothing.
 """
@@ -65,30 +66,63 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
     if not session:
         return unavailable("", HARNESS, "no session id given")
     try:
-        with closing(open_ro(Path(source))) as con:
-            sessions = con.execute(
-                "SELECT id, model, input_tokens, output_tokens, cache_read_tokens, "
-                "cache_write_tokens, estimated_cost_usd, actual_cost_usd FROM sessions "
-                "WHERE id = ? OR parent_session_id = ?",
-                (session, session),
-            ).fetchall()
-            if not any(row[0] == session for row in sessions):
-                return unavailable(session, HARNESS, "session not in the Hermes database")
-            messages = con.execute(
-                "SELECT m.session_id, m.timestamp, m.token_count, m.tool_calls FROM messages m "
-                "JOIN sessions s ON s.id = m.session_id "
-                "WHERE (s.id = ? OR s.parent_session_id = ?) AND m.role = 'assistant' "
-                "ORDER BY m.timestamp, m.id",
-                (session, session),
-            ).fetchall()
-            per_model = con.execute(
-                "SELECT u.model, SUM(u.estimated_cost_usd), SUM(u.actual_cost_usd) "
-                "FROM session_model_usage u JOIN sessions s ON s.id = u.session_id "
-                "WHERE s.id = ? OR s.parent_session_id = ? GROUP BY u.model",
-                (session, session),
-            ).fetchall()
+        return _read(Path(source), session)
     except sqlite3.Error as exc:
         return unavailable(session, HARNESS, f"Hermes database unreadable: {exc}")
+    except Exception as exc:  # noqa: BLE001 — a reader reports, it never raises
+        return unavailable(session, HARNESS, f"{type(exc).__name__}: {exc}")
+
+
+def _cost(sessions: list[Any], per_model: list[Any]) -> Cost:
+    """The session's harness dollars, summed row by row.
+
+    Each session row contributes its `actual_cost_usd` when Hermes has it, else
+    its `estimated_cost_usd`; the total is `exact` only when every row was
+    actual. A row with neither leaves the whole session unpriced — a partial sum
+    would read as the session's cost. Per-model figures follow the same row's
+    choice; a per-model `0` is Hermes's column default ("not recorded"), so it
+    is omitted rather than priced at $0 — with none left, `rollup` splits the
+    total over the messages by tokens."""
+    actual = {row[0]: _number(row[7]) for row in sessions}
+    estimated = {row[0]: _number(row[6]) for row in sessions}
+    figures: list[float] = []
+    for sid in actual:
+        figure = actual[sid] if actual[sid] is not None else estimated[sid]
+        if figure is None:
+            return Cost()
+        figures.append(figure)
+    by_model: dict[str, float] = {}
+    for sid, model, est, act in per_model:
+        figure = _number(act if actual.get(sid) is not None else est)
+        if figure is not None and figure > 0:
+            by_model[str(model)] = by_model.get(str(model), 0.0) + figure
+    exact = all(v is not None for v in actual.values())
+    return Cost(usd=sum(figures), source="exact" if exact else "estimated", by_model=by_model)
+
+
+def _read(source: Path, session: str) -> UsageRecord:
+    with closing(open_ro(source)) as con:
+        sessions = con.execute(
+            "SELECT id, model, input_tokens, output_tokens, cache_read_tokens, "
+            "cache_write_tokens, estimated_cost_usd, actual_cost_usd FROM sessions "
+            "WHERE id = ? OR parent_session_id = ?",
+            (session, session),
+        ).fetchall()
+        if not any(row[0] == session for row in sessions):
+            return unavailable(session, HARNESS, "session not in the Hermes database")
+        messages = con.execute(
+            "SELECT m.session_id, m.timestamp, m.token_count, m.tool_calls FROM messages m "
+            "JOIN sessions s ON s.id = m.session_id "
+            "WHERE (s.id = ? OR s.parent_session_id = ?) AND m.role = 'assistant' "
+            "ORDER BY m.timestamp, m.id",
+            (session, session),
+        ).fetchall()
+        per_model = con.execute(
+            "SELECT u.session_id, u.model, u.estimated_cost_usd, u.actual_cost_usd "
+            "FROM session_model_usage u JOIN sessions s ON s.id = u.session_id "
+            "WHERE s.id = ? OR s.parent_session_id = ?",
+            (session, session),
+        ).fetchall()
 
     session_tokens = sum(int(v or 0) for row in sessions for v in row[2:6])
     message_tokens = sum(int(row[2] or 0) for row in messages)
@@ -96,23 +130,6 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
         return unavailable(session, HARNESS, ACP_ZERO_TOKENS)
 
     models = {row[0]: str(row[1] or "unknown") for row in sessions}
-    actual = [_number(row[7]) for row in sessions]
-    estimated = [_number(row[6]) for row in sessions]
-    if all(v is not None for v in actual):
-        cost = Cost(
-            usd=sum(v for v in actual if v is not None),
-            source="exact",
-            by_model={m: float(a or 0) for m, _e, a in per_model},
-        )
-    elif all(v is not None for v in estimated):
-        cost = Cost(
-            usd=sum(v for v in estimated if v is not None),
-            source="estimated",
-            by_model={m: float(e or 0) for m, e, _a in per_model},
-        )
-    else:
-        cost = Cost()
-
     out = [
         Message(
             ts=datetime.fromtimestamp(float(ts), tz=UTC).isoformat() if ts is not None else None,
@@ -124,5 +141,9 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
         for owner, ts, count, calls in messages
     ]
     return UsageRecord(
-        session=session, harness=HARNESS, messages=tuple(out), cost=cost, attribution="coarse"
+        session=session,
+        harness=HARNESS,
+        messages=tuple(out),
+        cost=_cost(sessions, per_model),
+        attribution="coarse",
     )

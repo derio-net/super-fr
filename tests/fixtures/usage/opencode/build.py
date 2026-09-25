@@ -73,6 +73,8 @@ def main() -> None:
         [
             ("ses_paid", None, "/work/example", "paid session", T0),
             ("ses_free", None, "/work/example", "free session", T0),
+            ("ses_copilot", None, "/work/example", "copilot session", T0),
+            ("ses_mixed", None, "/work/example", "mixed session", T0),
         ],
     )
     paid_tokens = {
@@ -88,6 +90,13 @@ def main() -> None:
         "output": 0,
         "reasoning": 0,
         "cache": {"write": 0, "read": 5000},
+    }
+    copilot_tokens = {
+        "total": 24163,
+        "input": 2,
+        "output": 514,
+        "reasoning": 0,
+        "cache": {"write": 3735, "read": 19912},
     }
     user = json.dumps({"role": "user", "time": {"created": T0 - 1000}})
     con.executemany(
@@ -107,6 +116,34 @@ def main() -> None:
                 T0,
                 T0 + 5000,
                 assistant("free-model", "opencode", 0, free_tokens, T0),
+            ),
+            # Copilot-routed: OpenCode records a non-zero `cost` that is its OWN
+            # estimate (Copilot bills by subscription, not per token). The
+            # providerID and the token/cost shape follow a live github-copilot
+            # row of the same 2026-09-25 capture; the figures are that row's.
+            (
+                "msg_a3",
+                "ses_copilot",
+                T0,
+                T0 + 5000,
+                assistant("claude-sonnet-5", "github-copilot", 0.0184639, copilot_tokens, T0),
+            ),
+            # one exact + one Copilot-estimated message: the session is estimated
+            (
+                "msg_a4",
+                "ses_mixed",
+                T0,
+                T0 + 5000,
+                assistant("claude-sonnet-5", "anthropic", 0.0123, paid_tokens, T0),
+            ),
+            (
+                "msg_a5",
+                "ses_mixed",
+                T0 + 6000,
+                T0 + 11000,
+                assistant(
+                    "claude-sonnet-5", "github-copilot", 0.0184639, copilot_tokens, T0 + 6000
+                ),
             ),
         ],
     )

@@ -8,6 +8,7 @@ are derived here straight from the fixture bytes, never from the reader.
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -199,3 +200,127 @@ def test_hermes_missing_database_is_unavailable(tmp_path: Path) -> None:
 
     assert hermes.read(tmp_path / "nope.db", "h_actual").unavailable
     assert not (tmp_path / "nope.db").exists()
+
+
+# --- phase-1 review fixes (p1-r1, p1-r3, p1-r4, p1-r5) ----------------------
+
+
+def test_opencode_copilot_routed_cost_is_estimated_not_exact() -> None:
+    # p1-r1 / spec §5.A.2: Copilot bills by subscription, so OpenCode's non-zero
+    # `cost` on a github-copilot message is its own estimate
+    from fr.usage.readers import opencode
+
+    record = opencode.read(OC_DB, "ses_copilot")
+    assert record.cost.source == "estimated"
+    assert record.cost.usd == pytest.approx(0.0184639)
+
+
+def test_opencode_session_is_exact_only_if_every_priced_message_is() -> None:
+    from fr.usage.readers import opencode
+
+    record = opencode.read(OC_DB, "ses_mixed")
+    assert record.cost.source == "estimated"
+    assert record.cost.usd == pytest.approx(0.0123 + 0.0184639)
+    assert opencode.read(OC_DB, "ses_paid").cost.source == "exact"
+
+
+def _db_copy(src: Path, tmp_path: Path, *statements: str) -> Path:
+    import sqlite3
+
+    db = tmp_path / src.name
+    shutil.copy(src, db)
+    con = sqlite3.connect(db)
+    for statement in statements:
+        con.execute(statement)
+    con.commit()
+    con.close()
+    return db
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        # a non-numeric cell where a count belongs
+        "UPDATE messages SET token_count = 'many' WHERE session_id = 'h_actual'",
+        # a timestamp no clock can hold
+        "UPDATE messages SET timestamp = 'yesterday' WHERE session_id = 'h_actual'",
+        # bytes that are not UTF-8 in a TEXT column
+        "UPDATE messages SET tool_calls = CAST(x'fffe' AS TEXT) WHERE session_id = 'h_actual'",
+    ],
+)
+def test_hermes_one_bad_row_is_unavailable_never_a_crash(tmp_path: Path, statement: str) -> None:
+    # p1-r3 / spec §5.A.7: a reader reports, it never raises
+    from fr.usage.readers import hermes
+
+    record = hermes.read(_db_copy(HERMES_DB, tmp_path, statement), "h_actual")
+    assert record.unavailable
+    assert record.cost.usd is None
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE message SET time_created = 99999999999999999999 WHERE id = 'msg_a1'",
+        "UPDATE message SET data = CAST(x'fffe' AS TEXT) WHERE id = 'msg_a1'",
+        "UPDATE message SET time_created = 'noon' WHERE id = 'msg_a1'",
+    ],
+)
+def test_opencode_one_bad_row_is_unavailable_or_tolerated_never_a_crash(
+    tmp_path: Path, statement: str
+) -> None:
+    from fr.usage.readers import opencode
+
+    record = opencode.read(_db_copy(OC_DB, tmp_path, statement), "ses_paid")
+    # a row the reader can read around (a non-numeric time) is tolerated; one it
+    # cannot is `unavailable` — either way a record comes back
+    assert record.unavailable or record.cost.source == "exact"
+
+
+def test_hermes_unrecorded_per_model_cost_is_omitted_not_priced_at_zero(tmp_path: Path) -> None:
+    # p1-r4: Hermes defaults session_model_usage costs to 0 — "not recorded", not
+    # "$0". With every per-model figure absent, the session total is split over
+    # the messages by tokens, not dumped into unattributed.
+    from fr.usage.readers import hermes
+    from fr.usage.rollup import rollup
+
+    db = _db_copy(
+        HERMES_DB,
+        tmp_path,
+        "UPDATE session_model_usage SET actual_cost_usd = 0, estimated_cost_usd = 0",
+    )
+    record = hermes.read(db, "h_actual")
+    assert record.cost.source == "exact"
+    assert record.cost.by_model == {}
+    result = rollup([record])
+    assert result.by_sub.get("unattributed", 0.0) == pytest.approx(0.0)
+    assert sum(result.by_activity.values()) == pytest.approx(0.05)
+
+
+def test_hermes_mixed_actual_and_estimated_rows_sum_per_row_as_estimated(tmp_path: Path) -> None:
+    # p1-r5: the child has only an estimate; the session still has a figure
+    from fr.usage.readers import hermes
+
+    db = _db_copy(
+        HERMES_DB,
+        tmp_path,
+        "UPDATE sessions SET actual_cost_usd = NULL WHERE id = 'h_actual_child'",
+        "UPDATE session_model_usage SET actual_cost_usd = 0 WHERE session_id = 'h_actual_child'",
+    )
+    record = hermes.read(db, "h_actual")
+    assert record.cost.source == "estimated"
+    assert record.cost.usd == pytest.approx(0.048 + 0.002)
+    assert record.cost.by_model == {"anthropic/claude-sonnet-5": pytest.approx(0.048 + 0.002)}
+
+
+def test_hermes_a_row_with_no_figure_at_all_leaves_the_session_unpriced(tmp_path: Path) -> None:
+    from fr.usage.readers import hermes
+
+    db = _db_copy(
+        HERMES_DB,
+        tmp_path,
+        "UPDATE sessions SET actual_cost_usd = NULL, estimated_cost_usd = NULL "
+        "WHERE id = 'h_actual_child'",
+    )
+    record = hermes.read(db, "h_actual")
+    assert record.cost.source == "none"
+    assert record.cost.usd is None
