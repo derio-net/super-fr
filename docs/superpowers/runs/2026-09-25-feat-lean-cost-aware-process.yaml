@@ -1,0 +1,24 @@
+schema_version: 6
+run: 2026-09-25-feat-lean-cost-aware-process
+workflow: fr-goal@1
+branch: feat/lean-cost-aware-process
+started: '2026-09-25T10:26:39+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending

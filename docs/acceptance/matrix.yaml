@@ -4130,3 +4130,96 @@ rows:
     notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
       conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
       handoff tests in test_run_cli.py.'
+  - id: usage-reconstruct-cross-harness
+    capability: Lean cost-aware pipeline
+    acceptance: The operator can reconstruct a run's cost per model, step and activity
+      from Claude Code, OpenCode or Hermes session data
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+  - id: usage-captured-at-deliver
+    capability: Lean cost-aware pipeline
+    acceptance: Delivering a run stores its usage in docs/superpowers/usage/<run-id>.yaml
+      without an extra agent turn
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+  - id: usage-readable-on-any-host
+    capability: Lean cost-aware pipeline
+    acceptance: fr run cost shows a delivered run's cost on a checkout that never ran
+      it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+  - id: usage-privacy-no-host-identity
+    capability: Lean cost-aware pipeline
+    acceptance: A usage file never contains a hostname, base URL, path or message content
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+  - id: usage-devcontainer-captures
+    capability: Lean cost-aware pipeline
+    acceptance: A devcontainer-mode run's usage file has readable sessions
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: manual, then int. Born at brainstorm 2026-09-25.'
+  - id: step-record-one-resolve
+    capability: Lean cost-aware pipeline
+    acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
+      commit, one line of output'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+  - id: step-record-atomic-refusal
+    capability: Lean cost-aware pipeline
+    acceptance: An invalid step record changes nothing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+  - id: stale-session-resumes-record
+    capability: Lean cost-aware pipeline
+    acceptance: A new session picks up an in-progress step record and completes it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+  - id: bookkeeping-turns-per-step
+    capability: Lean cost-aware pipeline
+    acceptance: A live run spends at most 2 bookkeeping turns per step (baseline 6.1)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: manual. Born at brainstorm 2026-09-25.'
+  - id: deliver-pr-body-sections
+    capability: Lean cost-aware pipeline
+    acceptance: A PR missing a required fr-rendered section cannot be delivered
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+  - id: audit-pages-regenerated
+    capability: Lean cost-aware pipeline
+    acceptance: The operator can regenerate the audit and architecture pages from run
+      data
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
