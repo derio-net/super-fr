@@ -3,7 +3,7 @@ run: 2026-09-25-fix-610-closeout-defects
 workflow: fr-goal@1
 branch: fix/610-closeout-defects
 started: '2026-09-25T07:28:08+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -345,6 +345,17 @@ steps:
           reviewer: acc4b13ea417f0a53
           findings: p3-m5
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-25T12:47:01+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p1-r1, p2-r3
+    main_session:
+      input_tokens: 0
+      cache_creation_input_tokens: 0
+      cache_read_input_tokens: 0
+      output_tokens: 0
+      turns: 0
+      sessions: 1
   deliver:
     state: pending
