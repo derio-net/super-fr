@@ -312,3 +312,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f2 created=2026-09-26T00:54:47 phase=3 state=open review_scope=in -->
 ### r3-f2 · finding [open] (reviewer: in scope) · HIGH: take_theirs checks out main's WHOLE version file, discarding the PR's other edits in it (e.g. a new dependency in pyproject.toml); exceeds d3 (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f3 created=2026-09-26T00:54:49 phase=3 state=open review_scope=in -->
+### r3-f3 · finding [open] (reviewer: in scope) · MEDIUM: batch merge never checks collected-config freshness (spec §3.I), yet runs its version.files/set/relock (phase 3)
