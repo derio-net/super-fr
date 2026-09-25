@@ -403,3 +403,8 @@ The weakened 'or kept in out' assertion is now an exact 'The scratch worktree is
 ### r3-f11-resolved · finding [fixed] · resolves r3-f11: Git seam tripwire does not stop batch modules from running arbitrary commands through run_declared/_run
 
 AST tripwire: batch modules may import only Checkout, Worktree, GitError from fr.triage.gitseam, never the module whole, and never name or reach _run/git/git_ok/run_declared. Tests: test_forge_adapter_batch_ops.py::test_batch_modules_reach_git_only_through_the_declared_worktree_methods, self-check ::test_the_seam_tripwire_fires_on_each_way_around_it (8 plants), ::test_the_seam_tripwire_admits_the_declared_surface
+
+<!-- fr:journal kind=finding scope=plan id=r3-f12-resolved created=2026-09-26T01:13:02 state=fixed resolves=r3-f12 answered_by=agent -->
+### r3-f12-resolved · finding [fixed] · resolves r3-f12: git merge in the scratch worktree inherits operator rerere config, which can silently resolve a non-version conflict; pass -c rerere.enabled=false
+
+Worktree.merge runs git -c rerere.enabled=false merge --no-ff --no-commit <ref>. Test: test_triage_gitseam.py::test_the_scratch_merge_disables_rerere (argv asserted)
