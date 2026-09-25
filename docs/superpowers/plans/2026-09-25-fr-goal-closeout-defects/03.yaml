@@ -156,9 +156,11 @@ state:
         cursor saves + run_cmd:872 spec-journal append noted and committed once; 4
         new tests green; run subset fallout fixed (see journal)'
     P3.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:51:22+00:00'
+      note: centralised as the _commits_run_writes decorator + _RunWrites recorder;
+        _commit_run_writes_now flushes before a dispatch brief so the brief stays
+        the last line
     P3.T4.S1:
       state: x
       ticked_at: '2026-09-25T09:27:42+00:00'
