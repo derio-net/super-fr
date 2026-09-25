@@ -625,9 +625,10 @@ def commit_paths(
     # non-zero exit means git could not tell us, and reporting `unchanged`
     # for that would hand a caller false "cursor committed" assurance.
     if pending.returncode != 0:
+        detail = pending.stderr.strip() or pending.stdout.strip()
         return CommitOutcome(
             committed=False,
-            reason=f"could not inspect the index: {pending.stderr.strip() or pending.stdout.strip()}",
+            reason=f"could not inspect the index: {detail}",
         )
     if not pending.stdout.strip():
         return CommitOutcome(
