@@ -80,3 +80,8 @@ Pre-existing gap in test_import_direction.py, not caused by this change.
 ### r1-6-resolved · finding [out-of-scope] · resolves r1-6: Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take
 
 Follows from the spec's decision to register herdr under fr.runners (d2); herdr refuses phase units in can_dispatch, so the items are refused visibly, not lost. Listed in the PR for the operator.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-25T20:59:09 phase=1 -->
+### review-phase-1 · review · Phase 1 review (feature-dev:code-reviewer, separate context): 7 findings (phase 1)
+
+In scope and fixed: r1-1, r1-2, r1-3, r1-4. In scope, moved to phase 3: r1-docs. Out of scope: r1-5, r1-6. No correctness bug found; schema-2 downgrade on write not possible in this phase (nothing writes judgements yet).
