@@ -24,3 +24,8 @@ Docs, skill prose, mirrors and the version bump: no production code is written, 
 ### 3cc7e3015849 · discovery · no-refactor-because P3.T6 (phase 3)
 
 This task IS the phase's refactor and quality gate; a refactor step of a refactor step would be circular.
+
+<!-- fr:journal kind=decision scope=plan id=model-override-opus-5-5 created=2026-09-25T22:44:49 -->
+### model-override-opus-5-5 · decision · Operator: Opus 5.5 on every tier for this run
+
+Operator (2026-09-25): run implementation with Opus 5.5 on every tier. Standing bindings (claude-code: mechanical=haiku-4.5, standard=sonnet-5, hard=opus-5.5) are left untouched; each dispatch passes Opus 5.5 explicitly and records it with fr run claim --model claude-opus-5-5.
