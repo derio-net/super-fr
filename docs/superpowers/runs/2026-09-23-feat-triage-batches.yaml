@@ -1,4 +1,4 @@
-schema_version: 6
+schema_version: 7
 run: 2026-09-23-feat-triage-batches
 workflow: fr-goal@1
 branch: feat/triage-batches
@@ -14,13 +14,6 @@ steps:
   spec-review:
     state: done
     at: '2026-09-25T07:40:37+00:00'
-    main_session:
-      input_tokens: 56
-      cache_creation_input_tokens: 73959
-      cache_read_input_tokens: 6228034
-      output_tokens: 41393
-      turns: 26
-      sessions: 1
     units:
       step/spec-review:
         attempts:
@@ -37,13 +30,6 @@ steps:
     at: '2026-09-25T20:39:17+00:00'
     emitted:
       plan: docs/superpowers/plans/2026-09-25-triage-batches
-    main_session:
-      input_tokens: 88
-      cache_creation_input_tokens: 603382
-      cache_read_input_tokens: 13294868
-      output_tokens: 46143
-      turns: 44
-      sessions: 1
     units:
       step/plan:
         attempts:
@@ -59,13 +45,6 @@ steps:
     exit: 0
     stdout: |
       self-review passed
-    main_session:
-      input_tokens: 0
-      cache_creation_input_tokens: 0
-      cache_read_input_tokens: 0
-      output_tokens: 0
-      turns: 0
-      sessions: 1
   implement:
     state: running
     at: '2026-09-25T22:42:45+00:00'
@@ -86,17 +65,6 @@ steps:
           session: dcff6006-440b-4a29-b738-f04b65457c17
           returned: '2026-09-25T20:54:44+00:00'
           outcome: done
-          estimate:
-            journal_entries: 6
-            journal_lines: 31
-            handoff_chars: 1425
-            spec_bytes: 36444
-            plan_bytes: 25726
-          measured:
-            input_tokens: 68
-            cache_creation_input_tokens: 94505
-            cache_read_input_tokens: 2701986
-            output_tokens: 528
       phase/1/review-phase:
         state: done
         attempts:
@@ -106,17 +74,6 @@ steps:
           session: dcff6006-440b-4a29-b738-f04b65457c17
           returned: '2026-09-25T20:59:24+00:00'
           outcome: done
-          estimate:
-            journal_entries: 10
-            journal_lines: 51
-            handoff_chars: 3603
-            spec_bytes: 36444
-            plan_bytes: 25917
-          measured:
-            input_tokens: 40
-            cache_creation_input_tokens: 95448
-            cache_read_input_tokens: 1267830
-            output_tokens: 1674
         evidence:
           review: review-phase-1
           reviewer: a8b28fa83cb208e61
@@ -132,17 +89,6 @@ steps:
           session: dcff6006-440b-4a29-b738-f04b65457c17
           returned: '2026-09-25T21:29:04+00:00'
           outcome: done
-          estimate:
-            journal_entries: 20
-            journal_lines: 87
-            handoff_chars: 5798
-            spec_bytes: 36444
-            plan_bytes: 26050
-          measured:
-            input_tokens: 226
-            cache_creation_input_tokens: 301694
-            cache_read_input_tokens: 22755808
-            output_tokens: 2307
       phase/2/review-phase:
         state: done
         attempts:
@@ -152,12 +98,6 @@ steps:
           session: dcff6006-440b-4a29-b738-f04b65457c17
           returned: '2026-09-25T22:08:59+00:00'
           outcome: done
-          estimate:
-            journal_entries: 30
-            journal_lines: 137
-            handoff_chars: 13989
-            spec_bytes: 36444
-            plan_bytes: 27485
         evidence:
           review: review-phase-2
           reviewer: acdf4d2daf28e4e44
@@ -173,17 +113,6 @@ steps:
           session: dcff6006-440b-4a29-b738-f04b65457c17
           returned: '2026-09-25T22:42:44+00:00'
           outcome: done
-          estimate:
-            journal_entries: 60
-            journal_lines: 253
-            handoff_chars: 18424
-            spec_bytes: 36444
-            plan_bytes: 27485
-          measured:
-            input_tokens: 234
-            cache_creation_input_tokens: 293489
-            cache_read_input_tokens: 23956755
-            output_tokens: 1314
       phase/3/review-phase:
         state: running
         attempts:
@@ -191,12 +120,6 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: dcff6006-440b-4a29-b738-f04b65457c17
-          estimate:
-            journal_entries: 71
-            journal_lines: 308
-            handoff_chars: 22794
-            spec_bytes: 36444
-            plan_bytes: 27865
   journal-check:
     state: pending
   deliver:

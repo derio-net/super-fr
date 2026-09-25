@@ -1,0 +1,119 @@
+schema_version: 1
+run: 2026-09-23-feat-triage-batches
+captures:
+- host: h-ccacaef8
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-25T22:42:45+00:00'
+  at:
+  - migrated
+  sessions:
+  - session: (main)
+    role: main
+    models:
+      unknown:
+        input: 144
+        cache_write: 677341
+        cache_read: 19522902
+        output: 87536
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      spec-review:
+        usd: null
+        turns: 26
+      plan:
+        usd: null
+        turns: 44
+      plan-review:
+        usd: null
+        turns: 0
+  - session: aafbc50c4914c1a73
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 68
+        cache_write: 94505
+        cache_read: 2701986
+        output: 528
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 1425
+  - session: phase/1/review-phase#1
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 40
+        cache_write: 95448
+        cache_read: 1267830
+        output: 1674
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 3603
+  - session: a5bddba9f7040ce56
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 226
+        cache_write: 301694
+        cache_read: 22755808
+        output: 2307
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 5798
+  - session: phase/2/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 13989
+  - session: a7e0a33450b6066e3
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 234
+        cache_write: 293489
+        cache_read: 23956755
+        output: 1314
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 18424
+  - session: phase/3/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 22794
