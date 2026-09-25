@@ -4136,9 +4136,17 @@ rows:
       from Claude Code, OpenCode or Hermes session data
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_readers.py
+      - super-fr:tests/unit/test_usage_report.py
+      - super-fr:tests/unit/test_usage_classify.py
+    status: ci
+    notes: 'Phase 1 of 2026-09-25-lean-cost-aware-process: per-harness readers over
+      redacted fixtures (Claude Code capture, OpenCode live-schema DB, Hermes upstream-schema
+      DB), the classifier table and the rollup/CLI tests run in CI; cost per model,
+      activity and step reconstructed. Hermes rows are schema-built, not a live capture
+      (journal 83ed2919b8c4).'
   - id: usage-captured-at-deliver
     capability: Lean cost-aware pipeline
     acceptance: Delivering a run stores its usage in docs/superpowers/usage/<run-id>.yaml
