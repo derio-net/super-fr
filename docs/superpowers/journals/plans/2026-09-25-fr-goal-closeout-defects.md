@@ -148,3 +148,8 @@ Regex updated to the phase-2 wording ('in origin/feat/x but no scripts/validate-
 ### p3-r1 · finding [open] (reviewer: in scope) · Run commit message drops/misreports state and item (phase 3)
 
 Reviewer (important): _RunWrites.message() takes state from steps[step] — member resolves/claims lose it, gate clears read 'pending', advance omits the item. Spec §3.C format: <verb> <step>[ <item>] <state>.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-25T12:15:01 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Record commits run consumer hooks + signing on every fr command (phase 3)
+
+Reviewer (important): commit_paths commits without --no-verify; per-command frequency makes slow/auto-fixing hooks fail or stall ticks, and a failed commit leaves the record staged.
