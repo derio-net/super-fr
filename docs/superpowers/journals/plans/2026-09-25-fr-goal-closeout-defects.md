@@ -288,3 +288,8 @@ a216b4a5: commit_records/_RunWrites.commit()/_commit_run_writes_now() return Com
 ### p4-r2-resolved · finding [fixed] · resolves p4-r2: Brief's archive/housekeeping steps are not exact commands
 
 a797e354: closeout brief gives exact housekeeping commands (fr isolation up --branch chore/archive-<slug> before fr archive, explicit warning against archiving in the merged feature workspace, commit/push/PR). Test: test_run_closeout.py::test_closeout_brief_housekeeping_gives_exact_commands_on_a_new_branch
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-09-25T14:10:57 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: Brief never says which checkout to run from
+
+a797e354: closeout brief now names its own checkout (repo_root, base clone, default branch, after merge) instead of relying on the transient handoff line. Test: test_run_closeout.py::test_closeout_brief_names_the_checkout_to_run_it_from
