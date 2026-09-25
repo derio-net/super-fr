@@ -149,3 +149,8 @@ hermes.py and opencode.py: body moved to _read(); read() catches sqlite3.Error, 
 ### p1-r4-resolved · finding [fixed] · resolves p1-r4: NULL per-model Hermes cost coerced to 0.0 and priced at $0
 
 Hermes session_model_usage costs are NOT NULL DEFAULT 0, so 0 means not recorded. None and <=0 per-model figures are now omitted; with none left, by_model is empty and rollup takes the token-pool path. Test: all per-model zeros give by_model {} and nothing lands in unattributed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-09-25T20:22:09 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: Mixed actual/estimated Hermes rows discard figures as Cost() none
+
+hermes._cost: per session row, actual else estimated, summed; exact only if every row was actual. Per-model rows (now per session, no GROUP BY) follow their row's choice; a row with neither figure leaves the session unpriced. Tests for mixed rows and for a row with no figure.
