@@ -459,3 +459,8 @@ Reviewer a9217b89215b69c05 (Opus 5.5). Held up: emits-literal sections, template
 ### p3-r1-resolved · finding [fixed] · resolves p3-r1: Record path accepts answered_by: operator on an out-of-scope fix without transcript verification
 
 verify_operator_claim moved to fr.journal.operator; the engine runs it in _journal_writes for every resolution claiming answered_by operator (record + verb paths); before_write hook removed. test_record_review_fixes::test_a_record_fixing_an_out_of_scope_finding_as_operator_is_verified.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-09-25T23:47:57 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Plain resolve --step deliver --state done bypasses the live PR-section check
+
+_deliver_pr_gate in _resolve_body (step emits pr, state done, before _complete_step) renders pr-body.md and checks live missing_sections; engine pre-check removed. 15 deliver/pr-emitting tests now serve a complying PR via the complete_live_pr fixture. test_the_flag_form_deliver_is_refused_without_the_out_of_scope_section.
