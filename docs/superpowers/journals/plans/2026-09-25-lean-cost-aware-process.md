@@ -69,3 +69,8 @@ hermes.py:105,111 + rollup.py:126-133.
 ### p1-r5 · finding [open] (reviewer: in scope) · Mixed actual/estimated Hermes rows discard figures as Cost() none (phase 1)
 
 hermes.py:101-114.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-09-25T20:03:25 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · .fr-deliver classified verify for shell writes but journal_write for Write tool (phase 1)
+
+classify.py:127 vs :180.
