@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 PLANS_REL = Path("docs") / "superpowers" / "plans"
-REPAIR_COMMAND = (
-    "bash ~/.claude/plugins/marketplaces/derio-net--super-fr/scripts/install-validator-wrapper.sh"
-)
+# Harness-neutral: `fr init validator-wrapper` (below) runs identically on
+# Claude Code, OpenCode, Hermes, or a bare CLI shell — unlike the retired
+# `bash ~/.claude/plugins/marketplaces/.../install-validator-wrapper.sh`
+# remedy, which only worked where that marketplace path existed at all
+# (2026-09-25 fr-goal-closeout-defects spec §3.B).
+REPAIR_COMMAND = "fr init validator-wrapper"
 WRAPPER_REL = Path("scripts") / "validate-plans.sh"
 
 WRAPPER_TEXT = """#!/usr/bin/env bash
@@ -66,14 +69,3 @@ def ensure_validator_wrapper(repo_root: Path) -> bool:
     target.write_text(WRAPPER_TEXT)
     target.chmod(0o755)
     return before != WRAPPER_TEXT
-
-
-def validate_plan_repo_validator(repo_root: Path) -> None:
-    if not plans_dir_exists(repo_root):
-        return
-    target = validator_wrapper_path(repo_root)
-    if not target.is_file() or not (target.stat().st_mode & 0o111):
-        raise ValidatorWrapperError(
-            f"plan repo is missing executable {WRAPPER_REL}; run `{REPAIR_COMMAND}` "
-            "from the repo root, then retry `fr isolation up`."
-        )

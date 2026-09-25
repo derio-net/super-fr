@@ -383,6 +383,26 @@ def test_size_counts_deletions(tmp_path: Path) -> None:
     assert "2 lines" in section
 
 
+def test_the_validator_wrapper_is_an_fr_artifact(tmp_path: Path) -> None:
+    """`fr plan create` writes scripts/validate-plans.sh on a repo's first plan
+    (gh#610 §3.B); it is fr's bookkeeping, not work the estimate covered."""
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "wrapper").mkdir()
+    plain = _repo(tmp_path / "plain", estimate=100)
+    _write(plain, "src/app.py", "x = 1\n")
+    _commit_all(plain, "work")
+
+    with_wrapper = _repo(tmp_path / "wrapper", estimate=100)
+    _write(with_wrapper, "src/app.py", "x = 1\n")
+    _write(with_wrapper, "scripts/validate-plans.sh", "#!/usr/bin/env bash\nexit 0\n")
+    _commit_all(with_wrapper, "work")
+
+    report = build_report(with_wrapper, _plan(with_wrapper), None)
+
+    assert "validate-plans.sh" not in report
+    assert _section(report, "Size") == _section(build_report(plain, _plan(plain), None), "Size")
+
+
 # ── determinism and the CLI ──────────────────────────────────────────────────
 
 

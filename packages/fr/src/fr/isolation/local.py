@@ -310,7 +310,10 @@ def branch_changes_present(
     """
     mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
     if mb.returncode != 0:
-        raise IsolationError(f"no merge-base for {base_ref} and {branch} — unrelated histories?")
+        raise IsolationError(
+            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
+            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
+        )
     merge_base = mb.stdout.strip()
     names = run(["git", "diff", "--name-only", merge_base, branch], cwd=repo_root)
     changed = [ln for ln in names.stdout.splitlines() if ln]
@@ -989,7 +992,7 @@ class LocalWorktreeDevcontainerTarget:
     def verify_merge(
         self,
         state: IsolationState,
-        default_branch: str = "main",
+        default_branch: str,
         remote: str = "origin",
     ) -> dict[str, Any]:
         """Confirm the branch's changes reached `<remote>/<default_branch>`.
@@ -1011,7 +1014,7 @@ class LocalWorktreeDevcontainerTarget:
     def verify_merge_reaped(
         self,
         branch: str,
-        default_branch: str = "main",
+        default_branch: str,
         remote: str = "origin",
     ) -> dict[str, Any]:
         """`verify_merge` for a branch whose workspace gc already reaped.
@@ -1886,9 +1889,9 @@ class LocalWorktreeDevcontainerTarget:
         line = result.stdout.strip()
         if result.returncode != 0 or not line:
             raise IsolationError(
-                "plan repo has scripts/validate-plans.sh in the working tree but not in "
-                f"{ref}; run `{REPAIR_COMMAND}` if needed, commit it to the isolation start "
-                "ref, then retry `fr isolation up`."
+                f"plan repo has docs/superpowers/plans in {ref} but no "
+                f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
+                "root, commit it to the isolation start ref, then retry `fr isolation up`."
             )
         mode = line.split(maxsplit=1)[0]
         if mode != "100755":

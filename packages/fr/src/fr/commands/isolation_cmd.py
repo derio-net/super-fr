@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import typer
 
@@ -123,6 +124,17 @@ def _gc_ops(target: Target) -> _GcCapable:
 def _fail(err: IsolationError) -> None:
     typer.echo(f"error: {err}", err=True)
     raise typer.Exit(2)
+
+
+def _verify_or_fail(call: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """Run a `verify_merge`/`verify_merge_reaped` call; a raised `IsolationError`
+    exits 2 via `_fail` (an `error:`-prefixed message, no traceback) instead of
+    propagating — the live and reaped paths share this shape (§3.A, gh#469)."""
+    try:
+        return call()
+    except IsolationError as err:
+        _fail(err)
+        raise AssertionError("unreachable")  # _fail always raises typer.Exit
 
 
 def _resolve_repo(repo: Path) -> Path:
@@ -859,8 +871,10 @@ def verify_merge(
     branch: str | None = typer.Option(
         None, help="Branch whose merge to verify (default: the single active workspace)."
     ),
-    default_branch: str = typer.Option(
-        "main", "--default-branch", help="Base branch the PR merged into."
+    default_branch: str | None = typer.Option(
+        None,
+        "--default-branch",
+        help="Base branch the PR merged into (resolved from target if unset).",
     ),
 ) -> None:
     """Verify a merged branch's changes actually reached the base branch.
@@ -896,17 +910,21 @@ def verify_merge(
     # only the host to go on, so it keeps the env-based selection.
     target = _target_or_exit(root) if state is None else _target_for_or_exit(root, state)
     _refuse_external(target, "verify-merge")
+    # Resolve default_branch if not explicitly provided
+    if default_branch is None:
+        default_branch = _worktree_ops(target)._resolve_default_branch()
+    # Exit 2 (usage), never 1, on a raised IsolationError: 1 means "not
+    # verified — recover", and an unresolvable ref/base disproves nothing
+    # about the merge.
     if state is None:
         assert branch is not None
-        try:
-            res = _worktree_ops(target).verify_merge_reaped(branch, default_branch=default_branch)
-        except IsolationError as err:
-            # Exit 2 (usage), never 1: 1 means "not verified — recover", and an
-            # unresolvable ref disproves nothing about the merge.
-            _fail(err)
-            return
+        res = _verify_or_fail(
+            lambda: _worktree_ops(target).verify_merge_reaped(branch, default_branch=default_branch)
+        )
     else:
-        res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+        res = _verify_or_fail(
+            lambda: _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+        )
     note = " (workspace already reaped; checked from the repo root)" if reaped else ""
     if res["verified"]:
         typer.echo(

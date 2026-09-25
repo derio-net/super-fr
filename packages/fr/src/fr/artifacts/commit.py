@@ -40,7 +40,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +66,7 @@ __all__ = [
     "GitUnavailableError",
     "NoRepo",
     "commit_migration",
+    "commit_paths",
     "git_context",
     "index_lock_held",
     "lock_path",
@@ -87,6 +89,9 @@ class CommitOutcome:
     committed: bool
     reason: str
     paths: tuple[Path, ...] = ()
+    # True when there was nothing to commit because the files already match
+    # HEAD: not a refusal — the content is already committed.
+    unchanged: bool = False
     message: str | None = None
 
 
@@ -464,17 +469,57 @@ def commit_migration(
     paths = report.changed_paths
     if not paths:
         return CommitOutcome(committed=False, reason="nothing was migrated; nothing to commit")
+    if fr_version is None:
+        from fr import __version__
+
+        fr_version = __version__
+    return commit_paths(repo_root, paths, migration_commit_message(report, fr_version=fr_version))
+
+
+_UNCOMMITTED = "the files are in your working tree, uncommitted"
+
+
+_LOCK_POLL_SECONDS = 0.05
+
+
+def commit_paths(
+    repo_root: Path,
+    paths: Sequence[Path],
+    message: str,
+    *,
+    no_verify: bool = False,
+    restore_index: bool = False,
+    lock_wait: float = 0.0,
+) -> CommitOutcome:
+    """Commit exactly `paths` under `message`, or explain why it did not.
+
+    The generic body `commit_migration` delegates to, and the one committer fr's
+    own record writes use (gh#610, spec 2026-09-25 §3.C). Every refusal of the
+    migration commit applies unchanged: no repo, a git refusal, a detached HEAD,
+    the default branch, no HEAD, a held index lock, a path outside the repo.
+    A relative path is read against `repo_root`, not the process cwd.
+
+    The pathspec commit records each path's WHOLE working-tree file, so a hand
+    edit sitting in one of these files rides along under `message` (p3-m2).
+
+    The keywords are the record-commit policy (decision 248a1091887d), off by
+    default so the migration commit is unchanged: `no_verify` skips the
+    repository's commit hooks (signing is left as configured); `restore_index`
+    puts the index entries of `paths` back as they were if the commit fails;
+    `lock_wait` waits up to that many seconds for a held `index.lock` to clear
+    before refusing (p3-r3).
+    """
+    paths = tuple(p if p.is_absolute() else repo_root / p for p in paths)
+    if not paths:
+        return CommitOutcome(committed=False, reason="no paths were written; nothing to commit")
 
     state = git_context(repo_root)
     if isinstance(state, GitRefusal):
-        return CommitOutcome(
-            committed=False,
-            reason=f"{state.reason}; the migrated files are in your working tree, uncommitted",
-        )
+        return CommitOutcome(committed=False, reason=f"{state.reason}; {_UNCOMMITTED}")
     if isinstance(state, NoRepo):
         return CommitOutcome(
             committed=False,
-            reason=f"{repo_root} is not a git repository; the migrated files are uncommitted",
+            reason=f"{repo_root} is not a git repository; the files are uncommitted",
         )
     toplevel = state.toplevel
     if state.branch is None:
@@ -488,7 +533,7 @@ def commit_migration(
             reason=(
                 "refusing to commit on a detached HEAD (a rebase, a bisect, or a checked-out "
                 "commit): the commit would be folded into the operation in progress or "
-                "orphaned. The migrated files are in your working tree, uncommitted"
+                "orphaned. The files are in your working tree, uncommitted"
             ),
         )
     if state.branch == state.default_branch:
@@ -496,7 +541,7 @@ def commit_migration(
             committed=False,
             reason=(
                 f"refusing to commit on {state.branch!r}, the repository's default branch; "
-                f"the migrated files are in your working tree, uncommitted"
+                f"{_UNCOMMITTED}"
             ),
         )
     if not state.has_head:
@@ -506,16 +551,19 @@ def commit_migration(
         # whatever else happened to be staged.
         return CommitOutcome(
             committed=False,
-            reason=f"{toplevel} has no commits yet; the migrated files are uncommitted",
+            reason=f"{toplevel} has no commits yet; the files are uncommitted",
         )
     held = index_lock_held(toplevel)
+    deadline = time.monotonic() + lock_wait
+    while held is not None and time.monotonic() < deadline:
+        # Another writer in the same worktree (an executor's own commit) holds
+        # the index for a moment; a bounded wait, then the same refusal.
+        time.sleep(_LOCK_POLL_SECONDS)
+        held = index_lock_held(toplevel)
     if held is not None:
         return CommitOutcome(
             committed=False,
-            reason=(
-                f"another git process holds {held}; the migrated files are in your "
-                "working tree, uncommitted"
-            ),
+            reason=f"another git process holds {held}; {_UNCOMMITTED}",
         )
 
     # Preconditions, asserted rather than trusted: this writes to git history
@@ -530,9 +578,29 @@ def commit_migration(
                 reason=f"refusing to commit: {path} is outside the git repository {toplevel}",
             )
 
-    # `add` first, so an artifact a migration *created* is tracked and can be
-    # named by the pathspec below. Scoped with `--` so no path is ever read as
-    # an option.
+    # The index entries of `rel` as they stand now, so a failed commit can put
+    # them back: a path the caller had already staged stays staged (at the
+    # version it staged), a path only this call added is dropped again.
+    before: str | None = None
+    if restore_index:
+        try:
+            listed = _git(toplevel, "ls-files", "-s", "-z", "--", *rel)
+        except GitUnavailableError as e:
+            return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
+        if listed.returncode != 0:
+            return CommitOutcome(
+                committed=False,
+                reason=f"refusing to commit: `git ls-files` failed: {listed.stderr.strip()}",
+            )
+        before = listed.stdout
+
+    def failed(reason: str) -> CommitOutcome:
+        if before is not None:
+            reason += _restore_index(toplevel, rel, before)
+        return CommitOutcome(committed=False, reason=reason, paths=paths, message=message)
+
+    # `add` first, so a file the caller *created* is tracked and can be named by
+    # the pathspec below. Scoped with `--` so no path is ever read as an option.
     try:
         added = _git(toplevel, "add", "--", *rel)
     except GitUnavailableError as e:
@@ -547,49 +615,82 @@ def commit_migration(
     # against the index, so the answer does not change when the operator has
     # staged something unrelated. No -> no empty commit, and — the important
     # half — no commit at all, which is what stops an unrelated staged file
-    # from being committed under a migration message.
+    # from being committed under fr's message.
     try:
         pending = _git(toplevel, "diff", "--cached", "--name-only", "HEAD", "--", *rel)
     except GitUnavailableError as e:
         return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
-    if pending.returncode != 0 or not pending.stdout.strip():
+    # pd-r2: a FAILED probe is not the same answer as an EMPTY one. Only
+    # rc == 0 with empty stdout means "the files already match HEAD" — a
+    # non-zero exit means git could not tell us, and reporting `unchanged`
+    # for that would hand a caller false "cursor committed" assurance.
+    if pending.returncode != 0:
+        detail = pending.stderr.strip() or pending.stdout.strip()
         return CommitOutcome(
             committed=False,
-            reason="the migrated files already match HEAD; no commit made",
+            reason=f"could not inspect the index: {detail}",
         )
-
-    if fr_version is None:
-        from fr import __version__
-
-        fr_version = __version__
-    message = migration_commit_message(report, fr_version=fr_version)
+    if not pending.stdout.strip():
+        return CommitOutcome(
+            committed=False,
+            reason="the files already match HEAD; no commit made",
+            unchanged=True,
+        )
 
     # The pathspec on `commit` is what keeps an unrelated *staged* file out:
     # without it git records the whole index. It also leaves that file staged.
+    verify = ["--no-verify"] if no_verify else []
     try:
         # A commit can legitimately take longer than a read: pre-commit hooks
         # and signing run here. Still bounded, still reported.
-        done = _git(toplevel, "commit", "-m", message, "--", *rel, timeout=GIT_TIMEOUT_SECONDS * 4)
-    except GitUnavailableError as e:
-        return CommitOutcome(
-            committed=False,
-            reason=f"the migration is in your working tree but could not be committed: {e}",
-            paths=paths,
-            message=message,
+        done = _git(
+            toplevel,
+            "commit",
+            *verify,
+            "-m",
+            message,
+            "--",
+            *rel,
+            timeout=GIT_TIMEOUT_SECONDS * 4,
         )
+    except GitUnavailableError as e:
+        return failed(f"the files are in your working tree but could not be committed: {e}")
     if done.returncode != 0:
-        return CommitOutcome(
-            committed=False,
-            reason=(
-                f"the migration is in your working tree but could not be committed: "
-                f"{done.stderr.strip() or done.stdout.strip()}"
-            ),
-            paths=paths,
-            message=message,
+        return failed(
+            f"the files are in your working tree but could not be committed: "
+            f"{done.stderr.strip() or done.stdout.strip()}"
         )
     return CommitOutcome(
         committed=True,
-        reason=f"committed {len(rel)} migrated path(s): {', '.join(rel)}",
+        reason=f"committed {len(rel)} path(s): {', '.join(rel)}",
         paths=paths,
         message=message,
     )
+
+
+def _restore_index(toplevel: Path, rel: Sequence[str], before: str) -> str:
+    """Put the index entries of `rel` back to `before` (`ls-files -s -z`).
+
+    Returns "" on success, or a clause naming what could not be restored — the
+    caller's refusal is still reported either way; this never raises.
+    """
+    try:
+        reset = _git(toplevel, "reset", "-q", "--", *rel)
+        if reset.returncode not in (0, 1):  # 1: "unstaged changes after reset"
+            return f"; the index could not be restored: {reset.stderr.strip()}"
+        entries = "".join(f"{entry}\0" for entry in before.split("\0") if entry.strip())
+        if entries:
+            done = subprocess.run(
+                ["git", "update-index", "-z", "--index-info"],
+                cwd=toplevel,
+                input=entries,
+                capture_output=True,
+                text=True,
+                timeout=GIT_TIMEOUT_SECONDS,
+                check=False,
+            )
+            if done.returncode != 0:
+                return f"; the index could not be restored: {done.stderr.strip()}"
+    except (GitUnavailableError, OSError, subprocess.SubprocessError) as e:
+        return f"; the index could not be restored: {e}"
+    return ""

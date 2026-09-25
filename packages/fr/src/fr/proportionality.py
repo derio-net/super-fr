@@ -42,14 +42,16 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
+from fr.plan_validator_wrapper import WRAPPER_REL
 
 if TYPE_CHECKING:
     from fr.journal.model import JournalEntry
     from fr.parser import Plan
     from fr.types import PhaseHeader
 
-EXEMPT_PREFIXES = ("docs/superpowers/", "docs/acceptance/")
-"""fr's own artifacts: spec, plan, journals, runs, acceptance matrix + reports."""
+EXEMPT_PREFIXES = ("docs/superpowers/", "docs/acceptance/", WRAPPER_REL.as_posix())
+"""fr's own artifacts: spec, plan, journals, runs, acceptance matrix + reports,
+and the validator wrapper `fr plan create` installs on a repo's first plan."""
 
 MIN_STEM_CHARS = 4
 """Shorter stems (`app`, `cli`, `io`) match half a repo by accident."""

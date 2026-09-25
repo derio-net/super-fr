@@ -580,7 +580,9 @@ def test_remote_row_checks_the_validator_wrapper_in_origin_ref(
     _git(repo, "checkout", "-q", "main")
     _git(repo, "branch", "-q", "-D", "feat/x")
 
-    with pytest.raises(IsolationError, match="not in origin/feat/x"):
+    with pytest.raises(
+        IsolationError, match="in origin/feat/x but no scripts/validate-plans.sh there"
+    ):
         _up(repo, GitRunner(), branch="feat/x")
 
 

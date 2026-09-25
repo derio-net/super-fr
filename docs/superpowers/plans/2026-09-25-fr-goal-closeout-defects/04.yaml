@@ -1,0 +1,108 @@
+schema_version: 2
+phase:
+  number: 4
+  title: fr pickup --run prints the closeout brief; deliver hands it off (spec §3.D)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - closeout-pickup-run-handoff
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/test_pickup_cmd.py
+  - tests/unit/test_run_closeout.py
+  - tests/unit/test_run_cli.py
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: The closeout brief is derived from the run file
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_run_closeout.py: a pure
+      `closeout_brief(repo_root, state) -> str` for a RunState whose deliver
+      is done with emitted pr/spec/plan contains, in order: branch, PR url,
+      spec + plan paths, `fr isolation verify-merge --branch <b>` with a STOP
+      instruction, the spec's `## Test Plan` path (only when the spec has one),
+      each out-of-scope finding from both journals with its `fr journal
+      resolve … --state deferred --tracked-by <#N>` line, `fr status`,
+      `fr archive <plan-dir>` on a housekeeping branch, the housekeeping PR,
+      and `fr isolation down --branch <b>`. Run: fail.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement fr/run/closeout.py reading only the RunState and the
+      artifacts it names (journal findings via the existing journal
+      render/parse API — grep journal_cmd.py for how `render --section
+      findings` selects out-of-scope ones). Tests green.
+- number: 2
+  title: fr pickup --run
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_pickup_cmd.py: `fr pickup --run <id>` prints the
+      brief for a run with deliver done; exit 2 naming the cursor for a run
+      whose deliver is not done; exit 2 when --run is combined with a
+      plan_dir or --phase; exit 2 for an unknown run id; the existing
+      `fr pickup <plan-dir> --phase N` behaviour unchanged. Run: fail.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: pickup_cmd.py: plan_dir becomes Optional, --phase Optional,
+      new --run; exactly one mode must be given. Tests green.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: keep pickup_cmd.py thin (loading + mode check only; brief
+      text lives in fr/run/closeout.py); tests green.
+- number: 3
+  title: Resolving deliver and a finished advance print the handoff
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: tests/unit/test_run_cli.py: `fr run resolve --step deliver --state
+      done` (with the evidence fixtures the existing deliver tests use) prints
+      `closeout: after the PR merges, start a NEW session in <workspace> and
+      run` followed by `fr pickup --run <id>`, plus `push it (git push)` with
+      the cursor commit sha; `fr run advance` on the finished run prints the
+      same closeout lines after `run <id> complete`. Run: fail.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: add one helper in run_cmd.py producing the handoff lines; call it
+      from deliver's resolve path (after the phase-3 commit, so the sha is
+      known) and from the finished-run branch (~L3319-3326). Tests green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T11:11:03+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T11:11:04+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T11:11:09+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T11:11:10+00:00'
+      note: null
+    P4.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T11:11:24+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-25T11:11:30+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-25T11:11:31+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T11:12:39+00:00'
+    note: null
+    observed_prs: []

@@ -855,30 +855,41 @@ report itself and records a fingerprint of it, so the one pasted into the pull
 request can be checked against the one the tool saw. The second is the
 <code>fr run cost</code> table, so what the run spent is written down beside what it
 produced.</p>
-<h3>9. Confirm the merge, then drive the manual Test Plan</h3>
-<p>When you report the merge, <code>fr-goal</code> checks that the final result actually
-arrived on the project's main line before deleting its workspace. It runs
-<code>fr isolation verify-merge</code>, freshly fetches the default branch, confirms the
-PR state, and compares that content. This deliberately verifies results rather
-than commit identity, so squash, rebase, and merge commits are supported. If a
-late fix is missing, the workflow stops for a cherry-pick or fresh PR instead
-of archiving incomplete work (<code>packages/fr/src/fr/commands/isolation_cmd.py:455-516</code>,
-<code>packages/fr/src/fr/isolation/local.py:492-525</code>).</p>
-<p>For a change that must be proven in a deployed environment, the specification
-contains a <strong>manual Test Plan</strong> agreed during the initial question round. This
-is different from the acceptance tests gathered during implementation: it may
-require opening the real application, observing production behavior, checking
-a dashboard, or performing an operation with access the isolated agent does not
-have.</p>
-<p>After merge verification, the agent drives this session interactively. It
-presents the next check, asks the operator to perform or observe the human-only
-part, records the result, and continues until the plan passes or a failure
-requires recovery. Each out-of-scope finding you chose to file becomes an issue,
-and the journal records the finding as deferred to it; one you did not answer
-stays visibly out of scope. It then reports any remaining acceptance debt, confirms plan
-completion, archives the plan, its journal, and its run record through a
-housekeeping PR, and tears down isolation or lets garbage collection reap it
-(<code>plugins/super-fr/skills/fr-goal/SKILL.md:113-117</code>).</p>
+<h3>9. Confirm the merge, then close out in a new session</h3>
+<p>Resolving <code>deliver</code> prints a handoff line —
+<code>closeout: after the PR merges, start a NEW session in &lt;workspace&gt; and run
+fr pickup --run &lt;run-id&gt;</code> — because the session that opens the PR is not the
+one that closes it out: closing out happens later, after a human merge, in a
+session with none of the delivering one's context. <code>fr-goal</code>'s job at that
+point is only to relay that line to you verbatim, after pushing the commit
+that carries the final cursor.</p>
+<p>Once you report the merge and open that new session, <code>fr pickup --run
+&lt;run-id&gt;</code> reads the run's own record and prints a self-contained brief built
+from nothing but that file and the artifacts it names — branch, PR, spec and
+plan paths, and the closeout steps as exact commands — because the new
+session inherits none of the delivering one's memory. It refuses, exit 2, a
+run whose delivery is not actually done.</p>
+<p>The brief opens with <code>fr isolation verify-merge --branch &lt;b&gt;</code>, which resolves
+the remote's own default branch on its own (no flag needed): it freshly
+fetches that branch, confirms the PR state, and compares content rather than
+commit identity, so squash, rebase, and merge commits are all supported. If a
+late fix is missing, it says to stop and recover — cherry-pick or a fresh PR —
+rather than archive incomplete work. Next comes the specification's manual
+Test Plan, if it has one, named by path; this is different from the
+acceptance tests gathered during implementation — it may require opening the
+real application, observing production behavior, checking a dashboard, or
+performing an operation with access the isolated agent never had. Then each
+out-of-scope finding from both journals appears with its own <code>fr journal
+resolve … --state deferred --tracked-by</code> line, ready to run once you have
+filed the issue; a finding you do not file stays visibly out of scope rather
+than silently closed. The brief ends with <code>fr status</code> to confirm every phase
+is complete, and the exact commands to archive the plan, its journal, and its
+run record through a housekeeping PR — run from a <em>separate</em> workspace, never
+inside the just-merged feature branch — before tearing down isolation or
+leaving it for garbage collection to reap
+(<code>packages/fr/src/fr/run/closeout.py</code>,
+<code>plugins/super-fr/skills/fr-goal/SKILL.md</code>, the "Post-merge close-out"
+section).</p>
 <h3>When one goal spans several repositories</h3>
 <p>The delivery unit is still one repository: one workspace, one plan, one branch,
 and one PR. A coordinating spec may cover several repositories, but <code>fr-goal</code>

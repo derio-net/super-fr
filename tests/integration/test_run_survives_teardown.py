@@ -107,20 +107,23 @@ def test_a_dirty_run_survives_a_forced_down_and_comes_back_with_up(tmp_path: Pat
     shipped.mkdir()
     (shipped / "walk.yaml").write_text(_SHAPE)
 
-    # 1. start — born in the worktree; commit the cursor on the branch.
+    # 1. start — born in the worktree; fr commits the cursor on the branch
+    #    itself (gh#610 §3.C), where this test used to commit it by hand.
     started = _fr(repo, shipped, ["run", "start", "walk", "--branch", BRANCH, "--run-id", RUN])
     assert started.exit_code == 0, started.output
     state = load_state(repo, BRANCH)
     assert state is not None
     wt = Path(state.worktree)
-    _git(wt, "add", "-A")
-    _git(wt, "commit", "-qm", "run cursor")
+    assert _git(wt, "status", "--porcelain", "--", "docs/superpowers/runs") == ""
 
-    # 2. advance from the worktree: `one` runs, the cursor moves to `two`, and
-    #    the committed cursor is now dirty.
+    # 2. advance from the worktree: `one` runs and the cursor moves to `two`.
+    #    fr commits that too now, so un-commit it (mixed reset: the file keeps
+    #    its content) to recreate the scenario this test is about — a cursor
+    #    whose latest write is NOT committed when the workspace is torn down.
     advanced = _fr(wt, shipped, ["run", "advance", RUN])
     assert advanced.exit_code == 0, advanced.output
     assert load_run_state(wt, RUN).cursor == "two"
+    _git(wt, "reset", "-q", "HEAD~1")
     assert _git(wt, "status", "--porcelain")
 
     # 3. down refuses, naming the run it would end.

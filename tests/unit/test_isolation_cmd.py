@@ -306,8 +306,11 @@ def test_up_plan_repo_without_validator_wrapper_exits_2(repo: Path, fake_run: li
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
 
     assert res.exit_code == 2
-    assert "scripts/validate-plans.sh" in res.output
-    assert "install-validator-wrapper.sh" in res.output
+    assert "docs/superpowers/plans" in res.output
+    assert "no scripts/validate-plans.sh there" in res.output
+    assert "fr init validator-wrapper" in res.output
+    assert "in the working tree" not in res.output
+    assert "~/.claude" not in res.output
     assert not fake_run
 
 
@@ -448,7 +451,11 @@ def test_up_plan_repo_with_uncommitted_validator_wrapper_exits_2(
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
 
     assert res.exit_code == 2
-    assert "not in HEAD" in res.output
+    assert "docs/superpowers/plans in HEAD" in res.output
+    assert "no scripts/validate-plans.sh there" in res.output
+    assert "fr init validator-wrapper" in res.output
+    assert "in the working tree" not in res.output
+    assert "~/.claude" not in res.output
     assert not fake_run
 
 
@@ -734,6 +741,9 @@ class _StubTarget:
     def __init__(self, result: dict) -> None:
         self._result = result
 
+    def _resolve_default_branch(self) -> str:
+        return "main"
+
     def verify_merge(self, state, default_branch: str = "main") -> dict:
         return self._result
 
@@ -790,9 +800,104 @@ def test_verify_merge_cmd_not_verified_exits_1(
     assert "fix2.py" in res.output
 
 
+class _RecordingTarget:
+    """Live-path stub that records the default_branch verify_merge receives
+    (P1.T1.S1 a/b) — proves the CLI resolves via `_resolve_default_branch()`
+    when `--default-branch` is omitted, and that an explicit flag wins."""
+
+    def __init__(self, resolved: str = "master") -> None:
+        self._resolved = resolved
+        self.received_default_branch: str | None = None
+
+    def _resolve_default_branch(self) -> str:
+        return self._resolved
+
+    def verify_merge(self, state, default_branch: str) -> dict:
+        self.received_default_branch = default_branch
+        return {
+            "branch": "feat/v",
+            "verified": True,
+            "changes_present": True,
+            "missing": [],
+            "pr_state": "MERGED",
+            "fetched": True,
+        }
+
+
+def test_verify_merge_cmd_no_flag_resolves_default_branch_from_target(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    stub = _RecordingTarget(resolved="master")
+    monkeypatch.setattr(isolation_cmd, "_target_for", lambda root, state: stub)
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/v"]
+    )
+    assert res.exit_code == 0, res.output
+    assert stub.received_default_branch == "master"
+    assert "origin/master" in res.output
+
+
+def test_verify_merge_cmd_explicit_default_branch_wins_over_resolver(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    stub = _RecordingTarget(resolved="master")
+    monkeypatch.setattr(isolation_cmd, "_target_for", lambda root, state: stub)
+    res = runner.invoke(
+        app,
+        [
+            "isolation",
+            "verify-merge",
+            "--repo",
+            str(repo),
+            "--branch",
+            "feat/v",
+            "--default-branch",
+            "trunk",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    assert stub.received_default_branch == "trunk"
+    assert "origin/trunk" in res.output
+
+
+class _RaisingLiveTarget:
+    """Live-path stub whose verify_merge raises IsolationError (P1.T1.S1 c) —
+    proves the live call is wrapped like the reaped one: exit 2, a clean
+    `error:`-prefixed message naming --default-branch, no traceback."""
+
+    def _resolve_default_branch(self) -> str:
+        return "main"
+
+    def verify_merge(self, state, default_branch: str) -> dict:
+        raise IsolationError(
+            f"no merge-base for origin/{default_branch} and feat/v — unrelated "
+            f"histories? If 'origin/{default_branch}' is the wrong base, pass "
+            "--default-branch <branch>."
+        )
+
+
+def test_verify_merge_cmd_live_path_isolation_error_exits_2_no_traceback(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    monkeypatch.setattr(isolation_cmd, "_target_for", lambda root, state: _RaisingLiveTarget())
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/v"]
+    )
+    assert res.exit_code == 2
+    assert "error:" in res.output
+    assert "--default-branch" in res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit)
+
+
 class _ReapedStub:
     def __init__(self, result: dict | None = None, err: str | None = None) -> None:
         self._result, self._err = result, err
+
+    def _resolve_default_branch(self) -> str:
+        return "main"
 
     def verify_merge_reaped(self, branch, default_branch: str = "main") -> dict:
         if self._err:
@@ -1674,6 +1779,9 @@ class _RoutedStub:
     def down_refusal(self, state):
         self.calls.append("down_refusal")
         return None
+
+    def _resolve_default_branch(self) -> str:
+        return "main"
 
     def verify_merge(self, state, default_branch="main"):
         self.calls.append("verify_merge")

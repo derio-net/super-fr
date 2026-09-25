@@ -2330,6 +2330,22 @@ def test_branch_changes_present_squash(tmp_path: Path) -> None:
     assert res.missing == []
 
 
+def test_branch_changes_present_no_merge_base_names_base_and_suggests_flag(
+    tmp_path: Path,
+) -> None:
+    # P1.T1.S2 (§3.A): the message must name the base ref that failed to
+    # resolve AND suggest --default-branch as the way out — a wrong/omitted
+    # base is a usage question, not a dead end.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "--orphan", "unrelated")
+    _commit(repo, "other.py", "x\n", "unrelated root")
+    with pytest.raises(IsolationError) as exc_info:
+        branch_changes_present(subprocess_runner, repo, "unrelated", "main")
+    msg = str(exc_info.value)
+    assert "main" in msg
+    assert "--default-branch" in msg
+
+
 def test_branch_changes_present_merge_commit(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     _git(repo, "checkout", "-q", "-b", "feature")
@@ -2611,7 +2627,7 @@ def test_verify_merge_reaped_unresolvable_ref_raises_naming_ref(tmp_path: Path) 
     _with_origin(repo)
     target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
     with pytest.raises(IsolationError, match="ghost-branch"):
-        target.verify_merge_reaped("ghost-branch")
+        target.verify_merge_reaped("ghost-branch", default_branch="main")
 
 
 def test_verify_merge_orphan_not_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

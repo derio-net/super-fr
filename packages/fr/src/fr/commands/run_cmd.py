@@ -20,20 +20,24 @@ forking the done/failed cursor asymmetry a second time.
 from __future__ import annotations
 
 import datetime as _dt
+import functools
 import json
 import os
 import re
 import shlex
 import subprocess
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, NoReturn
+from typing import Any, Literal, NoReturn, TypeVar, cast
 
 import typer
 from rich.console import Console
 
+from fr.artifacts.commit import CommitOutcome
 from fr.commands.common import resolve_repo_root
+from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
 from fr.harness.long_commands import long_command_rule
@@ -53,6 +57,7 @@ from fr.journal.model import (
     spec_journal_slug,
     unauthorized_fixes,
 )
+from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
@@ -95,6 +100,183 @@ run_app = typer.Typer(
 )
 
 _TEMPLATE_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
+
+
+# --- gh#610 §3.C: fr commits its own record writes ---------------------------
+#
+# Every mutating command (start/adopt/advance/resolve/claim) is wrapped in
+# `_commits_run_writes`: while it runs, each cursor save and each journal
+# append it makes is noted here, and on the way out — success, refusal or
+# traceback alike, since a write that landed must not be lost to an exit path —
+# every noted path is committed ONCE, per repo root, through `commit_records`,
+# which never fails the command. `save_run_state` and `adopt_run` stay pure.
+
+
+@dataclass
+class _RunWrites:
+    verb: str
+    step: str | None = None
+    item: str | None = None
+    # The state word the subject ends in, when the command knows it better
+    # than the cursor does (p3-r1): a member resolve/claim has no record of its
+    # own in `steps`, and a cleared cli gate is `pending` again on disk.
+    outcome: str | None = None
+    loaded_cursor: str | None = None
+    last: RunState | None = None
+    paths: dict[Path, list[Path]] = field(default_factory=dict)
+
+    def note(self, repo_root: Path, path: Path) -> None:
+        self.paths.setdefault(repo_root, []).append(path)
+
+    def message(self) -> str:
+        run = self.last.run if self.last is not None else "?"
+        step = self.step or self.loaded_cursor or (self.last.cursor if self.last else None)
+        parts = [self.verb]
+        if step:
+            parts.append(step)
+        if self.item:
+            parts.append(self.item)
+        record = self.last.steps.get(step) if (self.last is not None and step) else None
+        if self.outcome is not None:
+            parts.append(self.outcome)
+        elif record is not None:
+            parts.append(record.state)
+        return f"chore(fr): run {run} — {' '.join(parts)}"
+
+    def commit(self) -> CommitOutcome | None:
+        """Commit what has been noted so far, once per repo root, and forget it.
+
+        Returns the last root's `CommitOutcome`, or `None` when nothing was
+        pending — a caller deciding whether to print "push it" (p4-r1) must
+        tell "nothing to commit" from "committed" from "refused".
+        """
+        pending, self.paths = self.paths, {}
+        outcome: CommitOutcome | None = None
+        for root, paths in pending.items():
+            outcome = commit_records(root, paths, self.message())
+        return outcome
+
+
+_RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
+
+
+def _note_record_write(repo_root: Path, path: Path, state: RunState | None = None) -> None:
+    """Record that this command wrote `path` (a no-op outside a wrapped command)."""
+    writes = _RUN_WRITES.get()
+    if writes is None:
+        return
+    writes.note(repo_root, path)
+    if state is not None:
+        writes.last = state
+
+
+def _save_run_state(repo_root: Path, state: RunState) -> Path:
+    """`save_run_state`, noted for the command's closing commit."""
+    path = save_run_state(repo_root, state)
+    _note_record_write(repo_root, path, state)
+    return path
+
+
+def _note_subject(*, step: str, item: str | None, outcome: str) -> None:
+    """Name the unit this command acted on in its commit subject (p3-r1)."""
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        writes.step, writes.item, writes.outcome = step, item, outcome
+
+
+def _commit_run_writes_now() -> CommitOutcome | None:
+    """Commit this command's writes BEFORE it prints a dispatch brief.
+
+    The brief is the line a naive `tail -1` parses (see `_print_member_dispatch`),
+    so `commit_records`' stderr report must not land after it — in a harness
+    that merges stdout and stderr it would become the last line.
+
+    Returns the `CommitOutcome` (or `None` if nothing was pending) so a caller
+    that goes on to print a "push it" line knows whether this invocation's
+    commit actually landed (p4-r1).
+    """
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        return writes.commit()
+    return None
+
+
+def _note_loaded(state: RunState) -> None:
+    """The cursor as the command found it — the step `advance` acted on."""
+    writes = _RUN_WRITES.get()
+    if writes is not None and writes.loaded_cursor is None:
+        writes.loaded_cursor = state.cursor
+
+
+def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) -> list[str]:
+    """The handoff toward `fr pickup --run` (spec 2026-09-25-fr-goal-closeout-
+    defects §3.D.2) — printed once `deliver` resolves `done`, and again on
+    every `advance` of an already-finished run.
+
+    `committed` is THIS invocation's own commit outcome (p4-r1) — the caller's
+    `_commit_run_writes_now()` result, `True` when nothing was pending. Names
+    the sha of HEAD as it stands when this prints; for the `deliver` call site
+    that must be AFTER `_commit_run_writes_now()` has run (p3-m4): the
+    wrapping decorator commits in `finally`, which runs after the command's
+    own prints, so a sha read any earlier would not exist yet. When the commit
+    was refused (default branch, stuck lock, detached HEAD, …), printing that
+    sha would be false assurance that the cursor reached the PR — so this
+    prints a NOT-committed line instead, never the sha.
+    """
+    from fr.run.closeout import primary_checkout
+
+    base = primary_checkout(repo_root)
+    lines = [
+        f"closeout: after the PR merges, start a NEW session in {base} and run",
+        f"  fr pickup --run {run_id}",
+    ]
+    if not committed:
+        lines.append(
+            "cursor NOT committed (see the `fr: not committed` line above) — "
+            "commit and push it before merging"
+        )
+        return lines
+    try:
+        sha = git_answer(repo_root, "rev-parse", "--short", "HEAD").stdout.strip()
+    except GitUnavailableError:
+        sha = None
+    if sha:
+        lines.append(f"cursor committed as {sha} — push it (git push) so the PR carries it")
+    return lines
+
+
+_Cmd = TypeVar("_Cmd", bound=Callable[..., None])
+
+
+def _commits_run_writes(
+    verb: str, outcome: Callable[[dict[str, Any]], str | None] | None = None
+) -> Callable[[_Cmd], _Cmd]:
+    """Commit every record the wrapped command wrote, once, on every exit path.
+
+    `outcome` reads the subject's closing state word off the command's own
+    arguments (`resolve --state`, `claim --abandoned`) — the state the command
+    was asked to record, which the cursor alone cannot always say (p3-r1).
+    """
+
+    def decorate(fn: _Cmd) -> _Cmd:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> None:
+            writes = _RunWrites(
+                verb=verb,
+                step=kwargs.get("step_id"),
+                item=kwargs.get("item"),
+                outcome=outcome(kwargs) if outcome is not None else None,
+            )
+            token = _RUN_WRITES.set(writes)
+            try:
+                fn(*args, **kwargs)
+            finally:
+                _RUN_WRITES.reset(token)
+                writes.commit()
+
+        return cast(_Cmd, wrapper)
+
+    return decorate
 
 
 def _now() -> str:
@@ -882,6 +1064,7 @@ def _gate_provenance(
                     body=reason or "",
                 ),
             )
+            _note_record_write(repo_root, target)
         err_console.print(
             f"[yellow]{step_id}: operator gate cleared WITHOUT asking (answered_by: "
             f"agent). Reason: {reason}[/yellow]",
@@ -2396,6 +2579,8 @@ def _print_member_dispatch(
     `_split_member_id` returns (item, member) — opposite orders that are
     easy to splat into each other by accident.
     """
+    _note_subject(step=member.id, item=item, outcome="running")
+    _commit_run_writes_now()
     console.print(f"{step.id}: dispatch brief ({item}/{member.id})", soft_wrap=True)
     console.print(
         f"  resolve with: {_resolve_hint(state.run, member.id, item)}   (or --state failed)",
@@ -2495,7 +2680,7 @@ def _advance_group(
         # completes here would lose them.
         if items != units.unit_states(record):
             state = _with_step(state, step.id, units.with_unit_states(record, items))
-        save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
+        _save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
         return
     # Spec §3.D.2 point 2: the preflight, ONCE, before the first unit of this
@@ -2548,7 +2733,7 @@ def _advance_group(
             repo_root=repo_root,
             at=estimate_at,
         )
-    save_run_state(
+    _save_run_state(
         repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
     )
     resolved_tier = _phase_tier(repo_root, state, phase_n)
@@ -2626,6 +2811,7 @@ def _bind_session(workspace: Path, branch: str, session: str | None, harness: st
 
 
 @run_app.command("start")
+@_commits_run_writes("start")
 def start_cmd(
     workflow: str = typer.Argument(..., help="Workflow shape name (resolved repo > shipped)."),
     branch: str = typer.Option(..., "--branch", help="Branch this run operates on."),
@@ -2767,7 +2953,7 @@ def start_cmd(
         cursor=manifest.steps[0].id,
         steps=steps,
     )
-    save_run_state(workspace, state)
+    _save_run_state(workspace, state)
     console.print(f"started run {rid} ({state.workflow}) — cursor: {state.cursor}")
     # soft_wrap: rich would fold a long worktree path across lines and break
     # the operator's copy-paste (same reason `commands/common.py` uses a plain
@@ -2787,6 +2973,7 @@ def start_cmd(
 
 
 @run_app.command("adopt")
+@_commits_run_writes("adopt")
 def adopt_cmd(
     target: Path = typer.Argument(
         ..., help="Plan folder to adopt (or the spec, when no plan exists yet)."
@@ -2833,6 +3020,7 @@ def adopt_cmd(
     except AdoptError as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
+    _note_record_write(repo_root, run_path(repo_root, state.run), state)
 
     console.print(f"adopted run {state.run} ({state.workflow}) \u2014 cursor: {state.cursor}")
     done = [sid for sid, rec in state.steps.items() if rec.state == "done"]
@@ -2900,7 +3088,7 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
     if not path.exists():  # a present-but-unreadable file keeps its own error (p5-f9)
         _missing_run_exit(repo_root, run_id, path)
     try:
-        return load_run_state(repo_root, run_id)
+        state = load_run_state(repo_root, run_id)
     except RunStateError as e:
         err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
@@ -2909,6 +3097,8 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
             f"[red]cannot read {run_path(repo_root, run_id)}: {e}[/red]", soft_wrap=True
         )
         raise typer.Exit(2) from e
+    _note_loaded(state)
+    return state
 
 
 def _dispatch_holder_label(attempt: UnitAttempt) -> str:
@@ -3245,6 +3435,7 @@ def cost_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
 
 
 @run_app.command("advance")
+@_commits_run_writes("advance")
 def advance_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     redispatch: bool = typer.Option(
@@ -3325,12 +3516,26 @@ def advance_cmd(
         # `fr run check` had already exited 0. Nothing is written here; a
         # finished run is read-only until something else moves it.
         console.print(f"run {state.run} complete — cursor {state.cursor!r} is done")
+        # spec §3.D.2: the same `fr pickup --run` handoff `resolve` prints
+        # when `deliver` lands `done` — repeated here because a run can be
+        # rediscovered by `advance` long after that one printing scrolled
+        # out of the delivering session's transcript. Nothing is pending this
+        # call (nothing was written above), so `_commit_run_writes_now()` is a
+        # no-op — called anyway (p4-r1) so `committed` reflects a real outcome
+        # rather than assuming one.
+        outcome = _commit_run_writes_now()
+        for line in _closeout_handoff_lines(
+            repo_root,
+            state.run,
+            committed=outcome is None or outcome.committed or outcome.unchanged,
+        ):
+            console.print(line, soft_wrap=True)
         return
 
     if _gate_pending(step, record):
         if record.state != "blocked":
             new_record = record.model_copy(update={"state": "blocked", "at": _now()})
-            save_run_state(repo_root, _with_step(state, state.cursor, new_record))
+            _save_run_state(repo_root, _with_step(state, state.cursor, new_record))
         # soft_wrap on both: the gate line ends in a command the operator
         # copy-pastes, and the brief is JSON a harness parses off stdout —
         # rich's default folding would break a long token mid-string and
@@ -3355,6 +3560,7 @@ def advance_cmd(
         # is how the operator's question gets asked in the first place. Nothing
         # is executed either way — a `cli` step's side effect is exactly what
         # the gate is guarding.
+        _commit_run_writes_now()
         if step.kind == "agent":
             console.print(json.dumps(_build_brief(step, state), sort_keys=True), soft_wrap=True)
         return
@@ -3403,7 +3609,8 @@ def advance_cmd(
                     tier=step.tier,
                     repo_root=repo_root,
                 )
-            save_run_state(repo_root, state)
+            _save_run_state(repo_root, state)
+        _commit_run_writes_now()
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
         return
@@ -3434,13 +3641,13 @@ def advance_cmd(
         new_state = _complete_step(
             state, manifest, state.cursor, "done", exit_code=0, stdout=proc.stdout
         )
-        save_run_state(repo_root, new_state)
+        _save_run_state(repo_root, new_state)
         console.print(f"{step.id}: done (exit 0)")
     else:
         new_state = _complete_step(
             state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
         )
-        save_run_state(repo_root, new_state)
+        _save_run_state(repo_root, new_state)
         err_console.print(f"{step.id}: failed (exit {proc.returncode})")
         raise typer.Exit(1)
 
@@ -3571,20 +3778,21 @@ def _resolve_member(
     )
     updated = _with_measurement(updated, group.id, key)
     if state_value == "failed":
-        save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
+        _save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
         return
     if all(items.get(k) == "done" for k in expected):
-        save_run_state(
+        _save_run_state(
             repo_root, _complete_step(updated, manifest, group.id, "done", emitted=merged_emitted)
         )
         console.print(_group_done_line(group.id, expected, manual), soft_wrap=True)
         return
-    save_run_state(repo_root, updated)
+    _save_run_state(repo_root, updated)
     console.print(f"{member.id} {item}: done")
 
 
 @run_app.command("resolve")
+@_commits_run_writes("resolve", lambda kw: kw.get("state_value"))
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id to resolve (must be `running`)."),
@@ -3816,7 +4024,7 @@ def resolve_cmd(
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
             )
-            save_run_state(repo_root, _with_step(state, step_id, new_record))
+            _save_run_state(repo_root, _with_step(state, step_id, new_record))
             console.print(
                 f"{step_id}: operator gate cleared — `fr run advance {run_id}` now executes it",
                 soft_wrap=True,
@@ -3824,7 +4032,7 @@ def resolve_cmd(
             return
         # `failed` = the operator declined the gate. Same cursor asymmetry as
         # every other failure: recorded, and the run does not move past it.
-        save_run_state(repo_root, _complete_step(state, manifest, step_id, "failed"))
+        _save_run_state(repo_root, _complete_step(state, manifest, step_id, "failed"))
         console.print(f"{step_id}: failed (operator gate declined)")
         return
 
@@ -3844,7 +4052,7 @@ def resolve_cmd(
             )
             raise typer.Exit(2)
         merged = {**(record.emitted or {}), **emitted_map}
-        save_run_state(
+        _save_run_state(
             repo_root, _with_step(state, step_id, record.model_copy(update={"emitted": merged}))
         )
         console.print(f"{step_id}: amended emitted artifacts (still done; cursor unchanged)")
@@ -3899,8 +4107,22 @@ def resolve_cmd(
         # cleared at all.
         answered_by=gate_by,
     )
-    save_run_state(repo_root, new_state)
+    _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
+    if step_id == "deliver" and state_value == "done":
+        # p3-m4: commit BEFORE reading HEAD's sha for the "push it" line below
+        # — the decorator's own commit runs in `finally`, after this function
+        # returns, so a sha read any earlier would not exist yet. `.commit()`
+        # is idempotent once called (it empties the pending paths), so the
+        # decorator's later call is a no-op — never a second stderr line.
+        # p4-r1: `outcome` is THIS commit's real result — a refusal (default
+        # branch, stuck lock, detached HEAD, …) must not be followed by a
+        # "push it" line that assumes the commit landed.
+        outcome = _commit_run_writes_now()
+        for line in _closeout_handoff_lines(
+            repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
+        ):
+            console.print(line, soft_wrap=True)
 
 
 def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
@@ -3941,7 +4163,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
     new_record = _close_dispatch(record, key, "abandoned")
     closed = _with_measurement(_with_step(state, owner_id, new_record), owner_id, key)
-    save_run_state(repo_root, closed)
+    _save_run_state(repo_root, closed)
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
     )
@@ -3972,11 +4194,12 @@ def _claim_identity(
         key,
         _claimed_identity(open_record, key, agent=agent, harness=harness, model=model),
     )
-    save_run_state(repo_root, _with_step(state, owner_id, new_record))
+    _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(f"{key}: claimed by {agent}", soft_wrap=True)
 
 
 @run_app.command("claim")
+@_commits_run_writes("claim", lambda kw: "abandoned" if kw.get("abandoned") else "claimed")
 def claim_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id (or member id) to claim."),

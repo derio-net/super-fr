@@ -502,7 +502,7 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     # (out-of-scope-for-this-phase) completion signal would move it.
     assert state.cursor == "plan"
 
-    brief = json.loads(result.output.split("\n", 1)[1])
+    brief = json.loads(result.stdout.split("\n", 1)[1])
     assert brief["run"] == "r1"
     assert brief["workflow"] == "agentic@1"
     assert brief["step"] == "plan"
@@ -6466,3 +6466,435 @@ def test_start_refusing_an_existing_run_id_names_advance(tmp_path: Path) -> None
     assert result.exit_code == 2, result.output
     assert "already exists" in result.output
     assert "fr run advance r1" in result.output
+
+
+# --- gh#610 §3.C: fr commits its own cursor writes ---------------------------
+
+
+def _git_out(repo: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _runs_clean(repo: Path) -> str:
+    return _git_out(repo, "status", "--porcelain", "--", "docs/superpowers/runs")
+
+
+def _head_files(repo: Path) -> list[str]:
+    return sorted(_git_out(repo, "show", "--name-only", "--format=", "HEAD").splitlines())
+
+
+def _commit_report_lines(stderr: str) -> list[str]:
+    """The `fr: committed`/`fr: not committed` lines an invocation printed —
+    used to pin "at most one per invocation" (operator steer, p3-steer)."""
+    return [
+        ln
+        for ln in stderr.splitlines()
+        if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+    ]
+
+
+def _assert_fr_commit(repo: Path, run_id: str, verb: str) -> None:
+    # Subject located via the run-records path, not assumed to be "the one
+    # commit" at HEAD (operator steer, p3-steer): a single invocation may
+    # commit more than once (e.g. an early commit before a dispatch brief,
+    # then the wrapping decorator's own commit in `finally`).
+    subject = _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/runs")
+    assert subject.startswith(f"chore(fr): run {run_id} — {verb} "), subject
+    assert _head_files(repo) and all(
+        f.startswith("docs/superpowers/") for f in _head_files(repo)
+    ), _head_files(repo)
+    assert _runs_clean(repo) == ""
+
+
+def test_start_advance_and_resolve_each_commit_the_cursor(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+
+    res = _invoke(
+        repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"]
+    )
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "start")
+    assert _head_files(repo) == ["docs/superpowers/runs/r1.yaml"]
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "advance")
+
+    step = load_run_state(repo, "r1").cursor
+    res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "done"])
+    assert res.exit_code == 0, res.output
+    _assert_fr_commit(repo, "r1", "resolve")
+    subject = _subject(repo)
+    assert subject == f"chore(fr): run r1 — resolve {step} done", subject
+
+
+def test_claim_commits_the_cursor(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    step = load_run_state(repo, "r1").cursor
+    before = _git_out(repo, "rev-parse", "HEAD")
+
+    res = _invoke(repo, shipped, ["run", "claim", "r1", "--step", step, "--agent", "a1f1"])
+
+    assert res.exit_code == 0, res.output
+    assert _git_out(repo, "rev-parse", "HEAD") != before
+    _assert_fr_commit(repo, "r1", "claim")
+
+
+def test_no_questions_resolve_commits_cursor_and_spec_journal_together(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-g")
+    repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
+
+    result = _invoke_measurable(
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "x"], root, "s-g"
+    )
+
+    assert result.exit_code == 0, result.output
+    # Outcome, not cadence (operator steer, p3-steer): both the cursor and
+    # the spec journal this invocation appended are clean when the command
+    # returns, whatever number of commits it took to get there — never
+    # "exactly one" (per-phase batching is planned in feat/lean-cost-aware-
+    # process and would land here as more than one).
+    assert _runs_clean(repo) == ""
+    assert _git_out(repo, "status", "--porcelain", "--", "docs/superpowers/journals") == ""
+    # Format, kept (operator steer): the journal write landed under an fr
+    # commit with the same "resolve" subject as the cursor's — i.e. they
+    # were committed together, located by path rather than by assuming
+    # exactly one new commit landed.
+    journal_subject = _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/journals")
+    assert journal_subject.startswith("chore(fr): run r1 — resolve "), journal_subject
+    _assert_fr_commit(repo, "r1", "resolve")
+    # p3-steer (c): at most one commit-report line per invocation.
+    assert len(_commit_report_lines(result.stderr)) <= 1, result.stderr
+
+
+def test_on_the_default_branch_the_cursor_lands_but_is_not_committed(tmp_path: Path) -> None:
+    import subprocess
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git_out(repo, "remote", "add", "origin", str(origin))
+    _git_out(repo, "push", "-q", "origin", "b")
+    _git_out(repo, "remote", "set-head", "origin", "b")
+    before = _git_out(repo, "rev-parse", "HEAD")
+
+    res = _invoke(repo, shipped, ["run", "start", "cli-only", "--branch", "b", "--run-id", "r1"])
+
+    assert res.exit_code == 0, res.output
+    assert load_run_state(repo, "r1").cursor == "hello"
+    assert _git_out(repo, "rev-parse", "HEAD") == before
+    assert _runs_clean(repo) != ""
+    assert "fr: not committed (" in res.stderr and "default branch" in res.stderr
+
+
+# --- gh#610 p3-r1: the commit subject is `<verb> <step>[ <item>] <state>` ----
+
+
+def _subject(repo: Path) -> str:
+    # Path-scoped for the same reason as `_assert_fr_commit` (p3-steer): do
+    # not assume HEAD is "the one commit" this invocation made.
+    return _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/runs")
+
+
+def test_commit_subject_of_a_grouped_member_advance_claim_and_resolve(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — advance code phase/1 running"
+    # p3-steer (c): a grouped member's dispatch commits early (before the
+    # brief, `_commit_run_writes_now()`) AND the wrapping decorator commits
+    # again in `finally` — still at most one reported stderr line.
+    assert len(_commit_report_lines(res.stderr)) <= 1, res.stderr
+
+    claim = ["run", "claim", "r1", "--step", "code", "--item", "phase/1"]
+    res = _invoke(repo, shipped, [*claim, "--agent", "a1"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — claim code phase/1 claimed"
+
+    res = _invoke(repo, shipped, [*claim, "--abandoned"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — claim code phase/1 abandoned"
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+    assert res.exit_code == 0, res.output
+    res = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — resolve code phase/1 done"
+
+
+def test_commit_subject_of_a_gate_clear_is_the_resolved_state(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+
+    res = _clear_cli_gate(repo, shipped)
+
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — resolve brainstorm done"
+
+
+def test_commit_subject_of_a_flat_resolve_and_a_cli_advance(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    step = load_run_state(repo, "r1").cursor
+    res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "failed"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == f"chore(fr): run r1 — resolve {step} failed"
+
+    repo2 = _repo(tmp_path / "two")
+    _write_shape(shipped, "fails", _FAILING_SHAPE)
+    _invoke(repo2, shipped, ["run", "start", "fails", "--branch", "b", "--run-id", "r2"])
+    _invoke(repo2, shipped, ["run", "advance", "r2"])
+    assert _subject(repo2) == "chore(fr): run r2 — advance boom failed"
+
+
+# --- gh#610 spec §3.D.2: resolving `deliver` and a finished `advance` hand off
+# to `fr pickup --run` — a NEW session starts closeout, inheriting none of
+# this one's context.
+
+
+_CLOSEOUT_SHAPE = """
+workflow: closeout
+schema: 1
+unit: run
+steps:
+  - id: brainstorm
+    kind: agent
+    emits: [spec]
+  - id: plan
+    kind: agent
+    needs: [spec]
+    emits: [plan]
+  - id: deliver
+    kind: agent
+    needs: [spec, plan]
+    emits: [pr]
+"""
+
+
+def _resolved_to_deliver(repo: Path, shipped: Path) -> None:
+    """Start `closeout`, resolving `brainstorm` and `plan` with real
+    artifacts on disk (rule 5's existence check), leaving `deliver` dispatched."""
+    spec_dir = repo / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "2026-09-30-fixture-design.md").write_text("# Fixture\n")
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-09-30-fixture"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "_meta.yaml").write_text("plan: 2026-09-30-fixture\n")
+
+    _invoke(repo, shipped, ["run", "start", "closeout", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # brainstorm: running + brief
+    resolved_spec = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=docs/superpowers/specs/2026-09-30-fixture-design.md",
+        ],
+    )
+    assert resolved_spec.exit_code == 0, resolved_spec.output
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # plan: running + brief
+    resolved_plan = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            "plan=docs/superpowers/plans/2026-09-30-fixture",
+        ],
+    )
+    assert resolved_plan.exit_code == 0, resolved_plan.output
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # deliver: running + brief
+
+
+def _resolve_deliver(repo: Path, shipped: Path):
+    return _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "deliver",
+            "--state",
+            "done",
+            "--emitted",
+            "pr=https://github.com/derio-net/super-fr/pull/1",
+        ],
+    )
+
+
+def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path) -> None:
+    """spec §3.D.2: once `deliver` resolves `done`, fr prints the exact
+    `fr pickup --run <id>` handoff — the only way the new closeout session
+    finds the run, since it inherits none of this one's context. The commit
+    sha named in the "push it" line must be THIS invocation's own commit
+    (p3-m4): the wrapping decorator commits in `finally`, after this
+    function's own prints, so the sha must come from an explicit early
+    commit, not a read before one exists."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
+    idx_pickup = stdout.index("fr pickup --run r1")
+    idx_push = stdout.index("push it (git push)")
+    assert idx_closeout < idx_pickup < idx_push
+
+    # Outcome, not cadence (operator steer): fr's own run path is clean,
+    # whatever number of commits it took to get there — never "exactly one".
+    assert _runs_clean(repo) == ""
+    _assert_fr_commit(repo, "r1", "resolve")
+
+    # The sha printed is real and IS the commit this resolve just made — not
+    # a stale one read before `_commit_run_writes_now()` ran.
+    head_sha = _git_out(repo, "rev-parse", "--short", "HEAD")
+    assert f"cursor committed as {head_sha}" in stdout
+
+    # p3-m4 + operator steer (c): the early commit this print needs must not
+    # make the decorator's `finally` report a SECOND commit line on stderr.
+    assert len(_commit_report_lines(result.stderr)) <= 1, result.stderr
+
+
+def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+    resolved = _resolve_deliver(repo, shipped)
+    assert resolved.exit_code == 0, resolved.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    assert "run r1 complete — cursor 'deliver' is done" in stdout
+    idx_complete = stdout.index("run r1 complete")
+    idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
+    idx_pickup = stdout.index("fr pickup --run r1")
+    assert idx_complete < idx_closeout < idx_pickup
+
+
+def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pushed(
+    tmp_path: Path,
+) -> None:
+    """p4-r1: on the default branch (or under a stuck lock) `commit_records`
+    refuses to commit the cursor (spec §3.C), so the closeout handoff must not
+    tell the operator to push a commit that never landed — it must say the
+    cursor is NOT committed instead."""
+    import subprocess
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git_out(repo, "remote", "add", "origin", str(origin))
+    _git_out(repo, "push", "-q", "origin", "b")
+    _git_out(repo, "remote", "set-head", "origin", "b")
+
+    _resolved_to_deliver(repo, shipped)
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    assert "cursor committed as" not in result.stdout
+    assert "push it (git push)" not in result.stdout
+    assert "cursor NOT committed" in result.stdout
+    assert "fr: not committed (" in result.stderr and "default branch" in result.stderr
+
+
+def test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree(
+    tmp_path: Path,
+) -> None:
+    """pd-r3: `_repo`'s fixture repo IS a linked worktree (see its docstring —
+    `fr run start` ensures isolation itself). The closeout handoff's 'start a
+    NEW session in <dir>' must name the PRIMARY checkout (`base`, the
+    fixture's own primary), never the worktree that is about to be reaped."""
+    repo = _repo(tmp_path)
+    primary = (tmp_path / "base").resolve()
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    assert f"start a NEW session in {primary} and run" in stdout
+    session_line = next(
+        line for line in stdout.splitlines() if line.startswith("closeout: after the PR merges")
+    )
+    assert str(repo.resolve()) not in session_line
+
+
+def test_advance_on_an_already_finished_run_reports_the_cursor_as_committed(
+    tmp_path: Path,
+) -> None:
+    """pd-r3: a byte-identical re-resolve of `deliver` (the amend path, `state
+    already done`) does not print the closeout handoff at all — it returns
+    before reaching it. So the "unchanged still reads as committed" mapping
+    (pd-r2) is exercised through `advance` of an already-finished run
+    instead: it re-prints the handoff after `_commit_run_writes_now()` finds
+    nothing pending, and must say 'cursor committed as <sha>', never 'cursor
+    NOT committed' — and `commit_records` must stay silent (no `fr: not
+    committed` line), since there is nothing new to commit."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+    resolved = _resolve_deliver(repo, shipped)
+    assert resolved.exit_code == 0, resolved.output
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])  # first post-finish advance
+    assert first.exit_code == 0, first.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])  # byte-identical re-resolve
+
+    assert result.exit_code == 0, result.output
+    head_sha = _git_out(repo, "rev-parse", "--short", "HEAD")
+    assert f"cursor committed as {head_sha}" in result.stdout
+    assert "cursor NOT committed" not in result.stdout
+    assert "fr: not committed" not in result.stderr

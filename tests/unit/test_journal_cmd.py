@@ -2085,3 +2085,70 @@ def test_the_operator_guard_owns_a_parity_row_and_its_notice_quotes_it(
     assert res.exit_code == 0, res.output
     note = row.harnesses["hermes"].scope_note
     assert note and " ".join(note.split()) in " ".join(res.output.split())
+
+
+# --- gh#610 §3.C: fr journal commits its own writes ---------------------------
+
+
+def _feature_repo(tmp_path: Path) -> Path:
+    import subprocess
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "T")
+    (tmp_path / "seed.md").write_text("seed\n")
+    git("add", "-A")
+    git("commit", "-qm", "seed")
+    git("checkout", "-q", "-b", "feat/j")
+    return tmp_path
+
+
+def _git_out(root: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+class TestJournalCommits:
+    def test_add_and_resolve_each_commit_the_journal(self, tmp_path: Path, monkeypatch) -> None:
+        root = _feature_repo(tmp_path)
+        monkeypatch.chdir(root)
+        monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
+        base = ["--scope", "plan", "--slug", "S"]
+
+        journal = "docs/superpowers/journals/plans/S.md"
+
+        res = runner.invoke(
+            app,
+            ["journal", "add", *base, "--kind", "finding", "--state", "open",
+             "--title", "t", "--body", "b", "--phase", "1", "--id", "f1"],
+        )  # fmt: skip
+        assert res.exit_code == 0, res.output
+        # Format, kept (robust per path rather than assuming HEAD is "the
+        # one commit" this invocation made — operator steer, p3-steer).
+        assert (
+            _git_out(root, "log", "-1", "--format=%s", "--", journal)
+            == "chore(fr): journal plan/S — finding f1"
+        )
+        assert _git_out(root, "status", "--porcelain", "--", "docs") == ""
+        # p3-steer (c): at most one commit-report line per invocation.
+        commit_lines = [
+            ln
+            for ln in res.stderr.splitlines()
+            if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+        ]
+        assert len(commit_lines) <= 1, res.stderr
+
+        res = runner.invoke(
+            app,
+            ["journal", "resolve", *base, "--id", "f1", "--state", "fixed", "--note", "n"],
+        )
+        assert res.exit_code == 0, res.output
+        subject = _git_out(root, "log", "-1", "--format=%s", "--", journal)
+        assert subject.startswith("chore(fr): journal plan/S — finding "), subject
+        assert _git_out(root, "status", "--porcelain", "--", "docs") == ""

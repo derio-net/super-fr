@@ -4064,3 +4064,69 @@ rows:
     notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
       test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
       is this change''s own deliver.'
+  - id: closeout-verify-merge-default-branch
+    capability: fr-goal-closeout
+    acceptance: An operator on a repo whose default branch is master verifies a merged
+      PR with 'fr isolation verify-merge --branch <b>' and no flags; a missing merge-base
+      is a clean error naming --default-branch, never a traceback.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Phase 1 (§3.A) implemented and covered: verify-merge resolves --default-branch
+      from the target when omitted, an explicit flag wins, and a raised IsolationError
+      on the live path exits 2 with a clean error naming --default-branch (no traceback).'
+  - id: closeout-wrapper-ships-with-first-plan
+    capability: fr-goal-closeout
+    acceptance: The first 'fr plan create' in a repo ships the validator wrapper with
+      the plan, so a post-merge housekeeping workspace comes up without a hand-committed
+      wrapper; the guard's remedy is the harness-neutral 'fr init validator-wrapper'.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_cmd.py
+      - super-fr:tests/unit/test_plan_ops.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: fr init validator-wrapper (test_init_cmd.py), plan_ops.create installing/staging
+      the wrapper on first plan (test_plan_ops.py wrapper tests), and the reworded isolation
+      guard message (test_isolation_cmd.py) all pin phase 2 of gh#610's closeout-defects
+      plan.
+  - id: closeout-fr-commits-own-records
+    capability: fr-goal-closeout
+    acceptance: fr commits its own record writes (run cursor, plan edits, journal entries)
+      on a feature branch, so fr archive / fr repair / fr isolation down never refuse
+      over fr's own uncommitted state.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_records_commit.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_plan_cmd.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_closeout_e2e.py
+    status: ci
+    notes: 'Phase 5 P5.T1.S1: end-to-end proof on real git — a squash-merged branch
+      carrying fr''s own plan/journal/run commits leaves fr archive, fr isolation verify-merge,
+      and the isolation-down reap-hazard guard all clean.'
+  - id: closeout-pickup-run-handoff
+    capability: fr-goal-closeout
+    acceptance: After deliver, fr prints one exact command; 'fr pickup --run <id>' in
+      a fresh session prints a self-contained closeout brief (verify-merge, Test Plan,
+      archive, down) from the run file.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_closeout.py
+      - super-fr:tests/unit/test_pickup_cmd.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
+      conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
+      handoff tests in test_run_cli.py.'
