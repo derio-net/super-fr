@@ -129,3 +129,8 @@ x
 ### p1-golden-e50 · finding [open] · Golden per-session paperwork share: e50c7ff5 reproduces 21.9% vs the audit's published 23.6% (phase 1)
 
 The p1-r11 per-session assertion (23-37% within 0.5 points, spec §7.3) holds for 8 of 9 sessions. e50c7ff5 comes out at 21.9% against the audit page's own 23.6% (05f4a8ab is 0.6 off its published 30.6 but inside the band). A first-call-only attribution variant does not close it (21.4%). Most of the gap sits in single messages that carry a full 1h cache rebuild (one git/gh call is 5.5% of the session) and in memory/scratchpad file touches classified other. The audit's original classifier is not in the repo, so the difference cannot be pinned without it. Pinned as a STRICT xfail in tests/unit/test_usage_report.py (GOLDEN_OUTLIERS), not tuned away. Pooled shares still reproduce: paperwork 30.06% (published 30.2), implementation 32.84% (32.9).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-09-25T20:22:06 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: OpenCode reader labels every non-zero cost exact; Copilot-routed must be estimated
+
+opencode.py: ESTIMATED_PROVIDERS (github-copilot prefix, confirmed against a live DB's providerIDs); a session is exact only if every priced message is. Fixture rows ses_copilot and ses_mixed (live row shape), NOTE.md sha updated; two tests.
