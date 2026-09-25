@@ -91,10 +91,13 @@ tasks:
       Write the reusable contract in fr_dispatch.testing (from_env, name, refresh, slot_budget, can_dispatch on unit run, payload keys brief/harness/model/branch/reserved_version/issues honoured) and failing tests in tests/unit/test_run_unit_runner_contract.py: load_runner refuses a package-less name and a runner without from_env with the documented messages; vk and cncd are refused by the from_env check; a stub with from_env that only takes phases is refused by can_dispatch
   - id: P2.T5.S2
     text: |-
-      Write failing tests in tests/unit/test_fr_herdr_runner.py with the herdr CLI faked: preflight refuses without HERDR_ENV=1 or herdr on PATH; dispatch runs tab create with label equal to the item id, agent start with the claude model flag, then prompt, in that order, returning the pane id; the agent name fits [a-z][a-z0-9_-]{0,31} for a 40-character batch id; the same batch id in two repos gets different labels and names; existing_dispatches matches live tabs by label; the runner passes the contract
+      Write failing tests in tests/unit/test_fr_herdr_runner.py with the herdr CLI faked: preflight refuses without HERDR_ENV=1 or herdr on PATH; the runner's launch issues `herdr tab create` with the label equal to the item id, then the herdr start command carrying the claude model flag, then the herdr prompt command, in that order, and returns the pane id; the agent name fits [a-z][a-z0-9_-]{0,31} for a 40-character batch id; the same batch id in two repos gets different labels and names; existing_dispatches matches live tabs by label; the runner passes the contract
   - id: P2.T5.S3
     text: |-
       Implement fr_dispatch.registry.load_runner and document the run-unit payload beside WorkItem; implement HerdrRunner (from_env, name herdr, refresh no-op, slot_budget 1, capabilities git/tests/scm/devcontainer, harness table claude to --model); tests green
+  - id: P2.T5.S4
+    text: |-
+      Refactor the herdr CLI plumbing and the contract helpers for clarity (one subprocess seam, one harness table), or record no-refactor-because P2.T5 in the plan journal
 - number: 6
   title: REFACTOR and quality gate
   steps:
@@ -163,6 +166,10 @@ state:
       ticked_at: null
       note: null
     P2.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S4:
       state: ' '
       ticked_at: null
       note: null
