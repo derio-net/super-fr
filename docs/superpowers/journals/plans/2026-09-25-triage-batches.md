@@ -216,3 +216,8 @@ _TOP_KEY matches plain and quoted top-level keys; _body_bounds puts a prepended 
 ### r2p-f7-resolved · finding [fixed] · resolves r2p-f7: Concurrent edit to batches: is silently lost between load and save_batches (widest in cancel); no compare-before-write
 
 save_batches(path, batches, *, read=...) re-loads the file's current batches and refuses with 'judgements.yaml changed since it was read; re-run' (exit 2 from every verb via _write) when they differ from what the verb loaded; the file is left untouched. Tests: test_triage_batch_model.py::test_a_write_over_batches_changed_since_they_were_read_is_refused, test_triage_batch_verbs.py::test_cancel_refuses_to_overwrite_batches_changed_while_it_ran. Commit c1422709.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f8-resolved created=2026-09-25T23:50:17 state=fixed resolves=r2p-f8 answered_by=agent -->
+### r2p-f8-resolved · finding [fixed] · resolves r2p-f8: cancel can exit 2 after partial forge writes when a later op is unsupported; except Exception masks programming errors as forge failures
+
+cancel now reads every member's comments before any write (the read is the only batch op glab/tea declare unsupported), so UnsupportedForgeOperation exits 2 with no label removed and no comment posted; per-member failures are caught as fr.hostclient.FORGE_ERRORS (GhError, GlabError, TeaError) only, so a programming error raises. Tests: test_triage_batch_verbs.py::test_cancel_probes_an_unsupported_backend_before_any_write, ::test_a_programming_error_during_cancel_is_not_reported_as_a_forge_failure (the existing forge-failure exit-1 test still passes with FakeGhError now a GhError).
