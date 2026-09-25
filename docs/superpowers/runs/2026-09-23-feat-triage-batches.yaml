@@ -98,18 +98,29 @@ steps:
             cache_read_input_tokens: 2701986
             output_tokens: 528
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T20:54:45+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: dcff6006-440b-4a29-b738-f04b65457c17
+          returned: '2026-09-25T20:59:24+00:00'
+          outcome: done
           estimate:
             journal_entries: 10
             journal_lines: 51
             handoff_chars: 3603
             spec_bytes: 36444
             plan_bytes: 25917
+          measured:
+            input_tokens: 40
+            cache_creation_input_tokens: 95448
+            cache_read_input_tokens: 1267830
+            output_tokens: 1674
+        evidence:
+          review: review-phase-1
+          reviewer: a8b28fa83cb208e61
+          findings: r1-1,r1-2,r1-3,r1-4,r1-5,r1-6
   journal-check:
     state: pending
   deliver:
