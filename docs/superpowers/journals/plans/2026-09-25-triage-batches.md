@@ -261,3 +261,8 @@ dispatch --yes calls runner.can_dispatch before preflight/existing_dispatches/di
 ### r2p-handle-resolved · finding [fixed] · resolves r2p-handle: DispatchEvent.handle is a required str but Runner.dispatch may return None; phase 3 must map None explicitly
 
 A None handle from Runner.dispatch is recorded as the item id (the runner's own identity for the dispatch, which existing_dispatches matches). Test: test_triage_batch_dispatch.py::test_a_runner_without_a_handle_records_the_item_id
+
+<!-- fr:journal kind=decision scope=plan id=p3-reserve-order created=2026-09-26T00:19:58 phase=3 -->
+### p3-reserve-order · decision · Dispatch-time reservation is max(source, every live reservation) + bump; explicit order is honoured at merge (phase 3)
+
+Spec 3.D says both 'dispatch-time order is explicit order, then dispatch sequence' and 'the reservation is the next version after the highest of (source, every live reservation)'. Read literally together they conflict when a batch with order 1 is dispatched after an unordered one. Chosen: the formula. Reusing a number already briefed to another live run would make two runs build the same version; a monotonic reservation never does. The explicit order is a merge-time constraint: batch merge's reconcile (3.F step 3b) re-slots any PR whose version is not its slot in the real order. Tests: test_triage_batch_version.py::test_the_reservation_follows_the_highest_live_reservation, ::test_slots_follow_merge_order_and_each_batchs_bump; test_triage_batch_dispatch.py::test_successive_dispatches_reserve_successive_versions.
