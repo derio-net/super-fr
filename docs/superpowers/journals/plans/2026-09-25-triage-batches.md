@@ -342,3 +342,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f12 created=2026-09-26T00:55:10 phase=3 state=open review_scope=in -->
 ### r3-f12 · finding [open] (reviewer: in scope) · git merge in the scratch worktree inherits operator rerere config, which can silently resolve a non-version conflict; pass -c rerere.enabled=false (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f13 created=2026-09-26T00:55:12 phase=3 state=open review_scope=in -->
+### r3-f13 · finding [open] (reviewer: in scope) · Config freshness compares committer dates (%cI); compare ancestry/commit identity instead (phase 3)
