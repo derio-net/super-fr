@@ -3,7 +3,7 @@ run: 2026-09-26-fix-624-set-status-drop-level
 workflow: fr-goal@1
 branch: fix/624-set-status-drop-level
 started: '2026-09-25T22:34:40+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
   spec-review:
-    state: running
-    at: '2026-09-25T22:39:31+00:00'
+    state: done
+    at: '2026-09-25T22:42:07+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: d798e182-2250-49f5-81ab-727aaac0eef3
+          returned: '2026-09-25T22:42:07+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: ad589e28ccd1d7da4
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7
   plan:
     state: pending
   plan-review:
