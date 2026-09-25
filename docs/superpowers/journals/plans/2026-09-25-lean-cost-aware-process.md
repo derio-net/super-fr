@@ -89,3 +89,8 @@ commands/usage_cmd.py:189-192.
 ### p1-r9 · finding [open] (reviewer: in scope) · Unknown attempt harness relabelled claude-code (phase 1)
 
 usage_cmd.py:88.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-09-25T20:03:28 phase=1 state=open review_scope=in -->
+### p1-r10 · finding [open] (reviewer: in scope) · Skill says count turns but the report renders none; phase 2 schema needs turns (phase 1)
+
+fr-audit/SKILL.md:61-63, rollup.py:64.
