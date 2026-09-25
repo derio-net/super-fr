@@ -1,0 +1,36 @@
+schema_version: 1
+run: 2026-09-26-fix-624-set-status-drop-level
+step: brainstorm
+outcome: done
+journal:
+  - kind: decision
+    id: d-carrier
+    title: Drops are carried CLI-only via RecordTarget; the record kind's shape is unchanged
+    body: >-
+      Operator chose CLI-only over adding `drop_levels` to AcceptanceItem. The record
+      artifact kind keeps version 1 (no stamp bump, no migration), so the release stays a
+      patch. Step records still cannot drop refs; a step that needs one runs the verb.
+  - kind: decision
+    id: d-conflict
+    title: The same ref in both --level and --drop-level is refused, exit 2
+    body: Contradictory intent in one call. It is refused with nothing changed, like an absent-ref drop.
+  - kind: decision
+    id: d-empty-evidence
+    title: A drop that empties a ci/scheduled row's evidence is allowed
+    body: >-
+      The status is the operator's explicit call in the same command, with --notes;
+      set-status never judged status against evidence, and `fr acceptance check` stays the gate.
+acceptance:
+  - id: lifecycle-acceptance-drop-level
+    capability: Artifact lifecycles
+    acceptance: >-
+      An operator can remove a stale evidence ref from an acceptance row with a command
+      (in the same rewrite as its status move), so re-pointing a row whose tests were
+      deleted needs no hand-edited YAML.
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
+    status: not-implemented
+    notes: gh#624. Target level unit (tests/unit/test_acceptance_set_status.py), status ci on merge.
+emitted:
+  spec: docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
+evidence: {}
