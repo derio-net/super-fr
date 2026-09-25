@@ -52,12 +52,14 @@ unbound. Each answer is a `decision` in the brainstorm record, each acceptance r
 entry. **Hard gate:** an unanswered batch is a stop signal — restate the open questions, never
 default. The record carries `emitted: {spec: <path>}`. "The
 request already decided everything" is still a question to put, not a reason to skip the batch;
-the one bypass is `--no-questions --reason "…"`, written to the spec journal and the PR body.
+the one bypass is `no_questions: true` + `reason: "…"` in the record (with `--record`, fr refuses
+the `--no-questions`/`--reason` flags), written to the spec journal and the PR body.
 
 **Harness — questions:** Claude Code batches them into one `AskUserQuestion` call, and `resolve`
 VERIFIES it: no answered question in the session transcript since the gate blocked → refused.
 Hermes and OpenCode have no question tool: put the numbered batch in your reply and END THE TURN,
-then `--answered-by operator` once the operator answered — unverified there, so advisory.
+then `evidence: {answered_by: operator}` in the record
+(`--answered-by operator` in the flag form) once the operator answered — unverified, so advisory.
 
 ### 2. spec-review
 Never review the spec yourself: dispatch the read-only `fr-spec-reviewer` (the brief's `agent` and `tier`) INTO this workspace with the spec and spec-journal paths. It checks the spec against the Q&A decisions AND codebase reality (a file:line for every named file/helper/service), and tags each finding in or out of scope (§6's definitions). Its return IS the step's record (findings with `review_scope`, plus a `kind: review` entry): save it at the brief's `record` path, fix every finding in scope, add a `resolves:` entry per finding (the rest `state: out-of-scope`, the body saying why this change did not cause it) and `evidence: {review: <entry-id>, reviewer: <agent-id>}`, then `fr run resolve <run-id> --step spec-review --record <file>`. fr refuses a review entry older than the step, a reviewer this session did not dispatch after it opened, and — `findings` is derived — any spec finding still open. Cross-repo spec: this session owns ONE repo's plan + PR; for each other repo, dispatch one agent with the spec ref and this pipeline from `plan` onward — one plan, one PR, one workspace per repo: brief it to enter isolation in ITS repo first, `fr isolation up --repo <path> --branch <b>` (it inherits your cwd).

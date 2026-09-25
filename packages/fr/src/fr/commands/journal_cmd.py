@@ -15,7 +15,6 @@ Verbs:
 from __future__ import annotations
 
 import hashlib
-import os
 from pathlib import Path
 from typing import get_args
 
@@ -30,7 +29,6 @@ from fr.journal.model import (
     JournalParseError,
     effective_finding_states,
     journal_path,
-    journal_stamp_as_utc,
     open_finding_ids,
     parse_journal,
     resolution_record_id,
@@ -130,68 +128,6 @@ def _validate_answered_by(answered_by: str | None) -> None:
             f"(got {answered_by!r})[/red]"
         )
         raise typer.Exit(2)
-
-
-def _verify_operator_claim(entries: list[JournalEntry], finding_id: str) -> None:
-    """Check an `--answered-by operator` claim where fr can, before it is written.
-
-    The window opens at the finding's LAST out-of-scope record (else the
-    finding itself): an operator answer from before the orchestrator moved it
-    out answered something else. Same observation the brainstorm gate makes
-    (`fr.run.telemetry.operator_answered_since`) with the same three outcomes —
-    observed and answered: record; observed and not: refuse, nothing written;
-    not observable: record, and say so. OpenCode and Hermes have no question
-    tool fr can read, so there the claim is recorded as stated.
-    """
-    from fr.harness.detect import detect_harness
-    from fr.harness.model import HarnessError
-    from fr.run.telemetry import operator_answered_since
-
-    since = next(
-        (
-            e.created
-            for e in reversed(entries)
-            if e.id == finding_id or (e.resolves == finding_id and e.out_of_scope)
-        ),
-        None,
-    )
-    observed = operator_answered_since(os.environ, journal_stamp_as_utc(since)) if since else None
-    if observed is True:
-        return
-    if observed is False:
-        err_console.print(
-            f"[red]{finding_id}: no answered question in this session's transcript since "
-            f"{since} — `--answered-by operator` is a claim fr can check here, and it does "
-            "not hold. Ask the operator with your harness's question tool, then resolve "
-            "again.[/red] Nothing written.",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError as e:
-        err_console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2) from e
-    if harness == "claude-code":
-        err_console.print(
-            f"[yellow]{finding_id}: could not verify `--answered-by operator` — the "
-            "session transcript is not readable here; recorded unverified.[/yellow]",
-            soft_wrap=True,
-        )
-    else:
-        from fr.harness import load_matrix
-
-        # The reason is the parity row's own `scope_note`, never a second
-        # hand-typed copy of it (the same rule the brainstorm gate follows).
-        row = next(s for s in load_matrix().surfaces if s.id == "out-of-scope-operator-guard")
-        cell = row.harnesses.get(harness) if harness is not None else None
-        why = (cell.scope_note if cell else None) or "fr cannot read an operator answer here"
-        err_console.print(
-            f"{finding_id}: `--answered-by operator` recorded as stated — advisory on "
-            f"{harness or 'an unrecognised harness'}: {why}",
-            markup=False,
-            soft_wrap=True,
-        )
 
 
 @journal_app.command("add")
@@ -311,8 +247,6 @@ def add(
             "`--resolves` must name a finding that exists"
         )
         raise typer.Exit(2)
-    if resolves is not None and answered_by == "operator":
-        _verify_operator_claim(existing, resolves)
     # spec 2026-09-25 §5.C.6: a one-entry record through the step-record engine.
     from fr.record.model import JournalItem, StepRecord
 
@@ -346,7 +280,7 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
     from fr.record import apply as engine
 
     try:
-        engine.apply_record(
+        outcome = engine.apply_record(
             root,
             None,
             record,  # type: ignore[arg-type]
@@ -357,6 +291,8 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
     except engine.RecordRefusedError as e:
         err_console.print(f"[red]{e}[/red] — nothing written", soft_wrap=True)
         raise typer.Exit(2) from e
+    for notice in outcome.notices:  # an unverifiable operator claim says so (p3-r1)
+        err_console.print(notice, markup=False, soft_wrap=True)
 
 
 RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
@@ -471,9 +407,6 @@ def resolve(
             "finding has a state to resolve"
         )
         raise typer.Exit(2)
-    if answered_by == "operator":
-        _verify_operator_claim(entries, entry_id)
-
     from fr.record.model import Resolution, StepRecord
 
     record_id = _record_id(entry_id, {e.id for e in entries})

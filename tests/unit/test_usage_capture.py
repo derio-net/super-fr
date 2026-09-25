@@ -106,6 +106,7 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_resolving_deliver_captures_every_readable_session_in_the_cursors_commit(
     tmp_path: Path, transcripts: Path
 ) -> None:
@@ -188,6 +189,7 @@ def test_a_new_hosts_first_resolve_appends_its_capture_and_a_known_host_adds_not
     assert usage_path(repo, RUN).read_bytes() == before
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_a_reader_that_raises_is_unavailable_and_the_resolve_still_succeeds(
     tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -209,6 +211,7 @@ def test_a_reader_that_raises_is_unavailable_and_the_resolve_still_succeeds(
     assert entry.unavailable
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_a_readers_exception_text_never_reaches_the_committed_file(
     tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -282,6 +285,7 @@ def test_a_corrupt_usage_file_never_fails_the_resolve(tmp_path: Path, transcript
     assert path.read_text() == "captures: [not, a, mapping\n"
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_archive_captures_the_closeout_session_and_moves_the_file(
     tmp_path: Path, transcripts: Path
 ) -> None:

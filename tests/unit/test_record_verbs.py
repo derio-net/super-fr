@@ -195,3 +195,97 @@ def test_run_resolve_record_routes_through_the_engine(tmp_path: Path, spy) -> No
     assert out.exit_code == 0, out.output
     [(run_id, _)] = spy
     assert run_id == RUN
+
+
+# --- p3-r5: a record's acceptance entry is create-only OR move-only ----------
+
+
+def _row_record(**fields: object):
+    from fr.record.model import AcceptanceItem, StepRecord
+
+    return StepRecord(acceptance=(AcceptanceItem.model_validate(fields),))
+
+
+def test_a_record_acceptance_entry_with_capability_is_create_only(repo: Path) -> None:
+    create = {
+        "id": "row-a", "capability": "c", "acceptance": "a",
+        "origin": ("super-fr:docs/spec.md",), "status": "not-implemented",
+    }  # fmt: skip
+    target = engine.RecordTarget(message="m")
+    engine.apply_record(repo, None, _row_record(**create), target=target)
+    matrix = (repo / "docs" / "acceptance" / "matrix.yaml").read_text()
+
+    # The same entry again is a no-op (a retry heals, p3-r3) …
+    engine.apply_record(repo, None, _row_record(**create), target=target)
+    assert (repo / "docs" / "acceptance" / "matrix.yaml").read_text() == matrix
+    # … but a create naming an existing id with anything different is refused.
+    with pytest.raises(engine.RecordRefusedError, match="already exists"):
+        engine.apply_record(
+            repo, None, _row_record(**{**create, "capability": "other"}), target=target
+        )
+    assert (repo / "docs" / "acceptance" / "matrix.yaml").read_text() == matrix
+
+
+def test_a_record_acceptance_entry_without_capability_is_move_only(repo: Path) -> None:
+    target = engine.RecordTarget(message="m")
+    with pytest.raises(engine.RecordRefusedError, match="no such row"):
+        engine.apply_record(
+            repo, None, _row_record(id="nope", status="skipped", notes="why"), target=target
+        )
+    assert "nope" not in (repo / "docs" / "acceptance" / "matrix.yaml").read_text()
+
+
+# --- p3-r8: completing a phase runs the refactor gate, verb or record --------
+
+
+def _two_step_plan(root: Path) -> Path:
+    from fr.plan_ops import PhaseSpec, create
+
+    slug = "2026-09-25-gaps"
+    create(
+        repo_root=root,
+        slug=slug,
+        spec="docs/spec.md",
+        target_repo="derio-net/super-fr",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="P1",
+                tasks=(
+                    {
+                        "number": 1,
+                        "title": "t",
+                        "steps": [
+                            {"id": "P1.T1.S1", "text": "RED: a test"},
+                            {"id": "P1.T1.S2", "text": "GREEN: pass it"},
+                        ],
+                    },
+                ),
+                skeleton=True,
+            )
+        ],
+        prose="# p\n",
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "gaps plan", "--no-verify")
+    return root / "docs" / "superpowers" / "plans" / slug
+
+
+def test_complete_phase_verb_refuses_a_task_with_no_refactor_reason(repo: Path) -> None:
+    plan = _two_step_plan(repo)
+    for step in ("P1.T1.S1", "P1.T1.S2"):
+        assert _fr(repo, ["plan", "edit", str(plan), "--tick", step]).exit_code == 0
+
+    refused = _fr(repo, ["plan", "edit", str(plan), "--complete-phase", "1"])
+    assert refused.exit_code == 2, refused.output
+    assert "P1.T1" in refused.output and "refactor" in refused.output
+
+    # Back-compat: a `no-refactor-because` journal entry is the reason.
+    why = [
+        "journal", "add", "--scope", "plan", "--slug", plan.name, "--kind", "discovery",
+        "--phase", "1", "--title", "no-refactor-because P1.T1", "--body", "nothing to clean",
+    ]  # fmt: skip
+    assert _fr(repo, why).exit_code == 0
+    done = _fr(repo, ["plan", "edit", str(plan), "--complete-phase", "1"])
+    assert done.exit_code == 0, done.output

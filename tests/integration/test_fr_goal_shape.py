@@ -25,6 +25,7 @@ import re
 import textwrap
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from fr.run import units
 from fr.run.model import load_run_state
@@ -565,6 +566,7 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     assert load_run_state(root, "g1").cursor == "deliver"
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path) -> None:
     """The operator-visible proof: review fires inside every phase iteration
     (the next brief after an implement return is that phase's review, never

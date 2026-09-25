@@ -122,6 +122,25 @@ def _run_group() -> None:
 
 
 @dataclass
+class ResolveGuard:
+    """What the step-record engine needs to undo a `resolve` it drove (p3-r3).
+
+    `originals` holds the bytes of every path this command wrote — the cursor,
+    the usage capture, the spec journal a `--no-questions` clears into, the PR
+    render — remembered BEFORE the write, so a refusal or a crash can put each
+    one back. `landed` turns true once any commit landed: from then on the
+    tree must stay equal to HEAD, never be restored behind it.
+    `before_commit` runs once, immediately before the first commit, and names
+    extra paths to record in it (the engine's tracked record file, deleted).
+    """
+
+    originals: dict[Path, bytes | None] = field(default_factory=dict)
+    landed: bool = False
+    before_commit: Callable[[], list[Path]] | None = None
+    prepared: bool = False
+
+
+@dataclass
 class _RunWrites:
     verb: str
     step: str | None = None
@@ -136,6 +155,15 @@ class _RunWrites:
     # The outcome of the last commit this command made — the step-record
     # engine reports it in its one line (spec 2026-09-25 §5.C.2.4).
     last_outcome: CommitOutcome | None = None
+    guard: ResolveGuard | None = None
+    # p3-r10: the step-record engine prints its own one line naming the
+    # commit, so `commit_records`' "fr: committed …" echo would be a second.
+    quiet: bool = False
+
+    def remember(self, path: Path) -> None:
+        """Keep `path`'s bytes as they are now, before this command writes it."""
+        if self.guard is not None and path not in self.guard.originals:
+            self.guard.originals[path] = path.read_bytes() if path.is_file() else None
 
     def note(self, repo_root: Path, path: Path) -> None:
         self.paths.setdefault(repo_root, []).append(path)
@@ -162,10 +190,19 @@ class _RunWrites:
         pending — a caller deciding whether to print "push it" (p4-r1) must
         tell "nothing to commit" from "committed" from "refused".
         """
+        guard = self.guard
+        if guard is not None and not guard.prepared and self.paths:
+            guard.prepared = True
+            if guard.before_commit is not None:
+                root = next(iter(self.paths))
+                for path in guard.before_commit():
+                    self.note(root, path)
         pending, self.paths = self.paths, {}
         outcome: CommitOutcome | None = None
         for root, paths in pending.items():
-            outcome = commit_records(root, paths, self.message())
+            outcome = commit_records(root, paths, self.message(), quiet=self.quiet)
+            if guard is not None and outcome.committed:
+                guard.landed = True
         if outcome is not None:
             self.last_outcome = outcome
         return outcome
@@ -224,8 +261,17 @@ def _note_record_write(repo_root: Path, path: Path, state: RunState | None = Non
         writes.last = state
 
 
+def _remember(path: Path) -> None:
+    """Keep `path`'s current bytes for the step-record engine's restore
+    (a no-op unless the engine drives this command)."""
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        writes.remember(path)
+
+
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
+    _remember(run_path(repo_root, state.run))
     path = save_run_state(repo_root, state)
     _note_record_write(repo_root, path, state)
     return path
@@ -352,7 +398,9 @@ def _capture_usage(
     """Write this host's usage capture and note it for the command's commit.
     Never raises (`fr.usage.capture.capture`)."""
     from fr.usage.capture import capture
+    from fr.usage.file import usage_path
 
+    _remember(usage_path(repo_root, state.run))
     path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
     if path is not None:
         _note_record_write(repo_root, path)
@@ -962,6 +1010,7 @@ def _gate_provenance(
             already = False
         # Review r1-6: a retry after a later refusal must not log it twice.
         if not already:
+            _remember(target)
             append_journal_entry(
                 target,
                 slug,
@@ -3640,8 +3689,8 @@ def resolve_cmd(
         help="Why no operator decision was needed (with --no-questions); written "
         "to the spec journal this resolve emits.",
     ),
-    answered_by: str = typer.Option(
-        "agent",
+    answered_by: str | None = typer.Option(
+        None,
         "--answered-by",
         help="operator | agent — who answered this step's operator gate. "
         "Defaults to `agent`, the weaker claim; recorded only when a gate "
@@ -3699,10 +3748,29 @@ def resolve_cmd(
       ever.
     """
     if record_file is not None:
-        if state_value is not None or emitted or evidence:
+        # p3-r4: every flag the record carries is refused beside it, never
+        # silently dropped — a flag that is ignored reads as one honoured.
+        given = [
+            flag
+            for flag, value in (
+                ("--state", state_value),
+                ("--emitted", emitted),
+                ("--evidence", evidence),
+                ("--no-questions", no_questions),
+                ("--reason", reason),
+                ("--answered-by", answered_by),
+                ("--agent", agent),
+                ("--harness", harness),
+                ("--model", model),
+            )
+            if value not in (None, False, [])
+        ]
+        if given:
             err_console.print(
-                "[red]--record carries the outcome, evidence and emitted artifacts — "
-                "do not pass --state/--evidence/--emitted with it[/red]",
+                f"[red]--record carries the outcome, evidence and emitted artifacts — "
+                f"do not pass {'/'.join(given)} with it (record fields: `outcome`, "
+                "`emitted`, `evidence` — answered_by/agent/harness/model go in `evidence` — "
+                "and `no_questions` + `reason`)[/red]",
                 soft_wrap=True,
             )
             raise typer.Exit(2)
@@ -3720,11 +3788,56 @@ def resolve_cmd(
         item=item,
         no_questions=no_questions,
         reason=reason,
-        answered_by=answered_by,
+        answered_by=answered_by or "agent",
         agent=agent,
         harness=harness,
         model=model,
     )
+
+
+def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
+    """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
+    carries every required section (spec 2026-09-25 §5.C.4). The render is
+    the one file a refusal leaves behind: it is what the agent opens the PR
+    with. On success the render is removed — it goes with the delivered step.
+    """
+    from fr import gh
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.record.model import records_dir
+    from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
+
+    body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
+    body_path.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    rel = body_path.relative_to(repo_root).as_posix()
+    ref = pr or state.branch
+    try:
+        live = gh.view_pr_body(ref, cwd=repo_root)
+    except gh.GhError as e:
+        err_console.print(
+            f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
+            f"the PR with `gh pr create --body-file {rel}`, record its url (`emitted: "
+            "{pr: <url>}` in the record, or `--emitted pr=<url>`), and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    missing = missing_sections(live)
+    if missing:
+        err_console.print(
+            f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
+            f"it from fr's render — `gh pr edit {ref} --body-file {rel}` — and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    from fr.record.apply import _is_tracked
+
+    tracked = _is_tracked(repo_root, body_path)
+    _remember(body_path)
+    body_path.unlink()
+    if tracked:
+        _note_record_write(repo_root, body_path)
 
 
 def _resolve_body(
@@ -3964,6 +4077,11 @@ def _resolve_body(
         harness=harness,
         model=model,
     )
+    if "pr" in step.emits and state_value == "done":
+        # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
+        # form and a record reach the same one — before the cursor moves.
+        pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_pr_gate(repo_root, state, pr)
     new_state = _complete_step(
         state,
         manifest,
@@ -4055,6 +4173,9 @@ def resolve_in_process(
     evidence: dict[str, str],
     emitted: dict[str, str],
     also_commit: list[Path],
+    no_questions: bool = False,
+    reason: str | None = None,
+    guard: ResolveGuard | None = None,
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
     (every gate included), with the engine's written paths noted into the same
@@ -4073,7 +4194,9 @@ def resolve_in_process(
     agent = offered.pop("agent", None)
     harness = offered.pop("harness", None)
     model = offered.pop("model", None)
-    writes = _RunWrites(verb="resolve", step=step_id, item=item, outcome=state_value)
+    writes = _RunWrites(
+        verb="resolve", step=step_id, item=item, outcome=state_value, guard=guard, quiet=True
+    )
     for path in also_commit:
         writes.note(repo_root, path)
     token = _RUN_WRITES.set(writes)
@@ -4087,6 +4210,8 @@ def resolve_in_process(
                 emitted=[f"{k}={v}" for k, v in emitted.items()],
                 evidence=[f"{k}={v}" for k, v in offered.items()],
                 item=item,
+                no_questions=no_questions,
+                reason=reason,
                 answered_by=answered_by,
                 agent=agent,
                 harness=harness,
@@ -4114,10 +4239,22 @@ def resolve_in_process(
 def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_file: Path) -> None:
     """`fr run resolve --record`: parse, fill run/step/item, apply — one line."""
     from fr.record.apply import RecordRefusedError, apply_record
-    from fr.record.model import RecordError, load_record
+    from fr.record.model import RecordError, load_record, records_dir
 
     repo_root = resolve_repo_root()
-    path = record_file if record_file.is_absolute() else Path.cwd() / record_file
+    # p3-r9: a record is resolved against the repo root (never the cwd) and
+    # must live in this run's records dir — the engine deletes and commits
+    # it, which must never reach an arbitrary file.
+    path = record_file if record_file.is_absolute() else repo_root / record_file
+    home = records_dir(repo_root, run_id)
+    if not path.resolve().is_relative_to(home.resolve()):
+        err_console.print(
+            f"refused: {record_file} is not in this run's records dir "
+            f"({home.relative_to(repo_root).as_posix()}/) — nothing applied",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     try:
         record = load_record(path)
     except RecordError as e:

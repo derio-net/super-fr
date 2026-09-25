@@ -17,10 +17,13 @@ add/set-status`) hand it a one-entry record. Either way it:
    succeeded, then runs the step's existing gates through `fr run resolve`'s
    own code (review witness, operator guard, `deliver`'s `tests=` log, the
    refactor gate). Those gates READ the journal and the plan, which is why the
-   writes land before them: a gate that refuses restores every byte this call
-   touched, so a refusal still changes nothing on disk;
+   writes land before them: a gate that refuses — or a crash before any commit
+   landed — restores every byte this call touched, the cursor and usage
+   capture included, so a refusal still changes nothing on disk (p3-r3);
 4. **commits once** through `fr.records_commit.commit_records`, and hands back
-   the one line the caller prints.
+   the one line the caller prints. The record file is removed only once every
+   write is on disk and every gate passed, and re-applying a record whose
+   entries already landed is a no-op for them — a retry heals, never wedges.
 
 `RecordRefusedError` carries a refusal's message; the caller prints it and exits 2.
 """
@@ -31,7 +34,7 @@ import hashlib
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -48,8 +51,7 @@ from fr.journal.model import (
     resolution_record_id,
     spec_journal_slug,
 )
-from fr.record.model import StepRecord, allowed_sections, present_sections, records_dir
-from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
+from fr.record.model import StepRecord, allowed_sections, present_sections
 from fr.workflow.artifacts import journal_scope
 
 if TYPE_CHECKING:
@@ -83,10 +85,6 @@ class RecordTarget:
     phase: int | None = None
     message: str | None = None
     """The commit subject a verb record commits under."""
-    before_write: Callable[[list[JournalEntry], list[JournalEntry]], None] | None = None
-    """A verb's own last check over (existing, new) journal entries, run after
-    validation and before any byte moves — `--answered-by operator`'s
-    transcript verification."""
 
 
 @dataclass
@@ -156,7 +154,6 @@ class _Context:
     phase: int | None
     completes_phase: bool
     emits_ticks: bool
-    emits_pr: bool = False
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -207,7 +204,6 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         phase=phase,
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
-        emits_pr="pr" in owner_emits,
     )
     return context, state
 
@@ -230,13 +226,30 @@ def _stamp() -> str:
     return _dt.datetime.now().replace(microsecond=0).isoformat()
 
 
+def _same_entry(a: JournalEntry, b: JournalEntry, *, ignore: frozenset[str]) -> bool:
+    """Equal in everything but `ignore` — a retry's entry differs from the one
+    a crashed apply already wrote only in its `created` stamp."""
+    return a.model_dump(exclude=set(ignore)) == b.model_dump(exclude=set(ignore))
+
+
+_STAMP = frozenset({"created"})
+_STAMP_AND_ID = frozenset({"created", "id"})
+
+
 def _journal_writes(
-    ctx: _Context, record: StepRecord, overlay: _Overlay, repo_root: Path, target: RecordTarget
-) -> tuple[list[JournalEntry], dict[str, int]]:
+    ctx: _Context, record: StepRecord, overlay: _Overlay, repo_root: Path
+) -> tuple[list[JournalEntry], dict[str, int], list[str]]:
+    """Journal appends, in memory. Returns (entries appended, counts, advisory
+    lines). Re-applying a record whose entries are already in the journal —
+    a retry after an apply that died between its writes and its commit —
+    is a no-op for those entries (p3-r3): the retry heals the tree instead of
+    wedging on "already exists". A same-id entry with different content still
+    refuses."""
     counts: dict[str, int] = {}
+    notices: list[str] = []
     refactor = dict(record.refactor)
     if not record.journal and not record.resolves and not refactor:
-        return [], counts
+        return [], counts, notices
     scope = ctx.scope or ("plan" if refactor else None)
     slug = ctx.slug or (ctx.plan_dir.name if refactor and ctx.plan_dir is not None else None)
     if scope is None or slug is None:
@@ -252,12 +265,30 @@ def _journal_writes(
 
     def add(entry: JournalEntry) -> None:
         if entry.id in taken:
+            there = next((e for e in existing if e.id == entry.id), None)
+            if there is not None and _same_entry(there, entry, ignore=_STAMP):
+                return  # already applied by an earlier, interrupted apply
             raise RecordRefusedError(
                 f"journal entry {entry.id!r} already exists; a finding changes by a "
                 "`resolves` entry, never by re-adding it"
             )
+        _verify(entry)
         taken.add(entry.id)
         new.append(entry)
+
+    def _verify(entry: JournalEntry) -> None:
+        # p3-r1: every path that writes an operator claim checks it here, the
+        # verbs and a whole step's record alike.
+        if entry.answered_by != "operator" or entry.resolves is None:
+            return
+        from fr.journal.operator import OperatorClaimRefusedError, verify_operator_claim
+
+        try:
+            advisory = verify_operator_claim([*existing, *new], entry.resolves)
+        except OperatorClaimRefusedError as e:
+            raise RecordRefusedError(str(e)) from e
+        if advisory is not None:
+            notices.append(advisory)
 
     def finding(fid: str) -> JournalEntry:
         hit = next((e for e in [*existing, *new] if e.id == fid), None)
@@ -330,7 +361,9 @@ def _journal_writes(
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid resolution of {res.id!r}: {e}") from e
-        add(entry)
+        last = next((e for e in reversed([*existing, *new]) if e.resolves == res.id), None)
+        if last is None or last in new or not _same_entry(last, entry, ignore=_STAMP_AND_ID):
+            add(entry)
         counts["resolved"] = counts.get("resolved", 0) + 1
 
     if refactor:
@@ -353,13 +386,14 @@ def _journal_writes(
             )
             counts["refactor"] = counts.get("refactor", 0) + 1
 
-    if target.before_write is not None:
-        target.before_write(existing, new)
+    # Put even when nothing is new: a retry that found every entry already
+    # written still commits the journal an interrupted apply left dirty.
     text = overlay.read(path)
     for entry in new:
         text = appended_journal_text(text, slug, entry)
-    overlay.put(path, text)
-    return new, counts
+    if text is not None:
+        overlay.put(path, text)
+    return new, counts, notices
 
 
 def _unique_id(base: str, taken: set[str]) -> str:
@@ -459,6 +493,7 @@ def _plan_writes(ctx: _Context, record: StepRecord, overlay: _Overlay) -> dict[s
         completion = raw(n)["state"]["completion"]
         if completion.get("at") and complete is None:
             continue  # already complete: a resolve does not re-stamp it
+        _refactor_check(plan, n, overlay)
         completion["at"] = _now_iso()
         if note is not None:
             completion["note"] = note
@@ -468,6 +503,28 @@ def _plan_writes(ctx: _Context, record: StepRecord, overlay: _Overlay) -> dict[s
         overlay.put(ctx.plan_dir / f"{n:02d}.yaml", _yaml_dump(data))
     _check_plan_parses(ctx.plan_dir, overlay)
     return counts
+
+
+def _refactor_check(plan: Any, phase_n: int, overlay: _Overlay) -> None:
+    """The refactor-or-justify gate on EVERY phase completion (p3-r8) — a
+    record's or `fr plan edit --complete-phase`'s alike. The justifications
+    are read from the journal on disk plus this record's own entries, which
+    are still in memory."""
+    from fr.record.gates import refactor_gaps
+
+    extra: set[str] = set()
+    if plan.repo_root is not None:
+        path = journal_path(plan.repo_root, "plan", plan.meta.plan)
+        if path in overlay.writes:
+            extra = _justified_tasks(_load_entries(overlay.read(path), path))
+    gaps = refactor_gaps(plan, phase_n, extra)
+    if gaps:
+        raise RecordRefusedError(
+            f"phase {phase_n}: task(s) {', '.join(gaps)} have no refactor step and no "
+            f"refactor reason — add `refactor: {{{gaps[0]}: <why there was nothing to "
+            "clean>}` to the step record, or journal a `no-refactor-because "
+            f"{gaps[0]}` discovery for phase {phase_n} before completing it"
+        )
 
 
 def _check_plan_parses(plan_dir: Path, overlay: _Overlay) -> None:
@@ -518,12 +575,22 @@ def _acceptance_writes(
         except AcceptanceError as e:
             raise RecordRefusedError(f"matrix does not parse: {e}") from e
         existing = next((r for r in matrix.rows if r.id == item.id), None)
+        # p3-r5: the entry's shape says which verb it is, as the verbs do —
+        # `capability`/`acceptance` present is `fr acceptance add` (create-only),
+        # absent is `set-status` (move-only). Existence alone never decides.
+        creates = item.capability is not None or item.acceptance is not None
+        if creates and (item.capability is None or item.acceptance is None):
+            raise RecordRefusedError(
+                f"acceptance {item.id}: a new row needs both `capability` and `acceptance`"
+            )
+        if not creates and existing is None:
+            raise RecordRefusedError(
+                f"acceptance {item.id}: no such row — moving a status needs an existing id; "
+                "give `capability` and `acceptance` to create it"
+            )
         try:
-            if existing is None:
-                if item.capability is None or item.acceptance is None:
-                    raise RecordRefusedError(
-                        f"acceptance {item.id}: a new row needs `capability` and `acceptance`"
-                    )
+            if creates:
+                assert item.capability is not None and item.acceptance is not None
                 row = Row(
                     id=item.id,
                     capability=item.capability,
@@ -534,6 +601,7 @@ def _acceptance_writes(
                     notes=item.notes or "",
                 )
             else:
+                assert existing is not None  # refused above when absent
                 if not item.notes:
                     raise RecordRefusedError(
                         f"acceptance {item.id}: moving a row's status needs `notes` — "
@@ -556,6 +624,13 @@ def _acceptance_writes(
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
+        if creates and existing is not None:
+            if existing == row:
+                continue  # already created by an earlier, interrupted apply (p3-r3)
+            raise RecordRefusedError(
+                f"acceptance {item.id}: row already exists — `capability`/`acceptance` "
+                "create a row; drop them to move its status"
+            )
         if existing is None:
             text = append_row(text, row)
             lines.append(f"added row {row.id} ({row.status})")
@@ -675,32 +750,21 @@ def apply_record(
 
     overlay = _Overlay()
     counts: dict[str, int] = {}
-    entries, journal_counts = _journal_writes(ctx, record, overlay, repo_root, target)
+    entries, journal_counts, journal_notices = _journal_writes(ctx, record, overlay, repo_root)
     counts.update(journal_counts)
     counts.update(_plan_writes(ctx, record, overlay))
     row_counts, row_lines = _acceptance_writes(record, overlay, repo_root)
     counts.update(row_counts)
-    if run_id is not None and ctx.emits_pr and record.outcome == "done":
-        body_path = records_dir(repo_root, run_id) / PR_BODY_NAME
-        _check_live_pr(repo_root, state, record, body_path)
-        overlay.put(body_path, None)  # the render goes with the record once delivered
-    delete_record = record_file is not None and record_file.is_file()
-    if delete_record:
-        assert record_file is not None
-        overlay.put(record_file, None)
+    notices = (*journal_notices, *row_lines)
 
     commit_paths = [p for p, text in overlay.writes.items() if text is not None]
-    if delete_record and record_file is not None and _is_tracked(repo_root, record_file):
-        commit_paths.append(record_file)
     commit_paths += [
-        p
-        for p, text in overlay.writes.items()
-        if text is None and p != record_file and _is_tracked(repo_root, p)
+        p for p, text in overlay.writes.items() if text is None and _is_tracked(repo_root, p)
     ]
 
     before = overlay.snapshot()
-    overlay.write()
     if run_id is None:
+        overlay.write()
         outcome = _commit(repo_root, commit_paths, target.message or "chore(fr): record")
         return ApplyOutcome(
             line="",
@@ -709,14 +773,37 @@ def apply_record(
             committed=outcome.committed,
             written=tuple(commit_paths),
             entries=tuple(entries),
-            notices=tuple(row_lines),
+            notices=notices,
         )
 
     from fr.commands import run_cmd
 
     assert record.step is not None and record.outcome is not None
     state_value = "done" if record.outcome == "done" else "failed"
+    # p3-r3: the record survives until every write — the cursor included — is
+    # on disk. A tracked record is removed the instant before the commit that
+    # records its deletion (git commits a path as the working tree has it); an
+    # untracked one only after that commit landed. Everything this call writes,
+    # the cursor and the usage capture included, is remembered before it moves,
+    # and restored on ANY exit unless a commit already landed — a restore after
+    # a commit would leave a tree that disagrees with HEAD.
+    guard = run_cmd.ResolveGuard()
+    record_bytes: bytes | None = None
+    tracked_record = False
+    if record_file is not None and record_file.is_file():
+        record_bytes = record_file.read_bytes()
+        tracked_record = _is_tracked(repo_root, record_file)
+
+    def drop_tracked_record() -> list[Path]:
+        if not tracked_record or record_file is None or not record_file.is_file():
+            return []
+        guard.originals.setdefault(record_file, record_bytes)
+        record_file.unlink()
+        return [record_file]
+
+    guard.before_commit = drop_tracked_record
     try:
+        overlay.write()
         result = run_cmd.resolve_in_process(
             repo_root,
             run_id,
@@ -725,11 +812,17 @@ def apply_record(
             state_value=state_value,
             evidence=dict(record.evidence),
             emitted=dict(record.emitted),
+            no_questions=record.no_questions,
+            reason=record.reason,
             also_commit=commit_paths,
+            guard=guard,
         )
     except BaseException:
-        _restore(before)
+        if not guard.landed:
+            _restore({**guard.originals, **before})
         raise
+    if record_bytes is not None and not tracked_record and record_file is not None:
+        record_file.unlink(missing_ok=True)  # every write landed and every gate passed
     word = record.outcome if record.outcome != "blocked" else "blocked (resolved failed)"
     subject = " ".join(x for x in (record.step, record.item, word) if x)
     sha = _short_head(repo_root) if result.committed else None
@@ -743,34 +836,8 @@ def apply_record(
         committed=result.committed,
         written=tuple(commit_paths),
         entries=tuple(entries),
-        notices=tuple(row_lines) + tuple(result.notices),
+        notices=notices + tuple(result.notices),
     )
-
-
-def _check_live_pr(repo_root: Path, state: Any, record: StepRecord, body_path: Path) -> None:
-    """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
-    carries every required section (spec §5.C.4). The render is the one file
-    a refusal leaves behind: it is what the agent opens the PR with."""
-    from fr import gh
-
-    body_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(body_path, render_pr_body(repo_root, state))
-    rel = body_path.relative_to(repo_root).as_posix()
-    ref = record.emitted.get("pr") or state.branch
-    try:
-        live = gh.view_pr_body(ref, cwd=repo_root)
-    except gh.GhError as e:
-        raise RecordRefusedError(
-            f"cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open the PR "
-            f"with `gh pr create --body-file {rel}`, put its url in the record's "
-            "`emitted: {pr: <url>}`, and resolve again"
-        ) from e
-    missing = missing_sections(live)
-    if missing:
-        raise RecordRefusedError(
-            f"the PR body lacks required section(s): {', '.join(missing)}. Update it "
-            f"from fr's render — `gh pr edit {ref} --body-file {rel}` — and resolve again"
-        )
 
 
 def _commit(repo_root: Path, paths: list[Path], message: str) -> CommitOutcome:

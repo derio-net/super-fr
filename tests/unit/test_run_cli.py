@@ -1186,6 +1186,7 @@ def _started_emitter(tmp_path: Path):
     return repo, shipped
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_an_absolute_emitted_plan_path_is_stored_repo_relative(tmp_path: Path) -> None:
     """Stored verbatim, an absolute path matched neither
     `archive.find_run_for_plan` nor `adopt.adoptable_plans` — both compare
@@ -1242,6 +1243,7 @@ def test_an_emitted_path_outside_the_repo_is_refused(tmp_path: Path) -> None:
     assert "outside the repo" in result.output
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_a_non_repo_tracked_artifact_is_stored_verbatim(tmp_path: Path) -> None:
     """`pr` is a URL and `report`/`journal:*` have no repo path — rewriting
     them as repo-relative would be nonsense."""
@@ -1564,6 +1566,7 @@ def _resolve(repo: Path, shipped: Path, *emitted: str):
     return _invoke(repo, shipped, argv)
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_an_emitted_path_containing_an_equals_sign_is_not_truncated(tmp_path: Path) -> None:
     """Split on the FIRST `=` only. A path may legitimately contain one."""
     repo, shipped = _emitting_repo(tmp_path)
@@ -1631,6 +1634,7 @@ def test_an_emitted_artifact_that_does_not_exist_is_refused(tmp_path: Path) -> N
     assert "does not exist" in result.output
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_symlinked_roots_on_both_sides_still_resolve_relative(tmp_path: Path) -> None:
     """An fr worktree lives under `~/.cache`, which on macOS is reached
     through `/private/var/...`. Resolving only ONE side left a file plainly
@@ -6290,6 +6294,7 @@ def _resolve_deliver(repo: Path, shipped: Path):
     )
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path) -> None:
     """spec §3.D.2: once `deliver` resolves `done`, fr prints the exact
     `fr pickup --run <id>` handoff — the only way the new closeout session
@@ -6327,6 +6332,7 @@ def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path
     assert len(_commit_report_lines(result.stderr)) <= 1, result.stderr
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
@@ -6346,6 +6352,7 @@ def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Pa
     assert idx_complete < idx_closeout < idx_pickup
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pushed(
     tmp_path: Path,
 ) -> None:
@@ -6374,6 +6381,7 @@ def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pus
     assert "fr: not committed (" in result.stderr and "default branch" in result.stderr
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree(
     tmp_path: Path,
 ) -> None:
@@ -6398,6 +6406,7 @@ def test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree(
     assert str(repo.resolve()) not in session_line
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_advance_on_an_already_finished_run_reports_the_cursor_as_committed(
     tmp_path: Path,
 ) -> None:

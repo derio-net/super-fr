@@ -151,6 +151,11 @@ class StepRecord(_Strict):
     step: StrictStr | None = None
     item: StrictStr | None = None
     outcome: Outcome | None = None
+    no_questions: bool = False
+    """`fr run resolve --no-questions`: clear the step's operator gate WITHOUT
+    having asked the operator — the explicit, recorded bypass (needs `reason`)."""
+    reason: StrictStr | None = None
+    """`--reason`: why no operator decision was needed (with `no_questions`)."""
     ticks: tuple[StrictStr | TickItem, ...] = ()
     complete: CompleteItem | None = None
     refactor: dict[StrictStr, StrictStr] = {}
@@ -189,7 +194,7 @@ _SECTION_FIELDS: dict[str, tuple[str, ...]] = {
     "journal": ("journal",),
     "resolves": ("resolves",),
     "acceptance": ("acceptance",),
-    "outcome": ("outcome",),
+    "outcome": ("outcome", "no_questions", "reason"),
     "evidence": ("evidence", "emitted"),
 }
 

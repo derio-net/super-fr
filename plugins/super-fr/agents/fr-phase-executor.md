@@ -85,7 +85,8 @@ the same capability boundary as #420, read from the other side).
    `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding --phase N …`
    (use `--global` instead of `--phase N` only for an entry that genuinely
    applies to every phase — an untagged entry renders in every handoff), and a
-   `no-refactor-because: P<n>.T<m>` discovery for a task with nothing to clean.
+   `no-refactor-because: P<n>.T<m>` discovery for a task with nothing to clean
+   (`--complete-phase` refuses a phase with a task that has neither).
 
 ## Contract — the worktree has exactly one writer
 
