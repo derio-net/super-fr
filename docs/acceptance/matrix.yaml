@@ -4282,8 +4282,10 @@ rows:
       int:
       - super-fr:tests/unit/test_run_cost_cmd.py
     status: ci
-    notes: fr run cost reads usage/ (then implemented/usage/) on a checkout with no
-      cursor and no transcripts; phase 2
+    notes: 'CI unit-pinned; live-verified 2026-09-26: fr run cost from a fresh clone
+      with an empty HOME rendered the Claude Code run''s per-step turns and per-model
+      tokens from the committed usage file. The OpenCode run rendered empty because
+      nothing was captured (#636).'
   - id: usage-privacy-no-host-identity
     capability: Lean cost-aware pipeline
     acceptance: A usage file never contains a hostname, base URL, path or message content
