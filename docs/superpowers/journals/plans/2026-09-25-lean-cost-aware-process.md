@@ -109,3 +109,8 @@ AGENTS.md Repo shape.
 ### p2-r12 · finding [open] (reviewer: out of scope) · UsageRecord.tool_calls targets hold raw commands/paths; phase 2 must serialize an allowlist projection (phase 2)
 
 Filed against phase 2 from the phase-1 review (fr/usage/model.py:44-50); gates phase 2's review. Spec §5.B.2.
+
+<!-- fr:journal kind=finding scope=plan id=83ed2919b8c4-resolved created=2026-09-25T20:03:30 state=open resolves=83ed2919b8c4 tracked_by=#623 -->
+### 83ed2919b8c4-resolved · finding [deferred → #623] · resolves 83ed2919b8c4: Hermes fixture rows are constructed, not captured
+
+No Hermes host available; spec §7.1 allows a schema-built fixture; live capture tracked.
