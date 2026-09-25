@@ -135,6 +135,20 @@ def test_an_in_progress_issue_gets_the_age_of_its_latest_fr_batch_marker() -> No
     assert forge.called("list_issue_comments") == [{"repo": REPO, "number": 7}]
 
 
+def test_a_marker_with_no_created_at_gives_no_dispatch_time() -> None:
+    """Review r2p-f13: an empty stamp is not a time; it never reaches check."""
+    item = f"{REPO}/run/batch-lifecycle"
+    comments = [{"author": "a", "body": batch_marker(item), "created_at": ""}]
+    forge = _Forge(
+        issues={REPO: [_issue(7, ("fr:in-progress",))]},
+        prs={REPO: []},
+        open_prs=[],
+        comments={(REPO, 7): comments},
+    )
+
+    assert collect_facts(forge, SCOPE, now=NOW).issues[0].dispatch_marker_at is None
+
+
 def test_a_withdrawn_marker_is_not_a_dispatch_marker() -> None:
     comments = [
         {

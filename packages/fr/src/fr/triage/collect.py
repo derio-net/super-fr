@@ -481,9 +481,10 @@ def _with_marker(forge: Forge, issue: Issue) -> Issue:
         return issue
     comments = forge.list_issue_comments(repo=issue.repo, number=issue.number)
     stamps = [
-        str(c.get("created_at") or "")
+        stamp
         for c in comments
         if str(c.get("body") or "").lstrip().startswith(BATCH_MARKER_PREFIX)
+        and (stamp := str(c.get("created_at") or ""))  # no stamp is no time (r2p-f13)
     ]
     if not stamps:
         return issue

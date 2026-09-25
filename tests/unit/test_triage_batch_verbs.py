@@ -521,6 +521,35 @@ def test_a_linked_pr_is_not_stale() -> None:
     assert classify(facts, load_judgements_text(JUDGEMENTS)).stale == []
 
 
+def test_a_closed_unmerged_linked_pr_does_not_hide_a_stale_dispatch() -> None:
+    """Review r2p-f13: 'no linked PR' means no OPEN or MERGED one."""
+    old = PullRequest(repo=REPO, number=9, title="p", state="CLOSED", is_draft=False, url="u")
+    facts = _facts(_in_progress(577, "2026-09-01T00:00:00Z", prs=[old]))
+    assert [s.key for s in classify(facts, load_judgements_text(JUDGEMENTS)).stale] == [
+        "super-fr#577"
+    ]
+
+
+def test_a_merged_linked_pr_is_not_stale() -> None:
+    pr = PullRequest(repo=REPO, number=9, title="p", state="MERGED", is_draft=False, url="u")
+    facts = _facts(_in_progress(577, "2026-09-01T00:00:00Z", prs=[pr]))
+    assert classify(facts, load_judgements_text(JUDGEMENTS)).stale == []
+
+
+@pytest.mark.parametrize("marker_at", ["", "not-a-date", "2026-09-01T00:00:00"])
+def test_an_unreadable_marker_time_is_skipped_never_raised(tmp_path: Path, marker_at: str) -> None:
+    """Review r2p-f13: check always exits 0; a marker it cannot date is skipped."""
+    facts = _facts(_in_progress(577, marker_at), _in_progress(575, "2026-09-01T00:00:00Z"))
+    assert [s.key for s in classify(facts, load_judgements_text(JUDGEMENTS)).stale] == [
+        "super-fr#575"
+    ]
+    _state(tmp_path, facts)
+    result = CliRunner().invoke(
+        app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path), "--json"]
+    )
+    assert result.exit_code == 0, result.output
+
+
 def test_the_stale_threshold_comes_from_the_collected_config() -> None:
     config = {REPO: TriageConfig(stale_dispatch_days=5)}
     facts = _facts(_in_progress(577, "2026-09-22T11:00:00Z"), config=config)
