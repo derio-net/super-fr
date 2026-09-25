@@ -379,3 +379,8 @@ Every agent-step brief gains 'record' (null for a fan-out group; each member bri
 ### p3-pr-body · decision · PR body: rendered on the record path of a step that emits pr; the flag path stays unchecked (phase 3)
 
 resolve --record for a step emitting 'pr' (manifest-driven, fr-goal's deliver) with outcome done renders docs/superpowers/runs/<run>.records/pr-body.md (Findings, Out-of-scope findings or None., Proportionality, Cost), then reads the live body with fr.gh.view_pr_body(emitted.pr or the branch). An unreadable PR or a missing heading refuses (exit 2); the render is the one file a refusal leaves, untracked, since the agent opens the PR with it; on success it is deleted with the record. Cost reads the usage file if present, else this host's transcripts (not written). The plain '--state done' deliver path is NOT gated: it serves humans/runners and a dozen existing tests; the pipeline skills now teach only the record path. Full suite: 5436 passed; one parallel-load flake in test_opencode_plugin_live (passes alone).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-t6-norefactor created=2026-09-25T23:13:30 phase=3 -->
+### p3-t6-norefactor · discovery · no-refactor-because P3.T6 (phase 3)
+
+Prose, mirrors, explainer, version bump and matrix flips: nothing to extract — the edits are generated (mirrors, report set, rendered page) or one-line prose substitutions.
