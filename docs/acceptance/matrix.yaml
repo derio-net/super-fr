@@ -4143,10 +4143,11 @@ rows:
       - super-fr:tests/unit/test_usage_classify.py
     status: ci
     notes: 'Phase 1 of 2026-09-25-lean-cost-aware-process: per-harness readers over
-      redacted fixtures (Claude Code capture, OpenCode live-schema DB, Hermes upstream-schema
-      DB), the classifier table and the rollup/CLI tests run in CI; cost per model,
-      activity and step reconstructed. Hermes rows are schema-built, not a live capture
-      (journal 83ed2919b8c4).'
+      redacted fixtures (Claude Code capture, OpenCode live-schema DB incl. Copilot-routed
+      estimated rows, Hermes upstream-schema DB), the classifier table and the rollup/CLI
+      tests run in CI; cost per model, activity and step reconstructed. Hermes rows
+      are schema-built, not a live capture (journal 83ed2919b8c4, live capture tracked
+      in #623).'
   - id: usage-captured-at-deliver
     capability: Lean cost-aware pipeline
     acceptance: Delivering a run stores its usage in docs/superpowers/usage/<run-id>.yaml
@@ -4228,9 +4229,9 @@ rows:
       data
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Phase 1 shipped the engine (fr usage report
-      --format html) with unit CLI tests (tests/unit/test_usage_report.py) and a local-only
-      golden check; the integration-level test the prose names is not written yet, so
-      the row is not flipped. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/integration/test_usage_report_cli.py
+    status: ci
+    notes: engine regenerates the audit page and the measured half of the architecture
+      page; the future-state half is authored (spec §5.A.6)

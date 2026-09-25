@@ -116,6 +116,18 @@ uv workspace monorepo, version lockstepped across every manifest (see
     the repo was skipped, or the key was judged after the last collect). A
     DELETED issue is unreachable, not orphaned: collect views every judged key
     in a collected repo, so its failure is always recorded.
+  - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
+    session or run cost, and on what, reconstructed from the harness's own
+    records: `readers/` (one per harness — Claude Code transcripts, OpenCode and
+    Hermes SQLite opened read-only — each returning a `UsageRecord` and NEVER
+    raising: a failure is `unavailable`, never a record of zeros), `classify.py`
+    (pure `(tool, command|path) -> activity`), `rollup.py` (the harness's dollars
+    split by fixed price ratios across activities and cursor step windows, plus
+    turns), `render.py` (table / one HTML page, `—` for every missing figure).
+    CLI: `fr usage collect|report` (`commands/usage_cmd.py`); the cache lives
+    under `$HOME/.cache/fr/usage/`, never the repo, so `usage` is in
+    `READ_ONLY_COMMANDS`. Driver skill: `fr-audit`. Dollars always come from the
+    harness; fr invents no list price.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
