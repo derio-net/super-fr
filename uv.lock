@@ -7,6 +7,7 @@ members = [
     "fr",
     "fr-cncd",
     "fr-dispatch",
+    "fr-herdr",
     "fr-vk",
     "super-fr-workspace",
 ]
@@ -209,6 +210,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "fr", editable = "packages/fr" }]
+
+[[package]]
+name = "fr-herdr"
+version = "4.21.1"
+source = { editable = "packages/fr-herdr" }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+]
 
 [[package]]
 name = "fr-vk"
@@ -693,6 +709,7 @@ dependencies = [
     { name = "fr" },
     { name = "fr-cncd" },
     { name = "fr-dispatch" },
+    { name = "fr-herdr" },
     { name = "fr-vk" },
 ]
 
@@ -711,6 +728,7 @@ requires-dist = [
     { name = "fr", editable = "packages/fr" },
     { name = "fr-cncd", editable = "packages/fr-cncd" },
     { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+    { name = "fr-herdr", editable = "packages/fr-herdr" },
     { name = "fr-vk", editable = "packages/fr-vk" },
 ]
 

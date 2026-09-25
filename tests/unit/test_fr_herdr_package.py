@@ -39,12 +39,23 @@ def test_stub_runner_is_named_herdr() -> None:
     assert HerdrRunner().name == "herdr"
 
 
+_IDS: dict[str, str] = {
+    "run": "derio-net/super-fr/run/2026-09-25-batch-lifecycle",
+    "spec": "derio-net/super-fr/2026-09-25-triage-batches",
+    "phase": "derio-net/super-fr/2026-09-25-triage-batches/2026-09-25-triage-batches/phase/1",
+}
+
+
+def test_every_unit_has_an_id() -> None:
+    assert set(_IDS) == set(get_args(Unit))
+
+
 @pytest.mark.parametrize("unit", get_args(Unit))
 def test_stub_runner_refuses_every_unit(unit: Unit) -> None:
     from fr_herdr.runner import HerdrRunner
 
     item = WorkItem(
-        id=f"super-fr/{unit}",
+        id=_IDS[unit],
         unit=unit,
         workflow="fr-goal",
         repo="derio-net/super-fr",

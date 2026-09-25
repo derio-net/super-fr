@@ -156,7 +156,7 @@ def test_collect_views_the_judged_issues_that_are_no_longer_open(
 def test_a_bad_judgements_file_exits_2_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "judgements.yaml").write_text("schema: 2\n", encoding="utf-8")
+    (tmp_path / "judgements.yaml").write_text("schema: 3\n", encoding="utf-8")
 
     result = _run(monkeypatch, _Forge(), "--repo", "derio-net/super-fr", "--dir", str(tmp_path))
 

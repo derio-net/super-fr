@@ -145,7 +145,7 @@ uv run pytest -q --no-cov -n auto                   # fast, parallel (pytest-xdi
 uv run pytest tests/unit/test_foo.py::test_bar -q   # single test
 uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
-uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
 ```
 

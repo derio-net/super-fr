@@ -3,7 +3,9 @@
 `collect` reads the forge and writes `facts.json` under the scope's state
 directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
-`render` writes `triage.html`, and `--open` hands it to `webbrowser`. The
+`render` writes `triage.html`, and `--open` hands it to `webbrowser`.
+`batch list` prints the batches in `judgements.yaml` (spec
+2026-09-25-triage-batches §3.A); it needs no facts.json. The
 engine lives in `fr.triage`; this module only parses flags and does I/O.
 
 Gate-exempt: `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` because
@@ -52,7 +54,15 @@ triage_app = typer.Typer(
 )
 
 
-# One option set for --repo/--org/--dir, shared by collect, check and render.
+batch_app = typer.Typer(
+    name="batch",
+    help="Batches: groups of judged issues delivered as one run.",
+    no_args_is_help=True,
+)
+triage_app.add_typer(batch_app)
+
+
+# One option set for --repo/--org/--dir, shared by collect, check, render and batch.
 RepoOpt = Annotated[str | None, typer.Option("--repo", help="Triage one repo: OWNER/REPO.")]
 OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
 DirOpt = Annotated[
@@ -218,3 +228,25 @@ def render_command(
     )
     if open_:
         webbrowser.open(out.resolve().as_uri())
+
+
+@batch_app.command("list")
+def batch_list_command(
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Print one line per batch in judgements.yaml, or "no batches"."""
+    path = state_dir(_scope(repo, org), dir_override) / "judgements.yaml"
+    try:
+        batches = load_judgements(path).batches if path.exists() else []
+    except TriageError as exc:
+        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
+        raise typer.Exit(code=2) from exc
+    if not batches:
+        console.print("no batches")
+        return
+    for b in batches:
+        console.print(
+            f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}", markup=False, soft_wrap=True
+        )

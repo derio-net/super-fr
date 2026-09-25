@@ -1,0 +1,20 @@
+[project]
+name = "fr-herdr"
+version = "4.21.1"
+description = "super-fr herdr adapter: the first runner that accepts run-unit work (a triage batch launched as one /fr-goal)"
+requires-python = ">=3.11"
+dependencies = ["fr", "fr-dispatch"]
+
+[project.entry-points."fr.runners"]
+herdr = "fr_herdr.runner:HerdrRunner"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fr_herdr"]
+
+[tool.uv.sources]
+fr = { workspace = true }
+fr-dispatch = { workspace = true }

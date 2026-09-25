@@ -26,7 +26,10 @@ from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
 FACTS_SCHEMA: Literal[2] = 2
+# The version this fr WRITES. Stays 1 until the first engine write of a batch
+# (plan phase 2); the loader already reads every version in JUDGEMENTS_READS.
 JUDGEMENTS_SCHEMA: Literal[1] = 1
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2)
 
 ScopeKind = Literal["repo", "org"]
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
@@ -249,12 +252,28 @@ class Pattern(_Strict):
         return [normalize_key(k) for k in v]
 
 
+class Batch(_Strict):
+    """A group of judged issues delivered as one run (spec §3.A).
+
+    Minimal in phase 1 — id, title and member ids. The launch settings, the
+    engine-written events and the load-time membership rules land with the
+    batch verbs.
+    """
+
+    id: str
+    title: str
+    ids: list[str]
+
+
 class Judgements(_Strict):
-    schema_: Literal[1] = Field(1, alias="schema")
+    """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
+
+    schema_: Literal[1, 2] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
+    batches: list[Batch] = []
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -290,16 +309,20 @@ class Judgements(_Strict):
 # ------------------------------------------------------------------- loaders
 
 
-def _check_schema(path: Path, data: object, expected: int, remedy: str = "") -> dict[str, Any]:
+def _check_schema(
+    path: Path, data: object, expected: int | tuple[int, ...], remedy: str = ""
+) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TriageError(f"{path}: expected a mapping at the top level")
+    accepted = (expected,) if isinstance(expected, int) else expected
     value = data.get("schema")
     # `type(...) is int`, not `==`: True == 1 == 1.0, and pydantic's Literal[1]
     # accepts all three, so `schema: true` would otherwise load (r-p2-schema-strict).
-    if type(value) is not int or value != expected:
+    if type(value) is not int or value not in accepted:
         suffix = f"; {remedy}" if remedy else ""
+        reads = " or ".join(str(v) for v in accepted)
         raise TriageError(
-            f"{path}: unsupported schema {value!r} (this fr reads schema {expected}){suffix}"
+            f"{path}: unsupported schema {value!r} (this fr reads schema {reads}){suffix}"
         )
     return data
 
@@ -323,6 +346,6 @@ def load_judgements(path: Path) -> Judgements:
     except (OSError, yaml.YAMLError) as exc:
         raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
     try:
-        return Judgements.model_validate(_check_schema(path, data, JUDGEMENTS_SCHEMA))
+        return Judgements.model_validate(_check_schema(path, data, JUDGEMENTS_READS))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid judgements: {exc}") from exc
