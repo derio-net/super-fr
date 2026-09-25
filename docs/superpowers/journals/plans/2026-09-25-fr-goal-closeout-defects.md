@@ -183,3 +183,8 @@ Reviewer (minor, phase 4): the decorator commits in finally; phase 4's 'cursor c
 ### p3-m5 · finding [open] (reviewer: out of scope) · Ready-checklist 'no commits since the ok' must exempt chore(fr) commits (phase 5)
 
 Reviewer (minor, phase 5): fr now commits its cursor after the review ok; the skill prose must exempt chore(fr): record commits.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m6 created=2026-09-25T12:15:05 phase=3 state=open review_scope=in -->
+### p3-m6 · finding [open] (reviewer: in scope) · Each record write costs ~9 git processes (phase 3)
+
+Reviewer (minor, noted only).
