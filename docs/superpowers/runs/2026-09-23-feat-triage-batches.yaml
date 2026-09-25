@@ -3,7 +3,7 @@ run: 2026-09-23-feat-triage-batches
 workflow: fr-goal@1
 branch: feat/triage-batches
 started: '2026-09-23T13:31:29+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -46,8 +46,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-09-25T22:42:45+00:00'
+    state: done
+    at: '2026-09-25T23:28:27+00:00'
     members:
     - implement-phase
     - review-phase
@@ -114,12 +114,18 @@ steps:
           returned: '2026-09-25T22:42:44+00:00'
           outcome: done
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T22:42:45+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: dcff6006-440b-4a29-b738-f04b65457c17
+          returned: '2026-09-25T23:28:27+00:00'
+          outcome: done
+        evidence:
+          review: review-phase-3
+          reviewer: a9bca9286ced70018
+          findings: r1-docs,r2p-f10,r2p-f11,r2p-f12b,r2p-handle,r2p-f14,r3-f1,r3-f2,r3-f3,r3-f4,r3-f5,r3-f6,r3-f7,r3-f8,r3-f9,r3-f10,r3-f11,r3-f12,r3-f13,r3-f14
   journal-check:
     state: pending
   deliver:
