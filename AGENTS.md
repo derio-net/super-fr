@@ -110,12 +110,31 @@ uv workspace monorepo, version lockstepped across every manifest (see
     place a second forge lands — a new class, not an edit to the collector.
     `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` (it never
     touches a registered artifact), so the migration gate never refuses it.
-    `check` reports four sets and always exits 0: unranked, settled,
+    `check` always exits 0; its core sets are unranked (issues and PRs), settled,
     orphaned (the key names no repo collect read — the only set safe to act
     on without the forge) and unreachable (the forge would not show the issue,
     the repo was skipped, or the key was judged after the last collect). A
     DELETED issue is unreachable, not orphaned: collect views every judged key
-    in a collected repo, so its failure is always recorded.
+    in a collected repo, so its failure is always recorded. The last set,
+    stale dispatch, arrived with batches: an `fr:in-progress` issue whose
+    batch marker comment is older than `stale_dispatch_days`, with no PR.
+    **Batches** (2026-09-25 spec, `triage-batches`): `fr triage batch
+    {list,create,edit,cancel,suggest,dispatch,merge}`
+    (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
+    fr-goal run with one PR. `judgements.yaml` is schema 2 (`batches:` with
+    engine-appended `events`; schema 1 still loads) and `facts.json` schema 3
+    (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
+    the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
+    (stages, open-batch rule, the one writer, the §3.F merge order),
+    `batch_dispatch.py` (brief, marker comment), `batch_version.py`
+    (reservations) and `batch_merge.py` (reconcile, refusals, execution).
+    `dispatch`, `merge` and `cancel` write the forge only with `--yes`, only
+    through the `GhClient` adapter (§3.J; glab/tea raise
+    `UnsupportedForgeOperation`, gh#611); git runs only in
+    `fr/triage/gitseam.py`, which a tripwire keeps apart from the forge ban
+    that globs every `batch*` module. `triage_batch_cmd.py` is `fr`'s second
+    `find_spec`-guarded soft point into `fr_dispatch`
+    (`test_import_direction.py` `_SOFT_POINTS`).
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -126,6 +145,13 @@ uv workspace monorepo, version lockstepped across every manifest (see
   protocol. `fr-cncd` is real but predates its own README/CLAUDE mentions —
   don't assume tables in `README.md` are exhaustive; check `packages/*/pyproject.toml`
   and `plugins/super-fr/skills/` against prose before trusting a list.
+- `fr-herdr` — the `herdr` runner (entry point `fr.runners: herdr`), the
+  first that takes `unit="run"` work: `fr triage batch dispatch` builds it
+  through `fr_dispatch.registry.load_runner`'s `from_env()` and it opens a
+  herdr tab, starts the harness on the batch's model and submits the brief.
+  It never imports `fr.triage`, and `fr` never imports it
+  (`test_import_direction.py`); `fr_dispatch.testing` holds the reusable
+  run-unit contract it passes.
 - `fr-opencode-plugin` — **the one non-Python package**: TypeScript/Bun,
   ports the `fr-isolation-required` Claude Code hook to an OpenCode
   `tool.execute.before` plugin. Excluded from the uv workspace

@@ -87,6 +87,7 @@ pushing.
 ## Where things are
 
 `packages/fr` is the CLI/engine (plans, journals, isolation, acceptance);
-`packages/fr-dispatch` + `fr-vk`/`fr-cncd` are the runner protocol and adapters;
+`packages/fr-dispatch` + `fr-vk`/`fr-cncd`/`fr-herdr` are the runner protocol and
+adapters (`fr-herdr` takes `fr triage batch dispatch` runs);
 `plugins/super-fr*` are the shipped skills/rules/hooks. `AGENTS.md` has the full
 map, the bridge-audit rule, and the marketplace-naming invariants — read it.
