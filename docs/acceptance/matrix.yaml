@@ -4015,9 +4015,10 @@ rows:
       - super-fr:tests/unit/test_migration_run_main_session.py
       - super-fr:tests/unit/test_run_telemetry.py
     status: skipped
-    notes: Unit-pinned (both readers, _complete_step hook, fr run cost); the cross-harness
-      live check (spec Test Plan 15) is owed post-merge, so not ci yet — phase-1 review
-      p1-f1.
+    notes: 'Live-verified on Claude Code (host-worktree): run 2026-09-25-fix-606-writes-dot-dir-prefix,
+      PR #609, all 7 steps measured. OpenCode walk (devcontainer, PR #612) measured
+      1/7: fr run executes inside the container without harness env or host data. To
+      be superseded by the lean-cost-aware-process usage rows.'
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
