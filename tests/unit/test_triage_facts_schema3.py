@@ -11,13 +11,14 @@ from one head-branch lookup per dispatched batch; `Facts.config` from
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fr.triage.collect import CONFIG_PATH, collect_facts
 from fr.triage.errors import ForgeError, TriageError
-from fr.triage.model import FACTS_SCHEMA, Scope, batch_marker, load_facts
+from fr.triage.model import FACTS_SCHEMA, PullRequest, Scope, batch_marker, load_facts
 
 from tests.unit.triage_fixtures import NOW, FakeForge
 
@@ -29,13 +30,25 @@ def _ref(number: int) -> dict[str, Any]:
     return {"repository": {"owner": {"login": "example-org"}, "name": "alpha"}, "number": number}
 
 
-def _pr(number: int, *, state: str = "OPEN", head: str = "topic", refs: list[int] = ()) -> dict:
+AT = datetime(2026, 9, 25, 0, 0, tzinfo=UTC)  # the batch's last dispatch
+BEFORE, AFTER = "2026-09-24T12:00:00Z", "2026-09-25T06:00:00Z"
+
+
+def _pr(
+    number: int,
+    *,
+    state: str = "OPEN",
+    head: str = "topic",
+    refs: list[int] = (),
+    created: str = AFTER,
+) -> dict:
     return {
         "number": number,
         "title": f"PR {number}",
         "state": state,
         "isDraft": False,
-        "mergedAt": "2026-09-24T00:00:00Z" if state == "MERGED" else None,
+        "createdAt": created,
+        "mergedAt": "2026-09-26T00:00:00Z" if state == "MERGED" else None,
         "url": f"https://github.com/{REPO}/pull/{number}",
         "headRefName": head,
         "closingIssuesReferences": [_ref(n) for n in refs],
@@ -178,7 +191,7 @@ def test_a_dispatched_batch_branch_lands_its_prs_in_batch_prs() -> None:
         head_prs={(REPO, "feat/batch-x"): [lost]},
     )
 
-    facts = collect_facts(forge, SCOPE, now=NOW, batch_branches=[("alpha", "feat/batch-x")])
+    facts = collect_facts(forge, SCOPE, now=NOW, batch_branches=[("alpha", "feat/batch-x", AT)])
 
     assert [(p.number, p.state, p.head_ref, p.head_oid) for p in facts.batch_prs] == [
         (40, "MERGED", "feat/batch-x", "feedbeef")
@@ -193,16 +206,91 @@ def test_a_branch_already_on_a_linked_pr_costs_no_lookup() -> None:
         open_prs=[_open_record(12, head="feat/batch-x", refs=[7])],
     )
 
-    facts = collect_facts(forge, SCOPE, now=NOW, batch_branches=[("alpha", "feat/batch-x")])
+    facts = collect_facts(forge, SCOPE, now=NOW, batch_branches=[("alpha", "feat/batch-x", AT)])
 
     assert forge.called("list_prs_by_head") == []
     assert facts.batch_prs == []
 
 
+def test_a_pr_carries_its_created_at() -> None:
+    forge = _Forge(issues={REPO: [_issue(7)]}, prs={REPO: [_pr(12, refs=[7])]}, open_prs=[])
+    (pr,) = collect_facts(forge, SCOPE, now=NOW).issues[0].prs
+    assert pr.created_at == AFTER
+
+
+def test_a_linked_pr_from_before_the_dispatch_does_not_skip_the_lookup() -> None:
+    """Review r2p-f1: the only PR on the branch is the abandoned one from an
+    earlier dispatch, so a merged no-Closes PR of the redispatch is looked up."""
+    old = _pr(50, state="CLOSED", head="feat/batch-x", refs=[7], created=BEFORE)
+    lost = {**_pr(52, state="MERGED", head="feat/batch-x"), "headRefOid": "feedbeef"}
+    forge = _Forge(
+        issues={REPO: [_issue(7)]},
+        prs={REPO: [old]},
+        open_prs=[],
+        head_prs={(REPO, "feat/batch-x"): [old, lost]},
+    )
+
+    facts = collect_facts(forge, SCOPE, now=NOW, batch_branches=[("alpha", "feat/batch-x", AT)])
+
+    assert forge.called("list_prs_by_head") == [{"repo": REPO, "branch": "feat/batch-x"}]
+    assert 52 in {p.number for p in facts.batch_prs}
+
+
+def _known(number: int, state: str, created: str) -> PullRequest:
+    return PullRequest(
+        repo=REPO,
+        number=number,
+        title="t",
+        state=state,  # type: ignore[arg-type]
+        is_draft=False,
+        url="u",
+        head_ref="feat/batch-x",
+        created_at=created,
+    )
+
+
+@pytest.mark.parametrize("state", ["MERGED", "CLOSED"])
+def test_a_batch_already_terminal_in_the_previous_facts_costs_no_lookup(state: str) -> None:
+    """Review r2p-f3: a batch whose PR of this dispatch is already merged or
+    closed is carried over from the previous facts, not looked up forever."""
+    known = _known(40, state, AFTER)
+    forge = _Forge(issues={REPO: [_issue(7)]}, prs={REPO: []}, open_prs=[])
+
+    facts = collect_facts(
+        forge,
+        SCOPE,
+        now=NOW,
+        batch_branches=[("alpha", "feat/batch-x", AT)],
+        known_batch_prs=[known],
+    )
+
+    assert forge.called("list_prs_by_head") == []
+    assert facts.batch_prs == [known]
+
+
+@pytest.mark.parametrize(
+    "known", [_known(40, "MERGED", BEFORE), _known(40, "OPEN", AFTER)], ids=["earlier", "open"]
+)
+def test_a_known_pr_that_is_not_terminal_for_this_dispatch_is_looked_up_again(
+    known: PullRequest,
+) -> None:
+    forge = _Forge(issues={REPO: [_issue(7)]}, prs={REPO: []}, open_prs=[])
+
+    collect_facts(
+        forge,
+        SCOPE,
+        now=NOW,
+        batch_branches=[("alpha", "feat/batch-x", AT)],
+        known_batch_prs=[known],
+    )
+
+    assert forge.called("list_prs_by_head") == [{"repo": REPO, "branch": "feat/batch-x"}]
+
+
 def test_a_batch_in_a_repo_outside_the_scope_is_not_looked_up() -> None:
     forge = _Forge(issues={REPO: []}, prs={REPO: []}, open_prs=[])
 
-    collect_facts(forge, SCOPE, now=NOW, batch_branches=[("beta", "feat/batch-x")])
+    collect_facts(forge, SCOPE, now=NOW, batch_branches=[("beta", "feat/batch-x", AT)])
 
     assert forge.called("list_prs_by_head") == []
 
@@ -377,3 +465,39 @@ def test_the_collect_command_looks_up_the_branch_of_each_batch_last_dispatched(
 
     assert result.exit_code == 0, result.output
     assert forge.called("list_prs_by_head") == [{"repo": REPO, "branch": "feat/batch-live"}]
+
+
+def test_a_second_collect_does_not_look_up_a_batch_found_merged_by_the_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r2p-f3: head lookups are bounded by the non-terminal batches."""
+    from fr.cli import app
+    from fr.commands import triage_cmd
+    from typer.testing import CliRunner
+
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 2\n"
+        "tiers: [{n: 1, title: Now}]\n"
+        "issues: {alpha#7: {tier: 1}}\n"
+        "batches:\n"
+        "  - {id: x, title: t, ids: [alpha#7], events: [{kind: dispatch, "
+        "at: '2026-09-25T00:00:00Z', runner: herdr, handle: h, branch: feat/batch-x}]}\n",
+        encoding="utf-8",
+    )
+    lost = {**_pr(40, state="MERGED", head="feat/batch-x"), "headRefOid": "feedbeef"}
+    forge = _Forge(
+        issues={REPO: [_issue(7)]},
+        prs={REPO: []},
+        open_prs=[],
+        head_prs={(REPO, "feat/batch-x"): [lost]},
+    )
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    args = ["triage", "collect", "--repo", REPO, "--dir", str(tmp_path)]
+
+    for _ in range(3):
+        result = CliRunner().invoke(app, args)
+        assert result.exit_code == 0, result.output
+
+    assert len(forge.called("list_prs_by_head")) == 1
+    facts = load_facts(tmp_path / "facts.json")
+    assert [(p.number, p.state) for p in facts.batch_prs] == [(40, "MERGED")]

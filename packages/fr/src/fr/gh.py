@@ -267,7 +267,9 @@ def list_repos(
 
 
 ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
-PR_LIST_FIELDS = "number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences"
+PR_LIST_FIELDS = (
+    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
+)
 OPEN_PR_LIST_FIELDS = (
     PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
 )

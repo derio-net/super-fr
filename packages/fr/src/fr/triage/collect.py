@@ -166,6 +166,7 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             title=r["title"],
             state=r["state"],
             is_draft=r["isDraft"],
+            created_at=r.get("createdAt"),
             merged_at=r.get("mergedAt"),
             url=r["url"],
             head_ref=r.get("headRefName") or "",
@@ -319,7 +320,8 @@ def collect_facts(
     *,
     now: datetime,
     judged: Iterable[str] = (),
-    batch_branches: Iterable[tuple[str, str]] = (),
+    batch_branches: Iterable[tuple[str, str, datetime]] = (),
+    known_batch_prs: Iterable[PullRequest] = (),
     issue_limit: int = ISSUE_LIMIT,
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
@@ -334,8 +336,12 @@ def collect_facts(
     calls are bounded by the judgements, never by the backlog. The batch
     extras are bounded the same way (spec 2026-09-25-triage-batches §3.F): one
     config read per repo, one comment read per `fr:in-progress` issue, and one
-    head-branch lookup per *batch_branches* entry — `(repo name, branch)` of
-    each batch whose last event is a dispatch — that no collected PR is on.
+    head-branch lookup per *batch_branches* entry — `(repo name, branch,
+    dispatched at)` of each batch whose last event is a dispatch — that no
+    collected PR of that dispatch is on and that is not already terminal:
+    a merged or closed PR of that dispatch in *known_batch_prs* (the previous
+    facts' `batch_prs`) is carried over instead of looked up again (review
+    r2p-f3), so a finished batch costs nothing on later collects.
     """
     repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
     skipped: list[Skipped] = []
@@ -414,8 +420,13 @@ def collect_facts(
         for p, refs in open_prs
         if not any(_in_scope(ref, scope) for ref in refs) and (p.repo, p.number) not in linked_prs
     ]
-    on_branches = {(p.repo, p.head_ref) for p in [*linked_prs_all(out), *unlinked]}
-    batch_prs = _batch_prs(forge, batch_branches, collected, on_branches)
+    batch_prs = _batch_prs(
+        forge,
+        batch_branches,
+        collected,
+        seen=[*linked_prs_all(out), *unlinked],
+        known=list(known_batch_prs),
+    )
     return Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
@@ -503,18 +514,48 @@ def _marker_at(forge: Forge, repo: str, raw: dict[str, Any]) -> str | None:
     return max(stamps) if stamps else None
 
 
+def _created_since(pr: PullRequest, at: datetime) -> bool:
+    """Whether *pr* was opened at or after *at*; unknown creation counts as yes."""
+    try:
+        created = datetime.fromisoformat(pr.created_at) if pr.created_at else None
+    except ValueError:
+        created = None
+    if created is None or created.tzinfo is None:
+        return True
+    return created >= at
+
+
 def _batch_prs(
     forge: Forge,
-    branches: Iterable[tuple[str, str]],
+    branches: Iterable[tuple[str, str, datetime]],
     collected: list[str],
-    on_branches: set[tuple[str, str]],
+    *,
+    seen: list[PullRequest],
+    known: list[PullRequest],
 ) -> list[PullRequest]:
-    """One head-branch lookup per dispatched batch no collected PR is on (§3.A)."""
+    """One head-branch lookup per dispatched, non-terminal batch (§3.A, §3.F).
+
+    Skipped when a collected PR (*seen*) of THIS dispatch is already on the
+    branch — a PR opened before the last dispatch belongs to an earlier one and
+    must not hide the redispatch's PR (review r2p-f1) — or when *known* (the
+    previous facts) holds a merged or closed PR of this dispatch: that batch is
+    terminal, and its PR is carried over instead (review r2p-f3).
+    """
     by_name = {repo.split("/", 1)[1].lower(): repo for repo in collected}
     found: list[PullRequest] = []
-    for name, branch in sorted(set(branches)):
+    for name, branch, at in sorted(set(branches)):
         repo = by_name.get(name.lower())
-        if repo is None or (repo, branch) in on_branches:
+        if repo is None:
+            continue
+
+        def ours(p: PullRequest, repo: str = repo, branch: str = branch, at: datetime = at) -> bool:
+            return p.repo == repo and p.head_ref == branch and _created_since(p, at)
+
+        if any(ours(p) for p in seen):
+            continue
+        terminal = [p for p in known if ours(p) and p.state in {"MERGED", "CLOSED"}]
+        if terminal:
+            found.extend(terminal)
             continue
         raw = forge.list_prs_by_head(repo=repo, branch=branch)
         found.extend(pr for pr, _ in parse_prs(repo, raw))

@@ -72,7 +72,14 @@ def _cancel(at: str = "2026-09-26T08:00:00Z") -> dict[str, Any]:
     return {"kind": "cancel", "at": at, "reason": "split"}
 
 
-def _pr(number: int, state: str, *, head: str = BRANCH, repo: str = REPO) -> PullRequest:
+def _pr(
+    number: int,
+    state: str,
+    *,
+    head: str = BRANCH,
+    repo: str = REPO,
+    created: str | None = None,
+) -> PullRequest:
     return PullRequest(
         repo=repo,
         number=number,
@@ -81,6 +88,7 @@ def _pr(number: int, state: str, *, head: str = BRANCH, repo: str = REPO) -> Pul
         is_draft=False,
         url=f"https://github.com/{repo}/pull/{number}",
         head_ref=head,
+        created_at=created,
     )
 
 
@@ -438,6 +446,38 @@ def test_an_unlinked_open_pr_on_the_branch_is_found_in_facts_prs() -> None:
 def test_batch_prs_find_a_merged_pr_with_no_closes_lines_and_give_partial() -> None:
     facts = _facts([_issue(577), _issue(575)], batch_prs=[_pr(40, "MERGED")])
     assert _stage([_dispatch()], facts) == "partial"
+
+
+# Review r2p-f1: a redispatch after an abandoned PR. Only a PR created at or
+# after the LAST dispatch belongs to the current dispatch.
+_FIRST, _SECOND = "2026-09-25T00:00:00Z", "2026-09-27T00:00:00Z"
+_ABANDONED = _pr(50, "CLOSED", created="2026-09-25T06:00:00Z")
+
+
+def test_a_redispatch_after_an_abandoned_pr_is_dispatched() -> None:
+    facts = _facts([_issue(577, prs=[_ABANDONED]), _issue(575)])
+    assert _stage([_dispatch(_FIRST)], facts) == "abandoned"
+    assert _stage([_dispatch(_FIRST), _dispatch(_SECOND)], facts) == "dispatched"
+
+
+def test_a_new_pr_after_the_redispatch_is_pr_open() -> None:
+    new = _pr(51, "OPEN", created="2026-09-27T06:00:00Z")
+    facts = _facts([_issue(577, prs=[_ABANDONED, new]), _issue(575)])
+    assert _stage([_dispatch(_FIRST), _dispatch(_SECOND)], facts) == "pr-open"
+
+
+def test_a_merged_no_closes_pr_after_the_redispatch_is_found() -> None:
+    lost = _pr(52, "MERGED", created="2026-09-27T06:00:00Z")
+    facts = _facts([_issue(577, prs=[_ABANDONED]), _issue(575)], batch_prs=[lost])
+    batch = _one(_judgements(_batch(events=[_dispatch(_FIRST), _dispatch(_SECOND)])))
+    assert batch_pr(batch, facts) == lost
+    assert derive_batch_stage(batch, facts) == "partial"
+
+
+def test_a_pr_created_exactly_at_the_dispatch_belongs_to_it() -> None:
+    at = _pr(53, "OPEN", created=_SECOND)
+    facts = _facts([_issue(577), _issue(575)], prs=[at])
+    assert _stage([_dispatch(_FIRST), _dispatch(_SECOND)], facts) == "pr-open"
 
 
 def test_identity_is_repo_plus_batch_id() -> None:

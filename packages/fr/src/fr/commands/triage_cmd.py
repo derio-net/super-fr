@@ -37,6 +37,7 @@ from fr.triage.model import (
     DispatchEvent,
     Facts,
     Judgements,
+    PullRequest,
     Scope,
     issue_key,
     load_facts,
@@ -133,12 +134,13 @@ def collect_command(
     try:
         loaded = load_judgements(judgements) if judgements.exists() else None
         judged = list(loaded.issues) if loaded else []
-        # The branch of each batch whose last event is a dispatch (spec
-        # 2026-09-25-triage-batches §3.A): collect looks each one up by head.
+        # The branch and time of each batch whose last event is a dispatch (spec
+        # 2026-09-25-triage-batches §3.A): collect looks each one up by head,
+        # unless the previous facts already show it terminal (review r2p-f3).
         branches = [
-            (b.repo_name, b.events[-1].branch)
+            (b.repo_name, event.branch, event.at)
             for b in (loaded.batches if loaded else [])
-            if b.events and isinstance(b.events[-1], DispatchEvent)
+            if b.events and isinstance(event := b.events[-1], DispatchEvent)
         ]
         facts = collect_facts(
             make_forge(),
@@ -146,6 +148,7 @@ def collect_command(
             now=datetime.now(UTC),
             judged=judged,
             batch_branches=branches,
+            known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
             pr_limit=pr_limit,
         )
     except TriageError as exc:
@@ -159,6 +162,20 @@ def collect_command(
     _report(facts)
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+
+
+def _previous_batch_prs(path: Path) -> list[PullRequest]:
+    """The previous collect's `batch_prs`; none when there is no readable facts.json.
+
+    Only an optimisation (review r2p-f3): unreadable or older-schema facts
+    just mean every dispatched batch is looked up again.
+    """
+    if not path.exists():
+        return []
+    try:
+        return load_facts(path).batch_prs
+    except TriageError:
+        return []
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:

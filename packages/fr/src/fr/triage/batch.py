@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -101,8 +102,32 @@ def _members(batch: Batch, facts: Facts) -> list[Issue]:
     return [found[k] for k in batch.ids if k in found]
 
 
+def _parse_time(stamp: str | None) -> datetime | None:
+    """An aware datetime from a forge timestamp; None when absent or unreadable."""
+    if not stamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
+    """Whether *pr* can belong to the dispatch *event* (review r2p-f1).
+
+    A PR opened before the dispatch belongs to an earlier one — an abandoned
+    PR must not make a redispatch read `abandoned`. A PR whose creation time
+    is unknown (facts collected before `createdAt` was read) is kept: it cannot
+    be shown to predate the dispatch.
+    """
+    created = _parse_time(pr.created_at)
+    return created is None or created >= event.at
+
+
 def batch_pr(batch: Batch, facts: Facts) -> PullRequest | None:
-    """The batch's PR: on its dispatch branch, in its repo; highest number wins.
+    """The batch's PR: on its dispatch branch, in its repo, opened at or after
+    its LAST dispatch; highest number wins.
 
     Candidates are the members' linked PRs, the unlinked open PRs and the
     head-branch lookups (`Facts.batch_prs`) — the last is how a merged PR whose
@@ -114,7 +139,9 @@ def batch_pr(batch: Batch, facts: Facts) -> PullRequest | None:
         return None
     pool = [p for issue in _members(batch, facts) for p in issue.prs]
     pool += [*facts.prs, *facts.batch_prs]
-    matches = [p for p in pool if p.repo == repo and p.head_ref == event.branch]
+    matches = [
+        p for p in pool if p.repo == repo and p.head_ref == event.branch and of_dispatch(p, event)
+    ]
     return max(matches, key=lambda p: p.number, default=None)
 
 

@@ -141,6 +141,9 @@ class PullRequest(_Strict):
     state: PrState
     is_draft: bool
     merged_at: str | None = None
+    # When the PR was opened (`createdAt`): dates it against a batch's last
+    # dispatch, so a PR from an earlier dispatch is not this one's (r2p-f1).
+    created_at: str | None = None
     url: str
     head_ref: str = ""
     head_oid: str = ""  # open PRs only (the open-PR list carries headRefOid)
