@@ -243,3 +243,8 @@ pickup_cmd.py stayed thin by construction: --run mode is a load + mode-check + c
 ### p3-m4-resolved · finding [fixed] · resolves p3-m4: deliver handoff must commit before printing the sha
 
 7e983b53: resolve_cmd's deliver branch now calls _commit_run_writes_now() before printing the push-it/sha line (run_cmd.py); test_resolving_deliver_prints_the_pickup_run_closeout_handoff (tests/unit/test_run_cli.py) asserts the printed sha equals HEAD after the call and that stderr carries at most one fr: committed/not committed line.
+
+<!-- fr:journal kind=finding scope=plan id=p3-steer-resolved created=2026-09-25T13:50:57 state=fixed resolves=p3-steer -->
+### p3-steer-resolved · finding [fixed] · resolves p3-steer: Phase-3 tests assert commit cadence; stderr line count unpinned
+
+pending: fixing phase-3 test cadence assertions per operator steer
