@@ -198,3 +198,8 @@ Constant per command, no O(n) scan added; reviewer rated it acceptable. A few gi
 ### p3-r1-resolved · finding [fixed] · resolves p3-r1: Run commit message drops/misreports state and item
 
 692dd2a3: _RunWrites.outcome from resolve --state / claim --abandoned, grouped advance names member+item via _note_subject; pinned by test_run_cli.py::test_commit_subject_of_a_grouped_member_advance_claim_and_resolve, ::test_commit_subject_of_a_gate_clear_is_the_resolved_state, ::test_commit_subject_of_a_flat_resolve_and_a_cli_advance
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-09-25T12:28:20 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Record commits run consumer hooks + signing on every fr command
+
+1c02f263: commit_paths(no_verify=True, restore_index=True) from commit_records; signing untouched; commit_migration default unchanged. Pinned by test_records_commit.py::test_a_record_commit_skips_a_failing_pre_commit_hook, ::test_a_failed_record_commit_restores_the_index (forced failure = commit.gpgsign + gpg.program=false, which --no-verify cannot skip), ::test_the_migration_commit_still_runs_hooks
