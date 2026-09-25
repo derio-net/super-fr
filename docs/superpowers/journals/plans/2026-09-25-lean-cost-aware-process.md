@@ -334,3 +334,8 @@ a97bbe1c: three stale refs removed one hand-edited line each (no drop-level verb
 ### p2-r26-resolved · finding [fixed] · resolves p2-r26: Runner companion paths: uncommitted if the stamp fails; uncommitted_veto ignores them
 
 e88deb21: SchemaMigration.companions declared up front (run 6->7 declares usage/<run>.yaml) and checked by the veto; FailedAction.also_wrote carries companions written before a failed stamp (write_version raising now caught too); gate and fr migrate print them. Tests for both gaps plus an e2e uncommitted_veto case.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r27-resolved created=2026-09-25T22:16:03 state=fixed resolves=p2-r27 -->
+### p2-r27-resolved · finding [fixed] · resolves p2-r27: measure_dispatch/measure_attempt/TranscriptReader.measure left without a caller
+
+a268b717: measure_dispatch, measure_attempt, TranscriptReader(.measure) and the readers' measure/locate_session deleted with what only they used (Measurement, select_*, reader_for/READERS, read_claude_code, UsageTotals, ...) and their tests; kept _read_records, message_groups, attribute_dispatches, gates, dispatched_from_this_session.
