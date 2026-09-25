@@ -114,3 +114,8 @@ Filed against phase 2 from the phase-1 review (fr/usage/model.py:44-50); gates p
 ### 83ed2919b8c4-resolved · finding [deferred → #623] · resolves 83ed2919b8c4: Hermes fixture rows are constructed, not captured
 
 No Hermes host available; spec §7.1 allows a schema-built fixture; live capture tracked.
+
+<!-- fr:journal kind=review scope=plan id=r-p1 created=2026-09-25T20:03:31 phase=1 -->
+### r-p1 · review · Phase 1 review (independent reviewer): 13 findings; r1-r11, r13 and 7cf4d2239290 fixed; r12 filed to phase 2; 83ed2919b8c4 deferred #623 (phase 1)
+
+Reviewer a5ca54c59998f8557 (Opus 5.5) read every phase-1 file. Verified clean: dedupe single rule, harness-only pricing with fixed ratios, unavailable never 0, (prev, at] windows, READ_ONLY exemption, fixture privacy.
