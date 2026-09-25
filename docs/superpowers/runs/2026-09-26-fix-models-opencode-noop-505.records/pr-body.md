@@ -1,27 +1,19 @@
-# Fix #505: distinguish absent OpenCode agent files from idempotent applies
+# Fix #505: distinguish absent OpenCode agents from idempotent apply
 
-## Summary
+`materialize_agents` now reports the number of supported-tier OpenCode agent files it considered, separately from changed files. `fr models apply --harness opencode` says no files were found only when none match; otherwise it reports `<n> agent files already up to date`. Includes regressions for both branches and patch bump 4.22.0 → 4.22.1.
 
-`materialize_agents` now returns the count of matching tier-agent files separately from its changes. `fr models apply --harness opencode` preserves the no-files message only when no matching files exist; otherwise an unchanged set reports `<n> agent files already up to date`. Added independent regression coverage for both outcomes and bumped the package/plugin version from 4.22.0 to 4.22.1.
-
+- Issue: https://github.com/derio-net/super-fr/issues/505
 - Spec: `docs/superpowers/specs/2026-09-26-models-opencode-noop-report-design.md`
 - Plan: `docs/superpowers/plans/2026-09-26-models-opencode-noop-report`
-- Issue: https://github.com/derio-net/super-fr/issues/505
 
 ## Operator decisions
 
-- Count only OpenCode agent files discovered by `materialize_agents`; unrelated files do not count.
-- The focused models command/tests are sufficient for the post-merge Test Plan.
-
-## Verification
-
-- Focused tests: 25 passed (`tests/unit/test_opencode_agents_materialize.py`, `tests/unit/test_models_cmd.py`).
-- Ruff check and format, mypy, artifact validation, acceptance check, and version sync passed.
-- Full suite: 5,458 passed and 97 skipped on the first run, with one unrelated transcript fixture failure; an isolated rerun reproduced it. A second full run also had a test subprocess timeout in `test_suite_isolation_inherited_columns.py`. Full logs and gate results: `docs/superpowers/runs/2026-09-26-fix-models-opencode-noop-505.records/full-suite.log`.
+- Count only discovered OpenCode agent files with a supported tier suffix; exclude unrelated files.
+- Focused models command/tests are sufficient post-merge verification.
 
 ## Operator gates
 
-- Brainstorm questions were answered by the operator. OpenCode cannot mechanically verify the answer from a session transcript.
+- Brainstorm Q&A answered by operator. OpenCode cannot verify answer provenance from a session transcript.
 
 ## Manual phases
 
@@ -33,9 +25,8 @@ Post-merge, run the focused models command/tests against the merged branch.
 
 ## Acceptance debt
 
-`fr acceptance status --brief`: unchanged repository-wide debt — 205 ci, 23 skipped, 9 not-implemented, 1 scheduled.
-
-`fr acceptance check --added-since origin/main`: no acceptance rows added.
+- `fr acceptance status --brief`: 205 ci, 23 skipped, 9 not-implemented, 1 scheduled (unchanged repo-wide debt).
+- `fr acceptance check --added-since origin/main`: no acceptance rows added.
 
 ## Ready checklist
 
@@ -43,9 +34,11 @@ Post-merge, run the focused models command/tests against the merged branch.
 - [ ] Explicit review approved
 - [ ] No commits since review approval
 
+<!-- rendered by fr for run 2026-09-26-fix-models-opencode-noop-505; edit above this line only -->
+
 ## Findings
 
-No unresolved in-scope findings. The phase-1 review finding about seeding the positive-case fixture was fixed and re-reviewed in the same branch.
+- `review-cli-count-fixture` (plan, phase 1) — CLI no-op test must seed existing agent files — **fixed**
 
 ## Out-of-scope findings
 
@@ -53,8 +46,35 @@ None.
 
 ## Proportionality
 
-202 lines changed against an estimate of 220 (0.9×). `fr plan proportionality` reports `.claude-plugin/marketplace.json` as an out-of-plan touch; it is the generated version synchronization artifact required by the patch bump.
+```text
+proportionality: merge-base 6a7da3568f8c79b44a294f74a9e98ccf4db80155
+
+## Unreferenced new files
+
+none.
+
+## Out-of-plan touches
+
+- .claude-plugin/marketplace.json
+
+## Size
+
+202 lines changed (+160 -42; fr artifacts excluded) against an estimate of 220 (0.9×).
+```
 
 ## Cost
 
-Usage was not observable in this OpenCode run; `fr run cost` reports no captured usage. No dollar amount is claimed.
+| step | turns | cost |
+|---|---:|---:|
+| brainstorm | — | — |
+| spec-review | — | — |
+| plan | — | — |
+| plan-review | — | — |
+| implement | — | — |
+| journal-check | — | — |
+| deliver | — | — |
+| **total** | | — |
+
+Sessions: 0 read, 0 unavailable.
+
+_Read from this host's transcripts; the usage file is written by this resolve._
