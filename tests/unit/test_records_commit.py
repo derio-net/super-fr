@@ -269,3 +269,117 @@ def test_commit_records_without_an_identity_does_not_raise(
     assert _head(root) == before
     assert p.exists()
     assert "fr: not committed (" in capsys.readouterr().err
+
+
+# --- p3-r2: record commits skip hooks, keep signing, restore the index -------
+
+
+def _failing_pre_commit_hook(root: Path) -> None:
+    hooks = root / ".git" / "hooks"
+    hook = hooks / "pre-commit"
+    hook.write_text("#!/bin/sh\necho 'house hook says no' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    _git(root, "config", "core.hooksPath", str(hooks))
+
+
+def test_a_record_commit_skips_a_failing_pre_commit_hook(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.records_commit import commit_records
+
+    root = _repo(tmp_path)
+    _failing_pre_commit_hook(root)
+    p = _record(root)
+
+    commit_records(root, [p], "chore(fr): run r — start")
+
+    assert _git(root, "log", "-1", "--format=%s") == "chore(fr): run r — start"
+    assert "fr: committed" in capsys.readouterr().err
+
+
+def test_the_migration_commit_still_runs_hooks(tmp_path: Path) -> None:
+    """Only record commits skip hooks; the generic default is unchanged."""
+    root = _repo(tmp_path)
+    _failing_pre_commit_hook(root)
+    before = _head(root)
+
+    outcome = commit_paths(root, [_record(root)], "m")
+
+    assert not outcome.committed
+    assert _head(root) == before
+
+
+def _signing_that_fails(root: Path) -> None:
+    """Force `git commit` to exit non-zero WITHOUT a hook (--no-verify skips
+    those): require a signature and make the signer fail. That this makes the
+    record commit fail is also the proof fr leaves signing as configured."""
+    _git(root, "config", "commit.gpgsign", "true")
+    _git(root, "config", "gpg.program", "false")
+
+
+def test_a_failed_record_commit_restores_the_index(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.records_commit import commit_records
+
+    root = _repo(tmp_path)
+    pre_staged = _record(root, "docs/superpowers/plans/p/_meta.yaml", "a: 1\n")
+    _git(root, "add", "--", "docs/superpowers/plans/p/_meta.yaml")  # plan_ops staged it
+    pre_staged.write_text("a: 2\n")  # ...and the file moved on since
+    fresh = _record(root)  # commit_paths itself will add this one
+    unrelated = root / "unrelated.md"
+    unrelated.write_text("executor's\n")
+    _git(root, "add", "--", "unrelated.md")
+    index_before = _git(root, "ls-files", "-s")
+    _signing_that_fails(root)
+    before = _head(root)
+
+    commit_records(root, [pre_staged, fresh], "chore(fr): plan p — create")
+
+    assert _head(root) == before
+    assert "fr: not committed (" in capsys.readouterr().err
+    assert _git(root, "ls-files", "-s") == index_before
+    assert _git(root, "ls-files", "--", "docs/superpowers/runs/r.yaml") == ""
+    assert pre_staged.read_text() == "a: 2\n" and fresh.exists()
+
+
+# --- p3-r3: a briefly held index.lock is waited out, a stuck one is not ------
+
+
+def test_a_record_commit_waits_out_a_briefly_held_index_lock(tmp_path: Path) -> None:
+    import threading
+
+    root = _repo(tmp_path)
+    p = _record(root)
+    lock = root / ".git" / "index.lock"
+    lock.write_text("")
+    timer = threading.Timer(0.2, lock.unlink)
+    timer.start()
+    try:
+        outcome = commit_paths(root, [p], "m", lock_wait=2.0)
+    finally:
+        timer.join()
+
+    assert outcome.committed, outcome.reason
+    assert _files_at_head(root) == ["docs/superpowers/runs/r.yaml"]
+
+
+def test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly(tmp_path: Path) -> None:
+    import time
+
+    from fr.records_commit import commit_records
+
+    root = _repo(tmp_path)
+    p = _record(root)
+    lock = root / ".git" / "index.lock"
+    lock.write_text("")
+    before = _head(root)
+    started = time.monotonic()
+    try:
+        commit_records(root, [p], "m")
+    finally:
+        lock.unlink()
+    elapsed = time.monotonic() - started
+
+    assert _head(root) == before
+    assert 1.0 <= elapsed < 5.0, elapsed

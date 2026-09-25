@@ -21,6 +21,8 @@ from fr.git import GitUnavailableError, git_answer
 
 __all__ = ["commit_records"]
 
+_LOCK_WAIT_SECONDS = 2.0
+
 
 def _shown(root: Path, paths: Iterable[Path]) -> str:
     out: list[str] = []
@@ -45,7 +47,18 @@ def commit_records(repo_root: Path, paths: Iterable[Path], message: str) -> None
     """Commit `paths` under `message`; report on stderr; never raise."""
     todo = list(dict.fromkeys(p if p.is_absolute() else repo_root / p for p in paths))
     try:
-        outcome = commit_paths(repo_root, todo, message)
+        # Decision 248a1091887d: fr's own bookkeeping skips the repo's commit
+        # hooks (frequent; a fixer hook would fail every tick), keeps signing as
+        # configured, restores the index on failure, and waits out a briefly
+        # held index.lock (an executor committing in the same worktree, p3-r3).
+        outcome = commit_paths(
+            repo_root,
+            todo,
+            message,
+            no_verify=True,
+            restore_index=True,
+            lock_wait=_LOCK_WAIT_SECONDS,
+        )
         if outcome.committed:
             print(
                 f"fr: committed {_short_head(repo_root)} {message.splitlines()[0]}",

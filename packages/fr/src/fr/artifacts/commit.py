@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -475,7 +476,18 @@ def commit_migration(
 _UNCOMMITTED = "the files are in your working tree, uncommitted"
 
 
-def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> CommitOutcome:
+_LOCK_POLL_SECONDS = 0.05
+
+
+def commit_paths(
+    repo_root: Path,
+    paths: Sequence[Path],
+    message: str,
+    *,
+    no_verify: bool = False,
+    restore_index: bool = False,
+    lock_wait: float = 0.0,
+) -> CommitOutcome:
     """Commit exactly `paths` under `message`, or explain why it did not.
 
     The generic body `commit_migration` delegates to, and the one committer fr's
@@ -483,6 +495,16 @@ def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> Commit
     migration commit applies unchanged: no repo, a git refusal, a detached HEAD,
     the default branch, no HEAD, a held index lock, a path outside the repo.
     A relative path is read against `repo_root`, not the process cwd.
+
+    The pathspec commit records each path's WHOLE working-tree file, so a hand
+    edit sitting in one of these files rides along under `message` (p3-m2).
+
+    The keywords are the record-commit policy (decision 248a1091887d), off by
+    default so the migration commit is unchanged: `no_verify` skips the
+    repository's commit hooks (signing is left as configured); `restore_index`
+    puts the index entries of `paths` back as they were if the commit fails;
+    `lock_wait` waits up to that many seconds for a held `index.lock` to clear
+    before refusing (p3-r3).
     """
     paths = tuple(p if p.is_absolute() else repo_root / p for p in paths)
     if not paths:
@@ -529,6 +551,12 @@ def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> Commit
             reason=f"{toplevel} has no commits yet; the files are uncommitted",
         )
     held = index_lock_held(toplevel)
+    deadline = time.monotonic() + lock_wait
+    while held is not None and time.monotonic() < deadline:
+        # Another writer in the same worktree (an executor's own commit) holds
+        # the index for a moment; a bounded wait, then the same refusal.
+        time.sleep(_LOCK_POLL_SECONDS)
+        held = index_lock_held(toplevel)
     if held is not None:
         return CommitOutcome(
             committed=False,
@@ -546,6 +574,27 @@ def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> Commit
                 committed=False,
                 reason=f"refusing to commit: {path} is outside the git repository {toplevel}",
             )
+
+    # The index entries of `rel` as they stand now, so a failed commit can put
+    # them back: a path the caller had already staged stays staged (at the
+    # version it staged), a path only this call added is dropped again.
+    before: str | None = None
+    if restore_index:
+        try:
+            listed = _git(toplevel, "ls-files", "-s", "-z", "--", *rel)
+        except GitUnavailableError as e:
+            return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
+        if listed.returncode != 0:
+            return CommitOutcome(
+                committed=False,
+                reason=f"refusing to commit: `git ls-files` failed: {listed.stderr.strip()}",
+            )
+        before = listed.stdout
+
+    def failed(reason: str) -> CommitOutcome:
+        if before is not None:
+            reason += _restore_index(toplevel, rel, before)
+        return CommitOutcome(committed=False, reason=reason, paths=paths, message=message)
 
     # `add` first, so a file the caller *created* is tracked and can be named by
     # the pathspec below. Scoped with `--` so no path is ever read as an option.
@@ -576,26 +625,26 @@ def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> Commit
 
     # The pathspec on `commit` is what keeps an unrelated *staged* file out:
     # without it git records the whole index. It also leaves that file staged.
+    verify = ["--no-verify"] if no_verify else []
     try:
         # A commit can legitimately take longer than a read: pre-commit hooks
         # and signing run here. Still bounded, still reported.
-        done = _git(toplevel, "commit", "-m", message, "--", *rel, timeout=GIT_TIMEOUT_SECONDS * 4)
-    except GitUnavailableError as e:
-        return CommitOutcome(
-            committed=False,
-            reason=f"the files are in your working tree but could not be committed: {e}",
-            paths=paths,
-            message=message,
+        done = _git(
+            toplevel,
+            "commit",
+            *verify,
+            "-m",
+            message,
+            "--",
+            *rel,
+            timeout=GIT_TIMEOUT_SECONDS * 4,
         )
+    except GitUnavailableError as e:
+        return failed(f"the files are in your working tree but could not be committed: {e}")
     if done.returncode != 0:
-        return CommitOutcome(
-            committed=False,
-            reason=(
-                f"the files are in your working tree but could not be committed: "
-                f"{done.stderr.strip() or done.stdout.strip()}"
-            ),
-            paths=paths,
-            message=message,
+        return failed(
+            f"the files are in your working tree but could not be committed: "
+            f"{done.stderr.strip() or done.stdout.strip()}"
         )
     return CommitOutcome(
         committed=True,
@@ -603,3 +652,31 @@ def commit_paths(repo_root: Path, paths: Sequence[Path], message: str) -> Commit
         paths=paths,
         message=message,
     )
+
+
+def _restore_index(toplevel: Path, rel: Sequence[str], before: str) -> str:
+    """Put the index entries of `rel` back to `before` (`ls-files -s -z`).
+
+    Returns "" on success, or a clause naming what could not be restored — the
+    caller's refusal is still reported either way; this never raises.
+    """
+    try:
+        reset = _git(toplevel, "reset", "-q", "--", *rel)
+        if reset.returncode not in (0, 1):  # 1: "unstaged changes after reset"
+            return f"; the index could not be restored: {reset.stderr.strip()}"
+        entries = "".join(f"{entry}\0" for entry in before.split("\0") if entry.strip())
+        if entries:
+            done = subprocess.run(
+                ["git", "update-index", "-z", "--index-info"],
+                cwd=toplevel,
+                input=entries,
+                capture_output=True,
+                text=True,
+                timeout=GIT_TIMEOUT_SECONDS,
+                check=False,
+            )
+            if done.returncode != 0:
+                return f"; the index could not be restored: {done.stderr.strip()}"
+    except (GitUnavailableError, OSError, subprocess.SubprocessError) as e:
+        return f"; the index could not be restored: {e}"
+    return ""
