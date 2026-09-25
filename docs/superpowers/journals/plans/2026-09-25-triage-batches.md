@@ -9,3 +9,8 @@ Red-only task: it writes failing tests and changes no production code, so there 
 ### eb2d1827ddaf · discovery · no-refactor-because P1.T2 (phase 1)
 
 Glue only (a schema literal, a list verb, a stub package and CI wiring); P1.T3 verifies it end to end and records a cleanup if one is needed.
+
+<!-- fr:journal kind=discovery scope=plan id=d54428244b78 created=2026-09-25T20:38:51 phase=2 -->
+### d54428244b78 · discovery · no-refactor-because P2.T6 (phase 2)
+
+This task IS the phase's refactor and quality gate; a refactor step of a refactor step would be circular.
