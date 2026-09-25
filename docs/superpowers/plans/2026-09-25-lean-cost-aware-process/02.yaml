@@ -279,6 +279,7 @@ state:
       ticked_at: '2026-09-25T19:30:58+00:00'
       note: ruff/mypy clean; full suite 5385 passed
   completion:
-    at: null
-    note: null
+    at: '2026-09-25T19:30:59+00:00'
+    note: usage kind + capture + run 7 + backfill + host-side rule + parity modes;
+      suite 5385 passed
     observed_prs: []
