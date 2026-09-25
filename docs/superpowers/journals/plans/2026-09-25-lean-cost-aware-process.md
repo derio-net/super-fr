@@ -154,3 +154,8 @@ Hermes session_model_usage costs are NOT NULL DEFAULT 0, so 0 means not recorded
 ### p1-r5-resolved · finding [fixed] · resolves p1-r5: Mixed actual/estimated Hermes rows discard figures as Cost() none
 
 hermes._cost: per session row, actual else estimated, summed; exact only if every row was actual. Per-model rows (now per session, no GROUP BY) follow their row's choice; a row with neither figure leaves the session unpriced. Tests for mixed rows and for a row with no figure.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-09-25T20:22:09 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: .fr-deliver classified verify for shell writes but journal_write for Write tool
+
+Chose verify for both: .fr-deliver/ holds deliver's tests=<log>, the suite's own output, which the shell rule (like full*.log) already calls verify. _path now returns verify for .fr-deliver/ on Read/Write/Edit; table cases for Bash, Write and Read. Golden re-run unchanged: pooled paperwork 30.06%, implementation 32.84%.
