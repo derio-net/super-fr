@@ -100,3 +100,8 @@ The contents API resolves ref=HEAD to the default branch, so collect reads .fr/t
 ### p2-withdrawn-marker · decision · A withdrawal comment uses its own marker prefix, fr-batch-withdrawn: (phase 2)
 
 Spec §3.E says cancel posts 'a marker comment' and stale dispatch dates the 'fr-batch marker comment'. If both used <!-- fr-batch:<item> -->, a cancelled-then-redispatched batch would be dated by its withdrawal, and phase 3's --repair idempotency check would see the withdrawal as 'already posted'. So fr.triage.model defines batch_marker (<!-- fr-batch:<item> -->) and withdrawn_marker (<!-- fr-batch-withdrawn:<item> -->); the dispatch prefix never matches the withdrawn one. collect dates by the LATEST dispatch marker. Phase 3: repair/dispatch idempotency should treat a dispatch marker as present only when it is newer than the latest withdrawn marker for the same item, else a re-dispatch after cancel posts nothing.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-norefactor-t2 created=2026-09-25T23:09:12 phase=2 -->
+### p2-norefactor-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+The collect additions are four small named functions (join_open, read_config, _with_marker, _batch_prs) called once each from collect_facts; the three test Forge doubles (FakeForge, the CLI and skeleton doubles) each gained the two new reads and a 404 read_file_at_ref, and FakeForge.anchor_reads() filters the config read out of the anchor-read assertions. Nothing duplicated remains to fold.
