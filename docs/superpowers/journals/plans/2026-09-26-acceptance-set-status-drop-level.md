@@ -49,3 +49,8 @@ Added test_drop_levels_refuses_a_drop_from_a_level_the_row_has_no_refs_in.
 ### p1-r4-resolved · finding [out-of-scope] · resolves p1-r4: No direct test of merge_levels refusing an unknown key (phase 1)
 
 merge_levels had no direct unknown-key test before this change; the refactor kept its error text byte-identical and drop_levels' test exercises the shared helper.
+
+<!-- fr:journal kind=decision scope=plan id=p2-check-drops-upfront created=2026-09-26T00:52:20 phase=2 -->
+### p2-check-drops-upfront · decision · The three drop misalignments are refused at the top of apply_record, before the run context is loaded (phase 2)
+
+`_check_drops(record, drops, run_id)` runs first in `apply_record`, so a drop passed with a `run_id` is refused before `_run_context` reads the run (a missing run would otherwise mask the real refusal), and the no-item / create-item checks need only the record's shape, not the matrix. The absent-ref refusal stays in `_acceptance_writes`, where `drop_levels` raises `AcceptanceError` inside the existing except and becomes `RecordRefusedError`; all refusals fire before the overlay is written. An extra test pins drop + addition re-pointing a row in one pass (spec §2.C).
