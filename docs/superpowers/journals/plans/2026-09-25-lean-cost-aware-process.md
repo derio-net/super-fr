@@ -404,3 +404,8 @@ apply.py:683 vs run_cmd.py:3981; spec §5.C.4 / Test Plan 13. Check inside _reso
 ### p3-r3 · finding [open] (reviewer: in scope) · Invalid-record atomicity: crash window, retry wedges on existing ids, restore misses cursor/usage paths and can revert committed files (phase 3)
 
 apply.py:701-732, run_cmd.py:3979-3996. Orchestrator decision: delete record after commit; byte-identical re-append is a no-op (retry heals); snapshot every _RunWrites.note path; never restore after a commit landed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-09-25T23:23:34 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · --record silently ignores --no-questions/--reason/--answered-by/--agent/--harness/--model (phase 3)
+
+run_cmd.py:3701-3710. Refuse them with --record, or add no_questions/reason record fields and document the gate bypass in fr-goal §1.
