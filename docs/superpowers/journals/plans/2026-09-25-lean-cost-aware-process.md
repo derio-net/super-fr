@@ -349,3 +349,8 @@ ea8a6b46: operator gate records unobserved=operator-gate and warns on every harn
 ### p2-r29-resolved · finding [fixed] · resolves p2-r29: Closeout upsert erases the deliver capture record
 
 9e1ec7c2: Capture.at is a non-empty list of distinct events; capture() appends to the host's entry so closeout keeps deliver; usage kind v1 unreleased, no migration; fixtures/tests and both committed files updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r30-resolved created=2026-09-25T22:16:05 state=fixed resolves=p2-r30 -->
+### p2-r30-resolved · finding [fixed] · resolves p2-r30: usage group checks cwd repo, not the subcommand's --repo
+
+9d5b80df: host-side check moved from the usage group callback into each subcommand, against its --repo (else the resolved repo root); test with a marked --repo and a plain cwd and vice versa.
