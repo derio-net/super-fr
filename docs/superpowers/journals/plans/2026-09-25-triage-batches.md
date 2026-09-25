@@ -52,3 +52,6 @@ Verification-only task; the loader change (a read-versions tuple in _check_schem
 
 <!-- fr:journal kind=finding scope=plan id=r1-1 created=2026-09-25T20:59:03 phase=1 state=fixed review_scope=in -->
 ### r1-1 · finding [fixed] (reviewer: in scope) · Schema-1 files could carry batches (spec 3.A) — Judgements now refuses batches unless schema 2; test added (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-2 created=2026-09-25T20:59:04 phase=1 state=fixed review_scope=in -->
+### r1-2 · finding [fixed] (reviewer: in scope) · No import-boundary tripwire for fr_herdr — fr/fr_dispatch never import fr_herdr; fr_herdr never imports fr.triage (self-tested pattern) (phase 1)
