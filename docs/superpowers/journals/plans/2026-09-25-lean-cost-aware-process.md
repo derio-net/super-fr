@@ -164,3 +164,8 @@ Chose verify for both: .fr-deliver/ holds deliver's tests=<log>, the suite's own
 ### p1-r7-resolved · finding [fixed] · resolves p1-r7: Report CLI test needle 'implement' matches the column header
 
 The CLI test asserts a line-anchored By-step row per step (step cell then a dollar cell), and a new rollup test asserts by_step keys are exactly the cursor steps the fixture's messages fall in (plus OUTSIDE).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-09-25T20:22:11 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: report --run reads the cached index, missing sessions added to the cursor later
+
+report --run takes the union of the cached index and the live cursor's sessions (fails only when neither exists). Test: collect, append a session to the cursor, report shows both.
