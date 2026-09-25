@@ -196,3 +196,8 @@ install.sh is byte-identical to main and the test passes on the host; in the con
 ### r2p-f9-resolved · finding [fixed] · resolves r2p-f9: HerdrRunner.dispatch leaves a labelled tab after a failure past tab create, which existing_dispatches then reports live forever
 
 HerdrRunner.dispatch wraps everything after tab create; on any failure it runs herdr tab close <tab_id> (best effort; a close failure never masks the original) and re-raises. Tests: test_fr_herdr_runner.py::test_a_failure_after_tab_create_closes_the_tab_and_reraises[start|prompt], ::test_a_failed_tab_close_does_not_mask_the_original_error. Commit 8a892abe.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f12a-resolved created=2026-09-25T23:45:14 state=fixed resolves=r2p-f12a answered_by=agent -->
+### r2p-f12a-resolved · finding [fixed] · resolves r2p-f12a: fr_dispatch.testing contract uses bare assert (silent under python -O)
+
+fr_dispatch.testing checks go through _require(ok, msg), which raises AssertionError explicitly; no bare assert remains. Tests: test_run_unit_runner_contract.py::test_the_contract_still_bites_under_python_dash_o (child interpreter with -O), ::test_the_contract_module_has_no_bare_assert. Commit 5bf5bf95.
