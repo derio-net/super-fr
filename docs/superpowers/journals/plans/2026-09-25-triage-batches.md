@@ -34,3 +34,8 @@ Operator (2026-09-25): run implementation with Opus 5.5 on every tier. Standing 
 ### 31dca047ed37 · discovery · Schema 2 judgements were pinned as refused by two existing tests (phase 1)
 
 tests/unit/test_triage_cli.py::test_a_bad_judgements_file_exits_2_naming_it and tests/unit/test_triage_model.py (renamed to test_schema_3_in_judgements_is_refused_naming_the_file) used schema 2 as the unknown version. Both now use schema 3; the loader reads JUDGEMENTS_READS = (1, 2) while JUDGEMENTS_SCHEMA stays 1 as the write version until phase 2.
+
+<!-- fr:journal kind=discovery scope=plan id=f531198b3826 created=2026-09-25T22:49:10 phase=1 -->
+### f531198b3826 · discovery · Red run masked a malformed WorkItem id in the herdr stub test (phase 1)
+
+P1.T1.S3's red run failed on ModuleNotFoundError: fr_herdr before any WorkItem was built, so the test's first ids (super-fr/<unit>) never reached WorkItem.__post_init__, which rejects them. Found in green; the test now uses one well-formed id per unit from the work_item grammar plus a guard that every Unit has an id. For phase 2's runner contract tests: build items through item_id/run_item_id.
