@@ -125,3 +125,8 @@ The verbs share their I/O through _load_state/_scope from triage_cmd and one _wr
 ### p2-herdr-shapes · discovery · herdr CLI shapes behind HerdrRunner, and the one fixture that is not a capture (phase 2)
 
 Captured live 2026-09-25 (read-only, inside the operator's herdr session): tab list/get and pane list print a JSON envelope {id, result:{...}, type}; herdr --skill documents that tab create returns .result.tab and .result.root_pane, and that agent names must match [a-z][a-z0-9_-]{0,31}. tests/fixtures/herdr/tab-list.json is a capture with the operator's tab labels replaced; tab-create.json is ASSEMBLED from the documented keys and captured object shapes, because a live capture would have opened a tab in the operator's session. Its README says so. HerdrRunner reads only .result.root_pane.pane_id from it; phase 4's live walk should replace it with a real capture.
+
+<!-- fr:journal kind=decision scope=plan id=p2-dispatch-handle created=2026-09-25T23:23:45 phase=2 -->
+### p2-dispatch-handle · decision · Runner.dispatch may return an opaque handle; herdr's cwd comes from an optional checkout payload key (phase 2)
+
+Spec §3.C says HerdrRunner 'returns the pane id as the handle', but the Runner protocol typed dispatch -> None, so a str-returning implementation fails the mypy conformance assignment (r1-3). The protocol now types dispatch -> str | None (tick ignores the value; vk/cncd still return None). Separately, herdr needs --cwd <checkout> but the spec's payload lists only brief/harness/model/branch/reserved_version/issues; the runner reads an OPTIONAL payload key 'checkout' and falls back to its own cwd. Phase 3's dispatch should put the resolved --checkout path in payload['checkout'] and record the returned handle in the dispatch event.
