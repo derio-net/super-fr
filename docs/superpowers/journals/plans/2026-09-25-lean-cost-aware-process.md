@@ -494,3 +494,8 @@ test_deliver_tests_log_gate_fires_through_a_record[absent|stale]: exit 2, no byt
 ### p3-r8-resolved · finding [fixed] · resolves p3-r8: fr plan edit --complete-phase no longer enforces the refactor check
 
 _plan_writes runs refactor_gaps on every actual phase completion (verb or record), counting the record in-memory refactor/journal entries; back-compat journal no-refactor-because still satisfies it. test_complete_phase_verb_refuses_a_task_with_no_refactor_reason; prose in fr-execute + fr-phase-executor notes it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-09-25T23:48:02 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: --record deletes and commits any parseable path; relative path resolved against cwd
+
+--record resolved against the repo root and required under records_dir(run); otherwise exit 2, nothing touched. Tests: outside-dir refusal + relative path from another cwd.
