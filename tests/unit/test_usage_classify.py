@@ -58,6 +58,36 @@ CASES = [
     ("terminal", "uv run fr journal add --scope plan", "paperwork", "journal_write"),
     ("write_file", "packages/fr/src/fr/x.py", "implementation", "code_write"),
     ("delegate_task", "", "other", "orchestration"),
+    # p1-r2: the reviewer's unwrap / prefix shapes ...
+    ("Bash", "uv run fr isolation exec --branch b -- git status", "other", "vcs"),
+    ("Bash", "F=docs/superpowers/plans/p/01.yaml && cat $F", "paperwork", "paper_read"),
+    ("Bash", "export X=; git log", "other", "vcs"),
+    (
+        "Bash",
+        "fr isolation exec --branch b -- bash -lc 'cat > packages/x.py <<EOF'",
+        "implementation",
+        "code_write",
+    ),
+]
+
+UNWRAP_DEPENDENT = [
+    # ... and the ones whose answer DEPENDS on it: each lands on a different rule
+    # when `_unwrap` is a no-op (pinned by test_these_cases_need_the_unwrap)
+    ("Bash", "uv run fr isolation exec --branch b -- git status", "other", "vcs"),
+    ("Bash", "fr isolation exec --branch b -- bash -lc 'git log -1'", "other", "vcs"),
+    ("Bash", "GIT_PAGER=cat git log --oneline", "other", "vcs"),
+    # $VAR / ${VAR} substitution: the path lives only in the stripped value
+    ("Bash", "F=docs/superpowers/plans/p/01.yaml && cat > $F <<'EOF'", "paperwork", "plan_write"),
+    ("Bash", "export F=packages/fr/x.py; cat > ${F} <<'EOF'", "implementation", "code_write"),
+]
+
+CASES += UNWRAP_DEPENDENT
+CASES += [
+    # p1-r6: .fr-deliver/ holds deliver's tests=<log> — the suite's output, so
+    # writing or reading it is verification, whichever tool touched it
+    ("Bash", "uv run pytest -q > .fr-deliver/tests.log 2>&1", "implementation", "verify"),
+    ("Write", "~/wt/.fr-deliver/tests.log", "implementation", "verify"),
+    ("Read", ".fr-deliver/tests.log", "implementation", "verify"),
 ]
 
 
@@ -65,6 +95,16 @@ CASES = [
 def test_classify(name: str, target: str, activity: str, sub: str) -> None:
     result = classify(name, target)
     assert (result.activity, result.sub) == (activity, sub)
+
+
+@pytest.mark.parametrize(("name", "target", "activity", "sub"), UNWRAP_DEPENDENT)
+def test_these_cases_need_the_unwrap(
+    name: str, target: str, activity: str, sub: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.usage import classify as module
+
+    monkeypatch.setattr(module, "_unwrap", lambda command: command)
+    assert classify(name, target).sub != sub
 
 
 def test_no_tool_call_is_narration() -> None:

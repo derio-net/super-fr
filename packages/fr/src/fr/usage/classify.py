@@ -173,11 +173,15 @@ def _unwrap(command: str) -> str:
 
 def _path(path: str, write: bool) -> Classification:
     p = path or ""
+    if re.search(r"(^|/)\.fr-deliver/", p):
+        # deliver's `tests=<log>` evidence: the suite's own output, so touching
+        # it is verification — the same answer the shell rule gives
+        return _of("verify")
     if re.search(r"(^|/)docs/superpowers/specs/", p):
         return _of("spec_write" if write else "paper_read")
     if re.search(r"(^|/)docs/superpowers/plans/", p):
         return _of("plan_write" if write else "paper_read")
-    if re.search(r"(^|/)docs/superpowers/(journals|runs)/|(^|/)\.fr-deliver/", p):
+    if re.search(r"(^|/)docs/superpowers/(journals|runs)/", p):
         return _of("journal_write" if write else "paper_read")
     if re.search(r"(^|/)docs/superpowers/", p):
         return _of("paper_read")
