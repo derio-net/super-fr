@@ -365,3 +365,18 @@ def test_drop_levels_refuses_an_unknown_level_key() -> None:
 
     with pytest.raises(AcceptanceError, match="unti"):
         drop_levels({"unit": ("r:a",)}, {"unti": ["r:a"]})
+
+
+def test_drop_levels_refuses_a_drop_from_a_level_the_row_has_no_refs_in() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError, match="e2e"):
+        drop_levels({"unit": ("r:a",)}, {"e2e": ["r:a"]})
+
+
+def test_drop_levels_removes_every_copy_of_a_duplicated_existing_ref() -> None:
+    from fr.acceptance.edit import drop_levels
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:a")}, {"unit": ("r:a",)})
+    assert out["unit"] == ("r:b",)

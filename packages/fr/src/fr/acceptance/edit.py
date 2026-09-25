@@ -23,7 +23,7 @@ Spec: `docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md` §3.G.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 
 import yaml
 
@@ -150,14 +150,18 @@ def merge_levels(
 
 
 def drop_levels(
-    existing: dict[str, tuple[str, ...]], drops: dict[str, list[str]]
+    existing: Mapping[str, Sequence[str]], drops: Mapping[str, Sequence[str]]
 ) -> dict[str, tuple[str, ...]]:
     """Existing level refs minus `drops`, the remaining refs in their order.
 
     The one definition of "this ref is on the row" (gh#624): a drop naming a
     ref the row does not carry is refused, never ignored — a typo'd ref that
     silently removed nothing would leave stale evidence behind while reporting
-    success. A ref named twice in `drops` is dropped once.
+    success. A ref named twice in `drops` is dropped once; a ref a (hand-edited)
+    row carries twice loses every copy — a drop means "this evidence is no
+    longer on the row". Typed over `Mapping`/`Sequence` so the CLI's parsed
+    lists and the engine's `RecordTarget.acceptance_drops` tuples both pass
+    straight through.
     """
     _refuse_unknown_levels(drops)
     for lv, refs in drops.items():
