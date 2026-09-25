@@ -98,6 +98,19 @@ run_app = typer.Typer(
 _TEMPLATE_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
 
 
+@run_app.callback()
+def _run_group() -> None:
+    """Durable workflow-run cursor. Runs on the harness host (spec 2026-09-25
+    §5.B.6): refused from inside a devcontainer-mode workspace."""
+    from fr.isolation.where import HostSideError, require_harness_host
+
+    try:
+        require_harness_host(resolve_repo_root(), "run")
+    except HostSideError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+
+
 # --- gh#610 §3.C: fr commits its own record writes ---------------------------
 #
 # Every mutating command (start/adopt/advance/resolve/claim) is wrapped in
@@ -154,6 +167,44 @@ class _RunWrites:
 
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
+
+
+# --- spec 2026-09-25 §5.B.7: transcript gates stop degrading silently ---------
+#
+# A gate that cannot observe (no harness detected, no readable transcript)
+# notes itself here and prints a warning; the resolve then records the names
+# under the unit's `unobserved` evidence, so the gap is in the cursor, not
+# only in a stderr nobody keeps.
+
+_UNOBSERVED: ContextVar[list[str] | None] = ContextVar("fr_unobserved", default=None)
+
+
+def _note_unobserved(gate: str) -> None:
+    found = _UNOBSERVED.get()
+    if found is None:
+        found = []
+        _UNOBSERVED.set(found)
+    if gate not in found:
+        found.append(gate)
+
+
+def _why_unobservable() -> str:
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        harness = None
+    if harness is None:
+        return "no harness detected"
+    return "no readable transcript for this session"
+
+
+def _take_unobserved() -> dict[str, str]:
+    """`{"unobserved": "<gate>,…"}` for every gate noted so far, and forget them."""
+    from fr.run.telemetry import UNOBSERVED
+
+    found = _UNOBSERVED.get() or []
+    _UNOBSERVED.set(None)
+    return {UNOBSERVED: ",".join(found)} if found else {}
 
 
 def _note_record_write(repo_root: Path, path: Path, state: RunState | None = None) -> None:
@@ -925,14 +976,18 @@ def _gate_provenance(
         )
         return "agent"
     try:
-        on_claude_code = detect_harness(os.environ) == "claude-code"
+        harness_now = detect_harness(os.environ)
     except HarnessError:
-        on_claude_code = False
-    if on_claude_code:
+        harness_now = None
+    # Claude Code enforces this gate, so failing to observe it is news; with
+    # NO harness detected nothing observed it at all (§5.B.7). OpenCode and
+    # Hermes were told at `advance` that the gate is not enforced there.
+    if harness_now in ("claude-code", None):
+        _note_unobserved("operator-gate")
         err_console.print(
-            f"[yellow]{step_id}: could not verify this gate — no readable transcript for "
-            f"this session, so `answered_by: {claimed}` is recorded as claimed, "
-            "unverified.[/yellow]",
+            f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
+            f"so `answered_by: {claimed}` is recorded as claimed, unverified "
+            "(evidence: unobserved=operator-gate).[/yellow]",
             soft_wrap=True,
         )
     return claimed  # type: ignore[return-value]  # validated by the caller
@@ -1468,9 +1523,11 @@ def _verify_reviewer(
         )
         raise typer.Exit(2)
     if observed is None:
+        _note_unobserved("reviewer")
         err_console.print(
-            f"[yellow]{key}: could not verify reviewer {agent_id!r} — no readable transcript "
-            "for this session; recorded as claimed, unverified.[/yellow]",
+            f"[yellow]{key}: could not verify reviewer {agent_id!r} — "
+            f"{_why_unobservable()}; recorded as claimed, unverified "
+            "(evidence: unobserved=reviewer).[/yellow]",
             soft_wrap=True,
         )
 
@@ -1539,9 +1596,10 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
                 soft_wrap=True,
             )
             raise typer.Exit(2)
+        _note_unobserved("tests")
         err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — no readable transcript for "
-            "this session; recorded as a fresh log, unverified.[/yellow]",
+            f"[yellow]{key}: could not verify who ran {log} — {_why_unobservable()}; "
+            "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
     # Review r1-8: the witness lands in a git-tracked cursor, so it names the
@@ -3489,6 +3547,7 @@ def _resolve_member(
         offered=evidence_map,
         state_value=state_value,
     )
+    verified = {**verified, **_take_unobserved()}
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
     updated = _with_step(
@@ -3623,6 +3682,7 @@ def resolve_cmd(
         raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
+    _UNOBSERVED.set(None)
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -3807,6 +3867,7 @@ def resolve_cmd(
         offered=evidence_map,
         state_value=state_value,
     )
+    verified = {**verified, **_take_unobserved()}
     if verified:
         # Reached by `deliver`'s `tests` evidence (debug journal C5) — the first
         # obligation a flat unit can carry, since `review` needs a phase.

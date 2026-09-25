@@ -43,6 +43,20 @@ usage_app = typer.Typer(
 )
 
 
+@usage_app.callback()
+def _usage_group() -> None:
+    """Runs on the harness host (spec 2026-09-25 §5.B.6): refused from inside
+    a devcontainer-mode workspace, whose transcripts are on the host."""
+    from fr.commands.common import resolve_repo_root
+    from fr.isolation.where import HostSideError, require_harness_host
+
+    try:
+        require_harness_host(resolve_repo_root(), "usage")
+    except HostSideError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+
+
 def cache_root(env: Mapping[str, str]) -> Path:
     override = env.get(CACHE_ENV)
     return Path(override) if override else Path.home() / ".cache" / "fr" / "usage"

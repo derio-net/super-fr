@@ -34,6 +34,7 @@ from fr.isolation.types import (
     clear_workspace_sentinels,
     list_states,
     load_state,
+    recorded_mode,
 )
 
 isolation_app = typer.Typer(
@@ -351,6 +352,14 @@ def exec(  # noqa: A001 - typer command name
     if not argv:
         _fail(IsolationError("nothing to run — usage: fr isolation exec -- CMD ..."))
         return
+    if recorded_mode(state) == "devcontainer":
+        # `fr run` / `fr usage` run on the harness host (spec 2026-09-25 §5.B.6)
+        from fr.isolation.where import inner_fr_command, refusal
+
+        inner = inner_fr_command(argv)
+        if inner is not None:
+            typer.echo(refusal(state.worktree, inner), err=True)
+            raise typer.Exit(2)
     try:
         # the workspace's recorded mode, never the env (gh#569)
         rc = _target_for(root, state).exec(state, argv)

@@ -109,6 +109,12 @@ TRANSCRIPT_ROOT_ENV = "FR_TRANSCRIPT_ROOT"
 """Override for that root — the whole of this module's configuration surface,
 and what keeps the test suite off the operator's own transcripts."""
 
+UNOBSERVED = "unobserved"
+"""The evidence key a resolve records when a transcript gate could not
+observe (spec 2026-09-25-lean-cost-aware-process §5.B.7): its value names the
+gates, comma-separated. Every gate helper below returns `None` for "could not
+read", never `False`, so the caller can tell the two apart."""
+
 SESSION_ID_ENV = "CLAUDE_CODE_SESSION_ID"
 """Set in every Claude Code tool call. Verified live (2026-09-20) from inside
 a dispatched subagent: the value there is the ORCHESTRATOR's session id, which
