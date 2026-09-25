@@ -3,7 +3,7 @@ run: 2026-09-25-fix-610-closeout-defects
 workflow: fr-goal@1
 branch: fix/610-closeout-defects
 started: '2026-09-25T07:28:08+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -64,7 +64,18 @@ steps:
           returned: '2026-09-25T08:08:57+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-25T08:08:58+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+    main_session:
+      input_tokens: 0
+      cache_creation_input_tokens: 0
+      cache_read_input_tokens: 0
+      output_tokens: 0
+      turns: 0
+      sessions: 1
   implement:
     state: pending
     members:
