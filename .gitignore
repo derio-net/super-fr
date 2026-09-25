@@ -41,3 +41,6 @@ node_modules/
 
 # ad-hoc acceptance report (committed set is report_local.html / report_linked.{html,md})
 docs/acceptance/report.html
+
+# fr deliver suite logs (gh#606)
+.fr-deliver/

@@ -4050,3 +4050,16 @@ rows:
       - super-fr:tests/unit/test_run_evidence.py
     status: ci
     notes: Unit-pinned for both CLI views; check exit remains unchanged.
+  - id: deliver-tests-log-dot-dir
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a log the orchestrator wrote under
+      a dot-directory (e.g. .fr-deliver/tests.log)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-writes-dot-dir-prefix-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
+      test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
+      is this change''s own deliver.'

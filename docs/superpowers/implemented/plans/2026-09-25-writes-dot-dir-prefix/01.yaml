@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Segment-wise redirect-target match in _writes (gh#606)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - deliver-tests-log-dot-dir
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/run/telemetry.py
+  - tests/unit/test_run_telemetry.py
+  - .gitignore
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - packages/fr-opencode-plugin/package.json
+  - plugins/*/.claude-plugin/plugin.json
+  - .claude-plugin/marketplace.json
+  - uv.lock
+  estimate_lines: 80
+tasks:
+- number: 1
+  title: A dot-directory log is matched (spec §2, §3.1)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_run_telemetry.py add a test that builds a Bash transcript with
+      `tests.unit.transcript_sessions.ran_at(root, "2026-09-21T16:05:00.000Z", session_id="s-b",
+      log=".fr-deliver/tests.log", until="2026-09-21T16:09:00.000Z")` (the `_bash_env` helper passes
+      kwargs through) and asserts `orchestrator_wrote_since(env, Path("/repo/.fr-deliver/tests.log"),
+      "2026-09-21T16:00:00+00:00")` returns that one window. Run
+      `uv run pytest tests/unit/test_run_telemetry.py -q --no-cov` and confirm it fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/run/telemetry.py rewrite the relative branch of `_writes`:
+      `parts = PurePosixPath(target).parts`, drop leading ".." segments, and match iff `parts` is
+      non-empty and `log.parts[-len(parts):] == parts`. The absolute branch is unchanged. Update the
+      `_WRITE_TARGET` docstring/comment to state the leading-".." leniency is deliberate (spec §2).
+      Re-run the test file; it passes.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: a parametrized test pins spec §2 directly on `_writes`. Matches against
+      `/repo/.fr-deliver/tests.log`: `.fr-deliver/tests.log`, `./.fr-deliver/tests.log`, `tests.log`.
+      Matches against `/repo/x.log`: `x.log`, `./x.log`, `../x.log`. Non-matches:
+      `fr-deliver/tests.log` against `/repo/.fr-deliver/tests.log`, `foo/tests.log` against
+      `/repo/xfoo/tests.log`, `a/../b.log` against `/repo/b.log`, `..` against `/repo/x.log`.
+      Use shell commands like `pytest > <target>`.
+      Run ruff format + ruff check + mypy on packages/fr/src; all green.
+- number: 2
+  title: Ignore the deliver log dir and bump the patch version
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Add `.fr-deliver/` to .gitignore (spec §3.3, spec-review s1); confirm with
+      `git check-ignore .fr-deliver/tests.log`.
+  - id: P1.T2.S2
+    text: |-
+      `uv run --no-project python scripts/bump-version.py patch`, then
+      `uv run --no-project python scripts/bump-version.py --check`; commit the manifests and uv.lock.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-24T22:49:08+00:00'
+      note: 'red: test_a_relative_dot_directory_log_is_matched fails ([] != window)'
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-24T22:49:21+00:00'
+      note: 'green: segment-wise match in _writes; 54 passed'
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-24T22:49:37+00:00'
+      note: 10 spec-§2 pins (redirect + tee -a); 64 passed; ruff format/check + mypy
+        green
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-24T22:49:41+00:00'
+      note: git check-ignore confirms .gitignore:46
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-24T22:49:55+00:00'
+      note: 4.20.0 -> 4.20.1; bump-version --check ok
+  completion:
+    at: '2026-09-24T22:49:56+00:00'
+    note: null
+    observed_prs: []
