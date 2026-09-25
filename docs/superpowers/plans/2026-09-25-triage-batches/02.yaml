@@ -143,9 +143,9 @@ state:
       ticked_at: '2026-09-25T21:12:47+00:00'
       note: null
     P2.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:12:49+00:00'
+      note: triage suite green (279 passed); refactor recorded in p2-refactor-t3
     P2.T4.S1:
       state: ' '
       ticked_at: null
