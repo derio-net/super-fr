@@ -37,7 +37,7 @@ chosen model, and flagged that both batches would touch
 | d3 | On a behind or conflicting PR: update from main, wait for CI, merge; stop on a real conflict and name it. Never resolve a conflict, **except** one confined to the repo's declared version files (d4). |
 | d4 | Version bumps are reserved per batch at dispatch time, so each run bumps to its final number early and CI builds it early. |
 | d5 | `batch merge --yes` blocks in the foreground while CI runs; Ctrl-C and re-run resumes. |
-| d6 | Forge writes go through `GhClient` where it already covers the operation; merge-only operations are GitHub-only with a declared refusal elsewhere. A forge parity matrix is its own spec (gh#611). |
+| d6 | Every forge operation a batch verb performs goes through fr's forge adapter, `GhClient` via `fr.hostclient.client_for_backend` (§3.J). New operations are implemented for GitHub; the glab/tea adapters declare each one unsupported. `collect` stays on triage's own GitHub-only `Forge`; moving it, and filling the gaps, is gh#611. |
 | d7 | A dispatch is made visible on the forge: the existing `fr:in-progress` label, one marker comment, and an early draft PR carrying the `Closes` lines. |
 
 ## 3. Design
@@ -108,7 +108,7 @@ event becomes the last one. `abandoned` releases its members, like `partial`.
 branch lookup below; when several match, the highest PR number wins (a
 re-dispatch opens a new PR). A merged PR whose body lost every `Closes` line
 is linked to no member, so for each batch at `dispatched`, `collect` also runs
-one `gh pr list --head <branch> --state all` and stores the result in
+one `Forge.list_prs_by_head(repo, branch)` (all states) and stores the result in
 `Facts.batch_prs`. `collect` already reads `judgements.yaml` (to view judged
 keys that are no longer open), so it knows the branches.
 
@@ -168,7 +168,9 @@ refused by that message.
    - for each member: key, title, `detail`, `note`; then `rationale`
    - branch `feat/batch-<id>`
    - "Open a draft PR as soon as the spec is committed. Its body contains
-     `Closes <owner>/<repo>#<n>` for every member."
+     `<closing ref>` for every member." The reference comes from the adapter
+     (`GhClient.closing_ref(repo, number)`, §3.J), `Closes <owner>/<repo>#<n>`
+     on GitHub, so the brief never hardcodes one forge's syntax.
    - "Bump the version to `<reserved>`" (only when reserved)
    - "Use `<model>` for every subagent and every model tier"
    - "Do not name any member issue as a phase `tracking_issue` in the plan"
@@ -301,8 +303,8 @@ is the same for every runner) writes to each member issue through `GhClient`:
    `<!-- fr-batch:<repo>/run/batch-<id> -->`, then: "Dispatched as batch
    `<id>` (<title>), with <other members>. Branch `feat/batch-<id>`." No pane
    id, host, or other local detail. Before posting, the engine lists the
-   issue's comments (the new `Forge.list_issue_comments`, §3.F Facts;
-   GitHub-only like the rest of triage collect) and skips the post when a
+   issue's comments (`GhClient.list_issue_comments`, §3.J) and skips the
+   post when a
    marker comment for this item id exists, which makes `--repair` idempotent.
 
 The brief's early draft PR does the rest: GitHub links it in each issue's
@@ -358,7 +360,9 @@ No ids: every batch at stage `pr-open`.
 - `Issue` gains `dispatch_marker_at` (§3.E); `Facts` gains `batch_prs` (§3.A)
   and `config` (§3.I).
 - The `Forge` protocol gains `list_issue_comments(repo, number)` and
-  `list_prs_by_head(repo, branch)`; `GhForge` implements both.
+  `list_prs_by_head(repo, branch)`. `GhForge` implements both by delegating to
+  the new `RealGhClient` methods of the same names (§3.J), so each operation
+  has one GitHub implementation, whether collect or a batch verb calls it.
 
 Collect's extra calls are bounded: one per `fr:in-progress` issue, one per
 `dispatched` batch, and one config read per repo.
@@ -373,8 +377,9 @@ steps: that is the conflict prediction, shown before anything merges.
 
 1. Re-read the PR from the forge. Stop the queue if it is a draft, has failing
    required checks, or its head moved since the plan was printed.
-2. Up to date, green, and its version is its slot number → `gh pr merge <n> --<repo default method>
-   --match-head-commit <sha>`. Never `--admin`. A protection refusal (e.g. a
+2. Up to date, green, and its version is its slot number →
+   `GhClient.pr_merge(repo, n, head_sha=<sha>, method=<repo default>)` (on
+   GitHub: `gh pr merge <n> --<method> --match-head-commit <sha>`). Never `--admin`. A protection refusal (e.g. a
    required review) stops the queue and is reported verbatim.
 3. **Needs a change** (behind main, or 3b: its version is not its slot
    number) → create a scratch worktree of the PR branch under
@@ -400,12 +405,11 @@ The scratch worktree sits outside every repo on purpose: merge edits branches
 that other runs own, which fr-isolation forbids in the base clone, and a
 batch's own workspace may have a live session in it.
 
-**Forges.** Merge needs operations `GhClient` lacks (PR files, required-check
-state, merge with head match, check wait). They are added for GitHub only. On
-gitlab/gitea `batch merge` exits 2 with "batch merge is not supported on
-<backend> (gh#611)". Never a silent no-op. (Today no non-GitHub triage can
-exist at all, since `collect`'s only `Forge` is `GhForge`; the refusal is for
-when that changes.)
+**Forges.** Merge's forge operations (required checks, merge with head match,
+PR re-read) are adapter methods (§3.J). On gitlab/gitea they raise
+`UnsupportedForgeOperation`, and `batch merge` exits 2 with its message. Never a
+silent no-op. (Today no non-GitHub triage can exist at all, since `collect`'s
+only `Forge` is `GhForge`; the refusal is for when that changes.)
 
 ### 3.G Board
 
@@ -449,6 +453,39 @@ the version `source`, and merge's scratch worktree. So:
   use the version at that moment, not at the last collect.
 - For an `--org` triage, each batch belongs to one repo; its verbs need a
   checkout of that repo, and `--checkout` is how the operator gives one.
+
+### 3.J The forge adapter
+
+fr's forge adapter is the `GhClient` protocol (`fr/ghclient.py`; the name
+predates the other backends), built by `fr.hostclient.client_for_backend`
+into `RealGhClient`, `RealGlabClient` or `RealTeaClient`. Every forge operation
+a batch verb performs goes through it. No batch module calls `gh`, `glab` or
+`tea` directly, and none calls triage's `Forge` (that protocol serves `collect`
+only).
+
+Operations batches use that the adapter **already has**, on all three backends:
+`edit_issue_labels`, `comment_issue`, `ensure_labels`.
+
+Operations this spec **adds** to the protocol:
+
+| Method | Used by | GitHub | gitlab / gitea |
+|---|---|---|---|
+| `list_issue_comments(repo, number)` | §3.E marker check, `--repair` | implemented | unsupported |
+| `list_prs_by_head(repo, branch)` | §3.A batch PR lookup | implemented | unsupported |
+| `pr_view(repo, number)` → state, draft, head oid, mergeable | §3.F step 1 | implemented | unsupported |
+| `pr_required_checks(repo, number)` / `wait_required_checks` | §3.F steps 1 and 3 | implemented | unsupported |
+| `pr_merge(repo, number, head_sha, method)` | §3.F step 2 | implemented | unsupported |
+| `closing_ref(repo, number)` | §3.C brief | implemented | unsupported |
+
+"Unsupported" is a typed `UnsupportedForgeOperation(op, backend, "gh#611")`
+raised by the glab/tea adapters, which the batch verbs turn into exit 2 with
+its message. It is declared in the adapter, one method at a time, rather than
+as a `backend != "github"` check scattered through the verbs. That is the
+surface gh#611's parity table is meant to find: each unsupported cell is a
+method that raises, readable without running anything.
+
+GitHub gets the attention for now (operator, 2026-09-25). `collect` stays on
+triage's own `Forge`; whether it moves onto this adapter is decided in gh#611.
 
 ## 4. Error handling
 
@@ -537,7 +574,7 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
    tab labels and names; `existing_dispatches` matches by tab label.
 7. **Dispatch without `--yes`** (unit): prints the plan, writes nothing to the
    file, the forge or the runner.
-8. **Forge writes, gates and repair** (unit, `GhClient` and `Forge`
+8. **Forge writes, gates and repair** (unit, the `GhClient` adapter
    faked): label and marker comment on every member only after
    `runner.dispatch` succeeds; a failed dispatch writes nothing; the comment
    carries no handle; `dispatch` is refused at `dispatched`/`pr-open` whether
@@ -580,8 +617,13 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     last change to `.fr/triage.yaml`; the version source is read from
     `origin/<default>`, not the working tree.
 18. **Migration exemption** (unit): the pinned exemption test still passes.
-19. **Board** (unit): the Batches section renders each batch's members,
+19. **Forge adapter** (unit): each method §3.J adds is implemented by
+    `RealGhClient` (subprocess faked) and raises `UnsupportedForgeOperation`
+    naming gh#611 on `RealGlabClient` and `RealTeaClient`; `GhForge`'s two new
+    methods delegate to `RealGhClient`; a tripwire fails if any batch module
+    invokes `gh`, `glab` or `tea` directly or imports triage's `Forge`.
+20. **Board** (unit): the Batches section renders each batch's members,
     derived stage, reserved version, PR, and for `pr-open` batches the planned
     merge order with shared files; members carry a batch chip.
-20. **Live walk** (manual, post-implementation): create, dispatch through
+21. **Live walk** (manual, post-implementation): create, dispatch through
     `fr-herdr`, and merge two real super-fr batches with overlapping files.

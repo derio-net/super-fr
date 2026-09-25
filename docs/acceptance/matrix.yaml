@@ -4159,7 +4159,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
     levels: {}
     status: not-implemented
-    notes: Test Plan items 8-10.
+    notes: Test Plan items 8-10 and 19 (forge adapter).
   - id: triage-batch-version-reserve
     capability: Backlog triage
     acceptance: Each dispatched batch bumps to a version reserved in merge order, so
@@ -4179,4 +4179,4 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
     levels: {}
     status: not-implemented
-    notes: Test Plan items 12-15 and 19 (board); live walk (item 20) owed post-implementation.
+    notes: Test Plan items 12-15 and 20 (board); live walk (item 21) owed post-implementation.

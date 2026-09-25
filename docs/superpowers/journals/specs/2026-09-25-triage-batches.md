@@ -144,3 +144,8 @@ Verified s1-s16 (s7, s8, s9, s12, s15 partial or wrong in effect); findings r2-1
 ### r2-13-resolved · finding [out-of-scope] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
 
 True and pre-existing; the r2-1 open-PR join fills these fields for linked open PRs as a side effect, so no separate issue is needed.
+
+<!-- fr:journal kind=decision scope=spec id=d8-forge-adapter created=2026-09-25T20:16:44 -->
+### d8-forge-adapter · decision · All batch forge ops go through the GhClient adapter; new ops GitHub-only, declared unsupported on glab/tea; collect stays on triage Forge until gh#611
+
+Operator (2026-09-25): the forge should be generic. Asked whether collect should move onto GhClient here: no, keep focused, GitHub gets the attention for now; gh#611 should find this surface and decide concretely.
