@@ -86,7 +86,7 @@ steps:
       phase/4:
         state: manual
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T17:23:07+00:00'
           agent: a22937c41c887db75
@@ -94,12 +94,19 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
+          returned: '2026-09-25T17:57:28+00:00'
+          outcome: done
           estimate:
             journal_entries: 1
             journal_lines: 6
             handoff_chars: 412
             spec_bytes: 30323
             plan_bytes: 35422
+          measured:
+            input_tokens: 258
+            cache_creation_input_tokens: 254512
+            cache_read_input_tokens: 21186838
+            output_tokens: 1905
   journal-check:
     state: pending
   deliver:
