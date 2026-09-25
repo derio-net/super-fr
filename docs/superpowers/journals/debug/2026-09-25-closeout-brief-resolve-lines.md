@@ -9,3 +9,8 @@ First live use of `fr pickup --run 2026-09-25-fix-610-closeout-defects` (houseke
 ### 022b8fb20d26 · root-cause · closeout_brief emits resolves before the housekeeping workspace and without --note
 
 packages/fr/src/fr/run/closeout.py:165-174 appends the out-of-scope resolve lines before `fr status` and the `fr isolation up --branch chore/archive-…` line (186-190); _out_of_scope_lines (107-108) formats `fr journal resolve … --state deferred --tracked-by <#N>` with no --note, while journal_cmd.resolve's --note is typer.Option(...) (required). The existing ordering test pinned the wrong order (resolves < status < archive) and no test ran the lines against the CLI signature.
+
+<!-- fr:journal kind=finding scope=debug id=29e4d3f7b5f3 created=2026-09-25T19:42:06 state=fixed -->
+### 29e4d3f7b5f3 · finding [fixed] · resolves after isolation up, runnable as printed; PR line guarded
+
+closeout.py: out-of-scope resolve lines now sit between `fr isolation up --branch chore/archive-<slug>` (or `chore/closeout-<run>` with no plan) and `fr archive`; each carries `--tracked-by '<#N>' --note 'Filed at closeout as <#N>.'` (quoted: a bare #618 is a shell comment). Failing-first tests in tests/unit/test_run_closeout.py: ordering (red on old order), parse-against-click-signature (red on missing --note, and on the unquoted #), no-plan edge; review follow-up guards the housekeeping-PR line (revert-proven). Full suite 5279 passed.
