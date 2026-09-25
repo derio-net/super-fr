@@ -234,3 +234,8 @@ Per archived run: if any session the cursor names is readable here, the backfill
 ### p2-parity-modes · decision · Parity modes: harness state stays required, modes refine; main-session-cost row retired for usage-capture (phase 2)
 
 HarnessState keeps its required state (what fr harness parity --check compares against registration files, which do not vary by mode) and gains optional modes {host-worktree|devcontainer|external: {state, scope_note}}; state_in(mode) falls back to the harness state. usage-capture is partial on all three harnesses until phase 4's live walk (claude-code, opencode), Hermes stays partial (implemented, not live-verified). main-session-cost was removed rather than re-described: it named StepRecord.main_session, which run 7 deleted. Also flipped usage-readable-on-any-host to ci (test_run_cost_cmd's checkout-that-never-ran-it test) beyond the two rows the plan named - the acceptance rule requires it once a test verifies a row. AGENTS.md repo shape updated for fr/usage persistence and the host-side rule.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r20 created=2026-09-25T21:40:21 phase=2 state=open review_scope=in -->
+### p2-r20 · finding [open] (reviewer: in scope) · In-process refusal blocks host-worktree pods/CI: mode: worktree + container evidence is not devcontainer (phase 2)
+
+isolation/where.py:122, masked by tests/conftest.py:162-175. Spec §5.B.6 amended: marker records target; refuse iff target devcontainer + container evidence.
