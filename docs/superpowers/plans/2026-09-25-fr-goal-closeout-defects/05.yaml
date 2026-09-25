@@ -1,0 +1,105 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr-goal skill closeout prose, mirrors, end-to-end closeout proof (spec §3.C/§3.D,
+    Test Plan 4)
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - closeout-fr-commits-own-records
+  - closeout-pickup-run-handoff
+  tier: standard
+  files:
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-isolation/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - docs/explainers/**
+  - tests/integration/test_closeout_e2e.py
+  - tests/unit/test_closeout_e2e.py
+  - docs/acceptance/**
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: A delivered, squash-merged run closes out without fr refusing its own state
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED→GREEN (the behaviour exists after phases 1-4; this test proves the
+      combination): tests/unit/test_closeout_e2e.py with a bare "origin" repo
+      whose default is `master` and a clone on a feature branch: fr run
+      start → … → resolve deliver (use the minimal shape/evidence fixtures
+      test_run_cli.py already has, or a one-step repo-override workflow), push,
+      squash-merge the branch into origin/master by plumbing, then assert
+      `fr isolation verify-merge --branch <b>` (no flags, host-worktree
+      target) exits 0, `fr archive <plan-dir>` does not refuse as dirty, and
+      the reap-hazard check for the branch's worktree reports no
+      dirty-worktree or unlanded-content hazard caused by fr's records. If a
+      piece genuinely needs a live forge, pin that piece at unit level and
+      journal why. Run until green.
+- number: 2
+  title: fr-goal skill tells the closeout story truthfully
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Edit plugins/super-fr/skills/fr-goal/SKILL.md §8: replace "commit plan +
+      journals" with a clean-status check (fr commits its own writes; commit
+      hand edits), add "after resolving `deliver`, `git push` so the PR
+      carries the final cursor", and relay fr's `fr pickup --run <id>` handoff
+      line to the operator verbatim. Rewrite "Post-merge close-out": it runs
+      in a NEW session from `fr pickup --run <id>`'s brief, not in the
+      delivering session; `verify-merge` needs no `--default-branch`. Keep the
+      section headings and within the tool/argument-neutrality rules
+      (`uv run pytest tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov`).
+  - id: P5.T2.S2
+    text: |-
+      Regenerate mirrors: `uv run --no-project python scripts/sync-opencode.py`
+      AND `uv run --no-project python scripts/sync-hermes.py`; then both
+      `--check`; run the three opencode/hermes tripwires
+      (test_tripwire_opencode_skills_sync.py, test_tripwire_opencode_instructions_sync.py,
+      test_tripwire_hermes_skills_sync.py) green.
+  - id: P5.T2.S3
+    text: |-
+      grep docs/explainers/*.md for "close-out|closeout|verify-merge|
+      default-branch". If a page describes the closeout, update the .md and
+      re-render per .claude/rules/explainers-currency.md (`uv run --isolated
+      --no-project …` from `/`, byte-identical check first); if none does,
+      journal that no explainer describes it.
+- number: 3
+  title: Acceptance rows move with their evidence
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      For each of closeout-verify-merge-default-branch,
+      closeout-wrapper-ships-with-first-plan, closeout-fr-commits-own-records,
+      closeout-pickup-run-handoff: `uv run fr acceptance set-status --id <row>
+      --status ci --level unit=super-fr:<test file> --notes "<which test pins
+      it>"`. Then `uv run fr acceptance check` exits 0.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

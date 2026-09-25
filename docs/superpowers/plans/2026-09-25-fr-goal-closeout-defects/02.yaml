@@ -1,0 +1,130 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The validator wrapper ships with the first plan; neutral remedy (spec §3.B)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - closeout-wrapper-ships-with-first-plan
+  tier: standard
+  files:
+  - packages/fr/src/fr/plan_validator_wrapper.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/commands/init_cmd.py
+  - packages/fr/src/fr/isolation/local.py
+  - tests/unit/test_plan_ops.py
+  - tests/unit/test_init_cmd.py
+  - tests/unit/test_isolation_cmd.py
+  - tests/unit/test_isolation.py
+  - tests/unit/test_retired_marketplace_name.py
+  - tests/unit/test_plan_validator_wrapper*.py
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: fr init validator-wrapper is the harness-neutral installer
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests (tests/unit/test_init_cmd.py, create it if absent, using
+      CliRunner on fr.cli.app in a tmp git repo): `fr init validator-wrapper`
+      writes scripts/validate-plans.sh with mode 0755 and
+      is_super_fr_validator_wrapper() true, stages it (`git diff --cached
+      --name-only` lists it), exit 0; a foreign file at that path is left
+      byte-identical and the command exits 2 naming it; a second run is a
+      no-op exit 0. Assert `plan_validator_wrapper.REPAIR_COMMAND ==
+      "fr init validator-wrapper"`. Run them: fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add a `validator-wrapper` command to commands/init_cmd.py calling
+      `ensure_validator_wrapper(repo_root)` (plan_validator_wrapper.py:55)
+      then `git add -- scripts/validate-plans.sh`; print the commit
+      instruction. Set `REPAIR_COMMAND = "fr init validator-wrapper"`. Keep
+      tests/unit/test_retired_marketplace_name.py green (it pins the single
+      constant — update its expectations only where they asserted the old
+      bash path). Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: delete `validate_plan_repo_validator` in
+      plan_validator_wrapper.py if grep confirms it still has no caller in
+      packages/*/src (dead code per spec review); tests green.
+- number: 2
+  title: Guard messages name the neutral command and tell the truth
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: update tests/unit/test_isolation_cmd.py
+      test_up_plan_repo_with_uncommitted_validator_wrapper_exits_2 (~L421) and
+      any test_isolation.py assertion on the guard text to expect: "has
+      docs/superpowers/plans in <ref> but no scripts/validate-plans.sh there",
+      "fr init validator-wrapper", and NOT "in the working tree" nor
+      "~/.claude". Run: fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: reword `_ensure_validator_wrapper_in_ref` (local.py ~L1868-1899)
+      and `_ensure_validator_wrapper_in_worktree` (~L1901-1911) messages;
+      both interpolate REPAIR_COMMAND. Tests green.
+- number: 3
+  title: fr plan create installs and stages a missing wrapper
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_plan_ops.py: `plan_ops.create(...)` in a tmp git
+      repo with no scripts/validate-plans.sh leaves the wrapper on disk (0755)
+      and in the staged set together with the plan folder; with a foreign
+      file present, create succeeds, the file is byte-identical and a warning
+      is surfaced (return value or logged — pick the shape create already
+      uses for non-fatal notes); with the super-fr wrapper already present
+      nothing about it changes. Run: fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: in plan_ops.create (~L159-274), after the folder is written and
+      when repo_root is a git repo, call ensure_validator_wrapper(repo_root)
+      (catch its foreign-file refusal → warning) and append the wrapper path
+      to `written` when it changed, so `_stage(repo_root, written)` stages it.
+      Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: run `uv run pytest tests/unit/test_plan_ops.py
+      tests/unit/test_plan_cmd.py tests/unit/test_isolation.py -q --no-cov`;
+      tidy any duplication between scaffold.py's wrapper handling
+      (~L532-539) and create's, without changing scaffold's behaviour.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

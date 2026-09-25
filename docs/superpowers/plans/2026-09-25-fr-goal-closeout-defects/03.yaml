@@ -1,0 +1,172 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr commits its own record writes (spec §3.C)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - closeout-fr-commits-own-records
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/commit.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/plan_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/run/adopt.py
+  - packages/fr/src/fr/records_commit.py
+  - tests/unit/test_migration_commit.py
+  - tests/unit/test_records_commit.py
+  - tests/unit/test_run_cli.py
+  - tests/unit/test_plan_cmd.py
+  - tests/unit/test_journal_cmd.py
+  - tests/**/conftest.py
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: commit_paths — the generic path-scoped committer
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_records_commit.py (tmp git repos, a feature branch
+      off an initial commit, origin/HEAD set up the way
+      test_migration_commit.py sets it): `commit_paths(root, [p], msg)`
+      commits exactly p with msg; an unrelated pre-staged file stays staged
+      and uncommitted; on the default branch it returns
+      CommitOutcome(committed=False) naming the default branch and leaves p
+      uncommitted; detached HEAD, no HEAD, and a held .git/index.lock each
+      return committed=False with a reason; empty paths → committed=False;
+      a path with no changes → committed=False, no empty commit. Run: fail.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: extract commit_migration's body (artifacts/commit.py:460-~590)
+      into `commit_paths(repo_root, paths, message) -> CommitOutcome` in the
+      same module; commit_migration builds its message and delegates.
+      tests/unit/test_migration_commit.py must pass UNMODIFIED. New tests green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: make the refusal reasons generic ("the files are in your
+      working tree, uncommitted") where they said "migrated", keeping
+      test_migration_commit.py's assertions passing (adjust wording only if a
+      test pins it, and say so in the phase's journal).
+- number: 2
+  title: One CLI-layer hook — collect written record paths, commit once, never fail
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests for a small module fr/records_commit.py:
+      `commit_records(repo_root, paths, message)` calls commit_paths, and on
+      committed=False or ANY exception prints one stderr line
+      `fr: not committed (<reason>): <paths>` and returns normally (never
+      raises); on success prints `fr: committed <short-sha> <message>` to
+      stderr. Run: fail.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement fr/records_commit.py; tests green.
+- number: 3
+  title: fr run writes commit the cursor (+ any journal it appended)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_run_cli.py, in a tmp git repo on a feature branch
+      (build the fixture once in conftest or the test module): after
+      `fr run start`, `resolve`, `advance`, `claim` each, `git status
+      --porcelain -- docs/superpowers/runs` is empty and HEAD's subject
+      starts `chore(fr): run <id> —` touching only fr's paths; `fr run
+      resolve --step brainstorm --no-questions --reason x` produces ONE commit
+      containing both the run file and the spec journal (run_cmd.py:872);
+      on the default branch the write lands and no commit is made. Run: fail.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: in commands/run_cmd.py give each mutating command
+      (start/adopt/advance/resolve/claim) one exit path that calls
+      commit_records with every record path it wrote (run file via
+      run_path(); the spec journal path when run_cmd.py:872 appended). Do it
+      at the CLI layer; save_run_state and adopt.py's library function stay
+      pure. Message `chore(fr): run <id> — <verb> <step>[ <item>] <state>`.
+      Tests green; then run the whole run suite
+      `uv run pytest tests/unit -q --no-cov -k "run"` and fix any test that
+      asserted an uncommitted cursor (adjust the assertion, never the
+      behaviour, and journal each adjusted test).
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: if several commands repeat the collect-then-commit shape,
+      centralise it (a context manager or a callback in run_cmd.py);
+      run-suite green.
+- number: 4
+  title: fr plan and fr journal writes commit their paths
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests/unit/test_plan_cmd.py + tests/unit/test_journal_cmd.py in a
+      tmp git repo on a feature branch: `fr plan create`, `fr plan edit
+      --tick`, `--complete`, and `fr journal add` / `resolve` each leave their
+      paths clean in `git status --porcelain` and add one `chore(fr): plan
+      <slug> — <verb>` / `chore(fr): journal <scope>/<slug> — <kind> <id>`
+      commit; plan create's commit includes the validator wrapper when phase 2
+      installed it. Run: fail.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: in commands/plan_cmd.py and commands/journal_cmd.py call
+      commit_records with the paths the operation wrote (plan_ops already
+      returns / stages them; journal_cmd knows its journal path). plan_ops
+      stays staging-only — tests/unit/test_plan_ops.py's staged-not-committed
+      pin must still pass. Tests green.
+  - id: P3.T4.S3
+    text: |-
+      REFACTOR + quality gate: `uv run pytest -q --no-cov` (full suite, into
+      a log file, per the brief's long_commands rule); fix any suite-wide
+      fallout from auto-commits (e.g. tests that run fr in a repo on its
+      default branch, or assert a dirty tree); `uv run ruff check
+      packages/ tests/` and `uv run mypy packages/fr/src` clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

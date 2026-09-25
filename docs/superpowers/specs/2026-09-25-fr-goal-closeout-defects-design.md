@@ -249,3 +249,9 @@ there is no post-merge operator step beyond the normal closeout.
 Added `not-implemented` at brainstorm and moved as the tests land:
 `closeout-verify-merge-default-branch`, `closeout-wrapper-ships-with-first-plan`,
 `closeout-fr-commits-own-records`, `closeout-pickup-run-handoff`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-25-fr-goal-closeout-defects | `derio-net/super-fr` | `2026-09-25-fr-goal-closeout-defects` | — |
