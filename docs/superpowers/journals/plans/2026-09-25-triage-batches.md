@@ -75,3 +75,8 @@ Pre-existing gap in test_import_direction.py, not caused by this change.
 
 <!-- fr:journal kind=finding scope=plan id=r1-6 created=2026-09-25T20:59:08 phase=1 state=open review_scope=out -->
 ### r1-6 · finding [open] (reviewer: out of scope) · Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-6-resolved created=2026-09-25T20:59:09 state=open resolves=r1-6 out_of_scope=true answered_by=agent -->
+### r1-6-resolved · finding [out-of-scope] · resolves r1-6: Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take
+
+Follows from the spec's decision to register herdr under fr.runners (d2); herdr refuses phase units in can_dispatch, so the items are refused visibly, not lost. Listed in the PR for the operator.
