@@ -123,15 +123,16 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
     i_verify = idx(f"fr isolation verify-merge --branch {BRANCH}")
     i_stop = idx("STOP")
     i_test_plan = idx(f"Test Plan: {SPEC_REL}")
+    i_status = idx("fr status")
+    i_up = idx(f"fr isolation up --branch chore/archive-{SPEC_SLUG}")
     i_spec_finding = idx(
         f"fr journal resolve --scope spec --slug {SPEC_SLUG} --id sf1 "
-        "--state deferred --tracked-by <#N>"
+        "--state deferred --tracked-by '<#N>'"
     )
     i_plan_finding = idx(
         f"fr journal resolve --scope plan --slug {SPEC_SLUG} --id pf1 "
-        "--state deferred --tracked-by <#N>"
+        "--state deferred --tracked-by '<#N>'"
     )
-    i_status = idx("fr status")
     i_archive = idx(f"fr archive {PLAN_REL}")
     i_housekeeping_pr = idx("housekeeping PR")
     i_down = idx(f"fr isolation down --branch {BRANCH}")
@@ -144,13 +145,68 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
         < i_verify
         < i_stop
         < i_test_plan
+        < i_status
+        < i_up
         < i_spec_finding
         < i_plan_finding
-        < i_status
         < i_archive
         < i_housekeeping_pr
         < i_down
     )
+
+
+def _resolve_lines(brief: str) -> list[str]:
+    return [ln.strip() for ln in brief.splitlines() if "fr journal resolve" in ln]
+
+
+def test_closeout_brief_runs_every_resolve_inside_the_housekeeping_workspace(
+    tmp_path: Path,
+) -> None:
+    """gh#621 (1): the brief is run from the base clone on the default branch,
+    where fr writes a journal record but deliberately commits nothing. A
+    resolve line printed before `fr isolation up --branch chore/archive-…`
+    leaves its record stranded, uncommitted, on main — never reaching the
+    housekeeping PR or the journal `fr archive` moves."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _spec_out_of_scope_finding(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+
+    brief = closeout_brief(tmp_path, _state())
+
+    i_up = brief.index("fr isolation up --branch chore/archive-")
+    i_archive = brief.index(f"fr archive {PLAN_REL}")
+    positions = [brief.index(line) for line in _resolve_lines(brief)]
+    assert len(positions) == 2
+    assert all(i_up < pos < i_archive for pos in positions), brief
+
+
+def test_closeout_brief_resolve_lines_parse_against_the_real_cli(tmp_path: Path) -> None:
+    """gh#621 (2): each printed resolve line must be runnable as printed once
+    its placeholders are filled in. Parsed against the real `fr journal
+    resolve` click signature, so the NEXT required option added there fails
+    here too — not just `--note`."""
+    import shlex
+
+    import typer
+    from fr.commands.journal_cmd import journal_app
+
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _spec_out_of_scope_finding(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+
+    brief = closeout_brief(tmp_path, _state())
+    resolve_cmd = typer.main.get_command(journal_app).commands["resolve"]  # type: ignore[attr-defined]
+
+    lines = _resolve_lines(brief)
+    assert lines
+    for line in lines:
+        argv = shlex.split(line.replace("<#N>", "#618"), comments=True)
+        assert argv[:3] == ["fr", "journal", "resolve"], line
+        ctx = resolve_cmd.make_context("resolve", argv[3:])  # raises on a missing option
+        assert ctx.params["tracked_by"] == "#618"
+        assert ctx.params["note"]
 
 
 def test_closeout_brief_names_the_checkout_to_run_it_from(tmp_path: Path) -> None:
@@ -408,3 +464,32 @@ def test_primary_checkout_falls_back_to_repo_root_for_a_bare_repository(tmp_path
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
 
     assert primary_checkout(bare) == bare
+
+
+def test_closeout_brief_without_a_plan_still_resolves_off_the_default_branch(
+    tmp_path: Path,
+) -> None:
+    """gh#621 (1), the no-plan edge: with no plan there is no `chore/archive-`
+    branch, but an out-of-scope spec finding still needs a workspace to be
+    committed in — never the default branch the brief is run from."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _spec_out_of_scope_finding(tmp_path)
+    state = RunState(
+        run="r1",
+        workflow="fr-goal@1",
+        branch=BRANCH,
+        started="2026-09-30T00:00:00Z",
+        cursor="deliver",
+        steps={
+            "brainstorm": StepRecord(state="done", emitted={"spec": SPEC_REL}),
+            "deliver": StepRecord(state="done", emitted={"pr": PR_URL}),
+        },
+    )
+
+    brief = closeout_brief(tmp_path, state)
+
+    i_up = brief.index("fr isolation up --branch chore/closeout-r1")
+    i_resolve = brief.index("fr journal resolve --scope spec")
+    i_push = brief.index("git push -u origin chore/closeout-r1")
+    assert i_up < i_resolve < i_push
+    assert "fr archive" not in brief
