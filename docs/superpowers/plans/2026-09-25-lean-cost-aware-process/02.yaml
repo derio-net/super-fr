@@ -267,9 +267,13 @@ state:
       ticked_at: '2026-09-25T19:30:56+00:00'
       note: test_harness_parity_modes.py 8 red
     P2.T7.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:30:57+00:00'
+      note: HarnessState.modes + state_in; usage-capture row (per mode, Hermes note
+        incl. hermes-agent#6775, external capture-before-teardown); gates restated
+        per mode; fr-goal-main-session-cost re-pointed (in T4), usage-privacy-no-host-identity
+        / usage-captured-at-deliver / usage-readable-on-any-host -> ci; acceptance
+        check 0; parity --check 0
     P2.T7.S3:
       state: ' '
       ticked_at: null
