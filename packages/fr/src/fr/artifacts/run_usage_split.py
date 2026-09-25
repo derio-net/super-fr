@@ -171,6 +171,16 @@ def _harness(data: dict[str, Any]) -> str:
     return "unknown"
 
 
+def usage_companions(path: Path) -> list[Path]:
+    """The one companion `split_run_usage` may write for the cursor at `path`
+    — its run's usage file, declared before it runs so the gate's
+    uncommitted-changes veto checks it too (p2-r26). A cursor is named for its
+    run id (`docs/superpowers/runs/<run>.yaml`)."""
+    from fr.usage.file import usage_path
+
+    return [usage_path(path.parents[3], path.stem)]
+
+
 def split_run_usage(path: Path) -> list[Path] | None:
     """Rewrite the run cursor at `path` from v6 to v7, moving its figures into
     its usage file. Returns the usage path when one was written."""
@@ -219,6 +229,11 @@ def split_run_usage(path: Path) -> list[Path] | None:
     written: list[Path] = []
     usage_text: str | None = None
     target = usage_path(path.parents[3], str(data["run"]))
+    if target not in usage_companions(path):
+        raise UnconvertibleRunCursorError(
+            f"{path}: its `run:` ({data['run']!r}) does not match its file name, so its "
+            f"usage file is not the one this migration declared; the cursor is left unchanged"
+        )
     if entries:
         try:
             existing = load_usage(target) or UsageFile(run=str(data["run"]))
@@ -250,6 +265,7 @@ RUN_USAGE_SPLIT_MIGRATION = SchemaMigration(
     from_version=6,
     to_version=7,
     fn=split_run_usage,
+    companions=usage_companions,
     description="run cursor: move `estimate`, `measured` and `main_session` into the "
     "run's usage file (`at: migrated`); a cursor it cannot convert is left untouched",
 )
@@ -263,4 +279,5 @@ __all__ = [
     "UnconvertibleRunCursorError",
     "split_run_usage",
     "split_usage",
+    "usage_companions",
 ]

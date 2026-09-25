@@ -808,3 +808,82 @@ def test_a_cursor_with_a_partial_measurement_is_left_byte_identical_while_the_re
     lone_report = run_migrations(alone, dry_run=False)
     assert [f.path for f in lone_report.failed] == [lone]
     assert _unchanged(lone, frozen)
+
+
+# --- companion paths (phase-2 review p2-r26) -------------------------------
+
+
+def _writes_companion(companion: Path):
+    def fn(path: Path) -> list[Path]:
+        companion.parent.mkdir(parents=True, exist_ok=True)
+        companion.write_text("moved: true\n")
+        path.write_text(path.read_text() + "moved_out: true\n")
+        return [companion]
+
+    return fn
+
+
+def test_a_migration_declares_its_companion_paths_so_the_veto_checks_them(
+    tmp_path: Path,
+) -> None:
+    """A companion the operator is editing is held back exactly like the
+    artifact itself: nothing is written, the artifact is that path's failure."""
+    reg = _registry(current_version=2)
+    companion = tmp_path / "docs" / "superpowers" / "usage" / "a.yaml"
+    companion.parent.mkdir(parents=True)
+    companion.write_text("mine: editing\n")
+    reg.register(
+        SchemaMigration(
+            "plan", 1, 2, _writes_companion(companion), companions=lambda p: [companion]
+        )
+    )
+    meta = _plan(tmp_path, "a", version=1)
+    before = _freeze(meta)
+
+    def veto(path: Path) -> str | None:
+        return "has uncommitted changes" if path == companion else None
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg, veto=veto)
+
+    assert [f.path for f in report.failed] == [meta]
+    assert "a.yaml" in report.failed[0].error and "uncommitted" in report.failed[0].error
+    assert _unchanged(meta, before)
+    assert companion.read_text() == "mine: editing\n"
+    assert report.applied == ()
+
+
+def test_a_stamp_failure_after_a_companion_write_reports_the_companion(tmp_path: Path) -> None:
+    """The body and companion were written, the stamp did not take: the
+    failure names what landed, so it is never an unseen uncommitted file."""
+    reg = _registry(current_version=2)
+    companion = tmp_path / "docs" / "superpowers" / "usage" / "a.yaml"
+    reg.register(SchemaMigration("plan", 1, 2, _writes_companion(companion)))
+    meta = _unstamped_plan(
+        tmp_path, "dup", "schema_version: 2\nplan: dup\ntarget_repo: x\nschema_version: 1\n"
+    )
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert [f.path for f in report.failed] == [meta]
+    assert report.failed[0].also_wrote == (companion,)
+
+
+def test_a_stamp_write_that_raises_is_that_artifacts_failure_not_the_runs(
+    tmp_path: Path,
+) -> None:
+    reg = _registry(current_version=2)
+    companion = tmp_path / "docs" / "superpowers" / "usage" / "a.yaml"
+    kind = reg.kinds["plan"]
+
+    def boom(path: Path, version: int) -> None:
+        raise OSError("disk full")
+
+    reg.kinds["plan"] = replace(kind, write_version=boom)  # type: ignore[index]
+    reg.register(SchemaMigration("plan", 1, 2, _writes_companion(companion)))
+    meta = _plan(tmp_path, "a", version=1)
+
+    report = run_migrations(tmp_path, dry_run=False, registry=reg)
+
+    assert [f.path for f in report.failed] == [meta]
+    assert "disk full" in report.failed[0].error
+    assert report.failed[0].also_wrote == (companion,)

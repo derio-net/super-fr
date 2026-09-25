@@ -516,6 +516,8 @@ def _migrate_and_commit(
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
+            for companion in failure.also_wrote:
+                emit(f"    it had already written {_rel(companion, root)} (uncommitted)")
         # PARTIAL SUCCESS is its own outcome and the message says so (review
         # r5-c5). One plan migrated and committed while another failed on a
         # `~=` ceiling is the ordinary shape of a consumer repo mid-upgrade;
