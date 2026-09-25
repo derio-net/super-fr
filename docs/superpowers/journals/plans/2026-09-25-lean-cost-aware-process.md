@@ -104,3 +104,8 @@ test_usage_report.py:232-239 vs spec §7.3.
 ### p1-r13 · finding [open] (reviewer: in scope) · AGENTS.md repo shape has no fr/usage entry (phase 1)
 
 AGENTS.md Repo shape.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12 created=2026-09-25T20:03:30 phase=2 state=open review_scope=out -->
+### p2-r12 · finding [open] (reviewer: out of scope) · UsageRecord.tool_calls targets hold raw commands/paths; phase 2 must serialize an allowlist projection (phase 2)
+
+Filed against phase 2 from the phase-1 review (fr/usage/model.py:44-50); gates phase 2's review. Spec §5.B.2.
