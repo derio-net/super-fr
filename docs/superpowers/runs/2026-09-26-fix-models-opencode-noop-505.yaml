@@ -3,7 +3,7 @@ run: 2026-09-26-fix-models-opencode-noop-505
 workflow: fr-goal@1
 branch: fix/models-opencode-noop-505
 started: '2026-09-25T22:34:58+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -51,8 +51,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-09-25T23:04:47+00:00'
+    state: done
+    at: '2026-09-25T23:05:57+00:00'
     members:
     - implement-phase
     - review-phase
@@ -90,11 +90,18 @@ steps:
           returned: '2026-09-25T23:04:46+00:00'
           outcome: done
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T23:04:47+00:00'
           agent: A9A3D033-444D-483E-BDB6-A2BD8562617E
           harness: opencode
+          returned: '2026-09-25T23:05:57+00:00'
+          outcome: done
+        evidence:
+          review: phase-2-review
+          reviewer: A9A3D033-444D-483E-BDB6-A2BD8562617E
+          findings: none
+          unobserved: reviewer
   journal-check:
     state: pending
   deliver:
