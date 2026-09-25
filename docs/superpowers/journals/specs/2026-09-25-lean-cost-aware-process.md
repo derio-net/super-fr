@@ -54,3 +54,33 @@ From the #604 phase-5 steer: in devcontainer mode fr run ran in the container wi
 ### r-spec · review · Spec review (independent fr-spec-reviewer): 3 findings, all fixed
 
 Reviewer verified the telemetry readers, units.py consumers, pickup_cmd.py:65, run v6 + legacy freeze precedent, fr-goal.yaml emits, fr-isolation-guard.sh:206-215 (host-side cd form already allowed; §5.B.6 updated), parity.yaml shape, plan_ops.py:1804-1871, and the gh#610 dependency.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1 created=2026-09-25T15:06:06 state=open review_scope=in -->
+### sr-1 · finding [open] (reviewer: in scope) · emits: gates only the journal section; ticks/refactor/acceptance/resolves were stated by step id
+
+Spec §5.C.2.1 vs plugins/super-fr/workflows/fr-goal.yaml emits values and fr/workflow/model.py:53. Two incompatible implementations possible.
+
+<!-- fr:journal kind=finding scope=spec id=sr-1-fixed created=2026-09-25T15:06:07 state=fixed resolves=sr-1 -->
+### sr-1-fixed · finding [fixed] · resolves sr-1
+
+§5.C.2.1 now a table: journal/resolves <- journal:<scope>; ticks/refactor <- new plan:ticks token; acceptance <- new acceptance token; both manifests and fr.workflow.artifacts vocabulary gain them (§6).
+
+<!-- fr:journal kind=finding scope=spec id=sr-2 created=2026-09-25T15:06:09 state=open review_scope=in -->
+### sr-2 · finding [open] (reviewer: in scope) · No devcontainer marker value exists; devcontainer and host-worktree both write mode: worktree
+
+Spec §5.B.6 vs fr/isolation/hostworktree.py:9, external.py:104-119.
+
+<!-- fr:journal kind=finding scope=spec id=sr-2-fixed created=2026-09-25T15:06:10 state=fixed resolves=sr-2 -->
+### sr-2-fixed · finding [fixed] · resolves sr-2
+
+In-process check reworded: mode: worktree marker AND container evidence (the external.py checks).
+
+<!-- fr:journal kind=finding scope=spec id=sr-3 created=2026-09-25T15:06:12 state=open review_scope=out -->
+### sr-3 · finding [open] (reviewer: out of scope) · parity.yaml isolation-mode dimension had no stated shape
+
+Spec §5.B.8 vs packages/fr/src/fr/harness/parity.yaml:16-45. Reclassified in scope by the orchestrator: the ambiguity is in this spec's own new requirement.
+
+<!-- fr:journal kind=finding scope=spec id=sr-3-fixed created=2026-09-25T15:06:13 state=fixed resolves=sr-3 -->
+### sr-3-fixed · finding [fixed] · resolves sr-3
+
+§5.B.8 now specifies optional harnesses.<harness>.modes.<mode>: {state, scope_note}; absent = one state for all modes.
