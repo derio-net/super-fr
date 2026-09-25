@@ -4225,9 +4225,13 @@ rows:
     acceptance: A new session picks up an in-progress step record and completes it
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/unit/test_record_template.py
+    status: ci
+    notes: 'session A commits a partial record; a fresh process with another session
+      id sees ''record in progress: 1 ticks, 1 decisions'' in fr pickup, appends and
+      resolve --record applies the whole.'
   - id: bookkeeping-turns-per-step
     capability: Lean cost-aware pipeline
     acceptance: A live run spends at most 2 bookkeeping turns per step (baseline 6.1)
