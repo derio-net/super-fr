@@ -345,3 +345,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f13 created=2026-09-26T00:55:12 phase=3 state=open review_scope=in -->
 ### r3-f13 · finding [open] (reviewer: in scope) · Config freshness compares committer dates (%cI); compare ancestry/commit identity instead (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f14 created=2026-09-26T00:55:15 phase=3 state=open review_scope=out -->
+### r3-f14 · finding [open] (reviewer: out of scope) · Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash) (phase 3)
