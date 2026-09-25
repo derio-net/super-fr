@@ -238,3 +238,8 @@ Operator steer: replace commit-COUNT assertions in phase-3 tests (test_run_cli, 
 ### f9483f92bcfb · discovery · no-refactor-because P4.T2 (phase 4)
 
 pickup_cmd.py stayed thin by construction: --run mode is a load + mode-check + closeout_brief() call, no brief text lives here — nothing accumulated that needs extracting.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m4-resolved created=2026-09-25T13:12:33 state=fixed resolves=p3-m4 -->
+### p3-m4-resolved · finding [fixed] · resolves p3-m4: deliver handoff must commit before printing the sha
+
+7e983b53: resolve_cmd's deliver branch now calls _commit_run_writes_now() before printing the push-it/sha line (run_cmd.py); test_resolving_deliver_prints_the_pickup_run_closeout_handoff (tests/unit/test_run_cli.py) asserts the printed sha equals HEAD after the call and that stderr carries at most one fr: committed/not committed line.
