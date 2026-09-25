@@ -105,6 +105,17 @@ steps:
             cache_creation_input_tokens: 135933
             cache_read_input_tokens: 10392954
             output_tokens: 280
+        - dispatched: '2026-09-25T08:27:08+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-haiku-4-5-20251001
+          session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+          estimate:
+            journal_entries: 6
+            journal_lines: 31
+            handoff_chars: 1058
+            spec_bytes: 14780
+            plan_bytes: 24020
   journal-check:
     state: pending
   deliver:
