@@ -321,3 +321,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f5 created=2026-09-26T00:54:55 phase=3 state=open review_scope=in -->
 ### r3-f5 · finding [open] (reviewer: in scope) · MEDIUM: branch bumps to 4.22.0 but origin/main (#628) is already 4.22.0; rebase and bump minor to 4.23.0 (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f6 created=2026-09-26T00:54:58 phase=3 state=open review_scope=in -->
+### r3-f6 · finding [open] (reviewer: in scope) · A re-run force-removes the scratch worktree kept for inspection, destroying manual fixes (phase 3)
