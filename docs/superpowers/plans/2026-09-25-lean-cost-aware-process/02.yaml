@@ -259,9 +259,9 @@ state:
       note: fr.isolation.where (inner_fr_command, host_command, require_harness_host);
         exec refusal; run/usage group callbacks; unobserved evidence + warnings
     P2.T6.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:24:10+00:00'
+      note: ruff/mypy clean; bun test 76 pass; full suite 5376 passed
     P2.T7.S1:
       state: ' '
       ticked_at: null
