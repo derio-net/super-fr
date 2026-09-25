@@ -1,8 +1,7 @@
-"""The fr-herdr package skeleton (spec §3.C; plan phase 1).
+"""The fr-herdr package wiring (spec §3.C; plan phase 1).
 
-Phase 1 only wires the package: it imports, it registers under the
-`fr.runners` entry-point group as `herdr`, and its stub runner refuses every
-item. The real run-unit behaviour arrives in phase 2.
+The package imports and registers under the `fr.runners` entry-point group as
+`herdr`. The runner's behaviour is `test_fr_herdr_runner.py`'s.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ def test_herdr_is_a_registered_runner() -> None:
     assert "herdr" in runner_names()
 
 
-def test_the_registered_entry_point_loads_the_stub_runner() -> None:
+def test_the_registered_entry_point_loads_the_runner() -> None:
     from fr_dispatch.registry import available_runners
     from fr_herdr.runner import HerdrRunner
 
@@ -33,7 +32,7 @@ def test_the_registered_entry_point_loads_the_stub_runner() -> None:
     assert ep.load() is HerdrRunner  # type: ignore[attr-defined]
 
 
-def test_stub_runner_is_named_herdr() -> None:
+def test_the_runner_is_named_herdr() -> None:
     from fr_herdr.runner import HerdrRunner
 
     assert HerdrRunner().name == "herdr"
@@ -51,7 +50,7 @@ def test_every_unit_has_an_id() -> None:
 
 
 @pytest.mark.parametrize("unit", get_args(Unit))
-def test_stub_runner_refuses_every_unit(unit: Unit) -> None:
+def test_the_runner_refuses_any_item_without_a_harness(unit: Unit) -> None:
     from fr_herdr.runner import HerdrRunner
 
     item = WorkItem(
