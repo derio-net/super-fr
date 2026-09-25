@@ -6819,3 +6819,31 @@ def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Pa
     idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
     idx_pickup = stdout.index("fr pickup --run r1")
     assert idx_complete < idx_closeout < idx_pickup
+
+
+def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pushed(
+    tmp_path: Path,
+) -> None:
+    """p4-r1: on the default branch (or under a stuck lock) `commit_records`
+    refuses to commit the cursor (spec §3.C), so the closeout handoff must not
+    tell the operator to push a commit that never landed — it must say the
+    cursor is NOT committed instead."""
+    import subprocess
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git_out(repo, "remote", "add", "origin", str(origin))
+    _git_out(repo, "push", "-q", "origin", "b")
+    _git_out(repo, "remote", "set-head", "origin", "b")
+
+    _resolved_to_deliver(repo, shipped)
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    assert "cursor committed as" not in result.stdout
+    assert "push it (git push)" not in result.stdout
+    assert "cursor NOT committed" in result.stdout
+    assert "fr: not committed (" in result.stderr and "default branch" in result.stderr

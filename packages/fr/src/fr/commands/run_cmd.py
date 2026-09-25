@@ -35,6 +35,7 @@ from typing import Any, Literal, NoReturn, TypeVar, cast
 import typer
 from rich.console import Console
 
+from fr.artifacts.commit import CommitOutcome
 from fr.commands.common import resolve_repo_root
 from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
@@ -142,11 +143,18 @@ class _RunWrites:
             parts.append(record.state)
         return f"chore(fr): run {run} — {' '.join(parts)}"
 
-    def commit(self) -> None:
-        """Commit what has been noted so far, once per repo root, and forget it."""
+    def commit(self) -> CommitOutcome | None:
+        """Commit what has been noted so far, once per repo root, and forget it.
+
+        Returns the last root's `CommitOutcome`, or `None` when nothing was
+        pending — a caller deciding whether to print "push it" (p4-r1) must
+        tell "nothing to commit" from "committed" from "refused".
+        """
         pending, self.paths = self.paths, {}
+        outcome: CommitOutcome | None = None
         for root, paths in pending.items():
-            commit_records(root, paths, self.message())
+            outcome = commit_records(root, paths, self.message())
+        return outcome
 
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
@@ -176,16 +184,21 @@ def _note_subject(*, step: str, item: str | None, outcome: str) -> None:
         writes.step, writes.item, writes.outcome = step, item, outcome
 
 
-def _commit_run_writes_now() -> None:
+def _commit_run_writes_now() -> CommitOutcome | None:
     """Commit this command's writes BEFORE it prints a dispatch brief.
 
     The brief is the line a naive `tail -1` parses (see `_print_member_dispatch`),
     so `commit_records`' stderr report must not land after it — in a harness
     that merges stdout and stderr it would become the last line.
+
+    Returns the `CommitOutcome` (or `None` if nothing was pending) so a caller
+    that goes on to print a "push it" line knows whether this invocation's
+    commit actually landed (p4-r1).
     """
     writes = _RUN_WRITES.get()
     if writes is not None:
-        writes.commit()
+        return writes.commit()
+    return None
 
 
 def _note_loaded(state: RunState) -> None:
@@ -195,20 +208,31 @@ def _note_loaded(state: RunState) -> None:
         writes.loaded_cursor = state.cursor
 
 
-def _closeout_handoff_lines(repo_root: Path, run_id: str) -> list[str]:
+def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) -> list[str]:
     """The handoff toward `fr pickup --run` (spec 2026-09-25-fr-goal-closeout-
     defects §3.D.2) — printed once `deliver` resolves `done`, and again on
     every `advance` of an already-finished run.
 
-    Names the sha of HEAD as it stands when this prints. For the `deliver`
-    call site that must be AFTER `_commit_run_writes_now()` has run (p3-m4):
-    the wrapping decorator commits in `finally`, which runs after the
-    command's own prints, so a sha read any earlier would not exist yet.
+    `committed` is THIS invocation's own commit outcome (p4-r1) — the caller's
+    `_commit_run_writes_now()` result, `True` when nothing was pending. Names
+    the sha of HEAD as it stands when this prints; for the `deliver` call site
+    that must be AFTER `_commit_run_writes_now()` has run (p3-m4): the
+    wrapping decorator commits in `finally`, which runs after the command's
+    own prints, so a sha read any earlier would not exist yet. When the commit
+    was refused (default branch, stuck lock, detached HEAD, …), printing that
+    sha would be false assurance that the cursor reached the PR — so this
+    prints a NOT-committed line instead, never the sha.
     """
     lines = [
         f"closeout: after the PR merges, start a NEW session in {repo_root} and run",
         f"  fr pickup --run {run_id}",
     ]
+    if not committed:
+        lines.append(
+            "cursor NOT committed (see the `fr: not committed` line above) — "
+            "commit and push it before merging"
+        )
+        return lines
     try:
         sha = git_answer(repo_root, "rev-parse", "--short", "HEAD").stdout.strip()
     except GitUnavailableError:
@@ -3492,8 +3516,14 @@ def advance_cmd(
         # spec §3.D.2: the same `fr pickup --run` handoff `resolve` prints
         # when `deliver` lands `done` — repeated here because a run can be
         # rediscovered by `advance` long after that one printing scrolled
-        # out of the delivering session's transcript.
-        for line in _closeout_handoff_lines(repo_root, state.run):
+        # out of the delivering session's transcript. Nothing is pending this
+        # call (nothing was written above), so `_commit_run_writes_now()` is a
+        # no-op — called anyway (p4-r1) so `committed` reflects a real outcome
+        # rather than assuming one.
+        outcome = _commit_run_writes_now()
+        for line in _closeout_handoff_lines(
+            repo_root, state.run, committed=outcome is None or outcome.committed
+        ):
             console.print(line, soft_wrap=True)
         return
 
@@ -4080,8 +4110,13 @@ def resolve_cmd(
         # returns, so a sha read any earlier would not exist yet. `.commit()`
         # is idempotent once called (it empties the pending paths), so the
         # decorator's later call is a no-op — never a second stderr line.
-        _commit_run_writes_now()
-        for line in _closeout_handoff_lines(repo_root, run_id):
+        # p4-r1: `outcome` is THIS commit's real result — a refusal (default
+        # branch, stuck lock, detached HEAD, …) must not be followed by a
+        # "push it" line that assumes the commit landed.
+        outcome = _commit_run_writes_now()
+        for line in _closeout_handoff_lines(
+            repo_root, run_id, committed=outcome is None or outcome.committed
+        ):
             console.print(line, soft_wrap=True)
 
 
