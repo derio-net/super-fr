@@ -173,3 +173,8 @@ Reviewer (minor): hand edits in an fr-owned record ride fr's commit; document it
 ### p3-m3 · finding [open] (reviewer: in scope) · _staged_among fallback is not actually fail-closed (phase 3)
 
 Reviewer (minor): when git cannot answer, every candidate (incl. a foreign wrapper) is passed on; comment overstates.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m4 created=2026-09-25T12:15:04 phase=4 state=open review_scope=out -->
+### p3-m4 · finding [open] (reviewer: out of scope) · deliver handoff must commit before printing the sha (phase 4)
+
+Reviewer (minor, phase 4): the decorator commits in finally; phase 4's 'cursor committed as <sha>' line must call _commit_run_writes_now() first.
