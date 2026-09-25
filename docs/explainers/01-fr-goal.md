@@ -238,6 +238,24 @@ when the cursor is sitting on a failed step. Both `check` and `status` also
 surface completed work whose required evidence is missing as visible debt,
 without changing the check's exit code.
 
+Resolving a step is **one call**, and that is a cost decision rather than a
+tidiness one. Every command an agent runs is a turn, and every turn re-reads
+its whole context, so a phase whose bookkeeping took six separate commands —
+tick, tick, journal, journal, resolve, commit — paid for its context six times
+over to write things `fr` could have written in one go. So each agent step now
+keeps a **step record**: a small YAML file under
+`docs/superpowers/runs/<run-id>.records/`, handed to it pre-filled in the
+dispatch brief (and shown by `fr pickup`) with only the sections that step is
+allowed to carry — the shape's own `emits:` decides which. The agent adds ticks,
+journal entries, finding resolutions and evidence as the work happens, commits
+the file with its work, and `fr run resolve <run-id> --step <id> --record <file>`
+applies all of it: validated, gated exactly as before, written in one commit,
+reported in one line. A record `fr` refuses changes nothing on disk. And because
+the half-filled record is committed, a session that dies mid-phase leaves it for
+the next one, which `fr pickup` tells as *record in progress* rather than
+starting over. The older one-thing-at-a-time commands still exist, for you and
+for runners; they now go through the same engine.
+
 Advancing twice does not hand out the same work twice. If the step under the
 cursor is already running — an agent was dispatched and has not reported back —
 `fr run advance` refuses, names when that dispatch happened, and gives you the
@@ -373,14 +391,19 @@ work did not travel either.
 
 Phases are only part of the bill. The orchestrator — the session you started,
 which brainstorms, reviews, and delivers — spends tokens of its own at every
-step, and until recently nothing measured them. Now, as each top-level step
-finishes, `fr` reads the harness's own session store for the window that step
-occupied and records what the main session used: turns, the four token
-figures, and the cost where the harness reports one. `fr run cost <run-id>`
-prints that as one table, a row per step, with the subagents' total beside it.
-The same honesty rule applies. A step that cannot be measured prints `—`, never
-`0`, and if any one of the sessions a step spanned cannot be read, nothing is
-recorded at all: a partial sum presented as a measurement is worse than none.
+step. Transcripts are the only place any of it is written down, and they do
+not survive: a pod is torn down, a session is pruned, a run is picked up on
+another machine. So `fr` captures the run's usage once per host — at
+`deliver`, and on the first resolve a new host makes — into
+`docs/superpowers/usage/<run-id>.yaml`, committed beside the cursor and
+archived with it: per session, per model and per step, with dollars where the
+harness reports them and no hostname, path or message content in it. `fr run
+cost <run-id>` prints it as one table, a row per step, on any checkout that has
+the file, including one that never ran the run. The same honesty rule applies:
+a figure nobody could observe prints `—`, never `0`. When you want to know
+where the money went rather than how much there was — bookkeeping against
+implementation, before a process change and after it — the `fr-audit` skill
+(`fr usage report`) reconstructs that from the harness's own session data.
 
 ### Ending a turn on a run that is waiting for nobody
 
@@ -784,7 +807,17 @@ the specification's and the plan's, and the out-of-scope ones get a section of
 their own that asks you which to file; you answer when you merge, and nothing
 waits on it. The agent then stops. Merge remains the operator's decision.
 
-Two more things travel in that description. The first is a **proportionality
+You do not assemble that description, and neither does the agent. Resolving
+`deliver` makes `fr` render it — `pr-body.md` beside the step's record: the
+findings from both journals, the out-of-scope ones under their own heading (or
+"None."), the proportionality report and the cost table. The agent opens the
+draft pull request with that file, and `deliver` then reads the live
+description back and refuses to finish while any of those sections is missing.
+That refusal exists because one pull request did ship without its out-of-scope
+section, and a section that must be remembered is a section that will
+eventually be forgotten.
+
+Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files
 changed that no phase said it would touch, and the diff's size against the
 plan's own estimate, flagged when it runs past twice that. It exists because an
@@ -792,10 +825,9 @@ autonomous run's usual failure is not a wrong change but a larger one than
 asked for, and a reviewer looking at a green diff has no easy way to see what
 was not supposed to be there. It is a report, not a gate — nothing in it blocks
 delivery — but it is not optional either: marking `deliver` done runs the
-report itself and records a fingerprint of it, so the one pasted into the pull
-request can be checked against the one the tool saw. The second is the
-`fr run cost` table, so what the run spent is written down beside what it
-produced.
+report itself and records a fingerprint of it, so the one in the pull request
+can be checked against the one the tool saw. The second is the `fr run cost`
+table, so what the run spent is written down beside what it produced.
 
 ### 9. Confirm the merge, then close out in a new session
 
