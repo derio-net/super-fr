@@ -256,3 +256,8 @@ In scope, fixed with tests: r2p-f1 (medium: redispatch after abandoned PR derive
 ### r2p-f12b-resolved · finding [fixed] · resolves r2p-f12b: Test Plan 4's can_dispatch-before-preflight ordering is exercised nowhere yet; phase 3 dispatch must test it
 
 dispatch --yes calls runner.can_dispatch before preflight/existing_dispatches/dispatch; a refusal reaches no backend call. Tests: test_triage_batch_dispatch.py::test_can_dispatch_is_consulted_before_preflight (calls == [can_dispatch]) and ::test_the_protocol_calls_run_in_the_spec_order
+
+<!-- fr:journal kind=finding scope=plan id=r2p-handle-resolved created=2026-09-26T00:19:50 state=fixed resolves=r2p-handle answered_by=agent -->
+### r2p-handle-resolved · finding [fixed] · resolves r2p-handle: DispatchEvent.handle is a required str but Runner.dispatch may return None; phase 3 must map None explicitly
+
+A None handle from Runner.dispatch is recorded as the item id (the runner's own identity for the dispatch, which existing_dispatches matches). Test: test_triage_batch_dispatch.py::test_a_runner_without_a_handle_records_the_item_id
