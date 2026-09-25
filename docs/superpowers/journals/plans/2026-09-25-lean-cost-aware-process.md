@@ -454,3 +454,8 @@ Pre-existing live-plugin test; this diff does not touch it; observed once under 
 ### r-p3 · review · Phase 3 review (independent reviewer): 11 findings; p3-r1..r10 in scope, p3-r11 out of scope (phase 3)
 
 Reviewer a9217b89215b69c05 (Opus 5.5). Held up: emits-literal sections, template allowed-sections + step ids + resume, blocked->failed, plan:ticks completes the phase, verbs committing per §5.C.6, test changes moved not weakened, 4.22.0 lockstep. Blockers: p3-r1, p3-r2 (bypasses), p3-r3 (atomicity).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-09-25T23:47:57 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Record path accepts answered_by: operator on an out-of-scope fix without transcript verification
+
+verify_operator_claim moved to fr.journal.operator; the engine runs it in _journal_writes for every resolution claiming answered_by operator (record + verb paths); before_write hook removed. test_record_review_fixes::test_a_record_fixing_an_out_of_scope_finding_as_operator_is_verified.
