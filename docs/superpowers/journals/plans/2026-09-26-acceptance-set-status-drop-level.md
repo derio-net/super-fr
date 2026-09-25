@@ -99,3 +99,13 @@ Every refusal test now asserts HEAD and the full snapshot are unchanged; the run
 ### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: The engine accepts the same ref in the drops and in levels (drop then re-add) (phase 2)
 
 Spec §2.B.3 assigns the contradiction refusal to the CLI call. Phase 3 implements it and Test Plan item 4 pins it; this phase's engine contract is as specified.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-refusal-tests-red-vacuously created=2026-09-26T01:03:04 phase=3 -->
+### p3-refusal-tests-red-vacuously · discovery · Before --drop-level existed, the exit-2 refusal tests passed on typer's own "No such option" (phase 3)
+
+In RED, test items 2, 4, 5 and 6 passed vacuously: typer exits 2 for an unknown option, and its error also mentions `--drop-level`. Item 6 now also asserts our `'<level>=<ref>'` message, and the three refusal messages (absent ref, contradiction, unknown level key) were checked once by a throwaway probe after GREEN, so each exit 2 comes from the intended refusal.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-26T01:03:04 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+docs, mirror, matrix row and version bump — no code to refactor
