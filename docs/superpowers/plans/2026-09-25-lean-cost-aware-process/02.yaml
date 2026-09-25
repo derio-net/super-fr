@@ -214,9 +214,9 @@ state:
       note: fr/usage/capture.py; resolve deliver + after-hook for new host; archive
         _archive_usage
     P2.T3.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T18:43:41+00:00'
+      note: ruff/mypy clean; full suite 5413 passed
     P2.T4.S1:
       state: ' '
       ticked_at: null
