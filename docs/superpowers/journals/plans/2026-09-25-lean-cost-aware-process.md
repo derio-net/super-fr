@@ -324,3 +324,8 @@ aaf707cf: fr isolation up writes target (devcontainer|worktree) beside unchanged
 ### p2-r24-resolved · finding [fixed] · resolves p2-r24: Capture never fills briefs
 
 9e1ec7c2: readers measure dispatch prompt sizes (Claude Code Agent tool_use input.prompt keyed by attributed agent id; OpenCode task part state.input.prompt keyed by state.metadata.sessionId, shape read from a live db); session_entry re-keys to the cursor unit holding that agent. Migrated handoff_chars briefs stay in their migrated capture (files never rewritten).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r25-resolved created=2026-09-25T22:16:02 state=fixed resolves=p2-r25 -->
+### p2-r25-resolved · finding [fixed] · resolves p2-r25: fr-goal-main-session-cost still cites tests of the removed mechanism
+
+a97bbe1c: three stale refs removed one hand-edited line each (no drop-level verb: #624), set-status --notes records why, reports regenerated (--deterministic).
