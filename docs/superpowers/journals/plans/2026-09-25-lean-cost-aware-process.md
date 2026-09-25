@@ -444,3 +444,8 @@ records_commit.py:68. Suppress when the engine owns the line.
 ### p3-r11 · finding [open] (reviewer: out of scope) · test_opencode_plugin_live flaky under parallel load (phase 3)
 
 Not caused by this change; not touched by the diff.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-09-25T23:23:39 state=open resolves=p3-r11 out_of_scope=true -->
+### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: test_opencode_plugin_live flaky under parallel load
+
+Pre-existing live-plugin test; this diff does not touch it; observed once under -n auto load, green alone and in the final run.
