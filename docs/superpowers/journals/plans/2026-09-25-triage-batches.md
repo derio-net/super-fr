@@ -159,3 +159,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f8 created=2026-09-25T21:40:47 phase=2 state=open review_scope=in -->
 ### r2p-f8 · finding [open] (reviewer: in scope) · cancel can exit 2 after partial forge writes when a later op is unsupported; except Exception masks programming errors as forge failures (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f9 created=2026-09-25T21:40:48 phase=2 state=open review_scope=in -->
+### r2p-f9 · finding [open] (reviewer: in scope) · HerdrRunner.dispatch leaves a labelled tab after a failure past tab create, which existing_dispatches then reports live forever (phase 2)
