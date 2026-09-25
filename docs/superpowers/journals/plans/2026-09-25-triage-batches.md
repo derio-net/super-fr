@@ -201,3 +201,8 @@ HerdrRunner.dispatch wraps everything after tab create; on any failure it runs h
 ### r2p-f12a-resolved · finding [fixed] · resolves r2p-f12a: fr_dispatch.testing contract uses bare assert (silent under python -O)
 
 fr_dispatch.testing checks go through _require(ok, msg), which raises AssertionError explicitly; no bare assert remains. Tests: test_run_unit_runner_contract.py::test_the_contract_still_bites_under_python_dash_o (child interpreter with -O), ::test_the_contract_module_has_no_bare_assert. Commit 5bf5bf95.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f5-resolved created=2026-09-25T23:46:04 state=fixed resolves=r2p-f5 answered_by=agent -->
+### r2p-f5-resolved · finding [fixed] · resolves r2p-f5: Duplicate member ids accepted (create/edit), then refused confusingly as 'in y, y'
+
+Batch's ids validator refuses a key that appears more than once after normalisation ('a batch lists <key> more than once'); edit --add-issue no longer silently drops an existing member, so the model refuses it too. Tests: test_triage_batch_model.py::test_a_member_listed_twice_is_refused_naming_it, test_triage_batch_verbs.py::test_create_refuses_a_member_given_twice_and_writes_nothing, ::test_edit_refuses_adding_a_member_twice[member|twice].
