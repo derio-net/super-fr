@@ -14,3 +14,8 @@ Glue only (a schema literal, a list verb, a stub package and CI wiring); P1.T3 v
 ### d54428244b78 · discovery · no-refactor-because P2.T6 (phase 2)
 
 This task IS the phase's refactor and quality gate; a refactor step of a refactor step would be circular.
+
+<!-- fr:journal kind=discovery scope=plan id=d92d3b3c2ec6 created=2026-09-25T20:38:52 phase=3 -->
+### d92d3b3c2ec6 · discovery · no-refactor-because P3.T5 (phase 3)
+
+Docs, skill prose, mirrors and the version bump: no production code is written, so there is nothing to refactor; the mirror and bump --check gates in P3.T6 cover correctness.
