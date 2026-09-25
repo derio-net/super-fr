@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-09-26-fix-models-opencode-noop-505
+workflow: fr-goal@1
+branch: fix/models-opencode-noop-505
+started: '2026-09-25T22:34:58+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
