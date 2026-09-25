@@ -6573,9 +6573,7 @@ def test_no_questions_resolve_commits_cursor_and_spec_journal_together(tmp_path:
     # commit with the same "resolve" subject as the cursor's — i.e. they
     # were committed together, located by path rather than by assuming
     # exactly one new commit landed.
-    journal_subject = _git_out(
-        repo, "log", "-1", "--format=%s", "--", "docs/superpowers/journals"
-    )
+    journal_subject = _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/journals")
     assert journal_subject.startswith("chore(fr): run r1 — resolve "), journal_subject
     _assert_fr_commit(repo, "r1", "resolve")
     # p3-steer (c): at most one commit-report line per invocation.
