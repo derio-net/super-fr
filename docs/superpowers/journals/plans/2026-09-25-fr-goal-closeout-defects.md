@@ -383,3 +383,8 @@ Post-deliver review (medium, verified live): the common-dir basename guard ('.gi
 ### pd-r2 · finding [open] (reviewer: in scope) · A failed diff --cached probe is reported as unchanged (phase 3)
 
 Post-deliver review (low-medium): commit.py's pending.returncode != 0 branch is folded into unchanged=True; with the silent-unchanged change a git error now yields false 'cursor committed' assurance. Only rc 0 + empty output is unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=pd-r3 created=2026-09-25T15:25:20 phase=4 state=open review_scope=in -->
+### pd-r3 · finding [open] (reviewer: in scope) · No CLI-level test at the two dogfood wiring points (phase 4)
+
+Post-deliver review (low): no test asserts the handoff's 'start a NEW session in <dir>' names the primary checkout from a linked worktree, nor that a byte-identical re-resolve prints 'cursor committed as' (not 'NOT committed').
