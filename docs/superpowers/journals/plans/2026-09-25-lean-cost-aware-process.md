@@ -54,3 +54,8 @@ readers/opencode.py:128-137 vs spec §5.A.2.
 ### p1-r2 · finding [open] (reviewer: in scope) · Classifier tests pass even if unwrap/prefix-strip were a no-op; $VAR substitution untested (phase 1)
 
 tests/unit/test_usage_classify.py:14-33.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-09-25T20:03:23 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · Hermes/OpenCode readers catch only sqlite3.Error; one bad row crashes the report (phase 1)
+
+readers/hermes.py:93,118; opencode.py:63,72 vs spec §5.A.7.
