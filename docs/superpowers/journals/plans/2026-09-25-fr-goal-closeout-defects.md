@@ -353,3 +353,8 @@ Found by dogfooding deliver on this run: _closeout_handoff_lines and closeout_br
 ### p4-dogfood-resolved · finding [fixed] · resolves p4-dogfood: Closeout handoff and brief name the feature worktree as 'the base clone'
 
 9c05eb49: primary_checkout() for the displayed directory at both sites; RED test_closeout_brief_run_from_a_linked_worktree_names_the_primary_checkout (brief named the worktree), fallback test added; live fr pickup --run on this run now names the base clone.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-bg-suite created=2026-09-25T15:09:20 state=open review_scope=out -->
+### deliver-bg-suite · finding [open] (reviewer: out of scope) · deliver's tests= gate cannot credit a backgrounded suite run
+
+run_cmd.py:1660-1664 _verify_tests_log requires the log's mtime inside the window of the Bash call naming it; a run_in_background call's window ends at launch, so a backgrounded suite (which the long_commands brief rule tells agents to use) is always refused ('its bytes were not written by the command of yours that names it'). Also a log path held in a shell variable (> $L) is not recognised. Worked around this run by a foreground call (timeout 600000; ~4 min under -n auto).
