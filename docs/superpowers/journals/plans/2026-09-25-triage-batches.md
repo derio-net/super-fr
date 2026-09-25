@@ -251,3 +251,8 @@ Re-verified after r2p-f1: every derived stage incl. redispatch-after-abandoned i
 ### review-phase-2 · review · Phase 2 review (general-purpose reviewer with shell, separate context): 13 findings + 1 out of scope (phase 2)
 
 In scope, fixed with tests: r2p-f1 (medium: redispatch after abandoned PR derived abandoned), r2p-f2, r2p-f3, r2p-f4, r2p-f5, r2p-f6, r2p-f7, r2p-f8, r2p-f9, r2p-f12a, r2p-f13. Filed against phase 3: r2p-f10, r2p-f11, r2p-f12b, r2p-handle, r2p-f14. Out of scope: r2p-envtest (container-only uv-tool fr lacks fr_vk; install.sh unchanged, passes on host). Implementer decisions p2-dispatch-handle and p2-withdrawn-marker judged sound; privacy clean.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f12b-resolved created=2026-09-26T00:19:49 state=fixed resolves=r2p-f12b answered_by=agent -->
+### r2p-f12b-resolved · finding [fixed] · resolves r2p-f12b: Test Plan 4's can_dispatch-before-preflight ordering is exercised nowhere yet; phase 3 dispatch must test it
+
+dispatch --yes calls runner.can_dispatch before preflight/existing_dispatches/dispatch; a refusal reaches no backend call. Tests: test_triage_batch_dispatch.py::test_can_dispatch_is_consulted_before_preflight (calls == [can_dispatch]) and ::test_the_protocol_calls_run_in_the_spec_order
