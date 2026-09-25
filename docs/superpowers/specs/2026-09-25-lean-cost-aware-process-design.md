@@ -492,5 +492,6 @@ Born with this spec (`not-implemented`), presented at the end of the brainstorm:
 
 ## Implementation Plans
 
-| Plan | Status |
-|---|---|
+| Plan | Repo | File | Depends on |
+|--|--|--|--|
+| 2026-09-25-lean-cost-aware-process | `derio-net/super-fr` | `2026-09-25-lean-cost-aware-process` | — |

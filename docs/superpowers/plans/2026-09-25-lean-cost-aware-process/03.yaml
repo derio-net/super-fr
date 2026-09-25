@@ -1,0 +1,243 @@
+schema_version: 2
+phase:
+  number: 3
+  title: 'Step records: fr run resolve --record, verbs as one-entry records, rendered
+    PR body, pipeline prose (spec §5.C)'
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - step-record-one-resolve
+  - step-record-atomic-refusal
+  - stale-session-resumes-record
+  - deliver-pr-body-sections
+  tier: hard
+  files:
+  - packages/fr/src/fr/record/**
+  - packages/fr/src/fr/run/**
+  - packages/fr/src/fr/commands/**
+  - packages/fr/src/fr/workflow/**
+  - packages/fr/src/fr/workflows/fr-goal.yaml
+  - packages/fr/src/fr/artifacts/**
+  - packages/fr/src/fr/journal/**
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/acceptance/**
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - plugins/super-fr/skills/**
+  - plugins/super-fr/agents/**
+  - .opencode/**
+  - .hermes/**
+  - docs/explainers/01-fr-goal.*
+  - AGENTS.md
+  - tests/**
+  - docs/acceptance/**
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - plugins/*/.claude-plugin/plugin.json
+  - .claude-plugin/marketplace.json
+  - packages/fr-opencode-plugin/package.json
+  - uv.lock
+  estimate_lines: 2600
+tasks:
+- number: 1
+  title: 'The record kind and the emits: vocabulary (plan:ticks, acceptance)'
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_record_schema.py: `fr.record.model.StepRecord` (schema_version 1, run,
+      step, item, outcome, ticks, refactor, journal, resolves, acceptance, evidence) parses the
+      spec §5.C.1 example; `allowed_sections(step)` follows the §5.C.2.1 table from the step's
+      emits (journal/resolves <- journal:<scope>; ticks/refactor <- plan:ticks; acceptance <-
+      acceptance; outcome/evidence always); `fr workflow check` accepts plan:ticks and acceptance;
+      both fr-goal.yaml copies are identical and carry the new tokens (implement-phase:
+      plan:ticks; brainstorm and deliver: acceptance). Confirm red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: fr/record/model.py; register kind `record` v1 (locator
+      docs/superpowers/runs/*.records/*.yaml) with a validator; add the two tokens to
+      fr.workflow.artifacts; edit BOTH manifests. Tests green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; `uv run fr validate artifacts` exits 0.
+- number: 2
+  title: 'The apply engine: validate, gates, apply in memory, one atomic write, one
+    commit, one line'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_record_apply.py over a temp run: (a) a valid implement-phase record
+      applies ticks, journal entries and resolutions, moves the cursor, deletes the record file,
+      and produces exactly one commit (via commit_paths) with a clean tree for fr's paths and
+      ONE stdout line naming counts, next step and sha; (b) an unknown section, unknown tick id,
+      unknown finding id or malformed entry refuses with exit 2, nothing on disk changed
+      (hash every touched path before/after), record left in place; (c) existing gates still
+      fire: review witness, operator guard on an out-of-scope fix, deliver tests= log, and the
+      refactor gate (a task without a refactor step and no `refactor:` reason is refused);
+      (d) warnings print in full. Assert outcomes, not commit counts beyond "one per resolve".
+      Confirm red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: fr/record/apply.py `apply_record(repo_root, run_id, record) -> ApplyOutcome`
+      reusing the journal writer, plan_ops tick/complete, acceptance edit, and run
+      resolve internals as library calls; build every change in memory, write with
+      write_text_atomic, commit once. Move the refactor check out of `fr plan self-review`
+      (plan_ops.py:1804-1871) into the gate set; self-review no longer requires
+      no-refactor-because. Tests green.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 3
+  title: resolve --record, and the verbs as one-entry records
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: CLI tests: `fr run resolve <run> --step implement-phase --item phase/1 --record <f>`
+      routes to apply_record; `fr journal add`, `fr journal resolve`, `fr plan edit --tick`,
+      `fr plan edit --complete-phase` and `fr acceptance add/set-status` each build a one-entry
+      record and route through the same engine (spy on apply_record), keeping their current
+      flags, exit codes and refusals, and printing one line on success. Confirm red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: wire the flag and the verbs. Tests green; existing journal/plan/acceptance CLI tests
+      green unchanged except output-format assertions updated to the one-line form.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 4
+  title: Pre-filled record template in fr pickup and the dispatch brief; in-progress
+    records resume
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: tests: `fr pickup <plan> --phase 2` and `fr run advance`'s agent-step brief include a
+      YAML record template with run/step/item filled, only allowed sections, and the phase's step
+      ids; when docs/superpowers/runs/<run>.records/<step>__<item>.yaml exists, pickup shows
+      "record in progress: N ticks, M decisions" and the path. Stale-session test: session A
+      commits a partial record; a fresh process (session B env) picks it up via pickup, appends,
+      and `resolve --record` applies the whole. Confirm red.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: fr/record/template.py; call it from pickup_cmd.py and run_cmd.py's brief builder.
+      Tests green.
+  - id: P3.T4.S3
+    text: |-
+      REFACTOR: ruff/mypy clean.
+- number: 5
+  title: deliver renders the PR body and refuses a PR missing required sections
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      RED: tests/unit/test_deliver_pr_body.py: `resolve --step deliver --record` writes
+      docs/superpowers/runs/<run>.records/pr-body.md with in-scope findings, an "Out-of-scope
+      findings" section (or "None."), the proportionality report and the usage cost table;
+      with fr.gh mocked, a live PR body lacking the out-of-scope section is refused (exit 2,
+      names the missing section); a body containing all sections passes. Confirm red.
+  - id: P3.T5.S2
+    text: |-
+      GREEN: fr/record/pr_body.py; wire into the deliver path. Tests green.
+  - id: P3.T5.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 6
+  title: Pipeline prose, mirrors, explainer, AGENTS.md, version bump, acceptance flips
+  steps:
+  - id: P3.T6.S1
+    text: |-
+      Rewrite the bookkeeping instructions to the record flow (each SKILL.md stays under 120
+      lines; tool/argument-neutral): plugins/super-fr/skills/{fr-goal,fr-brainstorming,fr-plan,
+      fr-execute,fr-debugging}/SKILL.md and plugins/super-fr/agents/{fr-phase-executor,
+      fr-spec-reviewer}.md (return shape = a record). fr-goal §8: pass fr's pr-body.md to the PR;
+      state the host-side fr run rule for devcontainer mode. fr-plan Rules: refactor
+      justification is a record field. Run BOTH sync scripts; commit mirrors.
+  - id: P3.T6.S2
+    text: |-
+      Update docs/explainers/01-fr-goal.md for the record flow and usage/, then re-render the
+      .html from `/` with the `--isolated` recipe in .claude/rules/explainers-currency.md, after
+      first confirming the unmodified .md re-renders byte-identical. Update AGENTS.md repo shape
+      (fr/usage, usage/, records, host-side rule).
+  - id: P3.T6.S3
+    text: |-
+      `uv run --no-project python scripts/bump-version.py minor`; commit the manifests + uv.lock.
+      Flip step-record-one-resolve, step-record-atomic-refusal, stale-session-resumes-record,
+      deliver-pr-body-sections and audit-pages-regenerated to ci with their test refs via
+      `fr acceptance set-status`. Full `uv run pytest` (with coverage), ruff, mypy,
+      `fr acceptance check`, `fr validate artifacts`, and `scripts/sync-*.py --check` all green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
