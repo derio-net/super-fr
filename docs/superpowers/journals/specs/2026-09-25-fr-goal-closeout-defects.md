@@ -59,3 +59,8 @@ Spec §2 non-goals now records the model bindings as an operator-environment act
 ### review-spec-1 · review · Spec review (fr-spec-reviewer)
 
 Independent fr-spec-reviewer raised s1 (high, decision not reflected), s2 (medium, run_cmd.py:872 journal write uncovered), s3 (low, SKILL §8 commit line). All in scope, all fixed in the spec. 30 codebase claims verified by the reviewer.
+
+<!-- fr:journal kind=decision scope=spec id=248a1091887d created=2026-09-25T12:15:07 -->
+### 248a1091887d · decision · Record commits skip hooks, keep signing, restore the index on failure
+
+Phase-3 review p3-r2: fr's record commits (run/plan/journal, not migrations) pass --no-verify — they are fr's own bookkeeping, frequent, and a fixer hook (end-of-file-fixer) would fail every tick. Commit signing is left as the repo configures it (fr never silently bypasses a signing policy). On a failed commit the index is restored to its prior state for those paths. Orchestrator's decision under the operator's 'fr commits its records' answer; surfaced in the PR body.
