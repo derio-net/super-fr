@@ -4303,10 +4303,11 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
-    status: not-implemented
-    notes: Spec §9, target level manual -> int. Phase 2 built the host-side rule this
-      depends on (fr run/usage refused inside a devcontainer, capture runs on the host);
-      the verifying devcontainer-mode live walk is phase 4.
+    status: skipped
+    notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
+      in devcontainer mode (PR #635) captured a readable session (host label only, no
+      host names); fr run/usage refused inside the container. Manual walk, not in CI.
+      Caveat: subagent transcripts omitted (#637).'
   - id: step-record-one-resolve
     capability: Lean cost-aware pipeline
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
