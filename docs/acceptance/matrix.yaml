@@ -4130,3 +4130,53 @@ rows:
     notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
       conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
       handoff tests in test_run_cli.py.'
+  - id: triage-batch-state
+    capability: Backlog triage
+    acceptance: An operator can group judged issues into a named batch; fr refuses a
+      batch naming an unjudged issue or an issue already in another open batch, and
+      derives the batch stage from forge facts
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3a-batch-state-judgementsyaml-schema-2
+    levels: {}
+    status: not-implemented
+    notes: Test Plan items 1-2.
+  - id: triage-batch-dispatch
+    capability: Backlog triage
+    acceptance: An operator can dispatch a batch as one fr-goal run to any runner that
+      takes run-unit work, with an engine-rendered brief that closes every member issue;
+      a runner that cannot take run work is refused before anything is written
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3c-batch-dispatch
+    levels: {}
+    status: not-implemented
+    notes: Test Plan items 3-5; fr-herdr is the first run-unit runner.
+  - id: triage-batch-forge-visible
+    capability: Backlog triage
+    acceptance: After a batch is dispatched, every member issue shows as taken on the
+      forge, and any machine that triages the repo shows it in-progress, without reading
+      local run state
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
+    levels: {}
+    status: not-implemented
+    notes: Test Plan items 6-7.
+  - id: triage-batch-version-reserve
+    capability: Backlog triage
+    acceptance: Each dispatched batch bumps to a version reserved in merge order, so
+      a later batch never ships a lower version and its version conflict after an earlier
+      merge is resolved without the operator
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3d-version-reservations
+    levels: {}
+    status: not-implemented
+    notes: Test Plan items 8 and 10.
+  - id: triage-batch-merge-queue
+    capability: Backlog triage
+    acceptance: An operator can merge several batch PRs in a computed order that predicts
+      shared-file conflicts up front; the queue stops on a real conflict naming the
+      files, and a re-run resumes at the first unmerged PR
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
+    levels: {}
+    status: not-implemented
+    notes: Test Plan items 9-10; live walk (item 12) owed post-implementation.
