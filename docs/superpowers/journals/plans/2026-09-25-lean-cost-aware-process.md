@@ -529,3 +529,8 @@ Pre-existing gate behaviour (not introduced by this branch); found while deliver
 ### d-oos-cli-gate-unobserved · finding [open] (reviewer: out of scope) · An operator gate on a kind: cli step never persists unobserved to the cursor
 
 Recorded as discovery p2-d-review-fixes during phase-2 fixes: the step has no unit to hold evidence; stderr notice only. kind: agent gates (fr-goal brainstorm) do record it.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cli-gate-unobserved-resolved created=2026-09-26T00:09:56 state=open resolves=d-oos-cli-gate-unobserved out_of_scope=true -->
+### d-oos-cli-gate-unobserved-resolved · finding [out-of-scope] · resolves d-oos-cli-gate-unobserved: An operator gate on a kind: cli step never persists unobserved to the cursor
+
+Predates this change; this branch added unobserved for agent-step gates only.
