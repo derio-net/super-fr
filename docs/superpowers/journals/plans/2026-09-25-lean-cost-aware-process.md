@@ -544,3 +544,8 @@ Operator asked to file it; tracked.
 ### d-oos-cov-rsync-resolved-2 · finding [deferred → #630] · resolves d-oos-cov-rsync: Local full suite with coverage races install.sh's rsync of the repo root (.coverage.* vanish, rsync exit 23)
 
 Operator asked to file it; tracked.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-tests-window-resolved-2 created=2026-09-26T00:15:40 state=open resolves=d-oos-tests-window tracked_by=#631 -->
+### d-oos-tests-window-resolved-2 · finding [deferred → #631] · resolves d-oos-tests-window: deliver's tests= gate cannot see a run_in_background suite (call window ends at launch)
+
+Operator asked to file it; tracked.
