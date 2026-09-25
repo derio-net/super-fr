@@ -499,3 +499,8 @@ _plan_writes runs refactor_gaps on every actual phase completion (verb or record
 ### p3-r9-resolved · finding [fixed] · resolves p3-r9: --record deletes and commits any parseable path; relative path resolved against cwd
 
 --record resolved against the repo root and required under records_dir(run); otherwise exit 2, nothing touched. Tests: outside-dir refusal + relative path from another cwd.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-09-25T23:48:03 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: Successful resolve prints a second stderr line (fr: committed …)
+
+commit_records(quiet=True) from the engine resolve drops the fr: committed echo (a refused commit still reports). test_a_successful_resolve_prints_one_line_on_stdout_and_stderr_together.
