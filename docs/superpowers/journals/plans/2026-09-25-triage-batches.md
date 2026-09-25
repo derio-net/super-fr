@@ -90,3 +90,8 @@ In scope and fixed: r1-1, r1-2, r1-3, r1-4. In scope, moved to phase 3: r1-docs.
 ### p2-norefactor-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 The one reusable gh call (the head-branch PR list) went straight into fr.gh as list_prs_by_head beside list_prs/list_open_prs; the remaining new RealGhClient methods each shape a different gh JSON document once, so a shared helper would only rename _run_gh+json.loads. The unsupported glab/tea side is one mixin (fr.ghclient.UnsupportedBatchOps) with one raising method per operation, so there is no duplication to remove. GhError now keeps stdout, because gh pr checks answers on exit 8.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-live-gh-shapes created=2026-09-25T23:09:11 phase=2 -->
+### p2-live-gh-shapes · discovery · Live-verified gh shapes behind the adapter and collect (2026-09-25, derio-net/super-fr, read-only) (phase 2)
+
+The contents API resolves ref=HEAD to the default branch, so collect reads .fr/triage.yaml with ref HEAD and needs no default-branch lookup; an absent file answers 'Not Found (HTTP 404)', which collect treats as no config (any other forge failure propagates like the list calls). gh pr checks --required on a branch with none prints 'no required checks reported on the <branch> branch' (mapped to []); gh issue view --json comments returns {comments: [...]}. Not verified live: the exit-8 pending answer of gh pr checks (from gh's docs) — phase 4's live walk exercises it.
