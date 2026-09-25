@@ -344,3 +344,8 @@ a268b717: measure_dispatch, measure_attempt, TranscriptReader(.measure) and the 
 ### p2-r28-resolved · finding [fixed] · resolves p2-r28: Operator-gate unobserved recorded only on claude-code/no harness
 
 ea8a6b46: operator gate records unobserved=operator-gate and warns on every harness without a question reader (opencode, hermes tested); warning names the harness.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r29-resolved created=2026-09-25T22:16:04 state=fixed resolves=p2-r29 -->
+### p2-r29-resolved · finding [fixed] · resolves p2-r29: Closeout upsert erases the deliver capture record
+
+9e1ec7c2: Capture.at is a non-empty list of distinct events; capture() appends to the host's entry so closeout keeps deliver; usage kind v1 unreleased, no migration; fixtures/tests and both committed files updated.
