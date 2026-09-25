@@ -8,7 +8,9 @@ billed but no transcript message carries (a side query, a compaction) lands in
 `other / unattributed`, never dropped and never invented.
 
 A message's share is split evenly across its tool calls (1/k each, classified
-by `fr.usage.classify`); a message with none is narration. A session without a
+by `fr.usage.classify`); a message with none is narration. Each message is also
+counted as a TURN — of every activity it touched, and of its step — because
+turns, not artifact size, are what cost (spec §1). A session without a
 dollar figure contributes no dollars, and an `unavailable` one contributes
 nothing at all — both render `—`, never `0`.
 
@@ -62,6 +64,11 @@ class Rollup:
         default_factory=lambda: defaultdict(lambda: defaultdict(float))
     )
     calls: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    turns_by_activity: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    """Turns (assistant messages) per activity. A message is one turn of EVERY
+    activity its tool calls touched, so these may sum past the message count."""
+    turns_by_step: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    """Turns per step window: each message is one turn of exactly one step."""
 
     @property
     def total(self) -> float | None:
@@ -150,6 +157,12 @@ def rollup(
                 step = _step_of(message, windows)
                 for label in labels:
                     result.calls[label.sub] += 1
+                # turns are counted whether or not the message was priced: a
+                # turn re-reads the context either way (spec §1, finding 1)
+                for touched in dict.fromkeys(label.activity for label in labels):
+                    result.turns_by_activity[touched] += 1
+                if step is not None:
+                    result.turns_by_step[step] += 1
                 if not dollars:
                     # an unpriced message adds no dollar row: a `$0.00` would
                     # read as a measurement of nothing, not an absence of one

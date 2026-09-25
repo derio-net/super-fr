@@ -21,7 +21,12 @@ ACTIVITIES = ("paperwork", "implementation", "other")
 
 
 def _usd(value: float | None) -> str:
-    return DASH if value is None else f"${value:,.2f}"
+    if value is None:
+        return DASH
+    if 0 < value < 0.005:
+        # a real, sub-cent figure: `$0.00` would read as a measured zero
+        return "<$0.01"
+    return f"${value:,.2f}"
 
 
 def _pct(part: float | None, whole: float | None) -> str:
@@ -53,6 +58,37 @@ def _dollar_rows(values: Mapping[str, float], total: float | None) -> list[list[
     return [[name, _usd(value), _pct(value, total)] for name, value in ordered]
 
 
+def _activity_rows(result: Rollup, total: float | None) -> list[list[str]]:
+    """Activity rows with their turns — an activity with turns but no dollars
+    (every message unpriced) still gets a row, its dollars `—`."""
+    names = sorted(
+        set(result.by_activity) | set(result.turns_by_activity),
+        key=lambda n: (-result.by_activity.get(n, 0.0), n),
+    )
+    rows = []
+    for name in names:
+        usd = result.by_activity.get(name)
+        rows.append([name, _usd(usd), _pct(usd, total), str(result.turns_by_activity.get(name, 0))])
+    return rows
+
+
+def _step_rows(result: Rollup, bar: bool) -> list[list[str]]:
+    rows = []
+    for step in dict.fromkeys([*result.by_step, *result.turns_by_step]):
+        split = result.by_step.get(step, {})
+        step_total = sum(split.values()) if split else None
+        row = [
+            html.escape(step) if bar else step,
+            _usd(step_total),
+            str(result.turns_by_step.get(step, 0)),
+            *(_pct(split.get(a, 0.0), step_total) for a in ACTIVITIES),
+        ]
+        if bar:
+            row.append(_bar(split, step_total))
+        rows.append(row)
+    return rows
+
+
 def render_table(result: Rollup) -> str:
     total = result.total
     buffer = io.StringIO()
@@ -68,19 +104,15 @@ def render_table(result: Rollup) -> str:
         _table("By model", ["model", "usd", "share"], _dollar_rows(result.by_model, total))
     )
     console.print(
-        _table("By activity", ["activity", "usd", "share"], _dollar_rows(result.by_activity, total))
+        _table("By activity", ["activity", "usd", "share", "turns"], _activity_rows(result, total))
     )
     console.print(
         _table("By sub-activity", ["sub", "usd", "share"], _dollar_rows(result.by_sub, total))
     )
-    if result.by_step:
-        rows = []
-        for step, split in result.by_step.items():
-            step_total = sum(split.values())
-            rows.append(
-                [step, _usd(step_total), *(_pct(split.get(a, 0.0), step_total) for a in ACTIVITIES)]
-            )
-        console.print(_table("By step", ["step", "usd", *ACTIVITIES], rows))
+    if result.by_step or result.turns_by_step:
+        console.print(
+            _table("By step", ["step", "usd", "turns", *ACTIVITIES], _step_rows(result, bar=False))
+        )
     console.print(f"Total: {_usd(total)} (harness-reported; split by fixed price ratios)")
     return buffer.getvalue()
 
@@ -111,7 +143,7 @@ cache read 0.1, output 5). <span class="paperwork">&nbsp;&nbsp;</span> paperwork
 {sessions}
 </table>
 <h2>By activity</h2>
-<table><tr><th>activity</th><th>usd</th><th>share</th></tr>{activities}</table>
+<table><tr><th>activity</th><th>usd</th><th>share</th><th>turns</th></tr>{activities}</table>
 <h2>By sub-activity</h2>
 <table><tr><th>sub</th><th>usd</th><th>share</th></tr>{subs}</table>
 <h2>By model</h2>
@@ -148,25 +180,17 @@ def render_html(result: Rollup) -> str:
         cells += [_bar(row.by_activity, row.usd), f'<span class="note">{note}</span>']
         sessions.append(cells)
     steps = ""
-    if result.by_step:
-        step_rows = []
-        for step, split in result.by_step.items():
-            step_total = sum(split.values())
-            step_rows.append(
-                [html.escape(step), _usd(step_total)]
-                + [_pct(split.get(a, 0.0), step_total) for a in ACTIVITIES]
-                + [_bar(split, step_total)]
-            )
+    if result.by_step or result.turns_by_step:
         steps = (
-            "<h2>By step</h2><table><tr><th>step</th><th>usd</th><th>paperwork</th>"
+            "<h2>By step</h2><table><tr><th>step</th><th>usd</th><th>turns</th><th>paperwork</th>"
             "<th>implementation</th><th>other</th><th>split</th></tr>"
-            + _rows(step_rows)
+            + _rows(_step_rows(result, bar=True))
             + "</table>"
         )
     return _PAGE.format(
         total=_usd(total),
         sessions=_rows(sessions),
-        activities=_rows(_escaped(_dollar_rows(result.by_activity, total))),
+        activities=_rows(_escaped(_activity_rows(result, total))),
         subs=_rows(_escaped(_dollar_rows(result.by_sub, total))),
         models=_rows(_escaped(_dollar_rows(result.by_model, total))),
         steps=steps,

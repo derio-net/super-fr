@@ -62,7 +62,10 @@ def _source(harness: str, session: str, env: Mapping[str, str]) -> Path | None:
 
 
 def read_session(harness: str, session: str, env: Mapping[str, str]) -> UsageRecord:
-    """The live record for one session — `unavailable` when it cannot be found."""
+    """The live record for one session — `unavailable` when it cannot be found,
+    or when fr has no reader for its harness (never read as another harness)."""
+    if harness not in READERS:
+        return unavailable(session, harness, "no reader for this harness")
     source = _source(harness, session, env)
     if source is None:
         return unavailable(session, harness, "no transcript found for this session on this host")
@@ -79,15 +82,16 @@ def _cursor(repo: Path, run: str) -> dict[str, Any]:
 
 
 def _sessions_of(node: object) -> Iterator[tuple[str, str]]:
-    """Every `(harness, session)` a cursor records, wherever an attempt sits."""
+    """Every `(harness, session)` a cursor records, wherever an attempt sits.
+
+    Only an attempt that names NO harness is read as Claude Code (the cursors
+    that predate the field); a harness fr has no reader for stays itself, and
+    `read_session` reports it unavailable rather than relabelling it."""
     if isinstance(node, Mapping):
         session = node.get("session")
         if isinstance(session, str) and session:
             harness = node.get("harness")
-            yield (
-                (harness if isinstance(harness, str) and harness in READERS else "claude-code"),
-                session,
-            )
+            yield ("claude-code" if harness is None else str(harness), session)
         for value in node.values():
             yield from _sessions_of(value)
     elif isinstance(node, list):
@@ -186,12 +190,14 @@ def report(
     for run_id in runs:
         cursor = _cursor(_repo(repo), run_id) if _has_cursor(_repo(repo), run_id) else None
         index = cache_root(env) / "runs" / f"{run_id}.json"
+        if not index.is_file() and cursor is None:
+            raise _fail(f"run {run_id!r}: no cursor under {_repo(repo)} and never collected")
+        # the union: the cached index keeps sessions of a cursor that has since
+        # gone, the live cursor adds sessions attached after the last collect
         if index.is_file():
             pairs += [(str(h), str(s)) for h, s in json.loads(index.read_text())["sessions"]]
-        elif cursor is not None:
+        if cursor is not None:
             pairs += list(dict.fromkeys(_sessions_of(cursor)))
-        else:
-            raise _fail(f"run {run_id!r}: no cursor under {_repo(repo)} and never collected")
         for window in windows_from_cursor(cursor) if cursor is not None else ():
             step = window.step if len(runs) == 1 else f"{run_id}:{window.step}"
             windows.append(Window(step=step, start=window.start, end=window.end))

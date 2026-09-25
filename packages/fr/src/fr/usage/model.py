@@ -79,7 +79,9 @@ class UsageRecord(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     session: str
-    harness: Literal["claude-code", "opencode", "hermes"]
+    harness: str
+    """The harness key (`fr.usage.readers.READERS`), or — on an `unavailable`
+    record — whatever harness the cursor named, even one fr has no reader for."""
     role: Literal["main", "subagent"] = "main"
     messages: tuple[Message, ...] = ()
     cost: Cost = Cost()

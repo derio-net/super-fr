@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -184,8 +185,119 @@ def test_report_for_a_run_prints_models_activities_and_steps(transcripts: Path) 
     )
     assert result.exit_code == 0, result.output
     out = result.output
-    for needle in ("claude-fable-5-1", "paperwork", "implementation", "brainstorm", "implement"):
+    for needle in ("claude-fable-5-1", "paperwork", "implementation"):
         assert needle in out
+    # p1-r7: a By-step ROW per step — line-anchored, so a column header or the
+    # `implementation` activity row cannot satisfy it
+    for step in ("brainstorm", "implement"):
+        assert re.search(rf"^\W*{step}\s+│\s+\$[\d.,]+\s+│", out, re.M), (step, out)
+
+
+def test_rollup_step_keys_are_the_cursor_steps_the_messages_fall_in() -> None:
+    record = claude_code.read(FIXTURES / "claude-code" / f"{CC_SESSION}.jsonl")
+    windows = windows_from_cursor(
+        {
+            "started": "2026-09-21T11:00:00+00:00",
+            "steps": {
+                "brainstorm": {"at": "2026-09-21T11:40:00+00:00"},
+                "implement": {"at": "2026-09-21T13:00:00+00:00"},
+            },
+        }
+    )
+    result = rollup([record], windows=windows)
+    assert {"brainstorm", "implement"} <= set(result.by_step)
+    assert set(result.by_step) <= {"brainstorm", "implement", OUTSIDE}
+    # p1-r10: every message is one turn of exactly one step
+    assert sum(result.turns_by_step.values()) == len(record.messages)
+
+
+# p1-r10: turns (messages) per activity and per step --------------------------
+
+
+def test_rollup_counts_turns_per_activity_and_per_step() -> None:
+    windows = windows_from_cursor(
+        {
+            "started": "2026-09-25T10:00:00+00:00",
+            "steps": {
+                "plan": {"at": "2026-09-25T10:10:00+00:00"},
+                "implement": {"at": "2026-09-25T10:20:00+00:00"},
+            },
+        }
+    )
+    messages = [
+        _msg("m", ts="2026-09-25T10:05:00Z", calls=(READ_SPEC,), input=10),
+        _msg("m", ts="2026-09-25T10:06:00Z", calls=(READ_SPEC, EDIT), input=10),
+        _msg("m", ts="2026-09-25T10:15:00Z", calls=(EDIT, EDIT), input=10),
+        _msg("m", ts="2026-09-25T10:16:00Z", input=10),
+    ]
+    result = rollup([_rec("s", messages, {"m": 4.0})], windows=windows)
+    # a message is one turn of every activity it touched (so these may sum past
+    # the message count), and one turn of its step
+    assert dict(result.turns_by_activity) == {"paperwork": 2, "implementation": 2, "other": 1}
+    assert dict(result.turns_by_step) == {"plan": 2, "implement": 2}
+    # unpriced messages are still turns: a turn costs context whether or not
+    # the harness put a dollar figure on it
+    unpriced = rollup([_rec("free", messages, None)], windows=windows)
+    assert dict(unpriced.turns_by_activity) == dict(result.turns_by_activity)
+    for text in (render_table(result), render_html(result)):
+        assert "turns" in text
+
+
+def test_the_table_renders_turns_in_the_activity_and_step_rows() -> None:
+    windows = windows_from_cursor(
+        {
+            "started": "2026-09-25T10:00:00+00:00",
+            "steps": {"plan": {"at": "2026-09-25T10:10:00+00:00"}},
+        }
+    )
+    messages = [_msg("m", ts="2026-09-25T10:05:00Z", calls=(READ_SPEC,), input=10)] * 3
+    table = render_table(rollup([_rec("s", messages, {"m": 3.0})], windows=windows))
+    assert re.search(r"^\W*paperwork\s+│\s+\$3\.00\s+│\s+100\.0%\s+│\s+3\s+│", table, re.M), table
+    assert re.search(r"^\W*plan\s+│\s+\$3\.00\s+│\s+3\s+│", table, re.M), table
+
+
+# p1-r8 / p1-r9: which sessions a run report reads ------------------------------
+
+
+def test_report_reads_sessions_added_to_the_cursor_after_collect(transcripts: Path) -> None:
+    repo = _repo_with_run(transcripts)
+    runner = CliRunner()
+    assert (
+        runner.invoke(
+            app, ["usage", "collect", "--run", "2026-09-21-r", "--repo", str(repo)]
+        ).exit_code
+        == 0
+    )
+    cursor = repo / "docs" / "superpowers" / "runs" / "2026-09-21-r.yaml"
+    cursor.write_text(
+        cursor.read_text()
+        + "      phase/2:\n        attempts:\n        - harness: claude-code\n"
+        + "          session: later-session-0000\n"
+    )
+    result = runner.invoke(app, ["usage", "report", "--run", "2026-09-21-r", "--repo", str(repo)])
+    assert result.exit_code == 0, result.output
+    assert CC_SESSION[:8] in result.output
+    assert "later-se" in result.output
+
+
+def test_an_unknown_attempt_harness_is_unavailable_not_relabelled(transcripts: Path) -> None:
+    repo = _repo_with_run(transcripts)
+    cursor = repo / "docs" / "superpowers" / "runs" / "2026-09-21-r.yaml"
+    cursor.write_text(
+        cursor.read_text()
+        + "      phase/2:\n        attempts:\n        - harness: codex\n"
+        + "          session: codex-session-0000\n"
+        + "      phase/3:\n        attempts:\n        - session: bare-session-0000\n"
+    )
+    result = CliRunner().invoke(
+        app, ["usage", "report", "--run", "2026-09-21-r", "--repo", str(repo)]
+    )
+    assert result.exit_code == 0, result.output
+    codex = next(line for line in result.output.splitlines() if "codex-se" in line)
+    assert "codex" in codex.replace("codex-se", "")
+    assert "no reader for this harness" in result.output
+    bare = next(line for line in result.output.splitlines() if "bare-ses" in line)
+    assert "claude-code" in bare  # only a MISSING harness defaults to claude-code
 
 
 def test_report_html_is_one_self_contained_file(transcripts: Path) -> None:
@@ -237,3 +349,43 @@ def test_golden_audit_pooled_shares() -> None:
     implementation = 100 * (result.share("implementation") or 0)
     assert paperwork == pytest.approx(30.2, abs=0.5)
     assert implementation == pytest.approx(32.9, abs=0.5)
+
+
+# p1-r11 / spec §7.3: the per-session half of the claim — "23–37% in every
+# session", within the same 0.5 points as the pooled share. e50c7ff5 reproduces
+# at 21.9% against the audit's published 23.6%: a real 1.7-point gap, journaled
+# (not tuned away), so it is a STRICT xfail — the day it passes, this fails and
+# the marker must go.
+GOLDEN_OUTLIERS = {"e50c7ff5-b51f-415b-bc3c-dbc90e454a47"}
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        pytest.param(
+            s,
+            marks=pytest.mark.xfail(
+                strict=True, reason="reproduces 21.9% vs the published 23.6% (plan journal)"
+            ),
+        )
+        if s in GOLDEN_OUTLIERS
+        else s
+        for s in GOLDEN
+    ],
+)
+def test_golden_audit_every_sessions_paperwork_share_is_23_to_37(session: str) -> None:
+    path = _golden(session)
+    if path is None:
+        pytest.skip("the audit's transcripts exist only on the operator's host")
+    record = claude_code.read(path)
+    assert record.unavailable is None
+    paperwork = 100 * (rollup([record]).share("paperwork") or 0)
+    assert 23 - 0.5 <= paperwork <= 37 + 0.5, (session, paperwork)
+
+
+def test_a_sub_cent_figure_is_not_rendered_as_zero() -> None:
+    from fr.usage.render import _usd
+
+    assert _usd(0.0012) == "<$0.01"
+    assert _usd(None) == "—"
+    assert _usd(1.234) == "$1.23"

@@ -60,7 +60,10 @@ comparison silently, and never count it as zero.
   the small part.
 - **Turns are the cost unit.** An extra round trip re-reads everything. A
   bookkeeping step that takes six turns costs six context re-reads, however little
-  it writes. When paperwork looks expensive, count its turns before blaming its size.
+  it writes. When paperwork looks expensive, count its turns before blaming its size:
+  the report's `turns` columns do (By activity, By step). A turn is one assistant
+  message, counted once for each activity its tool calls touched, so activity turns
+  can sum past the message count; step turns cannot.
 - **Coarse sessions.** A `coarse attribution` note means the harness keeps one token
   count per message (Hermes), so its split is token-count-weighted. Compare it to other
   harnesses with that caveat stated.
