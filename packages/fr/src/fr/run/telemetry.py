@@ -292,7 +292,24 @@ def _distinct_messages(
     summed per record and are NOT rewritten — they are history; `fr run cost`
     flags them as possibly over-counted instead.
     """
-    seen: set[str] = set()
+    for record, usage, _blocks in message_groups(records):
+        yield record, usage
+
+
+def message_groups(
+    records: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], Mapping[str, Any], list[dict[str, Any]]]]:
+    """`(first record, usage, every record of that message)` per `message.id`.
+
+    The one dedupe rule `_distinct_messages` applies (first occurrence of an
+    id wins its usage; a record with no id stands alone), returning as well
+    the later records of the same message, which carry the message's later
+    CONTENT BLOCKS — a tool_use is usually written on a record after the
+    one whose usage wins. `fr.usage.readers.claude_code` needs those blocks
+    to know what a message did; a sum needs only the first record.
+    """
+    groups: list[tuple[dict[str, Any], Mapping[str, Any], list[dict[str, Any]]]] = []
+    by_id: dict[str, list[dict[str, Any]]] = {}
     for record in records:
         usage = _usage_of(record)
         if usage is None:
@@ -300,10 +317,15 @@ def _distinct_messages(
         # `_usage_of` already proved `message` is a Mapping.
         message_id = record["message"].get("id")
         if isinstance(message_id, str) and message_id:
-            if message_id in seen:
+            if message_id in by_id:
+                by_id[message_id].append(record)
                 continue
-            seen.add(message_id)
-        yield record, usage
+            blocks = [record]
+            by_id[message_id] = blocks
+        else:
+            blocks = [record]
+        groups.append((record, usage, blocks))
+    return groups
 
 
 def _sum_usage(pairs: Iterable[tuple[dict[str, Any], Mapping[str, Any]]]) -> UsageTotals:
@@ -1120,28 +1142,22 @@ class OpenCodeReader:
 def opencode_tokens(data: Mapping[str, Any]) -> dict[str, int]:
     """One OpenCode assistant message's `data.tokens`, as fr's four figures.
 
-    `input` -> `input_tokens`, `cache.write` -> `cache_creation_input_tokens`,
-    `cache.read` -> `cache_read_input_tokens`, and **`output + reasoning` ->
-    `output_tokens`**: reasoning is billed as output, and fr records the same
-    four figures for every harness rather than a fifth only OpenCode fills.
-    `tokens.total` is not read — it is the sum of the others. A missing or
-    non-integer field counts 0.
+    The parsing lives in `fr.usage.readers.opencode.tokens_of` (one reading of
+    OpenCode's token shape for both consumers); this projects its five figures
+    onto the cursor's four: `input` -> `input_tokens`, both cache writes ->
+    `cache_creation_input_tokens`, `cache_read` -> `cache_read_input_tokens`,
+    and `output` (which already folds in `reasoning`, billed as output) ->
+    `output_tokens`. A missing or non-integer field counts 0.
     """
-    raw_tokens = data.get("tokens")
-    tokens: Mapping[str, Any] = raw_tokens if isinstance(raw_tokens, Mapping) else {}
-    raw_cache = tokens.get("cache")
-    cache: Mapping[str, Any] = raw_cache if isinstance(raw_cache, Mapping) else {}
+    from fr.usage.readers.opencode import tokens_of
+
+    tokens = tokens_of(data)
     return {
-        "input_tokens": _count(tokens.get("input")),
-        "cache_creation_input_tokens": _count(cache.get("write")),
-        "cache_read_input_tokens": _count(cache.get("read")),
-        "output_tokens": _count(tokens.get("output")) + _count(tokens.get("reasoning")),
+        "input_tokens": tokens.input,
+        "cache_creation_input_tokens": tokens.cache_write_5m + tokens.cache_write_1h,
+        "cache_read_input_tokens": tokens.cache_read,
+        "output_tokens": tokens.output,
     }
-
-
-def _count(value: object) -> int:
-    """A token count, or 0 — a boolean is not a count."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _epoch_window(start: str, end: str) -> tuple[int, int] | None:
@@ -1153,8 +1169,11 @@ def _epoch_window(start: str, end: str) -> tuple[int, int] | None:
 
 
 def _open_ro(db: Path) -> sqlite3.Connection:
-    """`db` opened read-only; raises `sqlite3.Error` when it does not exist."""
-    return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+    """`db` opened read-only; raises `sqlite3.Error` when it does not exist.
+    Delegates to `fr.usage.readers.opencode.open_ro`, the one definition."""
+    from fr.usage.readers.opencode import open_ro
+
+    return open_ro(db)
 
 
 READERS: Mapping[str, TranscriptReader] = {
