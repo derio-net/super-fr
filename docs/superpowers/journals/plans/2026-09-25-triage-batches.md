@@ -85,3 +85,8 @@ Follows from the spec's decision to register herdr under fr.runners (d2); herdr 
 ### review-phase-1 · review · Phase 1 review (feature-dev:code-reviewer, separate context): 7 findings (phase 1)
 
 In scope and fixed: r1-1, r1-2, r1-3, r1-4. In scope, moved to phase 3: r1-docs. Out of scope: r1-5, r1-6. No correctness bug found; schema-2 downgrade on write not possible in this phase (nothing writes judgements yet).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-norefactor-t1 created=2026-09-25T23:03:44 phase=2 -->
+### p2-norefactor-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+The one reusable gh call (the head-branch PR list) went straight into fr.gh as list_prs_by_head beside list_prs/list_open_prs; the remaining new RealGhClient methods each shape a different gh JSON document once, so a shared helper would only rename _run_gh+json.loads. The unsupported glab/tea side is one mixin (fr.ghclient.UnsupportedBatchOps) with one raising method per operation, so there is no duplication to remove. GhError now keeps stdout, because gh pr checks answers on exit 8.
