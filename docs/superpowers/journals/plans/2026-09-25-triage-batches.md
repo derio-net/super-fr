@@ -135,3 +135,15 @@ Spec §3.C says HerdrRunner 'returns the pane id as the handle', but the Runner 
 ### p2-norefactor-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 HerdrRunner was written with the shape S4 asks for: every herdr call goes through _run_herdr (one subprocess seam, JSON envelope parsed once, HerdrError carrying herdr's words) and HARNESSES is the one harness table (kind + model flag). The contract helpers are three functions (run_item, check_constructible, check_run_unit_contract) with no shared state. The package test's 'stub' wording was updated to the real runner.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f1 created=2026-09-25T21:40:42 phase=2 state=open review_scope=in -->
+### r2p-f1 · finding [open] (reviewer: in scope) · Redispatch after an abandoned PR still derives abandoned: batch_pr counts PRs from before the last dispatch (batch.py:104-118); _batch_prs on_branches short-circuit hides a later merged no-Closes PR (collect.py:505) (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f2 created=2026-09-25T21:40:42 phase=2 state=open review_scope=in -->
+### r2p-f2 · finding [open] (reviewer: in scope) · triage-batch-state moved to ci while r2p-f1 exists; re-verify after the fix (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f3 created=2026-09-25T21:40:43 phase=2 state=open review_scope=in -->
+### r2p-f3 · finding [open] (reviewer: in scope) · Collect's batch head lookups are unbounded: every batch with a dispatch event, including terminal ones, forever (§3.F says one per dispatched batch) (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f4 created=2026-09-25T21:40:43 phase=2 state=open review_scope=in -->
+### r2p-f4 · finding [open] (reviewer: in scope) · Org collect aborts on one repo: invalid .fr/triage.yaml raises TriageError (not ForgeError) and list_issue_comments runs outside the per-repo try (phase 2)
