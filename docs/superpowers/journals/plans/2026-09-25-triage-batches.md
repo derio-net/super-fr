@@ -49,3 +49,6 @@ A workspace member's fr.runners entry point is only registered once the root pyp
 ### 6b7920f90e3e · discovery · no-refactor-because P1.T3 (phase 1)
 
 Verification-only task; the loader change (a read-versions tuple in _check_schema) and the stub runner needed no cleanup pass. Full suite, ruff, mypy (incl. packages/fr-herdr/src) and bump-version --check all green.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1 created=2026-09-25T20:59:03 phase=1 state=fixed review_scope=in -->
+### r1-1 · finding [fixed] (reviewer: in scope) · Schema-1 files could carry batches (spec 3.A) — Judgements now refuses batches unless schema 2; test added (phase 1)
