@@ -330,3 +330,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f8 created=2026-09-26T00:55:01 phase=3 state=open review_scope=in -->
 ### r3-f8 · finding [open] (reviewer: in scope) · p3-reserve-order sound but spec §3.D and Test Plan 11 still describe explicit-order-first reservation; amend the spec (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f9 created=2026-09-26T00:55:03 phase=3 state=open review_scope=in -->
+### r3-f9 · finding [open] (reviewer: in scope) · --repair ignores batch stage: re-labels closed/released issues on merged or abandoned batches; restrict to dispatched/pr-open (phase 3)
