@@ -413,3 +413,8 @@ Worktree.merge runs git -c rerere.enabled=false merge --no-ff --no-commit <ref>.
 ### r3-f13-resolved · finding [fixed] · resolves r3-f13: Config freshness compares committer dates (%cI); compare ancestry/commit identity instead
 
 check_config_fresh now parses .fr/triage.yaml at origin/<default> (Checkout.show) and compares it with the collected config by value; a file added or removed since collect is refused too. Content identity rather than a recorded blob sha: facts.json records no sha today, and the parsed content is exactly what the verbs consume. Checkout.last_change (%cI) removed. Tests: test_triage_batch_dispatch.py::test_a_collected_config_that_differs_from_origin_is_refused, ::test_a_config_added_on_origin_since_the_collect_is_refused, ::test_the_collected_config_matching_origin_is_used_whatever_its_commit_date; test_triage_batch_merge.py::test_merge_refuses_a_collected_config_that_differs_from_origin
+
+<!-- fr:journal kind=finding scope=plan id=r3-f5-resolved created=2026-09-26T01:28:24 state=fixed resolves=r3-f5 answered_by=agent -->
+### r3-f5-resolved · finding [fixed] · resolves r3-f5: MEDIUM: branch bumps to 4.22.0 but origin/main (#628) is already 4.22.0; rebase and bump minor to 4.23.0
+
+Merged origin/main (#628, 4.22.0) in 33b1cb19 and bumped minor to 4.23.0 with bump-version.py; bump-version --check passes.
