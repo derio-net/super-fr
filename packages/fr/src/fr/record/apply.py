@@ -556,7 +556,7 @@ def _check_plan_parses(plan_dir: Path, overlay: _Overlay) -> None:
 def _check_drops(
     record: StepRecord, drops: Mapping[str, Mapping[str, tuple[str, ...]]], run_id: str | None
 ) -> None:
-    """Refuse the three misalignments that would make a drop a silent no-op
+    """Refuse every misalignment that would make a drop a silent no-op
     (spec 2026-09-26 §2.C) — before anything is built or written."""
     if not drops:
         return
@@ -565,13 +565,24 @@ def _check_drops(
             "acceptance drops are verb-only (`set-status --drop-level`); "
             f"a run record never reads them (run {run_id!r})"
         )
-    items = {item.id: item for item in record.acceptance}
-    for row_id in drops:
-        item = items.get(row_id)
-        if item is None:
+    for row_id, levels in drops.items():
+        named = [item for item in record.acceptance if item.id == row_id]
+        if not named:
             raise RecordRefusedError(
                 f"acceptance {row_id}: a drop names a row the record does not move"
             )
+        if len(named) > 1:
+            # Judged by position, a create-then-move would pass the create
+            # refusal below and drop from the row it had just created.
+            raise RecordRefusedError(
+                f"acceptance {row_id}: the record names this row more than once, so "
+                "which entry the drop belongs to is ambiguous"
+            )
+        if not any(levels.values()):
+            raise RecordRefusedError(
+                f"acceptance {row_id}: a drop entry that names no ref would remove nothing"
+            )
+        item = named[0]
         if item.capability is not None or item.acceptance is not None:
             raise RecordRefusedError(
                 f"acceptance {row_id}: a drop on a row the record creates — a new row "

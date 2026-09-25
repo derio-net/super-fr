@@ -319,7 +319,7 @@ def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> No
     from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
 
     root = _matrix_repo(tmp_path)
-    before = _acceptance_files(root)
+    before, sha, files = _acceptance_files(root), head(root), snapshot(root)
     assert {
         f"docs/acceptance/{n}"
         for n in ("report_local.html", "report_linked.html", "report_linked.md")
@@ -332,13 +332,14 @@ def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> No
         apply_record(root, None, _move(), target=target)
 
     assert _acceptance_files(root) == before
+    assert (head(root), snapshot(root)) == (sha, files), "a refused drop must not commit or write"
 
 
 def test_a_drop_keyed_by_a_row_with_no_item_is_refused(tmp_path: Path) -> None:
     from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
 
     root = _matrix_repo(tmp_path)
-    before = _acceptance_files(root)
+    before, sha, files = _acceptance_files(root), head(root), snapshot(root)
     target = RecordTarget(
         message="m", acceptance_drops={"other": {"unit": ("own:tests/test_b.py",)}}
     )
@@ -347,13 +348,14 @@ def test_a_drop_keyed_by_a_row_with_no_item_is_refused(tmp_path: Path) -> None:
         apply_record(root, None, _move(), target=target)
 
     assert _acceptance_files(root) == before
+    assert (head(root), snapshot(root)) == (sha, files), "a refused drop must not commit or write"
 
 
 def test_a_drop_keyed_by_a_create_item_is_refused(tmp_path: Path) -> None:
     from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
 
     root = _matrix_repo(tmp_path)
-    before = _acceptance_files(root)
+    before, sha, files = _acceptance_files(root), head(root), snapshot(root)
     create = _move(
         "fresh",
         capability="c",
@@ -369,16 +371,51 @@ def test_a_drop_keyed_by_a_create_item_is_refused(tmp_path: Path) -> None:
         apply_record(root, None, create, target=target)
 
     assert _acceptance_files(root) == before
+    assert (head(root), snapshot(root)) == (sha, files), "a refused drop must not commit or write"
 
 
 def test_drops_with_a_run_id_are_refused(tmp_path: Path) -> None:
     from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
 
     root = _matrix_repo(tmp_path)
-    before = snapshot(root)
+    before, sha = snapshot(root), head(root)
     target = RecordTarget(acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}})
 
-    with pytest.raises(RecordRefusedError, match="run"):
+    with pytest.raises(RecordRefusedError, match="verb-only"):
         apply_record(root, "some-run", _move(), target=target)
 
-    assert snapshot(root) == before
+    assert (head(root), snapshot(root)) == (sha, before)
+
+
+@pytest.mark.parametrize("empty", [{}, {"unit": ()}], ids=["no-levels", "no-refs"])
+def test_a_drop_entry_naming_no_refs_is_refused(tmp_path: Path, empty: dict) -> None:
+    """p2-r2: a drop that names a row but no ref would remove nothing."""
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    sha, files = head(root), snapshot(root)
+    target = RecordTarget(message="m", acceptance_drops={"target": empty})
+
+    with pytest.raises(RecordRefusedError, match="no ref"):
+        apply_record(root, None, _move(), target=target)
+
+    assert (head(root), snapshot(root)) == (sha, files)
+
+
+def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> None:
+    """p2-r1: with two items for one id the drop's target is ambiguous — judged
+    by position, a create-then-move would slip past the create refusal."""
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+    from fr.record.model import AcceptanceItem, StepRecord
+
+    root = _matrix_repo(tmp_path)
+    sha, files = head(root), snapshot(root)
+    item = AcceptanceItem.model_validate({"id": "target", "status": "skipped", "notes": "why"})
+    target = RecordTarget(
+        message="m", acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}}
+    )
+
+    with pytest.raises(RecordRefusedError, match="more than once"):
+        apply_record(root, None, StepRecord(acceptance=(item, item)), target=target)
+
+    assert (head(root), snapshot(root)) == (sha, files)
