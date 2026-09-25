@@ -269,8 +269,9 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-09-25T11:51:49+00:00'
+          agent: a254bd4df5e6694dd
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5
           session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
           estimate:
             journal_entries: 45
