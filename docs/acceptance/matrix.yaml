@@ -4157,12 +4157,16 @@ rows:
       a runner that cannot take run work is refused before anything is written
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3c-batch-dispatch
-    levels: {}
-    status: not-implemented
-    notes: 'Test Plan 4-7 and 16-17; fr-herdr is the first run-unit runner. Landed in
-      phase 2: the run-unit contract and load_runner (test_run_unit_runner_contract.py)
-      and the real HerdrRunner (test_fr_herdr_runner.py). Owed: the batch dispatch verb,
-      brief, checkout and soft point (phase 3).'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+      - super-fr:tests/unit/test_import_direction.py
+      - super-fr:tests/unit/test_fr_herdr_runner.py
+    status: ci
+    notes: 'Phase 3: batch dispatch lands with its brief/WorkItem, gates in spec order
+      (can_dispatch before preflight), --repair and the second fr_dispatch soft point;
+      unit-tested with the runner, adapter and checkout faked. fr-herdr''s run-unit
+      contract was covered in phase 2.'
   - id: triage-batch-forge-visible
     capability: Backlog triage
     acceptance: After a batch is dispatched, every member issue shows as taken on the
@@ -4170,13 +4174,16 @@ rows:
       local run state
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
-    levels: {}
-    status: not-implemented
-    notes: 'Test Plan 8-10 and 19 (forge adapter). Landed in phase 2: the §3.J adapter
-      operations and the batch-module tripwire (test_forge_adapter_batch_ops.py), the
-      in-progress stage, stale-dispatch check, cancel''s forge writes and the board
-      (test_triage_batch_verbs.py, test_triage_batch_board.py). Owed: the dispatch-time
-      label and marker comment (phase 3), so the row cannot move yet.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+      - super-fr:tests/unit/test_triage_batch_verbs.py
+      - super-fr:tests/unit/test_forge_adapter_batch_ops.py
+    status: ci
+    notes: 'Phase 3: dispatch writes fr:in-progress and one marker comment per member
+      only after the runner accepted, idempotently (--repair posts no duplicate; a redispatch
+      after cancel posts a new marker); adapter faked. Cancel, the in-progress stage
+      and stale dispatch were covered in phase 2.'
   - id: triage-batch-version-reserve
     capability: Backlog triage
     acceptance: Each dispatched batch bumps to a version reserved in merge order, so
@@ -4184,9 +4191,17 @@ rows:
       merge is resolved without the operator
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3d-version-reservations
-    levels: {}
-    status: not-implemented
-    notes: Test Plan items 11 and 14.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_version.py
+      - super-fr:tests/unit/test_triage_batch_merge.py
+      int:
+      - super-fr:tests/integration/test_triage_batch_merge_git.py
+    status: ci
+    notes: 'Phase 3: reservation reads the source from origin/<default> by key (proven
+      against a real clone), follows every live reservation with the batch''s bump;
+      merge reconciles slots in merge order and re-versions with set in the scratch
+      worktree (integration test against a local bare origin).'
   - id: triage-batch-merge-queue
     capability: Backlog triage
     acceptance: An operator can merge several batch PRs in a computed order that predicts
@@ -4194,6 +4209,14 @@ rows:
       files, and a re-run resumes at the first unmerged PR
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
-    levels: {}
-    status: not-implemented
-    notes: Test Plan items 12-15 and 20 (board); live walk (item 21) owed post-implementation.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py
+      - super-fr:tests/unit/test_triage_batch_board.py
+      int:
+      - super-fr:tests/integration/test_triage_batch_merge_git.py
+    status: ci
+    notes: 'Phase 3: merge order, printed plan, reconcile, refusals (draft, failing
+      check, moved head, protection refusal verbatim, unsupported backend) unit-tested
+      with the forge faked; execution against real git with a local bare origin, including
+      resume. The live walk (Test Plan 21, phase 4) is still owed.'
