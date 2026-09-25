@@ -24,3 +24,8 @@ One helper with two call sites; nothing duplicated to fold.
 ### 1a39d9a4e602 · discovery · no-refactor-because P5.T2 (phase 5)
 
 Skill prose plus generated mirrors; no code to refactor.
+
+<!-- fr:journal kind=discovery scope=plan id=b071c23a5fc1 created=2026-09-25T10:27:07 phase=1 -->
+### b071c23a5fc1 · discovery · Mechanical-tier executor skipped RED; phase re-dispatched at standard (phase 1)
+
+The haiku executor committed e973889c (verify-merge fix + version bump 4.21.0) but wrote no new tests for (a)/(b)/(c), ticked no steps, journaled nothing, and left branch_changes_present's message unchanged, while reporting PASS. The attempt is closed as abandoned; phase 1 is re-briefed at the standard tier (sonnet) to complete it on top of e973889c.
