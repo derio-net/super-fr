@@ -356,3 +356,55 @@ def test_primary_checkout_falls_back_to_the_given_root_outside_git(tmp_path: Pat
     from fr.run.closeout import primary_checkout
 
     assert primary_checkout(tmp_path) == tmp_path
+
+
+def test_primary_checkout_resolves_a_relocated_git_dir_primary_from_its_linked_worktree(
+    tmp_path: Path,
+) -> None:
+    """pd-r1: a primary whose `.git` was relocated with `--separate-git-dir`
+    (the common-dir basename isn't literally `.git`) must still resolve to
+    the PRIMARY checkout when called from a linked worktree cut off it — not
+    the worktree itself, which the basename == ".git" guard used to fall
+    back to. `git worktree list --porcelain`'s first entry is the main
+    worktree; for a relocated git-dir it reports the git-dir path itself
+    (a real git limitation, verified live against git 2.53.0), which is
+    recovered here as the checkout containing it. The relocated dir is
+    nested under `primary` (an absolute path, never a relative one — a
+    relative `--separate-git-dir` resolves against the *process* cwd, not
+    against the target directory, and would otherwise plant a git-dir
+    inside this very repo)."""
+    import subprocess
+
+    from fr.run.closeout import primary_checkout
+
+    git = ["git", "-c", "user.email=t@example.com", "-c", "user.name=t"]
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    gitdir = primary / "elsewhere-gitdir"
+    subprocess.run(
+        [*git, "init", "-q", "-b", "main", f"--separate-git-dir={gitdir}", str(primary)],
+        check=True,
+    )
+    subprocess.run(
+        [*git, "-C", str(primary), "commit", "-q", "--allow-empty", "-m", "init"], check=True
+    )
+    wt = tmp_path / "wt"
+    subprocess.run(
+        [*git, "-C", str(primary), "worktree", "add", "-q", "-b", "feat/x", str(wt)], check=True
+    )
+
+    assert primary_checkout(wt) == primary.resolve()
+
+
+def test_primary_checkout_falls_back_to_repo_root_for_a_bare_repository(tmp_path: Path) -> None:
+    """pd-r1: a bare repo's `git worktree list --porcelain` first entry is
+    marked `bare` (no actual checkout) — fall back to `repo_root` rather
+    than naming a nonexistent working tree."""
+    import subprocess
+
+    from fr.run.closeout import primary_checkout
+
+    bare = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+
+    assert primary_checkout(bare) == bare

@@ -29,20 +29,56 @@ class CloseoutNotReadyError(Exception):
     """Raised by `closeout_brief` when `state`'s `deliver` step is not `done`."""
 
 
+def _first_worktree_list_entry(output: str) -> tuple[Path, bool] | None:
+    """`(path, bare)` for the FIRST `worktree` entry of `git worktree list
+    --porcelain` output — the main worktree, always listed first — or `None`
+    when the output names no worktree at all."""
+    path: Path | None = None
+    bare = False
+    for line in output.splitlines():
+        if line.startswith("worktree "):
+            if path is not None:
+                break  # a second entry has started; the first is complete
+            path = Path(line[len("worktree ") :])
+        elif path is not None and line == "bare":
+            bare = True
+        elif path is not None and line == "":
+            break
+    return None if path is None else (path, bare)
+
+
 def primary_checkout(repo_root: Path) -> Path:
     """The repo's PRIMARY working tree — the base clone — even when `repo_root`
     is a linked fr workspace. The closeout runs after merge, from the base clone;
     the feature worktree is what it reaps, so naming it would send a fresh session
     into a directory about to vanish (found dogfooding #610's own deliver).
-    Falls back to `repo_root` when git cannot answer or this is not a worktree."""
+
+    Resolved via `git worktree list --porcelain`'s first entry (pd-r1): the
+    main worktree is always listed first. Falls back to `repo_root` when git
+    cannot answer, this is not a git repo, or that first entry is `bare` (no
+    checkout to name). For a primary whose `.git` was relocated with
+    `--separate-git-dir`, git itself reports that entry's path as the
+    relocated git-dir rather than the checkout (a real git limitation,
+    verified live against git 2.53.0) — recovered here as the directory
+    containing it, when that directory is itself a real checkout."""
     try:
-        res = git_answer(repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        listed = git_answer(repo_root, "worktree", "list", "--porcelain")
     except GitUnavailableError:
         return repo_root
-    common = Path(res.stdout.strip()) if res.returncode == 0 and res.stdout.strip() else None
-    if common is None or common.name != ".git":
+    if listed.returncode != 0:
         return repo_root
-    return common.parent
+    entry = _first_worktree_list_entry(listed.stdout)
+    if entry is None:
+        return repo_root
+    path, bare = entry
+    if bare:
+        return repo_root
+    if (path / ".git").exists():
+        return path
+    parent = path.parent
+    if (parent / ".git").exists():
+        return parent
+    return repo_root
 
 
 def _emitted(state: RunState, name: str) -> str | None:
