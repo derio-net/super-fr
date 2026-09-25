@@ -84,3 +84,8 @@ tests/unit/test_usage_report.py:187.
 ### p1-r8 · finding [open] (reviewer: in scope) · report --run reads the cached index, missing sessions added to the cursor later (phase 1)
 
 commands/usage_cmd.py:189-192.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-09-25T20:03:27 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · Unknown attempt harness relabelled claude-code (phase 1)
+
+usage_cmd.py:88.
