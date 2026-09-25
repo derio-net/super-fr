@@ -509,3 +509,8 @@ commit_records(quiet=True) from the engine resolve drops the fr: committed echo 
 ### d-oos-cov-rsync · finding [open] (reviewer: out of scope) · Local full suite with coverage races install.sh's rsync of the repo root (.coverage.* vanish, rsync exit 23)
 
 Seen twice at deliver on macOS under pytest -n auto with coverage: test_install_sh TestInstallRules (test_installs_rule_file, test_idempotent). Passes alone and with --no-cov; CI (Linux) green on every push. Fix: exclude .coverage* from the rsync, or point COVERAGE_FILE outside the repo.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cov-rsync-resolved created=2026-09-26T00:09:54 state=open resolves=d-oos-cov-rsync out_of_scope=true -->
+### d-oos-cov-rsync-resolved · finding [out-of-scope] · resolves d-oos-cov-rsync: Local full suite with coverage races install.sh's rsync of the repo root (.coverage.* vanish, rsync exit 23)
+
+Not caused by this change: install.sh and coverage config are unchanged here; the race needs xdist+coverage, which #615 introduced.
