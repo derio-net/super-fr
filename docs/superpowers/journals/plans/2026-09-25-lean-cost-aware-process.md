@@ -479,3 +479,8 @@ Both: --record refuses --no-questions/--reason/--answered-by/--agent/--harness/-
 ### p3-r5-resolved · finding [fixed] · resolves p3-r5: Record acceptance entries create-or-move by id existence, losing add/set-status refusals
 
 capability/acceptance present = create-only (existing id refused unless identical, for retry); absent = move-only (unknown id refused). Two tests in test_record_verbs.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-09-25T23:48:00 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: fr-goal SKILL.md:96 claims record-path answered_by verification that does not exist
+
+SKILL.md:96 claim now true via p3-r1 (engine verifies answered_by operator on the record path); re-read, wording kept; §1 now names the record spelling evidence: {answered_by: operator}.
