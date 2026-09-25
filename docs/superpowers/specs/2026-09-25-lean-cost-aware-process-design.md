@@ -258,14 +258,18 @@ hands fr one data file, and fr does the rest in one process.
      from the given arguments. The command uses `uv run fr` when the worktree
      contains `packages/fr` (this repo), else bare `fr`.
    - **In-process layer.** `fr run` / `fr usage` refuse when the repo they
-     operate on carries a devcontainer-mode `.fr-isolation` marker **and**
-     container evidence exists. This catches `bash -c`, `python -m fr` and
+     operate on carries a `mode: worktree` `.fr-isolation` marker **and**
+     container evidence exists (`/.dockerenv`, `/run/.containerenv`,
+     `$KUBERNETES_SERVICE_HOST`, the checks `fr/isolation/external.py` already
+     has). There is no devcontainer marker value: devcontainer and host-worktree
+     both write `mode: worktree`, and container evidence is the discriminator. This catches `bash -c`, `python -m fr` and
      scripts the bridge cannot see. It keys on the operated repo's marker, not
      on env, so test suites running `fr run` against temp repos inside a
      container are unaffected, and external mode (also a container) is never
      refused.
-   - The host-side form must pass `fr-isolation-guard.sh` and its OpenCode and
-     Hermes adapters.
+   - The host-side form already passes `fr-isolation-guard.sh` (its allowed
+     `cd` prefix covers `$HOME/.cache/fr/worktrees`, lines 206-215); a test pins
+     that, and the same for the OpenCode and Hermes adapters.
    - Ephemeral pods (external mode) lose transcripts at teardown; capture at
      `deliver`, at the first `resolve` on a new host and at `fr archive` covers
      them, and `parity.yaml` states that dependency.
@@ -273,7 +277,11 @@ hands fr one data file, and fr does the rest in one process.
    (no harness detected, no readable transcript), it records `unobserved` in the
    step's evidence and prints a warning, which is never quiet.
 8. **Parity.** `parity.yaml` gains an isolation-mode dimension for usage capture
-   and each transcript gate, per harness. Claude Code and OpenCode:
+   and each transcript gate, per harness. Shape: an optional `modes:` map inside
+   a harness entry, `harnesses.<harness>.modes.<host-worktree|devcontainer|external>:
+   {state, scope_note}`; a harness entry without `modes:` means one state for all
+   modes, so existing rows stay valid, and `fr.harness.observe`/`check` learn the
+   optional key. Claude Code and OpenCode:
    live-verified in phase 4 (OpenCode noted "$0 for free models, estimated for
    Copilot-routed"). Hermes: *implemented, not live-verified (pod-only, no walk
    scheduled); per-message attribution coarse; ACP sessions report zero tokens
@@ -307,10 +315,20 @@ hands fr one data file, and fr does the rest in one process.
 
 2. **`fr run resolve --step <id> [--item <unit>] --record <file>`:**
    1. **Validates against the manifest.** The step's `emits:` decides the allowed
-      sections (`journal` only where it emits `journal:<scope>`, `ticks` and
-      `refactor` only on `implement-phase`, `acceptance` only on `brainstorm`,
-      `resolves` on review steps). An unknown section, tick id or finding id, or
-      a malformed entry, refuses the whole record with **nothing applied**.
+      sections, literally, so a repo-overridden manifest
+      (`docs/superpowers/workflows/<name>.yaml`) gets the same rules without code:
+
+      | Record section | Allowed when the step emits | fr-goal steps that emit it |
+      |---|---|---|
+      | `journal`, `resolves` | `journal:<scope>` (entries land in that scope) | brainstorm, spec-review, plan, implement-phase, review-phase |
+      | `ticks`, `refactor` | `plan:ticks` (**new token**) | implement-phase |
+      | `acceptance` | `acceptance` (**new token**) | brainstorm, deliver |
+      | `outcome`, `evidence` | always | all |
+
+      The two new tokens join `fr.workflow.artifacts`' vocabulary so
+      `fr workflow check` accepts them, and both manifest copies gain them. An
+      unknown section, tick id or finding id, or a malformed entry, refuses the
+      whole record with **nothing applied**.
    2. **Runs the step's existing gates** unchanged: review witness, operator
       guard on out-of-scope fixes, `deliver`'s `tests=` log, and the refactor
       check, which moves here from plan self-review (a task without a refactor
@@ -385,8 +403,8 @@ the product and they become its golden output.
   `scripts/sync-opencode.py` and `scripts/sync-hermes.py`, and install wiring for
   the new skill (`test_install_copies_*`).
 - **Workflow manifest:** both copies of `fr-goal.yaml` (`plugins/super-fr/workflows/`,
-  `packages/fr/src/fr/workflows/`) stay identical; `emits:` becomes the record
-  schema.
+  `packages/fr/src/fr/workflows/`) stay identical and gain the `plan:ticks` and
+  `acceptance` tokens (§5.C.2.1); `emits:` becomes the record schema.
 - **Parity:** `parity.yaml` rows per harness × isolation mode (§5.B.8).
 - **Explainers:** `docs/explainers/01-fr-goal.md` describes the pipeline, so it is
   updated and re-rendered per the explainers-currency rule (`--isolated`).

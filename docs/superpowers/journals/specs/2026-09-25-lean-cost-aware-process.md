@@ -49,3 +49,8 @@ Operator: the page-generating mechanism is kept (skill + engine), phase 1. Usage
 ### d10-host-side · decision · fr run / fr usage execute on the harness host in every mode
 
 From the #604 phase-5 steer: in devcontainer mode fr run ran in the container with no harness env or transcripts. fr isolation exec refuses inner fr run/usage in devcontainer mode with the host-side command; an in-process check keyed on the operated repo's marker catches the rest; external mode is never refused.
+
+<!-- fr:journal kind=review scope=spec id=r-spec created=2026-09-25T15:05:29 -->
+### r-spec · review · Spec review (independent fr-spec-reviewer): 3 findings, all fixed
+
+Reviewer verified the telemetry readers, units.py consumers, pickup_cmd.py:65, run v6 + legacy freeze precedent, fr-goal.yaml emits, fr-isolation-guard.sh:206-215 (host-side cd form already allowed; §5.B.6 updated), parity.yaml shape, plan_ops.py:1804-1871, and the gh#610 dependency.

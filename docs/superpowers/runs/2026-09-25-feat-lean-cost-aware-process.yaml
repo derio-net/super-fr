@@ -3,12 +3,32 @@ run: 2026-09-25-feat-lean-cost-aware-process
 workflow: fr-goal@1
 branch: feat/lean-cost-aware-process
 started: '2026-09-25T10:26:39+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: pending
+    state: done
+    at: '2026-09-25T12:59:44+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    main_session:
+      input_tokens: 120
+      cache_creation_input_tokens: 124458
+      cache_read_input_tokens: 16707043
+      output_tokens: 102581
+      turns: 60
+      sessions: 1
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-25T12:59:45+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-25T12:59:45+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
   plan:
     state: pending
   plan-review:
