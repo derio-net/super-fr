@@ -263,3 +263,8 @@ run_cmd.py _closeout_handoff_lines reads HEAD regardless of whether _commit_run_
 ### p4-r2 · finding [open] (reviewer: in scope) · Brief's archive/housekeeping steps are not exact commands (phase 4)
 
 closeout.py:107-114: no command to get onto a housekeeping branch; a fresh session could fr archive inside the merged feature workspace, committing to a dead branch.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-09-25T14:00:54 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · Brief never says which checkout to run from (phase 4)
+
+closeout_brief omits the directory; only the transient handoff line has it. After merge the run file is on main and the workspace may be reaped.
