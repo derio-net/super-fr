@@ -246,3 +246,8 @@ collect passes the previous facts.json's batch_prs as known_batch_prs; a batch w
 ### r2p-f2-resolved · finding [fixed] · resolves r2p-f2: triage-batch-state moved to ci while r2p-f1 exists; re-verify after the fix
 
 Re-verified after r2p-f1: every derived stage incl. redispatch-after-abandoned is now covered, so status ci holds. Row notes updated with fr acceptance set-status (ci -> ci) naming test_a_redispatch_after_an_abandoned_pr_is_dispatched, test_a_new_pr_after_the_redispatch_is_pr_open, test_a_merged_no_closes_pr_after_the_redispatch_is_found and test_triage_facts_schema3.py::test_a_linked_pr_from_before_the_dispatch_does_not_skip_the_lookup; unit level test_triage_facts_schema3.py added. fr acceptance check passes.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-09-26T00:08:58 phase=2 -->
+### review-phase-2 · review · Phase 2 review (general-purpose reviewer with shell, separate context): 13 findings + 1 out of scope (phase 2)
+
+In scope, fixed with tests: r2p-f1 (medium: redispatch after abandoned PR derived abandoned), r2p-f2, r2p-f3, r2p-f4, r2p-f5, r2p-f6, r2p-f7, r2p-f8, r2p-f9, r2p-f12a, r2p-f13. Filed against phase 3: r2p-f10, r2p-f11, r2p-f12b, r2p-handle, r2p-f14. Out of scope: r2p-envtest (container-only uv-tool fr lacks fr_vk; install.sh unchanged, passes on host). Implementer decisions p2-dispatch-handle and p2-withdrawn-marker judged sound; privacy clean.
