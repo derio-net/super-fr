@@ -169,3 +169,8 @@ The CLI test asserts a line-anchored By-step row per step (step cell then a doll
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: report --run reads the cached index, missing sessions added to the cursor later
 
 report --run takes the union of the cached index and the live cursor's sessions (fails only when neither exists). Test: collect, append a session to the cursor, report shows both.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9-resolved created=2026-09-25T20:22:11 state=fixed resolves=p1-r9 -->
+### p1-r9-resolved · finding [fixed] · resolves p1-r9: Unknown attempt harness relabelled claude-code
+
+_sessions_of defaults to claude-code only when the attempt names no harness; read_session returns unavailable 'no reader for this harness' for an unknown one; UsageRecord.harness widened to str. Test with a codex attempt and a harness-less one.
