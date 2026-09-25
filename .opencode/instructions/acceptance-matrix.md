@@ -33,7 +33,11 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   the evidence refs, and regenerates all three committed reports. `--notes`
   is required (a status that moved for no recorded reason is the silent
   change this rule forbids), and an unknown id or status is refused rather
-  than created. The matrix is a registry of CURRENT state, so this mutates;
+  than created. `--drop-level <level>=<ref>` (repeatable) removes a stale
+  evidence ref in the same rewrite — pair it with `--level` to re-point a
+  row in one call — and is refused (exit 2, nothing changed) when the ref is
+  not on the row or is also named in `--level`. The matrix is a registry of
+  CURRENT state, so this mutates;
   its journal counterpart `fr journal resolve` appends instead, because a
   journal is a log.
 - Check: `fr acceptance check` (refs, staleness, statuses; exit 2 on
