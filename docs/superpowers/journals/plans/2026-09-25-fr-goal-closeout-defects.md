@@ -373,3 +373,8 @@ Found on this run's own deliver re-resolve: nothing-to-commit was reported as a 
 ### p3-noop-resolved · finding [fixed] · resolves p3-noop: A record write that changed nothing prints 'fr: not committed'
 
 b53f7ee0: CommitOutcome.unchanged; commit_records silent on it; handoff counts it as landed. RED: test_a_record_write_that_changed_nothing_is_silent_and_counts_as_landed (AttributeError: no 'unchanged'). Migration tests unmodified and green.
+
+<!-- fr:journal kind=finding scope=plan id=pd-r1 created=2026-09-25T15:25:19 phase=4 state=open review_scope=in -->
+### pd-r1 · finding [open] (reviewer: in scope) · primary_checkout mis-resolves a --separate-git-dir primary (phase 4)
+
+Post-deliver review (medium, verified live): the common-dir basename guard ('.git') falls back to repo_root = the worktree for a relocated git-dir. Use git worktree list --porcelain (first entry = main worktree).
