@@ -1,0 +1,8 @@
+Command: uv run pytest -q --no-cov -n auto
+
+Result: 5,458 passed, 97 skipped, 1 failed on the first full run (timed at 600 seconds).
+The failure was unrelated to this change: tests/unit/test_run_cost_cmd.py::test_recompute_reads_this_hosts_transcripts_and_writes_nothing expected one transcript read but received one unavailable transcript.
+
+The focused rerun reproduced that same test failure in isolation. A second full run produced 5,457 passed and 97 skipped, with the same transcript fixture failure plus tests/unit/test_suite_isolation_inherited_columns.py::test_an_inherited_columns_does_not_freeze_module_consoles timing out after 120 seconds in a spawned pytest process. The focused changed tests passed: 25 passed.
+
+Other gates passed: ruff check and format check (508 files), mypy, artifact validation (46 artifacts), acceptance check (238 rows), and version sync (all manifests at 4.22.1).

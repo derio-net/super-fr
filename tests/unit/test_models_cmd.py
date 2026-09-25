@@ -196,3 +196,52 @@ class TestModelsApply:
         res = runner.invoke(app, ["models", "apply", "--harness", "bogus-harness"])
 
         assert res.exit_code != 0, "a typo'd --harness must be refused, not silently no-op"
+
+    def test_apply_reports_no_matching_files_for_empty_directory(self, tmp_path: Path) -> None:
+        """Phase 1.T1: when no agent files exist, report the absence plainly."""
+        res = runner.invoke(app, ["models", "apply", "--harness", "opencode"])
+
+        assert res.exit_code == 0, res.output
+        assert "nothing to update (no opencode agent files found)" in res.output.lower()
+
+    def test_apply_reports_discovered_count_when_files_already_correct(
+        self, tmp_path: Path
+    ) -> None:
+        """Phase 1.T1: when agent files exist and are already correct, report
+        the count as 'already up to date', not the confusing 'nothing to update'
+        message that implies there were no files."""
+        agent_dir = tmp_path / ".config" / "opencode" / "agent"
+        agent_dir.mkdir(parents=True)
+        agent_files = [
+            agent_dir / "fr-phase-executor-mechanical.md",
+            agent_dir / "fr-phase-executor-standard.md",
+            agent_dir / "fr-phase-executor-hard.md",
+        ]
+        for path, model in zip(agent_files, ("m", "s", "h"), strict=True):
+            path.write_text(
+                f'---\ndescription: "test agent"\nmode: subagent\nmodel: {model}\n---\nbody\n'
+            )
+
+        # Ensure all agents are already correct by setting config matching them
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "mechanical", "--model", "m"],
+        )
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "s"],
+        )
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "h"],
+        )
+
+        # Now apply again — should be idempotent but report the count
+        res = runner.invoke(app, ["models", "apply", "--harness", "opencode"])
+
+        assert res.exit_code == 0, res.output
+        # Should report the count of matching agent files, not "nothing to update"
+        assert "3 agent files already up to date" in res.output.lower(), (
+            f"apply must report discovered count for idempotent "
+            f"materialization, got: {res.output!r}"
+        )

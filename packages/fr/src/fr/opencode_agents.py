@@ -53,6 +53,21 @@ class Change:
     problem: str | None = None
 
 
+@dataclass(frozen=True)
+class MaterializeResult:
+    """Result of materializing agent files, containing both what was
+    considered and what was changed.
+
+    `considered` is the count of agent files that matched a supported tier
+    suffix (those we looked at), while `changes` is the list of those that
+    were actually rewritten or had problems. Allows a caller to distinguish
+    "no files at all" (considered==0) from "files existed but were already
+    correct" (considered>0, changes empty)."""
+
+    considered: int
+    changes: list[Change]
+
+
 def default_config_home() -> Path:
     """Base config dir OpenCode's own files live under — the SAME
     resolution `fr.models.default_models_path` uses
@@ -127,7 +142,7 @@ def _rewrite(lines: list[str], *, model: str | None) -> list[str] | None:
     return kept[: at + 1] + [f"model: {model}\n"] + kept[at + 1 :] + rest
 
 
-def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> list[Change]:
+def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> MaterializeResult:
     """Rewrite every discovered OpenCode tier agent file in place so its
     ``model:`` key (or the deliberate absence of one) matches
     ``models_cfg``'s ``opencode`` bindings.
@@ -135,21 +150,26 @@ def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> list[C
     Targets are discovered by globbing
     ``<config_home>/opencode/agent/*.md`` and matching the tier suffix —
     never named. A missing agent dir, or an agent dir with no matching
-    files, is a reported no-op (an empty list), not an exception: an
-    operator who never opted into OpenCode delivery must not have
-    `fr models set` fail on them. Nothing outside
-    ``<config_home>/opencode/agent/`` is ever written.
-    """
+    files, returns a result with considered==0. An operator who never opted
+    into OpenCode delivery must not have `fr models set` fail on them.
+    Nothing outside ``<config_home>/opencode/agent/`` is ever written.
+
+    The `considered` count includes only files that matched a supported tier
+    suffix, so a caller can distinguish "no files at all" (considered==0)
+    from "files existed but were already correct" (considered>0, empty
+    changes list)."""
     agent_dir = config_home / "opencode" / "agent"
     if not agent_dir.is_dir():
-        return []
+        return MaterializeResult(considered=0, changes=[])
 
     bindings = models_cfg.get("opencode", {})
     changes: list[Change] = []
+    considered = 0
     for agent_file in sorted(agent_dir.glob("*.md")):
         tier = _tier_for_stem(agent_file.stem)
         if tier is None:
             continue
+        considered += 1
         model = bindings.get(tier)
         current = agent_file.read_text()
         lines = current.splitlines(keepends=True)
@@ -188,4 +208,4 @@ def materialize_agents(config_home: Path, *, models_cfg: ModelsConfig) -> list[C
 
         agent_file.write_text(desired)
         changes.append(Change(path=agent_file, tier=tier, old_model=old_model, new_model=model))
-    return changes
+    return MaterializeResult(considered=considered, changes=changes)

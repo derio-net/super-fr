@@ -30,7 +30,7 @@ from fr.models import (
     resolved_config,
     set_binding,
 )
-from fr.opencode_agents import Change, default_config_home, materialize_agents
+from fr.opencode_agents import MaterializeResult, default_config_home, materialize_agents
 
 console = Console(highlight=False)
 err_console = Console(stderr=True, highlight=False)
@@ -67,15 +67,22 @@ def _resolved_config() -> ModelsConfig:
     return resolved_config(repo_cfg=_repo_cfg(), user_cfg=load_models(default_models_path()))
 
 
-def _report_changes(changes: list[Change]) -> None:
+def _report_changes(result: MaterializeResult) -> None:
     """Print exactly what the materialiser did, or that there was nothing to
     do. A silent side effect on a path outside the repo, or a report that
     claims a write that never happened, are both the defect this spec fixes
     one layer in (review r-p1-f3) — this is the one place both `set` and
     `apply` print through, so neither can reintroduce it."""
-    if not changes:
+    changes = result.changes
+    if result.considered == 0:
+        # No matching agent files found at all
         console.print("nothing to update (no OpenCode agent files found)")
         return
+    if not changes:
+        # Files were considered but none needed updating
+        console.print(f"{result.considered} agent files already up to date")
+        return
+    # Files were changed or had problems
     for change in changes:
         if change.problem is not None:
             err_console.print(f"  WARNING: {change.path} not updated — {change.problem}")
@@ -102,8 +109,8 @@ def set_cmd(
     path = default_models_path()
     set_binding(path, harness, tier, model)
     console.print(f"set {harness}/{tier} → {model} ({path})")
-    changes = materialize_agents(default_config_home(), models_cfg=_resolved_config())
-    _report_changes(changes)
+    result = materialize_agents(default_config_home(), models_cfg=_resolved_config())
+    _report_changes(result)
 
 
 @models_app.command("get")
@@ -143,5 +150,5 @@ def apply_cmd(
             f"(known: {', '.join(sorted(_APPLY_HARNESSES))})"
         )
         raise typer.Exit(code=2)
-    changes = materialize_agents(default_config_home(), models_cfg=_resolved_config())
-    _report_changes(changes)
+    result = materialize_agents(default_config_home(), models_cfg=_resolved_config())
+    _report_changes(result)
