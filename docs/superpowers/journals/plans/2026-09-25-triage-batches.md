@@ -130,3 +130,8 @@ Captured live 2026-09-25 (read-only, inside the operator's herdr session): tab l
 ### p2-dispatch-handle · decision · Runner.dispatch may return an opaque handle; herdr's cwd comes from an optional checkout payload key (phase 2)
 
 Spec §3.C says HerdrRunner 'returns the pane id as the handle', but the Runner protocol typed dispatch -> None, so a str-returning implementation fails the mypy conformance assignment (r1-3). The protocol now types dispatch -> str | None (tick ignores the value; vk/cncd still return None). Separately, herdr needs --cwd <checkout> but the spec's payload lists only brief/harness/model/branch/reserved_version/issues; the runner reads an OPTIONAL payload key 'checkout' and falls back to its own cwd. Phase 3's dispatch should put the resolved --checkout path in payload['checkout'] and record the returned handle in the dispatch event.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-norefactor-t5 created=2026-09-25T23:23:45 phase=2 -->
+### p2-norefactor-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+HerdrRunner was written with the shape S4 asks for: every herdr call goes through _run_herdr (one subprocess seam, JSON envelope parsed once, HerdrError carrying herdr's words) and HARNESSES is the one harness table (kind + model flag). The contract helpers are three functions (run_item, check_constructible, check_run_unit_contract) with no shared state. The package test's 'stub' wording was updated to the real runner.
