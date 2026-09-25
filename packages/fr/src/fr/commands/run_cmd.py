@@ -3525,7 +3525,9 @@ def advance_cmd(
         # rather than assuming one.
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
-            repo_root, state.run, committed=outcome is None or outcome.committed
+            repo_root,
+            state.run,
+            committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
         return
@@ -4118,7 +4120,7 @@ def resolve_cmd(
         # "push it" line that assumes the commit landed.
         outcome = _commit_run_writes_now()
         for line in _closeout_handoff_lines(
-            repo_root, run_id, committed=outcome is None or outcome.committed
+            repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
         ):
             console.print(line, soft_wrap=True)
 

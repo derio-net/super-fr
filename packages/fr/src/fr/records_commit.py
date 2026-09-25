@@ -71,6 +71,8 @@ def commit_records(repo_root: Path, paths: Iterable[Path], message: str) -> Comm
                 flush=True,
             )
             return outcome
+        if outcome.unchanged:
+            return outcome  # nothing to commit is not a refusal: stay silent
         if not todo or isinstance(git_context(repo_root), NoRepo):
             return outcome  # not in a git repo (or nothing written): a no-op, as before
         reason = outcome.reason

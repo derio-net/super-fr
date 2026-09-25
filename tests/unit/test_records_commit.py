@@ -383,3 +383,22 @@ def test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly(tmp_path: Path) 
 
     assert _head(root) == before
     assert 1.0 <= elapsed < 5.0, elapsed
+
+
+def test_a_record_write_that_changed_nothing_is_silent_and_counts_as_landed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Found on #610's own deliver: re-resolving an unchanged cursor printed
+    `fr: not committed (the files already match HEAD …)` — which reads as a
+    failure. Nothing to commit is not a refusal: no stderr line, and the
+    outcome says the content is already in HEAD."""
+    from fr.records_commit import commit_records
+
+    root = _repo(tmp_path)
+    (root / "seed.md").write_text("seed\n")  # byte-identical to HEAD
+
+    outcome = commit_records(root, [root / "seed.md"], "chore(fr): noop")
+
+    assert outcome.committed is False
+    assert outcome.unchanged is True
+    assert "fr:" not in capsys.readouterr().err

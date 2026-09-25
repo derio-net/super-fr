@@ -89,6 +89,9 @@ class CommitOutcome:
     committed: bool
     reason: str
     paths: tuple[Path, ...] = ()
+    # True when there was nothing to commit because the files already match
+    # HEAD: not a refusal — the content is already committed.
+    unchanged: bool = False
     message: str | None = None
 
 
@@ -621,6 +624,7 @@ def commit_paths(
         return CommitOutcome(
             committed=False,
             reason="the files already match HEAD; no commit made",
+            unchanged=True,
         )
 
     # The pathspec on `commit` is what keeps an unrelated *staged* file out:
