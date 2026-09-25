@@ -291,3 +291,8 @@ Every batch PR bumps the repo's version files, so counting them made every pair 
 ### p3-t4-green-first · discovery · P3.T4's integration test passed on first run; mutation-checked instead (phase 3)
 
 The execution path (scratch worktree, --theirs, set, commit, push, wait, cleanup) was written in batch_merge.py alongside P3.T3's refusals, so the real-git test was green when first run. To show it is not vacuous it was run against two mutations: skipping take_theirs (both tests red) and never removing the scratch worktree (the cleanup assertion red); both restored.
+
+<!-- fr:journal kind=finding scope=plan id=r1-docs-resolved created=2026-09-26T00:29:48 state=fixed resolves=r1-docs answered_by=agent -->
+### r1-docs-resolved · finding [fixed] · resolves r1-docs: README package table, HERMES.md package prose and an AGENTS.md fr-herdr bullet are owned by no phase — P3.T5.S2 widened to own them
+
+README.md Components table gains an fr-herdr row; HERMES.md 'Where things are' names fr-herdr among the adapters; AGENTS.md gains an fr-herdr bullet under packages/ and documents the batch verbs in the fr/triage paragraph. Commit 892b9295 (docs, no test: prose)
