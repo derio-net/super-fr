@@ -14,3 +14,8 @@ Independent review found the positive branch test used the absent .opencode/agen
 ### review-cli-count-fixture-resolved · finding [fixed] · resolves review-cli-count-fixture: CLI no-op test must seed existing agent files (phase 1)
 
 Seeded three tier-specific agent files directly in the test and assert the exact count; verified the regression fails with the previous no-files message.
+
+<!-- fr:journal kind=review scope=plan id=phase-1-review created=2026-09-26T00:49:11 phase=1 -->
+### phase-1-review · review · Independent code review: fixture correction applied (phase 1)
+
+Review found the CLI positive-case test did not seed any agents because the mirror is absent in the worktree. Corrected test_models_cmd.py to seed three supported-tier agent files directly and assert exactly 3 are reported. Verified both intended failures remain pre-implementation. Reviewer session id 01a0dab3ec7b7e209ccac01fde3f75bd (general review agent).
