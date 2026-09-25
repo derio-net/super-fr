@@ -250,9 +250,9 @@ state:
       ticked_at: '2026-09-25T19:14:15+00:00'
       note: ruff/mypy clean
     P2.T6.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:24:08+00:00'
+      note: test_isolation_host_side_rule.py red (collection)
     P2.T6.S2:
       state: ' '
       ticked_at: null
