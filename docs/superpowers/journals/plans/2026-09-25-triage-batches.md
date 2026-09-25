@@ -408,3 +408,8 @@ AST tripwire: batch modules may import only Checkout, Worktree, GitError from fr
 ### r3-f12-resolved · finding [fixed] · resolves r3-f12: git merge in the scratch worktree inherits operator rerere config, which can silently resolve a non-version conflict; pass -c rerere.enabled=false
 
 Worktree.merge runs git -c rerere.enabled=false merge --no-ff --no-commit <ref>. Test: test_triage_gitseam.py::test_the_scratch_merge_disables_rerere (argv asserted)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f13-resolved created=2026-09-26T01:13:05 state=fixed resolves=r3-f13 answered_by=agent -->
+### r3-f13-resolved · finding [fixed] · resolves r3-f13: Config freshness compares committer dates (%cI); compare ancestry/commit identity instead
+
+check_config_fresh now parses .fr/triage.yaml at origin/<default> (Checkout.show) and compares it with the collected config by value; a file added or removed since collect is refused too. Content identity rather than a recorded blob sha: facts.json records no sha today, and the parsed content is exactly what the verbs consume. Checkout.last_change (%cI) removed. Tests: test_triage_batch_dispatch.py::test_a_collected_config_that_differs_from_origin_is_refused, ::test_a_config_added_on_origin_since_the_collect_is_refused, ::test_the_collected_config_matching_origin_is_used_whatever_its_commit_date; test_triage_batch_merge.py::test_merge_refuses_a_collected_config_that_differs_from_origin
