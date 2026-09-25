@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-09-26-fix-624-set-status-drop-level
+captures:
+- host: h-2884bd17
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-25T22:39:25+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: d798e182-2250-49f5-81ab-727aaac0eef3
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 28
+        cache_write: 88676
+        cache_read: 1332989
+        output: 7832
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 3
+      other:
+        usd: null
+        turns: 3
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+      brainstorm:
+        usd: null
+        turns: 12

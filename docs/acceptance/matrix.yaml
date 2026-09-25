@@ -4264,3 +4264,14 @@ rows:
     status: ci
     notes: engine regenerates the audit page and the measured half of the architecture
       page; the future-state half is authored (spec §5.A.6)
+  - id: lifecycle-acceptance-drop-level
+    capability: Artifact lifecycles
+    acceptance: An operator can remove a stale evidence ref from an acceptance row with
+      a command (in the same rewrite as its status move), so re-pointing a row whose
+      tests were deleted needs no hand-edited YAML.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-acceptance-set-status-drop-level-design.md
+    levels: {}
+    status: not-implemented
+    notes: gh#624. Target level unit (tests/unit/test_acceptance_set_status.py), status
+      ci on merge.
