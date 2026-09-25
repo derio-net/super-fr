@@ -43,8 +43,14 @@ def _short_head(root: Path) -> str:
     return done.stdout.strip() or "HEAD"
 
 
-def commit_records(repo_root: Path, paths: Iterable[Path], message: str) -> CommitOutcome:
+def commit_records(
+    repo_root: Path, paths: Iterable[Path], message: str, *, quiet: bool = False
+) -> CommitOutcome:
     """Commit `paths` under `message`; report on stderr; never raise.
+
+    `quiet` drops the success echo for a caller that prints its own line
+    naming the commit (the step-record engine, p3-r10); a commit that did NOT
+    land is still reported, because that line is the only sign of it.
 
     Returns the `CommitOutcome` (p4-r1) so a caller that prints a "push it"
     line — `run_cmd`'s closeout handoff — can tell a real commit from a
@@ -65,6 +71,8 @@ def commit_records(repo_root: Path, paths: Iterable[Path], message: str) -> Comm
             lock_wait=_LOCK_WAIT_SECONDS,
         )
         if outcome.committed:
+            if quiet:
+                return outcome
             print(
                 f"fr: committed {_short_head(repo_root)} {message.splitlines()[0]}",
                 file=sys.stderr,

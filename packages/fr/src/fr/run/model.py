@@ -61,100 +61,9 @@ dispatch is never coming back", recorded while the step itself goes back to
 `running` for a fresh attempt."""
 
 
-class ContextEstimate(BaseModel):
-    """What fr assembled for ONE attempt — `PhaseAccounting`'s V1 half, on its
-    own (spec `2026-09-20-unit-record-unification-design.md` §4.A).
-
-    Sizes, not tokens: no harness offers a token API at dispatch time, so this
-    measures the context fr itself built (journal, composed handoff, spec +
-    plan bytes) and every renderer labels the derived token figure an
-    ESTIMATE. The `at` timestamp `PhaseAccounting` carried is NOT here — in
-    the v5 shape the estimate hangs off an `Attempt`, whose `dispatched` is
-    that same moment recorded once instead of twice.
-
-    Every field defaults to `0` on purpose, and that is the opposite stance
-    from `MeasuredTokens` below: a size fr failed to read is genuinely zero
-    bytes of assembled context, while a measurement fr failed to take is not a
-    zero, it is an absence — which is why one is defaulted and the other is
-    required.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    journal_entries: int = 0
-    journal_lines: int = 0
-    handoff_chars: int = 0
-    spec_bytes: int = 0
-    plan_bytes: int = 0
-
-
-class MeasuredTokens(BaseModel):
-    """What ONE attempt actually burned, read from the harness's own
-    transcript — `PhaseAccounting`'s V2 half, with gh#514's invariant made
-    STRUCTURAL (spec §4.A).
-
-    All four fields are REQUIRED. A measurement is atomic — all four or none
-    — and `PhaseAccounting` could only say so in prose plus a validator
-    (`fr.artifacts.structure.validate_run`'s partial-measurement check), which
-    meant the unrepresentable state was representable everywhere except at the
-    one place that looked. Here a partial measurement cannot be constructed at
-    all, so "no measurement" is expressed the only honest way: no
-    `MeasuredTokens` at all, rather than a `MeasuredTokens` of zeros. A unit
-    that genuinely spent nothing stays distinguishable from one nobody could
-    read.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    input_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
-    output_tokens: int
-
-    @property
-    def total(self) -> int:
-        """The four figures summed — never a partial sum, because a partial
-        `MeasuredTokens` does not exist."""
-        return (
-            self.input_tokens
-            + self.cache_creation_input_tokens
-            + self.cache_read_input_tokens
-            + self.output_tokens
-        )
-
-
-class MainSessionUsage(BaseModel):
-    """What the MAIN session burned during one top-level step — spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D (gh#593 option 0).
-
-    `MeasuredTokens` covers a dispatched subagent; nothing covered the
-    orchestrator's own context, which is where gh#593 found the cost had
-    moved. The window is the step's, `(previous top-level step's at, this
-    step's at]`, so `brainstorm` (no attempt) and the whole `implement` loop
-    (dispatch, handoff and debugging turns) are measured too.
-
-    Atomic like `MeasuredTokens`: the four figures, `turns` (distinct
-    assistant messages) and `sessions` (how many harness sessions were summed)
-    are all required, so a partial measurement cannot be constructed and "not
-    observable" is the absence of the whole record, never zeros. `cost_usd` is
-    set only when the harness itself reports a cost (OpenCode does; Claude
-    Code's transcript does not), never computed from a price table here.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    input_tokens: int
-    cache_creation_input_tokens: int
-    cache_read_input_tokens: int
-    output_tokens: int
-    turns: int
-    sessions: int
-    cost_usd: float | None = None
-
-
 class Attempt(BaseModel):
-    """One attempt to hold a unit, carrying its own identity AND its own cost
-    (spec §4.A) — `DispatchRecord` plus `session`, `estimate` and `measured`.
+    """One attempt to hold a unit — `DispatchRecord` plus `session` (spec
+    `2026-09-20-unit-record-unification-design.md` §4.A).
 
     A unit's attempts (`UnitRecord.attempts`) are kept oldest first and never
     overwritten: a failed unit that is retried, or one `--redispatch`ed over a
@@ -162,24 +71,15 @@ class Attempt(BaseModel):
     for. Which side of the dispatch-holder spec's §3 line each field sits on:
 
     - **fr knows it** — `dispatched`, fr's own timestamp of the act of
-      dispatching. Stamped BEFORE the brief is built, because it doubles as
-      the start edge of the measurement window (`fr.run.units.estimated_at`):
-      one moment, recorded once.
-    - **fr derives it** — `agent_type`, `model`, `session`, `estimate`.
+      dispatching.
+    - **fr derives it** — `agent_type`, `model`, `session`.
     - **reported, unverifiable** — `agent`, `harness`, `returned`, `outcome`.
       An unreported `agent` is recorded as absent, never guessed.
 
-    The three new fields are each the repair of a defect the split shape had:
-
-    - `session` — the harness session that dispatched it. gh#514's
-      `measure_unit` reads the transcript out of the CURRENT process
-      environment, so without this a cursor picked up in another session (or
-      on another host: §4.D.1) either finds nothing or, worse, measures a
-      stranger's transcript that happens to fall in the same time window.
-    - `estimate` / `measured` — per ATTEMPT, not per unit. The old top-level
-      `accounting` map held one snapshot per unit, so a redispatched unit's
-      second attempt overwrote the first one's cost and the abandoned agent's
-      spend — exactly the spend worth seeing — disappeared.
+    What an attempt COST is no longer here: run 7 moved `estimate` and
+    `measured` into the run's usage file (spec
+    `2026-09-25-lean-cost-aware-process-design.md` §5.B.4), and the v5/v6 shape
+    that carried them is frozen as `fr.run.legacy.AttemptV6`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -204,22 +104,16 @@ class Attempt(BaseModel):
     returned: str | None = None
     outcome: DispatchOutcome | None = None
 
-    estimate: ContextEstimate | None = None
-    """What fr assembled for THIS attempt, written by `advance`."""
-
-    measured: MeasuredTokens | None = None
-    """What THIS attempt burned, written by `resolve` (and by `claim
-    --abandoned`, whose spend is exactly the spend worth seeing)."""
-
     synthesized: Literal[True] | None = None
     """`True` on the ONE kind of attempt fr did not record when it happened:
     the attempt the 4 -> 5 migration creates for a unit that had a cost
     snapshot and no dispatch record (spec §4.F — every cursor that predates
     the dispatch record, which is most of them). Absent everywhere else.
 
-    **A synthesized attempt carries COST, never a HOLD.** It exists so the
-    unit's estimate and measurement have an attempt to hang off, with
-    `dispatched` = the moment fr briefed it, which is the only fact fr has.
+    **A synthesized attempt never carries a HOLD.** It existed so the unit's
+    estimate and measurement had an attempt to hang off (run 7 moved both into
+    the usage file), with `dispatched` = the moment fr briefed it, which is the
+    only fact fr has.
     It has no `returned`, and that must NOT read as "still held": the unit may
     be `done`, or `failed` and waiting to be retried, and treating it as held
     made `advance` refuse to retry a failed unit of an in-flight run the
@@ -366,15 +260,6 @@ class StepRecord(BaseModel):
     exit: int | None = None
     stdout: str | None = None
 
-    main_session: MainSessionUsage | None = None
-    """The main session's usage over this step's window (spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D), written by
-    `_complete_step` on a `done` outcome only. Absent means "not observable" —
-    another harness, an unreadable candidate session, or a step completed
-    before this field existed — never zero. **A shape change**
-    (`current_version=6`, migration `fr.artifacts.run_main_session`); additive,
-    so the hop is stamp-only and no prior shape is frozen."""
-
     members: list[str] | None = None
     """Member-step ids of a grouped `for_each` step, recorded at build.
 
@@ -419,12 +304,6 @@ class StepRecord(BaseModel):
     in `fr.run.legacy` and every migration reads with that, never with this.
     """
 
-
-MAIN_SESSION_SCHEMA_VERSION = 6
-"""The `run` artifact version `StepRecord.main_session` FIRST appears in — the
-same kind of fact as `UNIT_RECORD_SCHEMA_VERSION` below, for the same
-validator check: a body carrying the key under an older stamp raises in any fr
-that believes the stamp."""
 
 UNIT_RECORD_SCHEMA_VERSION = 5
 """The `run` artifact version `StepRecord.units` FIRST appears in.

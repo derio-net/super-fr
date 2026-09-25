@@ -295,6 +295,16 @@ describe("fr-isolation-required (OpenCode plugin)", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("lets the host-side `cd <worktree> && fr run …` form through", async () => {
+    // spec 2026-09-25-lean-cost-aware-process §5.B.6: in devcontainer mode
+    // `fr run` / `fr usage` run on the harness host from the worktree.
+    const hook = await makeHook(repo);
+    const command = `cd ${join(repo, ".cache/fr/worktrees/x")} && uv run fr run resolve r --step x`;
+    await expect(
+      hook({ tool: "bash" } as never, { args: { command } } as never)
+    ).resolves.toBeUndefined();
+  });
+
   test("allows the read-only built-ins", async () => {
     const hook = await makeHook(repo);
     for (const tool of ["glob", "grep", "list", "read"]) {

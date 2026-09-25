@@ -1,0 +1,144 @@
+schema_version: 1
+run: 2026-09-25-feat-lean-cost-aware-process
+captures:
+- host: h-169ae131
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-25T18:24:30+00:00'
+  at:
+  - migrated
+  sessions:
+  - session: (main)
+    role: main
+    models:
+      unknown:
+        input: 158
+        cache_write: 163816
+        cache_read: 23492451
+        output: 130546
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      brainstorm:
+        usd: null
+        turns: 60
+      spec-review:
+        usd: null
+        turns: 7
+      plan:
+        usd: null
+        turns: 11
+      plan-review:
+        usd: null
+        turns: 0
+  - session: a22937c41c887db75
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 258
+        cache_write: 254512
+        cache_read: 21186838
+        output: 1905
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 412
+  - session: a5ca54c59998f8557
+    role: subagent
+    models:
+      claude-opus-5-5:
+        input: 56
+        cache_write: 127025
+        cache_read: 2388049
+        output: 5899
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 5487
+  - session: a3692f00922c2e8d7
+    role: subagent:super-fr:fr-phase-executor
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 9014
+- host: h-3c3cf7b7
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-25T22:10:43+00:00'
+  at:
+  - resolve:implement-phase
+  - deliver
+  sessions:
+  - session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 2460
+        cache_write: 3514247
+        cache_read: 265156561
+        output: 284889
+        usd: null
+        usd_source: none
+      claude-sonnet-5:
+        input: 40
+        cache_write: 128871
+        cache_read: 1857611
+        output: 305
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 777
+      other:
+        usd: null
+        turns: 226
+      paperwork:
+        usd: null
+        turns: 258
+    steps:
+      (outside run):
+        usd: null
+        turns: 40
+      brainstorm:
+        usd: null
+        turns: 60
+      spec-review:
+        usd: null
+        turns: 27
+      plan:
+        usd: null
+        turns: 11
+      implement:
+        usd: null
+        turns: 1076
+      deliver:
+        usd: null
+        turns: 23
+    briefs:
+      toolu_01SB7Gf6a54CfM5eoF7QNYHS: 293
+      a066b71b1a929bc9c: 1893
+      phase/1/implement-phase: 3576
+      phase/1/review-phase: 2136
+      af56a063da07e991f: 4044
+      phase/2/implement-phase: 2958
+      phase/2/review-phase: 3394
+      aa27fcbd57a61260a: 4595
+      phase/3/implement-phase: 3871
+      phase/3/review-phase: 3382
+      a093671f3f334af42: 4961

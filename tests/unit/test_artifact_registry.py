@@ -23,7 +23,7 @@ from fr.artifacts.registry import (
     write_version,
 )
 
-EXPECTED_KINDS = {"plan", "journal", "run", "matrix", "spec"}
+EXPECTED_KINDS = {"plan", "journal", "run", "matrix", "spec", "usage", "record"}
 
 
 # --- Task 1: the registry ------------------------------------------------
@@ -85,6 +85,12 @@ def _seed_repo(root: Path) -> dict[str, Path]:
     live["spec"] = w("docs/superpowers/specs/2026-01-01-live-design.md", "# live\n")
     w("docs/superpowers/implemented/specs/2026-01-01-done-design.md", "# done\n")
 
+    live["usage"] = w("docs/superpowers/usage/2026-01-01-live.yaml", "run: live\n")
+    w("docs/superpowers/implemented/usage/2026-01-01-done.yaml", "run: done\n")
+    live["record"] = w(
+        "docs/superpowers/runs/2026-01-01-live.records/deliver.yaml", "step: deliver\n"
+    )
+
     return live
 
 
@@ -128,6 +134,8 @@ def _diff(before: str, after: str) -> tuple[list[str], list[str]]:
 # trailing comment. A fixture emitted by the writer itself would pass against a
 # reformatting implementation and prove nothing.
 UNSTAMPED: dict[str, str] = {
+    "usage": ("# a usage file\nrun: r\ncaptures: []   # none yet\n"),
+    "record": ("# a step record\nstep: implement-phase\n\nticks: [P1.T1.S1]   # one so far\n"),
     "plan": (
         "# hand-edited plan meta — key order is NOT the canonical one\n"
         "\n"
@@ -198,6 +206,10 @@ STAMPED_3: dict[str, str] = {
         "repo: super-fr\n", "schema_version: 3\nrepo: super-fr\n"
     ),
     "spec": "---\nfr_schema: 3\n---\n" + UNSTAMPED["spec"],
+    "usage": UNSTAMPED["usage"].replace("run: r\n", "schema_version: 3\nrun: r\n"),
+    "record": UNSTAMPED["record"].replace(
+        "step: implement-phase\n", "schema_version: 3\nstep: implement-phase\n"
+    ),
 }
 
 
@@ -575,6 +587,8 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "run": next((root / "docs" / "superpowers" / "runs").glob("*.yaml")),
         "matrix": root / "docs" / "acceptance" / "matrix.yaml",
         "spec": next((root / "docs" / "superpowers" / "specs").glob("*.md")),
+        "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
+        "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),
     }[kind]
     artifact_kind(kind).write_version(target, version)
     return target

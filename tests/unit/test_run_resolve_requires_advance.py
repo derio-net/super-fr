@@ -104,4 +104,5 @@ def test_the_skill_asks_the_orchestrator_to_say_what_it_ran_on(path: Path) -> No
     """fr no longer guesses a model for work the orchestrator did itself (C2),
     so unless the skill asks for it the field is simply never filled."""
     text = " ".join(path.read_text().split())
-    assert "--model <the model you are running on>" in text
+    # The record form (spec 2026-09-25 §5.C): the review-phase record's evidence.
+    assert "model: <the model you are running on>" in text

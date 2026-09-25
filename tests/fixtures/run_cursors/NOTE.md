@@ -1,6 +1,6 @@
 # Run cursors — captured, never constructed
 
-Every file under `v1/` … `v5/` is a run cursor `fr` really wrote while driving a
+Every file under `v1/` … `v6/` is a run cursor `fr` really wrote while driving a
 real `/fr-goal` run in this repository, copied **byte for byte** with
 `git show <rev>:<path> > <fixture>`. None was typed, trimmed, reformatted or
 "tidied". They exist so the `run` 4 → 5 rewrite (spec
@@ -49,6 +49,7 @@ reproduces the fixture exactly, from any clone that has the commit).
 | `v4/2026-09-20-fix-fr-run-cursor-cluster.yaml` | `docs/superpowers/runs/2026-09-20-fix-fr-run-cursor-cluster.yaml` | `da2af6e74867` | `bd96bebc0263` | `f6cd3dbd0b64` | `f87a94d7f098d70a973721bb42875691d6a7df68af67a9956a21367f66aad0ec` | gh#496's `phase/<n>: manual` marker; no `dispatch` (stamp-migrated 2 -> 4, body untouched) |
 | `v4/2026-09-20-unit-record-unification-r2.yaml` | `docs/superpowers/runs/2026-09-20-unit-record-unification-r2.yaml` | `b7fd771b7141` | `b7fd771b7141` | `a8d7daf57a37` | `2ae23637b2a1ebb91ef280a43ec0234c5777d398c048141ad476b21ef3f6dabd` | IN-FLIGHT WITH A HELD UNIT: `phase/3/implement-phase` carries a claimed, OPEN attempt (`returned` absent) beside closed ones, a real measurement on `phase/2/implement-phase`, and two attempts with no `agent_type` (orchestrator-run reviews). Captured in phase 3, moments before the 4 -> 5 migration rewrote the source |
 | `v5/2026-09-23-fix-457-uninstall-rules.yaml` | `docs/superpowers/implemented/runs/2026-09-23-fix-457-uninstall-rules.yaml` | `7dbdc35b73a5` | `f6a26033add4` | `9c7feb6c087b` | `3aa0949f6150a38a358ce8acc8169a6bdbe14c1bacd96e33b7a878aad5c7a00b` | natively-written v5 (`units`, flat `step/*` attempts on an OpenCode run, a `cli` step with `exit`/`stdout`). Captured in phase 1 of plan `2026-09-24-fr-goal-scope-proportion-cost` as the input of the stamp-only 5 -> 6 hop |
+| `v6/2026-09-24-feat-597-593.yaml` | `docs/superpowers/runs/2026-09-24-feat-597-593.yaml` | `6d8200df` | `6d8200df` | `5a13a47e4d56` | `d9ce0a0953caa81bbd39831ad1203afbbd26f13b63c6e9ee4660c7991dac7e2b` | natively-written v6: `main_session` on three steps, `estimate` + `measured` on grouped phase attempts. Captured in phase 2 of plan `2026-09-25-lean-cost-aware-process` as the input of the 6 -> 7 hop, which moves those figures into `usage/` |
 
 ## Not captured, and why
 

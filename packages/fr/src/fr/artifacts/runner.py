@@ -48,7 +48,7 @@ Three invariants the rest of the framework leans on:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,16 +80,26 @@ class DuplicateMigrationError(ArtifactMigrationError):
 class SchemaMigration:
     """Moves one artifact kind `from_version` → `to_version`. Stamp-guarded.
 
-    `fn` rewrites the artifact's body and nothing else: the runner writes the
-    new stamp once `fn` returns. `fn` must read the file itself — it is handed
-    a path, never a parsed document.
+    `fn` rewrites the artifact's body: the runner writes the new stamp once
+    `fn` returns. `fn` must read the file itself — it is handed a path, never a
+    parsed document. A migration that MOVES data out of the artifact into a
+    companion file (run 6 -> 7 writes `usage/<run>.yaml`) returns the paths it
+    wrote, so they are committed with the artifact (`changed_paths`); every
+    other `fn` returns `None`.
+
+    Such a migration also DECLARES those paths up front: `companions(path)`
+    names every file `fn` may write beside `path`, before it runs, so a veto
+    (the CLI-entry gate's uncommitted-changes hold) can check them as well as
+    the artifact — a companion the operator is editing is held back exactly
+    like the artifact itself (phase-2 review p2-r26).
     """
 
     kind: str
     from_version: int
     to_version: int
-    fn: Callable[[Path], None]
+    fn: Callable[[Path], Iterable[Path] | None]
     description: str = ""
+    companions: Callable[[Path], Iterable[Path]] | None = None
 
     def __post_init__(self) -> None:
         if self.to_version <= self.from_version:
@@ -136,6 +146,8 @@ class PlannedAction:
     from_version: int | None = None
     to_version: int | None = None
     repair: str | None = None
+    also_wrote: tuple[Path, ...] = ()
+    """Companion files the migration wrote beside `path` (`SchemaMigration.fn`)."""
 
     @property
     def is_repair(self) -> bool:
@@ -150,6 +162,10 @@ class FailedAction:
     path: Path
     summary: str
     error: str
+    also_wrote: tuple[Path, ...] = ()
+    """Companion files the failing step had already written — its `fn`
+    returned, then the stamp did not take — reported so they are never an
+    unseen, uncommitted change (p2-r26)."""
 
 
 @dataclass(frozen=True)
@@ -171,6 +187,8 @@ class MigrationReport:
         seen: dict[Path, None] = {}
         for a in self.applied:
             seen[a.path] = None
+            for companion in a.also_wrote:
+                seen[companion] = None
         return tuple(seen)
 
     @property
@@ -389,6 +407,34 @@ def _actions_for(
 # --- running -------------------------------------------------------------
 
 
+def _held(
+    reg: MigrationRegistry,
+    name: str,
+    path: Path,
+    actions: list[PlannedAction],
+    veto: Callable[[Path], str | None],
+) -> str | None:
+    """`veto`'s reason for `path`, or for any companion its planned schema
+    steps declare (`SchemaMigration.companions`); `None` when all are clear."""
+    reason = veto(path)
+    if reason is not None:
+        return reason
+    steps = {(m.from_version, m.to_version): m for m in reg.schema_migrations(name)}
+    for action in actions:
+        step = steps.get((action.from_version, action.to_version))  # type: ignore[arg-type]
+        if step is None or step.companions is None:
+            continue
+        try:
+            declared = tuple(step.companions(path))
+        except Exception as e:
+            return f"its migration cannot name the companions it would write ({e})"
+        for companion in declared:
+            reason = veto(companion)
+            if reason is not None:
+                return f"its companion {companion.name} {reason}"
+    return None
+
+
 def run_migrations(
     repo_root: Path,
     *,
@@ -423,7 +469,7 @@ def run_migrations(
             failed.extend(planning_failures)
             if not actions:
                 continue
-            held = veto(path) if veto is not None else None
+            held = _held(reg, name, path, actions, veto) if veto is not None else None
             if held is not None:
                 failed.append(FailedAction(name, path, f"{name} migration held back", held))
                 continue
@@ -517,17 +563,21 @@ def _apply_to_one(
             break
         step = chain[0]
         try:
-            step.fn(path)
+            also_wrote = tuple(step.fn(path) or ())
         except Exception as e:
             # Unstamped on purpose: the artifact stays stale, so the next run
             # retries it instead of skipping a half-migration forever.
             failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
             return applied, failed
-        kind.write_version(path, step.to_version)
         try:
+            kind.write_version(path, step.to_version)
             landed = kind.read_version(path)
         except Exception as e:
-            failed.append(FailedAction(name, path, step.summary, f"{type(e).__name__}: {e}"))
+            failed.append(
+                FailedAction(
+                    name, path, step.summary, f"{type(e).__name__}: {e}", also_wrote=also_wrote
+                )
+            )
             return applied, failed
         if landed != step.to_version:
             failed.append(
@@ -538,6 +588,7 @@ def _apply_to_one(
                     f"stamping it with version {step.to_version} did not take — "
                     f"{kind.stamp} still reads as {landed}. The carrier probably declares "
                     f"the stamp twice; fix it by hand and re-run.",
+                    also_wrote=also_wrote,
                 )
             )
             return applied, failed
@@ -548,6 +599,7 @@ def _apply_to_one(
                 summary=step.summary,
                 from_version=step.from_version,
                 to_version=step.to_version,
+                also_wrote=also_wrote,
             )
         )
     else:

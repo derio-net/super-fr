@@ -84,7 +84,9 @@ Record the investigation to the `debug`-scope journal
 (`journals/debug/<YYYY-MM-DD-slug>.md`) via `fr journal add --scope debug`, appended
 **as you go** — not written up at the end. Continuous flush is the point: the
 rejected-hypotheses trail is the most compaction-vulnerable artifact here, so
-persist each verdict the moment you reach it. New debug journals live under
+persist each verdict the moment you reach it. Each `fr journal add` is a one-entry
+step record (the engine `fr run resolve --record` uses): validated, one commit, one line
+back — so flushing costs one call per verdict. New debug journals live under
 `journals/debug/`; pre-existing `debugging/*.md` prose stays put (no migration). A bug
 fix does NOT enter the spec → plan pipeline, but the journal is durable and
 searchable:

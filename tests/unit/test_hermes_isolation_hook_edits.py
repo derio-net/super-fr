@@ -106,6 +106,15 @@ def test_inside_valid_worktree_allows(tmp_path: Path) -> None:
     assert allowed(run_hook(payload(wt / "src.py")))
 
 
+def test_a_marker_carrying_the_isolation_target_still_allows(tmp_path: Path) -> None:
+    """p2-r20: the `target` key `fr isolation up` now writes is ignored by the gate."""
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    marker = json.loads((wt / ".fr-isolation").read_text())
+    (wt / ".fr-isolation").write_text(json.dumps({**marker, "target": "devcontainer"}))
+    assert allowed(run_hook(payload(wt / "src.py")))
+
+
 def test_fr_base_ok_allows(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)
     assert allowed(run_hook(payload(repo / "src.py"), env={"FR_BASE_OK": "1"}))

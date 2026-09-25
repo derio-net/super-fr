@@ -78,6 +78,7 @@ def test_up_creates_worktree_marker_state_no_container(
 
     marker = json.loads((st.worktree / ".fr-isolation").read_text())
     assert marker["mode"] == "worktree"
+    assert marker["target"] == "worktree"  # p2-r20
     assert marker["toplevel"] == str(st.worktree.resolve())
     # state round-trips
     assert load_state(repo, "feat/x") == st

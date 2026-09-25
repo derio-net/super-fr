@@ -1,0 +1,231 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Audit mechanism: cross-harness usage readers, classifier, fr usage collect/report,
+    fr-audit skill (spec §5.A)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - usage-reconstruct-cross-harness
+  - audit-pages-regenerated
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/usage/**
+  - packages/fr/src/fr/commands/usage_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/run/telemetry.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_usage_*.py
+  - tests/unit/test_migration_trigger.py
+  - tests/fixtures/usage/**
+  - plugins/super-fr/skills/fr-audit/**
+  - .opencode/skills/fr-audit/**
+  - .hermes/skills/fr/fr-audit/**
+  - .hermes/SOUL.d/super-fr-rules.md
+  - scripts/install.sh
+  - tests/unit/test_install_*.py
+  - docs/acceptance/**
+  estimate_lines: 2000
+tasks:
+- number: 1
+  title: 'Walking skeleton: Claude Code reader normalizes a captured transcript into
+    one UsageRecord, deduped by message.id'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: capture a real Claude Code session fixture: copy ONE short session JSONL plus one
+      subagents/*.jsonl and its cost-state line from ~/.claude/projects/<this repo>/ into
+      tests/fixtures/usage/claude-code/, redacting per .claude/rules/third-party-privacy.md
+      (home path -> ~, any non-derio-net host/org -> example.invalid; keep record shapes and
+      usage blocks byte-exact) and record provenance + sha256 in tests/fixtures/usage/NOTE.md.
+      In tests/unit/test_usage_readers.py assert `fr.usage.readers.claude_code.read(path)`
+      returns a `UsageRecord` whose per-model token sums count each message.id ONCE and whose
+      `cost.usd` equals the cost-state figure with `source == "exact"`. Run
+      `uv run pytest tests/unit/test_usage_readers.py -q --no-cov`; confirm it fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/usage/{__init__,model,readers/__init__,readers/claude_code}.py.
+      `model.py`: frozen pydantic `Tokens(input, cache_write_5m, cache_write_1h, cache_read, output)`,
+      `ToolCall(name, target)`, `Message(ts, model, tokens, tool_calls)`,
+      `UsageRecord(session, harness, role, messages, cost, unavailable, attribution)`,
+      `Cost(usd: float|None, source: Literal["exact","estimated","none"])`. The reader reuses
+      `fr.run.telemetry`'s existing dedupe helper (first record per message.id wins; records
+      without an id kept) instead of duplicating it. Test green; full `uv run pytest -q --no-cov` green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: ruff format + ruff check + mypy (AGENTS.md "Dev commands") clean; push the branch
+      and confirm CI is green on the skeleton.
+- number: 2
+  title: OpenCode and Hermes readers behind one UsageReader protocol
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/fixtures/usage/opencode/opencode.db built by a fixture script from the live
+      schema subset (session, message{id,session_id,time_created,data}, part{message_id,data})
+      with two assistant messages (one paid, one free-model $0) and one tool part; and
+      tests/fixtures/usage/hermes/state.db from the documented Hermes schema (sessions with
+      token + estimated_cost_usd/actual_cost_usd columns, messages{token_count,tool_calls,
+      timestamp}, session_model_usage), including one ACP-style session with zero tokens.
+      Assert: OpenCode per-message cost summed with source "exact" for paid, "none" for $0
+      free models; Hermes session cost "exact" from actual_cost_usd else "estimated",
+      attribution == "coarse", and the zero-token session yields `unavailable` naming
+      hermes-agent#6775, never 0. Confirm red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `UsageReader` Protocol (`read(source) -> UsageRecord`) in readers/__init__.py
+      with a `READERS` map keyed by harness; readers/opencode.py opens the DB read-only
+      (mode=ro URI, reusing telemetry's `_open_ro`), readers/hermes.py likewise. Every reader
+      catches its own I/O and parse errors and returns `unavailable="<reason>"`. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: fold the now-duplicated OpenCode token parsing in fr.run.telemetry onto the new
+      reader (telemetry keeps its public names, delegating). ruff/mypy clean; full suite green.
+- number: 3
+  title: 'Activity classifier: pure (tool name, command|path) -> paperwork | implementation
+    | other'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_usage_classify.py table-tests `fr.usage.classify.classify(name, target)`
+      over real, redacted shapes: `uv run fr isolation exec --branch b -- uv run fr journal add ...`
+      -> paperwork; `R=run && uv run fr run resolve $R ...` -> paperwork; `export VIRTUAL_ENV=; uv run fr run advance x`
+      -> paperwork; `fr plan --help` -> paperwork; Read of docs/superpowers/specs/x.md -> paperwork;
+      Edit of packages/fr/src/fr/x.py -> implementation; `uv run pytest -q` -> implementation;
+      `git status --short` -> other; heredoc `cat > f <<'EOF' ...` on packages/ -> implementation;
+      Agent/Task -> other. Also a sub-category (`journal_write`, `run_cursor`, `plan_tick`,
+      `acceptance`, `paper_read`, `paper_check`, `fr_cli_learning`, `code_read`, `code_write`,
+      `verify`, `vcs`, `orchestration`, `narration`) is returned. Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement classify.py: unwrap `fr isolation exec [...] --`, strip leading
+      `VAR=value`, `export X=;` and `cd <dir> &&` prefixes, then match fr verbs first, then
+      paths, then git/gh, per spec §5.A.4. Pure function, no I/O. Tests green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: ruff/mypy clean. Rule order lives in one ordered tuple with a comment per rule.
+- number: 4
+  title: Rollups and fr usage collect/report (table + html), read-only CLI
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_usage_report.py: (a) `rollup(records, weights)` splits each model's
+      harness dollars across activities and steps by price-weighted tokens using ONLY the fixed
+      ratios (input 1, cw5m 1.25, cw1h 2, cr 0.1, out 5) and sums back to the harness total within
+      0.01; (b) per-step windows come from a run cursor's step `at` timestamps, `(prev, at]`;
+      (c) a message with k tool calls contributes 1/k to each; no tool call -> narration;
+      (d) `unavailable` sessions render `—` never `0`; (e) CLI `fr usage collect --session <id>`
+      writes JSON under $HOME/.cache/fr/usage/ (FR_USAGE_CACHE override in tests) and
+      `fr usage report --run <id> --format table` prints per model / activity / step. Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: fr/usage/rollup.py, fr/usage/render.py (table via rich, html via a single
+      self-contained template string), commands/usage_cmd.py registered in cli.py. Add "usage"
+      to fr.artifacts.trigger.READ_ONLY_COMMANDS (it never mutates a registered artifact:
+      collect writes only under ~/.cache) and update
+      tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things
+      with the argument in the diff. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      Local golden check (skipped in CI when transcripts are absent, `pytest.mark.skipif`):
+      over the nine sessions named in tests/fixtures/usage/golden_sessions.txt (ids only),
+      `fr usage report` reproduces the audit's pooled shares (paperwork 30.2%, implementation
+      32.9%) within 0.5 points. Run it here, where the transcripts exist, and note the result.
+  - id: P1.T4.S4
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 5
+  title: fr-audit skill, install wiring, mirrors, regenerate the audit page
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: extend tests/unit/test_install_copies_opencode_skills.py / test_install_copies_rules.py
+      expectations (whichever enumerates shipped skills) and test_skill_validation for a new
+      plugins/super-fr/skills/fr-audit/SKILL.md (under 120 lines, tool/argument-neutral per
+      test_tripwire_skill_tool_neutrality). Confirm red.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: write the thin skill: when to use (compare runs, "what did this cost", before/after a
+      process change), the engine commands (`fr usage collect`, `fr usage report --format html`),
+      how to read the split (context carry vs generation; turns are the cost unit), and authoring
+      the future-state half of an architecture page from a spec (design, not measured). Wire it
+      into scripts/install.sh. Run BOTH `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`; commit the mirrors. Tests green.
+  - id: P1.T5.S3
+    text: |-
+      Render the audit page with the product: `uv run fr usage report --run <each golden run>
+      --format html -o $HOME/.cache/fr/usage/paper-trail.html` and confirm its per-session split
+      matches the published audit within 0.5 points; record the comparison in the phase record.
+      Then `fr acceptance set-status --id usage-reconstruct-cross-harness --status ci
+      --level unit=super-fr:tests/unit/test_usage_readers.py --notes "<why>"`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T17:37:29+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T17:37:30+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-25T17:55:43+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T17:37:31+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T17:37:32+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T17:37:32+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-25T17:39:26+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-25T17:39:27+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-25T17:39:29+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-25T17:55:44+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-25T17:55:44+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-09-25T17:55:45+00:00'
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: '2026-09-25T17:55:46+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-09-25T17:55:46+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-09-25T17:55:47+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-09-25T17:55:48+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T17:55:58+00:00'
+    note: null
+    observed_prs: []

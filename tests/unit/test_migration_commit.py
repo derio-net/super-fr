@@ -831,3 +831,31 @@ def test_on_default_branch_stays_a_thin_boolean_wrapper(tmp_path: Path) -> None:
     assert on_default_branch(root) == "main"
     _git(root, "checkout", "-q", "-b", "feat/y")
     assert on_default_branch(root) is None
+
+
+def test_a_v6_cursor_whose_usage_file_is_being_edited_is_held_back(tmp_path: Path) -> None:
+    """p2-r26: the run 6 -> 7 migration writes `usage/<run>.yaml` beside the
+    cursor and DECLARES it, so an operator's uncommitted edit to that usage
+    file holds the cursor back instead of being rewritten and committed."""
+    import shutil
+
+    run = "2026-09-24-feat-597-593"
+    root = _repo(tmp_path)
+    cursor = root / "docs" / "superpowers" / "runs" / f"{run}.yaml"
+    cursor.parent.mkdir(parents=True)
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures" / "run_cursors" / "v6"
+    shutil.copy(fixtures / f"{run}.yaml", cursor)
+    usage = root / "docs" / "superpowers" / "usage" / f"{run}.yaml"
+    usage.parent.mkdir(parents=True)
+    usage.write_text("schema_version: 1\nrun: x\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "v6 cursor")
+    usage.write_text("schema_version: 1\nrun: x\n# the operator, mid-edit\n")
+    before = cursor.read_bytes()
+
+    report = run_migrations(root, dry_run=False, veto=uncommitted_veto(root))
+
+    held = [f for f in report.failed if f.path == cursor]
+    assert held and f"{run}.yaml" in held[0].error and "uncommitted" in held[0].error
+    assert cursor.read_bytes() == before
+    assert usage.read_text().endswith("# the operator, mid-edit\n")

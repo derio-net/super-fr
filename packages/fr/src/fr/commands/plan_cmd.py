@@ -17,13 +17,11 @@ from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import (
     PhaseSpec,
     PlanEditError,
-    complete_phase,
     create,
     rework_add_origin,
     rework_create,
     rework_list,
     self_review,
-    tick,
 )
 from fr.plan_validator_wrapper import validator_wrapper_path
 from fr.records_commit import commit_records
@@ -268,25 +266,51 @@ def edit(
         err_console.print("Provide exactly one of --tick or --complete-phase")
         raise typer.Exit(2)
 
+    # spec 2026-09-25 §5.C.6: a one-entry record through the step-record engine.
+    from fr.record import apply as engine
+    from fr.record.model import CompleteItem, StepRecord, TickItem
+
+    if tick_step is not None:
+        if state not in ("x", "-"):
+            err_console.print(f"--state must be 'x' or '-', got {state!r}")
+            raise typer.Exit(2)
+        if state == "-" and not note:
+            err_console.print("[red]error:[/red] --state - (skipped) requires --note")
+            raise typer.Exit(2)
+        try:
+            item = TickItem(id=tick_step, state=state, note=note)  # type: ignore[arg-type]
+        except ValueError as e:
+            err_console.print(f"[red]error:[/red] step id {tick_step!r} not found in any phase")
+            raise typer.Exit(2) from e
+        record = StepRecord(ticks=(item,))
+        verb = f"tick {tick_step}" if state == "x" else f"skip {tick_step}"
+        line = f"ticked {tick_step} → {state}"
+    else:
+        assert complete_phase_n is not None
+        record = StepRecord(complete=CompleteItem(phase=complete_phase_n, note=note))
+        verb = f"complete phase {complete_phase_n}"
+        line = f"phase {complete_phase_n}: marked complete"
+    resolved = plan_dir.resolve()
     try:
-        if tick_step is not None:
-            if state not in ("x", "-"):
-                err_console.print(f"--state must be 'x' or '-', got {state!r}")
-                raise typer.Exit(2)
-            tick(plan_dir, tick_step, state=state, note=note)  # type: ignore[arg-type]
-            console.print(f"ticked {tick_step} → {state}")
-            verb = f"tick {tick_step}" if state == "x" else f"skip {tick_step}"
-        else:
-            assert complete_phase_n is not None
-            complete_phase(plan_dir, complete_phase_n, note=note)
-            console.print(f"phase {complete_phase_n}: marked complete")
-            _acceptance_flip_nudge(plan_dir, complete_phase_n)
-            verb = f"complete phase {complete_phase_n}"
-    except PlanEditError as e:
+        repo_root = parse(resolved).repo_root or resolved
+    except Exception as e:  # noqa: BLE001 — the verb's own parse error, as before
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
-    resolved = plan_dir.resolve()
-    _commit_plan_writes(_plan_repo_root(resolved), [resolved], resolved.name, verb)
+    try:
+        engine.apply_record(
+            repo_root,
+            None,
+            record,
+            target=engine.RecordTarget(
+                plan_dir=resolved, message=f"chore(fr): plan {resolved.name} — {verb}"
+            ),
+        )
+    except engine.RecordRefusedError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    console.print(line)
+    if complete_phase_n is not None:
+        _acceptance_flip_nudge(plan_dir, complete_phase_n)
 
 
 def _plan_repo_root(plan_dir: Path) -> Path | None:

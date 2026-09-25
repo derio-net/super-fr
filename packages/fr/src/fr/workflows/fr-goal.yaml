@@ -59,7 +59,7 @@ steps:
     kind: agent
     skill: super-fr:fr-brainstorming
     gate: operator
-    emits: [spec, journal:spec]
+    emits: [spec, journal:spec, acceptance]
 
   - id: spec-review
     kind: agent
@@ -102,7 +102,7 @@ steps:
         agent: super-fr:fr-phase-executor
         needs: [spec, plan]
         tier: from_phase
-        emits: [journal:plan]
+        emits: [journal:plan, plan:ticks]
       - id: review-phase
         kind: agent
         # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
@@ -166,7 +166,7 @@ steps:
     kind: agent
     skill: superpowers:verification-before-completion
     needs: [spec, plan]
-    emits: [pr]
+    emits: [pr, acceptance]
     # `tests` (debug journal C5): the log of the full suite the ORCHESTRATOR ran
     # during delivery — `--evidence tests=<log>`, hashed onto the cursor. On the
     # #497 run `deliver` resolved in 28s on a PR url and the executor's word.

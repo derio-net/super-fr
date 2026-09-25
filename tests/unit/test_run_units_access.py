@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from fr.run import units
 from fr.run.model import RunState, parse_run_state
 
@@ -66,14 +65,16 @@ def _state(name: str) -> RunState:
     """The captured cursor `name`, as the LIVE (v5) model reads it.
 
     The one seam phase 3 re-pointed: a captured v1-v4 file goes through the
-    real 4 -> 5 rewrite and is then parsed by the live model. Every assertion
+    real 4 -> 5 rewrite (and, since run 7, the 6 -> 7 usage split, which
+    carries cost out of the cursor) and is then parsed by the live model. Every assertion
     below was written against the OLD shape in phase 2 and survived this swap
     unchanged — which is the proof that the accessor layer is shape-neutral.
     """
     import yaml
+    from fr.artifacts.run_usage_split import split_usage
     from fr.run.legacy import v4_to_v5
 
-    migrated = v4_to_v5(yaml.safe_load((FIXTURES / name).read_text()))
+    migrated, _usage = split_usage(v4_to_v5(yaml.safe_load((FIXTURES / name).read_text())))
     return parse_run_state(yaml.safe_dump(migrated, sort_keys=False))
 
 
@@ -177,7 +178,6 @@ def test_a_unit_resolved_before_the_dispatch_record_has_one_synthesized_attempt(
     assert only.synthesized is True
     assert (only.agent, only.agent_type, only.harness, only.model) == (None, None, None, None)
     assert only.returned is None and only.outcome is None
-    assert only.estimate is not None
     assert units.dispatch_recorded(record, UNATTEMPTED) is False
 
 
@@ -333,168 +333,7 @@ def test_fan_out_states_is_empty_when_no_step_fans_out() -> None:
     assert units.fan_out_states(smallest) == {}
 
 
-# ----------------------------------------------------------------- the cost
-
-
-def test_accounted_keys_are_sorted_and_cover_every_unit_with_a_cost() -> None:
-    state = _state(HOLDER)
-    keys = units.accounted_keys(state)
-    assert keys == tuple(sorted(keys))
-    assert "phase/1/implement-phase" in keys
-
-
-def test_estimate_of_reads_the_v1_sizes() -> None:
-    estimate = units.estimate_of(_state(CLUSTER), "phase/1/implement-phase")
-    assert estimate is not None
-    assert estimate.journal_entries == 5
-    assert estimate.journal_lines == 26
-    assert estimate.handoff_chars == 2369
-    assert estimate.spec_bytes == 18657
-    assert estimate.plan_bytes == 36765
-
-
-def test_estimate_of_an_unaccounted_unit_is_none() -> None:
-    assert units.estimate_of(_state(CLUSTER), "phase/99/implement-phase") is None
-
-
-def test_estimated_at_is_the_moment_fr_assembled_the_context() -> None:
-    assert (
-        units.estimated_at(_state(CLUSTER), "phase/1/implement-phase")
-        == "2026-09-20T13:30:36+00:00"
-    )
-
-
-def test_estimated_at_of_an_unaccounted_unit_is_none() -> None:
-    assert units.estimated_at(_state(CLUSTER), "phase/99/implement-phase") is None
-
-
-def test_measured_of_is_none_where_no_transcript_figure_was_read() -> None:
-    state = _state(UNMEASURED)
-    assert units.accounted_keys(state)  # it HAS accounting...
-    assert all(units.measured_of(state, k) is None for k in units.accounted_keys(state))
-
-
-def test_measured_of_reads_all_four_figures_where_they_exist() -> None:
-    state = _state(MEASURED)
-    measured = [units.measured_of(state, k) for k in units.accounted_keys(state)]
-    got = [m for m in measured if m is not None]
-    assert got, "this fixture's value is that it carries real measurements"
-    for m in got:
-        assert m.total == (
-            m.input_tokens
-            + m.cache_creation_input_tokens
-            + m.cache_read_input_tokens
-            + m.output_tokens
-        )
-
-
-def test_with_estimate_and_with_measured_round_trip_through_the_accessors() -> None:
-    state = _state(CLUSTER)
-    key = "phase/9/implement-phase"
-    # An estimate is what fr assembled FOR an attempt, so there has to be one —
-    # opened at the very moment the estimate was computed (one timestamp).
-    steps = dict(state.steps)
-    steps["implement"] = units.with_attempt_appended(
-        units.with_unit_state(steps["implement"], key, "running"),
-        key,
-        units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00"),
-    )
-    state = state.model_copy(update={"steps": steps})
-    written = units.with_estimate(
-        state,
-        "implement",
-        key,
-        units.ContextEstimate(
-            journal_entries=1, journal_lines=2, handoff_chars=3, spec_bytes=4, plan_bytes=5
-        ),
-        at="2026-09-20T23:00:00+00:00",
-    )
-    estimate = units.estimate_of(written, key)
-    assert estimate is not None and estimate.handoff_chars == 3
-    assert units.estimated_at(written, key) == "2026-09-20T23:00:00+00:00"
-    assert units.measured_of(written, key) is None
-
-    measured = units.with_measured(
-        written,
-        "implement",
-        key,
-        units.MeasuredTokens(
-            input_tokens=1,
-            cache_creation_input_tokens=2,
-            cache_read_input_tokens=3,
-            output_tokens=4,
-        ),
-    )
-    got = units.measured_of(measured, key)
-    assert got is not None and got.total == 10
-    # …and the estimate it was folded in beside is untouched
-    after = units.estimate_of(measured, key)
-    assert after is not None and after.handoff_chars == 3
-
-
-def test_a_partial_measurement_cannot_be_represented() -> None:
-    """gh#514's "all four or none" invariant, made structural (spec §4.A)."""
-    with pytest.raises(Exception):
-        units.MeasuredTokens(input_tokens=1)  # type: ignore[call-arg]
-
-
 # ------------------------------------------------ the rules of the v5 shape
-
-
-def _estimate() -> units.ContextEstimate:
-    return units.ContextEstimate(handoff_chars=3)
-
-
-def test_with_estimate_refuses_a_moment_that_is_not_the_attempts_own() -> None:
-    """ONE timestamp. The estimate is computed before the brief and the attempt
-    opened after it; if the attempt stamped its own later `dispatched`, the
-    measurement window would start AFTER the dispatch it measures — silently.
-    So the mismatch is an error, not a second field."""
-    state = _state(HOLDER)
-    dispatched = units.attempts(state.steps["implement"], CLAIMED)[-1].dispatched
-    assert units.with_estimate(state, "implement", CLAIMED, _estimate(), at=dispatched)
-    with pytest.raises(ValueError, match="one moment"):
-        units.with_estimate(
-            state, "implement", CLAIMED, _estimate(), at="2030-01-01T00:00:00+00:00"
-        )
-
-
-def test_with_estimate_refuses_a_unit_with_no_attempt() -> None:
-    """fr never synthesizes an attempt at run time — only the migration does."""
-    state = _state(CLUSTER)
-    with pytest.raises(ValueError, match="no attempt"):
-        units.with_estimate(
-            state, "implement", "phase/1/review-phase", _estimate(), at="2026-09-20T23:00:00+00:00"
-        )
-
-
-def test_the_measurement_window_starts_at_the_attempts_own_dispatched() -> None:
-    state = _state(HOLDER)
-    last = units.attempts(state.steps["implement"], CLAIMED)[-1]
-    assert last.estimate is not None
-    assert units.estimated_at(state, CLAIMED) == last.dispatched
-
-
-def test_cost_is_per_attempt_a_redispatch_does_not_overwrite_the_abandoned_spend() -> None:
-    """Decision u2. The v4 `accounting` map held ONE snapshot per unit, so a
-    redispatched unit's second estimate overwrote the first — and the
-    abandoned agent's spend, exactly the spend worth seeing, disappeared."""
-    state = _state(HOLDER)
-    first = units.attempts(state.steps["implement"], CLAIMED)[-1]
-    assert first.estimate is not None and first.returned is not None
-    steps = dict(state.steps)
-    steps["implement"] = units.with_attempt_appended(
-        steps["implement"], CLAIMED, units.UnitAttempt(dispatched="2026-09-20T23:00:00+00:00")
-    )
-    state = state.model_copy(update={"steps": steps})
-
-    state = units.with_estimate(
-        state, "implement", CLAIMED, _estimate(), at="2026-09-20T23:00:00+00:00"
-    )
-
-    before, after = units.attempts(state.steps["implement"], CLAIMED)
-    assert before == first, "the earlier attempt keeps its own cost, untouched"
-    assert after.estimate == _estimate()
 
 
 def test_a_wholesale_state_write_never_drops_a_units_attempts() -> None:

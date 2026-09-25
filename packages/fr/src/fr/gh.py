@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import TypeVar
 from urllib.parse import quote
 
@@ -47,6 +48,25 @@ def _run_gh(args: list[str]) -> str:
             msg, stderr=exc.stderr or "", returncode=exc.returncode, stdout=exc.stdout or ""
         ) from exc
     return result.stdout.strip()
+
+
+def view_pr_body(ref: str, *, cwd: Path | None = None) -> str:
+    """The live body of pull request `ref` (a number, URL or branch), read
+    with `gh pr view` from `cwd` (its repository). Raises GhError."""
+    try:
+        done = subprocess.run(
+            ["gh", "pr", "view", ref, "--json", "body", "--jq", ".body"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+        )
+    except FileNotFoundError as exc:
+        raise GhError("gh is not installed") from exc
+    except subprocess.CalledProcessError as exc:
+        msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
+        raise GhError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
+    return done.stdout
 
 
 def create_issue(

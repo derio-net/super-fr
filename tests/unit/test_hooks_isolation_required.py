@@ -121,6 +121,25 @@ def test_valid_marker_in_worktree_allows(tmp_path: Path) -> None:
     assert allowed(run_hook(payload(wt / "a.py")))
 
 
+@pytest.mark.parametrize("target", ["devcontainer", "worktree"])
+def test_a_marker_carrying_the_isolation_target_still_allows(tmp_path: Path, target: str) -> None:
+    """p2-r20: `fr isolation up` records `target` beside `mode`; the gate
+    reads `mode` and must ignore the new key."""
+    repo = fr_repo(tmp_path)
+    wt = linked_worktree(repo)
+    (wt / ".fr-isolation").write_text(
+        json.dumps(
+            {
+                "toplevel": str(wt.resolve()),
+                "branch": "feat/x",
+                "mode": "worktree",
+                "target": target,
+            }
+        )
+    )
+    assert allowed(run_hook(payload(wt / "a.py")))
+
+
 def test_valid_marker_allows_a_symlink_that_stays_inside_the_worktree(tmp_path: Path) -> None:
     repo = fr_repo(tmp_path)
     wt = linked_worktree(repo)

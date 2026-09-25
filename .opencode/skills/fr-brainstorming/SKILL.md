@@ -68,9 +68,11 @@ design.
 
 The brainstorm's design document becomes the spec
 (`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the
-worktree). **Standalone:** resolve the cursor §0 started — `fr run resolve
-<run-id> --step brainstorm --state done --emitted spec=<path>` — then drive
-everything after this through `fr run advance <run-id>`. That is what makes
+worktree). **Standalone:** resolve the cursor §0 started with its step
+record — the brief's `record` file, filled as you go: `emitted: {spec: <path>}`,
+each operator answer as a `decision` in `journal:`, each §3 row in
+`acceptance:` — in ONE `fr run resolve <run-id> --step brainstorm --record
+<file>`, then drive everything after this through `fr run advance <run-id>`. That is what makes
 the cursor a gate rather than a file on disk: `implement`'s
 `needs: [spec, plan]` only refuses work that asks it to. Hand off to
 `fr-plan` (the fr-plan-override rule already routes
@@ -80,8 +82,9 @@ implementation continue in it; cleanup belongs to whoever finishes the run
 
 ## 3. Acceptance rows — born with the spec, presented at the close
 
-Each key "operator can do X" claim in the design becomes a matrix row:
-`fr acceptance add --status not-implemented --origin <repo>:<new-spec-path>`
+Each key "operator can do X" claim in the design becomes a matrix row — an
+`acceptance:` entry of the brainstorm record (`status: not-implemented`,
+`origin: [<repo>:<new-spec-path>]`), or with no run `fr acceptance add`
 (run `fr acceptance init` first if the repo has no matrix). **The brainstorm
 ENDS by presenting the rows to the operator with a one-line defense each** —
 the business claim it pins, the target verification level, why it is

@@ -1,0 +1,285 @@
+schema_version: 2
+phase:
+  number: 2
+  title: 'Usage persistence: usage/<run-id>.yaml, capture points, run 6->7, backfill,
+    host-side fr run, parity modes (spec §5.B)'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - usage-captured-at-deliver
+  - usage-readable-on-any-host
+  - usage-privacy-no-host-identity
+  - usage-devcontainer-captures
+  - fr-goal-main-session-cost
+  tier: hard
+  files:
+  - packages/fr/src/fr/usage/**
+  - packages/fr/src/fr/artifacts/**
+  - packages/fr/src/fr/run/**
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/usage_cmd.py
+  - packages/fr/src/fr/commands/isolation_cmd.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/isolation/**
+  - packages/fr/src/fr/harness/**
+  - plugins/super-fr/hooks/**
+  - packages/fr-opencode-plugin/**
+  - tests/**
+  - docs/superpowers/runs/**
+  - docs/superpowers/usage/**
+  - docs/superpowers/implemented/usage/**
+  - docs/acceptance/**
+  estimate_lines: 2400
+tasks:
+- number: 1
+  title: 'Precondition: gh#610''s commit_paths and fr pickup --run are on the branch
+    base'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Confirm `fr.artifacts.commit.commit_paths` and `fr pickup --run` exist on this branch
+      (`git log --oneline origin/main | grep -i 610`, then import commit_paths in a one-line
+      `uv run python -c`). If either is missing, STOP and report a BLOCKER: phases 2 and 3
+      build on them. If present, rebase onto origin/main and re-run the full suite green.
+- number: 2
+  title: 'The usage kind: model, registry, validator, privacy allowlist, host label'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_usage_kind.py: `fr.usage.file.UsageFile` (schema_version 1, run,
+      captures[host, harness, mode, captured_at, at, sessions[...]]) round-trips the spec §5.B.1
+      example; `fr validate artifacts` accepts it and rejects a duplicate key; `upsert_capture`
+      replaces only the same host's entry; `host_label(run_id, hostname)` is
+      `h-` + sha256(run_id + hostname)[:8]; a capture from fixture host `laptop.corp.example`
+      with provider base URL and paths present in the source serializes with none of them
+      (grep the YAML for the hostname, "http", "/Users", "~/"). Confirm red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: fr/usage/file.py; register kind `usage` (current_version 1, locator
+      docs/superpowers/usage/*.yaml) in fr.artifacts.registry ONLY, validator in
+      fr.artifacts.structure, imported from fr/artifacts/__init__.py. Serialization is an
+      explicit allowlist of fields, never `model_dump()` of source records. Tests green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; `uv run fr validate artifacts` exits 0.
+- number: 3
+  title: Capture at deliver, at archive (and move), and on the first resolve from
+    a new host
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_usage_capture.py with fixture transcripts via FR_TRANSCRIPT_ROOT /
+      FR_OPENCODE_DB / FR_HERMES_DB overrides: (a) `fr run resolve --step deliver` writes
+      docs/superpowers/usage/<run>.yaml with one capture (at: deliver) covering every session the
+      cursor records that is readable here plus the current one, committed via commit_paths in
+      the SAME commit as the cursor move; (b) a resolve from a second fake hostname
+      (FR_HOSTNAME override) with no capture yet appends `at: resolve:<step>`; the same host again
+      adds nothing; (c) `fr archive` captures the closeout session and moves the file to
+      docs/superpowers/implemented/usage/; (d) a reader raising yields `unavailable` and the
+      resolve still succeeds with its normal exit code. Confirm red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: fr/usage/capture.py `capture(repo_root, state, at, env)`; call it from the deliver
+      resolve path, from resolve when `host_label` is absent from the file, and from archive
+      (before the move). Session candidates: attempt sessions, isolation bindings, current
+      session (reuse telemetry.candidate_sessions). Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 4
+  title: 'Run 6 -> 7: freeze RunStateV6, remove estimate/measured/main_session, migrate
+    figures into usage/'
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: (a) tests/unit/test_run_legacy.py pins `fr.run.legacy.RunStateV6` source sha;
+      (b) test_migration_runner's every-hop chain assertion becomes [2, 3, 4, 5, 6, 7];
+      (c) tests/unit/test_migration_run_v7.py: a v6 fixture cursor (capture one from
+      docs/superpowers/runs/ via `git show`, sha in tests/fixtures/run_cursors/NOTE.md) migrates
+      to v7 with the three fields gone and their figures present in its usage/ file
+      (at: migrated, usd_source: none); an unconvertible cursor stays byte-identical and is
+      reported; a wholly-v7 body under a v6 stamp is completed;
+      (d) test_no_run_migration_names_the_live_parser stays green. Confirm red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: add RunStateV6 (vocabularies inlined) to fr/run/legacy.py; remove the fields from
+      fr/run/model.py; bump run current_version to 7 in fr/artifacts/registry.py ONLY; new
+      fr/artifacts/run_usage_split.py SchemaMigration 6->7 built in memory, written with
+      write_text_atomic, registered via fr/artifacts/__init__.py. Remove units.py's
+      estimate/measured readers and tests/unit/test_tripwire_per_unit_cost_reads.py; drop
+      fr run status's cost column; `fr run cost` reads usage/ (then implemented/usage/),
+      `--recompute` re-derives from local transcripts. Tests green.
+  - id: P2.T4.S3
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the worktree and commit the migrated live
+      cursors and their new usage/ files; `uv run fr validate artifacts` exits 0.
+  - id: P2.T4.S4
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+- number: 5
+  title: 'fr usage backfill: new files from archived runs + local transcripts, archives
+    untouched'
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests/unit/test_usage_backfill.py over a temp repo with two archived runs (one with v5
+      estimate/measured, one without): `fr usage backfill` writes
+      docs/superpowers/implemented/usage/<run>.yaml with at: backfill for each; the archived
+      run files hash-identical before and after; re-running is a no-op; a run whose transcripts
+      are present gets exact dollars, one without gets usd_source none. Confirm red.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: fr/usage/backfill.py + `fr usage backfill` subcommand. Tests green.
+  - id: P2.T5.S3
+    text: |-
+      REFACTOR: ruff/mypy clean.
+- number: 6
+  title: fr run / fr usage execute on the harness host (bridge refusal + in-process
+    check); unobserved gates warn
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      RED: tests/unit/test_isolation_host_side_rule.py: (a) `fr isolation exec -- uv run fr run
+      resolve r --step x` against a devcontainer-profile workspace fixture exits 2 printing
+      `cd <worktree> && uv run fr run resolve r --step x` (worktree contains packages/fr) and bare
+      `fr run …` for a consumer fixture; host-worktree and external workspaces are NOT refused;
+      (b) `fr run status` invoked with cwd in a repo whose .fr-isolation has mode: worktree AND
+      container evidence (monkeypatched /.dockerenv probe) exits 2 with the same message; a temp
+      repo without a marker inside a "container" is not refused; external mode is not refused;
+      (c) the host-side `cd $HOME/.cache/fr/worktrees/<wt> && fr run …` form passes
+      plugins/super-fr/hooks/fr-isolation-guard.sh (bats-free: invoke the script with a crafted
+      PreToolUse JSON as existing guard tests do) and the OpenCode adapter test;
+      (d) a transcript gate with no harness detected records `unobserved` in evidence and prints
+      a warning line. Confirm red.
+  - id: P2.T6.S2
+    text: |-
+      GREEN: argv inspection in commands/isolation_cmd.py exec (shlex-split `bash -c` strings best
+      effort); in-process check as a shared `fr.isolation.where.require_harness_host(repo_root)`
+      called at the top of the `run` and `usage` Typer groups; `unobserved` handling in the gate
+      helpers of fr/run/telemetry.py. Tests green.
+  - id: P2.T6.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; `cd packages/fr-opencode-plugin && bun test` green if touched.
+- number: 7
+  title: Parity modes and rows; re-point fr-goal-main-session-cost
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      RED: tests for fr.harness: parity.yaml accepts optional
+      harnesses.<harness>.modes.<host-worktree|devcontainer|external>: {state, scope_note};
+      absent `modes` = one state for all; `fr harness parity --check` passes with new rows for
+      usage capture and each transcript gate (Hermes: implemented, not live-verified, coarse
+      attribution, ACP zero tokens hermes-agent#6775; external mode notes capture-before-teardown).
+      Confirm red.
+  - id: P2.T7.S2
+    text: |-
+      GREEN: extend fr/harness model/observe/check and parity.yaml. Re-point the acceptance row:
+      `fr acceptance set-status --id fr-goal-main-session-cost --status skipped
+      --level unit=super-fr:tests/unit/test_usage_capture.py --notes "claim now delivered by
+      usage/ per-step rollup; main_session removed in run v7; live walk in phase 4"`. Flip
+      usage-privacy-no-host-identity and usage-captured-at-deliver to ci with their tests.
+      Tests green; `fr acceptance check` exits 0.
+  - id: P2.T7.S3
+    text: |-
+      REFACTOR: ruff/mypy clean; full suite green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T18:29:00+00:00'
+      note: commit_paths + fr pickup --run present; HEAD already contains origin/main
+        (19402029), no rebase needed; full suite 5390 passed
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T18:33:45+00:00'
+      note: test_usage_kind.py red on import
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T18:33:46+00:00'
+      note: fr/usage/file.py; kind usage v1 registered, validate_usage
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T18:33:46+00:00'
+      note: ruff/mypy clean; fr validate artifacts 0
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-25T18:43:40+00:00'
+      note: test_usage_capture.py 4 red
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-25T18:43:41+00:00'
+      note: fr/usage/capture.py; resolve deliver + after-hook for new host; archive
+        _archive_usage
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-25T18:43:41+00:00'
+      note: ruff/mypy clean; full suite 5413 passed
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-25T19:12:09+00:00'
+      note: legacy V6 pin, chain [2..7], test_migration_run_v7.py red; v6 fixture
+        captured from 6d8200df (NOTE.md row)
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-25T19:12:09+00:00'
+      note: RunStateV6 frozen; fields removed; run->7; run_usage_split 6->7 (runner
+        learns companion paths); units cost readers + tripwire gone; status cost column
+        gone; fr run cost reads usage/, --recompute
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-09-25T19:12:10+00:00'
+      note: 'fr migrate artifacts --yes: 2 live cursors -> v7 + usage files (eab566e9);
+        validate artifacts 0'
+    P2.T4.S4:
+      state: x
+      ticked_at: '2026-09-25T19:12:11+00:00'
+      note: ruff/mypy clean; full suite 5357 passed
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-09-25T19:14:13+00:00'
+      note: test_usage_backfill.py 4 red
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-09-25T19:14:14+00:00'
+      note: fr/usage/backfill.py + fr usage backfill (a0ae47ba)
+    P2.T5.S3:
+      state: x
+      ticked_at: '2026-09-25T19:14:15+00:00'
+      note: ruff/mypy clean
+    P2.T6.S1:
+      state: x
+      ticked_at: '2026-09-25T19:24:08+00:00'
+      note: test_isolation_host_side_rule.py red (collection)
+    P2.T6.S2:
+      state: x
+      ticked_at: '2026-09-25T19:24:09+00:00'
+      note: fr.isolation.where (inner_fr_command, host_command, require_harness_host);
+        exec refusal; run/usage group callbacks; unobserved evidence + warnings
+    P2.T6.S3:
+      state: x
+      ticked_at: '2026-09-25T19:24:10+00:00'
+      note: ruff/mypy clean; bun test 76 pass; full suite 5376 passed
+    P2.T7.S1:
+      state: x
+      ticked_at: '2026-09-25T19:30:56+00:00'
+      note: test_harness_parity_modes.py 8 red
+    P2.T7.S2:
+      state: x
+      ticked_at: '2026-09-25T19:30:57+00:00'
+      note: HarnessState.modes + state_in; usage-capture row (per mode, Hermes note
+        incl. hermes-agent#6775, external capture-before-teardown); gates restated
+        per mode; fr-goal-main-session-cost re-pointed (in T4), usage-privacy-no-host-identity
+        / usage-captured-at-deliver / usage-readable-on-any-host -> ci; acceptance
+        check 0; parity --check 0
+    P2.T7.S3:
+      state: x
+      ticked_at: '2026-09-25T19:30:58+00:00'
+      note: ruff/mypy clean; full suite 5385 passed
+  completion:
+    at: '2026-09-25T19:30:59+00:00'
+    note: usage kind + capture + run 7 + backfill + host-side rule + parity modes;
+      suite 5385 passed
+    observed_prs: []

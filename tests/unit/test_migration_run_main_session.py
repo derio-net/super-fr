@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 from fr.artifacts import ARTIFACT_KINDS, MIGRATIONS, run_migrations
 from fr.artifacts.structure import validate_run
-from fr.run.model import MainSessionUsage, StepRecord, parse_run_state
+from fr.run.legacy import MainSessionUsageV6 as MainSessionUsage
+from fr.run.legacy import StepRecordV6 as StepRecord
+from fr.run.legacy import parse_run_state_v6
 from pydantic import ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -77,16 +79,20 @@ def test_the_five_to_six_hop_is_registered() -> None:
 
 
 def test_a_captured_v5_cursor_migrates_to_six_changing_only_the_stamp(tmp_path: Path) -> None:
+    """The 5 -> 6 hop alone is stamp-only: its `fn` leaves the body byte-identical
+    (the chain then carries the cursor on to 7, which is `test_migration_run_v7`'s)."""
     path = tmp_path / "docs" / "superpowers" / "runs" / V5.name
     path.parent.mkdir(parents=True)
     before = V5.read_bytes()
     path.write_bytes(before)
+    (hop,) = [m for m in MIGRATIONS.schema_migrations("run") if m.from_version == 5]
+
+    assert hop.fn(path) is None
+    assert path.read_bytes() == before
 
     report = run_migrations(tmp_path, dry_run=False)
-
     assert report.ok, [(f.path.name, f.error) for f in report.failed]
-    assert ARTIFACT_KINDS["run"].read_version(path) == 6
-    assert path.read_bytes() == before.replace(b"schema_version: 5\n", b"schema_version: 6\n", 1)
+    assert ARTIFACT_KINDS["run"].read_version(path) == ARTIFACT_KINDS["run"].current_version
     assert validate_run(path) == []
 
 
@@ -114,14 +120,16 @@ def _with_main_session(tmp_path: Path, stamp: int) -> Path:
     )
     path = tmp_path / f"v{stamp}.yaml"
     path.write_text(text)
-    assert parse_run_state(text).steps["brainstorm"].main_session is not None
+    assert parse_run_state_v6(text).steps["brainstorm"].main_session is not None
     return path
 
 
-def test_the_validator_accepts_main_session_on_a_v6_cursor(tmp_path: Path) -> None:
-    assert validate_run(_with_main_session(tmp_path, 6)) == []
+def test_the_frozen_reader_accepts_main_session_on_a_v6_cursor(tmp_path: Path) -> None:
+    parse_run_state_v6(_with_main_session(tmp_path, 6).read_text())
 
 
-def test_the_validator_rejects_main_session_under_an_older_stamp(tmp_path: Path) -> None:
-    problems = validate_run(_with_main_session(tmp_path, 5))
-    assert any("main_session" in p and "6" in p for p in problems), problems
+def test_the_validator_rejects_main_session_once_run_7_removed_it(tmp_path: Path) -> None:
+    """Run 7 moved `main_session` into the usage file; the live model — and so
+    `fr validate artifacts` — no longer knows it."""
+    problems = validate_run(_with_main_session(tmp_path, 7))
+    assert any("main_session" in p for p in problems), problems

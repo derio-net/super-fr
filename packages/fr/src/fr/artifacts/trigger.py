@@ -82,6 +82,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "validate",
     "harness",
     "triage",
+    "usage",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -114,7 +115,12 @@ is ordinary git, not an fr rewrite of an artifact in the invoking checkout, so
 the promise still holds. Gating it protects nothing, since triage cannot
 proceed *over* a stale artifact; it would only refuse an agent's triage,
 commonly an org triage run from inside some unrelated repo, over artifacts the
-command never touches."""
+command never touches. `fr usage` (2026-09-25 lean-cost-aware-process, spec §5.A.5) is the
+same shape as `triage`: it READS a run cursor (for its sessions and step
+windows) and the harness's own transcripts, and writes only under its cache
+directory (`$HOME/.cache/fr/usage/`, or `FR_USAGE_CACHE`) — never a registered
+artifact, so it cannot proceed over a stale one. It must also run where the
+cursor is stale: reporting what an old run cost is exactly the audit's job."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by
@@ -515,6 +521,8 @@ def _migrate_and_commit(
     if report.failed:
         for failure in report.failed:
             emit(f"  FAILED: {_rel(failure.path, root)} · {failure.error}")
+            for companion in failure.also_wrote:
+                emit(f"    it had already written {_rel(companion, root)} (uncommitted)")
         # PARTIAL SUCCESS is its own outcome and the message says so (review
         # r5-c5). One plan migrated and committed while another failed on a
         # `~=` ceiling is the ordinary shape of a consumer repo mid-upgrade;

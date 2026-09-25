@@ -37,4 +37,6 @@ def test_a_resolve_example_names_its_scope_and_slug(where: str, example: str) ->
 
 
 def test_the_scan_finds_the_fr_goal_examples() -> None:
-    assert sum(1 for where, _ in _examples() if where.startswith("fr-goal:")) >= 3
+    # Since spec 2026-09-25 §5.C the pipeline resolves findings through step
+    # records; the closeout's deferral line is the verb example fr-goal keeps.
+    assert sum(1 for where, _ in _examples() if where.startswith("fr-goal:")) >= 1

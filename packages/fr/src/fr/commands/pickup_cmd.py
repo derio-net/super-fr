@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -12,6 +13,9 @@ from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError
 from fr.run.closeout import CloseoutNotReadyError, closeout_brief
 from fr.run.model import RunStateError, load_run_state
+
+if TYPE_CHECKING:
+    from fr.record.template import RecordBrief
 
 console = Console()
 err_console = Console(stderr=True)
@@ -112,9 +116,60 @@ def pickup_command(
             for sub in step.text.splitlines() or [""]:
                 lines.append(f"    {sub}")
         lines.append("")
+    lines.extend(_record_section(plan, phase))
     lines.append("---")
     lines.append("")
     lines.append(f"For plan-level context, read `{plan.repo_relative_dir}/_prose.md`.")
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))
+
+
+def _record_section(plan: object, phase: int) -> list[str]:
+    """The phase's step record (spec 2026-09-25 §5.C.3), when a run on disk
+    executes this plan: the in-progress record if one exists (a resumed
+    session continues it), else the pre-filled template. Nothing when no run
+    names the plan — the runner path has no cursor and uses the verbs."""
+    try:
+        found = _run_unit_record(plan, phase)
+    except Exception:  # noqa: BLE001 — pickup never fails over its optional section
+        return []
+    if found is None:
+        return []
+    lines = ["## Step record", ""]
+    if found.in_progress:
+        lines += [found.in_progress, "", "Continue it; do not start a new one.", ""]
+        return lines
+    lines += [
+        f"Fill `{found.path}` as you work:",
+        "",
+        "```yaml",
+        found.template.rstrip(),
+        "```",
+        "",
+    ]
+    return lines
+
+
+def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
+    from fr.commands.run_cmd import _resolve_manifest_for_state
+    from fr.record.template import record_brief
+    from fr.run.model import RUNS_REL, parse_run_state
+
+    repo_root = getattr(plan, "repo_root", None)
+    rel = getattr(plan, "repo_relative_dir", None)
+    if repo_root is None or rel is None:
+        return None
+    for path in sorted((repo_root / RUNS_REL).glob("*.yaml")):
+        try:
+            state = parse_run_state(path.read_text())
+        except Exception:  # noqa: BLE001, S112 — an unreadable cursor is not this plan's
+            continue
+        if not any(r.emitted and r.emitted.get("plan") == str(rel) for r in state.steps.values()):
+            continue
+        manifest = _resolve_manifest_for_state(repo_root, state)
+        for group in manifest.steps:
+            for member in group.steps:
+                if "plan:ticks" in (member.emits or group.emits):
+                    return record_brief(repo_root, state, member, group, f"phase/{phase}")
+    return None

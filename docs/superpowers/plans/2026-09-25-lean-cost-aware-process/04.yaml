@@ -1,0 +1,44 @@
+schema_version: 2
+phase:
+  number: 4
+  title: 'Post-merge live walk: /fr-goal on Claude Code and OpenCode, one in devcontainer
+    mode (Test Plan 15)'
+  tag: manual
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - bookkeeping-turns-per-step
+  - usage-devcontainer-captures
+  - usage-readable-on-any-host
+  - fr-goal-main-session-cost
+tasks:
+- number: 1
+  title: Operator runs /fr-goal on a small derio-net task under each harness
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Claude Code, devcontainer mode: run /fr-goal on a small task. Check: docs/superpowers/usage/<run>.yaml
+      has readable sessions (no host names in it); `fr usage report --run <run>` shows ≤ 2
+      bookkeeping turns per step; any `fr isolation exec -- fr run …` attempt was refused with
+      the host-side command.
+  - id: P4.T1.S2
+    text: |-
+      OpenCode, host-worktree mode: the same run; then on a second checkout that never ran it,
+      `fr run cost <run>` renders both runs. Flip usage-devcontainer-captures,
+      bookkeeping-turns-per-step, usage-readable-on-any-host and fr-goal-main-session-cost with
+      `fr acceptance set-status` and redacted evidence. Hermes is not walked (parity.yaml says so).
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

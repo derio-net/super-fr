@@ -1310,9 +1310,9 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # fr_version floor, and the no-`files` agentic-phase nudge.
     issues.extend(_scope_field_issues(plan))
 
-    # Refactor-or-justify gate (fr-goal methodology restoration): every
-    # multi-step task ends red → green → refactor, or records why not.
-    issues.extend(_refactor_issues(plan))
+    # The refactor-or-justify gate moved to `fr run resolve` (spec 2026-09-25
+    # §5.C.2.2, `fr.record.gates.refactor_gaps`): at plan time "nothing to
+    # clean" is a guess; at resolve the executor knows.
 
     # Same-repo-form spec that doesn't resolve locally (#248): almost always a
     # malformed cross-repo ref missing the `owner/repo:` prefix, which apply's
@@ -1825,53 +1825,6 @@ def _scope_field_issues(plan: Plan) -> list[ReviewIssue]:
                 ),
             )
         )
-    return out
-
-
-def _refactor_issues(plan: Plan) -> list[ReviewIssue]:
-    """Refactor-or-justify gate (fr-goal methodology restoration): a task that
-    ran red → green ends with a refactor step, or records a
-    `no-refactor-because:` justification in the plan journal.
-
-    Three exemptions, each with a reason: manual phases (runbook work has
-    nothing to extract), single-step tasks (fr-plan omits the refactor step
-    when there is nothing to clean — a trivial task carries no empty one),
-    and fully-ticked tasks (done is done; historical and mid-flight plans
-    must not retro-error, the same exemption the purity gate gives completed
-    steps). A missing/unparseable journal is not a justification — the
-    journal's own `fr journal check` owns malformed files.
-    """
-    out: list[ReviewIssue] = []
-    justifications = _refactor_justifications(plan)
-    for ph in plan.phases:
-        if ph.phase.tag != "agentic":
-            continue
-        n = ph.phase.number
-        for task in ph.tasks:
-            if len(task.steps) < 2:
-                continue
-            states = ph.state.steps
-            if all(
-                (states.get(s.id) is not None and states[s.id].state == "x") for s in task.steps
-            ):
-                continue
-            if any("refactor" in s.text.casefold() for s in task.steps):
-                continue
-            task_id = f"P{n}.T{task.number}"
-            if task_id in justifications:
-                continue
-            out.append(
-                ReviewIssue(
-                    severity="error",
-                    message=(
-                        f"phase {n} task {task_id} has no refactor step and no "
-                        f"no-refactor-because justification — add a refactor step "
-                        f"or record one: `fr journal add --scope plan "
-                        f"--slug {plan.meta.plan} --kind discovery --phase {n} "
-                        f"--title 'no-refactor-because {task_id}' --body <reason>`."
-                    ),
-                )
-            )
     return out
 
 

@@ -38,6 +38,7 @@ from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
 from fr.commands.triage_cmd import triage_app
 from fr.commands.undispatch_cmd import undispatch_command
+from fr.commands.usage_cmd import usage_app
 from fr.commands.validate_cmd import validate_app
 from fr.commands.workflow_cmd import workflow_app
 
@@ -77,6 +78,7 @@ app.add_typer(workflow_app, name="workflow")
 app.add_typer(run_app, name="run")
 app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
+app.add_typer(usage_app, name="usage")
 app.command(name="skills")(skills_command)
 
 
