@@ -363,3 +363,8 @@ Verified: check_open_membership/compare-before-write ran only in _write after ru
 ### r3-f2-resolved · finding [fixed] · resolves r3-f2: HIGH: take_theirs checks out main's WHOLE version file, discarding the PR's other edits in it (e.g. a new dependency in pyproject.toml); exceeds d3
 
 Verified: take_theirs replaced the whole file. Now a conflicted version file is taken from main only when the PR's change to it (merge-base -> PR head) is the quoted version alone (batch_version.only_version_changed); a lockfile changed further only with a declared relock (then relocked); anything else aborts, stops and names the path. Tests: test_triage_batch_merge_git.py::test_a_pr_that_changed_a_version_file_beyond_the_version_stops_the_queue (red against the old rule), test_triage_batch_merge.py::test_a_version_file_the_pr_changed_beyond_the_version_is_a_real_conflict, ::test_a_lockfile_changed_beyond_the_version_is_taken_and_relocked, ::test_a_lockfile_changed_beyond_the_version_without_relock_stops, test_triage_batch_version.py::test_only_version_changed
+
+<!-- fr:journal kind=finding scope=plan id=r3-f3-resolved created=2026-09-26T01:12:22 state=fixed resolves=r3-f3 answered_by=agent -->
+### r3-f3-resolved · finding [fixed] · resolves r3-f3: MEDIUM: batch merge never checks collected-config freshness (spec §3.I), yet runs its version.files/set/relock
+
+batch merge now fetches and holds check_config_fresh (shared _fresh_config with dispatch) before planning or reading the merge method. Test: test_triage_batch_merge.py::test_merge_refuses_a_collected_config_that_differs_from_origin
