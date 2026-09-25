@@ -323,3 +323,8 @@ Dispatched reviewer (sonnet) over 7e983b53: r1 (important: handoff claimed 'push
 ### 47c79242817d · discovery · P5.T1.S1 e2e test: RED verified by disabling the commit seam (phase 5)
 
 Temporarily made fr.records_commit.commit_records no-op (returning CommitOutcome(committed=False, ...)) and reran tests/unit/test_closeout_e2e.py: it failed for the right reason (deliver's handoff printed 'cursor NOT committed' instead of 'cursor committed as'). Reverted (git checkout -- packages/fr/src/fr/records_commit.py) and confirmed green again. No fixture piece needed a live forge except the PR-state lookup in verify_merge, which is monkeypatched on a real HostWorktreeTarget instance — every git operation the test asserts on (worktree state, squash-merge, push, fetch, reap-hazard) is real.
+
+<!-- fr:journal kind=discovery scope=plan id=9aeae7459f69 created=2026-09-25T14:29:54 phase=5 -->
+### 9aeae7459f69 · discovery · no-refactor-because P5.T1 (phase 5)
+
+One new test file, self-contained helpers mirroring the file-local _git/_invoke convention test_run_cli.py and test_isolation.py already use — nothing to fold across files.
