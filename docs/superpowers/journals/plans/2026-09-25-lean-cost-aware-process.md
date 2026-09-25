@@ -249,3 +249,8 @@ usage/file.py:241-242; readers' f'{type(exc).__name__}: {exc}'.
 ### p2-r22 · finding [open] (reviewer: in scope) · fr run cost drops all migrated entries once any live capture exists (phase 2)
 
 run/cost.py:87-93: supersede per session/step, report ignored entries.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r23 created=2026-09-25T21:40:23 phase=2 state=open review_scope=in -->
+### p2-r23 · finding [open] (reviewer: in scope) · Dispatched reviewer attempts (agent, no agent_type) labelled role: main (phase 2)
+
+artifacts/run_usage_split.py:109-114; regenerate both committed usage files.
