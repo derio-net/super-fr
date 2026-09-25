@@ -300,3 +300,8 @@ Operator chose to file it after #604 merged.
 ### dl-f2-resolved-2 · finding [deferred → #607] · resolves dl-f2: tests= gate cannot accept a backgrounded suite, while the brief's long_commands rule says to background it
 
 Operator chose to file it after #604 merged.
+
+<!-- fr:journal kind=discovery scope=plan id=x-p5-live-walk created=2026-09-25T15:04:46 phase=5 -->
+### x-p5-live-walk · discovery · Phase 5 live walk: Claude Code passes all three Test Plan 15 checks; OpenCode fails cost capture (devcontainer mode) (phase 5)
+
+Claude Code — run 2026-09-25-fix-606-writes-dot-dir-prefix (host-worktree), PR #609: main_session measured on all 7 top-level steps; spec-review evidence names a dispatched super-fr:fr-spec-reviewer; PR body carries the proportionality report and an out-of-scope statement. OpenCode — run 2026-09-25-fix-605-agent-step-evidence-debt (devcontainer), PR #612: spec-review answered by a child session running fr-spec-reviewer-standard (advisory on OpenCode, as parity.yaml states); proportionality present; NO out-of-scope statement (prose-only obligation missed); main_session on 1 of 7 steps. Root cause: every fr run advance/resolve ran via fr isolation exec inside the container, where no harness env is forwarded (attempts record harness=None) and the host transcripts/opencode.db are absent. The same makes the transcript-based gates (reviewer provenance, operator_answered_since, tests= window) degrade to 'recorded as claimed' in devcontainer mode on every harness. Handed to the in-flight lean-cost-aware-process brainstorm (usage/<run-id>.yaml capture redesign), which supersedes main_session. P5.T1.S2 stays open until that lands and an OpenCode devcontainer walk passes.
