@@ -20,7 +20,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from fr.run.telemetry import OpenCodeReader, reader_for
+from fr.run.telemetry import OpenCodeReader
 
 START = "2026-09-24T10:00:00+00:00"
 END = "2026-09-24T10:10:00+00:00"
@@ -96,16 +96,6 @@ def _env(db: Path) -> dict[str, str]:
     return {"FR_HARNESS": "opencode", "FR_OPENCODE_DB": str(db)}
 
 
-def test_opencode_has_a_reader() -> None:
-    assert isinstance(reader_for("opencode"), OpenCodeReader)
-
-
 def test_the_database_path_honours_the_override(db: Path) -> None:
     assert OpenCodeReader().database(_env(db)) == db
     assert OpenCodeReader().database({}).name == "opencode.db"
-
-
-def test_dispatch_measurement_stays_none(db: Path) -> None:
-    reader = OpenCodeReader()
-    assert reader.locate_session(_env(db)) is None
-    assert reader.measure(db, agent=None, start=START, end=END, same_session=True) is None
