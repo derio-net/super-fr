@@ -123,3 +123,8 @@ The duplication predates this change (the script always hand-copied the Python l
 ### review-p2 · review · Phase 2 review (phase 2)
 
 Dispatched reviewer (sonnet) over 99f3cb7b. Raised p2-r1 (critical, in: proportionality regression, 6 tests), p2-r2 (minor, in: warning visibility), p2-r3 (minor, out). Verified r1/r2 by reproduction and fixed in e016c1da with RED tests first; r3 filed out-of-scope. Also recorded: phase-2's targeted test list (mine, in the plan) omitted test_plan_proportionality.py, which is how r1 slipped past the executor.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-adjusted-tests created=2026-09-25T11:52:45 phase=3 -->
+### p3-adjusted-tests · discovery · Pre-existing tests adjusted for fr's own commits (phase 3)
+
+Two tests encoded 'fr leaves its write uncommitted' and were adjusted (assertions kept, behaviour not weakened): (1) tests/unit/test_run_cli.py::test_advance_agent_step_never_invokes_a_model parsed the brief from result.output line 2; click 8.3's result.output merges stderr, and fr now reports its commit there, so it reads result.stdout (the brief's contract is stdout). (2) tests/integration/test_run_survives_teardown.py::test_a_dirty_run_survives_a_forced_down_and_comes_back_with_up committed the cursor by hand after start (now fr does; replaced by asserting the runs dir is clean) and relied on advance leaving the cursor dirty; it now un-commits the advance with a mixed reset to recreate the uncommitted-cursor scenario it is about. test_migration_commit.py and test_migration_trigger.py are unmodified.
