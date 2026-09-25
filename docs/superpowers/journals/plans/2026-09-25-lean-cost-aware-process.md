@@ -549,3 +549,8 @@ Operator asked to file it; tracked.
 ### d-oos-tests-window-resolved-2 · finding [deferred → #631] · resolves d-oos-tests-window: deliver's tests= gate cannot see a run_in_background suite (call window ends at launch)
 
 Operator asked to file it; tracked.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cli-gate-unobserved-resolved-2 created=2026-09-26T00:15:41 state=open resolves=d-oos-cli-gate-unobserved tracked_by=#632 -->
+### d-oos-cli-gate-unobserved-resolved-2 · finding [deferred → #632] · resolves d-oos-cli-gate-unobserved: An operator gate on a kind: cli step never persists unobserved to the cursor
+
+Operator asked to file it; tracked.
