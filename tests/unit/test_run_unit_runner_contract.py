@@ -9,7 +9,10 @@ spec says it refuses. Runner entry points are faked by replacing
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 from fr_dispatch import registry
@@ -128,6 +131,36 @@ def test_a_runner_that_drops_a_payload_value_fails_the_contract() -> None:
 def test_a_runner_class_without_from_env_is_not_constructible() -> None:
     with pytest.raises(AssertionError, match="from_env"):
         check_constructible(_NoFromEnv)
+
+
+def test_the_contract_still_bites_under_python_dash_o() -> None:
+    """Review r2p-f12a: `python -O` strips bare `assert`, so the contract raises
+    AssertionError explicitly. Run in a child interpreter with -O."""
+    code = (
+        "from fr_dispatch.testing import check_constructible\n"
+        "class NoFromEnv: pass\n"
+        "try:\n"
+        "    check_constructible(NoFromEnv)\n"
+        "except AssertionError as exc:\n"
+        "    print('refused:', exc)\n"
+        "else:\n"
+        "    print('accepted')\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-O", "-c", code], capture_output=True, text=True, check=True
+    )
+    assert done.stdout.startswith("refused:"), done.stdout + done.stderr
+    assert "from_env" in done.stdout
+
+
+def test_the_contract_module_has_no_bare_assert() -> None:
+    """Every contract check is an explicit raise, so none disappears under -O."""
+    import ast
+
+    import fr_dispatch.testing as contract
+
+    tree = ast.parse(Path(contract.__file__).read_text(encoding="utf-8"))
+    assert not [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Assert)]
 
 
 # ------------------------------------------------------------- load_runner

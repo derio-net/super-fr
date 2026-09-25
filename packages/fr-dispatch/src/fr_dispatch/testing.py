@@ -11,8 +11,10 @@ batch work — `unit="run"` items dispatched by `fr triage batch dispatch` — w
 4. `dispatch(item)` honours the payload: the brief and the model it carries
    reach the backend (`check_run_unit_contract`'s *sent* probe shows what did).
 
-Plain `assert`s with messages, no pytest import: `fr_dispatch` does not depend
-on a test framework, and a failed contract reads the same in any runner.
+Explicit `AssertionError`s with messages, no pytest import: `fr_dispatch` does
+not depend on a test framework, and a failed contract reads the same in any
+runner. Never a bare `assert` — `python -O` strips those, and the contract would
+pass everything (review r2p-f12a).
 """
 
 from __future__ import annotations
@@ -59,11 +61,18 @@ def run_item(
     )
 
 
+def _require(ok: bool, message: str) -> None:
+    """Raise `AssertionError(message)` unless *ok* — an assert that survives -O."""
+    if not ok:
+        raise AssertionError(message)
+
+
 def check_constructible(runner_cls: type) -> None:
     """The class builds itself from the environment: a callable `from_env`."""
     factory = getattr(runner_cls, "from_env", None)
-    assert callable(factory), (
-        f"{runner_cls.__name__} has no from_env(): it cannot be constructed outside its own bridge"
+    _require(
+        callable(factory),
+        f"{runner_cls.__name__} has no from_env(): it cannot be constructed outside its own bridge",
     )
 
 
@@ -74,19 +83,22 @@ def check_run_unit_contract(runner: Runner, item: WorkItem, *, sent: Callable[[]
     recorded request) as text; the brief and the model must both appear in it.
     `can_dispatch` is checked before anything that could reach a backend.
     """
-    assert isinstance(runner.name, str) and runner.name, "runner.name must be a non-empty str"
+    _require(
+        isinstance(runner.name, str) and bool(runner.name), "runner.name must be a non-empty str"
+    )
     runner.refresh()  # typed `-> None` by the protocol; the contract is that it runs
     budget = runner.slot_budget()
-    assert isinstance(budget, int) and budget >= 0, f"slot_budget() returned {budget!r}"
-    assert runner.can_dispatch(item), (
-        f"runner `{runner.name}` does not take run-unit work: can_dispatch refused {item.id}"
+    _require(isinstance(budget, int) and budget >= 0, f"slot_budget() returned {budget!r}")
+    _require(
+        runner.can_dispatch(item),
+        f"runner `{runner.name}` does not take run-unit work: can_dispatch refused {item.id}",
     )
     missing = [k for k in RUN_PAYLOAD_KEYS if k not in item.payload]
-    assert not missing, f"the contract item lacks payload keys {missing}"
+    _require(not missing, f"the contract item lacks payload keys {missing}")
     runner.dispatch(item)
     text = sent()
     for key in ("brief", "model"):
         value = str(item.payload[key])
-        assert value in text, (
-            f"dispatch did not pass the payload's {key} ({value!r}) to its backend"
+        _require(
+            value in text, f"dispatch did not pass the payload's {key} ({value!r}) to its backend"
         )
