@@ -469,3 +469,8 @@ _deliver_pr_gate in _resolve_body (step emits pr, state done, before _complete_s
 ### p3-r3-resolved · finding [fixed] · resolves p3-r3: Invalid-record atomicity: crash window, retry wedges on existing ids, restore misses cursor/usage paths and can revert committed files
 
 Record removed only after all writes+gates (tracked: just before the commit that records it); identical re-applied journal entries/resolutions/rows are no-ops so a retry heals; ResolveGuard remembers cursor/usage/spec-journal/PR-render bytes before writing; no restore once a commit landed. Crash/heal/changed-entry/post-commit-raise tests in test_record_review_fixes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-09-25T23:47:59 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: --record silently ignores --no-questions/--reason/--answered-by/--agent/--harness/--model
+
+Both: --record refuses --no-questions/--reason/--answered-by/--agent/--harness/--model; record gains no_questions + reason (outcome section) so the brainstorm bypass stays one --record resolve; fr-goal §1 documents it. Tests: flag refusal (5 cases) + brainstorm no_questions record.
