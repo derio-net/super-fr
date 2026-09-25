@@ -10,6 +10,7 @@ the operation, the backend and gh#611.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -253,3 +254,37 @@ def test_the_protocol_declares_every_batch_operation() -> None:
 
     for op in _CALLS:
         assert hasattr(GhClient, op), op
+
+
+# ------------------------------------------------------------- tripwire (§3.J)
+
+_BATCH_MODULES = {
+    "fr.triage": "packages/fr/src/fr/triage/batch.py",
+    "fr.commands": "packages/fr/src/fr/commands/triage_batch_cmd.py",
+}
+_FORGE_CLIS = ("fr.gh", "fr.glab", "fr.tea", "subprocess", "fr.triage.collect")
+
+
+def _root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize(("package", "path"), sorted(_BATCH_MODULES.items()))
+def test_no_batch_module_reaches_a_forge_cli_or_triage_forge(package: str, path: str) -> None:
+    """Batch verbs go through the GhClient adapter only (spec §3.J, Test Plan 19)."""
+    from tests.unit.triage_fixtures import forbidden_imports
+
+    assert forbidden_imports(_root() / path, package, _FORGE_CLIS) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["from fr import gh", "import subprocess", "from fr.triage.collect import GhForge",
+     "from fr import tea", "import fr.glab"],
+)  # fmt: skip
+def test_the_batch_tripwire_catches_each_forbidden_import(tmp_path: Path, source: str) -> None:
+    from tests.unit.triage_fixtures import forbidden_imports
+
+    plant = tmp_path / "plant.py"
+    plant.write_text(source + "\n", encoding="utf-8")
+    assert forbidden_imports(plant, "fr.triage", _FORGE_CLIS) != []

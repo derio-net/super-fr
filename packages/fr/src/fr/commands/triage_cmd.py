@@ -4,9 +4,9 @@
 directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
 `render` writes `triage.html`, and `--open` hands it to `webbrowser`.
-`batch list` prints the batches in `judgements.yaml` (spec
-2026-09-25-triage-batches §3.A); it needs no facts.json. The
-engine lives in `fr.triage`; this module only parses flags and does I/O.
+The `batch` sub-app's verbs live in `fr.commands.triage_batch_cmd` (spec
+2026-09-25-triage-batches). The engine lives in `fr.triage`; this module only
+parses flags and does I/O.
 
 Gate-exempt: `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` because
 it never reads or writes a registered artifact (spec §3.F′).
@@ -197,7 +197,10 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned and unreachable. Always exits 0."""
+    """Report unranked issues and PRs, settled, orphaned, unreachable and stale dispatches.
+
+    Always exits 0.
+    """
     _, facts, judgements = _load_state(_scope(repo, org), dir_override)
     result = classify(facts, judgements)
     if as_json:
@@ -224,6 +227,15 @@ def check_command(
     )
     for u in result.unreachable:
         console.print(f"  {escape(u.key)}  {escape(u.reason)}", soft_wrap=True)
+    console.print(
+        f"[bold]stale dispatch[/bold] ({len(result.stale)}) — fr:in-progress, batch marker "
+        "older than the repo's threshold, no linked PR"
+    )
+    for st in result.stale:
+        console.print(
+            f"  {escape(st.key)}  {st.days}d since {escape(st.marker_at)}  {escape(st.title)}",
+            soft_wrap=True,
+        )
 
 
 @triage_app.command("render")
@@ -244,23 +256,9 @@ def render_command(
         webbrowser.open(out.resolve().as_uri())
 
 
-@batch_app.command("list")
-def batch_list_command(
-    repo: RepoOpt = None,
-    org: OrgOpt = None,
-    dir_override: DirOpt = None,
-) -> None:
-    """Print one line per batch in judgements.yaml, or "no batches"."""
-    path = state_dir(_scope(repo, org), dir_override) / "judgements.yaml"
-    try:
-        batches = load_judgements(path).batches if path.exists() else []
-    except TriageError as exc:
-        err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
-        raise typer.Exit(code=2) from exc
-    if not batches:
-        console.print("no batches")
-        return
-    for b in batches:
-        console.print(
-            f"{b.id}  {plural(len(b.ids), 'issue')}  {b.title}", markup=False, soft_wrap=True
-        )
+# The batch verbs live in `triage_batch_cmd` (spec 2026-09-25-triage-batches
+# §3.C names it as fr's second soft point for fr_dispatch). It reuses the
+# helpers above and registers its commands on `batch_app`, so it is imported
+# LAST: whichever of the two modules loads first, every name the other needs
+# already exists.
+import fr.commands.triage_batch_cmd  # noqa: E402, F401

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -27,8 +28,12 @@ from fr.triage.model import (
     Facts,
     Issue,
     Judgements,
+    Launch,
     PullRequest,
+    TriageConfig,
     _check_schema,
+    batch_marker,
+    withdrawn_marker,
 )
 
 BatchStage = Literal[
@@ -221,3 +226,151 @@ def save_batches(path: Path, batches: Sequence[Batch]) -> Judgements:
         raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
     write_text_atomic(path, text)
     return judgements
+
+
+# ------------------------------------------------------------------ launch
+
+
+def resolve_launch(batch: Batch, config: TriageConfig) -> Launch:
+    """The batch's launch, each unset field taken from `defaults.launch` (§3.B).
+
+    Resolved at dispatch, never at create: fr never picks a runner, harness or
+    model itself, so a field set in neither place is refused.
+    """
+    defaults = config.defaults.launch
+    resolved = Launch(
+        runner=batch.launch.runner or defaults.runner,
+        harness=batch.launch.harness or defaults.harness,
+        model=batch.launch.model or defaults.model,
+    )
+    missing = [f for f in ("runner", "harness", "model") if getattr(resolved, f) is None]
+    if missing:
+        raise TriageError(
+            f"batch {batch.id!r} has no {', '.join(missing)} to launch with: give "
+            f"{' '.join('--' + f for f in missing)} on the batch, or set defaults.launch "
+            "in the repo's .fr/triage.yaml"
+        )
+    return resolved
+
+
+# ----------------------------------------------------------------- markers
+
+
+def withdrawn_already(comments: Iterable[dict[str, object]], item_id: str) -> bool:
+    """True when the latest fr-batch marker for *item_id* is a withdrawal.
+
+    Comments are oldest first. Makes `batch cancel` idempotent: a re-run after
+    a partial forge failure posts a withdrawal only where none is current.
+    """
+    latest = None
+    for c in comments:
+        body = str(c.get("body") or "").lstrip()
+        if body.startswith(withdrawn_marker(item_id)):
+            latest = "withdrawn"
+        elif body.startswith(batch_marker(item_id)):
+            latest = "dispatch"
+    return latest == "withdrawn"
+
+
+def withdrawal_body(batch: Batch, item_id: str, reason: str) -> str:
+    """The cancel comment: marker first, then plain words. No handle, no host."""
+    text = f"{withdrawn_marker(item_id)}\nbatch `{batch.id}` withdrawn."
+    return f"{text} Reason: {reason}" if reason else text
+
+
+# ----------------------------------------------------------------- suggest
+
+_URL = re.compile(r"https?://\S+")
+_PATH = re.compile(r"[\w.-]+(?:/[\w.-]+)+|[\w-]+\.(?:py|md|ts|js|sh|yaml|yml|json|toml|lock|txt)\b")
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    signal: Literal["file", "theme", "pattern"]
+    label: str
+    keys: list[str]
+
+
+def cited_paths(text: str) -> set[str]:
+    """File paths a judgement's `detail` cites: tokens with a `/` or a file extension."""
+    return {m.strip(".,;:") for m in _PATH.findall(_URL.sub(" ", text))}
+
+
+def _same_file(a: str, b: str) -> bool:
+    """Two citations name one file when one is a path suffix of the other."""
+    return a == b or a.endswith("/" + b) or b.endswith("/" + a)
+
+
+def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
+    """Candidate groupings of open judged issues in no open batch (§3.B).
+
+    Signals in order: a cited file path, then a theme, then a pattern. Each
+    group has two or more members. Pure and model-free: the agent accepts one
+    with `create` or ignores it.
+    """
+    held = {k for b in judgements.batches if is_open(b, facts) for k in b.ids}
+    open_keys = {i.key for i in facts.issues if i.state == "open"}
+    free = [k for k in judgements.issues if k in open_keys and k not in held]
+    out: list[Suggestion] = []
+
+    cites = {k: cited_paths(judgements.issues[k].detail) for k in free}
+    groups: dict[frozenset[str], str] = {}
+    for path in sorted({p for ps in cites.values() for p in ps}):
+        members = frozenset(k for k in free if any(_same_file(path, q) for q in cites[k]))
+        if len(members) > 1 and len(path) > len(groups.get(members, "")):
+            groups[members] = path
+    out += [
+        Suggestion("file", label, [k for k in free if k in members])
+        for members, label in sorted(groups.items(), key=lambda kv: kv[1])
+    ]
+
+    themes: dict[str, list[str]] = {}
+    for k in free:
+        if theme := judgements.issues[k].theme:
+            themes.setdefault(theme, []).append(k)
+    out += [Suggestion("theme", t, ks) for t, ks in sorted(themes.items()) if len(ks) > 1]
+
+    for p in judgements.patterns:
+        ks = [k for k in p.ids if k in free]
+        if len(ks) > 1:
+            out.append(Suggestion("pattern", p.title, ks))
+    return out
+
+
+# ------------------------------------------------------------- merge order
+
+
+@dataclass(frozen=True)
+class MergeStep:
+    batch: Batch
+    pr: PullRequest
+    reserved_version: str | None
+    shared: list[str]  # files this PR shares with a LATER step: the conflict forecast
+
+
+def planned_merge_order(batches: Sequence[Batch], facts: Facts) -> list[MergeStep]:
+    """The `pr-open` batches in the order the board shows (§3.G).
+
+    Explicit `order` first (a hard constraint), then batch id. This is the
+    board's forecast only; `batch merge` computes the full spec §3.F order
+    (non-adjacent overlaps, fewest overlaps, lowest tier), which refines it.
+    """
+    ready = [
+        (b, pr)
+        for b in batches
+        if derive_batch_stage(b, facts) == "pr-open" and (pr := batch_pr(b, facts)) is not None
+    ]
+    ready.sort(key=lambda bp: (bp[0].order is None, bp[0].order or 0, bp[0].id))
+    steps: list[MergeStep] = []
+    for i, (b, pr) in enumerate(ready):
+        later = {f for _, p in ready[i + 1 :] for f in p.files}
+        event = last_dispatch(b)
+        steps.append(
+            MergeStep(
+                batch=b,
+                pr=pr,
+                reserved_version=event.reserved_version if event else None,
+                shared=sorted(set(pr.files) & later),
+            )
+        )
+    return steps

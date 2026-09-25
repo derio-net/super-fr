@@ -20,13 +20,17 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from fr.triage.batch import batch_pr as find_batch_pr
+from fr.triage.batch import derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.check import CheckResult, classify
 from fr.triage.model import issue_key
 
 if TYPE_CHECKING:
-    from fr.triage.model import Facts, Issue, Judgement, Judgements, PullRequest
+    from fr.triage.batch import MergeStep
+    from fr.triage.model import Batch, Facts, Issue, Judgement, Judgements, PullRequest
 
 _CODE = re.compile(r"`([^`\n]+)`")
 # One pass over code OR bold, so two matches can never overlap and a code span is
@@ -34,7 +38,7 @@ _CODE = re.compile(r"`([^`\n]+)`")
 _INLINE = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*")
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
-IN_FLIGHT = frozenset({"pr-draft", "pr-ready"})
+IN_FLIGHT = frozenset({"pr-draft", "pr-ready", "in-progress"})
 DONE = frozenset({"closed", "merged"})
 UNTOUCHED = frozenset({"backlog", "blocked"})
 EXCERPT = 600  # characters of an unranked issue's body shown on the page
@@ -129,6 +133,24 @@ details.row > summary::-webkit-details-marker { display: none; }
 .pill.stage-closed { background: var(--sev-4); }
 .pill.stage-backlog { background: transparent; color: var(--muted);
   border: 1px solid var(--line); }
+.pill.stage-in-progress { background: transparent; color: var(--live);
+  border: 1px solid var(--live); }
+.tag.batch { color: var(--live); border-color: var(--live); }
+.batches { margin-top: 28px; }
+.batches h2 { margin: 0 0 10px; font-size: 1.15rem; }
+.batches article { background: var(--surface); border: 1px solid var(--line);
+  border-left: 4px solid var(--live); border-radius: 6px; padding: 10px 12px; margin: 6px 0; }
+.batches h3 { margin: 0 0 4px; font-size: 1rem; display: flex; flex-wrap: wrap; gap: 4px 10px;
+  align-items: baseline; overflow-wrap: anywhere; }
+.batches p { margin: 4px 0; font-size: .9rem; overflow-wrap: anywhere; }
+.pill.bstage-dispatched, .pill.bstage-pr-open { background: var(--live); }
+.pill.bstage-merged { background: var(--accent); }
+.pill.bstage-partial { background: var(--sev-2); }
+.pill.bstage-cancelled, .pill.bstage-abandoned { background: var(--sev-4); }
+.pill.bstage-proposed { background: transparent; color: var(--muted);
+  border: 1px solid var(--line); }
+.merge-order { margin: 8px 0 0; padding-left: 22px; font-size: .9rem; }
+.merge-order li { margin: 2px 0; overflow-wrap: anywhere; }
 .detail { padding: 4px 12px 12px; border-top: 1px dashed var(--line); font-size: .92rem; }
 .detail p { margin: 8px 0; overflow-wrap: anywhere; }
 .detail .body { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono);
@@ -298,6 +320,7 @@ def _row(
     order: int,
     show_repo: bool,
     patterns: list[str],
+    batches: Sequence[str] = (),
 ) -> str:
     stage = issue.stage
     cx = judgement.cx if judgement else "-"
@@ -329,6 +352,7 @@ def _row(
     if verified:
         tags.append('<span class="tag ok">verified in code</span>')
     tags.extend(f'<span class="tag mono">PR #{pr.number}</span>' for pr in issue.prs)
+    tags.extend(f'<span class="tag batch">batch {esc(b)}</span>' for b in batches)
     detail: list[str] = []
     if judgement and judgement.detail:
         detail.append(f"<p>{inline(judgement.detail)}</p>")
@@ -477,6 +501,65 @@ def _masthead(facts: Facts, judgements: Judgements, result: CheckResult) -> str:
     )
 
 
+def _batch_card(batch: Batch, facts: Facts) -> str:
+    stage = derive_batch_stage(batch, facts)
+    event = last_dispatch(batch)
+    pr = find_batch_pr(batch, facts)
+    lines = [f'<p class="mono">{esc(", ".join(batch.ids))}</p>']
+    if batch.rationale:
+        lines.append(f"<p>{inline(batch.rationale)}</p>")
+    if event and event.reserved_version:
+        lines.append(
+            f'<p>reserved version <span class="mono">{esc(event.reserved_version)}</span></p>'
+        )
+    if event:
+        lines.append(f'<p>branch <span class="mono">{esc(event.branch)}</span></p>')
+    if pr is not None:
+        url = _safe_url(pr.url)
+        link = (
+            f'<a href="{url}" rel="noopener noreferrer">PR #{pr.number}</a>'
+            if url
+            else f"PR #{pr.number}"
+        )
+        lines.append(f'<p>{link} <span class="mono">{esc(pr.state.lower())}</span></p>')
+    return (
+        f'<article class="batch" data-batch="{esc(batch.id)}">'
+        f'<h3><span class="mono">{esc(batch.id)}</span> {esc(batch.title)} '
+        f'<span class="pill bstage-{stage}">{stage}</span></h3>{"".join(lines)}</article>'
+    )
+
+
+def _merge_step(step: MergeStep) -> str:
+    parts = [f"batch <code>{esc(step.batch.id)}</code>", f"PR #{step.pr.number}"]
+    if step.reserved_version:
+        parts.append(f'<span class="mono">{esc(step.reserved_version)}</span>')
+    if step.shared:
+        shared = ", ".join(f"<code>{esc(f)}</code>" for f in step.shared)
+        parts.append(f"shares {shared} with a later step")
+    return f'<li data-batch="{esc(step.batch.id)}">{" · ".join(parts)}</li>'
+
+
+def _batches(judgements: Judgements, facts: Facts) -> str:
+    """The Batches section (spec 2026-09-25-triage-batches §3.G); empty with no batches."""
+    if not judgements.batches:
+        return ""
+    cards = "".join(_batch_card(b, facts) for b in judgements.batches)
+    steps = planned_merge_order(judgements.batches, facts)
+    order = (
+        '<p class="tier-desc">Planned merge order of the open batch PRs, with the files '
+        "each shares with a later step (a conflict forecast; <code>fr triage batch merge"
+        "</code> computes the final order).</p>"
+        f'<ol class="merge-order">{"".join(_merge_step(s) for s in steps)}</ol>'
+        if steps
+        else ""
+    )
+    return (
+        '<section class="batches"><h2>Batches</h2>'
+        '<p class="tier-desc">Groups of judged issues delivered as one run. Members also '
+        f"appear in their tiers, with a batch chip.</p>{cards}{order}</section>"
+    )
+
+
 def _patterns(judgements: Judgements) -> str:
     if not judgements.patterns:
         return ""
@@ -497,6 +580,11 @@ def render(facts: Facts, judgements: Judgements) -> str:
         for key in p.ids:
             patterns_by_key.setdefault(key, []).append(esc(p.title))
     by_key = {i.key: i for i in facts.issues}
+    batches_by_key: dict[str, list[str]] = {}
+    for b in judgements.batches:
+        if derive_batch_stage(b, facts) != "cancelled":
+            for key in b.ids:
+                batches_by_key.setdefault(key, []).append(b.id)
     order = 0
 
     def row(issue: Issue, judgement: Judgement | None, tier: str) -> str:
@@ -509,10 +597,12 @@ def render(facts: Facts, judgements: Judgements) -> str:
             order=order,
             show_repo=show_repo,
             patterns=patterns_by_key.get(issue.key, []),
+            batches=batches_by_key.get(issue.key, []),
         )
 
     sections = [
         _prs_section(facts.prs, judgements, 1, facts.collected_at),
+        *([batches] if (batches := _batches(judgements, facts)) else []),
         _section(
             "unranked",
             "?",
