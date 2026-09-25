@@ -39,3 +39,8 @@ scripts/install.sh copies every plugins/super-fr/skills/*/ by glob (Claude plugi
 ### 674d801a6362 · discovery · no-refactor-because P1.T4 (phase 1)
 
 rollup/render/usage_cmd are fresh modules written to the shape the tests pin; ruff/mypy clean, nothing duplicated to fold.
+
+<!-- fr:journal kind=finding scope=plan id=7cf4d2239290 created=2026-09-25T19:56:21 phase=1 state=open -->
+### 7cf4d2239290 · finding [open] · audit-pages-regenerated not flipped: no integration test of fr usage report yet (phase 1)
+
+Phase 1's rows include audit-pages-regenerated (target int). The _prose says it flips on the unit AND integration tests of fr usage report; only unit CLI tests exist (tests/unit/test_usage_report.py) plus the local golden check. Notes recorded in the matrix; an integration test (e.g. tests/integration/ running fr usage report --format html over a fixture run) is owed before the flip.
