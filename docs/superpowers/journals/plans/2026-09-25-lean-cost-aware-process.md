@@ -174,3 +174,8 @@ report --run takes the union of the cached index and the live cursor's sessions 
 ### p1-r9-resolved · finding [fixed] · resolves p1-r9: Unknown attempt harness relabelled claude-code
 
 _sessions_of defaults to claude-code only when the attempt names no harness; read_session returns unavailable 'no reader for this harness' for an unknown one; UsageRecord.harness widened to str. Test with a codex attempt and a harness-less one.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-09-25T20:22:12 state=fixed resolves=p1-r10 -->
+### p1-r10-resolved · finding [fixed] · resolves p1-r10: Skill says count turns but the report renders none; phase 2 schema needs turns
+
+Rollup.turns_by_activity (a message is one turn of each activity it touched, priced or not) and turns_by_step (one per message), rendered as turns columns in By activity and By step (table and html). fr-audit skill text says the report counts them; OpenCode and Hermes mirrors regenerated.
