@@ -6845,3 +6845,56 @@ def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pus
     assert "push it (git push)" not in result.stdout
     assert "cursor NOT committed" in result.stdout
     assert "fr: not committed (" in result.stderr and "default branch" in result.stderr
+
+
+def test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree(
+    tmp_path: Path,
+) -> None:
+    """pd-r3: `_repo`'s fixture repo IS a linked worktree (see its docstring —
+    `fr run start` ensures isolation itself). The closeout handoff's 'start a
+    NEW session in <dir>' must name the PRIMARY checkout (`base`, the
+    fixture's own primary), never the worktree that is about to be reaped."""
+    repo = _repo(tmp_path)
+    primary = (tmp_path / "base").resolve()
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    assert f"start a NEW session in {primary} and run" in stdout
+    session_line = next(
+        line for line in stdout.splitlines() if line.startswith("closeout: after the PR merges")
+    )
+    assert str(repo.resolve()) not in session_line
+
+
+def test_advance_on_an_already_finished_run_reports_the_cursor_as_committed(
+    tmp_path: Path,
+) -> None:
+    """pd-r3: a byte-identical re-resolve of `deliver` (the amend path, `state
+    already done`) does not print the closeout handoff at all — it returns
+    before reaching it. So the "unchanged still reads as committed" mapping
+    (pd-r2) is exercised through `advance` of an already-finished run
+    instead: it re-prints the handoff after `_commit_run_writes_now()` finds
+    nothing pending, and must say 'cursor committed as <sha>', never 'cursor
+    NOT committed' — and `commit_records` must stay silent (no `fr: not
+    committed` line), since there is nothing new to commit."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+    resolved = _resolve_deliver(repo, shipped)
+    assert resolved.exit_code == 0, resolved.output
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])  # first post-finish advance
+    assert first.exit_code == 0, first.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])  # byte-identical re-resolve
+
+    assert result.exit_code == 0, result.output
+    head_sha = _git_out(repo, "rev-parse", "--short", "HEAD")
+    assert f"cursor committed as {head_sha}" in result.stdout
+    assert "cursor NOT committed" not in result.stdout
+    assert "fr: not committed" not in result.stderr
