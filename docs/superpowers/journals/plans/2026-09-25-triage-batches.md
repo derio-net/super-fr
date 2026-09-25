@@ -183,3 +183,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f14 created=2026-09-25T21:40:52 phase=3 state=open review_scope=in -->
 ### r2p-f14 · finding [open] (reviewer: in scope) · fr-triage SKILL.md still tells agents to write schema: 1 (lines 48, 65) (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-envtest created=2026-09-25T21:40:53 phase=2 state=open review_scope=out -->
+### r2p-envtest · finding [open] (reviewer: out of scope) · test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge (phase 2)
