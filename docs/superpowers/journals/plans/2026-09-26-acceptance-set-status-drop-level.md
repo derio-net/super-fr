@@ -109,3 +109,38 @@ In RED, test items 2, 4, 5 and 6 passed vacuously: typer exits 2 for an unknown 
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 docs, mirror, matrix row and version bump — no code to refactor
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-09-26T01:06:26 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Three CLI refusal tests assert only exit 2 and unchanged bytes, which a Typer usage error also satisfies (phase 3)
+
+test_acceptance_set_status.py absent-ref, both-flags and unknown-level tests; they passed vacuously during RED.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-26T01:06:26 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · The drop + add test does not pin the spec's 'one rewrite' (phase 3)
+
+It checked only the final levels.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-26T01:06:26 phase=3 state=open review_scope=out -->
+### p3-r3 · finding [open] (reviewer: out of scope) · _refuse_unknown_levels' suffix 'a typo would silently drop refs' reads oddly for --drop-level (phase 3)
+
+The message predates this change; it is only newly reachable.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-26T01:06:26 phase=3 -->
+### review-p3 · review · phase 3 code review: 3 findings (1 important and 1 minor in scope; 1 minor out) (phase 3)
+
+An independent reviewer reviewed 8eb35b5e..8e8811d9 against spec §2.A/B/D/E, Test Plan 1-7 and the operator's ask. 58 tests passed; ruff, the version check, the mirror check and fr acceptance check are clean. Probes confirmed every refusal leaves matrix.yaml and the reports byte-identical. p3-r1 and p3-r2 are fixed; p3-r3 is out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-09-26T01:06:26 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Three CLI refusal tests assert only exit 2 and unchanged bytes, which a Typer usage error also satisfies (phase 3)
+
+The absent-ref, both-flags and unknown-level tests now assert our message ('cannot drop', 'named in both', 'unknown level keys').
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-09-26T01:06:26 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: The drop + add test does not pin the spec's 'one rewrite' (phase 3)
+
+The re-point test spies on fr.acceptance.edit.replace_row and asserts exactly one rewrite of the row.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-09-26T01:06:26 phase=3 state=open resolves=p3-r3 out_of_scope=true -->
+### p3-r3-resolved · finding [out-of-scope] · resolves p3-r3: _refuse_unknown_levels' suffix 'a typo would silently drop refs' reads oddly for --drop-level (phase 3)
+
+The wording lives in the unknown-level refusal written for --level before this change; it stays accurate for additions, and rewording a shared pre-existing message is not this fix's job.
