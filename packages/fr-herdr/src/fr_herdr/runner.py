@@ -132,7 +132,9 @@ class HerdrRunner:
         """Open the tab, start the harness with the model, submit the brief.
 
         Returns the root pane id as the handle. Each step raises `HerdrError`
-        on failure, and nothing later runs.
+        on failure, and nothing later runs. A failure after the tab exists
+        closes it before re-raising (review r2p-f9): a labelled tab left behind
+        would read as a live dispatch to `existing_dispatches` forever.
         """
         payload = item.payload
         harness = HARNESSES[str(payload["harness"])]
@@ -150,26 +152,52 @@ class HerdrRunner:
                 "--no-focus",
             ]
         )
+        tab = _created_tab_id(created)
         try:
-            pane = str(created["result"]["root_pane"]["pane_id"])
-        except (KeyError, TypeError) as exc:
-            raise HerdrError(f"herdr tab create returned no root pane: {created!r}") from exc
-        name = agent_name(item.id)
-        _run_herdr(
-            [
-                "agent",
-                "start",
-                name,
-                "--kind",
-                harness.kind,
-                "--pane",
-                pane,
-                "--",
-                *harness.model_args(str(payload["model"])),
-            ]
-        )
-        _run_herdr(["agent", "prompt", name, str(payload["brief"])])
+            try:
+                pane = str(created["result"]["root_pane"]["pane_id"])
+            except (KeyError, TypeError) as exc:
+                raise HerdrError(f"herdr tab create returned no root pane: {created!r}") from exc
+            name = agent_name(item.id)
+            _run_herdr(
+                [
+                    "agent",
+                    "start",
+                    name,
+                    "--kind",
+                    harness.kind,
+                    "--pane",
+                    pane,
+                    "--",
+                    *harness.model_args(str(payload["model"])),
+                ]
+            )
+            _run_herdr(["agent", "prompt", name, str(payload["brief"])])
+        except BaseException:
+            _close_tab(tab)
+            raise
         return pane
+
+
+def _created_tab_id(created: dict[str, Any]) -> str | None:
+    """The id of the tab `herdr tab create` opened, from `.result.tab` or the root pane."""
+    result = created.get("result")
+    if not isinstance(result, dict):
+        return None
+    for holder in (result.get("tab"), result.get("root_pane")):
+        if isinstance(holder, dict) and holder.get("tab_id"):
+            return str(holder["tab_id"])
+    return None
+
+
+def _close_tab(tab: str | None) -> None:
+    """Best-effort close of a tab this dispatch opened; never masks the real error."""
+    if tab is None:
+        return
+    try:
+        _run_herdr(["tab", "close", tab])
+    except HerdrError:
+        pass
 
 
 if TYPE_CHECKING:

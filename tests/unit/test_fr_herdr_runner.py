@@ -157,6 +157,42 @@ def test_a_failed_tab_create_starts_nothing(herdr: _Herdr, monkeypatch: pytest.M
     assert len(herdr.calls) == 1
 
 
+@pytest.mark.parametrize("failing", ["start", "prompt"])
+def test_a_failure_after_tab_create_closes_the_tab_and_reraises(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    """Review r2p-f9: a labelled tab left behind would read as a live dispatch
+    to `existing_dispatches` forever, so the runner closes what it opened."""
+
+    def flaky(args: list[str]) -> dict[str, Any]:
+        if args[:2] == ["agent", failing]:
+            herdr.calls.append(list(args))
+            raise herdr_runner.HerdrError(f"herdr agent {failing} failed: boom")
+        return herdr(args)
+
+    monkeypatch.setattr(herdr_runner, "_run_herdr", flaky)
+    with pytest.raises(herdr_runner.HerdrError, match=f"agent {failing} failed"):
+        HerdrRunner.from_env().dispatch(_item())
+    assert herdr.calls[-1] == ["tab", "close", "w2:t1H"]
+
+
+def test_a_failed_tab_close_does_not_mask_the_original_error(
+    herdr: _Herdr, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def flaky(args: list[str]) -> dict[str, Any]:
+        herdr.calls.append(list(args))
+        if args[:2] == ["tab", "create"]:
+            return _fixture("tab-create.json")
+        if args[:2] == ["tab", "close"]:
+            raise herdr_runner.HerdrError("herdr tab close failed: gone")
+        raise herdr_runner.HerdrError("herdr agent start failed: boom")
+
+    monkeypatch.setattr(herdr_runner, "_run_herdr", flaky)
+    with pytest.raises(herdr_runner.HerdrError, match="agent start failed"):
+        HerdrRunner.from_env().dispatch(_item())
+    assert ["tab", "close", "w2:t1H"] in herdr.calls
+
+
 # ------------------------------------------------------------------ identity
 
 
