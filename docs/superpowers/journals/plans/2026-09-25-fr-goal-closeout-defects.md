@@ -408,3 +408,8 @@ Post-deliver review (low): no test asserts the handoff's 'start a NEW session in
 ### p1-r1-resolved-2 · finding [deferred → #618] · resolves p1-r1: _resolve_default_branch's host-CLI lookup is untimed
 
 Filed at closeout as gh#618.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved-2 created=2026-09-25T18:52:48 state=open resolves=p2-r3 tracked_by=#619 -->
+### p2-r3-resolved-2 · finding [deferred → #619] · resolves p2-r3: install-validator-wrapper.sh duplicates WRAPPER_TEXT, now unreferenced by REPAIR_COMMAND
+
+Filed at closeout as gh#619.
