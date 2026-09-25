@@ -413,3 +413,8 @@ Filed at closeout as gh#618.
 ### p2-r3-resolved-2 · finding [deferred → #619] · resolves p2-r3: install-validator-wrapper.sh duplicates WRAPPER_TEXT, now unreferenced by REPAIR_COMMAND
 
 Filed at closeout as gh#619.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-bg-suite-resolved-2 created=2026-09-25T18:52:48 state=open resolves=deliver-bg-suite tracked_by=#594 -->
+### deliver-bg-suite-resolved-2 · finding [deferred → #594] · resolves deliver-bg-suite: deliver's tests= gate cannot credit a backgrounded suite run
+
+Already tracked by gh#594 (earlier; covers both the backgrounded-run and shell-variable cases). gh#607 duplicates it.
