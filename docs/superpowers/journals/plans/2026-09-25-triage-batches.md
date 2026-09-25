@@ -191,3 +191,8 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 ### r2p-envtest-resolved · finding [out-of-scope] · resolves r2p-envtest: test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge
 
 install.sh is byte-identical to main and the test passes on the host; in the container, install.sh --install-bridge resolves the container's uv-tool fr python, which was installed without fr_vk. A devcontainer environment gap, not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f9-resolved created=2026-09-25T23:45:13 state=fixed resolves=r2p-f9 answered_by=agent -->
+### r2p-f9-resolved · finding [fixed] · resolves r2p-f9: HerdrRunner.dispatch leaves a labelled tab after a failure past tab create, which existing_dispatches then reports live forever
+
+HerdrRunner.dispatch wraps everything after tab create; on any failure it runs herdr tab close <tab_id> (best effort; a close failure never masks the original) and re-raises. Tests: test_fr_herdr_runner.py::test_a_failure_after_tab_create_closes_the_tab_and_reraises[start|prompt], ::test_a_failed_tab_close_does_not_mask_the_original_error. Commit 8a892abe.
