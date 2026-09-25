@@ -399,3 +399,8 @@ record/apply.py:302,329,356; journal_cmd.py:314,474; before_write hook never set
 ### p3-r2 · finding [open] (reviewer: in scope) · Plain resolve --step deliver --state done bypasses the live PR-section check (phase 3)
 
 apply.py:683 vs run_cmd.py:3981; spec §5.C.4 / Test Plan 13. Check inside _resolve_body deliver/done branch.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-25T23:23:33 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Invalid-record atomicity: crash window, retry wedges on existing ids, restore misses cursor/usage paths and can revert committed files (phase 3)
+
+apply.py:701-732, run_cmd.py:3979-3996. Orchestrator decision: delete record after commit; byte-identical re-append is a no-op (retry heals); snapshot every _RunWrites.note path; never restore after a commit landed.
