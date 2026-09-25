@@ -434,3 +434,8 @@ apply.py:445-465 + prose in fr-phase-executor.md:82-88, fr-execute SKILL.md:55. 
 ### p3-r9 · finding [open] (reviewer: in scope) · --record deletes and commits any parseable path; relative path resolved against cwd (phase 3)
 
 apply.py:687-694, run_cmd.py:4120. Resolve against repo root, require under records_dir(run).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-09-25T23:23:38 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · Successful resolve prints a second stderr line (fr: committed …) (phase 3)
+
+records_commit.py:68. Suppress when the engine owns the line.
