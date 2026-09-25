@@ -229,9 +229,10 @@ state:
         learns companion paths); units cost readers + tripwire gone; status cost column
         gone; fr run cost reads usage/, --recompute
     P2.T4.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:12:10+00:00'
+      note: 'fr migrate artifacts --yes: 2 live cursors -> v7 + usage files (eab566e9);
+        validate artifacts 0'
     P2.T4.S4:
       state: ' '
       ticked_at: null
