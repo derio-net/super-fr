@@ -51,7 +51,7 @@ from fr.commands.triage_cmd import (
     console,
     err_console,
 )
-from fr.ghclient import GhClient, UnsupportedForgeOperation
+from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
 from fr.triage.batch import (
@@ -62,6 +62,7 @@ from fr.triage.batch import (
     check_open_membership,
     derive_batch_stage,
     last_dispatch,
+    pr_open_queue,
     resolve_launch,
     save_batches,
     suggest,
@@ -77,6 +78,7 @@ from fr.triage.batch_dispatch import (
     live_reservations,
     render_brief,
 )
+from fr.triage.batch_merge import MergeContext, MergeStopError, describe, plan_queue, run_queue
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
@@ -654,3 +656,75 @@ def batch_dispatch_command(
     _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
     _report_forge_writes(_forge_writes(client, owner_repo, dispatched, item.id), batch)  # 6.6
     console.print(f"dispatched batch {batch.id}", markup=False)
+
+
+# ------------------------------------------------------------------- merge
+
+
+@batch_app.command("merge")
+def batch_merge_command(
+    batch_ids: Annotated[
+        list[str] | None, typer.Argument(help="Batches to merge; default: every pr-open batch.")
+    ] = None,
+    checkout_path: CheckoutOpt = None,
+    method: Annotated[
+        str, typer.Option("--method", help="merge | squash | rebase (the repo must allow it).")
+    ] = "squash",
+    yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Merge pr-open batch PRs in the computed order, re-slotting versions (§3.F).
+
+    Blocks in the foreground while required checks run; Ctrl-C and re-run
+    resumes at the first unmerged batch.
+    """
+    if method not in MERGE_METHODS:
+        _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    queue = pr_open_queue(judgements.batches, facts, judgements.issues)
+    if batch_ids:
+        wanted = {b.lower() for b in batch_ids}
+        known = {e.batch.id for e in queue}
+        if missing := sorted(wanted - known):
+            _fail(f"not a pr-open batch here: {', '.join(missing)}")
+        queue = [e for e in queue if e.batch.id in wanted]
+    if not queue:
+        console.print("no pr-open batches to merge", markup=False)
+        return
+    repos = {batch_repo(e.batch, facts) for e in queue}
+    if len(repos) != 1 or None in repos:
+        _fail(
+            "merge one repo's batches at a time: name the batches of one repo, "
+            f"with --checkout a clone of it (these span {', '.join(sorted(map(str, repos)))})"
+        )
+    owner_repo = str(next(iter(repos)))
+    checkout = _open_checkout(checkout_path, owner_repo)
+    ctx = MergeContext(
+        client=make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}"),
+        checkout=checkout,
+        repo=owner_repo,
+        version=facts.config_for(owner_repo).version,
+        scratch_root=target / "merge",
+        method=method,
+        say=lambda line: console.print(line, markup=False, soft_wrap=True),
+    )
+    try:
+        slots, merged = plan_queue(ctx, queue)
+        for step in merged:
+            ctx.say(f"{step.batch.id}: already merged (PR #{step.pr.number})")
+        ctx.say(f"merge plan for {owner_repo} ({method}):")
+        for i, slot in enumerate(slots, 1):
+            ctx.say(describe(i, slot))
+        if not yes:
+            ctx.say("nothing merged; re-run with --yes to act")
+            return
+        run_queue(ctx, slots)
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except MergeStopError as exc:
+        _fail(f"merge stopped: {exc}", code=1)
+    except TriageError as exc:
+        _fail(str(exc))
+    ctx.say(f"merged {plural(len(slots), 'batch')}")

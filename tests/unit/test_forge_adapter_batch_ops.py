@@ -183,6 +183,57 @@ def test_wait_required_checks_gives_up_at_the_timeout_with_the_last_answer(
     assert len(slept) == 2
 
 
+def test_wait_required_checks_waits_for_checks_to_appear_after_a_push(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review r2p-f10: right after a push GitHub has registered no check runs
+    yet, so `[]` is not yet "no required checks". The wait polls through a
+    bounded grace period until checks appear."""
+    rounds = iter(
+        [
+            [],
+            [],
+            [{"name": "t", "bucket": "pending", "state": "QUEUED"}],
+            [{"name": "t", "bucket": "fail", "state": "FAILURE"}],
+        ]
+    )
+    client = RealGhClient()
+    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: next(rounds))
+    slept: list[float] = []
+
+    final = client.wait_required_checks(
+        REPO, 12, interval=5.0, timeout=60.0, grace=30.0, sleep=slept.append
+    )
+
+    assert final == [{"name": "t", "bucket": "fail", "state": "FAILURE"}]
+    assert slept == [5.0, 5.0, 5.0]
+
+
+def test_wait_required_checks_accepts_none_required_once_the_grace_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = RealGhClient()
+    monkeypatch.setattr(client, "pr_required_checks", lambda repo, number: [])
+    slept: list[float] = []
+
+    final = client.wait_required_checks(
+        REPO, 12, interval=10.0, timeout=600.0, grace=25.0, sleep=slept.append
+    )
+
+    assert final == []
+    assert sum(slept) >= 25.0 - 10.0 and sum(slept) <= 30.0
+
+
+def test_pr_required_checks_raises_on_a_pending_exit_with_no_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review r2p-f10: exit 8 means "pending"; with no JSON to read, the answer is
+    unknown, which must never read as "no required checks" (an empty list)."""
+    _fake(monkeypatch, {("pr", "checks"): _gh.GhError("", stdout="", returncode=8)})
+    with pytest.raises(_gh.GhError):
+        RealGhClient().pr_required_checks(REPO, 12)
+
+
 def test_pr_merge_matches_the_head_commit_and_never_passes_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -258,23 +309,61 @@ def test_the_protocol_declares_every_batch_operation() -> None:
 
 # ------------------------------------------------------------- tripwire (§3.J)
 
-_BATCH_MODULES = {
-    "fr.triage": "packages/fr/src/fr/triage/batch.py",
-    "fr.commands": "packages/fr/src/fr/commands/triage_batch_cmd.py",
-}
+# Every batch module, by glob (review r2p-f11): a module added later is covered
+# without editing this list. `fr.triage.gitseam` is deliberately NOT matched:
+# it is the one place git (and the repo's declared version commands) run, and
+# it has its own guard below.
+_BATCH_GLOBS = (
+    "packages/fr/src/fr/triage/batch*.py",
+    "packages/fr/src/fr/commands/triage_batch*.py",
+)
 _FORGE_CLIS = ("fr.gh", "fr.glab", "fr.tea", "subprocess", "fr.triage.collect")
+_GIT_SEAM = "packages/fr/src/fr/triage/gitseam.py"
 
 
 def _root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize(("package", "path"), sorted(_BATCH_MODULES.items()))
-def test_no_batch_module_reaches_a_forge_cli_or_triage_forge(package: str, path: str) -> None:
+def _batch_modules() -> list[Path]:
+    return sorted(p for g in _BATCH_GLOBS for p in _root().glob(g))
+
+
+def test_the_batch_globs_find_every_batch_module() -> None:
+    names = {p.name for p in _batch_modules()}
+    assert {"batch.py", "batch_dispatch.py", "batch_merge.py", "triage_batch_cmd.py"} <= names
+    assert "gitseam.py" not in names
+
+
+@pytest.mark.parametrize("path", _batch_modules(), ids=lambda p: p.name)
+def test_no_batch_module_reaches_a_forge_cli_or_triage_forge(path: Path) -> None:
     """Batch verbs go through the GhClient adapter only (spec §3.J, Test Plan 19)."""
     from tests.unit.triage_fixtures import forbidden_imports
 
-    assert forbidden_imports(_root() / path, package, _FORGE_CLIS) == []
+    package = ".".join(path.relative_to(_root() / "packages/fr/src").with_suffix("").parts[:-1])
+    assert forbidden_imports(path, package, _FORGE_CLIS) == []
+
+
+def test_the_git_seam_runs_git_and_declared_commands_only() -> None:
+    """The seam may use subprocess, but never a forge CLI (review r2p-f11)."""
+    import ast
+
+    from tests.unit.triage_fixtures import forbidden_imports
+
+    path = _root() / _GIT_SEAM
+    assert (
+        forbidden_imports(path, "fr.triage", ("fr.gh", "fr.glab", "fr.tea", "fr.triage.collect"))
+        == []
+    )
+    literals = {
+        n.value
+        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    }
+    assert not literals & {"gh", "glab", "tea"}
+    # Every process starts from one of the two argv builders.
+    source = path.read_text(encoding="utf-8")
+    assert source.count("subprocess.run(") == 2
 
 
 @pytest.mark.parametrize(

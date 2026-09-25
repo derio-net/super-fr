@@ -166,11 +166,16 @@ class GhClient(Protocol):
         *,
         interval: float = 30.0,
         timeout: float = 3600.0,
+        grace: float = 120.0,
         sleep: Callable[[float], None] | None = None,
     ) -> list[dict[str, Any]]:
         """Poll `pr_required_checks` until none is pending, or *timeout* seconds of
         waiting have passed; return the last answer either way (the caller reads
-        the buckets)."""
+        the buckets).
+
+        An empty answer is not trusted for the first *grace* seconds: right
+        after a push the forge has registered no check runs yet, so `[]` then
+        means "not started", not "none required" (review r2p-f10)."""
         ...
 
     def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
@@ -218,6 +223,7 @@ class UnsupportedBatchOps:
         *,
         interval: float = 30.0,
         timeout: float = 3600.0,
+        grace: float = 120.0,
         sleep: Callable[[float], None] | None = None,
     ) -> list[dict[str, Any]]:
         raise self._unsupported("wait_required_checks")

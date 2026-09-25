@@ -10,9 +10,10 @@ command layer (§3.J), and nothing in `fr.triage` imports `fr_dispatch`.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import permutations
 from pathlib import Path
 from typing import Literal
 
@@ -28,6 +29,7 @@ from fr.triage.model import (
     DispatchEvent,
     Facts,
     Issue,
+    Judgement,
     Judgements,
     Launch,
     PullRequest,
@@ -413,6 +415,78 @@ def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
 
 # ------------------------------------------------------------- merge order
 
+# Exhaustive search over the unordered batches up to this many; a greedy pass
+# beyond it (a queue that long is already a planning problem of its own).
+_EXACT_ORDER_LIMIT = 8
+_NO_TIER = 10**6
+
+
+@dataclass(frozen=True)
+class QueueEntry:
+    """A `pr-open` batch with its PR and its lowest member tier (§3.F Order)."""
+
+    batch: Batch
+    pr: PullRequest
+    tier: int = _NO_TIER
+
+
+def _shares(a: QueueEntry, b: QueueEntry) -> bool:
+    return bool(set(a.pr.files) & set(b.pr.files))
+
+
+def merge_order(entries: Sequence[QueueEntry]) -> list[QueueEntry]:
+    """The spec §3.F merge order.
+
+    Explicit `order` values are hard constraints and go first, in order (then
+    id). The rest are arranged so that batches sharing files are not adjacent
+    where avoidable, then by fewest overlaps, then by lowest member tier, then
+    by batch id: among the arrangements with the fewest adjacent overlaps, the
+    one whose per-position keys `(overlaps, tier, id)` sort first. Pure and
+    deterministic: input order never matters.
+    """
+    fixed = sorted(
+        (e for e in entries if e.batch.order is not None),
+        key=lambda e: (e.batch.order, e.batch.id),
+    )
+    free = sorted((e for e in entries if e.batch.order is None), key=lambda e: e.batch.id)
+    overlaps = {e.batch.id: sum(_shares(e, o) for o in entries if o is not e) for e in entries}
+
+    def key(e: QueueEntry) -> tuple[int, int, str]:
+        return (overlaps[e.batch.id], e.tier, e.batch.id)
+
+    def adjacent(seq: Sequence[QueueEntry]) -> int:
+        return sum(_shares(x, y) for x, y in zip(seq, seq[1:], strict=False))
+
+    if len(free) <= _EXACT_ORDER_LIMIT:
+        best = min(
+            (list(p) for p in permutations(free)),
+            key=lambda p: (adjacent([*fixed[-1:], *p]), [key(e) for e in p]),
+        )
+        return [*fixed, *best]
+    out = list(fixed)
+    left = sorted(free, key=key)
+    while left:
+        pick = next((e for e in left if not (out and _shares(out[-1], e))), left[0])
+        out.append(pick)
+        left.remove(pick)
+    return out
+
+
+def lowest_tier(batch: Batch, issues: Mapping[str, Judgement]) -> int:
+    """The most urgent (lowest) tier among the batch's judged members."""
+    return min((issues[k].tier for k in batch.ids if k in issues), default=_NO_TIER)
+
+
+def pr_open_queue(
+    batches: Sequence[Batch], facts: Facts, issues: Mapping[str, Judgement]
+) -> list[QueueEntry]:
+    """Every `pr-open` batch with its PR, in batch-file order."""
+    return [
+        QueueEntry(batch=b, pr=pr, tier=lowest_tier(b, issues))
+        for b in batches
+        if derive_batch_stage(b, facts) == "pr-open" and (pr := batch_pr(b, facts)) is not None
+    ]
+
 
 @dataclass(frozen=True)
 class MergeStep:
@@ -422,29 +496,29 @@ class MergeStep:
     shared: list[str]  # files this PR shares with a LATER step: the conflict forecast
 
 
-def planned_merge_order(batches: Sequence[Batch], facts: Facts) -> list[MergeStep]:
-    """The `pr-open` batches in the order the board shows (§3.G).
-
-    Explicit `order` first (a hard constraint), then batch id. This is the
-    board's forecast only; `batch merge` computes the full spec §3.F order
-    (non-adjacent overlaps, fewest overlaps, lowest tier), which refines it.
-    """
-    ready = [
-        (b, pr)
-        for b in batches
-        if derive_batch_stage(b, facts) == "pr-open" and (pr := batch_pr(b, facts)) is not None
-    ]
-    ready.sort(key=lambda bp: (bp[0].order is None, bp[0].order or 0, bp[0].id))
+def with_forecast(ordered: Sequence[QueueEntry]) -> list[MergeStep]:
+    """Each step with its reservation and the files it shares with later steps."""
     steps: list[MergeStep] = []
-    for i, (b, pr) in enumerate(ready):
-        later = {f for _, p in ready[i + 1 :] for f in p.files}
-        event = last_dispatch(b)
+    for i, e in enumerate(ordered):
+        later = {f for o in ordered[i + 1 :] for f in o.pr.files}
+        event = last_dispatch(e.batch)
         steps.append(
             MergeStep(
-                batch=b,
-                pr=pr,
+                batch=e.batch,
+                pr=e.pr,
                 reserved_version=event.reserved_version if event else None,
-                shared=sorted(set(pr.files) & later),
+                shared=sorted(set(e.pr.files) & later),
             )
         )
     return steps
+
+
+def planned_merge_order(
+    batches: Sequence[Batch], facts: Facts, issues: Mapping[str, Judgement] | None = None
+) -> list[MergeStep]:
+    """The `pr-open` batches in the spec §3.F order, with the conflict forecast.
+
+    The board (§3.G) and `batch merge` share this order; merge re-reads each PR
+    from the forge before acting on it.
+    """
+    return with_forecast(merge_order(pr_open_queue(batches, facts, issues or {})))

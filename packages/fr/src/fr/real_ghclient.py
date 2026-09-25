@@ -315,13 +315,16 @@ class RealGhClient:
         *,
         interval: float = 30.0,
         timeout: float = 3600.0,
+        grace: float = 120.0,
         sleep: Callable[[float], None] | None = None,
     ) -> list[dict[str, Any]]:
         nap = sleep if sleep is not None else time.sleep
         waited = 0.0
         while True:
             checks = self.pr_required_checks(repo, number)
-            if not any(c["bucket"] == "pending" for c in checks):
+            # `[]` inside the grace period is "not registered yet" (r2p-f10).
+            settling = not checks and waited < grace
+            if not settling and not any(c["bucket"] == "pending" for c in checks):
                 return checks
             if waited + interval > timeout:
                 return checks

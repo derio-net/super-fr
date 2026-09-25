@@ -544,7 +544,7 @@ def _batches(judgements: Judgements, facts: Facts) -> str:
     if not judgements.batches:
         return ""
     cards = "".join(_batch_card(b, facts) for b in judgements.batches)
-    steps = planned_merge_order(judgements.batches, facts)
+    steps = planned_merge_order(judgements.batches, facts, judgements.issues)
     order = (
         '<p class="tier-desc">Planned merge order of the open batch PRs, with the files '
         "each shares with a later step (a conflict forecast; <code>fr triage batch merge"
