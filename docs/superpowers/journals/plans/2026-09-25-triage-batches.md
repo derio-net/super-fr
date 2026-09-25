@@ -186,3 +186,8 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-envtest created=2026-09-25T21:40:53 phase=2 state=open review_scope=out -->
 ### r2p-envtest · finding [open] (reviewer: out of scope) · test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-envtest-resolved created=2026-09-25T23:41:30 state=open resolves=r2p-envtest out_of_scope=true answered_by=agent -->
+### r2p-envtest-resolved · finding [out-of-scope] · resolves r2p-envtest: test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge
+
+install.sh is byte-identical to main and the test passes on the host; in the container, install.sh --install-bridge resolves the container's uv-tool fr python, which was installed without fr_vk. A devcontainer environment gap, not caused by this change.
