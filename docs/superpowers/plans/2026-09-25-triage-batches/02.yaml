@@ -166,9 +166,9 @@ state:
       note: 'contract in fr_dispatch/testing.py; red: ImportError RUN_PAYLOAD_KEYS
         / load_runner'
     P2.T5.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:22:04+00:00'
+      note: 'red: ImportError agent_name (fr_herdr still the phase-1 stub)'
     P2.T5.S3:
       state: ' '
       ticked_at: null
