@@ -37,3 +37,23 @@ Still bounds the 30s sleep; one-line comment records why.
 ### review-1 · review · Independent code review: 1 in-scope hardening fixed, 2 out-of-scope notes
 
 Reviewer (separate context, read-only). In-scope: the inner-subprocess regression test's `--rootdir` does not stop pytest's ini discovery walking up from tmp_path, so an ancestor ini's addopts could make it fail spuriously (latent). Fixed: an empty `pytest.ini` is written into tmp_path; RED (without the conftest fixture) and GREEN re-verified. Verified sound: fixture restore semantics, pytest-cov combining xdist workers under --cov-fail-under=75, the <25s budget. Out-of-scope, no evidence of a real leak: `fr.workflow.resolve._PACKAGED_DIR_CACHE` (depends only on install shape) and `monkeypatch.chdir` users (auto-restoring). Not filed: no observed failure.
+
+<!-- fr:journal kind=repro scope=debug id=repro-columns-80 created=2026-09-25T13:22:30 -->
+### repro-columns-80 · repro · CI-only: four CLI tests wrap at 80 cols under -n auto on Linux
+
+PR #615 CI (4 workers, Linux, py3.12): test_models_cmd::test_set_names_the_file_it_changed, test_journal_cmd::TestCheckRequireReviews x2, test_run_cost_cmd::test_the_command_prints_the_table_and_writes_nothing fail — rich output wrapped at ~80 despite conftest's per-test COLUMNS=200. Did NOT reproduce on macOS under -n 4 even with CI=true GITHUB_ACTIONS=true and no TTY. DID reproduce in a python:3.12 Linux container: serial 117 passed; `-n 1` on the three files alone → the same 4 failures. So not ordering: any Linux xdist worker.
+
+<!-- fr:journal kind=ruled-out scope=debug id=ro-columns-ordering created=2026-09-25T13:22:30 -->
+### ro-columns-ordering · ruled-out · Not a test-order leak, not a Console width setter, not FORCE_COLOR/TERM
+
+No test or src sets Console width/_environ/FORCE_COLOR/TTY_COMPATIBLE/TERM; no os.environ rebinding; `-n 1` with one file fails, so no predecessor test is involved. xdist/execnet/pytest-cov/click/typer source contains no COLUMNS write.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-columns-80 created=2026-09-25T13:22:31 -->
+### rc-columns-80 · root-cause · GNU readline setenvs COLUMNS=80 in the pytest main process; xdist workers inherit it; module-level rich Consoles freeze it at import
+
+Evidence (Linux container): a .pth probe shows the pytest main process starts with COLUMNS unset while its xdist worker starts with COLUMNS='80' LINES='24'. An import hook shows `import readline` comes from `_pytest/capture.py::_readline_workaround` (pytest_load_initial_conftests). `python -c 'import readline'` then `echo $COLUMNS` in a child → 80/24 while `os.environ.get('COLUMNS')` stays None: GNU readline (rl_change_environment) setenvs at C level; macOS libedit does not, hence Linux-only. execnet spawns workers via `Popen(args)` with no env=, inheriting the C environ. In the worker, `fr.commands.*` build `Console()` at import (collection, before fixtures); rich's Console.__init__ snapshots COLUMNS into `_width` → frozen at 80 (probe: at import ('80', 80); in-test COLUMNS=200 but console.size.width=80). Serial runs never have COLUMNS in os.environ, so their consoles read the width live.
+
+<!-- fr:journal kind=finding scope=debug id=fx-columns-80 created=2026-09-25T13:23:55 state=fixed -->
+### fx-columns-80 · finding [fixed] · conftest drops inherited COLUMNS/LINES at import so module-level consoles stay live
+
+`tests/conftest.py` pops COLUMNS and LINES from os.environ at import (before any test module is collected), so fr's import-time `Console()`s keep `_width=None` and follow each test's COLUMNS (the per-test 200 pin, and the tests that deliberately narrow to 40/60/80 still work). Failing-test-first: `tests/unit/test_suite_isolation_inherited_columns.py` runs a real `fr.commands.journal_cmd.err_console` width probe in an inner pytest session over a copy of the real conftest with COLUMNS=80/LINES=24 in its env (the worker's inherited values). RED: `AssertionError: frozen at import: _width=80`; GREEN after. Linux container: the 3 affected files + the narrow-width tests pass at -n 1, -n 4 and serially; full `-n 4` goes 74→70 failures, the 4 targets gone and nothing new (the remaining 70 are container-only: no gh/jq). Rejected alternative: making fr's consoles lazy in src — the CLI process's import-time COLUMNS is its runtime COLUMNS, so users are unaffected; the defect is the test harness's inherited env.
