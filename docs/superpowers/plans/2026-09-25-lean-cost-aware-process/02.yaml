@@ -263,9 +263,9 @@ state:
       ticked_at: '2026-09-25T19:24:10+00:00'
       note: ruff/mypy clean; bun test 76 pass; full suite 5376 passed
     P2.T7.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:30:56+00:00'
+      note: test_harness_parity_modes.py 8 red
     P2.T7.S2:
       state: ' '
       ticked_at: null
