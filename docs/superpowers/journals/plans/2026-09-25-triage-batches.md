@@ -271,3 +271,8 @@ Spec 3.D says both 'dispatch-time order is explicit order, then dispatch sequenc
 ### r2p-f10-resolved · finding [fixed] · resolves r2p-f10: wait_required_checks returns at once on [] right after a push, causing a spurious protection stop in merge; pr_required_checks exit-8 branch unverified
 
 wait_required_checks takes grace (default 120 s): an empty answer inside it is 'not registered yet' and is polled again; merge always waits after its own push. The exit-8 branch is pinned: pending JSON on stdout is read, exit 8 with no output raises rather than reading as []. Tests: test_forge_adapter_batch_ops.py::test_wait_required_checks_waits_for_checks_to_appear_after_a_push, ::test_wait_required_checks_accepts_none_required_once_the_grace_passes, ::test_pr_required_checks_raises_on_a_pending_exit_with_no_output, ::test_pr_required_checks_reads_the_output_of_a_pending_exit
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f11-resolved created=2026-09-26T00:25:02 state=fixed resolves=r2p-f11 answered_by=agent -->
+### r2p-f11-resolved · finding [fixed] · resolves r2p-f11: §3.J tripwire lists two files by name; phase-3 modules are uncovered, and merge/checkout need a git seam outside the subprocess ban
+
+The 3.J tripwire globs packages/fr/src/fr/triage/batch*.py and commands/triage_batch*.py; git (and the repo-declared set/relock) run only in fr/triage/gitseam.py, which is outside the glob and has its own guard: no fr.gh/glab/tea/collect import, no gh/glab/tea literal, exactly two subprocess.run sites. Tests: test_forge_adapter_batch_ops.py::test_the_batch_globs_find_every_batch_module, ::test_no_batch_module_reaches_a_forge_cli_or_triage_forge[*], ::test_the_git_seam_runs_git_and_declared_commands_only
