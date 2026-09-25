@@ -369,3 +369,8 @@ The apply engine and run_cmd wiring were drafted before tests/unit/test_record_a
 ### p3-verbs · discovery · Verbs via the engine: acceptance verbs now commit; journal add prints a line (phase 3)
 
 fr acceptance add/set-status previously wrote without committing; through the engine they commit once (matrix + three reports) like every other record write. fr journal add previously printed nothing on stdout; it now prints 'added <kind> <id> to <scope>/<slug>'. Refusals the verbs already had stay in the verbs (duplicate id, --phase/--global, answered-by operator transcript check, unknown row/status) so their messages are byte-identical; the engine re-checks and refuses anything else with exit 2. The now-dead acceptance helpers _commit_matrix/_regenerate_reports were removed.
+
+<!-- fr:journal kind=decision scope=plan id=p3-template created=2026-09-25T22:52:46 phase=3 -->
+### p3-template · decision · Template: brief key 'record' {path, template, in_progress}; pickup finds the run by its emitted plan (phase 3)
+
+Every agent-step brief gains 'record' (null for a fan-out group; each member brief carries its own). fr pickup <plan> --phase N appends '## Step record' only when a live cursor under docs/superpowers/runs/ recorded this plan as emitted: the template of the first for_each member whose emits carry plan:ticks, or 'record in progress: N ticks, M decisions — <path>' when the file exists. The runner path (no cursor) shows nothing and keeps using the verbs. Deviation: T4 code drafted before its tests; red confirmed (KeyError record / no Step record section) before wiring.
