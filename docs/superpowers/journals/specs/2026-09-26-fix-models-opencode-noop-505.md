@@ -9,3 +9,8 @@ Operator confirmed that considered counts include only OpenCode agent files disc
 ### d2 · decision · Focused post-merge verification
 
 Operator confirmed that running the focused models command and tests after merge is sufficient for the post-merge Test Plan.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-09-26T00:43:29 -->
+### spec-review · review · Independent spec review: clean
+
+Reviewed spec against issue #505, operator decisions d1/d2, and codebase reality. Zero findings. Reviewer: fr-spec-reviewer-standard session ses_f2543cfa4ffeNvKNdVBPaZumMJ.
