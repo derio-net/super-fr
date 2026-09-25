@@ -120,3 +120,8 @@ _dump_batches first merged the id back and re-ordered keys by Batch.model_fields
 ### p2-norefactor-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 The verbs share their I/O through _load_state/_scope from triage_cmd and one _write (open-batch rule, then save_batches); the engine functions (suggest, planned_merge_order, withdrawn_already, resolve_launch) are pure in fr.triage.batch. The stale set is one function beside classify. Nothing duplicated remained after the tidy that removed local imports and asserts from the command module before commit.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-herdr-shapes created=2026-09-25T23:23:44 phase=2 -->
+### p2-herdr-shapes · discovery · herdr CLI shapes behind HerdrRunner, and the one fixture that is not a capture (phase 2)
+
+Captured live 2026-09-25 (read-only, inside the operator's herdr session): tab list/get and pane list print a JSON envelope {id, result:{...}, type}; herdr --skill documents that tab create returns .result.tab and .result.root_pane, and that agent names must match [a-z][a-z0-9_-]{0,31}. tests/fixtures/herdr/tab-list.json is a capture with the operator's tab labels replaced; tab-create.json is ASSEMBLED from the documented keys and captured object shapes, because a live capture would have opened a tab in the operator's session. Its README says so. HerdrRunner reads only .result.root_pane.pane_id from it; phase 4's live walk should replace it with a real capture.
