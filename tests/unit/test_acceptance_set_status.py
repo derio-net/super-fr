@@ -327,3 +327,41 @@ def test_an_id_that_is_a_prefix_of_another_edits_only_the_exact_match(
     assert loaded["foo-2"]["status"] == "ci"
     assert loaded["foo"]["status"] == "ci"
     assert loaded["foo"]["notes"] == "n", "the prefix row's notes were rewritten"
+
+
+# --- drop_levels (gh#624, spec Test Plan item 8) -----------------------------
+
+
+def test_drop_levels_removes_a_ref_and_keeps_order() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import LEVELS
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:c")}, {"unit": ["r:b"]})
+    assert set(out) == set(LEVELS)
+    assert out["unit"] == ("r:a", "r:c")
+
+
+def test_drop_levels_dedupes_a_repeated_drop() -> None:
+    from fr.acceptance.edit import drop_levels
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:c")}, {"unit": ["r:b", "r:b"]})
+    assert out["unit"] == ("r:a", "r:c")
+
+
+def test_drop_levels_refuses_a_ref_not_on_the_row() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError) as exc:
+        drop_levels({"unit": ("r:a",)}, {"unit": ["r:missing"]})
+    msg = str(exc.value)
+    assert "unit" in msg
+    assert "r:missing" in msg
+
+
+def test_drop_levels_refuses_an_unknown_level_key() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError, match="unti"):
+        drop_levels({"unit": ("r:a",)}, {"unti": ["r:a"]})

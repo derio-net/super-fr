@@ -1,0 +1,10 @@
+schema_version: 1
+run: 2026-09-26-fix-624-set-status-drop-level
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3]
+refactor: {}
+journal: []
+resolves: []
+evidence: {}
