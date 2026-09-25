@@ -79,18 +79,19 @@ captures:
 - host: h-3c3cf7b7
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-09-25T19:59:42+00:00'
+  captured_at: '2026-09-25T22:10:43+00:00'
   at:
   - resolve:implement-phase
+  - deliver
   sessions:
   - session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
     role: main
     models:
       claude-opus-5-5:
-        input: 1614
-        cache_write: 2615081
-        cache_read: 166517227
-        output: 249283
+        input: 2460
+        cache_write: 3514247
+        cache_read: 265156561
+        output: 284889
         usd: null
         usd_source: none
       claude-sonnet-5:
@@ -103,17 +104,17 @@ captures:
     activity:
       implementation:
         usd: null
-        turns: 495
+        turns: 777
       other:
         usd: null
-        turns: 181
+        turns: 226
       paperwork:
         usd: null
-        turns: 165
+        turns: 258
     steps:
       (outside run):
         usd: null
-        turns: 215
+        turns: 40
       brainstorm:
         usd: null
         turns: 60
@@ -125,7 +126,10 @@ captures:
         turns: 11
       implement:
         usd: null
-        turns: 507
+        turns: 1076
+      deliver:
+        usd: null
+        turns: 23
     briefs:
       toolu_01SB7Gf6a54CfM5eoF7QNYHS: 293
       a066b71b1a929bc9c: 1893
@@ -135,3 +139,6 @@ captures:
       phase/2/implement-phase: 2958
       phase/2/review-phase: 3394
       aa27fcbd57a61260a: 4595
+      phase/3/implement-phase: 3871
+      phase/3/review-phase: 3382
+      a093671f3f334af42: 4961
