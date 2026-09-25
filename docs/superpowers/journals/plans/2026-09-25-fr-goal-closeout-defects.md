@@ -178,3 +178,8 @@ Reviewer (minor): when git cannot answer, every candidate (incl. a foreign wrapp
 ### p3-m4 · finding [open] (reviewer: out of scope) · deliver handoff must commit before printing the sha (phase 4)
 
 Reviewer (minor, phase 4): the decorator commits in finally; phase 4's 'cursor committed as <sha>' line must call _commit_run_writes_now() first.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m5 created=2026-09-25T12:15:05 phase=5 state=open review_scope=out -->
+### p3-m5 · finding [open] (reviewer: out of scope) · Ready-checklist 'no commits since the ok' must exempt chore(fr) commits (phase 5)
+
+Reviewer (minor, phase 5): fr now commits its cursor after the review ok; the skill prose must exempt chore(fr): record commits.
