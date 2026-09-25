@@ -1009,8 +1009,9 @@ def test_the_dispatch_brief_is_exhaustive_of_steps_agent_relevant_fields(tmp_pat
     brief = _brief_of(_invoke(repo, shipped, ["run", "advance", "r1"]).output)
 
     step_fields = set(Step.model_fields) - {"id", "run"}
-    # `run`/`workflow`/`step` are the run-identity keys the brief adds on top.
-    assert set(brief) == step_fields | {"run", "workflow", "step"}
+    # `run`/`workflow`/`step` are the run-identity keys the brief adds on top,
+    # and `record` the pre-filled step record (spec 2026-09-25 §5.C.3).
+    assert set(brief) == step_fields | {"run", "workflow", "step", "record"}
 
 
 # --- r2-f7: a manifest that grew a step must not traceback -----------------

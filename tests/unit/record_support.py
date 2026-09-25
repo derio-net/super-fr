@@ -21,6 +21,7 @@ from tests.integration.test_fr_goal_shape import (
 )
 
 __all__ = [
+    "LAST_BRIEF",
     "RUN",
     "SLUG",
     "commit_all",
@@ -34,6 +35,8 @@ __all__ = [
 ]
 
 RUN = "r1"
+LAST_BRIEF: dict[str, object] = {}
+"""The `implement-phase phase/1` brief the last `started_run` printed."""
 SLUG = "2026-09-25-rec"
 PLAN_REL = f"docs/superpowers/plans/{SLUG}"
 fr = _fr
@@ -135,6 +138,8 @@ def started_run(tmp_path: Path) -> Path:
     assert out.exit_code == 0, out.output
     brief = _walk_brief(out.stdout)
     assert (brief["step"], brief["item"]) == ("implement-phase", "phase/1"), out.output
+    LAST_BRIEF.clear()
+    LAST_BRIEF.update(brief)
     commit_all(root, "cursor")
     return root
 

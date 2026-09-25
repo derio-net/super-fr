@@ -1898,7 +1898,22 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "evidence": list(step.evidence),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
+        # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
+        # step; a fan-out group's record is per member, in the member brief.
+        "record": None if step.steps else _record_brief(state, step),
     }
+
+
+def _record_brief(
+    state: RunState, step: Step, group: Step | None = None, item: str | None = None
+) -> dict[str, Any] | None:
+    """The brief's `record` key — never the reason a brief fails to print."""
+    from fr.record.template import record_brief
+
+    try:
+        return record_brief(resolve_repo_root(), state, step, group, item).as_dict()
+    except Exception:  # noqa: BLE001 — a brief without a template still dispatches
+        return None
 
 
 def _brief_skill(step: Step) -> str | list[str] | None:
@@ -2261,6 +2276,7 @@ def _build_member_brief(
         "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
+        "record": _record_brief(state, member, group, item),
     }
 
 
