@@ -378,3 +378,8 @@ Added GhClient.repo_merge_methods (RealGhClient: gh repo view --json viewerDefau
 ### r3-f6-resolved · finding [fixed] · resolves r3-f6: A re-run force-removes the scratch worktree kept for inspection, destroying manual fixes
 
 Checkout.add_worktree replaces a kept scratch worktree only when git status (untracked included) is clean; one with local changes is refused naming its path and the discard command (git worktree remove --force <path>); a non-worktree directory is refused too. Tests: test_triage_gitseam.py::test_a_kept_worktree_with_local_changes_is_refused_by_name, ::test_a_kept_worktree_with_an_untracked_file_is_refused, ::test_a_clean_kept_worktree_is_replaced, ::test_a_directory_that_is_not_a_worktree_is_refused; test_triage_batch_merge_git.py::test_a_kept_worktree_with_a_manual_fix_is_never_replaced
+
+<!-- fr:journal kind=finding scope=plan id=r3-f7-resolved created=2026-09-26T01:12:36 state=fixed resolves=r3-f7 answered_by=agent -->
+### r3-f7-resolved · finding [fixed] · resolves r3-f7: commit_all runs git add --all after set/relock in the scratch worktree, pushing any untracked artifacts to another run's PR
+
+Worktree.commit_all(message, version_files) stages git add --update plus untracked paths matching the declared version.files globs only, never --all. Tests: test_triage_gitseam.py::test_commit_all_stages_tracked_changes_and_version_files_only; test_triage_batch_merge_git.py::test_the_version_update_commits_no_untracked_build_output (set leaves setv.log behind)
