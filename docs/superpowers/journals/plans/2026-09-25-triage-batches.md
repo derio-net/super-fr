@@ -398,3 +398,8 @@ Spec 3.D and Test Plan 11 amended: reservations follow dispatch sequence (next a
 ### r3-f10-resolved · finding [fixed] · resolves r3-f10: Test quality: weakened 'path named' assert; integration test lacks a version file with non-version content and the 3b re-slot against real git
 
 The weakened 'or kept in out' assertion is now an exact 'The scratch worktree is kept for inspection at <path>' check (test_triage_batch_merge.py::test_a_conflict_outside_the_version_files_stops_and_keeps_the_worktree). Integration world refactored into a builder with .fr/triage.yaml on origin; added real-git cases test_triage_batch_merge_git.py::test_a_pr_that_changed_a_version_file_beyond_the_version_stops_the_queue and ::test_an_up_to_date_pr_off_its_slot_is_re_slotted_against_real_git
+
+<!-- fr:journal kind=finding scope=plan id=r3-f11-resolved created=2026-09-26T01:12:57 state=fixed resolves=r3-f11 answered_by=agent -->
+### r3-f11-resolved · finding [fixed] · resolves r3-f11: Git seam tripwire does not stop batch modules from running arbitrary commands through run_declared/_run
+
+AST tripwire: batch modules may import only Checkout, Worktree, GitError from fr.triage.gitseam, never the module whole, and never name or reach _run/git/git_ok/run_declared. Tests: test_forge_adapter_batch_ops.py::test_batch_modules_reach_git_only_through_the_declared_worktree_methods, self-check ::test_the_seam_tripwire_fires_on_each_way_around_it (8 plants), ::test_the_seam_tripwire_admits_the_declared_surface
