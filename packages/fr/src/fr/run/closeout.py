@@ -82,8 +82,22 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     if plan_path:
         lines.append(f"plan: {plan_path}")
     lines.append("")
+    # p4-r3: name the checkout — the transient "start a NEW session in
+    # <workspace>" line printed by the delivering session is gone by the time
+    # a brand-new session reads this brief back, and the run file itself now
+    # lives on the default branch (the feature workspace it was written in
+    # may already be reaped).
+    lines.append(
+        f"Run this from {repo_root} — the base clone, on the default branch, "
+        "after the PR above has merged (the run file lives there; the feature "
+        "workspace this run happened in may already be reaped)."
+    )
+    lines.append("")
     lines.append("Closeout, in order:")
-    lines.append(f"  fr isolation verify-merge --branch {state.branch}")
+    lines.append(
+        f"  fr isolation verify-merge --branch {state.branch}   "
+        "# works from the repo root above even once the feature workspace is gone"
+    )
     lines.append("  STOP here if that refuses — the branch is not actually merged yet.")
 
     if spec_path:
@@ -108,8 +122,25 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
 
     lines.append("  fr status")
     if plan_path:
-        lines.append(f"  fr archive {plan_path}   # on a housekeeping branch")
-    lines.append("  open the housekeeping PR")
+        # p4-r2: exact commands, not a "# on a housekeeping branch" comment
+        # that leaves it to the reader to invent one — a fresh session with
+        # no memory of this run could otherwise `fr archive` right here, in
+        # the just-merged feature workspace, and commit to a dead branch.
+        # Branch naming matches this repo's own housekeeping PRs (`git log
+        # --oneline origin/main | grep -i archive`): `chore/archive-<slug>`.
+        plan_slug = Path(plan_path).name
+        housekeeping_branch = f"chore/archive-{plan_slug}"
+        lines.append(
+            f"  fr isolation up --branch {housekeeping_branch}   "
+            f"# from the base clone above — do NOT run `fr archive` inside "
+            f"{state.branch}, that workspace is the just-merged feature branch"
+        )
+        lines.append(f"  fr archive {plan_path}   # inside the new {housekeeping_branch} workspace")
+        lines.append(
+            "  git add -A && git commit -m "
+            f"'chore: archive {plan_slug}' && git push -u origin {housekeeping_branch}"
+        )
+    lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
     lines.append(f"  fr isolation down --branch {state.branch}")
 
     return "\n".join(lines)

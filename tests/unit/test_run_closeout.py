@@ -153,6 +153,49 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
     )
 
 
+def test_closeout_brief_names_the_checkout_to_run_it_from(tmp_path: Path) -> None:
+    """p4-r3: the brief itself (not just the transient handoff line the
+    delivering session printed) must say where to run it from — the base
+    clone, on the default branch, after merge, since the feature workspace
+    the run happened in may already be reaped."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+
+    brief = closeout_brief(tmp_path, _state())
+
+    assert str(tmp_path) in brief
+    assert "default branch" in brief
+    assert "may already be reaped" in brief or "may be reaped" in brief
+    # verify-merge must be usable from that same repo root once the feature
+    # workspace is gone.
+    verify_idx = brief.index(f"fr isolation verify-merge --branch {BRANCH}")
+    verify_line_end = brief.index("\n", verify_idx)
+    assert "repo root" in brief[verify_idx:verify_line_end]
+
+
+def test_closeout_brief_housekeeping_gives_exact_commands_on_a_new_branch(
+    tmp_path: Path,
+) -> None:
+    """p4-r2: no free-floating "on a housekeeping branch" comment — an exact
+    `fr isolation up --branch chore/archive-<slug>` command, run BEFORE `fr
+    archive`, and an explicit warning against archiving inside the merged
+    feature workspace (`state.branch`)."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+
+    brief = closeout_brief(tmp_path, _state())
+
+    housekeeping_branch = f"chore/archive-{SPEC_SLUG}"
+    i_up = brief.index(f"fr isolation up --branch {housekeeping_branch}")
+    i_archive = brief.index(f"fr archive {PLAN_REL}")
+    assert i_up < i_archive
+    # The warning names the feature branch by value, not just "this
+    # workspace" — a fresh session has no notion of "this" the transcript did.
+    up_line_end = brief.index("\n", i_up)
+    assert BRANCH in brief[i_up:up_line_end] or BRANCH in brief[i_archive : i_archive + 200]
+    assert "commit" in brief.lower() and "push" in brief.lower()
+
+
 def test_closeout_brief_omits_test_plan_line_when_the_spec_has_none(tmp_path: Path) -> None:
     _spec_file(tmp_path, with_test_plan=False)
     _plan_dir(tmp_path)
@@ -168,3 +211,114 @@ def test_closeout_brief_refuses_a_run_whose_deliver_is_not_done(tmp_path: Path) 
 
     with pytest.raises(CloseoutNotReadyError, match="deliver"):
         closeout_brief(tmp_path, _state(deliver_done=False))
+
+
+# --- p4-r4: a resolved out-of-scope finding drops out of the brief ----------
+
+
+def test_closeout_brief_excludes_a_finding_later_deferred_with_a_tracker(tmp_path: Path) -> None:
+    """An out-of-scope finding, subsequently resolved `deferred --tracked-by
+    <#N>` (the exact next step the brief itself tells the operator to run),
+    must not still be listed — its effective state is now `deferred`, not
+    `out-of-scope` (`effective_finding_states`' fold, last record wins)."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+    build_plan_journal(
+        tmp_path,
+        SPEC_SLUG,
+        [
+            {
+                "kind": "finding",
+                "id": "pf1-deferred",
+                "resolves": "pf1",
+                "state": "open",
+                "tracked_by": "#123",
+                "title": "resolves pf1: a plan-scope finding",
+            },
+        ],
+    )
+
+    brief = closeout_brief(tmp_path, _state())
+
+    assert "pf1" not in brief
+
+
+def test_closeout_brief_excludes_a_finding_later_fixed_by_the_operator(tmp_path: Path) -> None:
+    """Same fold, the other closing state: `fixed --answered-by operator`
+    (required to close an out-of-scope finding as fixed rather than
+    deferred, per `unauthorized_fixes`) also drops it from the list."""
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    _plan_out_of_scope_finding(tmp_path)
+    build_plan_journal(
+        tmp_path,
+        SPEC_SLUG,
+        [
+            {
+                "kind": "finding",
+                "id": "pf1-fixed",
+                "resolves": "pf1",
+                "state": "fixed",
+                "answered_by": "operator",
+                "title": "resolves pf1: a plan-scope finding",
+            },
+        ],
+    )
+
+    brief = closeout_brief(tmp_path, _state())
+
+    assert "pf1" not in brief
+
+
+# --- p4-r5: PR / spec / plan fallbacks ---------------------------------------
+
+
+def test_closeout_brief_reports_no_pr_recorded_when_deliver_emitted_none(tmp_path: Path) -> None:
+    _spec_file(tmp_path, with_test_plan=False)
+    _plan_dir(tmp_path)
+    state = RunState(
+        run="r1",
+        workflow="fr-goal@1",
+        branch=BRANCH,
+        started="2026-09-30T00:00:00Z",
+        cursor="deliver",
+        steps={
+            "brainstorm": StepRecord(state="done", emitted={"spec": SPEC_REL}),
+            "plan": StepRecord(state="done", emitted={"plan": PLAN_REL}),
+            "deliver": StepRecord(state="done"),  # no `pr` ever emitted
+        },
+    )
+
+    brief = closeout_brief(tmp_path, state)
+
+    assert "PR: (none recorded)" in brief
+
+
+def test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_them(
+    tmp_path: Path,
+) -> None:
+    """The `if spec_path:` / `if plan_path:` guards: a run whose `deliver`
+    only emitted `pr` must still print a usable brief — no spec/plan lines,
+    no Test Plan line, no out-of-scope journal lines, no archive command —
+    rather than crashing on a path that was never recorded."""
+    state = RunState(
+        run="r1",
+        workflow="fr-goal@1",
+        branch=BRANCH,
+        started="2026-09-30T00:00:00Z",
+        cursor="deliver",
+        steps={"deliver": StepRecord(state="done", emitted={"pr": PR_URL})},
+    )
+
+    brief = closeout_brief(tmp_path, state)
+
+    assert "spec:" not in brief
+    assert "plan:" not in brief
+    assert "Test Plan" not in brief
+    assert "fr archive" not in brief
+    assert "fr isolation up --branch chore/archive-" not in brief
+    assert PR_URL in brief
+    assert f"fr isolation verify-merge --branch {BRANCH}" in brief
+    assert "fr status" in brief
+    assert f"fr isolation down --branch {BRANCH}" in brief
