@@ -338,3 +338,8 @@ fr acceptance set-status is the whole task — a CLI invocation that rewrites th
 ### fd0be9e9c6bf · discovery · fr-goal SKILL.md 120-line cap + resolve-example regex both caught only by the full suite (phase 5)
 
 8f47711c: the P5.T2.S1 rewrite pushed fr-goal/SKILL.md to 128 lines (cap 120) and a hard line-wrap split 'fr journal resolve --scope ...' across a newline, which test_skill_journal_resolve_examples.py's backtick regex (no DOTALL-safe anchor) does not match across. Neither the targeted mirror/tripwire runs (opencode/hermes sync + tool-neutrality) nor a visual read of the diff caught it — only the full suite did. Fixed by tightening prose back to single-line clauses; mirrors regenerated.
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-09-25T14:46:59 phase=5 -->
+### review-p5 · review · Phase 5 review (phase 5)
+
+Dispatched reviewer (sonnet) over 618fba30..HEAD: no in-scope findings; verdict Ready. Checked every new SKILL.md/explainer claim against closeout.py and run_cmd.py; no stale closeout prose elsewhere; e2e test real (only _pr faked); mirrors in sync; line-cap squeeze kept every fact. One observation (plan step broader than needed) — not a defect.
