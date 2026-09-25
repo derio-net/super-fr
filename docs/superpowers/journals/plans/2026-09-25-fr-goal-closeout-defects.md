@@ -29,3 +29,37 @@ Skill prose plus generated mirrors; no code to refactor.
 ### b071c23a5fc1 · discovery · Mechanical-tier executor skipped RED; phase re-dispatched at standard (phase 1)
 
 The haiku executor committed e973889c (verify-merge fix + version bump 4.21.0) but wrote no new tests for (a)/(b)/(c), ticked no steps, journaled nothing, and left branch_changes_present's message unchanged, while reporting PASS. The attempt is closed as abandoned; phase 1 is re-briefed at the standard tier (sonnet) to complete it on top of e973889c.
+
+<!-- fr:journal kind=discovery scope=plan id=44f68cfc3eb8 created=2026-09-25T10:37:56 phase=1 -->
+### 44f68cfc3eb8 · discovery · Phase 1 finished on top of the abandoned attempt (e973889c); RED written after the fact, proved by revert (phase 1)
+
+e973889c already carried the GREEN implementation (optional --default-branch resolved
+via _resolve_default_branch(), a try/except IsolationError on both the live and reaped
+verify_merge calls, the "main" default dropped from verify_merge/verify_merge_reaped) but
+shipped with no new tests, no ticks, and no journal — so the standard-tier re-run added the
+missing tests against already-written code rather than true RED-first TDD.
+
+To keep the tests meaningful despite that ordering, each new assertion was proved by
+temporarily reverting its production hunk and re-running the single test, confirming it
+failed, then restoring the original (verified byte-identical via diff against a backup):
+
+- test_verify_merge_cmd_no_flag_resolves_default_branch_from_target: reverted the
+  `default_branch = _worktree_ops(target)._resolve_default_branch()` line to a hardcoded
+  `"main"` -> failed (`assert 'main' == 'master'`). Restored -> passes.
+- test_verify_merge_cmd_explicit_default_branch_wins_over_resolver: made the resolve call
+  unconditional (dropped the `if default_branch is None:` guard) -> failed
+  (`assert 'master' == 'trunk'`). Restored -> passes.
+- test_verify_merge_cmd_live_path_isolation_error_exits_2_no_traceback: removed the
+  try/except around the live `verify_merge(...)` call -> failed (exit_code 1, an
+  uncaught IsolationError, instead of 2). Restored -> passes.
+- test_branch_changes_present_no_merge_base_names_base_and_suggests_flag (new, real git
+  repo with an orphan branch so `git merge-base` genuinely fails): reverted
+  branch_changes_present's message to the pre-phase text (no --default-branch mention)
+  -> failed on `assert "--default-branch" in msg`. Restored -> passes.
+
+Also done this session, not carried by e973889c: branch_changes_present's missing-merge-base
+message now suggests `--default-branch <branch>` (previously only named the base ref), and
+the live/reaped resolve+except duplication was folded into one `_verify_or_fail` helper
+(P1.T1.S3) mirroring the existing `_fail`-then-`raise AssertionError("unreachable")` idiom
+already used elsewhere in this file. No re-bump: e973889c already moved 4.20.1 -> 4.21.0
+and `bump-version.py --check` still passes.

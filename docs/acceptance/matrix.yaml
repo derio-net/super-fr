@@ -4059,9 +4059,14 @@ rows:
       is a clean error naming --default-branch, never a traceback.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_cmd.py
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Phase 1 (§3.A) implemented and covered: verify-merge resolves --default-branch
+      from the target when omitted, an explicit flag wins, and a raised IsolationError
+      on the live path exits 2 with a clean error naming --default-branch (no traceback).'
   - id: closeout-wrapper-ships-with-first-plan
     capability: fr-goal-closeout
     acceptance: The first 'fr plan create' in a repo ships the validator wrapper with

@@ -310,7 +310,10 @@ def branch_changes_present(
     """
     mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
     if mb.returncode != 0:
-        raise IsolationError(f"no merge-base for {base_ref} and {branch} — unrelated histories?")
+        raise IsolationError(
+            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
+            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
+        )
     merge_base = mb.stdout.strip()
     names = run(["git", "diff", "--name-only", merge_base, branch], cwd=repo_root)
     changed = [ln for ln in names.stdout.splitlines() if ln]
