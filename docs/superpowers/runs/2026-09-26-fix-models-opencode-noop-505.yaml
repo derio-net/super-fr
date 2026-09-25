@@ -3,7 +3,7 @@ run: 2026-09-26-fix-models-opencode-noop-505
 workflow: fr-goal@1
 branch: fix/models-opencode-noop-505
 started: '2026-09-25T22:34:58+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -33,13 +33,17 @@ steps:
           findings: none
           unobserved: reviewer
   plan:
-    state: running
-    at: '2026-09-25T22:43:44+00:00'
+    state: done
+    at: '2026-09-25T22:44:17+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-26-models-opencode-noop-report
     units:
       step/plan:
         attempts:
         - dispatched: '2026-09-25T22:43:44+00:00'
           harness: opencode
+          returned: '2026-09-25T22:44:17+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
