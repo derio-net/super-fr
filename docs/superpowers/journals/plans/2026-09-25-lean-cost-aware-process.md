@@ -49,3 +49,8 @@ Phase 1's rows include audit-pages-regenerated (target int). The _prose says it 
 ### p1-r1 · finding [open] (reviewer: in scope) · OpenCode reader labels every non-zero cost exact; Copilot-routed must be estimated (phase 1)
 
 readers/opencode.py:128-137 vs spec §5.A.2.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-09-25T20:03:22 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · Classifier tests pass even if unwrap/prefix-strip were a no-op; $VAR substitution untested (phase 1)
+
+tests/unit/test_usage_classify.py:14-33.
