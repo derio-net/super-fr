@@ -306,3 +306,6 @@ fr-triage SKILL.md now says schema: 2 (loop step 3 and the example), documents b
 ### p3-gate-fixes · discovery · P3.T6 gate: the skill line cap and the older triage seam tripwire both caught phase-3 changes (phase 3)
 
 The first full run had two failures, both from this phase: (1) test_skill_validation's 120-line cap — the batch additions took fr-triage/SKILL.md to 162 lines; condensed and reflowed to 120 with loop step 5, the --yes rule and schema 2 intact (the skill-example tests pin them). (2) test_triage_collect.py::test_fr_triage_touches_gh_only_in_collect banned subprocess across fr.triage except collect.py, independent of the 3.J batch tripwire; gitseam.py is now its second, narrower exception (subprocess allowed, fr.gh still banned). The targeted runs had been green: only the full suite saw either. Re-run: 5566 passed, 89 skipped, exit 0.
+
+<!-- fr:journal kind=finding scope=plan id=r3-f1 created=2026-09-26T00:54:44 phase=3 state=open review_scope=in -->
+### r3-f1 · finding [open] (reviewer: in scope) · HIGH: dispatch launches the runner, then the open-batch rule / compare-before-write refuses in _write: no event, no forge write, batch stuck (re-run says live, --repair refuses) (phase 3)
