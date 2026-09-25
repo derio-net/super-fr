@@ -363,3 +363,8 @@ run_cmd.py:1660-1664 _verify_tests_log requires the log's mtime inside the windo
 ### deliver-bg-suite-resolved · finding [out-of-scope] · resolves deliver-bg-suite: deliver's tests= gate cannot credit a backgrounded suite run
 
 Predates this change (the gate and the long_commands rule both shipped earlier); surfaced by this run's own deliver. Candidate fix: accept a background task's completion window, or match the task's output file.
+
+<!-- fr:journal kind=finding scope=plan id=p3-noop created=2026-09-25T15:12:35 phase=3 state=open review_scope=in -->
+### p3-noop · finding [open] (reviewer: in scope) · A record write that changed nothing prints 'fr: not committed' (phase 3)
+
+Found on this run's own deliver re-resolve: nothing-to-commit was reported as a refusal on stderr, and would make the closeout handoff print 'cursor NOT committed' for an unchanged cursor.
