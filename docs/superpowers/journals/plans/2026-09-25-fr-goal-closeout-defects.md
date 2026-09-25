@@ -303,3 +303,8 @@ a797e354: backfilled coverage on effective_finding_states' exclusion path — al
 ### p4-r5-resolved · finding [fixed] · resolves p4-r5: No test for missing PR / spec / plan fallbacks in the brief
 
 a797e354: backfilled coverage on the PR:(none recorded) fallback and the spec_path/plan_path guards — already correct, no code change needed. Tests: test_run_closeout.py::test_closeout_brief_reports_no_pr_recorded_when_deliver_emitted_none, ::test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_them
+
+<!-- fr:journal kind=discovery scope=plan id=a49fbd745308 created=2026-09-25T14:15:40 -->
+### a49fbd745308 · discovery · Full-suite: pre-existing env failure in test_install_bridge, unrelated to phase 4
+
+Full suite after phase 4 fixes (5258 passed, 1 failed, 97 skipped, scratchpad/p4-fixes.log): tests/integration/test_install_bridge.py::test_install_bridge_flag_writes_wrapper fails because this devcontainer's globally uv-tool-installed `fr` (v4.20.1 at ~/.local/share/uv/tools/fr) cannot import fr_vk — confirmed by direct python -c "import fr_vk.bridge" against that interpreter, and by re-running the isolated test alone (still fails) and re-running install.sh --install-bridge by hand (same ERROR). No file touched by the p4-r1..r5 fixes (run_cmd.py, records_commit.py, run/closeout.py, their tests) is on this test's path — it exercises scripts/install.sh's bridge wrapper against the pod's pre-existing global tool install, which none of this phase's commits changed. Left open (not fixed): remediating the pod's global uv tool state is outside this phase's scope; re-running `uv tool install --force --with .../fr-vk .../fr` would fix it but is a host-level mutation, not a repo fix.
