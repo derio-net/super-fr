@@ -447,7 +447,8 @@ def test_fails_open_when_fr_hangs_and_does_not_hang_with_it(tmp_path: Path) -> N
 
     _assert_silent(result)
     assert guard.calls(), "the stub was never reached"
-    assert elapsed < 10, f"the guard waited {elapsed:.1f}s on a hung fr"
+    # 25, not 10: ~1s alone, but >10s under `pytest -n auto` load; still well under the 30s sleep.
+    assert elapsed < 25, f"the guard waited {elapsed:.1f}s on a hung fr"
 
 
 @pytest.mark.parametrize(

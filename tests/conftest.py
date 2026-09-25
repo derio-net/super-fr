@@ -125,3 +125,20 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     that needs a session sets one explicitly; nothing inherits the operator's.
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_vk_repo_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test with an empty `fr_vk.config` repo cache.
+
+    `fr_vk.config._cache` is a process-global `list_repos` snapshot that
+    production clears once per tick. A test that fills it through `tick()` and
+    a later one that calls `dispatch_phase` directly (no tick, so no clear)
+    used to share it — `test_bridge_e2e.py`'s `{foo, bar}` registry broke
+    `test_bridge_lifecycle.py` whenever the order put them together, which
+    `pytest -n auto` does. monkeypatch restores the slot afterwards too, so a
+    test cannot leak it forward either.
+    """
+    from fr_vk import config
+
+    monkeypatch.setattr(config, "_cache", None)

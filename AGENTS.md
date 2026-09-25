@@ -141,13 +141,19 @@ manifests (skills + rules + hooks) built from those packages.
 
 ```bash
 uv sync                                             # install workspace deps
-uv run pytest -q --no-cov                           # fast; full `pytest` (CI) also gates cov-fail-under=75
+uv run pytest -q --no-cov -n auto                   # fast, parallel (pytest-xdist); full `pytest -n auto` (CI) also gates cov-fail-under=75
 uv run pytest tests/unit/test_foo.py::test_bar -q   # single test
 uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
 ```
+
+`-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
+A test that passes serially but fails under `-n auto` is order-dependent or
+wall-clock-tight, not an xdist bug: reset process-global state in an autouse
+fixture in `tests/conftest.py` (see `_fresh_vk_repo_cache`) rather than
+pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
 `test`, `validate-artifacts`, `opencode-plugin-test`, `version-sync`,
