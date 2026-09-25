@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from fr.triage.collect import CONFIG_PATH, collect_facts
-from fr.triage.errors import TriageError
+from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import FACTS_SCHEMA, Scope, batch_marker, load_facts
 
 from tests.unit.triage_fixtures import NOW, FakeForge
@@ -258,6 +258,64 @@ def test_a_malformed_config_is_refused_naming_the_repo_and_file() -> None:
     )
 
     with pytest.raises(TriageError, match=r"example-org/alpha.*\.fr/triage\.yaml"):
+        collect_facts(forge, SCOPE, now=NOW)
+
+
+ORG = Scope(kind="org", target="example-org")
+_NAMES = ("alpha", "beta", "gamma")
+
+
+def _org_forge(**kw: Any) -> _Forge:
+    """example-org: three repos, one fr:in-progress issue each, no PRs."""
+    return _Forge(
+        repos=[{"name": n, "isArchived": False} for n in _NAMES],
+        issues={f"example-org/{n}": [_issue(1, ("fr:in-progress",))] for n in _NAMES},
+        prs={f"example-org/{n}": [] for n in _NAMES},
+        open_prs=[],
+        **kw,
+    )
+
+
+def test_org_scope_skips_a_repo_whose_config_is_invalid() -> None:
+    """Review r2p-f4: one repo's bad .fr/triage.yaml does not abort an org collect."""
+    forge = _org_forge(
+        file_bodies={("example-org/beta", CONFIG_PATH, "HEAD"): "stale_dispatch_days: soon\n"}
+    )
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    ((repo, reason),) = [(s.repo, s.reason) for s in facts.skipped]
+    assert repo == "example-org/beta"
+    assert ".fr/triage.yaml" in reason
+    assert sorted({i.repo for i in facts.issues}) == ["example-org/alpha", "example-org/gamma"]
+
+
+def _failing_comments(forge: _Forge, repo: str) -> None:
+    real = forge.list_issue_comments
+
+    def comments(*, repo: str = repo, number: int, _bad: str = repo) -> list[dict[str, Any]]:
+        if repo == _bad:
+            raise ForgeError("HTTP 502")
+        return real(repo=repo, number=number)
+
+    forge.list_issue_comments = comments  # type: ignore[method-assign]
+
+
+def test_org_scope_skips_a_repo_whose_comment_read_fails() -> None:
+    forge = _org_forge()
+    _failing_comments(forge, "example-org/gamma")
+
+    facts = collect_facts(forge, ORG, now=NOW)
+
+    assert [(s.repo, s.reason) for s in facts.skipped] == [("example-org/gamma", "HTTP 502")]
+    assert sorted({i.repo for i in facts.issues}) == ["example-org/alpha", "example-org/beta"]
+
+
+def test_repo_scope_still_fails_loudly_on_a_comment_read() -> None:
+    forge = _Forge(issues={REPO: [_issue(7, ("fr:in-progress",))]}, prs={REPO: []}, open_prs=[])
+    _failing_comments(forge, REPO)
+
+    with pytest.raises(ForgeError, match="HTTP 502"):
         collect_facts(forge, SCOPE, now=NOW)
 
 

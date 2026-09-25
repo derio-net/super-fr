@@ -326,8 +326,9 @@ def collect_facts(
 ) -> Facts:
     """Build the facts for *scope*: two bulk calls per repo, inverted.
 
-    In org scope a repo whose lists fail is recorded under `skipped` and the
-    rest still collect; in repo scope the one repo failing is the error, and
+    In org scope a repo whose lists, config or comment reads fail — or whose
+    `.fr/triage.yaml` is invalid — is recorded under `skipped` and the rest
+    still collect; in repo scope the one repo failing is the error, and
     in org scope so is collecting no repo at all (review r-p2-empty).
     Each *judged* key no longer open costs one `view_issue`, so the extra
     calls are bounded by the judgements, never by the backlog. The batch
@@ -343,13 +344,19 @@ def collect_facts(
     parsed_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     open_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     config: dict[str, TriageConfig] = {}
+    markers: dict[tuple[str, int], str] = {}
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
             repo_config = read_config(forge, repo)
-        except ForgeError as exc:
+            for raw in issues:
+                if at := _marker_at(forge, repo, raw):
+                    markers[(repo, raw["number"])] = at
+        except TriageError as exc:
+            # A forge failure, or a config the repo's owner broke (review r2p-f4):
+            # either way that one repo is skipped in org scope, never the collect.
             if scope.kind == "repo":
                 raise
             skipped.append(Skipped(repo=repo, reason=str(exc)))
@@ -384,7 +391,9 @@ def collect_facts(
         return links.get(_ref(owner, name, number), [])
 
     out = [
-        _with_marker(forge, _issue(repo, i, linked(repo, i["number"]), state="open"))
+        _issue(repo, i, linked(repo, i["number"]), state="open").model_copy(
+            update={"dispatch_marker_at": markers.get((repo, i["number"]))}
+        )
         for repo, i in raw_issues
     ]
     open_keys = {i.key for i in out}
@@ -461,7 +470,8 @@ def read_config(forge: Forge, repo: str) -> TriageConfig | None:
 
     Absent (404) is the common case and means the defaults. Any other forge
     failure propagates like the list calls' do; a file that is not valid config
-    is refused naming the repo and the file, never half-read.
+    is refused naming the repo and the file, never half-read — which fails a
+    repo-scope collect and skips just that repo in org scope (review r2p-f4).
     """
     try:
         body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
@@ -475,20 +485,22 @@ def read_config(forge: Forge, repo: str) -> TriageConfig | None:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
 
-def _with_marker(forge: Forge, issue: Issue) -> Issue:
-    """Date an `fr:in-progress` issue's dispatch by its latest fr-batch marker (§3.E)."""
-    if FR_IN_PROGRESS.name not in issue.labels:
-        return issue
-    comments = forge.list_issue_comments(repo=issue.repo, number=issue.number)
+def _marker_at(forge: Forge, repo: str, raw: dict[str, Any]) -> str | None:
+    """The time of an `fr:in-progress` issue's latest fr-batch marker (§3.E).
+
+    One comment read per `fr:in-progress` issue, none for the rest. Called
+    inside the per-repo collect, so a failing read skips that repo in org scope.
+    """
+    if FR_IN_PROGRESS.name not in {label["name"] for label in raw.get("labels") or []}:
+        return None
+    comments = forge.list_issue_comments(repo=repo, number=raw["number"])
     stamps = [
         stamp
         for c in comments
         if str(c.get("body") or "").lstrip().startswith(BATCH_MARKER_PREFIX)
         and (stamp := str(c.get("created_at") or ""))  # no stamp is no time (r2p-f13)
     ]
-    if not stamps:
-        return issue
-    return issue.model_copy(update={"dispatch_marker_at": max(stamps)})
+    return max(stamps) if stamps else None
 
 
 def _batch_prs(
