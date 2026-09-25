@@ -4039,6 +4039,17 @@ rows:
       (tripwire) and is walked end to end with spec-review evidence (test_fr_goal_shape);
       read-only agent mirror and worktree-hook allowlist pinned. Live dispatch of fr-spec-reviewer
       is spec Test Plan 15, post-merge.
+  - id: run-flat-step-evidence-debt
+    capability: Workflow runs
+    acceptance: Completed flat agent steps with missing required evidence are visible
+      as debt in fr run check and fr run status
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-flat-agent-step-evidence-debt-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence.py
+    status: ci
+    notes: Unit-pinned for both CLI views; check exit remains unchanged.
   - id: deliver-tests-log-dot-dir
     capability: fr-goal-methodology
     acceptance: deliver's tests=<log> gate accepts a log the orchestrator wrote under

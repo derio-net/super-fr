@@ -1715,7 +1715,8 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
             suffix = f"step/{member.id}" if member.id == step_id else f"/{member.id}"
             for key in units.unit_keys(record):
                 matches = key == suffix if member.id == step_id else key.endswith(suffix)
-                if not matches or units.unit_state(record, key) != "done":
+                unit_state = record.state if member.id == step_id else units.unit_state(record, key)
+                if not matches or unit_state != "done":
                     continue
                 held = units.evidence_of(record, key)
                 lacking = tuple(name for name in member.evidence if name not in held)
