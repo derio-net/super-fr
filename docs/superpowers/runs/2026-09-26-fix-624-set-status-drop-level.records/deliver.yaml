@@ -3,4 +3,4 @@ run: 2026-09-26-fix-624-set-status-drop-level
 step: deliver
 outcome: done
 evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/d798e182-2250-49f5-81ab-727aaac0eef3/scratchpad/deliver-suite.log
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/d798e182-2250-49f5-81ab-727aaac0eef3/scratchpad/deliver-suite-fg2.log
