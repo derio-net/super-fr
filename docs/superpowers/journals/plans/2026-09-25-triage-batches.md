@@ -44,3 +44,8 @@ P1.T1.S3's red run failed on ModuleNotFoundError: fr_herdr before any WorkItem w
 ### 162b015f5356 · discovery · fr-herdr wiring: root deps/sources and --cov added; README/HERMES lists and import-direction test not yet updated (phase 1)
 
 A workspace member's fr.runners entry point is only registered once the root pyproject depends on it (dependencies + [tool.uv.sources]); --cov=fr_herdr was added to addopts too. Left for later phases: README.md/HERMES.md package lists, AGENTS.md repo-shape prose, and tests/unit/test_import_direction.py peer rules (fr_dispatch must not import fr_herdr; fr_herdr vs fr_vk/fr_cncd).
+
+<!-- fr:journal kind=discovery scope=plan id=6b7920f90e3e created=2026-09-25T22:54:18 phase=1 -->
+### 6b7920f90e3e · discovery · no-refactor-because P1.T3 (phase 1)
+
+Verification-only task; the loader change (a read-versions tuple in _check_schema) and the stub runner needed no cleanup pass. Full suite, ruff, mypy (incl. packages/fr-herdr/src) and bump-version --check all green.
