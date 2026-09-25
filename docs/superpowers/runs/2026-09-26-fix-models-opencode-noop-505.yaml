@@ -93,6 +93,7 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-09-25T23:04:47+00:00'
+          agent: A9A3D033-444D-483E-BDB6-A2BD8562617E
           harness: opencode
   journal-check:
     state: pending
