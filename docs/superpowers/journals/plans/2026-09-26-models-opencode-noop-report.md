@@ -19,3 +19,17 @@ Seeded three tier-specific agent files directly in the test and assert the exact
 ### phase-1-review · review · Independent code review: fixture correction applied (phase 1)
 
 Review found the CLI positive-case test did not seed any agents because the mirror is absent in the worktree. Corrected test_models_cmd.py to seed three supported-tier agent files directly and assert exactly 3 are reported. Verified both intended failures remain pre-implementation. Reviewer session id 01a0dab3ec7b7e209ccac01fde3f75bd (general review agent).
+
+<!-- fr:journal kind=discovery scope=plan id=phase-2-implementation created=2026-09-26T01:04:46 phase=2 -->
+### phase-2-implementation · discovery · MaterializeResult successfully distinguishes considered from changed (phase 2)
+
+Implemented MaterializeResult dataclass to carry both `considered` count
+and `changes` list, allowing callers to distinguish "no files at all"
+(considered==0) from "files existed but were already correct"
+(considered>0, changes empty). Both callers (set_cmd, apply_cmd) and
+shared reporter (_report_changes) updated. All 25 focused tests pass.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-26T01:04:46 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+No further refactoring was needed after the result type, shared reporting path, and checks were complete.
