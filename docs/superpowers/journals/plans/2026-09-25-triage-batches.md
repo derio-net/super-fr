@@ -393,3 +393,8 @@ Spec 3.D and Test Plan 11 amended: reservations follow dispatch sequence (next a
 ### r3-f9-resolved · finding [fixed] · resolves r3-f9: --repair ignores batch stage: re-labels closed/released issues on merged or abandoned batches; restrict to dispatched/pr-open
 
 --repair on a batch whose last event is a dispatch refuses unless its stage is dispatched or pr-open (merged, partial, abandoned refused, no forge write). Tests: test_triage_batch_dispatch.py::test_repair_refuses_a_batch_that_is_no_longer_in_flight[abandoned|merged|partial], ::test_repair_completes_a_batch_in_flight[dispatched|pr-open]
+
+<!-- fr:journal kind=finding scope=plan id=r3-f10-resolved created=2026-09-26T01:12:51 state=fixed resolves=r3-f10 answered_by=agent -->
+### r3-f10-resolved · finding [fixed] · resolves r3-f10: Test quality: weakened 'path named' assert; integration test lacks a version file with non-version content and the 3b re-slot against real git
+
+The weakened 'or kept in out' assertion is now an exact 'The scratch worktree is kept for inspection at <path>' check (test_triage_batch_merge.py::test_a_conflict_outside_the_version_files_stops_and_keeps_the_worktree). Integration world refactored into a builder with .fr/triage.yaml on origin; added real-git cases test_triage_batch_merge_git.py::test_a_pr_that_changed_a_version_file_beyond_the_version_stops_the_queue and ::test_an_up_to_date_pr_off_its_slot_is_re_slotted_against_real_git
