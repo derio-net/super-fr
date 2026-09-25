@@ -192,6 +192,7 @@ def create_cmd(
             phases=phases,
             prose=prose,
             workflow=workflow,
+            warn=lambda msg: err_console.print(f"[yellow]warning:[/yellow] {msg}"),
         )
         console.print(f"created plan: {plan.dir}")
     except PlanEditError as e:

@@ -20,7 +20,7 @@ import datetime as _dt
 import logging
 import re
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -173,8 +173,13 @@ def create(
     prose: str,
     plans_dir: Path | None = None,
     workflow: str | None = None,
+    warn: Callable[[str], None] | None = None,
 ) -> Plan:
     """Scaffold a new v2 plan folder + append spec row.
+
+    `warn` receives non-fatal notes (a foreign validator wrapper left in
+    place). The CLI passes its stderr printer; library callers default to
+    this module's logger.
 
     `workflow` is the shape the plan dispatches at (spec §4.A.1). It is
     written ONLY when given — a `workflow: null` line in every new plan
@@ -291,8 +296,8 @@ def create(
             if ensure_validator_wrapper(repo_root):
                 written.append(validator_wrapper_path(repo_root))
         except ValidatorWrapperError as err:
-            logging.getLogger(__name__).warning(
-                "plan %s: could not install scripts/validate-plans.sh: %s", slug, err
+            (warn or logging.getLogger(__name__).warning)(
+                f"plan {slug}: could not install scripts/validate-plans.sh: {err}"
             )
 
     if written:
