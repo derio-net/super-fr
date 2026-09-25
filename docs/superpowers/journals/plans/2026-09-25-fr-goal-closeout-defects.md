@@ -88,3 +88,38 @@ scaffold.py's wrapper handling (plans_dir_exists gate, raise IsolationError on V
 ### 6519d7c46668 · discovery · tests/unit/test_plan_cmd.py does not exist in this repo (phase 2)
 
 The phase brief and plan step P2.T3.S3 both name tests/unit/test_plan_cmd.py as a gate/refactor-check target; no such file exists anywhere in the tree (fr plan create's CLI layer is exercised via tests/unit/test_v2_plan_ops.py at the library level and there is no dedicated CLI test file for it). Ran the equivalent CLI-facing tests instead: tests/unit/test_plan_ops.py + tests/unit/test_v2_plan_ops.py + tests/unit/test_isolation.py (305 passed) and the new tests/unit/test_init_cmd.py. Flagging so the gap is not silently assumed closed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-09-25T11:19:08 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · Validator wrapper counted as unplanned work by proportionality (phase 2)
+
+Reviewer (critical): proportionality.EXEMPT_PREFIXES omitted scripts/validate-plans.sh, which plan create now writes; 6 test_plan_proportionality tests regressed (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-09-25T11:19:08 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Foreign-wrapper warning not fr-owned output (phase 2)
+
+Reviewer (minor): plan_ops.create warned via logging with no handler configured; under CliRunner stderr was empty (reproduced).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-09-25T11:19:09 phase=2 state=open review_scope=out -->
+### p2-r3 · finding [open] (reviewer: out of scope) · install-validator-wrapper.sh duplicates WRAPPER_TEXT, now unreferenced by REPAIR_COMMAND (phase 2)
+
+Reviewer (minor, out): scripts/install-validator-wrapper.sh + its test + version pin remain live; hand-copied heredoc duplicates plan_validator_wrapper.WRAPPER_TEXT.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-09-25T11:19:09 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: Validator wrapper counted as unplanned work by proportionality
+
+e016c1da: EXEMPT_PREFIXES includes WRAPPER_REL; test_the_validator_wrapper_is_an_fr_artifact pins it; the 6 regressed tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-09-25T11:19:10 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Foreign-wrapper warning not fr-owned output
+
+e016c1da: create(warn=...) callback; plan_cmd prints 'warning:' on stderr; tests/unit/test_plan_cmd.py pins it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-09-25T11:19:10 state=open resolves=p2-r3 out_of_scope=true -->
+### p2-r3-resolved · finding [out-of-scope] · resolves p2-r3: install-validator-wrapper.sh duplicates WRAPPER_TEXT, now unreferenced by REPAIR_COMMAND
+
+The duplication predates this change (the script always hand-copied the Python literal) and install.sh still uses the script; retiring it is a separate change.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-09-25T11:19:11 phase=2 -->
+### review-p2 · review · Phase 2 review (phase 2)
+
+Dispatched reviewer (sonnet) over 99f3cb7b. Raised p2-r1 (critical, in: proportionality regression, 6 tests), p2-r2 (minor, in: warning visibility), p2-r3 (minor, out). Verified r1/r2 by reproduction and fixed in e016c1da with RED tests first; r3 filed out-of-scope. Also recorded: phase-2's targeted test list (mine, in the plan) omitted test_plan_proportionality.py, which is how r1 slipped past the executor.
