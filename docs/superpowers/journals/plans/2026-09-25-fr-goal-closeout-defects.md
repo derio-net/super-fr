@@ -403,3 +403,8 @@ Post-deliver review (low): no test asserts the handoff's 'start a NEW session in
 ### pd-r3-resolved · finding [fixed] · resolves pd-r3: No CLI-level test at the two dogfood wiring points
 
 9364a3bf: added test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree (revert-proofed by hand against repo_root) and test_advance_on_an_already_finished_run_reports_the_cursor_as_committed (amend path prints no handoff, so the unchanged mapping is exercised via a second advance) to test_run_cli.py. Both pass against the existing implementation.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved-2 created=2026-09-25T18:52:47 state=open resolves=p1-r1 tracked_by=#618 -->
+### p1-r1-resolved-2 · finding [deferred → #618] · resolves p1-r1: _resolve_default_branch's host-CLI lookup is untimed
+
+Filed at closeout as gh#618.
