@@ -424,10 +424,19 @@ def _seam_violations() -> dict[str, list[str]]:
         rel = path.relative_to(root).parent.parts
         modules[path] = ".".join(["fr", "triage", *rel])
     assert len(modules) > 3, "the scan found almost nothing: the walk itself is broken"
+    # `gitseam.py` is the batch verbs' git seam (triage-batches review r2p-f11):
+    # it may start processes (git, and the repo's declared version commands),
+    # but it may still never import the forge CLI wrapper.
+    git_seam = root / "gitseam.py"
     return {
         str(path): hits
         for path, package in modules.items()
-        if path != root / "collect.py" and (hits := forbidden_imports(path, package))
+        if path != root / "collect.py"
+        and (
+            hits := forbidden_imports(path, package, ("fr.gh",))
+            if path == git_seam
+            else forbidden_imports(path, package)
+        )
     }
 
 
