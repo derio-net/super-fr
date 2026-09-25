@@ -1,5 +1,6 @@
 """Shared pytest fixtures."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,20 @@ def _wide_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COLUMNS", WIDE_TERMINAL_COLUMNS)
 
 
+# The pin above only reaches a console that reads `$COLUMNS` LIVE. rich
+# snapshots it into `_width` in `Console.__init__`, and `fr.commands.*` build
+# their consoles at import — i.e. at collection, before any fixture — so a
+# `COLUMNS` already in the environment then freezes them for the whole session.
+# Under `pytest -n auto` on Linux one always is: pytest's capture plugin imports
+# `readline` in the main process, GNU readline `setenv`s COLUMNS=80/LINES=24
+# behind `os.environ`'s back, and execnet spawns every worker with that C-level
+# environment (PR #615's first CI run: four tests wrapped at 80). This conftest
+# is imported before any test module, so dropping them here keeps every
+# module-level console live. Pinned by test_suite_isolation_inherited_columns.
+for _inherited in ("COLUMNS", "LINES"):
+    os.environ.pop(_inherited, None)
+
+
 @pytest.fixture(autouse=True)
 def _transcript_root_off_the_operators_machine(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -125,3 +140,20 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     that needs a session sets one explicitly; nothing inherits the operator's.
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_vk_repo_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test with an empty `fr_vk.config` repo cache.
+
+    `fr_vk.config._cache` is a process-global `list_repos` snapshot that
+    production clears once per tick. A test that fills it through `tick()` and
+    a later one that calls `dispatch_phase` directly (no tick, so no clear)
+    used to share it — `test_bridge_e2e.py`'s `{foo, bar}` registry broke
+    `test_bridge_lifecycle.py` whenever the order put them together, which
+    `pytest -n auto` does. monkeypatch restores the slot afterwards too, so a
+    test cannot leak it forward either.
+    """
+    from fr_vk import config
+
+    monkeypatch.setattr(config, "_cache", None)

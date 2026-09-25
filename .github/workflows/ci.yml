@@ -30,7 +30,9 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
-      - run: uv run pytest
+      # pytest-xdist: pytest-cov combines worker coverage, so --cov-fail-under=75
+      # (pyproject addopts) still gates the whole suite.
+      - run: uv run pytest -n auto
 
   validate-artifacts:
     runs-on: ubuntu-latest

@@ -234,7 +234,9 @@ where it is; `fr run advance` executes the step under the cursor if it is a
 command, or prints the dispatch brief if it is agent work; `fr run claim`
 records which agent took that brief; `fr run resolve` records how a dispatched
 step turned out and answers an operator gate; and `fr run check` fails loudly
-when the cursor is sitting on a failed step.
+when the cursor is sitting on a failed step. Both `check` and `status` also
+surface completed work whose required evidence is missing as visible debt,
+without changing the check's exit code.
 
 Advancing twice does not hand out the same work twice. If the step under the
 cursor is already running — an agent was dispatched and has not reported back —
