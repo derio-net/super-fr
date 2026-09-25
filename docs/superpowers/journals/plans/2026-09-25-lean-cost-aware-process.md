@@ -319,3 +319,8 @@ aaf707cf: fr isolation up writes target (devcontainer|worktree) beside unchanged
 ### p2-r23-resolved · finding [fixed] · resolves p2-r23: Dispatched reviewer attempts (agent, no agent_type) labelled role: main
 
 9e1ec7c2: split_usage maps an attempt with agent but no agent_type to role subagent; both committed usage files regenerated through split_run_usage (v6 cursors at eab566e9^) plus capture().
+
+<!-- fr:journal kind=finding scope=plan id=p2-r24-resolved created=2026-09-25T22:16:01 state=fixed resolves=p2-r24 -->
+### p2-r24-resolved · finding [fixed] · resolves p2-r24: Capture never fills briefs
+
+9e1ec7c2: readers measure dispatch prompt sizes (Claude Code Agent tool_use input.prompt keyed by attributed agent id; OpenCode task part state.input.prompt keyed by state.metadata.sessionId, shape read from a live db); session_entry re-keys to the cursor unit holding that agent. Migrated handoff_chars briefs stay in their migrated capture (files never rewritten).
