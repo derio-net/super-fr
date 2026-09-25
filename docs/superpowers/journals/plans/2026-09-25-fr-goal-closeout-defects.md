@@ -208,3 +208,8 @@ Constant per command, no O(n) scan added; reviewer rated it acceptable. A few gi
 ### p3-r3-resolved · finding [fixed] · resolves p3-r3: index.lock race with a concurrently committing executor
 
 1c02f263: commit_paths(lock_wait=2.0) polls index.lock every 50ms, then the existing refusal. Pinned by test_records_commit.py::test_a_record_commit_waits_out_a_briefly_held_index_lock, ::test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly
+
+<!-- fr:journal kind=finding scope=plan id=p3-m2-resolved created=2026-09-25T12:28:21 state=fixed resolves=p3-m2 -->
+### p3-m2-resolved · finding [fixed] · resolves p3-m2: commit_paths commits the whole working-tree file
+
+1c02f263: commit_paths docstring states the pathspec commit takes the whole working-tree file, so hand edits in an fr-owned record ride fr's commit (docs only, no test)
