@@ -174,9 +174,9 @@ state:
       ticked_at: '2026-09-25T21:23:43+00:00'
       note: null
     P2.T5.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:23:46+00:00'
+      note: no-refactor-because P2.T5 (p2-norefactor-t5)
     P2.T6.S1:
       state: ' '
       ticked_at: null
