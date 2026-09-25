@@ -396,6 +396,11 @@ class Batch(_Strict):
         if bad:
             raise ValueError(f"batch ids must be '<repo-name>#<number>', got {bad!r}")
         keys = [normalize_key(k) for k in v]
+        twice = sorted({k for k in keys if keys.count(k) > 1})
+        if twice:
+            # Review r2p-f5: caught here, or the open-batch rule later reports the
+            # batch clashing with itself ("is in x, x").
+            raise ValueError(f"a batch lists {', '.join(twice)} more than once")
         repos = sorted({k.rpartition("#")[0] for k in keys})
         if len(repos) > 1:
             raise ValueError(f"a batch's members must be in one repo, got {repos}")

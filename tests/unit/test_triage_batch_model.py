@@ -160,6 +160,13 @@ def test_an_unknown_event_kind_is_refused() -> None:
         _judgements(_batch(events=[{"kind": "merge", "at": "2026-09-25T00:00:00Z"}]))
 
 
+@pytest.mark.parametrize("dupe", ["super-fr#577", "Super-FR#577"])
+def test_a_member_listed_twice_is_refused_naming_it(dupe: str) -> None:
+    """Review r2p-f5: after normalisation, a key may appear once in a batch."""
+    with pytest.raises(ValidationError, match=r"lists super-fr#577 more than once"):
+        _judgements(_batch(ids=["super-fr#577", "super-fr#575", dupe]))
+
+
 def test_members_in_two_repos_are_refused() -> None:
     base = {**_BASE, "issues": {**_BASE["issues"], "other#1": {"tier": 1}}}
     with pytest.raises(ValidationError, match="one repo"):

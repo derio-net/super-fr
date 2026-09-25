@@ -199,7 +199,7 @@ def batch_edit_command(
     if add_issue or remove_issue:
         drop = {k.lower() for k in remove_issue or []}
         ids = [k for k in batch.ids if k not in drop]
-        ids += [k for k in add_issue or [] if k.lower() not in ids]
+        ids += list(add_issue or [])  # a key already present is refused by the model
         changes["ids"] = ids
     if not changes and order is None:
         _fail("nothing to change: give at least one option")

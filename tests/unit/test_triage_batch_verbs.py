@@ -156,6 +156,20 @@ def test_create_refuses_an_existing_id(tmp_path: Path) -> None:
     assert "already exists" in out
 
 
+def test_create_refuses_a_member_given_twice_and_writes_nothing(tmp_path: Path) -> None:
+    """Review r2p-f5: refused at create, not later as 'super-fr#577 is in x, x'."""
+    _state(tmp_path)
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t",
+        "--issue", "super-fr#577", "--issue", "Super-FR#577",
+    )  # fmt: skip
+    assert code == 2
+    assert "more than once" in out
+    assert " is in x, x" not in out
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+
+
 def test_create_refuses_an_unjudged_member_and_writes_nothing(tmp_path: Path) -> None:
     _state(tmp_path)
     before = (tmp_path / "judgements.yaml").read_text("utf-8")
@@ -208,6 +222,19 @@ def test_edit_adds_and_removes_members(tmp_path: Path) -> None:
     assert code == 0, out
     (batch,) = _batches(tmp_path)
     assert (batch.title, batch.ids) == ("new", ["super-fr#577", "super-fr#471"])
+
+
+@pytest.mark.parametrize(
+    "added", [["super-fr#577"], ["super-fr#471", "Super-FR#471"]], ids=["member", "twice"]
+)
+def test_edit_refuses_adding_a_member_twice(tmp_path: Path, added: list[str]) -> None:
+    _with(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577", "super-fr#575"]})
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    args = [a for k in added for a in ("--add-issue", k)]
+    code, out = _run(tmp_path, "edit", "lifecycle", *args)
+    assert code == 2
+    assert "more than once" in out
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
 
 
 def test_edit_refuses_removing_the_last_member(tmp_path: Path) -> None:
