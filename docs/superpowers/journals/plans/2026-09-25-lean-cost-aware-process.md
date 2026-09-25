@@ -244,3 +244,8 @@ isolation/where.py:122, masked by tests/conftest.py:162-175. Spec §5.B.6 amende
 ### p2-r21 · finding [open] (reviewer: in scope) · unavailable reason copies exception text (absolute paths, usernames) into committed usage files (phase 2)
 
 usage/file.py:241-242; readers' f'{type(exc).__name__}: {exc}'.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r22 created=2026-09-25T21:40:22 phase=2 state=open review_scope=in -->
+### p2-r22 · finding [open] (reviewer: in scope) · fr run cost drops all migrated entries once any live capture exists (phase 2)
+
+run/cost.py:87-93: supersede per session/step, report ignored entries.
