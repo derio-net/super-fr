@@ -203,3 +203,8 @@ Constant per command, no O(n) scan added; reviewer rated it acceptable. A few gi
 ### p3-r2-resolved · finding [fixed] · resolves p3-r2: Record commits run consumer hooks + signing on every fr command
 
 1c02f263: commit_paths(no_verify=True, restore_index=True) from commit_records; signing untouched; commit_migration default unchanged. Pinned by test_records_commit.py::test_a_record_commit_skips_a_failing_pre_commit_hook, ::test_a_failed_record_commit_restores_the_index (forced failure = commit.gpgsign + gpg.program=false, which --no-verify cannot skip), ::test_the_migration_commit_still_runs_hooks
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-09-25T12:28:21 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: index.lock race with a concurrently committing executor
+
+1c02f263: commit_paths(lock_wait=2.0) polls index.lock every 50ms, then the existing refusal. Pinned by test_records_commit.py::test_a_record_commit_waits_out_a_briefly_held_index_lock, ::test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly
