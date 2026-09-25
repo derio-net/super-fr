@@ -106,7 +106,11 @@ class Capture(BaseModel):
     harness: str
     mode: Mode
     captured_at: str
-    at: str
+    """When this host last captured."""
+    at: tuple[str, ...]
+    """Every capture event from this host, in order (spec §5.B.1, p2-r29): a
+    later capture merges into the host's entry and appends, so a closeout
+    never erases the deliver that preceded it."""
     sessions: tuple[SessionEntry, ...] = ()
 
     @field_validator("host")
@@ -118,11 +122,17 @@ class Capture(BaseModel):
 
     @field_validator("at")
     @classmethod
-    def _at(cls, value: str) -> str:
-        if not _AT_RE.match(value):
-            raise ValueError(
-                f"at {value!r} must be deliver | closeout | resolve:<step> | migrated | backfill"
-            )
+    def _at(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if not value:
+            raise ValueError("at lists at least one capture event")
+        for event in value:
+            if not _AT_RE.match(event):
+                raise ValueError(
+                    f"at event {event!r} must be deliver | closeout | resolve:<step> | "
+                    "migrated | backfill"
+                )
+        if len(set(value)) != len(value):
+            raise ValueError(f"at lists an event twice: {list(value)}")
         return value
 
 
@@ -212,11 +222,34 @@ def _role(record: UsageRecord) -> str:
     return f"subagent:{agent}" if agent else "subagent"
 
 
-def session_entry(record: UsageRecord, windows: Sequence[Window] = ()) -> SessionEntry:
+def units_by_agent(cursor: Mapping[str, Any]) -> dict[str, str]:
+    """`{agent id: unit key}` from a run cursor's attempts (any version with
+    `units`) — how a brief the reader keyed by agent id finds its unit."""
+    out: dict[str, str] = {}
+    steps = cursor.get("steps")
+    for record in steps.values() if isinstance(steps, Mapping) else ():
+        units = record.get("units") if isinstance(record, Mapping) else None
+        for key, unit in units.items() if isinstance(units, Mapping) else ():
+            attempts = unit.get("attempts") if isinstance(unit, Mapping) else None
+            for attempt in attempts if isinstance(attempts, list | tuple) else ():
+                agent = attempt.get("agent") if isinstance(attempt, Mapping) else None
+                if isinstance(agent, str) and agent:
+                    out.setdefault(agent, str(key))
+    return out
+
+
+def session_entry(
+    record: UsageRecord,
+    windows: Sequence[Window] = (),
+    units: Mapping[str, str] | None = None,
+) -> SessionEntry:
     """One session's figures, copied out of `record` field by field.
 
-    Only model ids, token counts, dollars, turns and step names are read; tool
-    calls are used to CLASSIFY (inside `rollup`) and never copied."""
+    Only model ids, token counts, dollars, turns, step names and brief SIZES
+    are read; tool calls are used to CLASSIFY (inside `rollup`) and never
+    copied. `units` (`units_by_agent`) re-keys a brief from the agent id the
+    reader found to the cursor unit that agent held; an unmatched brief keeps
+    the reader's key (p2-r24)."""
     if record.unavailable is not None:
         return SessionEntry(
             session=record.session, unavailable=committed_reason(record.unavailable)
@@ -259,8 +292,17 @@ def session_entry(record: UsageRecord, windows: Sequence[Window] = ()) -> Sessio
         )
         for name in step_names
     }
+    briefs: dict[str, int] = {}
+    for key, size in record.briefs.items():
+        unit = (units or {}).get(key, key)
+        briefs[unit] = briefs.get(unit, 0) + size
     return SessionEntry(
-        session=record.session, role=_role(record), models=models, activity=activity, steps=steps
+        session=record.session,
+        role=_role(record),
+        models=models,
+        activity=activity,
+        steps=steps,
+        briefs=briefs,
     )
 
 
@@ -307,7 +349,7 @@ def dump_usage(file: UsageFile) -> str:
                 "harness": c.harness,
                 "mode": c.mode,
                 "captured_at": c.captured_at,
-                "at": c.at,
+                "at": list(c.at),
                 "sessions": [_session(s) for s in c.sessions],
             }
             for c in file.captures
@@ -338,6 +380,7 @@ def load_usage(path: Path) -> UsageFile | None:
 
 __all__ = [
     "committed_reason",
+    "units_by_agent",
     "IMPLEMENTED_USAGE_REL",
     "MIGRATED_HOST",
     "USAGE_REL",

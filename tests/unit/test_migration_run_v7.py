@@ -53,7 +53,7 @@ def test_a_v6_cursor_migrates_with_its_figures_moved_into_usage(tmp_path: Path) 
     usage = load_usage(usage_path(tmp_path, RUN))
     assert usage is not None
     (capture,) = usage.captures
-    assert capture.at == "migrated"
+    assert capture.at == ("migrated",)
     assert capture.host == host_label(RUN, MIGRATED_HOST)
     by_session = {s.session: s for s in capture.sessions}
 
@@ -70,6 +70,11 @@ def test_a_v6_cursor_migrates_with_its_figures_moved_into_usage(tmp_path: Path) 
     figures = executor.models["claude-opus-5-5"]
     assert figures.cache_read == 17753981 and figures.cache_write == 468702
     assert figures.usd is None and figures.usd_source == "none"
+
+    # p2-r23: a dispatched attempt (it names an `agent`) is a subagent even
+    # when v6 recorded no `agent_type` — only the `(main)` entry is `main`
+    assert [s.session for s in capture.sessions if s.role == "main"] == ["(main)"]
+    assert by_session["a1ea2343c237b8a52"].role == "subagent"
 
     # the usage file is committed with the cursor: it is a changed path
     assert usage_path(tmp_path, RUN) in report.changed_paths

@@ -110,6 +110,9 @@ def split_usage(data: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
                     role = None
                 elif attempt.get("agent_type"):
                     role = f"subagent:{attempt['agent_type']}"
+                elif attempt.get("agent"):
+                    # dispatched (it names an agent) but v6 kept no type (p2-r23)
+                    role = "subagent"
                 else:
                     role = "main"
                 models = {}
@@ -229,7 +232,7 @@ def split_run_usage(path: Path) -> list[Path] | None:
             harness=_harness(data),
             mode="host-worktree",
             captured_at=_captured_at(data),
-            at="migrated",
+            at=("migrated",),
             sessions=tuple(entries),
         )
         usage_text = dump_usage(upsert_capture(existing, capture))

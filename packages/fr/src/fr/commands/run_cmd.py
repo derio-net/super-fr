@@ -3176,15 +3176,17 @@ def cost_cmd(
                 soft_wrap=True,
             )
             raise typer.Exit(2)
-        entries, replayed = effective_entries(usage)
+        entries, replayed, ignored = effective_entries(usage)
         try:
             order = list(load_run_state(repo_root, run_id).steps)
         except RunStateError:
             order = []
-        captures = ", ".join(f"{c.at}@{c.host}" for c in usage.captures) or "none"
+        captures = ", ".join(f"{'+'.join(c.at)}@{c.host}" for c in usage.captures) or "none"
         note = f"captures: {captures}"
         if replayed:
             note += " — only figures migrated from the run 6 cursor (no dollars)"
+        if ignored:
+            note += f"; {ignored} migrated entries ignored (a live capture covers them)"
     summary = summarize(entries, order)
 
     def usd(value: float | None) -> str:

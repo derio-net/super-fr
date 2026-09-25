@@ -10,7 +10,8 @@ session's `unavailable`; a usage file that cannot be read is left untouched
 and reported on stderr; anything else is swallowed the same way. A step's
 outcome is never hostage to observability.
 
-A re-capture on the same host replaces that host's entry — but a session the
+A re-capture on the same host merges into that host's entry: its event is
+appended to the entry's `at` list (spec §5.B.1/3, p2-r29) — and a session the
 earlier capture READ and this one cannot (a pruned transcript) keeps its
 earlier figures: replacing a measurement with an absence would lose the one
 thing the file exists to keep.
@@ -35,6 +36,7 @@ from fr.usage.file import (
     host_label,
     load_usage,
     session_entry,
+    units_by_agent,
     upsert_capture,
     usage_path,
 )
@@ -162,14 +164,19 @@ def capture(
         windows = windows_from_cursor(
             {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
         )
+        units = units_by_agent(state.model_dump(mode="json"))
         entries: list[SessionEntry] = []
         for harness, session in pairs:
             try:
                 record = read_session(harness, session, env)
             except Exception as e:  # noqa: BLE001 — a reader must not fail a step
                 record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-            entries.append(session_entry(record, windows))
+            entries.append(session_entry(record, windows, units))
         label = this_host(state.run, env)
+        previous = existing.host(label)
+        events = previous.at if previous is not None else ()
+        if at not in events:
+            events = (*events, at)
         try:
             from fr.harness.detect import detect_harness
 
@@ -181,8 +188,8 @@ def capture(
             harness=harness_now,
             mode=isolation_mode(repo_root, state),
             captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
-            at=at,
-            sessions=tuple(_merge(existing.host(label), entries)),
+            at=events,
+            sessions=tuple(_merge(previous, entries)),
         )
         from fr.artifacts.atomic import write_text_atomic
 

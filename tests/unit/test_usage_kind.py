@@ -39,7 +39,7 @@ captures:
     harness: claude-code
     mode: host-worktree
     captured_at: '2019-03-04T12:00:00+00:00'
-    at: deliver
+    at: [deliver]
     sessions:
       - session: 11111111-aaaa
         role: main
@@ -88,7 +88,7 @@ def test_validate_artifacts_accepts_a_usage_file(tmp_path: Path) -> None:
 
 
 def test_validate_artifacts_rejects_a_duplicate_key(tmp_path: Path) -> None:
-    doubled = SPEC_EXAMPLE.replace("    at: deliver\n", "    at: deliver\n    at: closeout\n")
+    doubled = SPEC_EXAMPLE.replace("    at: [deliver]\n", "    at: [deliver]\n    at: [closeout]\n")
     _write(tmp_path, f"docs/superpowers/usage/{RUN}.yaml", doubled)
     report = validate_repo(tmp_path)
     assert not report.ok
@@ -97,7 +97,7 @@ def test_validate_artifacts_rejects_a_duplicate_key(tmp_path: Path) -> None:
 
 def test_two_captures_from_one_host_are_invalid() -> None:
     data = yaml.safe_load(SPEC_EXAMPLE)
-    data["captures"].append(dict(data["captures"][0], at="closeout"))
+    data["captures"].append(dict(data["captures"][0], at=["closeout"]))
     with pytest.raises(UsageFileError):
         parse_usage(yaml.safe_dump(data))
 
@@ -114,7 +114,7 @@ def _capture(host: str, at: str, session: str) -> Capture:
             "harness": "claude-code",
             "mode": "host-worktree",
             "captured_at": "2019-03-04T12:00:00+00:00",
-            "at": at,
+            "at": [at],
             "sessions": [{"session": session, "unavailable": "x"}],
         }
     )
@@ -127,7 +127,7 @@ def test_upsert_replaces_only_the_same_hosts_entry() -> None:
     two = upsert_capture(one, _capture(b, "resolve:review", "s2"))
     three = upsert_capture(two, _capture(a, "closeout", "s3"))
     assert [c.host for c in three.captures] == [a, b]
-    assert three.captures[0].at == "closeout"
+    assert three.captures[0].at == ("closeout",)  # upsert replaces; capture() merges
     assert three.captures[0].sessions[0].session == "s3"
     assert three.captures[1] == two.captures[1]
 
@@ -167,7 +167,7 @@ def test_a_capture_serializes_no_host_url_path_or_content() -> None:
         harness="claude-code",
         mode="host-worktree",
         captured_at="2019-03-04T12:00:00+00:00",
-        at="deliver",
+        at=("deliver",),
         sessions=(session_entry(record, windows),),
     )
     text = dump_usage(upsert_capture(UsageFile(run=RUN), capture))
@@ -179,3 +179,12 @@ def test_a_capture_serializes_no_host_url_path_or_content() -> None:
     assert entry.models["claude-opus-5-5"].usd == pytest.approx(0.25)
     assert entry.steps["brainstorm"].turns == 1
     assert sum(f.usd or 0 for f in entry.activity.values()) == pytest.approx(0.25)
+
+
+def test_at_is_a_non_empty_list_of_distinct_capture_events() -> None:
+    """p2-r29: `at` records every capture event from the host, in order."""
+    parsed = parse_usage(SPEC_EXAMPLE.replace("at: [deliver]", "at: [deliver, closeout]"))
+    assert parsed.captures[0].at == ("deliver", "closeout")
+    for bad in ("at: deliver", "at: []", "at: [deliver, deliver]", "at: [deliver, nope]"):
+        with pytest.raises(UsageFileError):
+            parse_usage(SPEC_EXAMPLE.replace("at: [deliver]", bad))

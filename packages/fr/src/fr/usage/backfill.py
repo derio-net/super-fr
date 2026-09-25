@@ -32,6 +32,7 @@ from fr.usage.file import (
     archived_usage_path,
     dump_usage,
     session_entry,
+    units_by_agent,
     usage_path,
 )
 from fr.usage.model import unavailable
@@ -63,13 +64,14 @@ def _cursor_figures(raw: dict[str, Any]) -> list[SessionEntry]:
 
 def _entries(raw: dict[str, Any], env: Mapping[str, str]) -> list[SessionEntry]:
     windows = windows_from_cursor(raw)
+    units = units_by_agent(raw)
     read: list[SessionEntry] = []
     for harness, session in dict.fromkeys(sessions_of(raw)):
         try:
             record = read_session(harness, session, env)
         except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
             record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-        read.append(session_entry(record, windows))
+        read.append(session_entry(record, windows, units))
     if any(e.unavailable is None for e in read):
         return read
     return _cursor_figures(raw) + read
@@ -100,7 +102,7 @@ def backfill(repo_root: Path, env: Mapping[str, str]) -> BackfillReport:
                 harness=_harness(raw),
                 mode="host-worktree",
                 captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
-                at="backfill",
+                at=("backfill",),
                 sessions=tuple(_entries(raw, env)),
             )
             text = dump_usage(UsageFile(run=run_id, captures=(capture,)))

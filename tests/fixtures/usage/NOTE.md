@@ -27,13 +27,18 @@ Redacted at capture time per `.claude/rules/third-party-privacy.md`:
   characters are truncated; the home directory is rewritten to `~` and the
   account name to `operator`; any URL not on `github.com/derio-net` becomes
   `https://example.invalid/`.
+- **dispatch prompts** (added 2026-09-25, phase-2 review p2-r24): each
+  `Agent` tool_use's `input.prompt` is re-captured from the same source
+  transcript as a same-length placeholder (`x` repeated) — its SIZE is what the
+  capture's `briefs` read, its text is never kept. Two dispatches: 96 and 2480
+  characters; the second is the dispatch of the kept subagent stream.
 
 The deliberately duplicated `message.id` records (one per content block) are
 preserved: they are what the dedupe test exercises.
 
 | file | sha256 |
 |---|---|
-| `claude-code/145101c9-bdfc-4f5d-a8be-617eeced7485.jsonl` | `173d8b3fb20514c06294f6c88a9cc8685e1622b2977e896fdd0b36dde601e991` |
+| `claude-code/145101c9-bdfc-4f5d-a8be-617eeced7485.jsonl` | `78e31dd7217617ab4f0b1f1f70e7fc7ba9f7e54d8076ef7da2b8be70d7e9b765` |
 | `claude-code/145101c9-bdfc-4f5d-a8be-617eeced7485/subagents/agent-af7cb1e9fc08366c6.jsonl` | `21bfb67b2070c3cbb42617a7008fbd988d55755831acfdae0a750f96b72bd8e3` |
 
 ## opencode/
@@ -47,7 +52,10 @@ same capture. Rows are fictional: `ses_paid` (one paid assistant message with a
 `bash` tool part), `ses_free` (one `$0` free-model message), `ses_copilot` (one
 `github-copilot`-routed message whose non-zero `cost` is OpenCode's own estimate;
 providerID and figures copied from a live row of the same capture) and
-`ses_mixed` (one `anthropic` + one `github-copilot` message).
+`ses_mixed` (one `anthropic` + one `github-copilot` message, the first carrying
+a `task` dispatch part whose shape — `state.input.prompt`,
+`state.metadata.sessionId` — follows a live task part of the same capture, its
+prompt a same-length placeholder; added for p2-r24).
 
 ## hermes/
 
@@ -62,6 +70,6 @@ assumption, not a capture. Includes an ACP-style session with zero tokens
 
 | file | sha256 |
 |---|---|
-| `opencode/opencode.db` | `33f89d0a29eefcbb3a3cb97013cd1b81b3493283c372486888f28e450c3bc25b` |
+| `opencode/opencode.db` | `f639094172d47718427ae135fea8b1692dec83a1adbabdc0363ce514f779ec79` |
 | `hermes/schema.sql` | `342e5bfaf785b6a9281de19d9296b3199f04fb98a723c54abf39454c1ecdd4a7` |
 | `hermes/state.db` | `46a42617cd2774d0a9a0bdaddb430b004c5b6e7bff352ab52e7b27387ac602be` |

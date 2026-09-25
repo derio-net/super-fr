@@ -122,6 +122,33 @@ def _agent_type(stream: Path) -> str:
     return kind if isinstance(kind, str) and kind else "subagent"
 
 
+def _dispatch_prompts(records: list[dict[str, Any]]) -> dict[str, int]:
+    """`{tool_use id: prompt chars}` for every dispatch in the main thread — any
+    tool_use whose input carries a string `prompt` (`Agent`, formerly `Task`)."""
+    sizes: dict[str, int] = {}
+    for record in records:
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
+                continue
+            raw = block.get("input")
+            prompt = raw.get("prompt") if isinstance(raw, Mapping) else None
+            if isinstance(block.get("id"), str) and isinstance(prompt, str):
+                sizes[block["id"]] = len(prompt)
+    return sizes
+
+
+def _tool_use_id(stream: Path) -> str | None:
+    meta = stream.with_name(stream.name[: -len(".jsonl")] + ".meta.json")
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    tool_use = data.get("toolUseId") if isinstance(data, dict) else None
+    return tool_use if isinstance(tool_use, str) else None
+
+
 def read(source: Path, session: str | None = None) -> UsageRecord:
     """The session whose main transcript is `source` (`session` is its file
     name; the argument exists for the shared protocol). Never raises."""
@@ -132,6 +159,8 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
         if records is None:
             return unavailable(session, HARNESS, f"unreadable transcript: {path.name}")
         messages = _messages(records, "main")
+        prompts = _dispatch_prompts(records)
+        by_agent: dict[str, str] = {}
         subagents = telemetry.session_dir(path) / "subagents"
         for stream in sorted(subagents.glob("*.jsonl")) if subagents.is_dir() else ():
             sub_records = telemetry._read_records(stream)
@@ -140,8 +169,16 @@ def read(source: Path, session: str | None = None) -> UsageRecord:
                     session, HARNESS, f"unreadable subagent transcript: {stream.name}"
                 )
             messages.extend(_messages(sub_records, _agent_type(stream)))
+            tool_use = _tool_use_id(stream)
+            if tool_use is not None and stream.name.startswith("agent-"):
+                by_agent[tool_use] = stream.name[len("agent-") : -len(".jsonl")]
+        briefs = {by_agent.get(call, call): size for call, size in prompts.items()}
         return UsageRecord(
-            session=session, harness=HARNESS, messages=tuple(messages), cost=_cost(records)
+            session=session,
+            harness=HARNESS,
+            messages=tuple(messages),
+            cost=_cost(records),
+            briefs=briefs,
         )
     except Exception as exc:  # noqa: BLE001 — a reader reports, it never raises
         return unavailable(session, HARNESS, f"{type(exc).__name__}: {exc}")

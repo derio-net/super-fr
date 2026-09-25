@@ -84,6 +84,27 @@ def _tool_call(part: Mapping[str, Any]) -> ToolCall | None:
     return ToolCall(name=str(part.get("tool") or ""), target=target)
 
 
+def _brief(part: Mapping[str, Any], session: str) -> tuple[str, int] | None:
+    """`(child session, prompt chars)` of a `task` dispatch this session made —
+    `state.input.prompt`, keyed by `state.metadata.sessionId` (else the part's
+    `callID`). A task a child session dispatched is not this session's brief."""
+    if part.get("tool") != "task":
+        return None
+    state = part.get("state")
+    state = state if isinstance(state, Mapping) else {}
+    raw_input = state.get("input")
+    prompt = raw_input.get("prompt") if isinstance(raw_input, Mapping) else None
+    if not isinstance(prompt, str):
+        return None
+    raw_meta = state.get("metadata")
+    meta: Mapping[str, Any] = raw_meta if isinstance(raw_meta, Mapping) else {}
+    parent = meta.get("parentSessionId")
+    if isinstance(parent, str) and parent != session:
+        return None
+    key = meta.get("sessionId") if isinstance(meta.get("sessionId"), str) else part.get("callID")
+    return (key, len(prompt)) if isinstance(key, str) else None
+
+
 ESTIMATED_PROVIDERS: Final = ("github-copilot",)
 """Providers whose per-message `cost` is OpenCode's own estimate, not a bill:
 Copilot charges by subscription, so the figure is priced from tokens (spec
@@ -122,10 +143,15 @@ def _read(source: Path, session: str) -> UsageRecord:
             (session, session),
         ).fetchall()
     calls: dict[str, list[ToolCall]] = {}
+    briefs: dict[str, int] = {}
     for message_id, raw in parts:
-        call = _tool_call(_json(raw))
+        part = _json(raw)
+        call = _tool_call(part)
         if call is not None:
             calls.setdefault(message_id, []).append(call)
+            brief = _brief(part, session)
+            if brief is not None:
+                briefs[brief[0]] = brief[1]
     messages: list[Message] = []
     total = 0.0
     exact = True
@@ -155,5 +181,6 @@ def _read(source: Path, session: str) -> UsageRecord:
             harness=HARNESS,
             messages=tuple(messages),
             cost=Cost(usd=total, source="exact" if exact else "estimated", by_model=by_model),
+            briefs=briefs,
         )
-    return UsageRecord(session=session, harness=HARNESS, messages=tuple(messages))
+    return UsageRecord(session=session, harness=HARNESS, messages=tuple(messages), briefs=briefs)

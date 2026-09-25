@@ -153,7 +153,7 @@ captures:
     harness: claude-code
     mode: host-worktree
     captured_at: '2019-03-04T00:00:00+00:00'
-    at: deliver
+    at: [deliver]
     sessions:
       - session: s-one
         unavailable: transcript pruned
@@ -247,7 +247,7 @@ MISSING_FIELD_CASES = {
     ),
     "usage": (
         "docs/superpowers/usage/2019-03-04-feat-widget.yaml",
-        GOOD_USAGE.replace("    at: deliver\n", ""),
+        GOOD_USAGE.replace("    at: [deliver]\n", ""),
         "at",
     ),
 }

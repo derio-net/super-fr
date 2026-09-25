@@ -324,3 +324,23 @@ def test_hermes_a_row_with_no_figure_at_all_leaves_the_session_unpriced(tmp_path
     record = hermes.read(db, "h_actual")
     assert record.cost.source == "none"
     assert record.cost.usd is None
+
+
+# --- dispatch-brief sizes (p2-r24) -------------------------------------------
+
+
+def test_claude_code_briefs_are_the_dispatch_prompt_sizes() -> None:
+    """The parent transcript's Agent tool_use `input.prompt`, measured — keyed
+    by the dispatched agent's id when its stream is attributable (the meta's
+    `toolUseId`), else by the tool_use id. Only a size; never the text."""
+    from fr.usage.readers import claude_code
+
+    record = claude_code.read(CC_MAIN)
+    assert record.briefs == {"af7cb1e9fc08366c6": 2480, "toolu_01UnnGBPuZbTDsutzsmhochi": 96}
+
+
+def test_opencode_briefs_are_the_task_prompt_sizes_keyed_by_child_session() -> None:
+    from fr.usage.readers import opencode
+
+    assert opencode.read(OC_DB, "ses_mixed").briefs == {"ses_child": 1009}
+    assert opencode.read(OC_DB, "ses_paid").briefs == {}

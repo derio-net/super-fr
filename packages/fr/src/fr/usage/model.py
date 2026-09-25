@@ -87,6 +87,11 @@ class UsageRecord(BaseModel):
     cost: Cost = Cost()
     unavailable: str | None = None
     """Why this session could not be read. Set means: nothing here is a measurement."""
+    briefs: dict[str, int] = {}
+    """Dispatch-brief sizes in characters — the prompt this session handed each
+    subagent it dispatched, measured, never kept — keyed by the dispatched
+    agent's harness id (the id a run cursor's attempt records as `agent`), or
+    by the dispatch's own call id when no agent id is attributable."""
     attribution: Literal["exact", "coarse"] = "exact"
     """`coarse` when the harness keeps too little per message to split usage
     by tool call faithfully (Hermes: one token count per message)."""

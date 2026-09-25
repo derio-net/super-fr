@@ -5,7 +5,8 @@ captures:
   harness: claude-code
   mode: host-worktree
   captured_at: '2026-09-24T22:26:00+00:00'
-  at: migrated
+  at:
+  - migrated
   sessions:
   - session: (main)
     role: main
@@ -46,7 +47,7 @@ captures:
     briefs:
       phase/1/implement-phase: 347
   - session: a1ea2343c237b8a52
-    role: main
+    role: subagent
     models:
       claude-sonnet-5:
         input: 78
@@ -80,7 +81,7 @@ captures:
     briefs:
       phase/2/implement-phase: 5371
   - session: a6dd9430e2d21f43c
-    role: main
+    role: subagent
     models:
       claude-sonnet-5:
         input: 68
@@ -114,7 +115,7 @@ captures:
     briefs:
       phase/3/implement-phase: 6409
   - session: a1948efadec1089eb
-    role: main
+    role: subagent
     models:
       claude-opus-5-5:
         input: 26
@@ -148,7 +149,7 @@ captures:
     briefs:
       phase/4/implement-phase: 11576
   - session: a979c488f146166c2
-    role: main
+    role: subagent
     models:
       claude-opus-5-5:
         input: 56

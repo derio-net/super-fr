@@ -158,12 +158,33 @@ def main() -> None:
             },
         }
     )
+    # A `task` dispatch: the part shape (state.input.prompt, state.metadata.
+    # sessionId = the child session) follows a live task part of the same
+    # 2026-09-25 capture; the prompt is a same-length placeholder (1009 chars,
+    # that row's size) and the ids are fictional.
+    task = json.dumps(
+        {
+            "type": "tool",
+            "tool": "task",
+            "callID": "call_task_1",
+            "state": {
+                "status": "completed",
+                "input": {
+                    "description": "<redacted>",
+                    "subagent_type": "general",
+                    "prompt": "x" * 1009,
+                },
+                "metadata": {"parentSessionId": "ses_mixed", "sessionId": "ses_child"},
+            },
+        }
+    )
     text = json.dumps({"type": "text", "text": "<redacted>"})
     con.executemany(
         "INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)",
         [
             ("prt_1", "msg_a1", "ses_paid", T0 + 1000, T0 + 1000, text),
             ("prt_2", "msg_a1", "ses_paid", T0 + 2000, T0 + 2000, tool),
+            ("prt_3", "msg_a4", "ses_mixed", T0 + 3000, T0 + 3000, task),
         ],
     )
     con.commit()

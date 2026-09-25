@@ -60,7 +60,7 @@ def _capture(host: str, at: str, *sessions: SessionEntry) -> Capture:
         harness="claude-code",
         mode="host-worktree",
         captured_at="2026-09-25T00:00:00+00:00",
-        at=at,
+        at=(at,),
         sessions=sessions,
     )
 
@@ -83,7 +83,7 @@ def _invoke(repo: Path, *argv: str):
 
 
 def test_steps_and_models_sum_across_sessions_and_keep_cursor_order() -> None:
-    entries, replayed = effective_entries(
+    entries, replayed, _ = effective_entries(
         _file(
             _capture("a", "deliver", _entry("s1", 1.0, 3), _entry("s2", 0.5, 2, step="plan")),
         )
@@ -107,7 +107,7 @@ def test_an_unpriced_session_is_none_never_zero() -> None:
 
 
 def test_a_reading_beats_another_hosts_absence() -> None:
-    entries, _ = effective_entries(
+    entries, _, _ = effective_entries(
         _file(
             _capture("a", "deliver", _entry("s1", 1.0, 3)),
             _capture("b", "resolve:review", SessionEntry(session="s1", unavailable="elsewhere")),
@@ -116,13 +116,68 @@ def test_a_reading_beats_another_hosts_absence() -> None:
     assert [e.unavailable for e in entries] == [None]
 
 
-def test_live_captures_supersede_migrated_figures() -> None:
+def test_live_captures_supersede_migrated_figures_of_the_steps_they_cover() -> None:
     migrated = _capture("(migrated)", "migrated", _entry("(main)", None, 9))
     live = _capture("a", "deliver", _entry("s1", 2.0, 4))
-    entries, replayed = effective_entries(_file(migrated, live))
-    assert [e.session for e in entries] == ["s1"] and not replayed
-    entries, replayed = effective_entries(_file(migrated))
-    assert [e.session for e in entries] == ["(main)"] and replayed
+    entries, replayed, ignored = effective_entries(_file(migrated, live))
+    assert [e.session for e in entries] == ["s1"] and not replayed and ignored == 1
+    entries, replayed, ignored = effective_entries(_file(migrated))
+    assert [e.session for e in entries] == ["(main)"] and replayed and ignored == 0
+
+
+def test_a_live_capture_of_an_unrelated_session_keeps_the_migrated_figures() -> None:
+    """p2-r22: supersede per session and per step, never wholesale — a live
+    closeout session that covers no migrated step drops no migrated figure."""
+    migrated = _capture(
+        "(migrated)",
+        "migrated",
+        _entry("(main)", None, 9),
+        _entry("agent-x", None, 5, step="plan"),
+    )
+    live = _capture("a", "closeout", _entry("closeout-session", 0.5, 2, step="deliver"))
+    entries, replayed, ignored = effective_entries(_file(migrated, live))
+    assert {e.session for e in entries} == {"(main)", "agent-x", "closeout-session"}
+    assert not replayed and ignored == 0
+    summary = summarize(entries, ["brainstorm", "plan", "deliver"])
+    assert [(r.step, r.turns) for r in summary.steps] == [
+        ("brainstorm", 9),
+        ("plan", 5),
+        ("deliver", 2),
+    ]
+
+
+def test_a_migrated_entry_is_superseded_by_a_live_reading_of_its_session() -> None:
+    migrated = _capture("(migrated)", "migrated", _entry("agent-x", None, 5, step="plan"))
+    live = _capture("a", "deliver", _entry("agent-x", 1.0, 0, step="deliver"))
+    entries, _, ignored = effective_entries(_file(migrated, live))
+    assert [(e.session, e.models["claude-opus-5-5"].usd) for e in entries] == [("agent-x", 1.0)]
+    assert ignored == 1
+
+
+def test_a_migrated_entry_is_trimmed_to_the_steps_no_live_reading_covers() -> None:
+    main = SessionEntry(
+        session="(main)",
+        role="main",
+        models={"unknown": ModelFigures(input=10)},
+        steps={"brainstorm": Figure(turns=9), "plan": Figure(turns=3)},
+    )
+    migrated = _capture("(migrated)", "migrated", main)
+    live = _capture("a", "resolve:brainstorm", _entry("s1", 1.0, 4))
+    entries, _, ignored = effective_entries(_file(migrated, live))
+    by_session = {e.session: e for e in entries}
+    assert set(by_session["(main)"].steps) == {"plan"}
+    # its tokens span a covered step and cannot be apportioned: not counted twice
+    assert by_session["(main)"].models == {}
+    assert ignored == 0
+
+
+def test_the_command_says_how_many_migrated_entries_it_ignored(tmp_path: Path) -> None:
+    migrated = _capture("(migrated)", "migrated", _entry("(main)", None, 9))
+    live = _capture("a", "deliver", _entry("s1", 2.0, 4))
+    _write(usage_path(tmp_path, RUN), _file(migrated, live))
+    result = _invoke(tmp_path, RUN)
+    assert result.exit_code == 0, result.output
+    assert "1 migrated entries ignored" in " ".join(result.output.split())
 
 
 # --- the command ------------------------------------------------------------

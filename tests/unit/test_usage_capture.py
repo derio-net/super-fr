@@ -117,7 +117,8 @@ def test_resolving_deliver_captures_every_readable_session_in_the_cursors_commit
 
     usage = load_usage(usage_path(repo, RUN))
     assert usage is not None
-    assert [c.at for c in usage.captures] == ["deliver"]
+    # p2-r29: one capture per host, every capture event from it kept in order
+    assert [c.at for c in usage.captures] == [("resolve:brainstorm", "deliver")]
     capture = usage.captures[0]
     assert capture.host == host_label(RUN, "laptop.corp.example")
     assert capture.mode == "host-worktree"
@@ -137,18 +138,49 @@ def test_resolving_deliver_captures_every_readable_session_in_the_cursors_commit
     assert "laptop.corp.example" not in usage_path(repo, RUN).read_text()
 
 
+def test_capture_records_each_dispatch_brief_under_the_unit_that_claimed_it(
+    tmp_path: Path, transcripts: Path
+) -> None:
+    """p2-r24: `briefs` is filled from the transcript — the dispatch prompt's
+    size, keyed by the cursor unit whose attempt names that agent."""
+    from fr.run.model import load_run_state
+
+    repo, shipped = _setup(tmp_path)
+    assert _invoke(repo, shipped, ["run", "advance", RUN]).exit_code == 0
+    claimed = _invoke(
+        repo, shipped, ["run", "claim", RUN, "--step", "brainstorm", "--agent", "af7cb1e9fc08366c6"]
+    )
+    assert claimed.exit_code == 0, claimed.output
+    resolved = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done", *EMITS["brainstorm"]],
+    )
+    assert resolved.exit_code == 0, resolved.output
+    (unit,) = [
+        key
+        for key, record in (load_run_state(repo, RUN).steps["brainstorm"].units or {}).items()
+        if any(a.agent == "af7cb1e9fc08366c6" for a in record.attempts)
+    ]
+
+    usage = load_usage(usage_path(repo, RUN))
+    assert usage is not None
+    entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
+    assert entry.briefs == {unit: 2480, "toolu_01UnnGBPuZbTDsutzsmhochi": 96}
+
+
 def test_a_new_hosts_first_resolve_appends_its_capture_and_a_known_host_adds_nothing(
     tmp_path: Path, transcripts: Path
 ) -> None:
     repo, shipped = _setup(tmp_path)
     assert _step(repo, shipped, "brainstorm").exit_code == 0
     first = load_usage(usage_path(repo, RUN))
-    assert first is not None and [c.at for c in first.captures] == ["resolve:brainstorm"]
+    assert first is not None and [c.at for c in first.captures] == [("resolve:brainstorm",)]
 
     assert _step(repo, shipped, "plan", FR_HOSTNAME="pod-7.example").exit_code == 0
     second = load_usage(usage_path(repo, RUN))
     assert second is not None
-    assert [c.at for c in second.captures] == ["resolve:brainstorm", "resolve:plan"]
+    assert [c.at for c in second.captures] == [("resolve:brainstorm",), ("resolve:plan",)]
     assert second.captures[1].host == host_label(RUN, "pod-7.example")
     before = usage_path(repo, RUN).read_bytes()
 
@@ -265,7 +297,8 @@ def test_archive_captures_the_closeout_session_and_moves_the_file(
     archived = load_usage(archived_usage_path(repo, RUN))
     assert archived is not None
     capture = archived.captures[0]
-    assert capture.at == "closeout"
+    # p2-r29: closeout merges into the host's capture, never erasing deliver
+    assert capture.at == ("resolve:brainstorm", "deliver", "closeout")
     by_id = {s.session: s for s in capture.sessions}
     assert by_id[CC_SESSION].unavailable is None, "the closeout session is captured"
     assert "deliver-session" in by_id, "the delivering session is kept"

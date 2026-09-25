@@ -108,7 +108,7 @@ def test_backfill_writes_one_new_file_per_archived_run_and_touches_no_run(repo: 
     for run in ("2026-09-01-feat-old", "2026-09-21-feat-new"):
         usage = load_usage(archived_usage_path(repo, run))
         assert usage is not None, run
-        assert [c.at for c in usage.captures] == ["backfill"]
+        assert [c.at for c in usage.captures] == [("backfill",)]
     text = archived_usage_path(repo, "2026-09-01-feat-old").read_text()
     assert "laptop.corp.example" not in text
 
