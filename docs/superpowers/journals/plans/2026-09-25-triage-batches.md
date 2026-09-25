@@ -276,3 +276,8 @@ wait_required_checks takes grace (default 120 s): an empty answer inside it is '
 ### r2p-f11-resolved · finding [fixed] · resolves r2p-f11: §3.J tripwire lists two files by name; phase-3 modules are uncovered, and merge/checkout need a git seam outside the subprocess ban
 
 The 3.J tripwire globs packages/fr/src/fr/triage/batch*.py and commands/triage_batch*.py; git (and the repo-declared set/relock) run only in fr/triage/gitseam.py, which is outside the glob and has its own guard: no fr.gh/glab/tea/collect import, no gh/glab/tea literal, exactly two subprocess.run sites. Tests: test_forge_adapter_batch_ops.py::test_the_batch_globs_find_every_batch_module, ::test_no_batch_module_reaches_a_forge_cli_or_triage_forge[*], ::test_the_git_seam_runs_git_and_declared_commands_only
+
+<!-- fr:journal kind=decision scope=plan id=p3-merge-method created=2026-09-26T00:25:03 phase=3 -->
+### p3-merge-method · decision · batch merge takes --method (default squash); the adapter has no 'repo default merge method' read (phase 3)
+
+Spec 3.F step 2 says pr_merge(..., method=<repo default>), but the 3.J adapter table adds no operation that reads a repo's allowed/default merge method, and adding one would widen the adapter beyond the spec. So merge takes --method merge|squash|rebase, default squash (this repo's own history is squash merges). A repo that disallows the method refuses the merge on the forge, which merge reports verbatim and stops on: a safe failure, never a silent different merge. Test: test_triage_batch_merge.py::test_an_up_to_date_pr_at_its_slot_merges_with_its_head (--method merge reaches pr_merge).
