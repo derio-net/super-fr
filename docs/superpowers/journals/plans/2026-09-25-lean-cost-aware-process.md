@@ -289,3 +289,8 @@ archive.py:505; spec amended: at becomes a list of events per host.
 ### p2-r30 · finding [open] (reviewer: in scope) · usage group checks cwd repo, not the subcommand's --repo (phase 2)
 
 commands/usage_cmd.py:54.
+
+<!-- fr:journal kind=review scope=plan id=r-p2 created=2026-09-25T21:40:37 phase=2 -->
+### r-p2 · review · Phase 2 review (independent reviewer): 11 findings (p2-r20..r30), all in scope; spec §5.B.1/3/6 amended for r20 and r29 (phase 2)
+
+Reviewer a72e52c7973e5ac63 (Opus 5.5). Verified clean: _read_any_version order, parity row replacement, host label + field-by-field allowlist, capture in the cursor commit and never failing its step, archive move, backfill read-only, RunStateV6 freeze + frozen hops, bridge refusal only in devcontainer with the right uv run fr/fr form, external never refused. Blocker: p2-r20 (host-worktree pods refused).
