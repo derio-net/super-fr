@@ -3,7 +3,7 @@ run: 2026-09-26-fix-624-set-status-drop-level
 workflow: fr-goal@1
 branch: fix/624-set-status-drop-level
 started: '2026-09-25T22:34:40+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -128,6 +128,10 @@ steps:
           reviewer: a6003113703b6cd9f
           findings: p3-r1,p3-r2,p3-r3
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-25T23:06:32+00:00'
+    exit: 0
+    stdout: |
+      3 out-of-scope finding(s): p1-r4, p2-r4, p3-r3
   deliver:
     state: pending
