@@ -627,3 +627,9 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     merge order with shared files; members carry a batch chip.
 21. **Live walk** (manual, post-implementation): create, dispatch through
     `fr-herdr`, and merge two real super-fr batches with overlapping files.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-25-triage-batches | `derio-net/super-fr` | `2026-09-25-triage-batches` | — |

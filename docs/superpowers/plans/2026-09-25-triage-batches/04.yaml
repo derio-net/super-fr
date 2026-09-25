@@ -1,0 +1,42 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Live walk - two real batches through dispatch and merge
+  tag: manual
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - triage-batch-merge-queue
+  - triage-batch-forge-visible
+tasks:
+- number: 1
+  title: Dispatch and merge two overlapping batches live (Test Plan 21)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      In a herdr session, collect the super-fr triage, create two batches whose issues touch a shared file, and dispatch both with `--to herdr --yes`; confirm on GitHub that every member carries fr:in-progress and one marker comment, and that each run opens a draft PR with Closes lines
+  - id: P4.T1.S2
+    text: |-
+      When both PRs are ready, run `fr triage batch merge --yes`; confirm the printed plan predicted the shared file, the second PR's version conflict was resolved and merged, and the board shows both batches merged
+  - id: P4.T1.S3
+    text: |-
+      Record the evidence (redacted per third-party-privacy) in the notes of triage-batch-merge-queue and triage-batch-forge-visible with `fr acceptance set-status --status ci`, naming the live walk and its date
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

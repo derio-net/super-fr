@@ -1,0 +1,180 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Engine - forge adapter, facts, batch state, board, runner contract
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-batch-state
+  - triage-batch-forge-visible
+  - triage-batch-dispatch
+  tier: hard
+  files:
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/gh.py
+  - packages/fr/src/fr/triage/**
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/registry.py
+  - packages/fr-dispatch/src/fr_dispatch/work_item.py
+  - packages/fr-dispatch/src/fr_dispatch/testing/**
+  - packages/fr-herdr/**
+  - tests/unit/test_forge_adapter_batch_ops.py
+  - tests/unit/test_triage_facts_schema3.py
+  - tests/unit/test_triage_batch_model.py
+  - tests/unit/test_triage_batch_verbs.py
+  - tests/unit/test_triage_batch_board.py
+  - tests/unit/test_run_unit_runner_contract.py
+  - tests/unit/test_fr_herdr_runner.py
+  - tests/unit/test_triage_*.py
+  - docs/acceptance/**
+  estimate_lines: 2100
+tasks:
+- number: 1
+  title: Forge adapter operations (spec 3.J, Test Plan 19)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Write failing tests in tests/unit/test_forge_adapter_batch_ops.py: `RealGhClient` implements list_issue_comments, list_prs_by_head, pr_view, pr_required_checks, wait_required_checks, pr_merge (passing --match-head-commit, never --admin) and closing_ref with the gh subprocess faked; `RealGlabClient` and `RealTeaClient` raise `UnsupportedForgeOperation` whose message names the operation, the backend and gh#611
+  - id: P2.T1.S2
+    text: |-
+      Add `UnsupportedForgeOperation` and the seven methods to the `GhClient` protocol, implement them in RealGhClient over fr.gh, and make the glab and tea adapters raise the declared refusal; tests green
+  - id: P2.T1.S3
+    text: |-
+      Refactor any duplicated gh JSON plumbing into fr.gh helpers, or record no-refactor-because P2.T1 in the plan journal
+- number: 2
+  title: Facts schema 3 and collect (spec 3.F Facts, 3.I, Test Plan 15)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Write failing tests in tests/unit/test_triage_facts_schema3.py with the Forge faked: an open linked PR gains files, head_oid, checks and merge_state from the open-PR join by (repo, number); an issue labelled fr:in-progress gets dispatch_marker_at from its fr-batch marker comment; a dispatched batch's branch PRs land in Facts.batch_prs; .fr/triage.yaml at the default branch lands in Facts.config; schema 2 facts are refused with the re-collect message
+  - id: P2.T2.S2
+    text: |-
+      Implement: FACTS_SCHEMA 3, PullRequest.files and head_oid, headRefOid on OPEN_PR_LIST_FIELDS, the open-PR join, Issue.dispatch_marker_at, Facts.batch_prs and Facts.config; add list_issue_comments and list_prs_by_head to the triage Forge protocol with GhForge delegating to the RealGhClient methods from P2.T1; collect's extra calls only for fr:in-progress issues, dispatched batches, and one config read per repo
+  - id: P2.T2.S3
+    text: |-
+      Run the whole triage suite green; refactor or record no-refactor-because P2.T2
+- number: 3
+  title: Batch model and stages (spec 3.A, 3.E stage, Test Plan 1-2)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Write failing tests in tests/unit/test_triage_batch_model.py: load refuses an unjudged member, empty ids, case-colliding batch ids and out-of-order events; a case-variant member key normalises to the judged key; each batch stage in the spec 3.A table (proposed, cancelled, dispatched, pr-open, merged, partial, abandoned) from constructed facts, highest PR number wins, batch_prs finds a merged PR with no Closes lines; the open-batch rule refuses a key in two open batches and releases members of partial, abandoned and cancelled batches; issue stage in-progress from the label, outranked by a linked PR, outranking blocked
+  - id: P2.T3.S2
+    text: |-
+      Implement the full Batch model (order, bump, launch, events with dispatch and cancel shapes), KEY_RE plus normalize_key on ids, JUDGEMENTS_SCHEMA 2 on write, `derive_batch_stage` and the open-batch rule as pure functions over judgements plus facts, and the in-progress stage in fr/triage/stage.py with STAGES reordered
+  - id: P2.T3.S3
+    text: |-
+      Run the triage suite green; refactor or record no-refactor-because P2.T3
+- number: 4
+  title: create, edit, cancel, suggest, stale dispatch, board (spec 3.B, 3.E, 3.G,
+    Test Plan 3, 9, 10, 20)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Write failing tests in tests/unit/test_triage_batch_verbs.py and tests/unit/test_triage_batch_board.py with the adapter faked: create stores only explicit launch values and applies the open-batch rule; edit add/remove issue and refusal past proposed except order; cancel without --yes writes nothing, with --yes removes fr:in-progress, posts the withdrawn marker comment and appends a cancel event; suggest groups by shared cited file, theme and pattern and writes nothing; check reports stale dispatch from dispatch_marker_at and Facts.config threshold (default 3 days); the board renders the Batches section with members, stage, reserved version, PR, planned order with shared files, batch chips, and in-progress in IN_FLIGHT with its pill
+  - id: P2.T4.S2
+    text: |-
+      Implement the four verbs in the batch sub-app, the sixth check set, and the render changes; judgements writes go through the loader's model so every load-time rule holds on write
+  - id: P2.T4.S3
+    text: |-
+      Run the triage suite green; refactor or record no-refactor-because P2.T4
+- number: 5
+  title: Run-unit runner contract and fr-herdr (spec 3.C, Test Plan 4, 6)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Write the reusable contract in fr_dispatch.testing (from_env, name, refresh, slot_budget, can_dispatch on unit run, payload keys brief/harness/model/branch/reserved_version/issues honoured) and failing tests in tests/unit/test_run_unit_runner_contract.py: load_runner refuses a package-less name and a runner without from_env with the documented messages; vk and cncd are refused by the from_env check; a stub with from_env that only takes phases is refused by can_dispatch
+  - id: P2.T5.S2
+    text: |-
+      Write failing tests in tests/unit/test_fr_herdr_runner.py with the herdr CLI faked: preflight refuses without HERDR_ENV=1 or herdr on PATH; dispatch runs tab create with label equal to the item id, agent start with the claude model flag, then prompt, in that order, returning the pane id; the agent name fits [a-z][a-z0-9_-]{0,31} for a 40-character batch id; the same batch id in two repos gets different labels and names; existing_dispatches matches live tabs by label; the runner passes the contract
+  - id: P2.T5.S3
+    text: |-
+      Implement fr_dispatch.registry.load_runner and document the run-unit payload beside WorkItem; implement HerdrRunner (from_env, name herdr, refresh no-op, slot_budget 1, capabilities git/tests/scm/devcontainer, harness table claude to --model); tests green
+- number: 6
+  title: REFACTOR and quality gate
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Run `uv run pytest -q --no-cov -n auto`, `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and the AGENTS.md mypy line including packages/fr-herdr/src; fix every failure at its cause
+  - id: P2.T6.S2
+    text: |-
+      Record the phase's test evidence on the rows it advances with `fr acceptance set-status` and `--level unit=super-fr:<test path>`: triage-batch-state to ci (Test Plan 1-3), leaving triage-batch-forge-visible and triage-batch-dispatch not-implemented with notes naming what landed; run `fr acceptance check`
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
