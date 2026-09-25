@@ -53,8 +53,10 @@ def head(root: Path) -> str:
 
 
 def commit_all(root: Path, message: str = "work") -> None:
+    """Commit whatever is dirty — nothing, when fr already committed its own."""
     git(root, "add", "-A")
-    git(root, "commit", "-qm", message, "--no-verify")
+    if git(root, "status", "--porcelain").strip():
+        git(root, "commit", "-qm", message, "--no-verify")
 
 
 def snapshot(root: Path) -> dict[str, str]:

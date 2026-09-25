@@ -48,7 +48,8 @@ from fr.journal.model import (
     resolution_record_id,
     spec_journal_slug,
 )
-from fr.record.model import StepRecord, allowed_sections, present_sections
+from fr.record.model import StepRecord, allowed_sections, present_sections, records_dir
+from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
 from fr.workflow.artifacts import journal_scope
 
 if TYPE_CHECKING:
@@ -155,6 +156,7 @@ class _Context:
     phase: int | None
     completes_phase: bool
     emits_ticks: bool
+    emits_pr: bool = False
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
@@ -205,6 +207,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         phase=phase,
         completes_phase=emits_ticks and record.outcome == "done" and phase is not None,
         emits_ticks=emits_ticks,
+        emits_pr="pr" in owner_emits,
     )
     return context, state
 
@@ -677,6 +680,10 @@ def apply_record(
     counts.update(_plan_writes(ctx, record, overlay))
     row_counts, row_lines = _acceptance_writes(record, overlay, repo_root)
     counts.update(row_counts)
+    if run_id is not None and ctx.emits_pr and record.outcome == "done":
+        body_path = records_dir(repo_root, run_id) / PR_BODY_NAME
+        _check_live_pr(repo_root, state, record, body_path)
+        overlay.put(body_path, None)  # the render goes with the record once delivered
     delete_record = record_file is not None and record_file.is_file()
     if delete_record:
         assert record_file is not None
@@ -738,6 +745,32 @@ def apply_record(
         entries=tuple(entries),
         notices=tuple(row_lines) + tuple(result.notices),
     )
+
+
+def _check_live_pr(repo_root: Path, state: Any, record: StepRecord, body_path: Path) -> None:
+    """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
+    carries every required section (spec §5.C.4). The render is the one file
+    a refusal leaves behind: it is what the agent opens the PR with."""
+    from fr import gh
+
+    body_path.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    rel = body_path.relative_to(repo_root).as_posix()
+    ref = record.emitted.get("pr") or state.branch
+    try:
+        live = gh.view_pr_body(ref, cwd=repo_root)
+    except gh.GhError as e:
+        raise RecordRefusedError(
+            f"cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open the PR "
+            f"with `gh pr create --body-file {rel}`, put its url in the record's "
+            "`emitted: {pr: <url>}`, and resolve again"
+        ) from e
+    missing = missing_sections(live)
+    if missing:
+        raise RecordRefusedError(
+            f"the PR body lacks required section(s): {', '.join(missing)}. Update it "
+            f"from fr's render — `gh pr edit {ref} --body-file {rel}` — and resolve again"
+        )
 
 
 def _commit(repo_root: Path, paths: list[Path], message: str) -> CommitOutcome:
