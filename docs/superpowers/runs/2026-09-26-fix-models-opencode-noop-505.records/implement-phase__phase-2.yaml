@@ -21,7 +21,5 @@ journal:
       (considered==0) from "files existed but were already correct"
       (considered>0, changes empty). Both callers (set_cmd, apply_cmd) and
       shared reporter (_report_changes) updated. All 25 focused tests pass.
-    state: open
-    review_scope: in
 resolves: []
 evidence: {}
