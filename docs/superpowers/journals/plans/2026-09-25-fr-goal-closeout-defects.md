@@ -163,3 +163,8 @@ Reviewer (important): fr's record commit can hold index.lock while the executor 
 ### p3-m1 · finding [open] (reviewer: in scope) · fr plan rework / rework-add stage but never commit (phase 3)
 
 Reviewer (minor, borderline in): same class as the spec's rule 'fr commits its records'.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m2 created=2026-09-25T12:15:03 phase=3 state=open review_scope=in -->
+### p3-m2 · finding [open] (reviewer: in scope) · commit_paths commits the whole working-tree file (phase 3)
+
+Reviewer (minor): hand edits in an fr-owned record ride fr's commit; document it.
