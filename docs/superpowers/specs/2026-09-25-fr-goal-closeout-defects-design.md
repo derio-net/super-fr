@@ -242,9 +242,11 @@ there is no post-merge operator step beyond the normal closeout.
    installs and stages it.
 3. On a feature branch:
    - `fr run resolve`, `fr plan edit --tick`, and `fr journal add` each leave
-     `git status --porcelain` clean for fr's paths and add exactly one `chore(fr):`
-     commit touching only those paths. A pre-staged unrelated file stays staged and
-     uncommitted.
+     `git status --porcelain` clean for fr's paths when the command returns, in a
+     `chore(fr):` commit touching only those paths. Tests assert that outcome, never
+     a commit count (operator steer, §3.C "One commit seam"). A pre-staged unrelated
+     file stays staged and uncommitted. At most one stderr commit line is printed
+     per invocation.
    - On the default branch the write happens and no commit is made.
    - A held `index.lock` makes the write succeed with a stderr warning.
 4. End to end on a fixture: resolve `deliver`, push, squash-merge into the default
