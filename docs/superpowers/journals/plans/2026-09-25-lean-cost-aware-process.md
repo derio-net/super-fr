@@ -79,3 +79,8 @@ classify.py:127 vs :180.
 ### p1-r7 · finding [open] (reviewer: in scope) · Report CLI test needle 'implement' matches the column header (phase 1)
 
 tests/unit/test_usage_report.py:187.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-09-25T20:03:26 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · report --run reads the cached index, missing sessions added to the cursor later (phase 1)
+
+commands/usage_cmd.py:189-192.
