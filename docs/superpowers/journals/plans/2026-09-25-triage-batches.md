@@ -177,3 +177,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f12b created=2026-09-25T21:40:51 phase=3 state=open review_scope=in -->
 ### r2p-f12b · finding [open] (reviewer: in scope) · Test Plan 4's can_dispatch-before-preflight ordering is exercised nowhere yet; phase 3 dispatch must test it (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-handle created=2026-09-25T21:40:51 phase=3 state=open review_scope=in -->
+### r2p-handle · finding [open] (reviewer: in scope) · DispatchEvent.handle is a required str but Runner.dispatch may return None; phase 3 must map None explicitly (phase 3)
