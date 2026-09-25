@@ -333,3 +333,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f9 created=2026-09-26T00:55:03 phase=3 state=open review_scope=in -->
 ### r3-f9 · finding [open] (reviewer: in scope) · --repair ignores batch stage: re-labels closed/released issues on merged or abandoned batches; restrict to dispatched/pr-open (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f10 created=2026-09-26T00:55:05 phase=3 state=open review_scope=in -->
+### r3-f10 · finding [open] (reviewer: in scope) · Test quality: weakened 'path named' assert; integration test lacks a version file with non-version content and the 3b re-slot against real git (phase 3)
