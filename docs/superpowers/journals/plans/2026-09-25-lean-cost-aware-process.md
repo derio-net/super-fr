@@ -504,3 +504,8 @@ _plan_writes runs refactor_gaps on every actual phase completion (verb or record
 ### p3-r10-resolved · finding [fixed] · resolves p3-r10: Successful resolve prints a second stderr line (fr: committed …)
 
 commit_records(quiet=True) from the engine resolve drops the fr: committed echo (a refused commit still reports). test_a_successful_resolve_prints_one_line_on_stdout_and_stderr_together.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cov-rsync created=2026-09-26T00:09:53 state=open review_scope=out -->
+### d-oos-cov-rsync · finding [open] (reviewer: out of scope) · Local full suite with coverage races install.sh's rsync of the repo root (.coverage.* vanish, rsync exit 23)
+
+Seen twice at deliver on macOS under pytest -n auto with coverage: test_install_sh TestInstallRules (test_installs_rule_file, test_idempotent). Passes alone and with --no-cov; CI (Linux) green on every push. Fix: exclude .coverage* from the rsync, or point COVERAGE_FILE outside the repo.
