@@ -348,3 +348,8 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f14 created=2026-09-26T00:55:15 phase=3 state=open review_scope=out -->
 ### r3-f14 · finding [open] (reviewer: out of scope) · Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash) (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f14-resolved created=2026-09-26T00:55:18 state=open resolves=r3-f14 out_of_scope=true answered_by=agent -->
+### r3-f14-resolved · finding [out-of-scope] · resolves r3-f14: Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash)
+
+Follows from the spec's per-scope triage state design, not from this phase; merge-time reconcile keeps merged versions unique.
