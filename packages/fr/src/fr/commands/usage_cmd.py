@@ -1,4 +1,5 @@
-"""`fr usage collect|report` — what a session or run cost, and on what (spec §5.A.5).
+"""`fr usage collect|report|backfill` — what a session or run cost, and on what
+(spec §5.A.5; `backfill` §5.B.5).
 
 `collect` normalizes harness sessions (`fr.usage.readers`) into JSON under
 `$HOME/.cache/fr/usage/` (`FR_USAGE_CACHE` overrides): `<harness>/<session>.json`,
@@ -6,8 +7,10 @@ plus `runs/<run>.json` naming a run's sessions. `report` renders a rollup as a
 table or one self-contained HTML page.
 
 Read-only with respect to registered artifacts: a run cursor is READ (for its
-sessions and step windows), never written, and nothing lands in the repo — which
-is why `usage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS`.
+sessions and step windows), never written — which is why `usage` is in
+`fr.artifacts.trigger.READ_ONLY_COMMANDS`. The one repo write is `backfill`'s,
+and it only CREATES files under `implemented/usage/`, the frozen archive no
+locator reaches.
 
 Exit codes: 0 success (an unreadable session is recorded as `unavailable` and
 reported, not failed); 2 usage error (no session or run named, an unknown run,
@@ -174,3 +177,22 @@ def report(
 
 def _has_cursor(repo: Path, run: str) -> bool:
     return run_path(repo, run).is_file() or archived_run_path(repo, run).is_file()
+
+
+@usage_app.command("backfill")
+def backfill_cmd(repo: RepoOpt = None) -> None:
+    """Write `implemented/usage/<run>.yaml` for every archived run that has none
+    (spec §5.B.5): reads archived cursors and this host's transcripts, writes
+    new files only — never a run cursor. Re-running is a no-op."""
+    from fr.usage.backfill import backfill
+
+    root = _repo(repo)
+    report = backfill(root, os.environ)
+    for run_id, error in report.failed:
+        typer.echo(f"fr usage: {run_id}: not backfilled — {error}", err=True)
+    typer.echo(
+        f"fr usage: {len(report.written)} backfilled, {len(report.skipped)} already had "
+        f"usage, {len(report.failed)} failed"
+    )
+    for path in report.written:
+        typer.echo(f"  {path.relative_to(root)}")
