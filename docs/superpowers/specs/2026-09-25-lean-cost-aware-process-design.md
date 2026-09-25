@@ -193,8 +193,8 @@ hands fr one data file, and fr does the rest in one process.
      - host: h-3f9a2c1e       # sha256(run_id + hostname)[:8]
        harness: claude-code
        mode: host-worktree    # host-worktree | devcontainer | external
-       captured_at: <iso8601>
-       at: deliver            # deliver | closeout | resolve:<step> | migrated | backfill
+       captured_at: <iso8601>   # the latest capture from this host
+       at: [deliver, closeout]  # every capture event from this host: deliver | closeout | resolve:<step> | migrated | backfill
        sessions:
          - session: <id>
            role: main         # main | subagent:<agent_type>
@@ -221,7 +221,7 @@ hands fr one data file, and fr does the rest in one process.
    | When | Captures |
    |---|---|
    | `fr run resolve --step deliver` | every session the cursor records that is readable on this host, plus the current one |
-   | closeout: `fr archive` | the closeout session, as its own capture; then the file moves to `implemented/usage/` with the plan |
+   | closeout: `fr archive` | the closeout session, merged into this host's capture with `closeout` appended to its `at` list; then the file moves to `implemented/usage/` with the plan |
    | any `fr run resolve` on a host with no capture yet | that host's sessions (runners, pods, cross-machine resume) |
 
    Capture never fails its step.
@@ -258,11 +258,15 @@ hands fr one data file, and fr does the rest in one process.
      from the given arguments. The command uses `uv run fr` when the worktree
      contains `packages/fr` (this repo), else bare `fr`.
    - **In-process layer.** `fr run` / `fr usage` refuse when the repo they
-     operate on carries a `mode: worktree` `.fr-isolation` marker **and**
-     container evidence exists (`/.dockerenv`, `/run/.containerenv`,
+     operate on carries a `.fr-isolation` marker with **`target: devcontainer`**
+     **and** container evidence exists (`/.dockerenv`, `/run/.containerenv`,
      `$KUBERNETES_SERVICE_HOST`, the checks `fr/isolation/external.py` already
-     has). There is no devcontainer marker value: devcontainer and host-worktree
-     both write `mode: worktree`, and container evidence is the discriminator. This catches `bash -c`, `python -m fr` and
+     has). `mode` alone cannot discriminate: devcontainer and host-worktree both
+     write `mode: worktree`, and a host-worktree pod or CI container also shows
+     container evidence while the harness runs inside it (phase-2 review p2-r20).
+     So `fr isolation up` records the chosen target in the marker
+     (`target: devcontainer | worktree | external`) beside the unchanged `mode`
+     the edit gate reads; a legacy marker without `target` is never refused. This catches `bash -c`, `python -m fr` and
      scripts the bridge cannot see. It keys on the operated repo's marker, not
      on env, so test suites running `fr run` against temp repos inside a
      container are unaffected, and external mode (also a container) is never
