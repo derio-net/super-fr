@@ -50,7 +50,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-09-25T22:46:29+00:00'
+    at: '2026-09-25T22:48:39+00:00'
     members:
     - implement-phase
     - review-phase
@@ -79,6 +79,14 @@ steps:
           review: review-p1
           reviewer: ae99175509668ee5e
           findings: p1-r1,p1-r2,p1-r3,p1-r4
+      phase/2/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-25T22:48:39+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: d798e182-2250-49f5-81ab-727aaac0eef3
   journal-check:
     state: pending
   deliver:
