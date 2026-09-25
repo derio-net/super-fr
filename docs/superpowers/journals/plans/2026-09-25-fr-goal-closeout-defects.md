@@ -368,3 +368,8 @@ Predates this change (the gate and the long_commands rule both shipped earlier);
 ### p3-noop · finding [open] (reviewer: in scope) · A record write that changed nothing prints 'fr: not committed' (phase 3)
 
 Found on this run's own deliver re-resolve: nothing-to-commit was reported as a refusal on stderr, and would make the closeout handoff print 'cursor NOT committed' for an unchanged cursor.
+
+<!-- fr:journal kind=finding scope=plan id=p3-noop-resolved created=2026-09-25T15:12:35 state=fixed resolves=p3-noop -->
+### p3-noop-resolved · finding [fixed] · resolves p3-noop: A record write that changed nothing prints 'fr: not committed'
+
+b53f7ee0: CommitOutcome.unchanged; commit_records silent on it; handoff counts it as landed. RED: test_a_record_write_that_changed_nothing_is_silent_and_counts_as_landed (AttributeError: no 'unchanged'). Migration tests unmodified and green.
