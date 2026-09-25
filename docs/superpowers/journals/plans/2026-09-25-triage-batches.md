@@ -296,3 +296,8 @@ The execution path (scratch worktree, --theirs, set, commit, push, wait, cleanup
 ### r1-docs-resolved · finding [fixed] · resolves r1-docs: README package table, HERMES.md package prose and an AGENTS.md fr-herdr bullet are owned by no phase — P3.T5.S2 widened to own them
 
 README.md Components table gains an fr-herdr row; HERMES.md 'Where things are' names fr-herdr among the adapters; AGENTS.md gains an fr-herdr bullet under packages/ and documents the batch verbs in the fr/triage paragraph. Commit 892b9295 (docs, no test: prose)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f14-resolved created=2026-09-26T00:29:49 state=fixed resolves=r2p-f14 answered_by=agent -->
+### r2p-f14-resolved · finding [fixed] · resolves r2p-f14: fr-triage SKILL.md still tells agents to write schema: 1 (lines 48, 65)
+
+fr-triage SKILL.md now says schema: 2 (loop step 3 and the example), documents batches/events, loop step 5 and the --yes rule; mirrors regenerated. Tests: test_fr_triage_skill_example.py::test_the_skill_teaches_schema_2_and_batches, ::test_the_skill_names_the_batch_verbs_and_the_yes_rule
