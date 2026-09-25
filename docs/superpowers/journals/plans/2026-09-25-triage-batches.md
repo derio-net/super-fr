@@ -95,3 +95,8 @@ The one reusable gh call (the head-branch PR list) went straight into fr.gh as l
 ### p2-live-gh-shapes · discovery · Live-verified gh shapes behind the adapter and collect (2026-09-25, derio-net/super-fr, read-only) (phase 2)
 
 The contents API resolves ref=HEAD to the default branch, so collect reads .fr/triage.yaml with ref HEAD and needs no default-branch lookup; an absent file answers 'Not Found (HTTP 404)', which collect treats as no config (any other forge failure propagates like the list calls). gh pr checks --required on a branch with none prints 'no required checks reported on the <branch> branch' (mapped to []); gh issue view --json comments returns {comments: [...]}. Not verified live: the exit-8 pending answer of gh pr checks (from gh's docs) — phase 4's live walk exercises it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-withdrawn-marker created=2026-09-25T23:09:12 phase=2 -->
+### p2-withdrawn-marker · decision · A withdrawal comment uses its own marker prefix, fr-batch-withdrawn: (phase 2)
+
+Spec §3.E says cancel posts 'a marker comment' and stale dispatch dates the 'fr-batch marker comment'. If both used <!-- fr-batch:<item> -->, a cancelled-then-redispatched batch would be dated by its withdrawal, and phase 3's --repair idempotency check would see the withdrawal as 'already posted'. So fr.triage.model defines batch_marker (<!-- fr-batch:<item> -->) and withdrawn_marker (<!-- fr-batch-withdrawn:<item> -->); the dispatch prefix never matches the withdrawn one. collect dates by the LATEST dispatch marker. Phase 3: repair/dispatch idempotency should treat a dispatch marker as present only when it is newer than the latest withdrawn marker for the same item, else a re-dispatch after cancel posts nothing.
