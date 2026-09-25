@@ -248,3 +248,8 @@ pickup_cmd.py stayed thin by construction: --run mode is a load + mode-check + c
 ### p3-steer-resolved · finding [fixed] · resolves p3-steer: Phase-3 tests assert commit cadence; stderr line count unpinned
 
 pending: fixing phase-3 test cadence assertions per operator steer
+
+<!-- fr:journal kind=finding scope=plan id=p3-steer-resolved-2 created=2026-09-25T13:51:19 state=fixed resolves=p3-steer -->
+### p3-steer-resolved-2 · finding [fixed] · resolves p3-steer: Phase-3 tests assert commit cadence; stderr line count unpinned
+
+a3b06b5a: replaced commit-count/cadence assertions in test_run_cli.py, test_plan_cmd.py, test_journal_cmd.py with record-paths-clean outcome checks; kept subject-format checks (robustified via path-scoped git log); added <=1 stderr commit-line pins for run advance (grouped member), run resolve --no-questions, plan edit --tick, journal add (no double-report found); disable-proof done and reverted; full suite 5260 passed, 89 skipped
