@@ -4139,7 +4139,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3a-batch-state-judgementsyaml-schema-2
     levels: {}
     status: not-implemented
-    notes: Test Plan items 1-2.
+    notes: Test Plan items 1-3 (renumbered after spec review).
   - id: triage-batch-dispatch
     capability: Backlog triage
     acceptance: An operator can dispatch a batch as one fr-goal run to any runner that
@@ -4149,7 +4149,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3c-batch-dispatch
     levels: {}
     status: not-implemented
-    notes: Test Plan items 3-5; fr-herdr is the first run-unit runner.
+    notes: Test Plan items 4-7 and 16-17; fr-herdr is the first run-unit runner.
   - id: triage-batch-forge-visible
     capability: Backlog triage
     acceptance: After a batch is dispatched, every member issue shows as taken on the
@@ -4159,7 +4159,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3e-forge-visibility
     levels: {}
     status: not-implemented
-    notes: Test Plan items 6-7.
+    notes: Test Plan items 8-10.
   - id: triage-batch-version-reserve
     capability: Backlog triage
     acceptance: Each dispatched batch bumps to a version reserved in merge order, so
@@ -4169,7 +4169,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3d-version-reservations
     levels: {}
     status: not-implemented
-    notes: Test Plan items 8 and 10.
+    notes: Test Plan items 11 and 14.
   - id: triage-batch-merge-queue
     capability: Backlog triage
     acceptance: An operator can merge several batch PRs in a computed order that predicts
@@ -4179,4 +4179,4 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
     levels: {}
     status: not-implemented
-    notes: Test Plan items 9-10; live walk (item 12) owed post-implementation.
+    notes: Test Plan items 12-15; live walk (item 19) owed post-implementation.
