@@ -279,3 +279,8 @@ run/telemetry.py:1000-1075 (+551, 628, 935): delete with their tests.
 ### p2-r28 · finding [open] (reviewer: in scope) · Operator-gate unobserved recorded only on claude-code/no harness (phase 2)
 
 commands/run_cmd.py:985-986 vs spec §5.B.7.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r29 created=2026-09-25T21:40:26 phase=2 state=open review_scope=in -->
+### p2-r29 · finding [open] (reviewer: in scope) · Closeout upsert erases the deliver capture record (phase 2)
+
+archive.py:505; spec amended: at becomes a list of events per host.
