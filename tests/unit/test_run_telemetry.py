@@ -962,6 +962,45 @@ def test_a_command_that_writes_the_log_yields_its_run_window(tmp_path: Path) -> 
     assert orchestrator_wrote_since(gone, Path(CAPTURED_LOG), "2026-01-01T00:00:00+00:00") is None
 
 
+def test_a_relative_dot_directory_log_is_matched(tmp_path: Path) -> None:
+    """gh#606: `lstrip("./")` stripped the leading dot of `.fr-deliver`, so a
+    suite logged to `.fr-deliver/tests.log` was never recognised as written."""
+    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
+
+    env = _bash_env(tmp_path, log=".fr-deliver/tests.log", until="2026-09-21T16:09:00.000Z")
+    windows = orchestrator_wrote_since(
+        env, Path("/repo/.fr-deliver/tests.log"), "2026-09-21T16:00:00+00:00"
+    )
+    assert windows == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("target", "log", "expected"),
+    [
+        (".fr-deliver/tests.log", "/repo/.fr-deliver/tests.log", True),
+        ("./.fr-deliver/tests.log", "/repo/.fr-deliver/tests.log", True),
+        ("tests.log", "/repo/.fr-deliver/tests.log", True),
+        ("x.log", "/repo/x.log", True),
+        ("./x.log", "/repo/x.log", True),
+        ("../x.log", "/repo/x.log", True),
+        ("fr-deliver/tests.log", "/repo/.fr-deliver/tests.log", False),
+        ("foo/tests.log", "/repo/xfoo/tests.log", False),
+        ("a/../b.log", "/repo/b.log", False),
+        ("..", "/repo/x.log", False),
+    ],
+)
+def test_writes_matches_relative_targets_segment_wise(
+    target: str, log: str, expected: bool
+) -> None:
+    """Spec §2 (gh#606), pinned on `_writes` itself for both write forms."""
+    from fr.run.telemetry import _writes
+
+    assert _writes(f"pytest > {target}", Path(log)) is expected
+    assert _writes(f"pytest 2>&1 | tee -a {target}", Path(log)) is expected
+
+
 def test_a_command_that_only_reads_the_log_does_not_count(tmp_path: Path) -> None:
     """Review r1-1: before, any command MENTIONING the log's name passed —
     `cat c1.log`, `ls c1.log`. Only a write names the log as its output."""
