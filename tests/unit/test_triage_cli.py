@@ -44,6 +44,15 @@ class _Forge:
     def list_open_prs(self, *, repo: str, limit: int) -> list[dict[str, Any]]:
         return [p for p in _load("super-fr-prs.json") if p.get("state") == "OPEN"]
 
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        raise ForgeError("Not Found (HTTP 404)")  # no .fr/triage.yaml, no anchor files
+
+    def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
+        return []
+
+    def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
+        return []
+
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         self.viewed.append((repo, number))
         return {
@@ -105,7 +114,7 @@ def test_org_scope_reports_a_skipped_repo_verbatim_and_still_writes(
     assert "[no access] [/red]" in result.output
     facts = json.loads((tmp_path / "facts.json").read_text(encoding="utf-8"))
     assert facts["skipped"] == [{"repo": "example-org/beta", "reason": "[no access] [/red]"}]
-    assert facts["schema"] == 2
+    assert facts["schema"] == 3
 
 
 def test_pr_limit_widens_the_window_and_a_full_list_warns(

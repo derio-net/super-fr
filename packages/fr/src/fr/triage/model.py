@@ -25,7 +25,7 @@ from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-FACTS_SCHEMA: Literal[2] = 2
+FACTS_SCHEMA: Literal[3] = 3
 # The version this fr WRITES. Stays 1 until the first engine write of a batch
 # (plan phase 2); the loader already reads every version in JUDGEMENTS_READS.
 JUDGEMENTS_SCHEMA: Literal[1] = 1
@@ -38,6 +38,24 @@ IssueState = Literal["open", "closed"]
 TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
+
+# The hidden first line of the comment a batch dispatch posts on each member
+# (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
+# grammar lives here, beside the field it fills. A withdrawal uses a DIFFERENT
+# prefix: `<!-- fr-batch:` never matches `<!-- fr-batch-withdrawn:`.
+BATCH_MARKER_PREFIX = "<!-- fr-batch:"
+WITHDRAWN_MARKER_PREFIX = "<!-- fr-batch-withdrawn:"
+
+
+def batch_marker(item_id: str) -> str:
+    """The dispatch marker for the run item *item_id* (`<repo>/run/batch-<id>`)."""
+    return f"{BATCH_MARKER_PREFIX}{item_id} -->"
+
+
+def withdrawn_marker(item_id: str) -> str:
+    """The marker that opens a `batch cancel` comment for *item_id*."""
+    return f"{WITHDRAWN_MARKER_PREFIX}{item_id} -->"
+
 
 # "<repo-name>#<number>" in both scopes (spec §3.D): one code path.
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
@@ -112,6 +130,8 @@ class PullRequest(_Strict):
     merged_at: str | None = None
     url: str
     head_ref: str = ""
+    head_oid: str = ""  # open PRs only (the open-PR list carries headRefOid)
+    files: list[str] = []  # open PRs only: the paths the PR touches
     checks: dict[str, int] = {"pass": 0, "fail": 0, "pending": 0}
     mergeable: str = "UNKNOWN"
     merge_state: str = "UNKNOWN"
@@ -134,6 +154,9 @@ class Issue(_Strict):
     closed_at: str | None = None
     body: str = ""
     prs: list[PullRequest] = []  # most advanced first
+    # createdAt of the latest fr-batch dispatch marker comment; read only for
+    # issues labelled fr:in-progress (spec §3.E stale dispatch).
+    dispatch_marker_at: str | None = None
 
     @property
     def key(self) -> str:
@@ -187,6 +210,49 @@ class Truncation(_Strict):
 _LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
 
 
+class Launch(_Strict):
+    """How a batch is launched: runner, harness and model (spec §3.B).
+
+    Every field is optional: a batch stores only what was given explicitly,
+    and dispatch resolves the rest from `defaults.launch` (§3.I), never by
+    picking one itself.
+    """
+
+    runner: str | None = None
+    harness: str | None = None
+    model: str | None = None
+
+
+class VersionSource(_Strict):
+    file: str
+    key: str
+
+
+class VersionBlock(_Strict):
+    """`.fr/triage.yaml`'s `version:` — the opt-in to reservations (spec §3.D)."""
+
+    source: VersionSource
+    files: list[str]
+    set_: str = Field(alias="set")
+    relock: str | None = None
+
+
+class ConfigDefaults(_Strict):
+    launch: Launch = Launch()
+
+
+class TriageConfig(_Strict):
+    """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
+
+    An absent file is `TriageConfig()`: no launch defaults, no reservations,
+    a 3-day stale-dispatch threshold.
+    """
+
+    defaults: ConfigDefaults = ConfigDefaults()
+    version: VersionBlock | None = None
+    stale_dispatch_days: int = Field(default=3, ge=0)
+
+
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.
 
@@ -195,7 +261,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[2] = Field(2, alias="schema")
+    schema_: Literal[3] = Field(3, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -205,6 +271,15 @@ class Facts(_Strict):
     skipped: list[Skipped] = []
     unviewed: list[Unviewed] = []
     warnings: list[Truncation] = []
+    # PRs found by head branch for batches at `dispatched` (spec §3.A): a merged
+    # PR that lost every Closes line is linked to no member, so only this finds it.
+    batch_prs: list[PullRequest] = []
+    # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
+    config: dict[str, TriageConfig] = {}
+
+    def config_for(self, repo: str) -> TriageConfig:
+        """*repo*'s collected config, or the defaults when it declares none."""
+        return self.config.get(repo, TriageConfig())
 
     @property
     def collected(self) -> list[str]:

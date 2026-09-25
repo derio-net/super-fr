@@ -241,7 +241,7 @@ def test_pattern_ids_go_through_the_same_normaliser_as_keys(tmp_path: Path) -> N
 
 def _facts_doc(**over: object) -> dict[str, object]:
     doc: dict[str, object] = {
-        "schema": 2,
+        "schema": 3,
         "scope": "example-org",
         "kind": "org",
         "collected_at": "2026-09-21T00:00:00+00:00",

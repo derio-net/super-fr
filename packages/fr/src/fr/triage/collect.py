@@ -16,10 +16,14 @@ from datetime import datetime
 from typing import Any, Protocol
 
 import yaml
+from pydantic import ValidationError
 
 from fr import gh
-from fr.triage.errors import ForgeError
+from fr.labels import FR_IN_PROGRESS
+from fr.real_ghclient import RealGhClient
+from fr.triage.errors import ForgeError, TriageError
 from fr.triage.model import (
+    BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
     Facts,
     Issue,
@@ -27,6 +31,7 @@ from fr.triage.model import (
     PullRequest,
     Scope,
     Skipped,
+    TriageConfig,
     Truncation,
     Unviewed,
     issue_key,
@@ -38,6 +43,11 @@ ISSUE_LIMIT = 1000
 PR_LIMIT = 200
 REPO_LIMIT = 200
 BODY_LIMIT = 2000
+CONFIG_PATH = ".fr/triage.yaml"
+# GitHub's contents API resolves HEAD to the default branch (verified live
+# 2026-09-25), so the config read needs no default-branch lookup first.
+DEFAULT_BRANCH_REF = "HEAD"
+_NOT_FOUND = "HTTP 404"
 
 # (owner login, repo name, issue number), lowercased — the key a closing reference names.
 IssueRef = tuple[str, str, int]
@@ -56,6 +66,10 @@ class Forge(Protocol):
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]: ...
 
     def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str: ...
+
+    def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]: ...
+
+    def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]: ...
 
 
 GH_MISSING = (
@@ -104,6 +118,18 @@ class GhForge:
         with _forge_errors():
             return gh.read_file_at_ref(repo=repo, path=path, ref=ref)
 
+    # The two batch reads delegate to the forge adapter's own methods (spec
+    # 2026-09-25-triage-batches §3.F), so each has ONE GitHub implementation
+    # whether collect or a batch verb calls it.
+
+    def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
+        with _forge_errors():
+            return RealGhClient().list_issue_comments(repo, number)
+
+    def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
+        with _forge_errors():
+            return RealGhClient().list_prs_by_head(repo, branch)
+
 
 def scope_repos(
     forge: Forge, scope: Scope, *, repo_limit: int = REPO_LIMIT
@@ -143,6 +169,8 @@ def parse_prs(repo: str, raw: Iterable[dict[str, Any]]) -> list[tuple[PullReques
             merged_at=r.get("mergedAt"),
             url=r["url"],
             head_ref=r.get("headRefName") or "",
+            head_oid=r.get("headRefOid") or "",
+            files=[f["path"] for f in r.get("files") or [] if "path" in f],
             checks=_checks(r.get("statusCheckRollup") or []),
             mergeable=r.get("mergeable") or "UNKNOWN",
             merge_state=r.get("mergeStateStatus") or "UNKNOWN",
@@ -291,6 +319,7 @@ def collect_facts(
     *,
     now: datetime,
     judged: Iterable[str] = (),
+    batch_branches: Iterable[tuple[str, str]] = (),
     issue_limit: int = ISSUE_LIMIT,
     pr_limit: int = PR_LIMIT,
     repo_limit: int = REPO_LIMIT,
@@ -301,7 +330,11 @@ def collect_facts(
     rest still collect; in repo scope the one repo failing is the error, and
     in org scope so is collecting no repo at all (review r-p2-empty).
     Each *judged* key no longer open costs one `view_issue`, so the extra
-    calls are bounded by the judgements, never by the backlog.
+    calls are bounded by the judgements, never by the backlog. The batch
+    extras are bounded the same way (spec 2026-09-25-triage-batches §3.F): one
+    config read per repo, one comment read per `fr:in-progress` issue, and one
+    head-branch lookup per *batch_branches* entry — `(repo name, branch)` of
+    each batch whose last event is a dispatch — that no collected PR is on.
     """
     repos, warnings = scope_repos(forge, scope, repo_limit=repo_limit)
     skipped: list[Skipped] = []
@@ -309,17 +342,21 @@ def collect_facts(
     raw_issues: list[tuple[str, dict[str, Any]]] = []
     parsed_prs: list[tuple[PullRequest, list[IssueRef]]] = []
     open_prs: list[tuple[PullRequest, list[IssueRef]]] = []
+    config: dict[str, TriageConfig] = {}
     for repo in repos:
         try:
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
+            repo_config = read_config(forge, repo)
         except ForgeError as exc:
             if scope.kind == "repo":
                 raise
             skipped.append(Skipped(repo=repo, reason=str(exc)))
             continue
         collected.append(repo)
+        if repo_config is not None:
+            config[repo] = repo_config
         if len(issues) == issue_limit:
             warnings.append(Truncation(source="issues", target=repo, limit=issue_limit))
         if len(prs) == pr_limit:
@@ -339,13 +376,17 @@ def collect_facts(
             reasons = "; ".join(f"{s.repo}: {s.reason}" for s in skipped)
             raise ForgeError(f"no repo of {scope.owner} could be read — {reasons}")
         raise ForgeError(f"{scope.owner} has no non-archived repos to triage")
+    parsed_prs = join_open(parsed_prs, [pr for pr, _ in open_prs])
     links = invert(parsed_prs, scope)
 
     def linked(repo: str, number: int) -> list[PullRequest]:
         owner, name = repo.split("/", 1)
         return links.get(_ref(owner, name, number), [])
 
-    out = [_issue(repo, i, linked(repo, i["number"]), state="open") for repo, i in raw_issues]
+    out = [
+        _with_marker(forge, _issue(repo, i, linked(repo, i["number"]), state="open"))
+        for repo, i in raw_issues
+    ]
     open_keys = {i.key for i in out}
     unviewed: list[Unviewed] = []
     for repo, number in _judged_elsewhere(judged, open_keys, collected):
@@ -364,6 +405,8 @@ def collect_facts(
         for p, refs in open_prs
         if not any(_in_scope(ref, scope) for ref in refs) and (p.repo, p.number) not in linked_prs
     ]
+    on_branches = {(p.repo, p.head_ref) for p in [*linked_prs_all(out), *unlinked]}
+    batch_prs = _batch_prs(forge, batch_branches, collected, on_branches)
     return Facts(
         schema=FACTS_SCHEMA,
         scope=scope.name,
@@ -375,4 +418,91 @@ def collect_facts(
         skipped=skipped,
         unviewed=unviewed,
         warnings=warnings,
+        batch_prs=batch_prs,
+        config=config,
     )
+
+
+def linked_prs_all(issues: Iterable[Issue]) -> list[PullRequest]:
+    """Every PR linked to one of *issues*."""
+    return [p for issue in issues for p in issue.prs]
+
+
+def join_open(
+    prs: Iterable[tuple[PullRequest, list[IssueRef]]], open_prs: Iterable[PullRequest]
+) -> list[tuple[PullRequest, list[IssueRef]]]:
+    """Fill each PR from the open-PR record with the same (repo, number) (spec §3.F).
+
+    A linked PR comes from `list_prs(state=all)`, whose fields carry no files,
+    head oid, checks or merge state; the open-PR list carries all of them. A
+    batch PR is always linked, so without this join it would have none.
+    """
+    by_id = {(p.repo, p.number): p for p in open_prs}
+    out: list[tuple[PullRequest, list[IssueRef]]] = []
+    for pr, refs in prs:
+        rec = by_id.get((pr.repo, pr.number))
+        if rec is not None:
+            pr = pr.model_copy(
+                update={
+                    "files": rec.files,
+                    "head_oid": rec.head_oid,
+                    "checks": rec.checks,
+                    "mergeable": rec.mergeable,
+                    "merge_state": rec.merge_state,
+                    "review": rec.review,
+                }
+            )
+        out.append((pr, refs))
+    return out
+
+
+def read_config(forge: Forge, repo: str) -> TriageConfig | None:
+    """*repo*'s `.fr/triage.yaml` at its default branch; None when it has none.
+
+    Absent (404) is the common case and means the defaults. Any other forge
+    failure propagates like the list calls' do; a file that is not valid config
+    is refused naming the repo and the file, never half-read.
+    """
+    try:
+        body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
+    except ForgeError as exc:
+        if _NOT_FOUND in str(exc):
+            return None
+        raise
+    try:
+        return TriageConfig.model_validate(yaml.safe_load(body) or {})
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
+
+
+def _with_marker(forge: Forge, issue: Issue) -> Issue:
+    """Date an `fr:in-progress` issue's dispatch by its latest fr-batch marker (§3.E)."""
+    if FR_IN_PROGRESS.name not in issue.labels:
+        return issue
+    comments = forge.list_issue_comments(repo=issue.repo, number=issue.number)
+    stamps = [
+        str(c.get("created_at") or "")
+        for c in comments
+        if str(c.get("body") or "").lstrip().startswith(BATCH_MARKER_PREFIX)
+    ]
+    if not stamps:
+        return issue
+    return issue.model_copy(update={"dispatch_marker_at": max(stamps)})
+
+
+def _batch_prs(
+    forge: Forge,
+    branches: Iterable[tuple[str, str]],
+    collected: list[str],
+    on_branches: set[tuple[str, str]],
+) -> list[PullRequest]:
+    """One head-branch lookup per dispatched batch no collected PR is on (§3.A)."""
+    by_name = {repo.split("/", 1)[1].lower(): repo for repo in collected}
+    found: list[PullRequest] = []
+    for name, branch in sorted(set(branches)):
+        repo = by_name.get(name.lower())
+        if repo is None or (repo, branch) in on_branches:
+            continue
+        raw = forge.list_prs_by_head(repo=repo, branch=branch)
+        found.extend(pr for pr, _ in parse_prs(repo, raw))
+    return found
