@@ -114,8 +114,8 @@ state:
       ticked_at: '2026-09-25T21:03:42+00:00'
       note: 'red: ImportError UnsupportedForgeOperation'
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-25T21:03:43+00:00'
       note: null
     P2.T1.S3:
       state: ' '
