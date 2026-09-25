@@ -179,3 +179,8 @@ _sessions_of defaults to claude-code only when the attempt names no harness; rea
 ### p1-r10-resolved · finding [fixed] · resolves p1-r10: Skill says count turns but the report renders none; phase 2 schema needs turns
 
 Rollup.turns_by_activity (a message is one turn of each activity it touched, priced or not) and turns_by_step (one per message), rendered as turns columns in By activity and By step (table and html). fr-audit skill text says the report counts them; OpenCode and Hermes mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11-resolved created=2026-09-25T20:22:13 state=fixed resolves=p1-r11 -->
+### p1-r11-resolved · finding [fixed] · resolves p1-r11: Golden test asserts only the pooled share, not the per-session 23-37% range
+
+Added test_golden_audit_every_sessions_paperwork_share_is_23_to_37, parametrized per session, band [22.5, 37.5]. Re-run: 31.2 34.0 30.5 22.7 21.9 37.2 31.9 37.0 36.0. e50c7ff5 (21.9 vs published 23.6) is a strict xfail, journaled as open finding p1-golden-e50 rather than tuned away.
