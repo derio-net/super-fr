@@ -241,3 +241,8 @@ PR_LIST_FIELDS reads createdAt; PullRequest.created_at (optional; FACTS_SCHEMA s
 ### r2p-f3-resolved · finding [fixed] · resolves r2p-f3: Collect's batch head lookups are unbounded: every batch with a dispatch event, including terminal ones, forever (§3.F says one per dispatched batch)
 
 collect passes the previous facts.json's batch_prs as known_batch_prs; a batch whose known PR of the current dispatch is MERGED or CLOSED is terminal: that PR is carried into the new batch_prs and its branch is not looked up. batch_branches now carry the dispatch time. Tests: test_triage_facts_schema3.py::test_a_batch_already_terminal_in_the_previous_facts_costs_no_lookup[MERGED|CLOSED], ::test_a_known_pr_that_is_not_terminal_for_this_dispatch_is_looked_up_again[earlier|open], ::test_a_second_collect_does_not_look_up_a_batch_found_merged_by_the_first (3 collects, 1 lookup). Commit e1e677d6.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f2-resolved created=2026-09-25T23:57:06 state=fixed resolves=r2p-f2 answered_by=agent -->
+### r2p-f2-resolved · finding [fixed] · resolves r2p-f2: triage-batch-state moved to ci while r2p-f1 exists; re-verify after the fix
+
+Re-verified after r2p-f1: every derived stage incl. redispatch-after-abandoned is now covered, so status ci holds. Row notes updated with fr acceptance set-status (ci -> ci) naming test_a_redispatch_after_an_abandoned_pr_is_dispatched, test_a_new_pr_after_the_redispatch_is_pr_open, test_a_merged_no_closes_pr_after_the_redispatch_is_found and test_triage_facts_schema3.py::test_a_linked_pr_from_before_the_dispatch_does_not_skip_the_lookup; unit level test_triage_facts_schema3.py added. fr acceptance check passes.
