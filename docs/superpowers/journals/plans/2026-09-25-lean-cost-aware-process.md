@@ -284,3 +284,8 @@ commands/run_cmd.py:985-986 vs spec §5.B.7.
 ### p2-r29 · finding [open] (reviewer: in scope) · Closeout upsert erases the deliver capture record (phase 2)
 
 archive.py:505; spec amended: at becomes a list of events per host.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r30 created=2026-09-25T21:40:27 phase=2 state=open review_scope=in -->
+### p2-r30 · finding [open] (reviewer: in scope) · usage group checks cwd repo, not the subcommand's --repo (phase 2)
+
+commands/usage_cmd.py:54.
