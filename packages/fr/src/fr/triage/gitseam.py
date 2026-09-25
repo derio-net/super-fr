@@ -15,10 +15,10 @@ operation goes through the `GhClient` adapter (§3.J), and
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import shlex
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from fr.triage.errors import TriageError
@@ -127,11 +127,6 @@ class Checkout:
             return None
         return git(["show", f"{ref}:{file}"], self.path)
 
-    def last_change(self, ref: str, file: str) -> datetime | None:
-        """When the commit on *ref* that last touched *file* was made; None if never."""
-        stamp = git(["log", "-1", "--format=%cI", ref, "--", file], self.path).strip()
-        return datetime.fromisoformat(stamp) if stamp else None
-
     def remote_branch_exists(self, branch: str) -> bool:
         out = git(["ls-remote", "--heads", "origin", f"refs/heads/{branch}"], self.path)
         return bool(out.strip())
@@ -145,8 +140,26 @@ class Checkout:
     # ------------------------------------------------------- scratch worktree
 
     def add_worktree(self, where: Path, ref: str) -> Worktree:
-        """A detached worktree of *ref* at *where*, replacing a stale one there."""
+        """A detached worktree of *ref* at *where*, replacing a CLEAN one there.
+
+        A worktree merge kept for inspection may hold an operator's manual fix,
+        so one with any local change (tracked or untracked) is refused by name
+        rather than force-removed (review r3-f6); so is a directory there that
+        is not a git worktree at all.
+        """
         if where.exists():
+            discard = f"`git worktree remove --force {where}`"
+            if not (where / ".git").exists():
+                raise GitError(
+                    f"{where} exists and is not a git worktree; move it aside or delete it, "
+                    "then re-run"
+                )
+            if git(["status", "--porcelain", "--untracked-files=all"], where).strip():
+                raise GitError(
+                    f"the scratch worktree kept at {where} has local changes, so it is not "
+                    f"replaced. Keep what you need, then discard it with {discard} "
+                    f"(run in {self.path}) and re-run"
+                )
             self.remove_worktree(where)
         where.parent.mkdir(parents=True, exist_ok=True)
         git(["worktree", "add", "--detach", str(where), ref], self.path)
@@ -164,12 +177,28 @@ class Worktree:
         self.path = path
 
     def merge(self, ref: str) -> list[str]:
-        """Start merging *ref* without committing; the conflicted paths ([] if none)."""
-        clean = git_ok(["merge", "--no-ff", "--no-commit", ref], self.path)
+        """Start merging *ref* without committing; the conflicted paths ([] if none).
+
+        `rerere` is off for this merge whatever the operator's config says: a
+        replayed resolution would make a non-version conflict look clean, and
+        only merge decides what may be resolved (review r3-f12).
+        """
+        argv = ["-c", "rerere.enabled=false", "merge", "--no-ff", "--no-commit", ref]
+        clean = git_ok(argv, self.path)
         conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
         if not clean and not conflicted:
             raise GitError(f"`git merge {ref}` failed in {self.path} without a conflict")
         return conflicted
+
+    def merge_base(self, ref: str) -> str:
+        """The merge base of HEAD (the PR side) and *ref*."""
+        return git(["merge-base", "HEAD", ref], self.path).strip()
+
+    def show(self, ref: str, file: str) -> str | None:
+        """*file*'s text at *ref*, or None when it does not exist there."""
+        if not git_ok(["cat-file", "-e", f"{ref}:{file}"], self.path):
+            return None
+        return git(["show", f"{ref}:{file}"], self.path)
 
     def take_theirs(self, paths: list[str]) -> None:
         """Resolve *paths* to main's side, so no file keeps conflict markers."""
@@ -186,9 +215,22 @@ class Worktree:
     def run(self, command: str, **fields: str) -> None:
         run_declared(command, self.path, **fields)
 
-    def commit_all(self, message: str) -> str | None:
-        """Stage everything and commit; the new head, or None when nothing changed."""
-        git(["add", "--all"], self.path)
+    def commit_all(self, message: str, version_files: list[str]) -> str | None:
+        """Stage tracked changes plus the declared *version_files* globs, and
+        commit; the new head, or None when nothing changed.
+
+        Never `git add --all`: `set` / `relock` may leave build output behind,
+        and anything untracked would ride into another run's PR (review r3-f7).
+        """
+        git(["add", "--update"], self.path)
+        untracked = git(["ls-files", "-z", "--others", "--exclude-standard"], self.path)
+        declared = [
+            p
+            for p in untracked.split("\0")
+            if p and any(fnmatch.fnmatch(p, g) for g in version_files)
+        ]
+        if declared:
+            git(["add", "--", *declared], self.path)
         merging = git_ok(["rev-parse", "-q", "--verify", "MERGE_HEAD"], self.path)
         if not merging and git_ok(["diff", "--cached", "--quiet"], self.path):
             return None

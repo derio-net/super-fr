@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.triage.batch_dispatch import render_brief
@@ -142,7 +142,6 @@ class FakeCheckout:
         self.origin = REPO
         self.default = "main"
         self.files: dict[tuple[str, str], str] = {("origin/main", "pyproject.toml"): PYPROJECT}
-        self.config_changed_at: datetime | None = None
         self.remote_branches: set[str] = set()
         self.fetched = 0
 
@@ -158,8 +157,13 @@ class FakeCheckout:
     def show(self, ref: str, file: str) -> str | None:
         return self.files.get((ref, file))
 
-    def last_change(self, ref: str, file: str) -> datetime | None:
-        return self.config_changed_at
+    def serve(self, config: dict[str, Any] | None) -> None:
+        """Put *config* at `origin/<default>:.fr/triage.yaml` (None: no file)."""
+        key = (f"origin/{self.default}", ".fr/triage.yaml")
+        if config is None:
+            self.files.pop(key, None)
+        else:
+            self.files[key] = yaml.safe_dump(config)
 
     def remote_branch_exists(self, branch: str) -> bool:
         return branch in self.remote_branches
@@ -229,6 +233,7 @@ def test_launch_defaults_resolve_from_the_collected_config_at_dispatch(
     )
     config = {"defaults": {"launch": {"runner": "fake", "harness": "claude", "model": "m-9"}}}
     _state(tmp_path, _facts(config=config), judgements)
+    checkout.serve(config)
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
     assert "runner: fake" in out and "harness: claude" in out and "model: m-9" in out
@@ -256,24 +261,38 @@ def test_no_launch_anywhere_is_refused(
     assert "defaults.launch" in out
 
 
-def test_a_config_older_than_the_checkouts_last_change_is_refused(
+def test_a_collected_config_that_differs_from_origin_is_refused(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
-    _state(tmp_path, _facts(collected_at="2026-09-26T12:00:00+00:00"))
-    checkout.config_changed_at = datetime(2026, 9, 26, 13, 0, tzinfo=UTC)
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
+    checkout.serve({"version": {**VERSION_CONFIG["version"], "files": ["pyproject.toml"]}})
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 2
-    assert "re-collect" in out or "collect" in out
+    assert "re-collect" in out
     assert runner.dispatched == []
 
 
-def test_a_config_collected_after_the_last_change_is_used(
+def test_a_config_added_on_origin_since_the_collect_is_refused(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
-    _state(tmp_path, _facts(collected_at="2026-09-26T12:00:00+00:00"))
-    checkout.config_changed_at = datetime(2026, 9, 26, 11, 0, tzinfo=UTC)
+    _state(tmp_path)  # collected: no .fr/triage.yaml
+    checkout.serve(VERSION_CONFIG)
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 2
+    assert "re-collect" in out
+
+
+def test_the_collected_config_matching_origin_is_used_whatever_its_commit_date(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Review r3-f13: freshness is the content's identity, not a committer
+    date — the fake has no dates at all, so none can be consulted."""
+    _state(tmp_path, _facts(config=VERSION_CONFIG, collected_at="2000-01-01T00:00:00+00:00"))
+    checkout.serve(VERSION_CONFIG)
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
+    assert "reserved version: 4.22.0" in out
 
 
 def test_the_missing_dispatch_package_is_named_like_apply(
@@ -349,6 +368,7 @@ def test_the_brief_is_printed_with_the_reserved_version(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
     _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
     assert "Bump the version to `4.22.0`" in out
@@ -363,6 +383,7 @@ def test_the_work_item_is_a_run_of_fr_goal_with_the_issues_in_its_payload(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
     _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     assert code == 0, out
     (item,) = runner.dispatched
@@ -390,6 +411,7 @@ def test_dispatch_without_yes_writes_nothing(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
     _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
     before = (tmp_path / "judgements.yaml").read_bytes()
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
@@ -691,6 +713,7 @@ def test_successive_dispatches_reserve_successive_versions(
     facts = _facts(config=VERSION_CONFIG, issues=[_issue(577), _issue(575), _issue(420), _issue(1)])
     gh.add_issue(REPO, 1)
     _state(tmp_path, facts, second)
+    checkout.serve(VERSION_CONFIG)
     assert _dispatch(tmp_path, "lifecycle", "--yes")[0] == 0  # minor: 4.21.1 -> 4.22.0
     code, out = _dispatch(tmp_path, "second", "--yes")  # patch, after the live 4.22.0
     assert code == 0, out
@@ -708,7 +731,183 @@ def test_the_source_version_is_read_from_the_default_branch_on_origin(
         ("HEAD", "pyproject.toml"): PYPROJECT.replace("4.21.1", "9.9.9"),
     }
     _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
     assert "reserved version: 5.1.0" in out
     assert checkout.fetched == 1
+
+
+# -------------------------------- the open-batch rule before launch (r3-f1)
+
+SPLIT = """\
+  - id: split
+    title: Split out rebuild
+    ids: ["super-fr#577"]
+    launch: {runner: fake, harness: claude, model: m}
+"""
+
+
+def test_a_redispatch_that_would_break_the_open_batch_rule_never_reaches_the_runner(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Review r3-f1, the reviewer's case: `lifecycle` was cancelled, #577 then
+    joined the new proposed batch `split`, and `lifecycle` is redispatched. The
+    rule used to run only in the write AFTER `runner.dispatch`: a live run with
+    no event and no forge marker."""
+    _state(tmp_path, judgements=CANCELLED + SPLIT)
+    before = (tmp_path / "judgements.yaml").read_bytes()
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert "super-fr#577 is in lifecycle, split" in " ".join(out.split())
+    assert runner.calls == [] and runner.dispatched == []
+    assert _mutations(gh) == []
+    assert (tmp_path / "judgements.yaml").read_bytes() == before
+
+
+def _another_writer(tmp_path: Path) -> None:
+    """Another verb adds a batch to judgements.yaml."""
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + SPLIT.replace("577", "420"), "utf-8")
+
+
+def test_a_change_to_judgements_before_launch_is_refused_before_the_runner(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Compare-before-write is re-checked immediately before `runner.dispatch`."""
+    _state(tmp_path)
+    real = runner.existing_dispatches
+
+    def _meanwhile(items: Sequence[WorkItem]) -> set[str]:
+        _another_writer(tmp_path)
+        return real(items)
+
+    runner.existing_dispatches = _meanwhile  # type: ignore[method-assign]
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2
+    assert "changed since it was read" in out
+    assert "dispatch" not in runner.calls and runner.dispatched == []
+
+
+def _dispatch_then_race(tmp_path: Path, runner: FakeRunner) -> None:
+    real = runner.dispatch
+
+    def _raced(item: WorkItem) -> str | None:
+        handle = real(item)
+        _another_writer(tmp_path)  # lands between the launch and the event write
+        return handle
+
+    runner.dispatch = _raced  # type: ignore[method-assign]
+
+
+def test_an_event_write_failing_after_launch_names_the_handle_and_the_recovery(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
+    _dispatch_then_race(tmp_path, runner)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 1
+    assert "w2:p1K" in flat and "changed since it was read" in flat
+    assert (
+        "fr triage batch dispatch lifecycle --repair --yes --handle w2:p1K "
+        "--reserved-version 4.22.0"
+    ) in flat
+    assert len(runner.dispatched) == 1 and _mutations(gh) == []
+
+
+def test_repair_records_the_missing_dispatch_of_a_live_run(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """The printed recovery works: the runner reports the item live, so repair
+    appends the event it could not write and completes the forge writes —
+    without launching anything."""
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    checkout.serve(VERSION_CONFIG)
+    _dispatch_then_race(tmp_path, runner)
+    assert _dispatch(tmp_path, "lifecycle", "--yes")[0] == 1
+    runner.live = {ITEM}
+    runner.calls.clear()
+
+    code, out = _dispatch(
+        tmp_path,
+        "lifecycle",
+        "--repair",
+        "--yes",
+        "--handle",
+        "w2:p1K",
+        "--reserved-version",
+        "4.22.0",
+    )
+
+    assert code == 0, out
+    assert "dispatch" not in runner.calls and len(runner.dispatched) == 1
+    lifecycle = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    (event,) = lifecycle.events
+    assert isinstance(event, DispatchEvent)
+    assert (event.handle, event.reserved_version, event.runner) == ("w2:p1K", "4.22.0", "fake")
+    for n in MEMBERS:
+        assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+        assert len(gh.issue_comments[(REPO, n)]) == 1
+
+
+def test_repair_records_nothing_for_a_run_the_runner_does_not_hold(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path)
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes", "--handle", "w2:p1K")
+    assert code == 2
+    assert "live" in out and "dispatch" not in runner.calls
+    assert _mutations(gh) == []
+    assert load_judgements(tmp_path / "judgements.yaml").batches[0].events == []
+
+
+def test_repair_needs_the_reserved_version_when_the_repo_reserves(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, _facts(config=VERSION_CONFIG))
+    runner.live = {ITEM}
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2
+    assert "--reserved-version" in out
+    assert load_judgements(tmp_path / "judgements.yaml").batches[0].events == []
+
+
+# ------------------------------------------------- --repair by stage (r3-f9)
+
+
+@pytest.mark.parametrize(
+    ("pr_state", "closed", "stage"),
+    [("CLOSED", False, "abandoned"), ("MERGED", True, "merged"), ("MERGED", False, "partial")],
+)
+def test_repair_refuses_a_batch_that_is_no_longer_in_flight(
+    tmp_path: Path,
+    gh: FakeGhClient,
+    runner: FakeRunner,
+    checkout: FakeCheckout,
+    pr_state: str,
+    closed: bool,
+    stage: str,
+) -> None:
+    """Review r3-f9: re-labelling the members of a merged or abandoned batch
+    would mark closed or released issues taken again."""
+    state = "closed" if closed else "open"
+    issues = [_issue(577, state=state), _issue(575, state=state), _issue(420)]
+    _state(tmp_path, _facts(prs=[_pr(pr_state)], issues=issues), DISPATCHED)
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2
+    assert stage in out
+    assert _mutations(gh) == [] and runner.calls == []
+
+
+@pytest.mark.parametrize("stage", ["dispatched", "pr-open"])
+def test_repair_completes_a_batch_in_flight(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout, stage: str
+) -> None:
+    facts = _facts(prs=[_pr()]) if stage == "pr-open" else _facts()
+    _state(tmp_path, facts, DISPATCHED)
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 0, out
+    for n in MEMBERS:
+        assert "fr:in-progress" in gh.issues[(REPO, n)].labels

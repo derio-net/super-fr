@@ -178,6 +178,10 @@ class FakeGhClient:
         """GitHub's closing line, as `RealGhClient.closing_ref` spells it."""
         return f"Closes {repo}#{number}"
 
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        """A repo allowing every method, squash by default."""
+        return {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+
     def create_issue(
         self,
         repo: str,

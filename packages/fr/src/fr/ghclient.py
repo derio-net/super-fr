@@ -188,6 +188,11 @@ class GhClient(Protocol):
         """The PR-body line that closes issue *number* of *repo* on merge."""
         ...
 
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        """`{default, allowed}`: the viewer's default merge method for *repo*
+        (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
+        ...
+
 
 class UnsupportedBatchOps:
     """The §3.J batch operations, each declared unsupported for `backend`.
@@ -233,3 +238,6 @@ class UnsupportedBatchOps:
 
     def closing_ref(self, repo: str, number: int) -> str:
         raise self._unsupported("closing_ref")
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        raise self._unsupported("repo_merge_methods")

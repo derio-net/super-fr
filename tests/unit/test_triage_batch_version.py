@@ -111,6 +111,37 @@ def test_the_source_is_read_from_origin_not_the_working_tree(tmp_path: Path) -> 
     assert text is not None
     assert read_source(text, VersionSource(file="pyproject.toml", key="project.version")) == "1.0.0"
     assert checkout.show(f"origin/{default}", "absent.toml") is None
-    assert checkout.last_change(f"origin/{default}", ".fr/triage.yaml") is None
-    assert checkout.last_change(f"origin/{default}", "pyproject.toml") is not None
     assert not checkout.remote_branch_exists("feat/batch-x")
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "want"),
+    [
+        ('[project]\nversion = "1.0.0"\n', '[project]\nversion = "1.0.2"\n', True),
+        ('{"version": "1.0.0"}\n', '{"version": "1.0.2"}\n', True),
+        ('version = "1.0.0"\n', 'version = "1.0.0"\n', True),
+        (
+            '[project]\nversion = "1.0.0"\n',
+            '[project]\nversion = "1.0.2"\ndependencies = ["requests"]\n',
+            False,
+        ),
+        ('deps = ["demo>=1.0.0"]\n', 'deps = ["demo>=1.0.2"]\n', False),
+        ('name = "a"\nversion = "1.0.0"\n', 'name = "b"\nversion = "1.0.2"\n', False),
+    ],
+    ids=["toml", "json", "unchanged", "added-dependency", "a-pin-is-not-a-version", "renamed"],
+)
+def test_only_version_changed(base: str, head: str, want: bool) -> None:
+    from fr.triage.batch_version import only_version_changed
+
+    assert only_version_changed(base, head, "1.0.0", "1.0.2") is want
+
+
+@pytest.mark.parametrize(
+    ("path", "want"),
+    [("uv.lock", True), ("web/package-lock.json", True), ("Cargo.lock", True),
+     ("package.json", False), ("pyproject.toml", False)],
+)  # fmt: skip
+def test_lockfiles_are_known_by_name(path: str, want: bool) -> None:
+    from fr.triage.batch_version import is_lockfile
+
+    assert is_lockfile(path) is want

@@ -90,3 +90,34 @@ def slot_versions(main_version: str, bumps: Sequence[Bump]) -> list[str]:
 def all_version_files(paths: Iterable[str], globs: Sequence[str]) -> bool:
     """Whether every path matches one of the declared `version.files` globs."""
     return all(any(fnmatch.fnmatch(p, g) for g in globs) for p in paths)
+
+
+# Lockfiles are derived from the manifests, so a conflict in one is resolvable
+# by regenerating it (`relock`), never by hand (review r3-f2). Matched on the
+# file name.
+LOCKFILE_NAMES = ("*.lock", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml")
+
+
+def is_lockfile(path: str) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    return any(fnmatch.fnmatch(name, g) for g in LOCKFILE_NAMES)
+
+
+def only_version_changed(base: str, head: str, old: str, new: str) -> bool:
+    """Whether *head* differs from *base* only where the quoted version *old*
+    became *new* (spec §3.F step 3, review r3-f2).
+
+    Line for line: the same number of lines, and every line that changed is
+    the base line with `"<old>"` replaced by `"<new>"`. The quotes are what
+    keep a pin such as `"demo>=1.0.0"` from passing as a version line. Any
+    other edit (a new dependency, a reworded field) is a real change that
+    taking main's side of the file would silently discard.
+    """
+    was, now = f'"{old}"', f'"{new}"'
+    before, after = base.splitlines(), head.splitlines()
+    if len(before) != len(after):
+        return False
+    return all(
+        b == a or (was in b and b.replace(was, now) == a)
+        for b, a in zip(before, after, strict=True)
+    )

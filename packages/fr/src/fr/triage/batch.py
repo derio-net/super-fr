@@ -256,7 +256,9 @@ def _replace_top_level(text: str, key: str, block: str, *, prepend: bool) -> str
     return "".join(lines)
 
 
-def save_batches(path: Path, batches: Sequence[Batch], *, read: Sequence[Batch]) -> Judgements:
+def save_batches(
+    path: Path, batches: Sequence[Batch], *, read: Sequence[Batch], dry_run: bool = False
+) -> Judgements:
     """Write *batches* as `path`'s `batches:` section and stamp schema 2.
 
     Only the `schema:` line and the `batches:` section change: the rest of the
@@ -269,6 +271,10 @@ def save_batches(path: Path, batches: Sequence[Batch], *, read: Sequence[Batch])
     CURRENT batches are compared with it first (review r2p-f7): if another
     writer changed them in between, the write is refused rather than silently
     dropping their change.
+
+    *dry_run* runs every one of those checks and writes nothing: `dispatch`
+    holds them before it launches a runner, whose launch cannot be undone
+    (review r3-f1).
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -289,7 +295,8 @@ def save_batches(path: Path, batches: Sequence[Batch], *, read: Sequence[Batch])
         judgements = Judgements.model_validate(data)
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(f"{path}: refusing to write invalid judgements: {exc}") from exc
-    write_text_atomic(path, text)
+    if not dry_run:
+        write_text_atomic(path, text)
     return judgements
 
 

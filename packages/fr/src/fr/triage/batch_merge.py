@@ -17,10 +17,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from fr.ghclient import GhClient
+from fr.ghclient import MERGE_METHODS, GhClient
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch import MergeStep, QueueEntry, merge_order, with_forecast
-from fr.triage.batch_version import all_version_files, is_above, read_source, slot_versions
+from fr.triage.batch_version import (
+    all_version_files,
+    is_above,
+    is_lockfile,
+    only_version_changed,
+    read_source,
+    slot_versions,
+)
 from fr.triage.errors import TriageError
 from fr.triage.model import VersionBlock
 
@@ -37,11 +44,13 @@ class WorktreeSeam(Protocol):
     path: Path
 
     def merge(self, ref: str) -> list[str]: ...
+    def merge_base(self, ref: str) -> str: ...
+    def show(self, ref: str, file: str) -> str | None: ...
     def take_theirs(self, paths: list[str]) -> None: ...
     def abort_merge(self) -> None: ...
     def read(self, file: str) -> str | None: ...
     def run(self, command: str, **fields: str) -> None: ...
-    def commit_all(self, message: str) -> str | None: ...
+    def commit_all(self, message: str, version_files: list[str]) -> str | None: ...
     def push(self, branch: str) -> None: ...
 
 
@@ -96,6 +105,32 @@ class MergeContext:
 
 
 # ------------------------------------------------------------------ planning
+
+
+def choose_method(explicit: str | None, methods: dict[str, Any]) -> str:
+    """The merge method (spec §3.F step 2): the repo's default, or *explicit*.
+
+    *methods* is `GhClient.repo_merge_methods`: `{default, allowed}`. An
+    explicit method the repo disallows is refused here, before anything
+    merges, rather than by the forge mid-queue (review r3-f4).
+    """
+    allowed = sorted(str(m) for m in methods.get("allowed") or [] if m in MERGE_METHODS)
+    if not allowed:
+        raise TriageError("the repo allows no merge method fr knows (merge, squash, rebase)")
+    if explicit is not None:
+        if explicit not in allowed:
+            raise TriageError(
+                f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
+            )
+        return explicit
+    default = methods.get("default")
+    if default in allowed:
+        return str(default)
+    if len(allowed) == 1:
+        return allowed[0]
+    raise TriageError(
+        f"the repo names no default merge method you may use; give --method ({', '.join(allowed)})"
+    )
 
 
 def plan_queue(
@@ -239,35 +274,74 @@ def _update_message(
     return f"chore: re-slot version to {slot}"
 
 
+def _unresolvable(ctx: MergeContext, wt: WorktreeSeam, conflicted: list[str]) -> list[str]:
+    """The conflicted paths merge may NOT resolve by taking main's side, and
+    whether a relock must regenerate a lockfile it did take (spec §3.F step 3).
+
+    `git checkout --theirs` replaces the WHOLE file, so a declared version file
+    is taken only when the PR's own change to it, from the merge base, is the
+    version and nothing else (review r3-f2): then `set` re-applies the slot and
+    nothing the PR wrote is lost. A lockfile the PR changed further is taken
+    only when a `relock` is declared to regenerate it from the manifests.
+    Everything else is a real conflict.
+    """
+    version = ctx.version
+    if version is None:
+        return list(conflicted)
+    base = wt.merge_base(ctx.main)
+    old_text, new_text = wt.show(base, version.source.file), wt.show("HEAD", version.source.file)
+    if old_text is None or new_text is None:
+        return list(conflicted)
+    old, new = read_source(old_text, version.source), read_source(new_text, version.source)
+    out: list[str] = []
+    for path in conflicted:
+        if not all_version_files([path], version.files):
+            out.append(path)
+            continue
+        before, after = wt.show(base, path), wt.show("HEAD", path)
+        if (
+            before is not None
+            and after is not None
+            and only_version_changed(before, after, old, new)
+        ):
+            continue
+        if is_lockfile(path) and version.relock:
+            continue
+        out.append(path)
+    return out
+
+
 def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: str | None) -> str:
     """Step 3: bring the PR branch up to date and onto its slot; the new head."""
     pr = slot.step.pr
     where = scratch_path(ctx, slot)
     wt: WorktreeSeam = ctx.checkout.add_worktree(where, head)
     ctx.scratch.add(where)
+    relock = False
     if behind:
         conflicted = wt.merge(ctx.main)
         if conflicted:
-            globs = ctx.version.files if ctx.version else []
-            if globs and all_version_files(conflicted, globs):
-                wt.take_theirs(conflicted)
-            else:
+            refused = _unresolvable(ctx, wt, conflicted)
+            if refused:
                 wt.abort_merge()
-                outside = [p for p in conflicted if not all_version_files([p], globs)]
                 raise MergeStopError(
                     f"PR #{pr.number} (batch {slot.step.batch.id}) conflicts with {ctx.main} "
-                    f"outside the version files: {', '.join(outside)}. The scratch worktree "
-                    f"is kept for inspection at {where}"
+                    f"in a change merge will not resolve: {', '.join(refused)} (only a version "
+                    "file whose PR change is the version alone is resolved). The scratch "
+                    f"worktree is kept for inspection at {where}"
                 )
+            wt.take_theirs(conflicted)
+            relock = any(is_lockfile(p) for p in conflicted)
     if ctx.version is not None and slot.slot is not None:
         text = wt.read(ctx.version.source.file)
         current = read_source(text, ctx.version.source) if text is not None else None
         if current != slot.slot:
             wt.run(ctx.version.set_, version=slot.slot)
-            if ctx.version.relock:
-                wt.run(ctx.version.relock)
+            relock = True
+        if relock and ctx.version.relock:
+            wt.run(ctx.version.relock)
     message = _update_message(ctx, slot.slot, behind=behind, previous=previous)
-    new = wt.commit_all(message)
+    new = wt.commit_all(message, ctx.version.files if ctx.version else [])
     if new is None:
         raise MergeStopError(f"PR #{pr.number}: the update produced no change to push")
     wt.push(pr.head_ref)

@@ -10,7 +10,9 @@ runs a process or calls a forge.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime
+
+import yaml
+from pydantic import ValidationError
 
 from fr.triage.batch import (
     batch_branch,
@@ -24,6 +26,7 @@ from fr.triage.model import (
     Batch,
     Facts,
     Judgements,
+    TriageConfig,
     batch_marker,
 )
 
@@ -111,19 +114,34 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     return latest_marker(comments, item_id) == "dispatch"
 
 
-def check_config_fresh(collected_at: str, last_change: datetime | None) -> None:
-    """Refuse a collected `.fr/triage.yaml` older than the checkout's last change
-    to it on `origin/<default>` (§3.I)."""
-    if last_change is None:
-        return
+def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) -> None:
+    """Refuse a collected `.fr/triage.yaml` that is not the one on
+    `origin/<default>` now (§3.I).
+
+    Identity, not time (review r3-f13): the file's text at the default branch
+    is parsed and compared with what `collect` recorded. Committer dates are
+    set by whoever commits (a rebase, a skewed clock, a cherry-pick) and say
+    nothing about which content was read; the content itself does. *collected*
+    is None when collect found no file, *on_origin* when there is none now.
+    """
     try:
-        collected = datetime.fromisoformat(collected_at)
-    except ValueError as exc:
-        raise TriageError(f"facts.json collected_at {collected_at!r} is unreadable") from exc
-    if collected.tzinfo is None or last_change.tzinfo is None or collected < last_change:
+        current = (
+            TriageConfig.model_validate(yaml.safe_load(on_origin) or {})
+            if on_origin is not None
+            else None
+        )
+    except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(
-            f"the collected {TRIAGE_CONFIG_PATH} predates its last change on the default "
-            f"branch ({last_change.isoformat()}); re-collect with `fr triage collect` first"
+            f"{TRIAGE_CONFIG_PATH} on the default branch is not valid triage config: {exc}"
+        ) from exc
+
+    def _shape(c: TriageConfig | None) -> object:  # values, not pydantic's fields-set
+        return c.model_dump(by_alias=True) if c is not None else None
+
+    if _shape(current) != _shape(collected):
+        raise TriageError(
+            f"the collected {TRIAGE_CONFIG_PATH} is not the one on the default branch now; "
+            "re-collect with `fr triage collect` first"
         )
 
 

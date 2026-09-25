@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.gh import GhError
@@ -49,6 +50,12 @@ class MergeForge:
         self.refuse: dict[int, str] = {}
         self.merged: list[tuple[int, str, str]] = []
         self.waits: list[int] = []
+        self.methods: dict[str, Any] = {"default": "squash", "allowed": ["merge", "squash"]}
+        self.method_reads = 0
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        self.method_reads += 1
+        return dict(self.methods)
 
     def add(self, number: int, head: str, **kw: Any) -> None:
         self.prs[number] = {
@@ -95,6 +102,12 @@ class FakeWorktree:
     def take_theirs(self, paths: list[str]) -> None:
         self.log.append(f"theirs {' '.join(paths)}")
 
+    def merge_base(self, ref: str) -> str:
+        return "base"
+
+    def show(self, ref: str, file: str) -> str | None:
+        return self.checkout.files.get((self.ref if ref == "HEAD" else ref, file))
+
     def abort_merge(self) -> None:
         self.log.append("abort")
 
@@ -106,8 +119,9 @@ class FakeWorktree:
         if "version" in fields:
             self.files["pyproject.toml"] = _toml(fields["version"])
 
-    def commit_all(self, message: str) -> str | None:
+    def commit_all(self, message: str, version_files: list[str]) -> str | None:
         self.log.append(f"commit {message}")
+        self.staged_globs = version_files
         sha = f"new-{len(self.checkout.worktrees)}"
         for f, t in self.files.items():
             self.checkout.files[(sha, f)] = t
@@ -124,7 +138,8 @@ class FakeCheckout:
     def __init__(self, path: Path, forge: MergeForge) -> None:
         self.path = path
         self.files: dict[tuple[str, str], str] = {
-            ("origin/main", "pyproject.toml"): _toml("4.21.1")
+            ("origin/main", "pyproject.toml"): _toml("4.21.1"),
+            ("base", "pyproject.toml"): _toml("4.21.1"),
         }
         self.up_to_date: set[str] = set()
         self.conflicts: dict[str, list[str]] = {}
@@ -159,6 +174,11 @@ class FakeCheckout:
         for pr in self.forge.prs.values():
             if pr["head_ref"] == branch:
                 pr["head_oid"] = sha
+
+
+def _lock(version: str, *deps: str) -> str:
+    extra = "".join(f'[[package]]\nname = "{d}"\nversion = "0.1.0"\n\n' for d in deps)
+    return f'version = 1\n\n{extra}[[package]]\nname = "super-fr"\nversion = "{version}"\n'
 
 
 def _batch_yaml(bid: str, n: int, *, order: int | None = None, bump: str = "patch", v: str) -> str:
@@ -230,6 +250,8 @@ def _setup(
         prs=prs,
         config={REPO: TriageConfig.model_validate(config)} if config else {},
     )
+    if config:  # the config on origin is the one collected: fresh (§3.I)
+        checkout.files[("origin/main", ".fr/triage.yaml")] = yaml.safe_dump(config)
     (tmp_path / "judgements.yaml").write_text(judgements, encoding="utf-8")
     (tmp_path / "facts.json").write_text(json.dumps(facts.to_json()), "utf-8")
     monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: forge)
@@ -380,7 +402,7 @@ def test_nothing_merges_at_a_version_not_above_mains(
 
     def _main_moves() -> None:  # an outside release lands after the plan is printed
         fetches.append(1)
-        if len(fetches) > 1:
+        if len(fetches) > 2:  # after the config check's and the plan's fetches
             checkout.files[("origin/main", "pyproject.toml")] = _toml("4.21.2")
         real_fetch()
 
@@ -482,7 +504,7 @@ def test_an_unsupported_backend_stops_with_its_declared_refusal(
     monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: RealGlabClient())
     code, out = _merge(tmp_path, "--yes")
     assert code == 2
-    assert "gh#611" in out and "pr_view" in out
+    assert "gh#611" in out and "repo_merge_methods" in out  # the first forge read
 
 
 def test_a_conflict_outside_the_version_files_stops_and_keeps_the_worktree(
@@ -491,13 +513,15 @@ def test_a_conflict_outside_the_version_files_stops_and_keeps_the_worktree(
     forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])])
     checkout.up_to_date.clear()  # behind main
     checkout.conflicts["head-one"] = ["uv.lock", "src/a.py"]
+    checkout.files[("base", "uv.lock")] = _lock("4.21.1")  # a version-only change
+    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
     code, out = _merge(tmp_path, "--yes")
     assert code == 1
     assert "src/a.py" in out and "uv.lock" not in out.split("src/a.py")[0].split("\n")[-1]
     (wt,) = checkout.worktrees
     assert wt.log == ["merge origin/main", "abort"]
     assert checkout.removed == []
-    assert str(wt.path) in " ".join(out.split()).replace(" ", "") or "kept" in out
+    assert f"The scratch worktree is kept for inspection at {wt.path}" in out
 
 
 def test_a_version_only_conflict_takes_mains_side_then_sets_the_slot(
@@ -512,6 +536,8 @@ def test_a_version_only_conflict_takes_mains_side_then_sets_the_slot(
     )
     checkout.up_to_date.clear()
     checkout.conflicts["head-one"] = ["pyproject.toml", "uv.lock"]
+    checkout.files[("base", "uv.lock")] = _lock("4.21.1")
+    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
     real_add = checkout.add_worktree
 
     def _add(where: Path, ref: str) -> FakeWorktree:
@@ -552,3 +578,133 @@ def test_declared_version_files_are_not_overlaps(
     assert _order(out) == ["a", "c", "b"]
     first = next(line for line in out.splitlines() if " a " in line)
     assert "x.py" in first and "pyproject.toml" not in first
+
+
+# ------------------------------------------- version-file conflicts (r3-f2)
+
+
+def _behind_with_conflicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: dict[str, Any] = CONFIG
+) -> tuple[MergeForge, FakeCheckout]:
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.2", ["a.py"])], config=config
+    )
+    checkout.up_to_date.clear()
+    checkout.conflicts["head-one"] = ["pyproject.toml", "uv.lock"]
+    checkout.files[("base", "uv.lock")] = _lock("4.21.1")
+    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2")
+    return forge, checkout
+
+
+def test_a_version_file_the_pr_changed_beyond_the_version_is_a_real_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r3-f2: `--theirs` takes main's WHOLE file, so a PR that bumped the
+    version AND added a dependency there would silently lose the dependency."""
+    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch)
+    checkout.files[("head-one", "pyproject.toml")] = (
+        _toml("4.21.2") + 'dependencies = ["requests"]\n'
+    )
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 1
+    assert "pyproject.toml" in out
+    (wt,) = checkout.worktrees
+    assert wt.log == ["merge origin/main", "abort"]
+    assert forge.merged == [] and checkout.removed == []
+
+
+def test_a_lockfile_changed_beyond_the_version_is_taken_and_relocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lockfile is derived: with a declared `relock`, main's side plus a
+    relock regenerates it from the PR's (version-only) manifests."""
+    relock = {"version": {**CONFIG["version"], "relock": "uv lock"}}
+    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch, relock)
+    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2", "requests")
+    real_add = checkout.add_worktree
+
+    def _add(where: Path, ref: str) -> FakeWorktree:
+        wt = real_add(where, ref)
+        wt.files["pyproject.toml"] = _toml("4.21.1")  # main's side after --theirs
+        return wt
+
+    checkout.add_worktree = _add  # type: ignore[method-assign]
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    (wt,) = checkout.worktrees
+    assert wt.log[:4] == [
+        "merge origin/main",
+        "theirs pyproject.toml uv.lock",
+        "run python scripts/bump.py 4.21.2",
+        "run uv lock",
+    ]
+    assert wt.staged_globs == ["pyproject.toml", "uv.lock"]
+
+
+def test_a_lockfile_changed_beyond_the_version_without_relock_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _behind_with_conflicts(tmp_path, monkeypatch)
+    checkout.files[("head-one", "uv.lock")] = _lock("4.21.2", "requests")
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 1
+    assert "uv.lock" in out
+    assert forge.merged == []
+
+
+# ------------------------------------------------------ config freshness (r3-f3)
+
+
+def test_merge_refuses_a_collected_config_that_differs_from_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec §3.I: merge runs the collected `version.files` / `set` / `relock`,
+    so it holds the same freshness rule as dispatch."""
+    forge, checkout = _setup(tmp_path, monkeypatch, [("one", 1, None, "patch", "4.21.5", ["a.py"])])
+    changed = {"version": {**CONFIG["version"], "set": "python scripts/other.py {version}"}}
+    checkout.files[("origin/main", ".fr/triage.yaml")] = yaml.safe_dump(changed)
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 2
+    assert "re-collect" in out
+    assert forge.merged == [] and checkout.worktrees == []
+
+
+# ------------------------------------------------------------ merge method (r3-f4)
+
+
+def test_the_merge_method_defaults_to_the_repos_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
+    )
+    forge.methods = {"default": "merge", "allowed": ["merge"]}
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 0, out
+    assert "(merge)" in out
+    assert forge.merged == [(1001, "head-solo", "merge")]
+
+
+def test_an_explicit_method_the_repo_disallows_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
+    )
+    code, out = _merge(tmp_path, "--yes", "--method", "rebase")
+    assert code == 2
+    assert "rebase" in out and "merge, squash" in out
+    assert forge.merged == []
+
+
+def test_no_repo_default_among_several_allowed_methods_asks_for_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge, checkout = _setup(
+        tmp_path, monkeypatch, [("solo", 1, None, "minor", "4.22.0", ["a.py"])]
+    )
+    forge.methods = {"default": None, "allowed": ["merge", "squash"]}
+    code, out = _merge(tmp_path, "--yes")
+    assert code == 2
+    assert "--method" in out
+    assert forge.merged == []

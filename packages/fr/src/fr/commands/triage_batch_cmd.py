@@ -71,6 +71,7 @@ from fr.triage.batch import (
 )
 from fr.triage.batch_dispatch import (
     DISPATCHABLE,
+    LIVE_STAGES,
     TRIAGE_CONFIG_PATH,
     check_config_fresh,
     dispatch_comment,
@@ -78,7 +79,14 @@ from fr.triage.batch_dispatch import (
     live_reservations,
     render_brief,
 )
-from fr.triage.batch_merge import MergeContext, MergeStopError, describe, plan_queue, run_queue
+from fr.triage.batch_merge import (
+    MergeContext,
+    MergeStopError,
+    choose_method,
+    describe,
+    plan_queue,
+    run_queue,
+)
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
@@ -175,15 +183,25 @@ def _launch(runner: str | None, harness: str | None, model: str | None) -> dict[
     return {k: v for k, v in given.items() if v is not None}
 
 
-def _write(target: Path, batches: list[Batch], facts: Facts, *, read: list[Batch]) -> None:
-    """Hold the open-batch rule, then write through the loader's model.
+def _save(
+    target: Path, batches: list[Batch], facts: Facts, *, read: list[Batch], dry_run: bool = False
+) -> None:
+    """Hold the open-batch rule, then write through the loader's model; raise
+    `TriageError` on a refusal. *dry_run* checks everything and writes nothing.
 
     *read* is the batches the verb loaded: the write is refused if the file's
     batches changed since (review r2p-f7).
     """
+    check_open_membership(batches, facts)
+    save_batches(target / "judgements.yaml", batches, read=read, dry_run=dry_run)
+
+
+def _write(
+    target: Path, batches: list[Batch], facts: Facts, *, read: list[Batch], dry_run: bool = False
+) -> None:
+    """`_save`, with a refusal as exit 2."""
     try:
-        check_open_membership(batches, facts)
-        save_batches(target / "judgements.yaml", batches, read=read)
+        _save(target, batches, facts, read=read, dry_run=dry_run)
     except TriageError as exc:
         _fail(str(exc))
 
@@ -423,9 +441,7 @@ def _reservation(
     """Fetch, hold the config-freshness rule, and reserve a version (§3.D, §3.I)."""
     config = facts.config_for(owner_repo)
     try:
-        checkout.fetch()
-        default = f"origin/{checkout.default_branch()}"
-        check_config_fresh(facts.collected_at, checkout.last_change(default, TRIAGE_CONFIG_PATH))
+        default = _fresh_config(checkout, facts, owner_repo)
         if config.version is None:
             return None
         text = checkout.show(default, config.version.source.file)
@@ -436,6 +452,15 @@ def _reservation(
         return reserve(source, live, batch.bump)
     except TriageError as exc:
         _fail(str(exc))
+
+
+def _fresh_config(checkout: Checkout, facts: Facts, owner_repo: str) -> str:
+    """Fetch, then hold the §3.I rule: the collected `.fr/triage.yaml` must be the
+    one on `origin/<default>` now. Returns that ref."""
+    checkout.fetch()
+    default = f"origin/{checkout.default_branch()}"
+    check_config_fresh(facts.config.get(owner_repo), checkout.show(default, TRIAGE_CONFIG_PATH))
+    return default
 
 
 def _work_item(
@@ -519,17 +544,29 @@ def _report_forge_writes(failed: list[str], batch: Batch) -> None:
         )
 
 
-def _repair(batch: Batch, owner_repo: str, client: GhClient, *, yes: bool) -> None:
+def _repair(
+    batch: Batch,
+    owner_repo: str,
+    client: GhClient,
+    facts: Facts,
+    *,
+    yes: bool,
+) -> None:
     """`dispatch --repair` (§3.C): redo only the forge writes of the last dispatch.
 
     Never calls the runner and never re-reserves: the event's branch and
-    reserved version stand as recorded.
+    reserved version stand as recorded. Only a batch still in flight
+    (`dispatched`, `pr-open`) is repaired: a merged, partial or abandoned
+    batch's members are closed or released, and re-labelling them would mark
+    them taken again (review r3-f9).
     """
-    event = batch.events[-1] if batch.events else None
-    if not isinstance(event, DispatchEvent):
+    event = batch.events[-1]
+    assert isinstance(event, DispatchEvent)
+    stage = derive_batch_stage(batch, facts)
+    if stage not in LIVE_STAGES:
         _fail(
-            f"batch {batch.id!r} has no dispatch as its last event; --repair only "
-            "completes the forge writes of one"
+            f"batch {batch.id!r} is {stage}; --repair only completes the forge writes of a "
+            "dispatched or pr-open batch"
         )
     item_id = batch_item_id(owner_repo, batch.id)
     console.print(f"repair the forge writes of batch {batch.id} ({item_id})", markup=False)
@@ -547,6 +584,106 @@ def _repair(batch: Batch, owner_repo: str, client: GhClient, *, yes: bool) -> No
     console.print(f"repaired batch {batch.id}", markup=False)
 
 
+def _probe(owner_repo: str, batch: Batch, launch: Launch) -> WorkItem:
+    """The run item's identity alone, for `preflight` / `existing_dispatches`."""
+    from fr_dispatch.work_item import WorkItem, run_item_id
+
+    return WorkItem(
+        id=run_item_id(owner_repo, f"batch-{batch.id}"),
+        unit="run",
+        workflow="fr-goal",
+        repo=owner_repo,
+        parent=None,
+        inputs=(),
+        payload={"harness": launch.harness, "model": launch.model},
+        tracking=None,
+    )
+
+
+def _record_missing(
+    target: Path,
+    judgements: Judgements,
+    facts: Facts,
+    batch: Batch,
+    owner_repo: str,
+    client: GhClient,
+    *,
+    to: str | None,
+    handle: str | None,
+    reserved: str | None,
+    yes: bool,
+) -> None:
+    """`dispatch --repair` for a launch whose event was never written (r3-f1).
+
+    The runner must report the run live: that, not the operator's word, is the
+    evidence a dispatch happened. The event records the handle and reserved
+    version the failed dispatch printed; nothing is launched or re-reserved.
+    """
+    try:
+        launch = resolve_launch(_with_runner(batch, to), facts.config_for(owner_repo))
+    except TriageError as exc:
+        _fail(str(exc))
+    runner_name = str(launch.runner)
+    runner = load_runner(runner_name)
+    probe = _probe(owner_repo, batch, launch)
+    refusal = runner.preflight([probe])
+    if refusal:
+        _fail(f"runner `{runner_name}` refused: {refusal}")
+    if probe.id not in runner.existing_dispatches([probe]):
+        _fail(
+            f"batch {batch.id!r} has no dispatch as its last event, and runner "
+            f"`{runner_name}` holds no live {probe.id}. --repair records a dispatch only for "
+            f"a run the runner reports live; to start one, `fr triage batch dispatch "
+            f"{batch.id} --yes`"
+        )
+    if reserved is None and facts.config_for(owner_repo).version is not None:
+        _fail(
+            "this repo reserves versions: give --reserved-version, the version the failed "
+            "dispatch printed (the run was briefed with it)"
+        )
+    branch = batch_branch(batch.id)
+    console.print(f"record the missing dispatch of batch {batch.id} ({probe.id})", markup=False)
+    console.print(f"  runner: {runner_name} (reports it live)", markup=False)
+    console.print(f"  handle: {handle or probe.id}", markup=False)
+    console.print(f"  branch: {branch}", markup=False)
+    console.print(f"  reserved version: {reserved or '(none)'}", markup=False)
+    console.print("  then add the label and marker comment on every member", markup=False)
+    if not yes:
+        console.print("nothing written; re-run with --yes to act", markup=False)
+        return
+    event = DispatchEvent(
+        kind="dispatch",
+        at=_now_after(batch),
+        runner=runner_name,
+        handle=handle or probe.id,
+        branch=branch,
+        reserved_version=reserved,
+    )
+    dispatched = batch.model_copy(update={"events": [*batch.events, event]})
+    _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
+    _report_forge_writes(_forge_writes(client, owner_repo, dispatched, probe.id), batch)
+    console.print(f"recorded and repaired batch {batch.id}", markup=False)
+
+
+def _with_runner(batch: Batch, to: str | None) -> Batch:
+    """*batch* with `--to` as its launch runner, when given."""
+    if not to:
+        return batch
+    return batch.model_copy(update={"launch": batch.launch.model_copy(update={"runner": to})})
+
+
+def _recovery(
+    batch: Batch, runner_name: str, handle: str, reserved: str | None, to: str | None
+) -> str:
+    """The exact command that records a launched run's missing event."""
+    parts = [f"fr triage batch dispatch {batch.id} --repair --yes --handle {handle}"]
+    if reserved is not None:
+        parts.append(f"--reserved-version {reserved}")
+    if to:
+        parts.append(f"--to {runner_name}")
+    return " ".join(parts)
+
+
 @batch_app.command("dispatch")
 def batch_dispatch_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to dispatch.")],
@@ -556,8 +693,23 @@ def batch_dispatch_command(
     checkout_path: CheckoutOpt = None,
     repair: Annotated[
         bool,
-        typer.Option("--repair", help="Redo only the forge writes of the last dispatch."),
+        typer.Option(
+            "--repair",
+            help="Redo only the forge writes of the last dispatch; or record the dispatch "
+            "of a run the runner reports live whose event was never written.",
+        ),
     ] = False,
+    handle: Annotated[
+        str | None,
+        typer.Option("--handle", help="With --repair: the handle a failed dispatch printed."),
+    ] = None,
+    reserved_version: Annotated[
+        str | None,
+        typer.Option(
+            "--reserved-version",
+            help="With --repair: the reserved version a failed dispatch printed.",
+        ),
+    ] = None,
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -570,16 +722,27 @@ def batch_dispatch_command(
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    if (handle or reserved_version) and not repair:
+        _fail("--handle and --reserved-version go with --repair only")
     if repair:
-        _repair(batch, owner_repo, client, yes=yes)
+        if batch.events and isinstance(batch.events[-1], DispatchEvent):
+            _repair(batch, owner_repo, client, facts, yes=yes)
+        else:
+            _record_missing(
+                target,
+                judgements,
+                facts,
+                batch,
+                owner_repo,
+                client,
+                to=to,
+                handle=handle,
+                reserved=reserved_version,
+                yes=yes,
+            )
         return
     try:
-        launch = resolve_launch(
-            batch.model_copy(update={"launch": batch.launch.model_copy(update={"runner": to})})
-            if to
-            else batch,
-            facts.config_for(owner_repo),
-        )
+        launch = resolve_launch(_with_runner(batch, to), facts.config_for(owner_repo))
     except TriageError as exc:
         _fail(str(exc))
     runner_name, model = str(launch.runner), str(launch.model)
@@ -631,6 +794,25 @@ def batch_dispatch_command(
             f"branch {branch} is already on origin for proposed batch {batch.id!r}: it was "
             "already dispatched from another scope"
         )
+    # The event the launch will record, and the judgements it will leave. The
+    # open-batch rule and compare-before-write run on them HERE, before any
+    # runner call, and again just before the launch: a launch cannot be undone,
+    # so the write after it must not be able to refuse on either (review r3-f1).
+    event = DispatchEvent(
+        kind="dispatch",
+        at=_now_after(batch),
+        runner=runner_name,
+        handle=item.id,
+        branch=branch,
+        reserved_version=reserved,
+    )
+
+    def _after(ev: DispatchEvent) -> list[Batch]:
+        return _replace(
+            judgements.batches, batch.model_copy(update={"events": [*batch.events, ev]})
+        )
+
+    _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
     if not runner.can_dispatch(item):
         _fail(f"runner `{runner_name}` does not take run-unit work")
     refusal = runner.preflight([item])
@@ -638,23 +820,30 @@ def batch_dispatch_command(
         _fail(f"runner `{runner_name}` refused: {refusal}")
     if item.id in runner.existing_dispatches([item]):
         _fail(f"runner `{runner_name}` already holds {item.id} live; nothing written")
+    _write(target, _after(event), facts, read=judgements.batches, dry_run=True)
     try:
-        handle = runner.dispatch(item)
+        launched = runner.dispatch(item)
     except Exception as exc:  # the runner's own failure: nothing is written
         _fail(f"runner `{runner_name}` failed to dispatch {item.id}: {exc}", code=1)
-    event = DispatchEvent(
-        kind="dispatch",
-        at=_now_after(batch),
-        runner=runner_name,
-        # Review r2p-handle: a runner with no handle of its own returns None; the
-        # item id is its identity for the dispatch (`existing_dispatches` matches it).
-        handle=handle if handle else item.id,
-        branch=branch,
-        reserved_version=reserved,
+    # Review r2p-handle: a runner with no handle of its own returns None; the
+    # item id is its identity for the dispatch (`existing_dispatches` matches it).
+    event = event.model_copy(update={"handle": launched if launched else item.id})
+    try:
+        _save(target, _after(event), facts, read=judgements.batches)
+    except TriageError as exc:
+        _fail(
+            f"runner `{runner_name}` launched {item.id} (handle {event.handle}), but its "
+            f"dispatch event was not recorded: {exc}. The run is live on branch {branch}"
+            + (f", briefed with reserved version {reserved}" if reserved else "")
+            + ". Nothing was written to the forge. Once the refusal is resolved, record it "
+            f"and complete the forge writes with "
+            f"`{_recovery(batch, runner_name, event.handle, reserved, to)}`",
+            code=1,
+        )
+    dispatched = _after(event)
+    _report_forge_writes(  # 6.7
+        _forge_writes(client, owner_repo, _find(dispatched, batch.id), item.id), batch
     )
-    dispatched = batch.model_copy(update={"events": [*batch.events, event]})
-    _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
-    _report_forge_writes(_forge_writes(client, owner_repo, dispatched, item.id), batch)  # 6.6
     console.print(f"dispatched batch {batch.id}", markup=False)
 
 
@@ -668,8 +857,12 @@ def batch_merge_command(
     ] = None,
     checkout_path: CheckoutOpt = None,
     method: Annotated[
-        str, typer.Option("--method", help="merge | squash | rebase (the repo must allow it).")
-    ] = "squash",
+        str | None,
+        typer.Option(
+            "--method",
+            help="merge | squash | rebase; default: the repo's own (it must allow it).",
+        ),
+    ] = None,
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -680,7 +873,7 @@ def batch_merge_command(
     Blocks in the foreground while required checks run; Ctrl-C and re-run
     resumes at the first unmerged batch.
     """
-    if method not in MERGE_METHODS:
+    if method is not None and method not in MERGE_METHODS:
         _fail(f"--method must be one of {', '.join(sorted(MERGE_METHODS))}, got {method!r}")
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     queue = pr_open_queue(judgements.batches, facts, judgements.issues)
@@ -701,20 +894,30 @@ def batch_merge_command(
         )
     owner_repo = str(next(iter(repos)))
     checkout = _open_checkout(checkout_path, owner_repo)
+    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    try:
+        # Merge runs the collected version.files / set / relock: the same
+        # freshness rule as dispatch (review r3-f3), before anything is read.
+        _fresh_config(checkout, facts, owner_repo)
+        chosen = choose_method(method, client.repo_merge_methods(owner_repo))
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    except TriageError as exc:
+        _fail(str(exc))
     ctx = MergeContext(
-        client=make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}"),
+        client=client,
         checkout=checkout,
         repo=owner_repo,
         version=facts.config_for(owner_repo).version,
         scratch_root=target / "merge",
-        method=method,
+        method=chosen,
         say=lambda line: console.print(line, markup=False, soft_wrap=True),
     )
     try:
         slots, merged = plan_queue(ctx, queue)
         for step in merged:
             ctx.say(f"{step.batch.id}: already merged (PR #{step.pr.number})")
-        ctx.say(f"merge plan for {owner_repo} ({method}):")
+        ctx.say(f"merge plan for {owner_repo} ({chosen}):")
         for i, slot in enumerate(slots, 1):
             ctx.say(describe(i, slot))
         if not yes:

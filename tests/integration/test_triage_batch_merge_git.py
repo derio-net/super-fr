@@ -15,6 +15,13 @@ worktrees under the triage state directory.
   pushed, and merged.
 - `three` (1.0.3) also conflicts in `a.txt`, which `one` changed: the queue
   stops naming it and keeps the scratch worktree. A re-run resumes at `three`.
+
+Separate worlds (review r3-f2, r3-f10): a PR that bumped the version AND added
+a dependency to `pyproject.toml` stops the queue rather than losing the
+dependency to `--theirs`; an up-to-date PR off its slot is re-slotted (step
+3b); and a kept worktree holding a manual fix is never replaced (r3-f6).
+Every `set` leaves an untracked `setv.log` behind, which must never be
+committed (r3-f7).
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.triage.gitseam import Checkout
@@ -47,6 +55,7 @@ p = root / "package.json"
 data = json.loads(p.read_text())
 data["version"] = v
 p.write_text(json.dumps(data, indent=2) + "\\n")
+(root / "setv.log").write_text(f"set {v}\\n")  # build output: never committed
 """
 
 
@@ -65,8 +74,10 @@ def _identity(repo: Path) -> None:
         _git(repo, "config", key, value)
 
 
-def _manifests(root: Path, version: str) -> None:
-    (root / "pyproject.toml").write_text(f'[project]\nname = "demo"\nversion = "{version}"\n')
+def _manifests(root: Path, version: str, extra: str = "") -> None:
+    (root / "pyproject.toml").write_text(
+        f'[project]\nname = "demo"\nversion = "{version}"\n{extra}'
+    )
     (root / "package.json").write_text(
         json.dumps({"name": "demo", "version": version}, indent=2) + "\n"
     )
@@ -75,9 +86,9 @@ def _manifests(root: Path, version: str) -> None:
     )
 
 
-def _branch(seed: Path, name: str, version: str, files: dict[str, str]) -> None:
+def _branch(seed: Path, name: str, version: str, files: dict[str, str], extra: str = "") -> None:
     _git(seed, "checkout", "--quiet", "-b", name, "main")
-    _manifests(seed, version)
+    _manifests(seed, version, extra)
     for path, text in files.items():
         (seed / path).write_text(text)
     _git(seed, "add", "--all")
@@ -125,6 +136,9 @@ class GitForge:
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
 
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        return {"default": "merge", "allowed": ["merge"]}
+
 
 class DemoCheckout(Checkout):
     """A real clone whose origin is a local path: it names the batch's repo."""
@@ -148,8 +162,19 @@ def _pr(number: int, bid: str, head: str, files: list[str]) -> PullRequest:
     )
 
 
-@pytest.fixture
-def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+# (batch id, PR number, reserved version, {path: text}, extra pyproject lines)
+Spec = tuple[str, int, str, dict[str, str], str]
+
+
+def _build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    specs: list[Spec],
+    *,
+    main_after: str | None = None,
+) -> dict[str, Any]:
+    """A bare origin at 1.0.0, one branch per spec cut from it, then (with
+    *main_after*) an outside release bumping main after the branches exist."""
     origin = tmp_path / "origin.git"
     _git(tmp_path, "init", "--quiet", "--bare", "--initial-branch=main", str(origin))
     seed = tmp_path / "seed"
@@ -160,12 +185,25 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     (seed / "a.txt").write_text("alpha\n")
     (seed / "scripts").mkdir()
     (seed / "scripts" / "setv.py").write_text(SETV)
+    set_cmd = f"{shlex.quote(sys.executable)} scripts/setv.py {{version}}"
+    config = {
+        "version": {
+            "source": {"file": "pyproject.toml", "key": "project.version"},
+            "files": VERSION_FILES,
+            "set": set_cmd,
+        }
+    }
+    (seed / ".fr").mkdir()
+    (seed / ".fr" / "triage.yaml").write_text(yaml.safe_dump(config))
     _git(seed, "add", "--all")
     _git(seed, "commit", "--quiet", "-m", "seed")
     _git(seed, "push", "--quiet", "origin", "main")
-    _branch(seed, "feat/batch-one", "1.0.1", {"a.txt": "alpha from one\n", "one.txt": "1\n"})
-    _branch(seed, "feat/batch-two", "1.0.2", {"two.txt": "2\n"})
-    _branch(seed, "feat/batch-three", "1.0.3", {"a.txt": "alpha from three\n"})
+    for bid, _, version, files, extra in specs:
+        _branch(seed, f"feat/batch-{bid}", version, files, extra)
+    if main_after is not None:
+        _manifests(seed, main_after)
+        _git(seed, "commit", "--quiet", "-am", f"release {main_after}")
+        _git(seed, "push", "--quiet", "origin", "main")
 
     clone = tmp_path / "clone"
     _git(tmp_path, "clone", "--quiet", str(origin), str(clone))
@@ -174,22 +212,18 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     _git(tmp_path, "clone", "--quiet", str(origin), str(worker))
     _identity(worker)
 
-    numbers = {"one": 11, "two": 12, "three": 13}
-    forge = GitForge(origin, worker, {n: f"feat/batch-{b}" for b, n in numbers.items()})
-    touched = {"one": ["a.txt", "one.txt"], "two": ["two.txt"], "three": ["a.txt"]}
-    reserved = {"one": "1.0.1", "two": "1.0.2", "three": "1.0.3"}
+    forge = GitForge(origin, worker, {n: f"feat/batch-{b}" for b, n, *_ in specs})
     judgements = (
         "schema: 2\ntiers:\n  - {n: 1, title: Now}\nissues:\n"
-        + "".join(f"  demo#{n}: {{tier: 1}}\n" for n in numbers.values())
+        + "".join(f"  demo#{n}: {{tier: 1}}\n" for _, n, *_ in specs)
         + "batches:\n"
         + "".join(
             f'  - id: {b}\n    title: {b}\n    ids: ["demo#{n}"]\n    bump: patch\n'
             f"    events:\n      - {{kind: dispatch, at: 2026-09-25T10:00:00Z, runner: herdr,"
-            f" handle: h, branch: feat/batch-{b}, reserved_version: {reserved[b]}}}\n"
-            for b, n in numbers.items()
+            f" handle: h, branch: feat/batch-{b}, reserved_version: {v}}}\n"
+            for b, n, v, *_ in specs
         )
     )
-    set_cmd = f"{shlex.quote(sys.executable)} scripts/setv.py {{version}}"
     facts = Facts(
         schema=3,
         scope="example-org--demo",
@@ -204,28 +238,18 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
                 state="open",
                 url=f"https://github.com/{REPO}/issues/{n}",
             )
-            for b, n in numbers.items()
+            for b, n, *_ in specs
         ],
         prs=[
             _pr(
                 n,
                 b,
                 _git(origin, "rev-parse", f"refs/heads/feat/batch-{b}"),
-                [*touched[b], *VERSION_FILES],
+                [*files, *VERSION_FILES],
             )
-            for b, n in numbers.items()
+            for b, n, _, files, _ in specs
         ],
-        config={
-            REPO: TriageConfig.model_validate(
-                {
-                    "version": {
-                        "source": {"file": "pyproject.toml", "key": "project.version"},
-                        "files": VERSION_FILES,
-                        "set": set_cmd,
-                    }
-                }
-            )
-        },
+        config={REPO: TriageConfig.model_validate(config)},
     )
     state = tmp_path / "state"
     state.mkdir()
@@ -234,6 +258,19 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: forge)
     monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: DemoCheckout(clone))
     return {"origin": origin, "forge": forge, "state": state, "worker": worker}
+
+
+@pytest.fixture
+def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    return _build(
+        tmp_path,
+        monkeypatch,
+        [
+            ("one", 11, "1.0.1", {"a.txt": "alpha from one\n", "one.txt": "1\n"}, ""),
+            ("two", 12, "1.0.2", {"two.txt": "2\n"}, ""),
+            ("three", 13, "1.0.3", {"a.txt": "alpha from three\n"}, ""),
+        ],
+    )
 
 
 def _merge(state: Path) -> tuple[int, str]:
@@ -284,3 +321,75 @@ def test_a_re_run_resumes_at_the_first_unmerged_pr(world: dict[str, Any]) -> Non
     assert "one: already merged" in out and "two: already merged" in out
     assert "1. batch three" in out and "slot 1.0.3" in out
     assert "a.txt" in out
+
+
+def test_the_version_update_commits_no_untracked_build_output(world: dict[str, Any]) -> None:
+    """Review r3-f7: `set` left `setv.log` in the scratch worktree of `two`."""
+    _merge(world["state"])
+    files = _git(world["origin"], "ls-tree", "-r", "--name-only", "main").split()
+    assert "setv.log" not in files
+    assert (
+        "setv.log"
+        not in _git(world["origin"], "ls-tree", "-r", "--name-only", "feat/batch-two").split()
+    )
+
+
+def test_a_kept_worktree_with_a_manual_fix_is_never_replaced(world: dict[str, Any]) -> None:
+    """Review r3-f6: the operator started fixing `three` in the kept worktree."""
+    assert _merge(world["state"])[0] == 1
+    kept = world["state"] / "merge" / "feat" / "batch-three"
+    (kept / "a.txt").write_text("alpha, resolved by hand\n")
+
+    code, out = _merge(world["state"])
+
+    assert code == 2, out
+    assert str(kept) in out and "git worktree remove --force" in out
+    assert (kept / "a.txt").read_text() == "alpha, resolved by hand\n"
+    assert world["forge"].merged == [11, 12]
+
+
+def test_a_pr_that_changed_a_version_file_beyond_the_version_stops_the_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r3-f2: the PR bumped the version AND added a dependency to
+    `pyproject.toml`; main bumped the version too. `--theirs` would take main's
+    whole file and drop the dependency, so the queue stops naming the file."""
+    dep = 'dependencies = ["requests>=2"]\n'
+    world = _build(
+        tmp_path,
+        monkeypatch,
+        [("dep", 21, "1.0.2", {"dep.txt": "d\n"}, dep)],
+        main_after="1.0.1",
+    )
+
+    code, out = _merge(world["state"])
+
+    assert code == 1, out
+    assert "PR #21" in out and "pyproject.toml" in out
+    assert world["forge"].merged == []
+    # the dependency is not lost: nothing was pushed, and main never took the file
+    assert dep.strip() in _git(world["origin"], "show", "feat/batch-dep:pyproject.toml")
+    assert "1.0.1" in _main_file(world, "pyproject.toml")
+    kept = world["state"] / "merge" / "feat" / "batch-dep"
+    assert dep.strip() in (kept / "pyproject.toml").read_text()  # the merge was aborted
+
+
+def test_an_up_to_date_pr_off_its_slot_is_re_slotted_against_real_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Step 3b (review r3-f10): up to date with main but carrying 1.0.5 where
+    its slot is 1.0.1: `set` runs in the scratch worktree, the re-slot commit is
+    pushed, and the PR merges at its slot without any `git merge` of main."""
+    world = _build(tmp_path, monkeypatch, [("solo", 31, "1.0.5", {"solo.txt": "s\n"}, "")])
+
+    code, out = _merge(world["state"])
+
+    assert code == 0, out
+    assert world["forge"].merged == [31]
+    for path in VERSION_FILES:
+        assert "1.0.1" in _main_file(world, path), path
+        assert "1.0.5" not in _main_file(world, path), path
+    log = _git(world["origin"], "log", "--format=%s", "feat/batch-solo").splitlines()
+    assert log[0] == "chore: re-slot version to 1.0.1"
+    assert not any(line.startswith("Merge") for line in log)  # 3b: no update from main
+    assert not (world["state"] / "merge" / "feat" / "batch-solo").exists()

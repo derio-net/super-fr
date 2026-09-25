@@ -351,6 +351,28 @@ class RealGhClient:
     def closing_ref(self, repo: str, number: int) -> str:
         return f"Closes {repo}#{number}"
 
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        out = _gh._run_gh(
+            [
+                "repo",
+                "view",
+                repo,
+                "--json",
+                "viewerDefaultMergeMethod,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed",
+            ]
+        )
+        raw: dict[str, Any] = json.loads(out)
+        flags = (
+            ("merge", "mergeCommitAllowed"),
+            ("squash", "squashMergeAllowed"),
+            ("rebase", "rebaseMergeAllowed"),
+        )
+        default = str(raw.get("viewerDefaultMergeMethod") or "").lower()
+        return {
+            "default": default if default in MERGE_METHODS else None,
+            "allowed": [m for m, key in flags if raw.get(key)],
+        }
+
 
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}

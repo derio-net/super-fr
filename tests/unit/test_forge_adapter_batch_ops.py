@@ -267,6 +267,37 @@ def test_closing_ref_is_githubs_cross_repo_closes_line() -> None:
     assert RealGhClient().closing_ref(REPO, 577) == "Closes derio-net/super-fr#577"
 
 
+def test_repo_merge_methods_reads_the_viewer_default_and_the_allowed_methods(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shape captured live 2026-09-26 from `gh repo view derio-net/super-fr`."""
+    captured = (
+        '{"mergeCommitAllowed":true,"rebaseMergeAllowed":false,'
+        '"squashMergeAllowed":true,"viewerDefaultMergeMethod":"SQUASH"}'
+    )
+    fake = _fake(monkeypatch, {("repo", "view"): captured})
+
+    got = RealGhClient().repo_merge_methods(REPO)
+
+    assert got == {"default": "squash", "allowed": ["merge", "squash"]}
+    (call,) = fake.calls
+    assert call[:3] == ["repo", "view", REPO]
+    fields = set(call[call.index("--json") + 1].split(","))
+    assert fields == {
+        "viewerDefaultMergeMethod",
+        "mergeCommitAllowed",
+        "squashMergeAllowed",
+        "rebaseMergeAllowed",
+    }
+
+
+def test_repo_merge_methods_maps_an_unknown_default_to_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake(monkeypatch, {("repo", "view"): '{"squashMergeAllowed":true}'})
+    assert RealGhClient().repo_merge_methods(REPO) == {"default": None, "allowed": ["squash"]}
+
+
 # ------------------------------------------------------- declared refusals
 
 _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
@@ -277,6 +308,7 @@ _CALLS: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
     "wait_required_checks": ((REPO, 1), {}),
     "pr_merge": ((REPO, 1), {"head_sha": "abc", "method": "merge"}),
     "closing_ref": ((REPO, 1), {}),
+    "repo_merge_methods": ((REPO,), {}),
 }
 
 
@@ -377,3 +409,64 @@ def test_the_batch_tripwire_catches_each_forbidden_import(tmp_path: Path, source
     plant = tmp_path / "plant.py"
     plant.write_text(source + "\n", encoding="utf-8")
     assert forbidden_imports(plant, "fr.triage", _FORGE_CLIS) != []
+
+
+# ------------------------------------------------ the git seam's surface (r3-f11)
+
+# What a batch module may take from the git seam: the two classes whose
+# methods are the declared git operations, and the error they raise. The
+# seam's command runners (`_run`, `git`, `git_ok`, `run_declared`) would let a
+# batch module run ANY command through the one module allowed subprocess.
+_SEAM = "fr.triage.gitseam"
+_SEAM_ALLOWED = frozenset({"Checkout", "Worktree", "GitError"})
+_SEAM_RUNNERS = frozenset({"_run", "git", "git_ok", "run_declared"})
+
+
+def _seam_breaches(source: str) -> list[str]:
+    import ast
+
+    out: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == _SEAM:
+                out += [f"imports {a.name}" for a in node.names if a.name not in _SEAM_ALLOWED]
+            elif module == "fr.triage" and any(a.name == "gitseam" for a in node.names):
+                out.append("imports the gitseam module whole")
+        elif isinstance(node, ast.Import):
+            out += [f"imports {a.name}" for a in node.names if a.name == _SEAM]
+        elif isinstance(node, ast.Attribute) and node.attr in _SEAM_RUNNERS:
+            out.append(f"reaches .{node.attr}")
+        elif isinstance(node, ast.Name) and node.id in _SEAM_RUNNERS:
+            out.append(f"names {node.id}")
+    return out
+
+
+@pytest.mark.parametrize("path", _batch_modules(), ids=lambda p: p.name)
+def test_batch_modules_reach_git_only_through_the_declared_worktree_methods(path: Path) -> None:
+    assert _seam_breaches(path.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from fr.triage.gitseam import run_declared",
+        "from fr.triage.gitseam import _run",
+        "from fr.triage.gitseam import git, git_ok",
+        "from fr.triage import gitseam",
+        "import fr.triage.gitseam",
+        "def f(wt):\n    wt.run_declared('rm -rf /', wt.path)",
+        "def f(seam):\n    seam._run(['sh', '-c', 'x'], seam.path)",
+        "def f(seam):\n    seam.git(['push', '--force'], seam.path)",
+    ],
+)
+def test_the_seam_tripwire_fires_on_each_way_around_it(source: str) -> None:
+    assert _seam_breaches(source) != []
+
+
+def test_the_seam_tripwire_admits_the_declared_surface() -> None:
+    source = (
+        "from fr.triage.gitseam import Checkout, GitError, Worktree\n"
+        "def f(wt):\n    wt.merge('origin/main')\n    wt.run('uv lock')\n"
+    )
+    assert _seam_breaches(source) == []
