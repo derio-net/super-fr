@@ -226,3 +226,8 @@ cancel now reads every member's comments before any write (the read is the only 
 ### r2p-f13-resolved · finding [fixed] · resolves r2p-f13: Stale dispatch: empty createdAt raises in check (must always exit 0); an old closed linked PR suppresses stale reporting
 
 check.stale_dispatches parses marker and collected_at through _aware(): missing, unparseable or naive times are skipped, so check always exits 0; only an OPEN or MERGED linked PR suppresses the report. collect's _with_marker ignores a marker comment with an empty created_at. Tests: test_triage_batch_verbs.py::test_an_unreadable_marker_time_is_skipped_never_raised[''|not-a-date|naive] (also runs the check command, exit 0), ::test_a_closed_unmerged_linked_pr_does_not_hide_a_stale_dispatch, ::test_a_merged_linked_pr_is_not_stale; test_triage_facts_schema3.py::test_a_marker_with_no_created_at_gives_no_dispatch_time.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f4-resolved created=2026-09-25T23:52:35 state=fixed resolves=r2p-f4 answered_by=agent -->
+### r2p-f4-resolved · finding [fixed] · resolves r2p-f4: Org collect aborts on one repo: invalid .fr/triage.yaml raises TriageError (not ForgeError) and list_issue_comments runs outside the per-repo try
+
+collect_facts reads each fr:in-progress issue's comments (_marker_at) inside the per-repo try, which now catches TriageError (ForgeError and read_config's invalid-config refusal): org scope records Skipped(repo, reason) and collects the rest; repo scope re-raises. Tests: test_triage_facts_schema3.py::test_org_scope_skips_a_repo_whose_config_is_invalid, ::test_org_scope_skips_a_repo_whose_comment_read_fails, ::test_repo_scope_still_fails_loudly_on_a_comment_read (plus the existing repo-scope malformed-config refusal).
