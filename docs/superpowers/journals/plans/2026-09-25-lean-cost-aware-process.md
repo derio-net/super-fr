@@ -409,3 +409,8 @@ apply.py:701-732, run_cmd.py:3979-3996. Orchestrator decision: delete record aft
 ### p3-r4 · finding [open] (reviewer: in scope) · --record silently ignores --no-questions/--reason/--answered-by/--agent/--harness/--model (phase 3)
 
 run_cmd.py:3701-3710. Refuse them with --record, or add no_questions/reason record fields and document the gate bypass in fr-goal §1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-09-25T23:23:35 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · Record acceptance entries create-or-move by id existence, losing add/set-status refusals (phase 3)
+
+apply.py:520-566. capability/acceptance present = create-only; absent = move-only.
