@@ -75,3 +75,52 @@ captures:
         turns: null
     briefs:
       phase/2/implement-phase: 9014
+- host: h-3c3cf7b7
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-25T19:32:01+00:00'
+  at: resolve:implement-phase
+  sessions:
+  - session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1262
+        cache_write: 2218179
+        cache_read: 142721482
+        output: 230706
+        usd: null
+        usd_source: none
+      claude-sonnet-5:
+        input: 40
+        cache_write: 128871
+        cache_read: 1857611
+        output: 305
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 366
+      other:
+        usd: null
+        turns: 154
+      paperwork:
+        usd: null
+        turns: 146
+    steps:
+      (outside run):
+        usd: null
+        turns: 288
+      brainstorm:
+        usd: null
+        turns: 60
+      spec-review:
+        usd: null
+        turns: 27
+      plan:
+        usd: null
+        turns: 11
+      implement:
+        usd: null
+        turns: 259
