@@ -534,3 +534,8 @@ Recorded as discovery p2-d-review-fixes during phase-2 fixes: the step has no un
 ### d-oos-cli-gate-unobserved-resolved · finding [out-of-scope] · resolves d-oos-cli-gate-unobserved: An operator gate on a kind: cli step never persists unobserved to the cursor
 
 Predates this change; this branch added unobserved for agent-step gates only.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved-2 created=2026-09-26T00:15:31 state=open resolves=p3-r11 tracked_by=#629 -->
+### p3-r11-resolved-2 · finding [deferred → #629] · resolves p3-r11: test_opencode_plugin_live flaky under parallel load
+
+Operator asked to file it; tracked.
