@@ -1,212 +1,188 @@
-"""`fr run cost` — gh#593's per-step table (spec
-`2026-09-24-fr-goal-scope-proportion-cost-design.md` §D, Reporting).
+"""`fr run cost` — a run's cost read from its usage file (spec
+`2026-09-25-lean-cost-aware-process-design.md` §5.B.4).
 
-One row per top-level step with the main session's turns, sessions, four
-token figures, cache-read per turn and cost when the harness reported one; a
-subagent line summing every attempt's `measured`; and an explicit flag on the
-measurements taken before the per-message dedupe, which over-count.
-
-The numbers are asserted on the pure row builder (`fr.run.cost`), because a
-rich table folds cells at the test runner's 80 columns; the CLI tests assert
-what the operator must be able to see at any width.
+Numbers are asserted on the pure summarizer (`fr.run.cost`), because a rich
+table folds cells at the runner's width; the CLI tests assert what the operator
+must see: per-step rows, `—` for an unobserved figure (never `0`), a checkout
+that never ran the run, the archive fallback, and `--recompute`.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
+import pytest
 from fr.cli import app
-from fr.run.cost import CostRow, cost_rows, possibly_over_counted, subagent_total
-from fr.run.model import (
-    Attempt,
-    MainSessionUsage,
-    MeasuredTokens,
-    RunState,
-    StepRecord,
-    UnitRecord,
-    load_run_state,
-    save_run_state,
+from fr.run.cost import effective_entries, summarize
+from fr.run.model import RunState, StepRecord, save_run_state
+from fr.usage.file import (
+    Capture,
+    Figure,
+    ModelFigures,
+    SessionEntry,
+    UsageFile,
+    archived_usage_path,
+    dump_usage,
+    host_label,
+    usage_path,
 )
 from typer.testing import CliRunner
 
 runner = CliRunner()
+RUN = "r1"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "usage"
+CC_SESSION = "145101c9-bdfc-4f5d-a8be-617eeced7485"
 
 
-def _measured(n: int) -> MeasuredTokens:
-    return MeasuredTokens(
-        input_tokens=n,
-        cache_creation_input_tokens=10 * n,
-        cache_read_input_tokens=100 * n,
-        output_tokens=2 * n,
-    )
-
-
-def _attempt(returned: str, n: int | None) -> Attempt:
-    return Attempt(
-        dispatched=returned,
-        returned=returned,
-        outcome="done",
-        measured=None if n is None else _measured(n),
-    )
-
-
-MAIN_IMPLEMENT = MainSessionUsage(
-    input_tokens=40,
-    cache_creation_input_tokens=5_000,
-    cache_read_input_tokens=90_000,
-    output_tokens=1_200,
-    turns=30,
-    sessions=2,
-    cost_usd=1.25,
-)
-MAIN_DELIVER = MainSessionUsage(
-    input_tokens=4,
-    cache_creation_input_tokens=500,
-    cache_read_input_tokens=9_000,
-    output_tokens=120,
-    turns=0,
-    sessions=1,
-)
-
-
-def _state() -> RunState:
-    """Upgraded mid-run: `brainstorm` and `spec-review` completed on an fr
-    without main-session measurement (and without the dedupe); `implement`
-    and `deliver` on this one."""
-    return RunState(
-        schema_version=6,
-        run="r1",
-        workflow="fr-goal@1",
-        branch="b",
-        started="2026-09-24T09:00:00+00:00",
-        cursor="deliver",
-        steps={
-            "brainstorm": StepRecord(state="done", at="2026-09-24T09:05:00+00:00"),
-            "spec-review": StepRecord(
-                state="done",
-                at="2026-09-24T09:10:00+00:00",
-                units={
-                    "step/spec-review": UnitRecord(
-                        attempts=(_attempt("2026-09-24T09:10:00+00:00", 1),)
-                    )
-                },
-            ),
-            "implement": StepRecord(
-                state="done",
-                at="2026-09-24T10:00:00+00:00",
-                main_session=MAIN_IMPLEMENT,
-                units={
-                    "phase/1/code": UnitRecord(
-                        state="done",
-                        attempts=(
-                            _attempt("2026-09-24T09:50:00+00:00", 2),
-                            _attempt("2026-09-24T09:55:00+00:00", None),
-                        ),
-                    )
-                },
-            ),
-            "deliver": StepRecord(
-                state="done",
-                at="2026-09-24T10:30:00+00:00",
-                main_session=MAIN_DELIVER,
-                units={
-                    "step/deliver": UnitRecord(attempts=(_attempt("2026-09-24T10:20:00+00:00", 3),))
-                },
-            ),
+def _entry(session: str, usd: float | None, turns: int | None, step: str = "brainstorm"):
+    return SessionEntry(
+        session=session,
+        role="main",
+        models={
+            "claude-opus-5-5": ModelFigures(
+                input=1,
+                cache_write=2,
+                cache_read=30,
+                output=4,
+                usd=usd,
+                usd_source="exact" if usd is not None else "none",
+            )
         },
+        steps={step: Figure(usd=usd, turns=turns)},
     )
 
 
-# --- the pure builder ---------------------------------------------------------
-
-
-def test_one_row_per_top_level_step_in_cursor_order() -> None:
-    rows = cost_rows(_state())
-    assert [r.step for r in rows] == ["brainstorm", "spec-review", "implement", "deliver"]
-
-
-def test_a_measured_step_carries_its_figures_and_cache_read_per_turn() -> None:
-    row = {r.step: r for r in cost_rows(_state())}["implement"]
-    assert row == CostRow(
-        step="implement",
-        turns=30,
-        sessions=2,
-        input_tokens=40,
-        cache_creation_input_tokens=5_000,
-        cache_read_input_tokens=90_000,
-        output_tokens=1_200,
-        cache_read_per_turn=3_000,
-        cost_usd=1.25,
+def _capture(host: str, at: str, *sessions: SessionEntry) -> Capture:
+    return Capture(
+        host=host_label(RUN, host),
+        harness="claude-code",
+        mode="host-worktree",
+        captured_at="2026-09-25T00:00:00+00:00",
+        at=at,
+        sessions=sessions,
     )
 
 
-def test_an_unmeasured_step_is_none_throughout_never_zero() -> None:
-    row = {r.step: r for r in cost_rows(_state())}["brainstorm"]
-    assert row == CostRow(step="brainstorm")
-    assert row.turns is None and row.input_tokens is None and row.cost_usd is None
+def _file(*captures: Capture) -> UsageFile:
+    return UsageFile(run=RUN, captures=captures)
 
 
-def test_zero_turns_has_no_cache_read_per_turn() -> None:
-    row = {r.step: r for r in cost_rows(_state())}["deliver"]
-    assert row.turns == 0 and row.cache_read_per_turn is None and row.cost_usd is None
-
-
-def test_the_subagent_line_sums_every_measured_attempt() -> None:
-    total = subagent_total(_state())
-    assert total.measured == 3 and total.attempts == 4
-    assert total.tokens == _measured(1 + 2 + 3)
-
-
-def test_measurements_taken_before_main_session_existed_are_flagged() -> None:
-    """The dedupe shipped with main-session measurement, so a measured attempt
-    that returned before the run's first main-session measurement was summed
-    per record — possibly over-counted. An unmeasured one has nothing to flag."""
-    assert possibly_over_counted(_state()) == ["phase/1/code", "step/spec-review"]
-
-
-def test_a_run_with_no_main_session_anywhere_flags_every_measurement() -> None:
-    state = _state()
-    steps = {k: v.model_copy(update={"main_session": None}) for k, v in state.steps.items()}
-    assert possibly_over_counted(state.model_copy(update={"steps": steps})) == [
-        "phase/1/code",
-        "step/deliver",
-        "step/spec-review",
-    ]
-
-
-# --- the command ---------------------------------------------------------------
+def _write(path: Path, file: UsageFile) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_usage(file))
+    return path
 
 
 def _invoke(repo: Path, *argv: str):
     return runner.invoke(app, ["run", "cost", *argv], env={**os.environ, "VK_REPO_ROOT": str(repo)})
 
 
-def test_the_command_prints_the_table_and_writes_nothing(tmp_path: Path) -> None:
-    path = save_run_state(tmp_path, _state())
+# --- the summarizer ---------------------------------------------------------
+
+
+def test_steps_and_models_sum_across_sessions_and_keep_cursor_order() -> None:
+    entries, replayed = effective_entries(
+        _file(
+            _capture("a", "deliver", _entry("s1", 1.0, 3), _entry("s2", 0.5, 2, step="plan")),
+        )
+    )
+    summary = summarize(entries, ["plan", "brainstorm", "deliver"])
+    assert not replayed
+    assert [(r.step, r.usd, r.turns) for r in summary.steps] == [
+        ("plan", 0.5, 2),
+        ("brainstorm", 1.0, 3),
+        ("deliver", None, None),
+    ]
+    (model,) = summary.models
+    assert model.cache_read == 60 and model.usd == pytest.approx(1.5)
+    assert summary.total == pytest.approx(1.5)
+
+
+def test_an_unpriced_session_is_none_never_zero() -> None:
+    summary = summarize([_entry("s1", None, None)])
+    assert summary.steps[0].usd is None and summary.steps[0].turns is None
+    assert summary.total is None
+
+
+def test_a_reading_beats_another_hosts_absence() -> None:
+    entries, _ = effective_entries(
+        _file(
+            _capture("a", "deliver", _entry("s1", 1.0, 3)),
+            _capture("b", "resolve:review", SessionEntry(session="s1", unavailable="elsewhere")),
+        )
+    )
+    assert [e.unavailable for e in entries] == [None]
+
+
+def test_live_captures_supersede_migrated_figures() -> None:
+    migrated = _capture("(migrated)", "migrated", _entry("(main)", None, 9))
+    live = _capture("a", "deliver", _entry("s1", 2.0, 4))
+    entries, replayed = effective_entries(_file(migrated, live))
+    assert [e.session for e in entries] == ["s1"] and not replayed
+    entries, replayed = effective_entries(_file(migrated))
+    assert [e.session for e in entries] == ["(main)"] and replayed
+
+
+# --- the command ------------------------------------------------------------
+
+
+def test_the_command_reads_the_usage_file_on_a_checkout_that_never_ran_it(tmp_path: Path) -> None:
+    path = _write(usage_path(tmp_path, RUN), _file(_capture("a", "deliver", _entry("s1", 1.25, 3))))
     before = path.read_bytes()
 
-    result = _invoke(tmp_path, "r1")
+    result = _invoke(tmp_path, RUN)
 
     assert result.exit_code == 0, result.output
-    for step in ("brainstorm", "spec-review", "implement", "deliver", "subagents"):
-        assert step in result.output
-    assert "—" in result.output, "an unmeasured figure prints as a dash"
-    assert "$1.25" in result.output
-    assert path.read_bytes() == before, "read-only: the cursor is never written"
-    assert load_run_state(tmp_path, "r1") == _state()
+    for needle in ("brainstorm", "claude-opus-5-5", "$1.25", "1 read, 0 unavailable", "deliver@"):
+        assert needle in result.output, needle
+    assert path.read_bytes() == before, "read-only"
 
 
-def test_the_command_names_the_possibly_over_counted_units(tmp_path: Path) -> None:
-    save_run_state(tmp_path, _state())
-
-    result = _invoke(tmp_path, "r1")
-
-    flat = " ".join(result.output.split())
-    assert "possibly over-counted" in flat
-    assert "phase/1/code" in flat and "step/spec-review" in flat
-    assert "step/deliver" not in flat.split("possibly over-counted", 1)[1]
+def test_the_archived_usage_file_is_read_when_the_active_one_is_gone(tmp_path: Path) -> None:
+    _write(archived_usage_path(tmp_path, RUN), _file(_capture("a", "closeout", _entry("s", 2, 1))))
+    result = _invoke(tmp_path, RUN)
+    assert result.exit_code == 0, result.output
+    assert "$2.00" in result.output
 
 
-def test_an_unknown_run_exits_two(tmp_path: Path) -> None:
-    assert _invoke(tmp_path, "nope").exit_code == 2
+def test_an_unobserved_figure_prints_a_dash(tmp_path: Path) -> None:
+    _write(usage_path(tmp_path, RUN), _file(_capture("a", "deliver", _entry("s1", None, None))))
+    result = _invoke(tmp_path, RUN)
+    assert result.exit_code == 0, result.output
+    assert "—" in result.output
+    assert "$0.00" not in result.output
+
+
+def test_no_usage_recorded_exits_two_and_names_recompute(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, "nope")
+    assert result.exit_code == 2
+    assert "--recompute" in " ".join(result.output.split())
+
+
+def test_recompute_reads_this_hosts_transcripts_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "projects" / "-work-example"
+    root.mkdir(parents=True)
+    shutil.copy(FIXTURES / "claude-code" / f"{CC_SESSION}.jsonl", root)
+    monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(tmp_path / "projects"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", CC_SESSION)
+    save_run_state(
+        tmp_path,
+        RunState(
+            run=RUN,
+            workflow="fr-goal@1",
+            branch="b",
+            started="2026-09-21T11:00:00+00:00",
+            cursor="deliver",
+            steps={"brainstorm": StepRecord(state="done", at="2026-09-21T13:00:00+00:00")},
+        ),
+    )
+
+    result = _invoke(tmp_path, RUN, "--recompute")
+
+    assert result.exit_code == 0, result.output
+    assert "recomputed" in result.output and "1 read" in result.output
+    assert not usage_path(tmp_path, RUN).exists()

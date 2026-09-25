@@ -4009,16 +4009,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_main_session.py
       - super-fr:tests/unit/test_run_opencode_reader.py
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_migration_run_main_session.py
       - super-fr:tests/unit/test_run_telemetry.py
+      - super-fr:tests/unit/test_usage_capture.py
     status: skipped
-    notes: 'Live-verified on Claude Code (host-worktree): run 2026-09-25-fix-606-writes-dot-dir-prefix,
-      PR #609, all 7 steps measured. OpenCode walk (devcontainer, PR #612) measured
-      1/7: fr run executes inside the container without harness env or host data. To
-      be superseded by the lean-cost-aware-process usage rows.'
+    notes: claim now delivered by usage/ per-step rollup; main_session removed in run
+      v7; live walk in phase 4
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review

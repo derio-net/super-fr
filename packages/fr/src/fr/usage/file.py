@@ -69,7 +69,7 @@ class Figure(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     usd: float | None = None
-    turns: int = 0
+    turns: int | None = None
 
 
 class SessionEntry(BaseModel):

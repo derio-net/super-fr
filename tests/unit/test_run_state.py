@@ -150,8 +150,8 @@ def _with_units(state: RunState, step_id: str, units: dict) -> RunState:
     return state.model_copy(update={"steps": steps})
 
 
-def test_a_unit_record_round_trips_with_its_state_attempts_and_cost() -> None:
-    from fr.run.model import Attempt, ContextEstimate, MeasuredTokens, UnitRecord
+def test_a_unit_record_round_trips_with_its_state_and_attempts() -> None:
+    from fr.run.model import Attempt, UnitRecord
 
     held = Attempt(
         dispatched="2026-09-20T00:00:01Z",
@@ -159,14 +159,11 @@ def test_a_unit_record_round_trips_with_its_state_attempts_and_cost() -> None:
         agent_type="super-fr:fr-phase-executor",
         harness="claude-code",
         model="claude-sonnet-5",
-        estimate=ContextEstimate(journal_entries=12, handoff_chars=2100),
     )
     closed = Attempt(
         dispatched="2026-09-19T00:00:01Z",
         returned="2026-09-19T01:00:00Z",
         outcome="abandoned",
-        estimate=ContextEstimate(handoff_chars=10),
-        measured=MeasuredTokens(**_MEASURED),
     )
     state = _with_units(
         _sample_state(),
@@ -176,12 +173,10 @@ def test_a_unit_record_round_trips_with_its_state_attempts_and_cost() -> None:
 
     text = dump_run_state(state)
 
-    assert "cache_read_input_tokens: 200784" in text
     assert parse_run_state(text) == state
     assert dump_run_state(parse_run_state(text)) == text
     unit = parse_run_state(text).steps["implement"].units["phase/1/code"]
-    assert unit.attempts[0].measured.output_tokens == 1927
-    assert unit.attempts[1].measured is None, "cost is per ATTEMPT — the open one has none yet"
+    assert [a.outcome for a in unit.attempts] == ["abandoned", None]
 
 
 def test_units_default_to_absent_and_a_unitless_run_omits_the_key() -> None:
@@ -205,25 +200,6 @@ def test_a_unit_with_no_attempts_dumps_no_attempts_key() -> None:
     assert parse_run_state(text) == state
 
 
-def test_a_measured_zero_is_not_no_measurement() -> None:
-    from fr.run.model import Attempt, MeasuredTokens
-
-    nothing = Attempt(dispatched="2026-09-20T00:00:01Z")
-    zero = Attempt(
-        dispatched="2026-09-20T00:00:01Z",
-        measured=MeasuredTokens(
-            input_tokens=0,
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=0,
-            output_tokens=0,
-        ),
-    )
-
-    assert nothing.measured is None
-    assert zero.measured is not None and zero.measured.total == 0
-    assert nothing != zero
-
-
 @pytest.mark.parametrize(
     ("where", "fragment"),
     [
@@ -233,6 +209,13 @@ def test_a_measured_zero_is_not_no_measurement() -> None:
             "    dispatch:\n      phase/1/code:\n      - dispatched: '2026-09-20T00:00:01Z'\n",
         ),
         ("top", "accounting:\n  phase/1/code:\n    at: '2026-09-09T09:00:01Z'\n"),
+        # run 7 (spec 2026-09-25-lean-cost-aware-process §5.B.4): usage left the cursor
+        ("step", "    main_session:\n      turns: 1\n"),
+        (
+            "step",
+            "    units:\n      phase/1/code:\n        attempts:\n"
+            "        - dispatched: '2026-09-20T00:00:01Z'\n          estimate: {}\n",
+        ),
     ],
 )
 def test_the_live_parser_refuses_every_map_the_flip_removed(where: str, fragment: str) -> None:
@@ -259,10 +242,11 @@ def test_a_migrated_capture_and_a_native_dump_are_the_same_data(path: Path) -> N
     dumps back to the SAME data — nothing invented by the model (no padded
     `attempts: []`, no defaulted zeros the rewrite did not write), nothing lost."""
     import yaml
+    from fr.artifacts.run_usage_split import split_usage
     from fr.run.legacy import v4_to_v5
 
     assert _CAPTURED, "no captured cursors — the glob is wrong, not the fixtures"
-    migrated = v4_to_v5(yaml.safe_load(path.read_text()))
+    migrated, _usage = split_usage(v4_to_v5(yaml.safe_load(path.read_text())))
     state = parse_run_state(yaml.safe_dump(migrated, sort_keys=False))
     redumped = yaml.safe_load(dump_run_state(state))
     redumped.pop("schema_version")
@@ -552,7 +536,13 @@ def test_the_migration_and_the_native_dump_are_one_writer(tmp_path: Path, name: 
     path.write_bytes(fixture.read_bytes())
 
     rewrite_to_unit_records(path)
-    migrated = path.read_text()
+    # …and the 6 -> 7 split, the chain's last body rewrite, writes through the
+    # same `dump_cursor_yaml`
+    import yaml
+    from fr.artifacts.run_usage_split import split_usage
+    from fr.run.model import dump_cursor_yaml
+
+    migrated = dump_cursor_yaml(split_usage(yaml.safe_load(path.read_text()))[0])
 
     if "phase-holder-identity" in name:  # the one whose `plan-review` printed a line
         assert "    stdout: |\n      self-review passed\n" in migrated

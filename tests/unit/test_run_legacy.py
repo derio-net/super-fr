@@ -92,6 +92,15 @@ def test_it_refuses_a_key_no_version_up_to_four_ever_had() -> None:
 
 
 FROZEN_CLASSES = ("DispatchRecordV4", "StepRecordV4", "PhaseAccountingV4", "RunStateV4")
+FROZEN_CLASSES_V6 = (
+    "ContextEstimateV6",
+    "MeasuredTokensV6",
+    "MainSessionUsageV6",
+    "AttemptV6",
+    "UnitRecordV6",
+    "StepRecordV6",
+    "RunStateV6",
+)
 
 
 def test_the_frozen_classes_are_exactly_these_four() -> None:
@@ -101,6 +110,35 @@ def test_the_frozen_classes_are_exactly_these_four() -> None:
         name for name, obj in vars(legacy).items() if inspect.isclass(obj) and name.endswith("V4")
     )
     assert sorted(declared) == sorted(FROZEN_CLASSES)
+
+
+def test_the_frozen_v6_classes_are_exactly_these() -> None:
+    """The v5/v6 shape, frozen when run 6 -> 7 removed `estimate`, `measured`
+    and `main_session` (spec 2026-09-25-lean-cost-aware-process §5.B.4)."""
+    declared = tuple(
+        name for name, obj in vars(legacy).items() if inspect.isclass(obj) and name.endswith("V6")
+    )
+    assert sorted(declared) == sorted(FROZEN_CLASSES_V6)
+
+
+def test_the_frozen_v6_reader_has_not_been_edited() -> None:
+    drifted = {
+        name
+        for name in FROZEN_CLASSES_V6
+        if hashlib.sha256(inspect.getsource(getattr(legacy, name)).encode()).hexdigest()
+        != legacy.FROZEN_CLASS_SHA256[name]
+    }
+    assert not drifted, f"{sorted(drifted)} changed; freeze a `…V7` beside them instead"
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(FIXTURES.glob("v[56]/*.yaml")),
+    ids=lambda p: f"{p.parent.name}/{p.name}",
+)
+def test_the_frozen_v6_reader_parses_every_captured_v5_and_v6_cursor(path: Path) -> None:
+    state = legacy.parse_run_state_v6(path.read_text())
+    assert state.cursor in state.steps
 
 
 def test_the_frozen_reader_has_not_been_edited() -> None:

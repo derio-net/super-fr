@@ -733,7 +733,14 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
     state = load_run_state(root, "r1")
     assert state.cursor == "journal-check"
     assert state.steps["implement"].state == "done"
-    assert len(units.accounted_keys(state)) == 6
+    # every one of the six units was dispatched: each carries an attempt
+    assert (
+        sum(
+            bool(units.attempts(state.steps["implement"], k))
+            for k in units.unit_keys(state.steps["implement"])
+        )
+        == 6
+    )
 
     # journal-check is `kind: cli` and self-completes: the toy plan's steps
     # were never ticked, so no phase is locally-complete and none is "owed"

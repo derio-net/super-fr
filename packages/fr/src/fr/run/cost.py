@@ -1,133 +1,195 @@
-"""What a run cost, step by step — the rows behind `fr run cost` (spec
-`2026-09-24-fr-goal-scope-proportion-cost-design.md` §D, gh#593's table).
+"""What a run cost — the rows behind `fr run cost` (spec
+`2026-09-25-lean-cost-aware-process-design.md` §5.B.4).
 
-Pure functions over a `RunState`: no I/O, no rendering, so the numbers are
-testable without a terminal and the command stays a thin printer.
+Read from the run's usage file (`docs/superpowers/usage/<run>.yaml`, then
+`implemented/usage/`), never from the cursor: run 7 moved the figures out of
+it. Pure functions over `SessionEntry` values; the command is a thin printer.
 
-Two sources, never mixed:
+**Which entries count.** No totals are stored, so readers sum on read — and
+must not count one session twice:
 
-- **the main session** — `StepRecord.main_session`, one row per top-level
-  step. Absent is `None` in every cell, printed as `—`: a step nobody could
-  measure is not a step that cost nothing (gh#514).
-- **subagents** — every attempt's `measured`, summed on one line. Read per
-  ATTEMPT, never per unit (`tests/unit/test_tripwire_per_unit_cost_reads.py`),
-  so a redispatched unit's abandoned attempt still counts.
+- **Live captures supersede migrated ones.** A `migrated` capture holds the
+  figures run 6 kept in the cursor (per-attempt subagent tokens, per-step
+  main-session tokens), which a transcript capture of the same sessions
+  already covers. They are read only when no live capture read any session.
+- **Per session, a reading beats an absence**, and among readings the later
+  capture wins: a host that could not read a session does not erase the host
+  that could.
 
-**Possibly over-counted.** Until the per-message dedupe
-(`fr.run.telemetry._distinct_messages`) a subagent measurement summed every
-transcript RECORD, and Claude Code writes one record per content block, each
-repeating the whole message's usage. Recorded values are history and are not
-rewritten, so this module flags them instead. The dedupe shipped in the same
-release as main-session measurement, so the run's own cursor dates it: a
-measured attempt that returned before the run's FIRST main-session
-measurement was taken by an older fr. The rule is conservative — a run whose
-main session could not be measured at all flags every measurement — because
-"possibly" is the honest word for a figure fr cannot vouch for.
+A figure nobody observed stays `None` and prints `—`, never `0`.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from fr.run.model import MeasuredTokens, RunState
-from fr.run.telemetry import parse_timestamp
+from fr.usage.file import (
+    SessionEntry,
+    UsageFile,
+    archived_usage_path,
+    load_usage,
+    usage_path,
+)
 
-__all__ = ["CostRow", "SubagentTotal", "cost_rows", "possibly_over_counted", "subagent_total"]
+if TYPE_CHECKING:
+    from fr.run.model import RunState
+
+REPLAYED = ("migrated",)
+"""Capture kinds that re-state figures rather than read transcripts."""
 
 
 @dataclass(frozen=True)
-class CostRow:
-    """One top-level step's main-session figures; every field `None` when the
-    step carries no `main_session`."""
-
+class StepRow:
     step: str
-    turns: int | None = None
-    sessions: int | None = None
-    input_tokens: int | None = None
-    cache_creation_input_tokens: int | None = None
-    cache_read_input_tokens: int | None = None
-    output_tokens: int | None = None
-    cache_read_per_turn: int | None = None
-    """Cache-read tokens per turn — gh#593's measure of how much context each
-    turn re-reads. `None` with no turns, rather than a division by zero."""
-    cost_usd: float | None = None
+    usd: float | None
+    turns: int | None
 
 
 @dataclass(frozen=True)
-class SubagentTotal:
-    """Every attempt's `measured`, summed. `tokens` is `None` when no attempt
-    was measured — "not observable", not zero."""
+class ModelRow:
+    model: str
+    input: int
+    cache_write: int
+    cache_read: int
+    output: int
+    usd: float | None
+    sources: tuple[str, ...]
 
-    measured: int
-    attempts: int
-    tokens: MeasuredTokens | None
+
+@dataclass
+class Summary:
+    steps: list[StepRow] = field(default_factory=list)
+    models: list[ModelRow] = field(default_factory=list)
+    read: int = 0
+    unavailable: int = 0
+
+    @property
+    def total(self) -> float | None:
+        priced = [m.usd for m in self.models if m.usd is not None]
+        return sum(priced) if priced else None
 
 
-def cost_rows(state: RunState) -> list[CostRow]:
-    """One row per top-level step, in the cursor's own step order."""
-    rows: list[CostRow] = []
-    for step_id, record in state.steps.items():
-        usage = record.main_session
-        if usage is None:
-            rows.append(CostRow(step=step_id))
+def load_run_usage(repo_root: Path, run_id: str) -> UsageFile | None:
+    """The run's usage file — active first, then archived. Raises on a bad one."""
+    for path in (usage_path(repo_root, run_id), archived_usage_path(repo_root, run_id)):
+        found = load_usage(path)
+        if found is not None:
+            return found
+    return None
+
+
+def effective_entries(file: UsageFile) -> tuple[list[SessionEntry], bool]:
+    """`(entries, replayed)` — one entry per session, by the rules above;
+    `replayed` is True when only migrated figures were available."""
+    live = [c for c in file.captures if c.at not in REPLAYED]
+    chosen = live
+    replayed = False
+    if not any(s.unavailable is None for c in live for s in c.sessions):
+        migrated = [c for c in file.captures if c.at in REPLAYED]
+        if migrated:
+            chosen, replayed = migrated, True
+    best: dict[str, SessionEntry] = {}
+    for capture in chosen:
+        for entry in capture.sessions:
+            held = best.get(entry.session)
+            if held is None or entry.unavailable is None or held.unavailable is not None:
+                best[entry.session] = entry
+    return list(best.values()), replayed
+
+
+@dataclass
+class _ModelAcc:
+    input: int = 0
+    cache_write: int = 0
+    cache_read: int = 0
+    output: int = 0
+    usd: float | None = None
+    sources: dict[str, None] = field(default_factory=dict)
+
+
+def _plus_usd(a: float | None, b: float | None) -> float | None:
+    if b is None:
+        return a
+    return b if a is None else a + b
+
+
+def _plus_turns(a: int | None, b: int | None) -> int | None:
+    if b is None:
+        return a
+    return b if a is None else a + b
+
+
+def summarize(entries: Iterable[SessionEntry], step_order: Sequence[str] = ()) -> Summary:
+    summary = Summary()
+    steps: dict[str, StepRow] = {name: StepRow(name, None, None) for name in step_order}
+    models: dict[str, _ModelAcc] = {}
+    for entry in entries:
+        if entry.unavailable is not None:
+            summary.unavailable += 1
             continue
-        rows.append(
-            CostRow(
-                step=step_id,
-                turns=usage.turns,
-                sessions=usage.sessions,
-                input_tokens=usage.input_tokens,
-                cache_creation_input_tokens=usage.cache_creation_input_tokens,
-                cache_read_input_tokens=usage.cache_read_input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_per_turn=(
-                    usage.cache_read_input_tokens // usage.turns if usage.turns else None
-                ),
-                cost_usd=usage.cost_usd,
+        summary.read += 1
+        for name, figure in entry.steps.items():
+            row = steps.get(name, StepRow(name, None, None))
+            steps[name] = StepRow(
+                name, _plus_usd(row.usd, figure.usd), _plus_turns(row.turns, figure.turns)
             )
+        for model, m in entry.models.items():
+            acc = models.setdefault(model, _ModelAcc())
+            acc.input += m.input
+            acc.cache_write += m.cache_write
+            acc.cache_read += m.cache_read
+            acc.output += m.output
+            acc.usd = _plus_usd(acc.usd, m.usd)
+            acc.sources[m.usd_source] = None
+    summary.steps = list(steps.values())
+    summary.models = [
+        ModelRow(
+            model=model,
+            input=acc.input,
+            cache_write=acc.cache_write,
+            cache_read=acc.cache_read,
+            output=acc.output,
+            usd=acc.usd,
+            sources=tuple(acc.sources),
         )
-    return rows
-
-
-def subagent_total(state: RunState) -> SubagentTotal:
-    """The sum of every attempt's `measured`, and how many of how many."""
-    attempts = [
-        attempt
-        for record in state.steps.values()
-        for unit in (record.units or {}).values()
-        for attempt in unit.attempts
+        for model, acc in models.items()
     ]
-    measured = [a.measured for a in attempts if a.measured is not None]
-    tokens = (
-        MeasuredTokens(
-            input_tokens=sum(m.input_tokens for m in measured),
-            cache_creation_input_tokens=sum(m.cache_creation_input_tokens for m in measured),
-            cache_read_input_tokens=sum(m.cache_read_input_tokens for m in measured),
-            output_tokens=sum(m.output_tokens for m in measured),
-        )
-        if measured
-        else None
+    return summary
+
+
+def recompute_entries(
+    repo_root: Path, state: RunState, env: Mapping[str, str]
+) -> list[SessionEntry]:
+    """Every session the run names, re-read from THIS host's transcripts —
+    what a capture here would record, without writing it."""
+    from fr.usage.capture import candidates
+    from fr.usage.file import session_entry
+    from fr.usage.model import unavailable
+    from fr.usage.rollup import windows_from_cursor
+    from fr.usage.sources import read_session
+
+    windows = windows_from_cursor(
+        {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
     )
-    return SubagentTotal(measured=len(measured), attempts=len(attempts), tokens=tokens)
+    out: list[SessionEntry] = []
+    for harness, session in candidates(state, env, repo_root):
+        try:
+            record = read_session(harness, session, env)
+        except Exception as e:  # noqa: BLE001 — one bad reader is one unavailable session
+            record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
+        out.append(session_entry(record, windows))
+    return out
 
 
-def possibly_over_counted(state: RunState) -> list[str]:
-    """Unit keys, sorted, holding a measured attempt that returned before the
-    run's first main-session measurement (module docstring)."""
-    stamps = [
-        parse_timestamp(record.at)
-        for record in state.steps.values()
-        if record.main_session is not None
-    ]
-    known = [s for s in stamps if s is not None]
-    since = min(known) if known else None
-    flagged: set[str] = set()
-    for record in state.steps.values():
-        for key, unit in (record.units or {}).items():
-            for attempt in unit.attempts:
-                if attempt.measured is None:
-                    continue
-                returned = parse_timestamp(attempt.returned)
-                if since is None or returned is None or returned < since:
-                    flagged.add(key)
-    return sorted(flagged)
+__all__ = [
+    "ModelRow",
+    "StepRow",
+    "Summary",
+    "effective_entries",
+    "load_run_usage",
+    "recompute_entries",
+    "summarize",
+]

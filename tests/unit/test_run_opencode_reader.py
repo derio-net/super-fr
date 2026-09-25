@@ -1,5 +1,7 @@
-"""`OpenCodeReader` — main-session usage from OpenCode's session database
-(spec `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D).
+"""`OpenCodeReader` — OpenCode's session database as a transcript source
+(spec `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D). Its
+main-session measurement went with run 7 (usage moved to `fr.usage`, whose
+OpenCode reader has its own tests).
 
 The fixture database is built here with the REAL schema subset the reader
 touches. Column names, the epoch-MILLISECOND `time_created`, and the `data`
@@ -18,8 +20,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from fr.run.model import MainSessionUsage
-from fr.run.telemetry import OpenCodeReader, SessionUsage, reader_for
+from fr.run.telemetry import OpenCodeReader, reader_for
 
 START = "2026-09-24T10:00:00+00:00"
 END = "2026-09-24T10:10:00+00:00"
@@ -86,16 +87,6 @@ def _db(path: Path, workspace: Path, base: Path) -> Path:
     return path
 
 
-EXPECTED_ONE = SessionUsage(
-    input_tokens=11,
-    cache_creation_input_tokens=44,
-    cache_read_input_tokens=330,
-    output_tokens=20 + 5 + 2,  # reasoning folded into output
-    turns=2,
-    cost_usd=0.75,
-)
-
-
 @pytest.fixture
 def db(tmp_path: Path) -> Path:
     return _db(tmp_path / "opencode.db", tmp_path / "ws", tmp_path / "base")
@@ -107,63 +98,6 @@ def _env(db: Path) -> dict[str, str]:
 
 def test_opencode_has_a_reader() -> None:
     assert isinstance(reader_for("opencode"), OpenCodeReader)
-
-
-def test_one_session_is_summed_with_reasoning_folded_into_output(db: Path) -> None:
-    assert OpenCodeReader().measure_main_session(db, "s-bound", START, END) == EXPECTED_ONE
-
-
-def test_a_bound_session_is_measured(db: Path, tmp_path: Path) -> None:
-    got = OpenCodeReader().measure_step(
-        _env(db), ["s-bound"], START, END, directories=[tmp_path / "ws"]
-    )
-    assert got == MainSessionUsage(
-        input_tokens=11,
-        cache_creation_input_tokens=44,
-        cache_read_input_tokens=330,
-        output_tokens=27,
-        turns=2,
-        sessions=1,
-        cost_usd=0.75,
-    )
-
-
-def test_an_unknown_bound_session_is_unreadable(db: Path, tmp_path: Path) -> None:
-    assert (
-        OpenCodeReader().measure_step(_env(db), ["nope"], START, END, directories=[tmp_path])
-        is None
-    )
-
-
-def test_unbound_the_unique_top_level_session_in_the_workspace_is_measured(
-    db: Path, tmp_path: Path
-) -> None:
-    got = OpenCodeReader().measure_step(_env(db), [], START, END, directories=[tmp_path / "ws"])
-    assert got is not None and got.sessions == 1 and got.turns == 2
-
-
-def test_unbound_two_qualifying_sessions_record_nothing(db: Path, tmp_path: Path) -> None:
-    got = OpenCodeReader().measure_step(
-        _env(db), [], START, END, directories=[tmp_path / "ws", tmp_path / "base"]
-    )
-    assert got is None, "two candidates is ambiguous — never a guess"
-
-
-def test_a_child_session_is_never_a_candidate(db: Path, tmp_path: Path) -> None:
-    """`s-child` sits in the workspace too; were it counted, the workspace
-    alone would be ambiguous and this would be `None`."""
-    assert OpenCodeReader().candidate_sessions(db, [tmp_path / "ws"], START, END) == ["s-bound"]
-
-
-def test_a_session_with_nothing_in_the_window_does_not_qualify(db: Path, tmp_path: Path) -> None:
-    later = ("2026-09-24T11:00:00+00:00", "2026-09-24T12:00:00+00:00")
-    assert OpenCodeReader().candidate_sessions(db, [tmp_path / "ws"], *later) == []
-
-
-def test_a_missing_database_is_no_measurement(tmp_path: Path) -> None:
-    env = _env(tmp_path / "absent.db")
-    assert OpenCodeReader().measure_step(env, ["s-bound"], START, END, directories=[]) is None
-    assert not (tmp_path / "absent.db").exists(), "read-only: a missing DB is never created"
 
 
 def test_the_database_path_honours_the_override(db: Path) -> None:

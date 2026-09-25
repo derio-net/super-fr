@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import yaml
 from fr.run.legacy import RunMigrationError, v4_to_v5
-from fr.run.model import UnitRecord
+from fr.run.legacy import UnitRecordV6 as UnitRecord
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "run_cursors"
 
@@ -334,8 +334,9 @@ def test_the_stamp_is_not_touched() -> None:
 @pytest.mark.parametrize("path", _captured(), ids=lambda p: f"{p.parent.name}/{p.name}")
 def test_every_converted_unit_parses_as_the_v5_model(path: Path) -> None:
     """The output is not merely a differently-shaped dict — every unit it
-    produces validates as `UnitRecord`, `Attempt`, `ContextEstimate` and
-    `MeasuredTokens`, all `extra="forbid"`.
+    produces validates as the v5 unit shape — since run 7 removed the cost
+    fields from the live model, the frozen `fr.run.legacy.UnitRecordV6`, all
+    `extra="forbid"`.
 
     `RunState` itself is NOT swapped in phase 2 (nothing is wired), so this
     validates the units directly. Phase 3 replaces it with a whole-cursor

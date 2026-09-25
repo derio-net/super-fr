@@ -47,27 +47,6 @@ def _attempts_by_unit(record) -> dict[str, list] | None:
     return found or None
 
 
-class _Snapshot:
-    """One unit's cost, flattened the way the v4 `PhaseAccounting` read: the
-    five V1 sizes, the four V2 figures (`None` when unmeasured), and `at`."""
-
-    def __init__(self, state, key: str) -> None:
-        estimate = units.estimate_of(state, key)
-        assert estimate is not None
-        measured = units.measured_of(state, key)
-        self.at = units.estimated_at(state, key)
-        for name in type(estimate).model_fields:
-            setattr(self, name, getattr(estimate, name))
-        for name in units.MeasuredTokens.model_fields:
-            setattr(self, name, None if measured is None else getattr(measured, name))
-        self.measured_tokens = None if measured is None else measured.total
-
-
-def _accounting(state) -> dict[str, _Snapshot]:
-    """`{unit key: snapshot}` for every unit with a recorded cost, key-sorted."""
-    return {key: _Snapshot(state, key) for key in units.accounted_keys(state)}
-
-
 runner_cli = CliRunner()
 
 
@@ -2379,117 +2358,6 @@ def _seed_journal(repo: Path, shipped: Path) -> None:
     return journal_path(repo, "plan", slug)
 
 
-def test_advance_records_a_context_snapshot_for_the_dispatched_unit(
-    tmp_path: Path,
-) -> None:
-    """What the dispatched executor is about to re-read — journal size, the
-    composed handoff size, spec + plan bytes — recorded under the unit's key."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    journal = _seed_journal(repo, shipped)
-
-    result = _invoke(repo, shipped, ["run", "advance", "r1"])
-
-    assert result.exit_code == 0, result.output
-    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
-    assert snap.journal_entries == 2
-    assert snap.journal_lines == len(journal.read_text().splitlines())
-    assert snap.handoff_chars > 0
-    assert snap.spec_bytes >= 0
-    assert snap.plan_bytes > 0
-
-
-def test_the_attempt_is_dispatched_at_the_moment_its_estimate_was_assembled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """ONE timestamp (spec 2026-09-20-unit-record-unification §4.F). The
-    estimate is assembled BEFORE the brief is built and the attempt is opened
-    AFTER it; the attempt's `dispatched` doubles as the start of its
-    measurement window, so it must be the EARLIER moment. If `_open_dispatch`
-    stamped its own clock instead, the window would start after the dispatch
-    it measures — invisibly, because at one-second resolution the two moments
-    are almost always the same string.
-
-    So the clock is made to TICK on every read: each `_now()` call returns a
-    later second. With the two moments wired apart, `units.with_estimate`
-    refuses the mismatch and this `advance` fails."""
-    import datetime as dt
-
-    import fr.commands.run_cmd as run_cmd
-
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    ticks = iter(range(10_000))
-    start = dt.datetime(2026, 9, 20, 9, 0, 0, tzinfo=dt.UTC)
-    reads: list[str] = []
-
-    def ticking() -> str:
-        moment = (start + dt.timedelta(seconds=next(ticks))).isoformat()
-        reads.append(moment)
-        return moment
-
-    monkeypatch.setattr(run_cmd, "_now", ticking)
-
-    result = _invoke(repo, shipped, ["run", "advance", "r1"])
-
-    assert result.exit_code == 0, result.output
-    state = load_run_state(repo, "r1")
-    (attempt,) = units.attempts(state.steps["implement"], "phase/1/code")
-    assert attempt.estimate is not None
-    assert units.estimated_at(state, "phase/1/code") == attempt.dispatched
-    assert len(reads) > 1, "the clock was read once — this test cannot tell moments apart"
-    assert attempt.dispatched == reads[0], (
-        "`dispatched` must be the FIRST moment this advance read — before the estimate was "
-        f"assembled and before the brief — not a later one (reads: {reads})"
-    )
-
-
-def test_advance_is_idempotent_over_the_snapshot(tmp_path: Path) -> None:
-    """Re-dispatching the same unit refreshes the one snapshot rather than
-    stacking them.
-
-    The re-dispatch is `--redispatch` since phase 4: a bare second `advance`
-    on a held unit now REFUSES (gh-499) and never reaches the snapshot at
-    all, which would have left this test passing for a reason that has
-    nothing to do with what it asserts."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
-    second = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
-
-    assert second.exit_code == 0, second.output
-    accounting = _accounting(load_run_state(repo, "r1"))
-
-    assert list(accounting) == ["phase/1/code"]
-
-
-def test_status_reports_snapshots_and_a_total(tmp_path: Path) -> None:
-    """Per-unit context sizes plus a running total — estimates labeled as
-    estimates (no harness token API in V1)."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])  # dispatches code
-
-    result = _invoke(repo, shipped, ["run", "status", "r1"])
-
-    assert result.exit_code == 0, result.output
-    assert "phase/1/code" in result.output
-    assert "journal 2 entries" in result.output
-    assert "total" in result.output
-    assert "est" in result.output
-
-
 # --- V2 measured tokens: resolve records them, status never blurs them with
 # --- an estimate (spec §5.C, phase 4) -------------------------------------
 
@@ -2525,90 +2393,6 @@ def _transcript_stamp(at: str) -> str:
     """The cursor writes `+00:00` at second precision; a transcript writes the
     captured `...Z` form with milliseconds. Same instant, harness spelling."""
     return at.replace("+00:00", ".000Z")
-
-
-def test_resolve_records_measured_tokens_for_the_unit_it_closes(tmp_path: Path) -> None:
-    """End to end: advance dispatches (and stamps the window's start), the
-    harness writes its transcript, resolve reads it back into the SAME
-    accounting record the V1 sizes live in.
-
-    The UNCLAIMED path, so the window is what selects — and since phase 4 the
-    window is offered only for an attempt THIS session dispatched (§4.D.1),
-    the `advance` has to declare the same session the `resolve` does. It used
-    to be a bare `_invoke`, which passed only because the authoring machine
-    was itself a Claude Code session whose id leaked through `os.environ`.
-    """
-    from tests.unit.transcript_sessions import dispatched_at
-
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    root = tmp_path / "projects"
-    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
-    at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
-    assert at is not None
-    dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
-
-    result = _invoke_measurable(
-        repo,
-        shipped,
-        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
-        root,
-        "sess-1",
-    )
-
-    assert result.exit_code == 0, result.output
-    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
-    assert snap.input_tokens == 2
-    assert snap.cache_creation_input_tokens == 2000
-    assert snap.cache_read_input_tokens == 40000
-    assert snap.output_tokens == 100
-    assert snap.measured_tokens == 2 + 2000 + 40000 + 100
-    # the V1 sizes are untouched — this is one record, not two
-    assert snap.journal_entries == 2
-    assert snap.handoff_chars > 0
-
-
-def test_resolve_records_the_served_model_not_the_claimed_alias(tmp_path: Path) -> None:
-    """2026-09-21 debug journal C3: the cursor recorded `model: opus` — the
-    alias the orchestrator typed — while the executor's own transcript said
-    `claude-opus-5` on every assistant record, and fr was already reading that
-    transcript for `measured:`. A claim held beside the measurement that
-    contradicts it. The captured fixture has the same split: its metadata says
-    `sonnet` (the request), its assistant records `claude-sonnet-5` (the
-    model that actually served it). The measurement wins."""
-    from fr.run import units
-
-    from tests.unit.transcript_sessions import dispatched_at
-
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    root = tmp_path / "projects"
-    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
-    at = _accounting(load_run_state(repo, "r1"))["phase/1/code"].at
-    assert at is not None
-    dispatched_at(root, _transcript_stamp(at), session_id="sess-1", usage=_USAGE)
-
-    result = _invoke_measurable(
-        repo,
-        shipped,
-        [
-            "run", "resolve", "r1", "--step", "code", "--item", "phase/1",
-            "--state", "done", "--model", "sonnet",
-        ],
-        root,
-        "sess-1",
-    )  # fmt: skip
-
-    assert result.exit_code == 0, result.output
-    attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/code")
-    assert attempt is not None
-    assert attempt.model == "claude-sonnet-5"
 
 
 def _orchestrator_session(root: Path, session_id: str, model: str) -> None:
@@ -2703,31 +2487,6 @@ def test_advance_is_silent_when_the_orchestrator_matches_its_binding(tmp_path: P
     assert "orchestrator is running on" not in result.stderr
 
 
-def test_resolve_records_nothing_when_no_transcript_can_be_read(tmp_path: Path) -> None:
-    """Degradation is never a zero: an unmeasurable unit keeps `None` in all
-    four fields, which is what `status` reports as an absence."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    _invoke(repo, shipped, ["run", "advance", "r1"])
-
-    result = _invoke_measurable(
-        repo,
-        shipped,
-        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
-        tmp_path / "no-such-transcript-root",
-        "sess-1",
-    )
-
-    assert result.exit_code == 0, result.output
-    snap = _accounting(load_run_state(repo, "r1"))["phase/1/code"]
-    assert snap.measured_tokens is None
-    assert snap.input_tokens is None
-    assert snap.handoff_chars > 0, "the V1 estimate survives the missing measurement"
-
-
 # --- cost is per ATTEMPT: a redispatch never overwrites the abandoned spend
 # --- (decision u2, spec §1.B / §4.D, phase 4) -----------------------------
 
@@ -2802,62 +2561,6 @@ def _redispatched_unit(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
     call(["run", "resolve", "r1", *unit, "--state", "done"])
     return repo, shipped, root
-
-
-def test_each_attempt_of_a_redispatched_unit_carries_its_own_cost(tmp_path: Path) -> None:
-    """Spec §1.B's live defect, pinned: the v4 shape APPENDED the attempt and
-    OVERWROTE the unit's one cost snapshot, so fr kept an abandoned agent's
-    identity and discarded its spend.
-
-    Two attempts, two estimates, two measurements, neither borrowed."""
-    repo, _shipped, _root = _redispatched_unit(tmp_path)
-
-    first, second = _dispatch_of(repo, "implement", "phase/1/code")
-
-    assert (first.outcome, second.outcome) == ("abandoned", "done")
-    assert first.agent == "a1f1" and second.agent == "b2e2"
-    assert first.estimate is not None, "the abandoned attempt keeps its own estimate"
-    assert second.estimate is not None
-    assert first.measured is not None and first.measured.total == FIRST_TOTAL
-    assert second.measured is not None and second.measured.total == SECOND_TOTAL
-
-
-def test_claim_abandoned_measures_the_attempt_it_closes(tmp_path: Path) -> None:
-    """The spend most worth seeing is the spend that produced nothing (§4.D).
-
-    Measured AT the abandon, not later: the assertion is made before the
-    second `advance` exists, so nothing but `claim --abandoned` can have
-    written it."""
-    from tests.unit.transcript_sessions import add_dispatch, write_session
-
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    root = tmp_path / "projects"
-    session = write_session(root, session_id="sess-1")
-    unit = ["--step", "code", "--item", "phase/1"]
-    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-1")
-    _invoke_measurable(
-        repo, shipped, ["run", "claim", "r1", *unit, "--agent", "a1f1"], root, "sess-1"
-    )
-    add_dispatch(
-        session,
-        timestamp=_SAME_INSTANT,
-        agent_id="a1f1",
-        tool_use_id="toolu_first",
-        usage=_USAGE_FIRST,
-    )
-
-    result = _invoke_measurable(
-        repo, shipped, ["run", "claim", "r1", *unit, "--abandoned"], root, "sess-1"
-    )
-
-    assert result.exit_code == 0, result.output
-    (only,) = _dispatch_of(repo, "implement", "phase/1/code")
-    assert only.outcome == "abandoned"
-    assert only.measured is not None and only.measured.total == FIRST_TOTAL
 
 
 def test_advance_records_the_session_that_dispatched_the_attempt(tmp_path: Path) -> None:
@@ -2961,181 +2664,7 @@ def _flat(result) -> str:
     return " ".join(result.output.split())
 
 
-def test_status_never_renders_a_measurement_and_an_estimate_the_same_way(
-    tmp_path: Path,
-) -> None:
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_run(repo, _TWO_UNIT_RUN)
-
-    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
-
-    # the measured unit: the four figures, named as measured
-    assert (
-        "measured: 21051 tok billed across the dispatch's turns "
-        "(in 1, cache-create 1000, cache-read 20000, out 50)" in flat
-    )
-    # the estimated unit: still an estimate, and SAID to be one
-    assert "not measured: no transcript figure for this unit" in flat
-    assert "tok est" in flat
-    # and each belongs to the right unit — ordering ties figure to key without
-    # depending on where rich decided to wrap. Since phase 4 the figures sit
-    # BENEATH their own attempt inside the steps block rather than in an
-    # accounting section of their own, so the ordering is read over the whole
-    # output; the keys still bracket their figures.
-    assert (
-        flat.index("phase/1/code")
-        < flat.index("measured: 21051 tok")
-        < flat.index("phase/2/code")
-        < flat.index("not measured:")
-    )
-    assert "measured total: 21051 tok over 1 of 2 dispatched attempts" in flat
-
-
-def test_status_says_out_loud_when_nothing_could_be_measured(tmp_path: Path) -> None:
-    """The failure this wording exists to prevent: estimates rendered as if
-    they were measurements, with nothing on screen saying which they are."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    unmeasured = "\n".join(line for line in _TWO_UNIT_RUN.splitlines() if "_tokens:" not in line)
-    _write_run(repo, unmeasured + "\n")
-
-    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
-
-    assert "measured total: none" in flat
-    assert "no transcript figure for any of the 2 dispatched attempts" in flat
-    assert "tok est" in flat
-    assert "measured: 21051" not in flat
-
-
-def test_status_renders_a_measured_zero_as_a_measurement(tmp_path: Path) -> None:
-    """A unit that genuinely spent nothing is measured. Rendering it as "not
-    measured" would be the same lie in the other direction."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    zeroed = _TWO_UNIT_RUN
-    for key, value in (
-        ("input_tokens: 1", "input_tokens: 0"),
-        ("cache_creation_input_tokens: 1000", "cache_creation_input_tokens: 0"),
-        ("cache_read_input_tokens: 20000", "cache_read_input_tokens: 0"),
-        ("output_tokens: 50", "output_tokens: 0"),
-    ):
-        zeroed = zeroed.replace(key, value)
-    _write_run(repo, zeroed)
-
-    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
-
-    assert (
-        "measured: 0 tok billed across the dispatch's turns "
-        "(in 0, cache-create 0, cache-read 0, out 0)" in flat
-    )
-    assert "measured total: 0 tok over 1 of 2 dispatched attempts" in flat
-
-
-def test_status_says_a_measured_figure_came_from_a_transcript(tmp_path: Path) -> None:
-    """A number with no provenance is the thing this phase exists to avoid.
-
-    Named for what it checks. It was previously called
-    `test_status_names_the_harness_whose_transcript_it_read`, which the body
-    could not deliver: `_with_measurement` keeps only the four figures, so the
-    cursor has no record of WHICH harness produced them and the rendering
-    cannot name one. A test whose name asserts more than its body is the exact
-    defect this repo keeps finding; renaming is the honest fix, and carrying
-    provenance into the cursor is the follow-up (v1 stores figures; which agent
-    produced them stays recoverable from the transcript).
-    """
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_run(repo, _TWO_UNIT_RUN)
-
-    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
-
-    assert "cumulative harness accounting" in flat
-
-
-def test_status_says_the_measured_figure_is_not_the_estimate(tmp_path: Path) -> None:
-    """The two numbers are labeled differently AND are different quantities.
-
-    The estimate is one dispatch's assembled context; the measurement is
-    cumulative billing across every turn of that dispatch, dominated by
-    cache re-reads. On a real unit of the run that built this they differed by
-    ~1,426x, which reads as a broken estimator unless the line says what it
-    counts.
-    """
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_run(repo, _TWO_UNIT_RUN)
-
-    flat = _flat(_invoke(repo, shipped, ["run", "status", "r9"]))
-
-    assert "billed across the dispatch's turns" in flat
-    assert "NOT comparable to the one-dispatch" in flat
-
-
 # --- status says what fr can and cannot see (spec §4.D / §4.D.1, phase 4) --
-
-
-def test_status_renders_each_attempts_cost_beneath_its_own_holder(tmp_path: Path) -> None:
-    """EVERY attempt, not just the last. The v4 shape rendered one cost line
-    per unit, so a redispatched unit showed the retry's figures and the
-    abandoned agent's spend was nowhere on screen.
-
-    Ordering is the assertion that ties a figure to a holder without
-    depending on where rich decided to wrap."""
-    repo, shipped, root = _redispatched_unit(tmp_path)
-
-    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
-
-    assert (
-        flat.index("agent a1f1")
-        < flat.index(f"measured: {FIRST_TOTAL} tok")
-        < flat.index("agent b2e2")
-        < flat.index(f"measured: {SECOND_TOTAL} tok")
-    ), flat
-    # the two quantities stay labelled as different quantities (gh#514)
-    assert flat.count("NOT comparable to the one-dispatch") == 2
-    assert "tok est" in flat
-
-
-def test_status_totals_include_the_abandoned_attempts_spend(tmp_path: Path) -> None:
-    """Totals sum ATTEMPTS. A denominator of units would report better
-    coverage than there is the moment one unit is redispatched."""
-    repo, shipped, root = _redispatched_unit(tmp_path)
-
-    flat = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-1"))
-
-    # 3 dispatched attempts, not 2: the flat `plan` step opened one of its
-    # own, and a denominator that quietly omitted it would report better
-    # coverage than there is.
-    assert (
-        f"measured total: {FIRST_TOTAL + SECOND_TOTAL} tok over 2 of 3 dispatched attempts" in flat
-    )
-
-
-def test_status_says_a_cost_from_another_session_is_not_observable_from_here(
-    tmp_path: Path,
-) -> None:
-    """§4.D.1: the cursor travelled with the branch; the transcripts did not.
-
-    An absent figure that could still arrive ("not measured") and one this
-    session can never produce ("not observable from here") are different
-    facts, and an operator deciding whether to wait needs the difference."""
-    repo = _repo(tmp_path)
-    shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
-    _started_grouped_with_plan(repo, shipped)
-    _seed_journal(repo, shipped)
-    root = tmp_path / "projects"
-    _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, "sess-a")
-
-    elsewhere = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-b"))
-    here = _flat(_invoke_measurable(repo, shipped, ["run", "status", "r1"], root, "sess-a"))
-
-    assert "not observable from here" in elsewhere
-    assert "not observable from here" not in here, (
-        "the SAME attempt read from the session that dispatched it is merely unmeasured"
-    )
-    assert "not measured: no transcript figure" in here
 
 
 def test_advance_refusing_another_sessions_holder_says_it_cannot_see_it(tmp_path: Path) -> None:
@@ -5803,7 +5332,6 @@ def test_advance_refusing_a_running_unit_leaves_the_run_file_alone(tmp_path: Pat
 
     assert result.exit_code == 2, result.output
     assert (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text() == before
-    assert list(_accounting(load_run_state(repo, "r1"))) == ["phase/1/code"]
 
 
 def test_resolve_composite_member_id_teaches_the_two_flags(tmp_path: Path) -> None:
@@ -6004,9 +5532,8 @@ def _forget_dispatch_records(repo: Path, step_id: str, *, shape: str = "adopted"
     forgotten = {}
     for key, unit in (state.steps[step_id].units or {}).items():
         kept: tuple = ()
-        if shape == "migrated" and unit.attempts and unit.attempts[-1].estimate is not None:
-            last = unit.attempts[-1]
-            kept = (Attempt(dispatched=last.dispatched, estimate=last.estimate, synthesized=True),)
+        if shape == "migrated" and unit.attempts:
+            kept = (Attempt(dispatched=unit.attempts[-1].dispatched, synthesized=True),)
         if unit.state is not None or kept:
             forgotten[key] = unit.model_copy(update={"attempts": kept})
     record = state.steps[step_id].model_copy(update={"units": forgotten or None})
@@ -6210,7 +5737,6 @@ def test_redispatch_refreshes_the_dispatch_time_and_that_units_snapshot(
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
     assert state.steps["implement"].at != stale
-    assert list(_accounting(state)) == ["phase/1/code"]
 
 
 def test_redispatch_with_nothing_outstanding_is_refused(tmp_path: Path) -> None:

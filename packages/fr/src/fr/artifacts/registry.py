@@ -376,7 +376,12 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 6: `StepRecord.main_session` — main-session usage per step (spec
             # `2026-09-24-fr-goal-scope-proportion-cost-design` §D), migration
             # `fr.artifacts.run_main_session`. Additive, so stamp-only.
-            current_version=6,
+            # 7: `Attempt.estimate`, `Attempt.measured` and
+            # `StepRecord.main_session` REMOVED — usage moved to its own kind
+            # (spec `2026-09-25-lean-cost-aware-process-design` §5.B.4),
+            # migration `fr.artifacts.run_usage_split`; the v5/v6 shape is
+            # frozen as `fr.run.legacy.RunStateV6`.
+            current_version=7,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,

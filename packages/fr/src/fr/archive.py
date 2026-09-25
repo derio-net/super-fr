@@ -30,7 +30,7 @@ from fr.git import (
 )
 from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
-from fr.run.legacy import RunStateV4, parse_run_state_v4
+from fr.run.legacy import RunStateV4, RunStateV6, parse_run_state_v4, parse_run_state_v6
 from fr.run.model import (
     RUNS_REL,
     RunState,
@@ -435,7 +435,7 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     return None
 
 
-def _read_any_version(text: str) -> RunState | RunStateV4 | None:
+def _read_any_version(text: str) -> RunState | RunStateV6 | RunStateV4 | None:
     """`text` as a run cursor of ANY version, or `None` if it is not one.
 
     A cursor fr has not migrated yet is still a cursor. The live model is the
@@ -446,11 +446,16 @@ def _read_any_version(text: str) -> RunState | RunStateV4 | None:
     `--adopt` would have written a second cursor for the same plan.
 
     `emitted.plan` and `run` are the same facts in every version, so the match
-    falls back to the frozen reader (`fr.run.legacy`). Not a migration, and
+    falls back to the frozen readers (`fr.run.legacy`: v5/v6, then v1-v4).
+    Not a migration, and
     nothing is written: this only answers "whose cursor is this?".
     """
     try:
         return parse_run_state(text)
+    except RunStateError:
+        pass
+    try:
+        return parse_run_state_v6(text)
     except RunStateError:
         pass
     try:

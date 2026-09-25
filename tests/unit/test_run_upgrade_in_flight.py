@@ -26,6 +26,7 @@ import pytest
 import yaml
 from fr.artifacts import artifact_kind, run_migrations
 from fr.run.legacy import RunStateV4, parse_run_state_v4
+from fr.usage.file import load_usage, usage_path
 
 from tests.unit.test_run_cli import _SHIPPED_FR_GOAL, _invoke, _repo, _squash
 
@@ -174,7 +175,10 @@ def test_the_holder_can_still_resolve_its_unit_after_the_migration(tmp_path: Pat
     (closed,) = units.attempts(record, HELD_KEY)
     assert (closed.agent, closed.dispatched) == (held.agent, held.dispatched)
     assert closed.outcome == "done" and closed.returned is not None
-    assert closed.estimate is not None, "the cost rode along on the attempt"
+    # run 7: the cost did not ride along on the attempt — it moved to usage/
+    usage = load_usage(usage_path(repo, run_id))
+    assert usage is not None
+    assert any(HELD_KEY in e.briefs for c in usage.captures for e in c.sessions)
     assert units.unit_state(record, HELD_KEY) == "done"
 
 
@@ -242,18 +246,18 @@ def test_status_still_shows_every_unit_state_and_every_prior_attempt(
                 assert attempt.dispatched in flat, "a recorded attempt vanished from status"
                 if attempt.agent:
                     assert f"agent {attempt.agent}" in flat
-    # Since phase 4 a cost is rendered BENEATH its own attempt rather than as
-    # a `<key>: journal ...` line in an accounting section, so the tie between
-    # key and figure is structural (the block under the unit's line) instead
-    # of textual. Asserting the block is strictly stronger than the prefix
-    # was: it would fail if the figure moved to the wrong unit.
+    # Since run 7 a cost is no longer rendered by `fr run status` at all: the
+    # 6 -> 7 hop MOVED every snapshot into the run's usage file, keyed by the
+    # same unit, so what must survive the upgrade is that file's figure.
+    usage = load_usage(usage_path(repo, run_id))
+    briefs = {
+        k: v
+        for c in (usage.captures if usage else ())
+        for e in c.sessions
+        for k, v in e.briefs.items()
+    }
     for key, snap in (legacy.accounting or {}).items():
-        block = _unit_block(result.output, key)
-        assert f"journal {snap.journal_entries} entries" in block, (
-            f"{key}'s estimate is not rendered under {key}"
-        )
-        if snap.output_tokens is not None:
-            assert f"out {snap.output_tokens}" in block
+        assert briefs.get(key) == snap.handoff_chars, f"{key}'s estimate was not moved to usage/"
 
 
 def _unit_block(output: str, key: str) -> str:

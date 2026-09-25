@@ -30,14 +30,11 @@ Two rules of the v5 shape that this module, and only this module, upholds:
   later. Every writer below edits a `UnitRecord` with `model_copy`, never
   rebuilds one from the half it was given.
 - **One timestamp.** The moment fr dispatched a unit is its attempt's
-  `dispatched`, and it doubles as the START of that attempt's measurement
-  window. `ContextEstimate` carries no `at`, so the moment cannot be recorded
-  twice and drift; `with_estimate` takes `at=` only to REFUSE an estimate
-  whose moment is not the attempt's own.
+  `dispatched`, recorded once.
 
-The cost WRITERS take a `step_id` and the cost READERS do not: cost hangs off
-an attempt inside one step's record, so a writer must say which, while a
-reader finds the key by scanning — unit keys are unique across a cursor.
+Cost is no longer here: run 7 moved each attempt's estimate and measurement
+into the run's usage file (spec `2026-09-25-lean-cost-aware-process-design.md`
+§5.B.4), and with them the per-unit cost readers and their tripwire.
 """
 
 from __future__ import annotations
@@ -46,37 +43,25 @@ from collections.abc import Mapping
 
 from fr.run.model import (
     Attempt,
-    ContextEstimate,
-    MeasuredTokens,
     RunState,
     StepRecord,
     UnitRecord,
 )
 
 __all__ = [
-    "ContextEstimate",
-    "MeasuredTokens",
     "UnitAttempt",
-    "accounted_attempts",
-    "accounted_keys",
     "attempts",
     "dispatch_recorded",
-    "dispatched_attempts",
-    "estimate_of",
-    "estimated_at",
     "evidence_of",
     "fan_out_states",
     "last_attempt",
-    "measured_of",
     "open_attempt",
     "unit_keys",
     "unit_state",
     "unit_states",
     "with_attempt_appended",
-    "with_estimate",
     "with_evidence",
     "with_last_attempt_replaced",
-    "with_measured",
     "with_unit_state",
     "with_unit_states",
 ]
@@ -306,31 +291,10 @@ def fan_out_states(state: RunState) -> dict[str, str]:
     return {}
 
 
-# --------------------------------------------------------------------- cost
+# ------------------------------------------------------------ last attempt
 #
-# Cost is per ATTEMPT (decision u2), and this section answers at BOTH grains.
-#
-# Per attempt — `last_attempt` (what a writer touches: `advance` estimates the
-# attempt it just opened, `resolve` and `claim --abandoned` measure the one
-# they just closed, and both are the tail), `accounted_attempts` and
-# `dispatched_attempts` (what `fr run status` renders and totals, so a
-# redispatched unit's abandoned spend is in the figures rather than behind
-# them).
-#
-# Per unit — `estimate_of` / `measured_of` / `estimated_at` / `accounted_keys`,
-# which answer for the unit's LAST attempt: that is the attempt a cost was
-# last written to and, for a migrated v4 cursor, the one the rewrite attached
-# the unit's single snapshot to. Never a substitute for the per-attempt view:
-# on a redispatched unit they show the retry and hide the abandoned spend.
-#
-# NOTE for review (phase 4): those four now have NO caller in `src/`. Phase 4
-# re-pointed `_with_measurement` at `last_attempt` and `fr run status` at
-# `accounted_attempts`, and the per-unit question went with them. They are
-# still exercised — `tests/unit/test_run_cli.py`'s `_Snapshot` reads a unit's
-# cost through them rather than through the storage, which is the seam this
-# module exists to offer — so they are not dead in the sense
-# `with_units_carried_forward` was. Flagged rather than deleted so review can
-# decide, the way phase 3 flagged that one.
+# Cost left the cursor in run 7 (the usage file holds it); `last_attempt` stays
+# because a unit's tail attempt is still what a resolve closes.
 
 
 def _owner(state: RunState, key: str) -> str | None:
@@ -343,11 +307,9 @@ def _owner(state: RunState, key: str) -> str | None:
 def last_attempt(state: RunState, key: str) -> UnitAttempt | None:
     """`key`'s most recent attempt anywhere in `state`, or `None`.
 
-    The attempt every cost WRITE lands on — `advance` estimates the one it
-    just opened; `resolve` and `claim --abandoned` measure the one they just
-    closed — and both are the tail by construction. Handed back whole rather
-    than as a timestamp, because a measurement needs four of its fields at
-    once: the window edges `dispatched`/`returned`, and the `(session, agent)`
+    Handed back whole rather than as a timestamp, because a caller needs
+    several of its fields at once: the window edges `dispatched`/`returned`,
+    and the `(session, agent)`
     pair that says WHICH transcript is this attempt's (§4.D.1).
     """
     step_id = _owner(state, key)
@@ -355,175 +317,3 @@ def last_attempt(state: RunState, key: str) -> UnitAttempt | None:
         return None
     recorded = attempts(state.steps[step_id], key)
     return recorded[-1] if recorded else None
-
-
-_last_attempt = last_attempt
-
-
-def accounted_attempts(state: RunState) -> tuple[tuple[str, UnitAttempt], ...]:
-    """Every `(unit key, attempt)` in `state` that carries an estimate —
-    key-sorted, and within a unit oldest attempt first.
-
-    Cost is per ATTEMPT (decision u2), so a REDISPATCHED unit contributes
-    twice and the abandoned attempt's spend — exactly the spend worth seeing
-    — lands in the totals rather than being overwritten by the retry.
-    `accounted_keys` answers the older, per-unit question and is not a
-    substitute: on a unit with two attempts it yields one key, and the
-    earlier figure is invisible.
-    """
-    found = [
-        (key, attempt)
-        for record in state.steps.values()
-        for key, unit in (record.units or {}).items()
-        for attempt in unit.attempts
-        if attempt.estimate is not None
-    ]
-    # `key=` on the key alone: `Attempt` is not orderable, and the sort is
-    # stable, so two attempts of one unit keep their oldest-first order.
-    return tuple(sorted(found, key=lambda pair: pair[0]))
-
-
-def dispatched_attempts(state: RunState) -> int:
-    """How many attempts `state` records at all — the denominator of
-    "measured N of M".
-
-    Attempts, not units: the numerator counts attempts now, so a denominator
-    of units would report better coverage than there is the moment one unit is
-    redispatched. A `synthesized` attempt counts — it carries a real cost
-    snapshot a measurement could still land beside.
-    """
-    return sum(
-        len(unit.attempts)
-        for record in state.steps.values()
-        for unit in (record.units or {}).values()
-    )
-
-
-def accounted_keys(state: RunState) -> tuple[str, ...]:
-    """Every unit key whose LAST attempt records a cost, sorted — across all
-    steps.
-
-    Sorted by KEY and not grouped by step: that is what the v4 top-level
-    `accounting` map rendered, and the per-step storage must not quietly
-    reorder `fr run status`. Per UNIT, so it cannot see a redispatched unit's
-    earlier attempt — `accounted_attempts` is what renders and totals those.
-    """
-    return tuple(
-        sorted(
-            key
-            for record in state.steps.values()
-            for key, unit in (record.units or {}).items()
-            if unit.attempts and unit.attempts[-1].estimate is not None
-        )
-    )
-
-
-# --- per-unit cost readers: TEST SEAM ONLY -------------------------------
-# `estimate_of`, `measured_of`, `estimated_at` and `accounted_keys` answer for a
-# unit's LAST attempt. Production code must iterate attempts instead — a per-unit
-# read is the exact shape of the defect that discarded an abandoned attempt's
-# cost. `tests/unit/test_tripwire_per_unit_cost_reads.py` fails on a new caller
-# anywhere under `packages/*/src`.
-def estimate_of(state: RunState, key: str) -> ContextEstimate | None:
-    """What fr assembled for `key` — the V1 sizes — or `None` if unrecorded."""
-    last = _last_attempt(state, key)
-    return None if last is None else last.estimate
-
-
-def estimated_at(state: RunState, key: str) -> str | None:
-    """When fr assembled `key`'s context — the START of its measurement window.
-
-    It IS the attempt's `dispatched`: one moment, recorded once. `advance`
-    stamps it before the dispatch brief is built, so it precedes every
-    transcript record of the dispatch it measures. `None` when there is no
-    estimate — no window, no measurement — which is also what an attempt
-    opened without one (a flat `kind: agent` step) reads as.
-    """
-    last = _last_attempt(state, key)
-    if last is None or last.estimate is None:
-        return None
-    return last.dispatched
-
-
-def measured_of(state: RunState, key: str) -> MeasuredTokens | None:
-    """What `key` actually burned, or `None` when nothing was measured.
-
-    A measurement is atomic, and in this shape that is structural: a
-    `MeasuredTokens` has all four figures or does not exist.
-    """
-    last = _last_attempt(state, key)
-    return None if last is None else last.measured
-
-
-def _with_last_attempt(state: RunState, step_id: str, key: str, attempt: UnitAttempt) -> RunState:
-    steps = dict(state.steps)
-    steps[step_id] = with_last_attempt_replaced(steps[step_id], key, attempt)
-    return state.model_copy(update={"steps": steps})
-
-
-def with_estimate(
-    state: RunState,
-    step_id: str,
-    key: str,
-    estimate: ContextEstimate,
-    *,
-    at: str,
-) -> RunState:
-    """`state` with `estimate` recorded on `key`'s LAST attempt under `step_id`.
-
-    `at` is the moment the estimate was assembled, and it must BE that
-    attempt's `dispatched` — otherwise this raises `ValueError`. That is the
-    "one timestamp" rule with teeth: the estimate is COMPUTED before the brief
-    and the attempt is OPENED after it, and the easy mistake is to let the
-    attempt stamp its own, later, `dispatched` — which silently moves the
-    start of the measurement window past the dispatch it measures. Callers
-    pass the same `at` to both; this checks that they did.
-
-    Also raises when `key` has no attempt under `step_id`: an estimate is what
-    fr assembled FOR an attempt, so there is nothing to record it on. fr never
-    synthesizes an attempt at run time — only the 4 -> 5 migration does, once,
-    for cursors that predate the dispatch record.
-    """
-    recorded = attempts(state.steps[step_id], key)
-    if not recorded:
-        raise ValueError(f"unit {key!r} of step {step_id!r} has no attempt to estimate")
-    if recorded[-1].dispatched != at:
-        raise ValueError(
-            f"unit {key!r}: the estimate was assembled at {at!r} but its attempt says it was "
-            f"dispatched at {recorded[-1].dispatched!r} — one moment, recorded once"
-        )
-    return _with_last_attempt(
-        state, step_id, key, recorded[-1].model_copy(update={"estimate": estimate})
-    )
-
-
-def with_measured(
-    state: RunState,
-    step_id: str,
-    key: str,
-    measured: MeasuredTokens,
-    served_model: str | None = None,
-) -> RunState:
-    """`state` with `measured` recorded BESIDE the estimate of `key`'s last
-    attempt under `step_id`.
-
-    Beside, never replacing: the estimate and the measurement are different
-    quantities (one dispatch's assembled context versus cumulative billing
-    across its turns) and `fr run status` is built on showing both. A unit
-    whose last attempt has no estimate has no measurement window either, so
-    there is nothing to measure against and `state` comes back unchanged.
-
-    `served_model` is the one exception to "beside": it REPLACES the attempt's
-    `model`, because `model` is the same fact — which model ran this unit — and
-    before a measurement it can only be a claim (a tier resolution, or the alias
-    an orchestrator passed to `claim --model`). A measured model outranks every
-    claim (2026-09-21 debug journal C3). `None` leaves the claim in place.
-    """
-    record = state.steps.get(step_id)
-    recorded = attempts(record, key) if record is not None else ()
-    if not recorded or recorded[-1].estimate is None:
-        return state
-    update: dict[str, object] = {"measured": measured}
-    if served_model is not None:
-        update["model"] = served_model
-    return _with_last_attempt(state, step_id, key, recorded[-1].model_copy(update=update))

@@ -48,7 +48,7 @@ Three invariants the rest of the framework leans on:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,15 +80,18 @@ class DuplicateMigrationError(ArtifactMigrationError):
 class SchemaMigration:
     """Moves one artifact kind `from_version` → `to_version`. Stamp-guarded.
 
-    `fn` rewrites the artifact's body and nothing else: the runner writes the
-    new stamp once `fn` returns. `fn` must read the file itself — it is handed
-    a path, never a parsed document.
+    `fn` rewrites the artifact's body: the runner writes the new stamp once
+    `fn` returns. `fn` must read the file itself — it is handed a path, never a
+    parsed document. A migration that MOVES data out of the artifact into a
+    companion file (run 6 -> 7 writes `usage/<run>.yaml`) returns the paths it
+    wrote, so they are committed with the artifact (`changed_paths`); every
+    other `fn` returns `None`.
     """
 
     kind: str
     from_version: int
     to_version: int
-    fn: Callable[[Path], None]
+    fn: Callable[[Path], Iterable[Path] | None]
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -136,6 +139,8 @@ class PlannedAction:
     from_version: int | None = None
     to_version: int | None = None
     repair: str | None = None
+    also_wrote: tuple[Path, ...] = ()
+    """Companion files the migration wrote beside `path` (`SchemaMigration.fn`)."""
 
     @property
     def is_repair(self) -> bool:
@@ -171,6 +176,8 @@ class MigrationReport:
         seen: dict[Path, None] = {}
         for a in self.applied:
             seen[a.path] = None
+            for companion in a.also_wrote:
+                seen[companion] = None
         return tuple(seen)
 
     @property
@@ -517,7 +524,7 @@ def _apply_to_one(
             break
         step = chain[0]
         try:
-            step.fn(path)
+            also_wrote = tuple(step.fn(path) or ())
         except Exception as e:
             # Unstamped on purpose: the artifact stays stale, so the next run
             # retries it instead of skipping a half-migration forever.
@@ -548,6 +555,7 @@ def _apply_to_one(
                 summary=step.summary,
                 from_version=step.from_version,
                 to_version=step.to_version,
+                also_wrote=also_wrote,
             )
         )
     else:

@@ -47,7 +47,6 @@ from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
-    compose_handoff,
     effective_finding_states,
     journal_stamp_as_utc,
     parse_journal,
@@ -68,10 +67,7 @@ from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
-    ContextEstimate,
     DispatchOutcome,
-    MainSessionUsage,
-    MeasuredTokens,
     RunState,
     RunStateError,
     StepRecord,
@@ -574,8 +570,8 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
     an observability field, not a dispatch precondition, and refusing to
     dispatch over an unreadable OPTIONAL tier would be a new failure mode for
     a field whose whole point is that a phase may legitimately not set it.
-    Mirrors `_accounting_snapshot`'s stance next to it ("observability must
-    not break execution") rather than `_group_phases`'s.
+    "Observability must not break execution", rather than `_group_phases`'s
+    stance.
     """
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
@@ -599,142 +595,6 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     countable towards the group's completion.
     """
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
-
-
-def _accounting_snapshot(
-    repo_root: Path, state: RunState, phase_n: int, depends_on: tuple[int, ...] = ()
-) -> ContextEstimate:
-    """What the dispatched unit is about to re-read (V1 context accounting).
-
-    Measured, not metered: journal entries/lines, the composed handoff's
-    chars, spec + plan bytes — the context fr itself assembles. Never a gate:
-    anything unreadable here degrades to zeros rather than refusing the
-    dispatch (observability must not break execution).
-    """
-    from fr.parser import PlanSchemaError, parse
-
-    plan_rel = _emitted_plan(state)
-    spec_rel: str | None = None
-    for record in state.steps.values():
-        if record.emitted and "spec" in record.emitted:
-            spec_rel = record.emitted["spec"]
-    spec_bytes = 0
-    if spec_rel is not None:
-        try:
-            candidate = repo_root / spec_rel
-            spec_bytes = candidate.stat().st_size if candidate.is_file() else 0
-        except OSError:
-            spec_bytes = 0
-    plan_bytes = 0
-    slug = ""
-    if plan_rel is not None:
-        slug = plan_rel.rstrip("/").rsplit("/", 1)[-1]
-        try:
-            plan_bytes = sum(
-                f.stat().st_size for f in (repo_root / plan_rel).rglob("*") if f.is_file()
-            )
-        except OSError:
-            plan_bytes = 0
-        try:
-            plan = parse(repo_root / plan_rel)
-            depends_on = next(
-                (p.phase.depends_on for p in plan.phases if p.phase.number == phase_n),
-                depends_on,
-            )
-        except (PlanSchemaError, OSError):
-            pass
-    entries: list[JournalEntry] = []
-    journal_lines = 0
-    if slug:
-        jpath = resolve_journal_read_path(repo_root, "plan", slug)
-        if jpath.is_file():
-            try:
-                text = jpath.read_text()
-            except OSError:
-                text = ""
-            if text:
-                journal_lines = len(text.splitlines())
-                try:
-                    entries = parse_journal(text)
-                except JournalParseError:
-                    entries = []
-    handoff_chars = len(
-        compose_handoff(entries, phase=phase_n, scope="plan", slug=slug, depends_on=depends_on)
-    )
-    # No `at` here: the estimate is a VALUE (what fr assembled), and when it
-    # was assembled is the caller's to record — `units.with_estimate(..., at=)`
-    # — because in the v5 shape that moment is the attempt's own `dispatched`
-    # rather than a second timestamp beside it.
-    return ContextEstimate(
-        journal_entries=len(entries),
-        journal_lines=journal_lines,
-        handoff_chars=handoff_chars,
-        spec_bytes=spec_bytes,
-        plan_bytes=plan_bytes,
-    )
-
-
-def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
-    """`state` with V2 measured tokens folded into the attempt just CLOSED.
-
-    **Taken when the attempt closes, not when it is dispatched**, and that is
-    a deliberate departure from the plan step's wording (P4.T1.S4 pointed at
-    the advance path, where the V1 sizes are recorded). At dispatch time the
-    transcript does not exist yet, so a measurement taken there is
-    structurally always empty — it would pass a test and read zero from every
-    real run. The figure lands on the same ATTEMPT the estimate does
-    (`Attempt.measured` beside `Attempt.estimate`); only the moment differs.
-
-    Both closers call it: `resolve`, and `claim --abandoned` — an abandoned
-    agent's spend is exactly the spend worth seeing, and before §4.D it was
-    the one spend fr discarded.
-
-    **The window is the attempt's OWN `[dispatched, returned]`** (§4.D). It
-    used to be `[dispatched, now]`, under a docstring asserting *"serial
-    dispatch makes that window hold exactly one dispatch"* — an assumption
-    that is run-wide and temporal rather than per-phase, and that
-    `advance --redispatch` breaks outright: two attempts of one unit put two
-    transcripts in one window, and `select_dispatch` then yields nothing.
-    Selection no longer leans on it. A claimed attempt is matched by its
-    `agent` id, which IS the transcript's filename, so overlap cannot confuse
-    it; the window is the fallback for an attempt nobody claimed.
-
-    Four situations leave `state` untouched, each a fact rather than a
-    shortcut: no attempt at all; no estimate, so no window was ever opened (a
-    flat `kind: agent` step); **`returned is None`**, which covers both an
-    open attempt and every `synthesized` one — a migrated cost carrier fr
-    never dispatched and must never measure; and an attempt that already HAS
-    a measurement, which a later `resolve` over an abandoned attempt must not
-    rewrite.
-
-    Never a gate and never noisy: a harness with no reader, a missing or
-    unreadable transcript, or an unattributable window all leave the cost
-    untouched — `fr run status` reports that absence in band, and the V1
-    estimate stays labeled an estimate.
-    """
-    from fr.run.telemetry import measure_attempt
-
-    attempt = units.last_attempt(state, key)
-    if attempt is None or attempt.estimate is None:
-        return state
-    if attempt.returned is None or attempt.measured is not None:
-        return state
-    measured = measure_attempt(
-        os.environ,
-        session=attempt.session,
-        agent=attempt.agent,
-        start=attempt.dispatched,
-        end=attempt.returned,
-    )
-    if measured is None:
-        return state
-    return units.with_measured(
-        state,
-        step_id,
-        key,
-        MeasuredTokens.model_validate(measured.totals.as_fields()),
-        served_model=measured.totals.served_model,
-    )
 
 
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
@@ -883,10 +743,6 @@ def _complete_step(
         "stdout": stdout,
         "emitted": dict(emitted) if emitted else None,
     }
-    if outcome == "done":
-        main_session = _measure_main_session(state, manifest, step_id, str(completion["at"]))
-        if main_session is not None:
-            completion["main_session"] = main_session
     new_record = (
         prior.model_copy(update=completion)
         if prior is not None
@@ -898,47 +754,6 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
-
-
-def _step_window_start(state: RunState, manifest: WorkflowManifest, step_id: str) -> str:
-    """Where `step_id`'s main-session window opens (spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D): the `at` of the
-    nearest EARLIER top-level step that is `done` — fr-goal's top-level steps
-    run in sequence, and a done step's `at` never moves — else the run's
-    `started`. Turns before `fr run start` belong to no step."""
-    ids = [s.id for s in manifest.steps]
-    if step_id in ids:
-        for earlier in reversed(ids[: ids.index(step_id)]):
-            record = state.steps.get(earlier)
-            if record is not None and record.state == "done" and record.at:
-                return record.at
-    return state.started
-
-
-def _measure_main_session(
-    state: RunState, manifest: WorkflowManifest, step_id: str, at: str
-) -> MainSessionUsage | None:
-    """`fr.run.telemetry.measure_step_main_session` over `step_id`'s window,
-    for `_complete_step` — the one place every `done` path meets (agent
-    `resolve`, cli `advance`, and the group's completion).
-
-    Catches EVERYTHING, on top of the callee's own guarantee: this runs inside
-    the act of completing a step, and no telemetry failure — a raising reader,
-    an unresolvable repo root — may turn a finished step into a failed
-    command. Absent `main_session` reads as "not observable", never zero.
-    """
-    from fr.run import telemetry
-
-    try:
-        return telemetry.measure_step_main_session(
-            state,
-            os.environ,
-            resolve_repo_root(),
-            _step_window_start(state, manifest, step_id),
-            at,
-        )
-    except Exception:  # noqa: BLE001 — observability never fails a completion
-        return None
 
 
 def _gate_degradation_notice() -> str | None:
@@ -2156,15 +1971,9 @@ def _open_dispatch(
 ) -> RunState:
     """Append a new attempt opening `key`'s hold under `step_id`.
 
-    `at` is the attempt's `dispatched`, and a caller that also records a
-    context estimate MUST pass the moment it computed that estimate at — taken
-    BEFORE the brief is built. In the v5 shape that one timestamp is both
-    "when fr dispatched this" and the start edge of the attempt's measurement
-    window; letting this function stamp its own `_now()` there would move the
-    window's start AFTER the dispatch it measures, and
-    `units.with_estimate` refuses the mismatch rather than let it pass.
-    Absent, it is stamped here — right for the flat `kind: agent` branch,
-    which records no estimate and still saves before it prints the brief.
+    `at` is the attempt's `dispatched`, taken by the grouped caller BEFORE
+    the brief is built. Absent, it is stamped here — right for the flat
+    `kind: agent` branch, which saves before it prints the brief.
 
     Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
     from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
@@ -2731,13 +2540,7 @@ def _advance_group(
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
-    # Computed HERE, before the brief is built, and WRITTEN below once the
-    # attempt exists. `estimated_at` is the start of the measurement window, so
-    # it has to precede every transcript record of the dispatch it measures;
-    # the write has to follow `_open_dispatch`, because in the v5 shape the
-    # estimate hangs off the attempt. Splitting the two keeps both true.
-    estimate_at = _now()
-    estimate = _accounting_snapshot(repo_root, state, phase_n)
+    dispatched_at = _now()
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -2769,11 +2572,9 @@ def _advance_group(
             agent_type=member.agent,
             tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
             repo_root=repo_root,
-            at=estimate_at,
+            at=dispatched_at,
         )
-    _save_run_state(
-        repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
-    )
+    _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
     _print_member_dispatch(step, member, item, state, resolved_tier)
 
@@ -3187,96 +2988,11 @@ def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
     return f"{who}{suffix} {attempt.dispatched} -> {attempt.returned} {attempt.outcome}"
 
 
-def _estimate_chars(estimate: ContextEstimate) -> int:
-    """The three SIZES fr assembled, summed — what the `~tok est` divides.
-
-    `journal_entries`/`journal_lines` are counts of things, not characters,
-    and adding them here would inflate the estimate by a number with no unit.
-    """
-    return estimate.handoff_chars + estimate.spec_bytes + estimate.plan_bytes
-
-
-def _cost_observable_here(attempt: UnitAttempt) -> bool:
-    """Could THIS session produce a measurement for `attempt` at all? (§4.D.1)
-
-    False only when the attempt names a session and it is not this one — the
-    cursor travelled with the branch and the transcripts did not. An attempt
-    with no recorded session is not claimed to be elsewhere: not knowing is
-    not the same as knowing, and "not measured" is the honest line there.
-    """
-    from fr.run.telemetry import dispatched_from_this_session
-
-    if attempt.session is None:
-        return True
-    return dispatched_from_this_session(os.environ, attempt.session)
-
-
-def _render_attempt_cost(attempt: UnitAttempt, *, indent: str, console: Console) -> None:
-    """One ATTEMPT's cost, printed BENEATH its own holder line (spec §4.D).
-
-    This is gh#514's `_print_accounting` body, moved: it used to render one
-    line per accounted UNIT in a section of its own, which on a redispatched
-    unit showed the retry's figures and left the abandoned agent's spend —
-    exactly the spend worth seeing — nowhere on screen. Under the holder, a
-    figure cannot be read against the wrong attempt.
-
-    **Two numbers, two quantities, and gh#514's wording is kept verbatim
-    because labelling alone did not convey it.** A `~N tok est` is fr's own
-    4-chars-per-token arithmetic over the context it assembled for ONE
-    dispatch. A `measured: N tok` is the harness's own accounting, cumulative
-    across every turn of that dispatch and overwhelmingly `cache_read`,
-    because each turn re-reads the whole accumulated context. On a real unit
-    they differed by ~1,426x, which reads as a broken estimator unless the
-    line says what it counts.
-
-    An absent measurement is PRINTED, not skipped — leaving an estimate alone
-    with nothing beside it is how an estimate comes to be read as a
-    measurement — and the two reasons it can be absent are different facts:
-    a figure that could still arrive, and one this session can never produce.
-    """
-    estimate = attempt.estimate
-    if estimate is None:
-        return
-    chars = _estimate_chars(estimate)
-    console.print(
-        f"{indent}journal {estimate.journal_entries} entries/"
-        f"{estimate.journal_lines} lines, handoff {estimate.handoff_chars} chars, "
-        f"spec+plan {estimate.spec_bytes + estimate.plan_bytes} chars "
-        f"(~{chars // 4} tok est)",
-        soft_wrap=True,
-    )
-    tokens = attempt.measured
-    if tokens is None and not _cost_observable_here(attempt):
-        console.print(
-            f"{indent}not observable from here: this attempt was dispatched from another "
-            f"session, whose transcripts did not travel with the branch — "
-            f"the ~{chars // 4} tok above is an ESTIMATE",
-            soft_wrap=True,
-        )
-        return
-    if tokens is None:
-        console.print(
-            f"{indent}not measured: no transcript figure for this unit — "
-            f"the ~{chars // 4} tok above is an ESTIMATE",
-            soft_wrap=True,
-        )
-        return
-    console.print(
-        f"{indent}measured: {tokens.total} tok billed across the dispatch's turns "
-        f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
-        f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
-        f"— cumulative harness accounting, NOT comparable to the "
-        f"one-dispatch ~{chars // 4} tok estimate above",
-        soft_wrap=True,
-    )
-
-
 def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
     """Every attempt recorded for `key`, oldest first (case (e)) — each one
     followed by its own cost."""
     for attempt in units.attempts(record, key):
         console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
-        _render_attempt_cost(attempt, indent=f"{indent}  ", console=console)
 
 
 def _render_unit_evidence(
@@ -3331,51 +3047,6 @@ def _render_step_and_items(
                 _render_unit_dispatch(record, key, indent="      ", console=console)
 
 
-def _print_accounting(state: RunState) -> None:
-    """The cost TOTALS — the closing section of `fr run status`.
-
-    The per-attempt detail it used to hold moved under each holder line
-    (`_render_attempt_cost`), because cost is per ATTEMPT now and a section
-    keyed by unit could only show one attempt's figures. What is left is the
-    arithmetic that is genuinely about the whole run.
-
-    **Totals sum ATTEMPTS**, so a redispatched unit finally contributes both:
-    the abandoned agent's spend is in the figure rather than behind it. The
-    denominator is dispatched ATTEMPTS for the same reason — counting units
-    would report better coverage than there is the moment one unit is
-    redispatched, and an attempt with no estimate at all would vanish from it
-    rather than count against it.
-
-    The closing line says `none` rather than `0 tok` when nothing was
-    measured: a total of zero over no measurements is a number that looks like
-    an answer.
-    """
-    console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-    total = 0
-    measured_total = 0
-    measured_attempts = 0
-    for _key, attempt in units.accounted_attempts(state):
-        assert attempt.estimate is not None  # `accounted_attempts` is what has one
-        total += _estimate_chars(attempt.estimate)
-        if attempt.measured is not None:
-            measured_total += attempt.measured.total
-            measured_attempts += 1
-    console.print(f"    total: {total} chars (~{total // 4} tok est)")
-    denom = units.dispatched_attempts(state)
-    if measured_attempts:
-        console.print(
-            f"    measured total: {measured_total} tok over {measured_attempts} of "
-            f"{denom} dispatched attempts (the ~tok estimates above are NOT part of this total)",
-            soft_wrap=True,
-        )
-    else:
-        console.print(
-            f"    measured total: none — no transcript figure for any of the "
-            f"{denom} dispatched attempts; every ~tok figure above is an estimate",
-            soft_wrap=True,
-        )
-
-
 def _render_cursor(state: RunState, console: Console) -> None:
     """The run's own four facts — where it is, and what it is driving."""
     console.print(f"run: {state.run}")
@@ -3387,89 +3058,111 @@ def _render_cursor(state: RunState, console: Console) -> None:
 @run_app.command("status")
 def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Print the cursor, every step's state, who is holding each dispatched
-    unit, since when, whether it has returned (spec §4.C) — and what each
-    ATTEMPT cost, beneath its own holder line (§4.D).
+    unit, since when, and whether it has returned (spec §4.C).
 
-    Three sections, and the body is the list of them: `_render_cursor`,
-    `_render_step_and_items` (which delegates one attempt's holder line to
-    `_render_dispatch_attempt` and its cost to `_render_attempt_cost`), and
-    `_print_accounting`'s totals.
+    Two sections: `_render_cursor` and `_render_step_and_items` (which
+    delegates one attempt's holder line to `_render_dispatch_attempt`). What
+    a run COST is `fr run cost`'s, read from the usage file — the cost column
+    went with run 7 (spec 2026-09-25-lean-cost-aware-process §5.B.4).
     """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
 
     _render_cursor(state, console)
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
-    if units.accounted_attempts(state):
-        _print_accounting(state)
 
 
 @run_app.command("cost")
-def cost_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Print what each top-level step cost the MAIN session, and the subagent
-    total beside it — gh#593's table (spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D).
+def cost_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    recompute: bool = typer.Option(
+        False,
+        "--recompute",
+        help="Re-derive the figures from THIS host's transcripts instead of the "
+        "run's usage file (nothing is written).",
+    ),
+) -> None:
+    """Print what a run cost, per step and per model, from its usage file
+    (`docs/superpowers/usage/<run>.yaml`, then `implemented/usage/`) — spec
+    `2026-09-25-lean-cost-aware-process-design.md` §5.B.4.
 
-    Read-only: it loads the cursor and prints; nothing is measured or written
-    here (measurement happens once, at `_complete_step`). A figure nobody
-    could observe prints as `—`, never `0`.
+    Read-only. Works on any checkout that has the file, including one that
+    never ran the run. A figure nobody could observe prints as `—`, never `0`.
     """
     from rich.table import Table
 
-    from fr.run.cost import cost_rows, possibly_over_counted, subagent_total
+    from fr.run.cost import effective_entries, load_run_usage, recompute_entries, summarize
+    from fr.usage.file import UsageFileError
 
-    state = _load_or_exit(resolve_repo_root(), run_id)
+    repo_root = resolve_repo_root()
+    order: list[str] = []
+    note = ""
+    if recompute:
+        state = _load_or_exit(repo_root, run_id)
+        entries = recompute_entries(repo_root, state, os.environ)
+        order = list(state.steps)
+        note = "recomputed from this host's transcripts (not written)"
+    else:
+        try:
+            usage = load_run_usage(repo_root, run_id)
+        except (OSError, UsageFileError) as e:
+            err_console.print(
+                f"[red]fr run cost: the usage file of {run_id} is unreadable: {e}[/red]"
+            )
+            raise typer.Exit(2) from e
+        if usage is None:
+            err_console.print(
+                f"[red]fr run cost: no usage recorded for {run_id!r} — nothing has been "
+                f"captured yet. `fr run cost {run_id} --recompute` re-derives it from this "
+                "host's transcripts.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        entries, replayed = effective_entries(usage)
+        try:
+            order = list(load_run_state(repo_root, run_id).steps)
+        except RunStateError:
+            order = []
+        captures = ", ".join(f"{c.at}@{c.host}" for c in usage.captures) or "none"
+        note = f"captures: {captures}"
+        if replayed:
+            note += " — only figures migrated from the run 6 cursor (no dollars)"
+    summary = summarize(entries, order)
+
+    def usd(value: float | None) -> str:
+        return "—" if value is None else f"${value:,.2f}"
 
     def n(value: int | None) -> str:
         return "—" if value is None else f"{value:,}"
 
-    table = Table(title=f"Cost — {state.run}")
-    table.add_column("step", overflow="fold", min_width=12)
-    for column in (
-        "turns",
-        "sessions",
-        "input",
-        "cache write",
-        "cache read",
-        "output",
-        "cache read/turn",
-        "cost",
-    ):
-        table.add_column(column, justify="right", overflow="fold")
-    for row in cost_rows(state):
-        table.add_row(
-            row.step,
-            n(row.turns),
-            n(row.sessions),
-            n(row.input_tokens),
-            n(row.cache_creation_input_tokens),
-            n(row.cache_read_input_tokens),
-            n(row.output_tokens),
-            n(row.cache_read_per_turn),
-            "—" if row.cost_usd is None else f"${row.cost_usd:,.2f}",
+    steps = Table(title=f"Cost — {run_id}")
+    steps.add_column("step", overflow="fold", min_width=12)
+    steps.add_column("turns", justify="right")
+    steps.add_column("cost", justify="right")
+    for row in summary.steps:
+        steps.add_row(row.step, n(row.turns), usd(row.usd))
+    steps.add_section()
+    steps.add_row("total", "", usd(summary.total))
+    console.print(steps)
+    models = Table(title="By model")
+    models.add_column("model", overflow="fold", min_width=12)
+    for column in ("input", "cache write", "cache read", "output", "cost", "source"):
+        models.add_column(column, justify="right", overflow="fold")
+    for m in summary.models:
+        models.add_row(
+            m.model,
+            n(m.input),
+            n(m.cache_write),
+            n(m.cache_read),
+            n(m.output),
+            usd(m.usd),
+            "/".join(m.sources),
         )
-    sub = subagent_total(state)
-    tokens = sub.tokens
-    table.add_section()
-    table.add_row(
-        f"subagents ({sub.measured}/{sub.attempts} measured)",
-        "—",
-        "—",
-        n(None if tokens is None else tokens.input_tokens),
-        n(None if tokens is None else tokens.cache_creation_input_tokens),
-        n(None if tokens is None else tokens.cache_read_input_tokens),
-        n(None if tokens is None else tokens.output_tokens),
-        "—",
-        "—",
+    console.print(models)
+    console.print(
+        f"sessions: {summary.read} read, {summary.unavailable} unavailable; {note}",
+        soft_wrap=True,
     )
-    console.print(table)
-    flagged = possibly_over_counted(state)
-    if flagged:
-        console.print(
-            "possibly over-counted (measured before per-message dedupe; recorded values "
-            f"are not rewritten): {', '.join(flagged)}",
-            soft_wrap=True,
-        )
 
 
 @run_app.command("advance")
@@ -3814,7 +3507,6 @@ def _resolve_member(
     updated = _close_on_resolve(
         updated, group.id, key, state_value, agent=agent, harness=harness, model=model
     )
-    updated = _with_measurement(updated, group.id, key)
     if state_value == "failed":
         _save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -4202,8 +3894,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     record = state.steps[owner_id]
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
     new_record = _close_dispatch(record, key, "abandoned")
-    closed = _with_measurement(_with_step(state, owner_id, new_record), owner_id, key)
-    _save_run_state(repo_root, closed)
+    _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
     )
