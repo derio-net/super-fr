@@ -128,3 +128,8 @@ Dispatched reviewer (sonnet) over 99f3cb7b. Raised p2-r1 (critical, in: proporti
 ### p3-adjusted-tests · discovery · Pre-existing tests adjusted for fr's own commits (phase 3)
 
 Two tests encoded 'fr leaves its write uncommitted' and were adjusted (assertions kept, behaviour not weakened): (1) tests/unit/test_run_cli.py::test_advance_agent_step_never_invokes_a_model parsed the brief from result.output line 2; click 8.3's result.output merges stderr, and fr now reports its commit there, so it reads result.stdout (the brief's contract is stdout). (2) tests/integration/test_run_survives_teardown.py::test_a_dirty_run_survives_a_forced_down_and_comes_back_with_up committed the cursor by hand after start (now fr does; replaced by asserting the runs dir is clean) and relied on advance leaving the cursor dirty; it now un-commits the advance with a mixed reset to recreate the uncommitted-cursor scenario it is about. test_migration_commit.py and test_migration_trigger.py are unmodified.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-brief-last-line created=2026-09-25T11:52:45 phase=3 -->
+### p3-brief-last-line · discovery · Commit report must precede the dispatch brief; stderr must flush (phase 3)
+
+run_cmd's contract: the JSON brief is the last line a naive tail -1 reads. The closing commit's stderr line would land after it, so _commit_run_writes_now() commits (and prints) before each of the three brief prints. Also, print(file=sys.stderr) without flush=True made the report appear AFTER the brief under CliRunner (separate text buffers flushed at exit); records_commit now flushes. 25 test_run_cli brief-parsing tests went red on the unflushed version.
