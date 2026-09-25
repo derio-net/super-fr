@@ -23,8 +23,12 @@ if TYPE_CHECKING:
     from fr.workflow.model import WorkflowManifest
 
 __all__ = [
+    "ALWAYS_RECORD_SECTIONS",
     "IMPLIED_INPUTS_BY_UNIT",
+    "RECORD_EMIT_TOKENS",
     "REPO_TRACKED_ARTIFACTS",
+    "journal_scope",
+    "record_sections",
     "required_inputs",
 ]
 
@@ -75,3 +79,41 @@ def required_inputs(manifest: WorkflowManifest) -> frozenset[str]:
         needed.update(step.needs)
         emitted.update(step.emits)
     return frozenset(needed - emitted) & REPO_TRACKED_ARTIFACTS
+
+
+# --- step records (spec 2026-09-25-lean-cost-aware-process §5.C.2.1) --------
+#
+# A step record's sections are allowed by what the step EMITS, literally, so a
+# repo-overridden manifest gets the same rules without code. Two tokens exist
+# only for this: neither names a file, and neither feeds a `needs`.
+
+RECORD_EMIT_TOKENS = frozenset({"plan:ticks", "acceptance"})
+"""`plan:ticks` — the step ticks plan steps (and justifies a missing refactor);
+`acceptance` — the step writes acceptance-matrix rows."""
+
+ALWAYS_RECORD_SECTIONS = frozenset({"outcome", "evidence"})
+"""Every step's record may say how it ended and what proves it."""
+
+_JOURNAL_PREFIX = "journal:"
+
+
+def record_sections(emits: tuple[str, ...] | list[str]) -> frozenset[str]:
+    """The record sections `emits` allows beyond `ALWAYS_RECORD_SECTIONS`."""
+    out: set[str] = set()
+    for token in emits:
+        if token.startswith(_JOURNAL_PREFIX):
+            out.update({"journal", "resolves"})
+        elif token == "plan:ticks":
+            out.update({"ticks", "refactor"})
+        elif token == "acceptance":
+            out.add("acceptance")
+    return frozenset(out)
+
+
+def journal_scope(emits: tuple[str, ...] | list[str]) -> str | None:
+    """The journal scope a record's `journal`/`resolves` entries land in —
+    the first `journal:<scope>` the step emits, or None."""
+    for token in emits:
+        if token.startswith(_JOURNAL_PREFIX):
+            return token[len(_JOURNAL_PREFIX) :]
+    return None

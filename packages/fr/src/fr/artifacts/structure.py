@@ -381,6 +381,18 @@ def validate_usage(path: Path) -> list[str]:
     return _model_problems(UsageFile, data)
 
 
+def validate_record(path: Path) -> list[str]:
+    """A step record (spec `2026-09-25-lean-cost-aware-process-design.md`
+    §5.C.1) against `StepRecord`. Which sections its step may carry needs the
+    manifest, so that is `fr run resolve --record`'s check, not this one."""
+    from fr.record.model import StepRecord
+
+    data, problems = _load_mapping(path)
+    if problems or data is None:
+        return problems
+    return _model_problems(StepRecord, data)
+
+
 # --- spec ----------------------------------------------------------------
 #
 # Specs are hand-written Markdown with no schema, so the checks target the
