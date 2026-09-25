@@ -231,3 +231,154 @@ def test_record_evidence_carries_the_holders_model(tmp_path: Path) -> None:
     assert _resolve(root, record, step="review-phase").exit_code == 0
     attempt = units.last_attempt(load_run_state(root, RUN), "phase/1/review-phase")
     assert attempt is not None and attempt.model == "m-1"
+
+
+# --- gh#624: RecordTarget.acceptance_drops (spec Test Plan 9, 10) ------------
+
+
+def _matrix_repo(tmp_path: Path) -> Path:
+    """A real git repo whose matrix has one row carrying two unit refs, with
+    the three committed reports already rendered and committed."""
+    from fr.record.apply import RecordTarget, apply_record
+    from fr.record.model import AcceptanceItem, StepRecord
+
+    from tests.unit.acceptance_helpers import make_repo, row
+
+    root = make_repo(
+        tmp_path, row(id="target", unit='"own:tests/test_a.py", "own:tests/test_b.py"'), git=False
+    )
+    (root / "tests" / "test_b.py").write_text("def test_b(): pass\n")
+    git(root, "init", "-q", "-b", "main")
+    git(root, "config", "user.email", "t@example.com")
+    git(root, "config", "user.name", "T")
+    commit_all(root, "seed")
+    git(root, "checkout", "-qb", "feat/drops")
+    # One plain move renders and commits the three reports, so the refusal
+    # cases below have something byte-identical to compare against.
+    apply_record(
+        root,
+        None,
+        StepRecord(acceptance=(AcceptanceItem(id="target", status="ci", notes="seed"),)),
+        target=RecordTarget(message="seed reports"),
+    )
+    commit_all(root, "reports")
+    return root
+
+
+def _move(row_id: str = "target", **fields: object):
+    from fr.record.model import AcceptanceItem, StepRecord
+
+    return StepRecord(
+        acceptance=(
+            AcceptanceItem.model_validate(
+                {"id": row_id, "status": "skipped", "notes": "why", **fields}
+            ),
+        )
+    )
+
+
+def _unit_refs(root: Path, row_id: str = "target") -> tuple[str, ...]:
+    from fr.acceptance.model import load_matrix
+
+    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    return next(r for r in matrix.rows if r.id == row_id).levels.get("unit", ())
+
+
+def _acceptance_files(root: Path) -> dict[str, str]:
+    return {k: v for k, v in snapshot(root).items() if k.startswith("docs/acceptance/")}
+
+
+def test_a_present_drop_removes_the_ref_from_the_row(tmp_path: Path) -> None:
+    from fr.record.apply import RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    target = RecordTarget(
+        message="m", acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}}
+    )
+
+    apply_record(root, None, _move(), target=target)
+
+    assert _unit_refs(root) == ("own:tests/test_a.py",)
+
+
+def test_a_drop_and_an_addition_re_point_the_row_in_one_pass(tmp_path: Path) -> None:
+    from fr.record.apply import RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    (root / "tests" / "test_c.py").write_text("def test_c(): pass\n")
+    target = RecordTarget(
+        message="m", acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}}
+    )
+
+    apply_record(root, None, _move(levels={"unit": ("own:tests/test_c.py",)}), target=target)
+
+    assert _unit_refs(root) == ("own:tests/test_a.py", "own:tests/test_c.py")
+
+
+def test_an_absent_ref_drop_is_refused_and_changes_nothing(tmp_path: Path) -> None:
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    before = _acceptance_files(root)
+    assert {
+        f"docs/acceptance/{n}"
+        for n in ("report_local.html", "report_linked.html", "report_linked.md")
+    } <= set(before)
+    target = RecordTarget(
+        message="m", acceptance_drops={"target": {"unit": ("own:tests/nope.py",)}}
+    )
+
+    with pytest.raises(RecordRefusedError, match="target"):
+        apply_record(root, None, _move(), target=target)
+
+    assert _acceptance_files(root) == before
+
+
+def test_a_drop_keyed_by_a_row_with_no_item_is_refused(tmp_path: Path) -> None:
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    before = _acceptance_files(root)
+    target = RecordTarget(
+        message="m", acceptance_drops={"other": {"unit": ("own:tests/test_b.py",)}}
+    )
+
+    with pytest.raises(RecordRefusedError, match="other"):
+        apply_record(root, None, _move(), target=target)
+
+    assert _acceptance_files(root) == before
+
+
+def test_a_drop_keyed_by_a_create_item_is_refused(tmp_path: Path) -> None:
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    before = _acceptance_files(root)
+    create = _move(
+        "fresh",
+        capability="c",
+        acceptance="a",
+        origin=("own:docs/superpowers/specs/s.md",),
+        status="not-implemented",
+    )
+    target = RecordTarget(
+        message="m", acceptance_drops={"fresh": {"unit": ("own:tests/test_a.py",)}}
+    )
+
+    with pytest.raises(RecordRefusedError, match="fresh"):
+        apply_record(root, None, create, target=target)
+
+    assert _acceptance_files(root) == before
+
+
+def test_drops_with_a_run_id_are_refused(tmp_path: Path) -> None:
+    from fr.record.apply import RecordRefusedError, RecordTarget, apply_record
+
+    root = _matrix_repo(tmp_path)
+    before = snapshot(root)
+    target = RecordTarget(acceptance_drops={"target": {"unit": ("own:tests/test_b.py",)}})
+
+    with pytest.raises(RecordRefusedError, match="run"):
+        apply_record(root, "some-run", _move(), target=target)
+
+    assert snapshot(root) == before
