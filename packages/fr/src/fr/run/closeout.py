@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fr.git import GitUnavailableError, git_answer
 from fr.journal.model import (
     JournalParseError,
     effective_finding_states,
@@ -19,13 +20,29 @@ from fr.journal.model import (
 )
 from fr.run.model import RunState
 
-__all__ = ["CloseoutNotReadyError", "closeout_brief"]
+__all__ = ["CloseoutNotReadyError", "closeout_brief", "primary_checkout"]
 
 TEST_PLAN_MARKER = "## Test Plan"
 
 
 class CloseoutNotReadyError(Exception):
     """Raised by `closeout_brief` when `state`'s `deliver` step is not `done`."""
+
+
+def primary_checkout(repo_root: Path) -> Path:
+    """The repo's PRIMARY working tree — the base clone — even when `repo_root`
+    is a linked fr workspace. The closeout runs after merge, from the base clone;
+    the feature worktree is what it reaps, so naming it would send a fresh session
+    into a directory about to vanish (found dogfooding #610's own deliver).
+    Falls back to `repo_root` when git cannot answer or this is not a worktree."""
+    try:
+        res = git_answer(repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    except GitUnavailableError:
+        return repo_root
+    common = Path(res.stdout.strip()) if res.returncode == 0 and res.stdout.strip() else None
+    if common is None or common.name != ".git":
+        return repo_root
+    return common.parent
 
 
 def _emitted(state: RunState, name: str) -> str | None:
@@ -88,7 +105,7 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     # lives on the default branch (the feature workspace it was written in
     # may already be reaped).
     lines.append(
-        f"Run this from {repo_root} — the base clone, on the default branch, "
+        f"Run this from {primary_checkout(repo_root)} — the base clone, on the default branch, "
         "after the PR above has merged (the run file lives there; the feature "
         "workspace this run happened in may already be reaped)."
     )

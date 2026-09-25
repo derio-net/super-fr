@@ -223,8 +223,11 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     sha would be false assurance that the cursor reached the PR — so this
     prints a NOT-committed line instead, never the sha.
     """
+    from fr.run.closeout import primary_checkout
+
+    base = primary_checkout(repo_root)
     lines = [
-        f"closeout: after the PR merges, start a NEW session in {repo_root} and run",
+        f"closeout: after the PR merges, start a NEW session in {base} and run",
         f"  fr pickup --run {run_id}",
     ]
     if not committed:

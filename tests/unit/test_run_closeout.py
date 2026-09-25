@@ -322,3 +322,37 @@ def test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_the
     assert f"fr isolation verify-merge --branch {BRANCH}" in brief
     assert "fr status" in brief
     assert f"fr isolation down --branch {BRANCH}" in brief
+
+
+def test_closeout_brief_run_from_a_linked_worktree_names_the_primary_checkout(
+    tmp_path: Path,
+) -> None:
+    """Dogfooding #610's own deliver: inside an fr workspace, repo_root is the
+    LINKED feature worktree — the one closeout reaps. The brief must name the
+    primary checkout (the base clone), never the worktree."""
+    import subprocess
+
+    main = tmp_path / "base"
+    main.mkdir()
+    git = ["git", "-c", "user.email=t@example.com", "-c", "user.name=t"]
+    subprocess.run([*git, "init", "-q", "-b", "main", str(main)], check=True)
+    (main / "README.md").write_text("x\n")
+    subprocess.run([*git, "-C", str(main), "add", "-A"], check=True)
+    subprocess.run([*git, "-C", str(main), "commit", "-q", "-m", "init"], check=True)
+    wt = tmp_path / "feature-wt"
+    subprocess.run(
+        [*git, "-C", str(main), "worktree", "add", "-q", "-b", "feat/x", str(wt)], check=True
+    )
+    _spec_file(wt, with_test_plan=False)
+    _plan_dir(wt)
+
+    brief = closeout_brief(wt, _state())
+
+    assert f"Run this from {main.resolve()}" in brief
+    assert str(wt) not in brief.split("Closeout, in order:")[0]
+
+
+def test_primary_checkout_falls_back_to_the_given_root_outside_git(tmp_path: Path) -> None:
+    from fr.run.closeout import primary_checkout
+
+    assert primary_checkout(tmp_path) == tmp_path
