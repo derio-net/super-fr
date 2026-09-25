@@ -259,3 +259,8 @@ artifacts/run_usage_split.py:109-114; regenerate both committed usage files.
 ### p2-r24 · finding [open] (reviewer: in scope) · Capture never fills briefs (phase 2)
 
 usage/capture.py:166-171: measure dispatch-prompt size from the parent transcript's Agent tool_use input; keep migrated handoff_chars.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r25 created=2026-09-25T21:40:24 phase=2 state=open review_scope=in -->
+### p2-r25 · finding [open] (reviewer: in scope) · fr-goal-main-session-cost still cites tests of the removed mechanism (phase 2)
+
+matrix.yaml:4010-4016; remove stale refs; verb tracked in https://github.com/derio-net/super-fr/issues/624.
