@@ -52,7 +52,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-09-25T22:49:22+00:00'
+    at: '2026-09-25T23:04:47+00:00'
     members:
     - implement-phase
     - review-phase
@@ -89,6 +89,11 @@ steps:
           model: github-copilot/claude-haiku-4.5
           returned: '2026-09-25T23:04:46+00:00'
           outcome: done
+      phase/2/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-25T23:04:47+00:00'
+          harness: opencode
   journal-check:
     state: pending
   deliver:
