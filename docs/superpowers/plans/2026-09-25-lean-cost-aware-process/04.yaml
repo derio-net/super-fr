@@ -48,6 +48,8 @@ state:
         #638 (prose tests= log accepted), #639 (orphan journal), #640 (flaky test).
         Rows moved per operator: passing ones flipped, failing ones kept with evidence.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-25T23:57:15+00:00'
+    note: 'Post-merge live walk done 2026-09-26 on Claude Code (#635) and OpenCode
+      (#633); Hermes not walked per parity.yaml. Outcome and defects: #636-#640, #607
+      comment.'
     observed_prs: []
