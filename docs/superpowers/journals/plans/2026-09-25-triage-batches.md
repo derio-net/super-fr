@@ -105,3 +105,8 @@ Spec §3.E says cancel posts 'a marker comment' and stale dispatch dates the 'fr
 ### p2-norefactor-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 The collect additions are four small named functions (join_open, read_config, _with_marker, _batch_prs) called once each from collect_facts; the three test Forge doubles (FakeForge, the CLI and skeleton doubles) each gained the two new reads and a 404 read_file_at_ref, and FakeForge.anchor_reads() filters the config read out of the anchor-read assertions. Nothing duplicated remains to fold.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-refactor-t3 created=2026-09-25T23:12:48 phase=2 -->
+### p2-refactor-t3 · discovery · P2.T3 refactor: the batches dumper relies on model_dump's field order (phase 2)
+
+_dump_batches first merged the id back and re-ordered keys by Batch.model_fields; both were redundant (id has no default, model_dump keeps field order), so it is now one model_dump(exclude_defaults=True) per batch. Beyond the spec's listed load checks, Batch also refuses members in two repos (spec §6 non-goal: cross-repo batches) and lowercases its id before the slug check, which is what makes 'case-colliding batch ids' a real uniqueness check. Events use AwareDatetime so time-ordering can never compare naive with aware.
