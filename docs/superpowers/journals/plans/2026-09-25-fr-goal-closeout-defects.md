@@ -153,3 +153,8 @@ Reviewer (important): _RunWrites.message() takes state from steps[step] — memb
 ### p3-r2 · finding [open] (reviewer: in scope) · Record commits run consumer hooks + signing on every fr command (phase 3)
 
 Reviewer (important): commit_paths commits without --no-verify; per-command frequency makes slow/auto-fixing hooks fail or stall ticks, and a failed commit leaves the record staged.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-25T12:15:01 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · index.lock race with a concurrently committing executor (phase 3)
+
+Reviewer (important): fr's record commit can hold index.lock while the executor commits in the same worktree; no retry.
