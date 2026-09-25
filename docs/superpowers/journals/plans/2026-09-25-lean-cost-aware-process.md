@@ -274,3 +274,8 @@ artifacts/runner.py:527-550, trigger.py:477: declare companion paths up front; c
 ### p2-r27 · finding [open] (reviewer: in scope) · measure_dispatch/measure_attempt/TranscriptReader.measure left without a caller (phase 2)
 
 run/telemetry.py:1000-1075 (+551, 628, 935): delete with their tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r28 created=2026-09-25T21:40:26 phase=2 state=open review_scope=in -->
+### p2-r28 · finding [open] (reviewer: in scope) · Operator-gate unobserved recorded only on claude-code/no harness (phase 2)
+
+commands/run_cmd.py:985-986 vs spec §5.B.7.
