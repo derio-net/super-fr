@@ -226,6 +226,19 @@ def scratch_path(ctx: MergeContext, slot: Slot) -> Path:
     return ctx.scratch_root / slot.step.pr.head_ref
 
 
+def _update_message(
+    ctx: MergeContext, slot: str | None, *, behind: bool, previous: str | None
+) -> str:
+    """Spec §3.F step 3's commit message."""
+    default = ctx.main.removeprefix("origin/")
+    if behind and slot is not None:
+        after = f"batch {previous}" if previous else default
+        return f"chore: take reserved version {slot} after {after}"
+    if behind:
+        return f"chore: update from {default}"
+    return f"chore: re-slot version to {slot}"
+
+
 def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: str | None) -> str:
     """Step 3: bring the PR branch up to date and onto its slot; the new head."""
     pr = slot.step.pr
@@ -253,13 +266,7 @@ def _update(ctx: MergeContext, slot: Slot, head: str, behind: bool, previous: st
             wt.run(ctx.version.set_, version=slot.slot)
             if ctx.version.relock:
                 wt.run(ctx.version.relock)
-    after = previous and f"batch {previous}" or ctx.main.removeprefix("origin/")
-    if behind and slot.slot is not None:
-        message = f"chore: take reserved version {slot.slot} after {after}"
-    elif behind:
-        message = f"chore: update from {ctx.main.removeprefix('origin/')}"
-    else:
-        message = f"chore: re-slot version to {slot.slot}"
+    message = _update_message(ctx, slot.slot, behind=behind, previous=previous)
     new = wt.commit_all(message)
     if new is None:
         raise MergeStopError(f"PR #{pr.number}: the update produced no change to push")

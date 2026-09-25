@@ -9,6 +9,7 @@ command layer (§3.J), and nothing in `fr.triage` imports `fr_dispatch`.
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -428,10 +429,17 @@ class QueueEntry:
     batch: Batch
     pr: PullRequest
     tier: int = _NO_TIER
+    # The PR's files minus the repo's declared version files, which every batch
+    # PR touches and merge resolves itself; None means all of `pr.files`.
+    files: tuple[str, ...] | None = None
+
+    @property
+    def touched(self) -> tuple[str, ...]:
+        return self.files if self.files is not None else tuple(self.pr.files)
 
 
 def _shares(a: QueueEntry, b: QueueEntry) -> bool:
-    return bool(set(a.pr.files) & set(b.pr.files))
+    return bool(set(a.touched) & set(b.touched))
 
 
 def merge_order(entries: Sequence[QueueEntry]) -> list[QueueEntry]:
@@ -480,12 +488,21 @@ def lowest_tier(batch: Batch, issues: Mapping[str, Judgement]) -> int:
 def pr_open_queue(
     batches: Sequence[Batch], facts: Facts, issues: Mapping[str, Judgement]
 ) -> list[QueueEntry]:
-    """Every `pr-open` batch with its PR, in batch-file order."""
-    return [
-        QueueEntry(batch=b, pr=pr, tier=lowest_tier(b, issues))
-        for b in batches
-        if derive_batch_stage(b, facts) == "pr-open" and (pr := batch_pr(b, facts)) is not None
-    ]
+    """Every `pr-open` batch with its PR, in batch-file order.
+
+    Files matching the repo's declared `version.files` are left out of the
+    overlap and the forecast: every batch PR bumps them, and merge resolves
+    exactly those conflicts itself (§3.F step 3).
+    """
+    out: list[QueueEntry] = []
+    for b in batches:
+        if derive_batch_stage(b, facts) != "pr-open" or (pr := batch_pr(b, facts)) is None:
+            continue
+        version = facts.config_for(pr.repo).version
+        globs = version.files if version else []
+        files = tuple(f for f in pr.files if not any(fnmatch.fnmatch(f, g) for g in globs))
+        out.append(QueueEntry(batch=b, pr=pr, tier=lowest_tier(b, issues), files=files))
+    return out
 
 
 @dataclass(frozen=True)
@@ -500,14 +517,14 @@ def with_forecast(ordered: Sequence[QueueEntry]) -> list[MergeStep]:
     """Each step with its reservation and the files it shares with later steps."""
     steps: list[MergeStep] = []
     for i, e in enumerate(ordered):
-        later = {f for o in ordered[i + 1 :] for f in o.pr.files}
+        later = {f for o in ordered[i + 1 :] for f in o.touched}
         event = last_dispatch(e.batch)
         steps.append(
             MergeStep(
                 batch=e.batch,
                 pr=e.pr,
                 reserved_version=event.reserved_version if event else None,
-                shared=sorted(set(e.pr.files) & later),
+                shared=sorted(set(e.touched) & later),
             )
         )
     return steps

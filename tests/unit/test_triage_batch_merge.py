@@ -531,3 +531,24 @@ def test_a_version_only_conflict_takes_mains_side_then_sets_the_slot(
         "push feat/batch-one",
     ]
     assert forge.merged == [(1001, "new-1", "squash")]
+
+
+def test_declared_version_files_are_not_overlaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every batch PR bumps the version files, and merge resolves those itself;
+    counting them would make every pair overlap and the order meaningless."""
+    _, _ = _setup(
+        tmp_path,
+        monkeypatch,
+        [
+            ("a", 1, None, "patch", "4.21.2", ["x.py", "pyproject.toml", "uv.lock"]),
+            ("b", 2, None, "patch", "4.21.3", ["x.py", "pyproject.toml", "uv.lock"]),
+            ("c", 3, None, "patch", "4.21.4", ["y.py", "pyproject.toml", "uv.lock"]),
+        ],
+    )
+    code, out = _merge(tmp_path)
+    assert code == 0, out
+    assert _order(out) == ["a", "c", "b"]
+    first = next(line for line in out.splitlines() if " a " in line)
+    assert "x.py" in first and "pyproject.toml" not in first
