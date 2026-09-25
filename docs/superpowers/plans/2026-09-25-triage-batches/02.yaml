@@ -178,9 +178,10 @@ state:
       ticked_at: '2026-09-25T21:23:46+00:00'
       note: no-refactor-because P2.T5 (p2-norefactor-t5)
     P2.T6.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:28:00+00:00'
+      note: full suite 5439 passed/89 skipped exit 0 (-n auto, 231s); ruff format/check
+        clean; mypy incl. fr-herdr clean
     P2.T6.S2:
       state: ' '
       ticked_at: null
