@@ -157,7 +157,11 @@ def check_open_membership(batches: Sequence[Batch], facts: Facts) -> None:
 
 # ------------------------------------------------------------------ writer
 
-_TOP_KEY = re.compile(r"^(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*:")
+# A top-level key, plain or quoted (`batches:`, `"batches":`, `'batches':`) —
+# all three are the same YAML key, so all three are replaced (review r2p-f6).
+_TOP_KEY = re.compile(r"^(?P<q>[\"']?)(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?P=q)\s*:")
+_DOC_START = re.compile(r"^---(\s|$)")
+_DOC_END = re.compile(r"^\.\.\.(\s|$)")
 
 
 def _dump_batches(batches: Iterable[Batch]) -> str:
@@ -189,22 +193,40 @@ def _top_level_span(lines: list[str], key: str) -> tuple[int, int] | None:
     return start, end
 
 
+def _body_bounds(lines: list[str]) -> tuple[int, int]:
+    """[start, end) of the document body: after a leading `---` (and any
+    directives or comments before it), before a trailing `...`. Inserting
+    outside these bounds would make the file two documents (review r2p-f6)."""
+    start = next((i + 1 for i, ln in enumerate(lines) if _DOC_START.match(ln)), 0)
+    if any(
+        ln.strip() and not ln.lstrip().startswith(("#", "%")) for ln in lines[: max(start - 1, 0)]
+    ):
+        start = 0  # content before the `---`: that marker is not the document start
+    end = len(lines)
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    if end > start and _DOC_END.match(lines[end - 1]):
+        return start, end - 1
+    return start, len(lines)
+
+
 def _replace_top_level(text: str, key: str, block: str, *, prepend: bool) -> str:
     lines = text.splitlines(keepends=True)
     if lines and not lines[-1].endswith("\n"):
         lines[-1] += "\n"
     span = _top_level_span(lines, key)
     new = block.splitlines(keepends=True)
+    start, end = _body_bounds(lines)
     if span is not None:
         lines[span[0] : span[1]] = new
     elif prepend:
-        lines[:0] = new
+        lines[start:start] = new
     else:
-        lines += new
+        lines[end:end] = new
     return "".join(lines)
 
 
-def save_batches(path: Path, batches: Sequence[Batch]) -> Judgements:
+def save_batches(path: Path, batches: Sequence[Batch], *, read: Sequence[Batch]) -> Judgements:
     """Write *batches* as `path`'s `batches:` section and stamp schema 2.
 
     Only the `schema:` line and the `batches:` section change: the rest of the
@@ -212,11 +234,24 @@ def save_batches(path: Path, batches: Sequence[Batch]) -> Judgements:
     The new text is validated through the loader's own model BEFORE anything is
     written, so every load-time rule also holds on write; a refused write leaves
     the file untouched. Returns the judgements as they now load.
+
+    *read* is the batches the caller loaded and based *batches* on. The file's
+    CURRENT batches are compared with it first (review r2p-f7): if another
+    writer changed them in between, the write is refused rather than silently
+    dropping their change.
     """
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    try:
+        current = Judgements.model_validate(
+            _check_schema(path, yaml.safe_load(text), JUDGEMENTS_READS)
+        ).batches
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
+    if list(current) != list(read):
+        raise TriageError(f"{path}: judgements.yaml changed since it was read; re-run")
     text = _replace_top_level(text, "schema", f"schema: {JUDGEMENTS_SCHEMA}\n", prepend=True)
     text = _replace_top_level(text, "batches", _dump_batches(batches), prepend=False)
     try:

@@ -210,7 +210,7 @@ def test_a_write_upgrades_schema_1_to_2_and_touches_only_the_batches_section(
     judgements = load_judgements(path)
     batch = Batch.model_validate(_batch())
 
-    save_batches(path, [batch])
+    save_batches(path, [batch], read=judgements.batches)
 
     text = path.read_text(encoding="utf-8")
     assert JUDGEMENTS_SCHEMA == 2
@@ -226,7 +226,11 @@ def test_a_write_replaces_an_existing_batches_section(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
     path.write_text(yaml.safe_dump({**_BASE, "batches": [_batch()]}), encoding="utf-8")
 
-    save_batches(path, [Batch.model_validate(_batch("other", ids=["super-fr#471"]))])
+    save_batches(
+        path,
+        [Batch.model_validate(_batch("other", ids=["super-fr#471"]))],
+        read=load_judgements(path).batches,
+    )
 
     assert [b.id for b in load_judgements(path).batches] == ["other"]
 
@@ -235,7 +239,7 @@ def test_a_write_stores_only_the_launch_values_given(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
     path.write_text(yaml.safe_dump(_BASE), encoding="utf-8")
 
-    save_batches(path, [Batch.model_validate(_batch(launch={"model": "m"}))])
+    save_batches(path, [Batch.model_validate(_batch(launch={"model": "m"}))], read=[])
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert raw["batches"][0]["launch"] == {"model": "m"}
@@ -250,7 +254,115 @@ def test_a_write_that_breaks_a_load_rule_is_refused_and_the_file_is_untouched(
     bad = Batch.model_validate(_batch(ids=["super-fr#999"]))  # valid alone, unjudged in the file
 
     with pytest.raises(TriageError, match="not judged"):
-        save_batches(path, [bad])
+        save_batches(path, [bad], read=[])
+
+    assert path.read_text(encoding="utf-8") == before
+
+
+_REST = (
+    "# the agent's own comment survives\n"
+    "tiers:\n  - {n: 1, title: Now}\n"
+    "issues:\n  super-fr#577: {tier: 1, note: 'keep: me'}\n  super-fr#575: {tier: 1}\n"
+)
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_a_quoted_batches_key_is_replaced_not_duplicated(tmp_path: Path, quote: str) -> None:
+    """Review r2p-f6: `"batches":` is the same top-level key as `batches:`."""
+    path = tmp_path / "judgements.yaml"
+    old = f"{quote}batches{quote}:\n  - {{id: old, title: t, ids: ['super-fr#577']}}\n"
+    path.write_text(f"{quote}schema{quote}: 2\n{_REST}{old}", encoding="utf-8")
+
+    save_batches(
+        path,
+        [Batch.model_validate(_batch("new", ids=["super-fr#575"]))],
+        read=load_judgements(path).batches,
+    )
+
+    text = path.read_text(encoding="utf-8")
+    assert text.count("batches") == 1
+    assert text.startswith(f"schema: 2\n{_REST}batches:\n")
+    assert [b.id for b in load_judgements(path).batches] == ["new"]
+
+
+@pytest.mark.parametrize(
+    ("head", "schema"),
+    [
+        ("---\n", "schema: 1\n"),
+        ("---\n", '"schema": 1\n'),
+        ("%YAML 1.1\n---\n", "'schema': 1\n"),
+    ],
+    ids=["plain", "quoted", "directive"],
+)
+def test_a_leading_document_marker_stays_one_document(
+    tmp_path: Path, head: str, schema: str
+) -> None:
+    """Review r2p-f6: the schema line stays inside the one document, and every
+    other byte of the file is kept."""
+    path = tmp_path / "judgements.yaml"
+    path.write_text(f"{head}{schema}{_REST}", encoding="utf-8")
+    batch = Batch.model_validate(_batch())
+
+    save_batches(path, [batch], read=[])
+
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith(f"{head}schema: 2\n{_REST}batches:\n")
+    assert load_judgements(path).batches == [batch]
+
+
+def test_a_document_end_marker_keeps_the_batches_inside_the_document(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    path.write_text(f"---\nschema: 2\n{_REST}...\n", encoding="utf-8")
+    batch = Batch.model_validate(_batch())
+
+    save_batches(path, [batch], read=[])
+
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith(f"---\nschema: 2\n{_REST}batches:\n")
+    assert text.endswith("...\n")
+    assert load_judgements(path).batches == [batch]
+
+
+@pytest.mark.parametrize("head", ["---\n", "# c\n---\n", "%YAML 1.1\n---\n"])
+def test_a_prepended_key_goes_after_the_document_start(head: str) -> None:
+    """The prepend path (no matching key at all) respects `---` too."""
+    from fr.triage.batch import _replace_top_level
+
+    out = _replace_top_level(f"{head}tiers: []\n", "schema", "schema: 2\n", prepend=True)
+    assert out == f"{head}schema: 2\ntiers: []\n"
+
+
+def test_a_write_keeps_every_other_byte(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    head = "schema: 2\n"
+    path.write_text(head + _REST, encoding="utf-8")
+
+    save_batches(path, [Batch.model_validate(_batch())], read=[])
+
+    text = path.read_text(encoding="utf-8")
+    assert text[: len(head + _REST)] == head + _REST
+    assert yaml.safe_load(text[len(head + _REST) :]).keys() == {"batches"}
+
+
+def test_a_write_over_batches_changed_since_they_were_read_is_refused(tmp_path: Path) -> None:
+    """Review r2p-f7: compare before write, so a concurrent edit is never lost."""
+    path = tmp_path / "judgements.yaml"
+    path.write_text(yaml.safe_dump({**_BASE, "batches": [_batch("a", ids=["super-fr#577"])]}))
+    read = load_judgements(path).batches
+    path.write_text(  # someone else adds batch b in between
+        yaml.safe_dump(
+            {
+                **_BASE,
+                "batches": [_batch("a", ids=["super-fr#577"]), _batch("b", ids=["super-fr#471"])],
+            }
+        )
+    )
+    before = path.read_text(encoding="utf-8")
+
+    with pytest.raises(TriageError, match="changed since it was read; re-run"):
+        save_batches(
+            path, [*read, Batch.model_validate(_batch("c", ids=["super-fr#575"]))], read=read
+        )
 
     assert path.read_text(encoding="utf-8") == before
 

@@ -364,6 +364,32 @@ def test_a_forge_failure_during_cancel_appends_no_event_and_exits_1(
     assert _batches(tmp_path)[0].events[-1].kind == "dispatch"
 
 
+def test_cancel_refuses_to_overwrite_batches_changed_while_it_ran(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r2p-f7: another writer adds a batch during cancel's forge writes;
+    cancel exits 2 rather than silently dropping it."""
+    _with(
+        tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [_DISPATCH]}
+    )
+    real = gh.comment_issue
+
+    def racing(*args: Any, **kw: Any) -> Any:
+        _with(
+            tmp_path,
+            {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [_DISPATCH]},
+            {"id": "docs", "title": "d", "ids": ["super-fr#471"]},
+        )
+        return real(*args, **kw)
+
+    monkeypatch.setattr(gh, "comment_issue", racing)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+
+    assert code == 2
+    assert "changed since it was read; re-run" in out
+    assert [b.id for b in _batches(tmp_path)] == ["lifecycle", "docs"]
+
+
 def test_cancel_refuses_a_batch_already_closed_out(tmp_path: Path, gh: FakeGhClient) -> None:
     cancel = {"kind": "cancel", "at": "2026-09-26T00:00:00Z"}
     _with(

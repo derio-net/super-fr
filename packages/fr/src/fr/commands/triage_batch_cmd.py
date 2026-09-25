@@ -103,11 +103,15 @@ def _launch(runner: str | None, harness: str | None, model: str | None) -> dict[
     return {k: v for k, v in given.items() if v is not None}
 
 
-def _write(target: Path, batches: list[Batch], facts: Facts) -> None:
-    """Hold the open-batch rule, then write through the loader's model."""
+def _write(target: Path, batches: list[Batch], facts: Facts, *, read: list[Batch]) -> None:
+    """Hold the open-batch rule, then write through the loader's model.
+
+    *read* is the batches the verb loaded: the write is refused if the file's
+    batches changed since (review r2p-f7).
+    """
     try:
         check_open_membership(batches, facts)
-        save_batches(target / "judgements.yaml", batches)
+        save_batches(target / "judgements.yaml", batches, read=read)
     except TriageError as exc:
         _fail(str(exc))
 
@@ -163,7 +167,7 @@ def batch_create_command(
         _fail(f"invalid batch: {exc}")
     if any(b.id == new.id for b in judgements.batches):
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
-    _write(target, [*judgements.batches, new], facts)
+    _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
 
 
@@ -213,7 +217,7 @@ def batch_edit_command(
         new = Batch.model_validate(doc)
     except ValidationError as exc:
         _fail(f"invalid batch: {exc}")
-    _write(target, _replace(judgements.batches, new), facts)
+    _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
 
 
@@ -275,7 +279,7 @@ def batch_cancel_command(
     cancelled = batch.model_copy(
         update={"events": [*batch.events, CancelEvent(kind="cancel", at=at, reason=reason)]}
     )
-    _write(target, _replace(judgements.batches, cancelled), facts)
+    _write(target, _replace(judgements.batches, cancelled), facts, read=judgements.batches)
     console.print(f"cancelled batch {batch.id}", markup=False)
 
 
