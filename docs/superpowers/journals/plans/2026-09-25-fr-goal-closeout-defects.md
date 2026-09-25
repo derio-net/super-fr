@@ -283,3 +283,8 @@ closeout.py:96 and the if spec_path/plan_path guards are uncovered.
 ### p4-r1-resolved · finding [fixed] · resolves p4-r1: Handoff prints 'push it' even when the cursor commit was refused
 
 a216b4a5: commit_records/_RunWrites.commit()/_commit_run_writes_now() return CommitOutcome; closeout handoff threads it as committed=, printing a NOT-committed line instead of a sha when refused. Test: test_run_cli.py::test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pushed
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-09-25T14:10:56 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: Brief's archive/housekeeping steps are not exact commands
+
+a797e354: closeout brief gives exact housekeeping commands (fr isolation up --branch chore/archive-<slug> before fr archive, explicit warning against archiving in the merged feature workspace, commit/push/PR). Test: test_run_closeout.py::test_closeout_brief_housekeeping_gives_exact_commands_on_a_new_branch
