@@ -108,10 +108,18 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-09-25T23:18:26+00:00'
+    state: done
+    at: '2026-09-25T23:34:29+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/633
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-09-25T23:18:26+00:00'
           harness: opencode
+          returned: '2026-09-25T23:34:29+00:00'
+          outcome: done
+        evidence:
+          tests: docs/superpowers/runs/2026-09-26-fix-models-opencode-noop-505.records/full-suite.log@ff04a1b91c2c
+          proportionality: 6a7da3568f8c79b44a294f74a9e98ccf4db80155:0d185cbd8428bed9029ac656bb039c6f483e14160621b8f9b814fe57661772e3
+          unobserved: tests
