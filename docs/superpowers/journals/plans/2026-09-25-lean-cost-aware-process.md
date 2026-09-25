@@ -394,3 +394,8 @@ fr-goal (110 lines) teaches one resolve --record per step (spec-review: the revi
 ### p3-r1 · finding [open] (reviewer: in scope) · Record path accepts answered_by: operator on an out-of-scope fix without transcript verification (phase 3)
 
 record/apply.py:302,329,356; journal_cmd.py:314,474; before_write hook never set. Move _verify_operator_claim into fr.journal, call in _journal_writes for both paths.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-25T23:23:33 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Plain resolve --step deliver --state done bypasses the live PR-section check (phase 3)
+
+apply.py:683 vs run_cmd.py:3981; spec §5.C.4 / Test Plan 13. Check inside _resolve_body deliver/done branch.
