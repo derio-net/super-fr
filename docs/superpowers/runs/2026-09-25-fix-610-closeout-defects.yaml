@@ -3,7 +3,7 @@ run: 2026-09-25-fix-610-closeout-defects
 workflow: fr-goal@1
 branch: fix/610-closeout-defects
 started: '2026-09-25T07:28:08+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -19,8 +19,15 @@ steps:
       turns: 27
       sessions: 1
   spec-review:
-    state: running
-    at: '2026-09-25T07:58:39+00:00'
+    state: done
+    at: '2026-09-25T08:06:26+00:00'
+    main_session:
+      input_tokens: 16
+      cache_creation_input_tokens: 10377
+      cache_read_input_tokens: 1075287
+      output_tokens: 3849
+      turns: 7
+      sessions: 1
     units:
       step/spec-review:
         attempts:
@@ -29,6 +36,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+          returned: '2026-09-25T08:06:26+00:00'
+          outcome: done
+        evidence:
+          review: review-spec-1
+          reviewer: ab41970f68a851643
+          findings: s1,s2,s3
   plan:
     state: pending
   plan-review:
