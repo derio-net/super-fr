@@ -620,7 +620,16 @@ def commit_paths(
         pending = _git(toplevel, "diff", "--cached", "--name-only", "HEAD", "--", *rel)
     except GitUnavailableError as e:
         return CommitOutcome(committed=False, reason=f"refusing to commit: {e}")
-    if pending.returncode != 0 or not pending.stdout.strip():
+    # pd-r2: a FAILED probe is not the same answer as an EMPTY one. Only
+    # rc == 0 with empty stdout means "the files already match HEAD" — a
+    # non-zero exit means git could not tell us, and reporting `unchanged`
+    # for that would hand a caller false "cursor committed" assurance.
+    if pending.returncode != 0:
+        return CommitOutcome(
+            committed=False,
+            reason=f"could not inspect the index: {pending.stderr.strip() or pending.stdout.strip()}",
+        )
+    if not pending.stdout.strip():
         return CommitOutcome(
             committed=False,
             reason="the files already match HEAD; no commit made",

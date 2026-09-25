@@ -385,6 +385,37 @@ def test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly(tmp_path: Path) 
     assert 1.0 <= elapsed < 5.0, elapsed
 
 
+def test_a_failed_diff_probe_is_not_reported_as_unchanged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pd-r2: only rc == 0 with empty stdout means "the files already match
+    HEAD". A FAILED probe (git could not answer) must not be folded into
+    `unchanged=True` — that would hand a caller (and the closeout handoff a
+    fresh session reads) false "cursor committed" assurance for a git error."""
+    import fr.artifacts.commit as commit_mod
+    from fr.records_commit import commit_records
+
+    root = _repo(tmp_path)
+    p = _record(root)
+    real_git = commit_mod._git
+
+    def flaky(cwd: Path, *args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ("diff", "--cached", "--name-only"):
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="fatal: boom\n")
+        return real_git(cwd, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(commit_mod, "_git", flaky)
+
+    outcome = commit_records(root, [p], "m")
+
+    assert outcome.committed is False
+    assert outcome.unchanged is False
+    err = capsys.readouterr().err
+    assert err.count("fr:") == 1
+    assert err.startswith("fr: not committed (")
+    assert "boom" in err
+
+
 def test_a_record_write_that_changed_nothing_is_silent_and_counts_as_landed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
