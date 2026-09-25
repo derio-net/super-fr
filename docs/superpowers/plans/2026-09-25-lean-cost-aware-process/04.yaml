@@ -31,9 +31,13 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T23:57:03+00:00'
+      note: 'Walked 2026-09-26: /fr-goal on #624, Claude Code, devcontainer mode (PR
+        #635). Usage file readable (1 session, host label only, no host names); fr
+        isolation exec -- fr run/usage refused exit 2 naming the host command; bookkeeping
+        2.7 turns/step-item (32/12), deliver alone 4 tests= records (#607 comment).
+        Subagents missing from capture (#637), no USD on Claude Code.'
     P4.T1.S2:
       state: ' '
       ticked_at: null
