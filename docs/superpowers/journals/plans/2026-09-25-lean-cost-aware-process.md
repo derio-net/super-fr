@@ -439,3 +439,8 @@ apply.py:687-694, run_cmd.py:4120. Resolve against repo root, require under reco
 ### p3-r10 · finding [open] (reviewer: in scope) · Successful resolve prints a second stderr line (fr: committed …) (phase 3)
 
 records_commit.py:68. Suppress when the engine owns the line.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-09-25T23:23:39 phase=3 state=open review_scope=out -->
+### p3-r11 · finding [open] (reviewer: out of scope) · test_opencode_plugin_live flaky under parallel load (phase 3)
+
+Not caused by this change; not touched by the diff.
