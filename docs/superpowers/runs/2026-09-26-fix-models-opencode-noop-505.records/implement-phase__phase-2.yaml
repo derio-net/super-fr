@@ -10,8 +10,7 @@ ticks:
   - P2.T1.S1
   - P2.T1.S2
 refactor:
-  P2.T1.S1: "No refactoring — implementation complete"
-  P2.T1.S2: "No refactoring — tests and quality gates all pass"
+  P2.T1: "No further refactoring was needed after the result type, shared reporting path, and checks were complete."
 journal:
   - kind: discovery
     id: phase-2-implementation
