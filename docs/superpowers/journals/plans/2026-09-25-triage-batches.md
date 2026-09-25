@@ -150,3 +150,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f5 created=2026-09-25T21:40:45 phase=2 state=open review_scope=in -->
 ### r2p-f5 · finding [open] (reviewer: in scope) · Duplicate member ids accepted (create/edit), then refused confusingly as 'in y, y' (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f6 created=2026-09-25T21:40:46 phase=2 state=open review_scope=in -->
+### r2p-f6 · finding [open] (reviewer: in scope) · save_batches: quoted top-level "batches": key gets a duplicate appended; a file starting with --- becomes two documents and can never take a batch (phase 2)
