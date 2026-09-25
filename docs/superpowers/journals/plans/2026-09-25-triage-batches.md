@@ -388,3 +388,8 @@ Worktree.commit_all(message, version_files) stages git add --update plus untrack
 ### r3-f8-resolved · finding [fixed] · resolves r3-f8: p3-reserve-order sound but spec §3.D and Test Plan 11 still describe explicit-order-first reservation; amend the spec
 
 Spec 3.D and Test Plan 11 amended: reservations follow dispatch sequence (next after max(origin, every live reservation)); explicit order applies at merge-time reconcile. Recorded in the spec journal as decision d-reserve-order crediting p3-reserve-order and the reviewer's verification. Tests (unchanged, already pin it): test_triage_batch_version.py::test_the_reservation_follows_the_highest_live_reservation, test_triage_batch_dispatch.py::test_successive_dispatches_reserve_successive_versions
+
+<!-- fr:journal kind=finding scope=plan id=r3-f9-resolved created=2026-09-26T01:12:46 state=fixed resolves=r3-f9 answered_by=agent -->
+### r3-f9-resolved · finding [fixed] · resolves r3-f9: --repair ignores batch stage: re-labels closed/released issues on merged or abandoned batches; restrict to dispatched/pr-open
+
+--repair on a batch whose last event is a dispatch refuses unless its stage is dispatched or pr-open (merged, partial, abandoned refused, no forge write). Tests: test_triage_batch_dispatch.py::test_repair_refuses_a_batch_that_is_no_longer_in_flight[abandoned|merged|partial], ::test_repair_completes_a_batch_in_flight[dispatched|pr-open]
