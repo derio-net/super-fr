@@ -168,3 +168,8 @@ Reviewer (minor, borderline in): same class as the spec's rule 'fr commits its r
 ### p3-m2 · finding [open] (reviewer: in scope) · commit_paths commits the whole working-tree file (phase 3)
 
 Reviewer (minor): hand edits in an fr-owned record ride fr's commit; document it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-m3 created=2026-09-25T12:15:03 phase=3 state=open review_scope=in -->
+### p3-m3 · finding [open] (reviewer: in scope) · _staged_among fallback is not actually fail-closed (phase 3)
+
+Reviewer (minor): when git cannot answer, every candidate (incl. a foreign wrapper) is passed on; comment overstates.
