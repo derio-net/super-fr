@@ -78,7 +78,7 @@ steps:
       sessions: 1
   implement:
     state: running
-    at: '2026-09-25T09:19:19+00:00'
+    at: '2026-09-25T10:09:30+00:00'
     members:
     - implement-phase
     - review-phase
@@ -218,6 +218,19 @@ steps:
             cache_creation_input_tokens: 550854
             cache_read_input_tokens: 13645681
             output_tokens: 1773
+      phase/3/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-25T10:09:30+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+          estimate:
+            journal_entries: 23
+            journal_lines: 145
+            handoff_chars: 6171
+            spec_bytes: 14780
+            plan_bytes: 25851
   journal-check:
     state: pending
   deliver:
