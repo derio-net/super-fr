@@ -74,3 +74,8 @@ hermes.py:101-114.
 ### p1-r6 · finding [open] (reviewer: in scope) · .fr-deliver classified verify for shell writes but journal_write for Write tool (phase 1)
 
 classify.py:127 vs :180.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-09-25T20:03:26 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · Report CLI test needle 'implement' matches the column header (phase 1)
+
+tests/unit/test_usage_report.py:187.
