@@ -109,20 +109,3 @@ def test_dispatch_measurement_stays_none(db: Path) -> None:
     reader = OpenCodeReader()
     assert reader.locate_session(_env(db)) is None
     assert reader.measure(db, agent=None, start=START, end=END, same_session=True) is None
-
-
-def test_the_parity_matrix_declares_main_session_cost() -> None:
-    """Spec §D: claude-code enforced, opencode partial (not live-proven),
-    hermes absent (no reader)."""
-    from fr.harness import load_matrix
-
-    (row,) = [s for s in load_matrix().surfaces if s.id == "main-session-cost"]
-    assert row.kind == "interaction"
-    states = {name: cell.state for name, cell in row.harnesses.items()}
-    assert states == {
-        "claude-code": "enforced",
-        "opencode": "partial",
-        "hermes": "absent",
-        "codex": "unsupported",
-        "copilot-cli": "unsupported",
-    }

@@ -59,8 +59,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
     executes a `kind: cli` step directly and never a `kind: agent` one — it
     emits a dispatch brief instead; `resolve` is the only way an `agent`
-    step's cursor moves past `running`. `cost` prints each top-level step's
-    main-session usage (`StepRecord.main_session`); `deliver`'s derived
+    step's cursor moves past `running`. `cost` prints a run's cost per step
+    and model from its usage file (`fr/run/cost.py`; run 7 moved every figure
+    out of the cursor — the v5/v6 shape is frozen as
+    `fr.run.legacy.RunStateV6`); `deliver`'s derived
     `proportionality` evidence runs `fr plan proportionality`
     (`fr/proportionality.py`). `plugins/super-fr/workflows/` ships
     the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
@@ -124,10 +126,21 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (pure `(tool, command|path) -> activity`), `rollup.py` (the harness's dollars
     split by fixed price ratios across activities and cursor step windows, plus
     turns), `render.py` (table / one HTML page, `—` for every missing figure).
-    CLI: `fr usage collect|report` (`commands/usage_cmd.py`); the cache lives
-    under `$HOME/.cache/fr/usage/`, never the repo, so `usage` is in
-    `READ_ONLY_COMMANDS`. Driver skill: `fr-audit`. Dollars always come from the
-    harness; fr invents no list price.
+    CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
+    cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
+    `READ_ONLY_COMMANDS` (`backfill` only CREATES archive files). Driver skill:
+    `fr-audit`. Dollars always come from the harness; fr invents no list price.
+    §5.B persists it: `file.py` is the `usage` artifact kind
+    (`docs/superpowers/usage/<run-id>.yaml`, one capture per host, host label
+    `h-<sha256(run+hostname)[:8]>`, an ALLOWLIST projection — never a
+    `model_dump` of a record, which holds raw commands and paths), `capture.py`
+    writes it at `resolve --step deliver`, a new host's first resolve and
+    `fr archive` (never failing the step), `backfill.py` fills archived runs.
+    **Host-side rule** (`fr/isolation/where.py`): `fr run`/`fr usage` execute
+    on the harness host — `fr isolation exec` refuses them in devcontainer
+    mode, and the `run`/`usage` groups refuse in-process on a `mode: worktree`
+    marker plus container evidence (`tests/conftest.py` neutralises the probe
+    suite-wide).
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)

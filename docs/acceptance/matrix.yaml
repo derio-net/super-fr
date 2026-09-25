@@ -4152,26 +4152,38 @@ rows:
       without an extra agent turn
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/unit/test_usage_capture.py
+    status: ci
+    notes: fr run resolve --step deliver writes usage/<run>.yaml in the SAME commit
+      as the cursor move, no extra agent turn; new-host and archive captures covered
+      too; phase 2
   - id: usage-readable-on-any-host
     capability: Lean cost-aware pipeline
     acceptance: fr run cost shows a delivered run's cost on a checkout that never ran
       it
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/unit/test_run_cost_cmd.py
+    status: ci
+    notes: fr run cost reads usage/ (then implemented/usage/) on a checkout with no
+      cursor and no transcripts; phase 2
   - id: usage-privacy-no-host-identity
     capability: Lean cost-aware pipeline
     acceptance: A usage file never contains a hostname, base URL, path or message content
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_kind.py
+    status: ci
+    notes: 'test_a_capture_serializes_no_host_url_path_or_content: a capture from fixture
+      host laptop.corp.example whose tool-call targets hold a hostname, ~/ and /Users
+      paths and a URL serializes none of them (allowlist projection, p2-r12); phase
+      2'
   - id: usage-devcontainer-captures
     capability: Lean cost-aware pipeline
     acceptance: A devcontainer-mode run's usage file has readable sessions
