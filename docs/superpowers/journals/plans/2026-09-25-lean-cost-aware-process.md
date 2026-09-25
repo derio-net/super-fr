@@ -294,3 +294,8 @@ commands/usage_cmd.py:54.
 ### r-p2 · review · Phase 2 review (independent reviewer): 11 findings (p2-r20..r30), all in scope; spec §5.B.1/3/6 amended for r20 and r29 (phase 2)
 
 Reviewer a72e52c7973e5ac63 (Opus 5.5). Verified clean: _read_any_version order, parity row replacement, host label + field-by-field allowlist, capture in the cursor commit and never failing its step, archive move, backfill read-only, RunStateV6 freeze + frozen hops, bridge refusal only in devcontainer with the right uv run fr/fr form, external never refused. Blocker: p2-r20 (host-worktree pods refused).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-d-review-fixes created=2026-09-25T22:15:26 phase=2 -->
+### p2-d-review-fixes · discovery · Phase-2 review fixes: live shapes captured, one pre-existing gap noted (phase 2)
+
+Briefs (p2-r24): the OpenCode task part shape (state.input.prompt, state.metadata.sessionId/parentSessionId) was read from this operator's live opencode.db (key shapes and sizes only) before writing the reader; the Claude Code fixture gained its two real Agent prompts as same-length placeholders (96, 2480 chars) from the same source transcript; NOTE.md records both and the new sha256s. Committed usage files regenerated through split_run_usage over the eab566e9^ v6 cursors plus capture() for this host (figures reflect the orchestrator session at recapture time). Pre-existing gap, not fixed: the kind: cli gate-clear branch of fr run resolve never persists _take_unobserved() (the cli step record has no unit to carry evidence), so unobserved=operator-gate reaches stderr but not the cursor there; agent-kind gates (fr-goal's brainstorm) record it. Conftest container_evidence patch dropped: the full suite passes with evidence forced on.
