@@ -4060,8 +4060,9 @@ def resolve_in_process(
     (every gate included), with the engine's written paths noted into the same
     commit, and the body's own stdout held back — the engine prints one line.
 
-    `evidence.answered_by` is the one non-evidence key a record's evidence may
-    carry: who answered the step's operator gate (`--answered-by`).
+    Four non-evidence keys a record's evidence may carry are the flags of the
+    same names: `answered_by` (who answered the step's operator gate) and
+    `agent`/`harness`/`model` (the late identity of the unit's holder).
     """
     import contextlib
     import io
@@ -4069,6 +4070,9 @@ def resolve_in_process(
 
     offered = dict(evidence)
     answered_by = offered.pop("answered_by", "agent")
+    agent = offered.pop("agent", None)
+    harness = offered.pop("harness", None)
+    model = offered.pop("model", None)
     writes = _RunWrites(verb="resolve", step=step_id, item=item, outcome=state_value)
     for path in also_commit:
         writes.note(repo_root, path)
@@ -4084,6 +4088,9 @@ def resolve_in_process(
                 evidence=[f"{k}={v}" for k, v in offered.items()],
                 item=item,
                 answered_by=answered_by,
+                agent=agent,
+                harness=harness,
+                model=model,
             )
             _capture_on_new_host(writes, {"step_id": step_id})
         writes.commit()

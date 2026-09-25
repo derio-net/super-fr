@@ -63,19 +63,29 @@ the same capability boundary as #420, read from the other side).
 
 1. Read the phase scope, the spec, and the journal handoff.
 2. Implement the phase **TDD** via `superpowers:test-driven-development` /
-   `fr-execute`: red → green → refactor per task, one task at a time — or record
-   `no-refactor-because: P<n>.T<m>` in the plan journal, tagged `--phase N`, when
-   there is nothing to clean. Run every command through `fr isolation exec -- …`
-   against the shared workspace.
-3. Tick steps and complete the phase with `fr plan edit` exactly as `fr-execute`
-   prescribes. **Never open a PR** — the orchestrator owns delivery.
-4. Append what you learned to the plan journal as you go:
+   `fr-execute`: red → green → refactor per task, one task at a time. Run every
+   command through `fr isolation exec -- …` against the shared workspace.
+   **Never open a PR** — the orchestrator owns delivery.
+3. **Keep the phase's step record** — the file your brief's `record` names
+   (also shown by `fr pickup <plan-dir> --phase N`, pre-filled with this run,
+   step and item, and only the sections this step may carry). As you go, add
+   each step id you finish to `ticks:`; a `refactor:` reason
+   (`P<n>.T<m>: "why there was nothing to clean"`) for a task you did not
+   refactor; and what you learned to `journal:` — `decision`, `discovery`, or
+   `finding` (`state: open|fixed|refuted`, `review_scope: in|out`), phase-scoped
+   by the record's item. Commit the record with your work, so a session that
+   dies mid-phase leaves it for the next one (`fr pickup` shows it as "record in
+   progress" — continue it, never start over). **Do not resolve it**: the
+   orchestrator's one `fr run resolve --record` applies all of it and completes
+   the phase in one commit. This is the durable record the orchestrator reviews
+   and the PR body is rendered from.
+4. **No record** (the runner path, or a plan with no run) → use the verbs
+   instead, exactly as `fr-execute` prescribes: `fr plan edit --tick`/
+   `--complete-phase`, and
    `fr journal add --scope plan --slug <plan-slug> --kind discovery|finding --phase N …`
-   (findings carry `--state open|fixed|refuted`; use `--global` instead of
-   `--phase N` only for an entry that genuinely applies to every phase — one of
-   the two is required, since an untagged entry renders in full in every
-   handoff, at every phase). This is the durable record the orchestrator
-   reviews and the PR body is derived from.
+   (use `--global` instead of `--phase N` only for an entry that genuinely
+   applies to every phase — an untagged entry renders in every handoff), and a
+   `no-refactor-because: P<n>.T<m>` discovery for a task with nothing to clean.
 
 ## Contract — the worktree has exactly one writer
 
@@ -107,12 +117,13 @@ before you start; these are the disciplines that hold while you run.
 A compact structured result for the orchestrator — the only thing that
 re-enters its context:
 
-- steps ticked / phase completion state;
+- the **record path** (committed) and its outcome — `done`, `failed` or
+  `blocked` with the blocker named; with no record, the steps ticked and the
+  ids of journal entries you added;
 - the test command run and its pass/fail summary;
-- files touched;
-- the ids of journal entries you added (so the orchestrator can render them).
+- files touched.
 
-Keep the prose minimal; the journal holds the detail.
+Keep the prose minimal; the record holds the detail.
 
 ## Long commands, and what you must not leave behind
 

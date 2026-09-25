@@ -71,23 +71,32 @@ an out-of-scope one it silently drops is not.
 
 ## What you return
 
-A compact structured list — the only thing that re-enters the orchestrator's
-context. No preamble, no pasted file contents:
+**Your return is the `spec-review` step's record** (spec 2026-09-25 §5.C.7) —
+the orchestrator saves it as the file its brief's `record` names, adds a
+`resolves:` entry for each finding it fixes or files, and applies it with one
+`fr run resolve --record`. So return YAML in the record's own shape, the only
+thing that re-enters the orchestrator's context. No preamble, no pasted file
+contents:
 
-```
-verdict: clean | findings
-findings:
-  - id: s1
-    check: decisions | codebase | consistency
-    scope: in | out
-    scope_reason: <one line>
+```yaml
+journal:
+  - kind: finding
+    id: s1
+    review_scope: in            # in | out
     title: <one line>
-    evidence: <decision id / spec section / path:line>
-    detail: <two or three sentences: what is wrong, and what would make it right>
-verified:
-  - <path:line> — <name the spec relies on, confirmed>
+    body: |
+      check: decisions | codebase | consistency
+      evidence: <decision id / spec section / path:line>
+      scope: <one-line reason for the tag>
+      <two or three sentences: what is wrong, and what would make it right>
+  - kind: review
+    id: spec-review
+    title: "independent spec review: <N> findings | clean"
+    body: |
+      verified:
+      - <path:line> — <name the spec relies on, confirmed>
 ```
 
-`verified` is the list of names you checked and found correct; it is what makes
-"no findings" distinguishable from "did not look". An empty review returns
-`verdict: clean` with `findings: []` and a non-empty `verified`.
+The `verified` list in the review entry is the names you checked and found
+correct; it is what makes "no findings" distinguishable from "did not look". A
+clean review returns the `review` entry alone, with a non-empty `verified`.

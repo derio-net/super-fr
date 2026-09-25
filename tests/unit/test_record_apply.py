@@ -219,3 +219,15 @@ def test_self_review_no_longer_demands_a_refactor_justification(tmp_path: Path) 
     root = started_run(tmp_path)
     issues = self_review(parse(root / PLAN_REL))
     assert not [i for i in issues if "no-refactor-because" in i.message]
+
+
+def test_record_evidence_carries_the_holders_model(tmp_path: Path) -> None:
+    """`evidence.model` is `--model`: the model the review ran on (fr-goal §6)."""
+    root = _implemented(tmp_path)
+    record = write_record(
+        root, _review_record(evidence={"review": "r-p1", "reviewer": "rv-1", "model": "m-1"})
+    )
+
+    assert _resolve(root, record, step="review-phase").exit_code == 0
+    attempt = units.last_attempt(load_run_state(root, RUN), "phase/1/review-phase")
+    assert attempt is not None and attempt.model == "m-1"

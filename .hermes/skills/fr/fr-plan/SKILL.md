@@ -60,11 +60,11 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 
 ## Rules
 
-- TDD (`superpowers:test-driven-development`): red → green → refactor — or a recorded `no-refactor-because:`
-  (task id) in the plan journal. No speculative generality; no silent skipping.
+- TDD (`superpowers:test-driven-development`): red → green → refactor — or a refactor reason, a
+  **step-record field** (`refactor: {P<n>.T<m>: "<why>"}`; a `no-refactor-because:` journal entry counts too).
 - **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a separate
-  `REFACTOR + quality gate` **task** for larger ones. Omit only with justification; `fr plan
-  self-review` enforces it (single-step tasks, manual phases, ticked tasks exempt).
+  `REFACTOR + quality gate` **task** for larger ones. Omit only with a reason; the phase's `fr run
+  resolve` enforces it (single-step tasks, manual phases exempt), not self-review — at plan time it's a guess.
 - **Walking skeleton first:** the first agentic phase smokes delivery (CI green on a trivial test,
   fixtures captured never constructed); mark it `skeleton: true`. Self-review errors without it AND
   when it is the only agentic phase — real work goes in later phases (override: `skeleton-override-*`).

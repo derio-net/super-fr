@@ -21,10 +21,12 @@ def test_dispatches_fr_phase_executor() -> None:
     assert "fr-phase-executor" in _text()
 
 
-def test_journal_render_derives_pr_body() -> None:
+def test_fr_renders_the_pr_body() -> None:
+    """Spec 2026-09-25 §5.C.4: the PR body is fr's render (`pr-body.md`), not
+    one the orchestrator assembles from `fr journal render` by hand."""
     t = _text()
-    assert "fr journal render" in t
-    assert "fr journal add" in t
+    assert "pr-body.md" in t
+    assert "--record" in t
 
 
 def test_journal_check_gates_delivery() -> None:
