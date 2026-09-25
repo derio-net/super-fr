@@ -489,3 +489,8 @@ SKILL.md:96 claim now true via p3-r1 (engine verifies answered_by operator on th
 ### p3-r7-resolved · finding [fixed] · resolves p3-r7: No test that deliver's tests= log gate still fires through --record
 
 test_deliver_tests_log_gate_fires_through_a_record[absent|stale]: exit 2, no byte or HEAD change, deliver still running.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-09-25T23:48:02 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: fr plan edit --complete-phase no longer enforces the refactor check
+
+_plan_writes runs refactor_gaps on every actual phase completion (verb or record), counting the record in-memory refactor/journal entries; back-compat journal no-refactor-because still satisfies it. test_complete_phase_verb_refuses_a_task_with_no_refactor_reason; prose in fr-execute + fr-phase-executor notes it.
