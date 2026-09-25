@@ -6578,3 +6578,68 @@ def test_on_the_default_branch_the_cursor_lands_but_is_not_committed(tmp_path: P
     assert _git_out(repo, "rev-parse", "HEAD") == before
     assert _runs_clean(repo) != ""
     assert "fr: not committed (" in res.stderr and "default branch" in res.stderr
+
+
+# --- gh#610 p3-r1: the commit subject is `<verb> <step>[ <item>] <state>` ----
+
+
+def _subject(repo: Path) -> str:
+    return _git_out(repo, "log", "-1", "--format=%s")
+
+
+def test_commit_subject_of_a_grouped_member_advance_claim_and_resolve(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — advance code phase/1 running"
+
+    claim = ["run", "claim", "r1", "--step", "code", "--item", "phase/1"]
+    res = _invoke(repo, shipped, [*claim, "--agent", "a1"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — claim code phase/1 claimed"
+
+    res = _invoke(repo, shipped, [*claim, "--abandoned"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — claim code phase/1 abandoned"
+
+    res = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+    assert res.exit_code == 0, res.output
+    res = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — resolve code phase/1 done"
+
+
+def test_commit_subject_of_a_gate_clear_is_the_resolved_state(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+
+    res = _clear_cli_gate(repo, shipped)
+
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == "chore(fr): run r1 — resolve brainstorm done"
+
+
+def test_commit_subject_of_a_flat_resolve_and_a_cli_advance(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
+    _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])
+    step = load_run_state(repo, "r1").cursor
+    res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "failed"])
+    assert res.exit_code == 0, res.output
+    assert _subject(repo) == f"chore(fr): run r1 — resolve {step} failed"
+
+    repo2 = _repo(tmp_path / "two")
+    _write_shape(shipped, "fails", _FAILING_SHAPE)
+    _invoke(repo2, shipped, ["run", "start", "fails", "--branch", "b", "--run-id", "r2"])
+    _invoke(repo2, shipped, ["run", "advance", "r2"])
+    assert _subject(repo2) == "chore(fr): run r2 — advance boom failed"

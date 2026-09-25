@@ -115,6 +115,10 @@ class _RunWrites:
     verb: str
     step: str | None = None
     item: str | None = None
+    # The state word the subject ends in, when the command knows it better
+    # than the cursor does (p3-r1): a member resolve/claim has no record of its
+    # own in `steps`, and a cleared cli gate is `pending` again on disk.
+    outcome: str | None = None
     loaded_cursor: str | None = None
     last: RunState | None = None
     paths: dict[Path, list[Path]] = field(default_factory=dict)
@@ -131,7 +135,9 @@ class _RunWrites:
         if self.item:
             parts.append(self.item)
         record = self.last.steps.get(step) if (self.last is not None and step) else None
-        if record is not None:
+        if self.outcome is not None:
+            parts.append(self.outcome)
+        elif record is not None:
             parts.append(record.state)
         return f"chore(fr): run {run} — {' '.join(parts)}"
 
@@ -162,6 +168,13 @@ def _save_run_state(repo_root: Path, state: RunState) -> Path:
     return path
 
 
+def _note_subject(*, step: str, item: str | None, outcome: str) -> None:
+    """Name the unit this command acted on in its commit subject (p3-r1)."""
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        writes.step, writes.item, writes.outcome = step, item, outcome
+
+
 def _commit_run_writes_now() -> None:
     """Commit this command's writes BEFORE it prints a dispatch brief.
 
@@ -184,13 +197,25 @@ def _note_loaded(state: RunState) -> None:
 _Cmd = TypeVar("_Cmd", bound=Callable[..., None])
 
 
-def _commits_run_writes(verb: str) -> Callable[[_Cmd], _Cmd]:
-    """Commit every record the wrapped command wrote, once, on every exit path."""
+def _commits_run_writes(
+    verb: str, outcome: Callable[[dict[str, Any]], str | None] | None = None
+) -> Callable[[_Cmd], _Cmd]:
+    """Commit every record the wrapped command wrote, once, on every exit path.
+
+    `outcome` reads the subject's closing state word off the command's own
+    arguments (`resolve --state`, `claim --abandoned`) — the state the command
+    was asked to record, which the cursor alone cannot always say (p3-r1).
+    """
 
     def decorate(fn: _Cmd) -> _Cmd:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> None:
-            writes = _RunWrites(verb=verb, step=kwargs.get("step_id"), item=kwargs.get("item"))
+            writes = _RunWrites(
+                verb=verb,
+                step=kwargs.get("step_id"),
+                item=kwargs.get("item"),
+                outcome=outcome(kwargs) if outcome is not None else None,
+            )
             token = _RUN_WRITES.set(writes)
             try:
                 fn(*args, **kwargs)
@@ -2502,6 +2527,7 @@ def _print_member_dispatch(
     `_split_member_id` returns (item, member) — opposite orders that are
     easy to splat into each other by accident.
     """
+    _note_subject(step=member.id, item=item, outcome="running")
     _commit_run_writes_now()
     console.print(f"{step.id}: dispatch brief ({item}/{member.id})", soft_wrap=True)
     console.print(
@@ -3700,7 +3726,7 @@ def _resolve_member(
 
 
 @run_app.command("resolve")
-@_commits_run_writes("resolve")
+@_commits_run_writes("resolve", lambda kw: kw.get("state_value"))
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id to resolve (must be `running`)."),
@@ -4093,7 +4119,7 @@ def _claim_identity(
 
 
 @run_app.command("claim")
-@_commits_run_writes("claim")
+@_commits_run_writes("claim", lambda kw: "abandoned" if kw.get("abandoned") else "claimed")
 def claim_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id (or member id) to claim."),
