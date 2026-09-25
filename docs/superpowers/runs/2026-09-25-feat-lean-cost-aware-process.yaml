@@ -3,7 +3,7 @@ run: 2026-09-25-feat-lean-cost-aware-process
 workflow: fr-goal@1
 branch: feat/lean-cost-aware-process
 started: '2026-09-25T10:26:39+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -133,6 +133,11 @@ steps:
           reviewer: a9217b89215b69c05
           findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-r6,p3-r7,p3-r8,p3-r9,p3-r10,p3-r11
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-25T21:48:48+00:00'
+    exit: 0
+    stdout: |
+      1 deferred finding(s): 83ed2919b8c4 → #623
+      1 out-of-scope finding(s): p3-r11
   deliver:
     state: pending
