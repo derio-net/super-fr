@@ -253,3 +253,8 @@ pending: fixing phase-3 test cadence assertions per operator steer
 ### p3-steer-resolved-2 · finding [fixed] · resolves p3-steer: Phase-3 tests assert commit cadence; stderr line count unpinned
 
 a3b06b5a: replaced commit-count/cadence assertions in test_run_cli.py, test_plan_cmd.py, test_journal_cmd.py with record-paths-clean outcome checks; kept subject-format checks (robustified via path-scoped git log); added <=1 stderr commit-line pins for run advance (grouped member), run resolve --no-questions, plan edit --tick, journal add (no double-report found); disable-proof done and reverted; full suite 5260 passed, 89 skipped
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-09-25T14:00:53 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · Handoff prints 'push it' even when the cursor commit was refused (phase 4)
+
+run_cmd.py _closeout_handoff_lines reads HEAD regardless of whether _commit_run_writes_now() committed (default branch, stuck lock, detached HEAD) — false assurance the cursor reached the PR.
