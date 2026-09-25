@@ -388,3 +388,8 @@ Post-deliver review (low-medium): commit.py's pending.returncode != 0 branch is 
 ### pd-r3 · finding [open] (reviewer: in scope) · No CLI-level test at the two dogfood wiring points (phase 4)
 
 Post-deliver review (low): no test asserts the handoff's 'start a NEW session in <dir>' names the primary checkout from a linked worktree, nor that a byte-identical re-resolve prints 'cursor committed as' (not 'NOT committed').
+
+<!-- fr:journal kind=finding scope=plan id=pd-r1-resolved created=2026-09-25T15:34:11 state=fixed resolves=pd-r1 -->
+### pd-r1-resolved · finding [fixed] · resolves pd-r1: primary_checkout mis-resolves a --separate-git-dir primary
+
+86bebae3: primary_checkout resolves via git worktree list --porcelain's first entry (fall back to repo_root when git fails, isn't a repo, or the entry is bare), recovering the checkout containing a relocated main git-dir instead of returning the linked worktree. Tests: test_primary_checkout_resolves_a_relocated_git_dir_primary_from_its_linked_worktree, test_primary_checkout_falls_back_to_repo_root_for_a_bare_repository.
