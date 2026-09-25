@@ -30,6 +30,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 from fr.usage.model import UsageRecord
+from fr.usage.readers.hermes import ACP_ZERO_TOKENS
 from fr.usage.rollup import Window, rollup
 
 USAGE_REL = Path("docs") / "superpowers" / "usage"
@@ -172,6 +173,38 @@ def archived_usage_path(repo_root: Path, run_id: str) -> Path:
 # --- the allowlist projection ---------------------------------------------
 
 
+# The committed file's `unavailable` vocabulary (p2-r21). A reader's reason is
+# free text — its own catch-all copies the exception's message, which carries
+# absolute paths and usernames — so the projection keeps only these reasons
+# verbatim and maps everything else to `reader failed[: <what>]`. The live
+# `fr usage report` path reads the record, not this file, and keeps the detail.
+_KEPT_REASONS = frozenset(
+    {
+        "no reader for this harness",
+        "no transcript found for this session on this host",
+        "no session id given",
+        "session not in the Hermes database",
+        "session not in the OpenCode database",
+        ACP_ZERO_TOKENS,
+    }
+)
+_READER_FAILED = re.compile(r"^reader failed(?:: [A-Za-z_][A-Za-z0-9_]*)?$")
+_EXC_PREFIX = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit|Interrupt)): ")
+
+
+def committed_reason(reason: str) -> str:
+    """`reason`, mapped onto the closed vocabulary a committed file may carry."""
+    if reason in _KEPT_REASONS or _READER_FAILED.match(reason):
+        return reason
+    if match := _EXC_PREFIX.match(reason):
+        return f"reader failed: {match.group(1)}"
+    if "database unreadable" in reason:
+        return "reader failed: database unreadable"
+    if reason.startswith(("unreadable transcript", "unreadable subagent transcript")):
+        return "reader failed: unreadable transcript"
+    return "reader failed"
+
+
 def _role(record: UsageRecord) -> str:
     if record.role == "main":
         return "main"
@@ -185,7 +218,9 @@ def session_entry(record: UsageRecord, windows: Sequence[Window] = ()) -> Sessio
     Only model ids, token counts, dollars, turns and step names are read; tool
     calls are used to CLASSIFY (inside `rollup`) and never copied."""
     if record.unavailable is not None:
-        return SessionEntry(session=record.session, unavailable=record.unavailable)
+        return SessionEntry(
+            session=record.session, unavailable=committed_reason(record.unavailable)
+        )
     result = rollup([record], windows=windows)
     source: UsdSource = record.cost.source if record.cost.usd is not None else "none"
     tokens: dict[str, dict[str, int]] = {}
@@ -302,6 +337,7 @@ def load_usage(path: Path) -> UsageFile | None:
 
 
 __all__ = [
+    "committed_reason",
     "IMPLEMENTED_USAGE_REL",
     "MIGRATED_HOST",
     "USAGE_REL",

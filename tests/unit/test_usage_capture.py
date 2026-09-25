@@ -177,6 +177,69 @@ def test_a_reader_that_raises_is_unavailable_and_the_resolve_still_succeeds(
     assert entry.unavailable
 
 
+def test_a_readers_exception_text_never_reaches_the_committed_file(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r21: a reader that catches its own failure reports the exception's
+    text — paths, usernames. The committed projection maps it to a closed
+    vocabulary (`reader failed: <ExcType>`), never the text."""
+    from fr.run import telemetry
+
+    def denied(path: Path):
+        raise PermissionError(13, "Permission denied", "/Users/someone/secret/t.jsonl")
+
+    monkeypatch.setattr(telemetry, "_read_records", denied)
+    repo, shipped = _setup(tmp_path)
+    for step in ("brainstorm", "plan", "review"):
+        assert _step(repo, shipped, step).exit_code == 0
+    assert _step(repo, shipped, "deliver").exit_code == 0
+
+    text = usage_path(repo, RUN).read_text()
+    assert "/Users/" not in text and "someone" not in text
+    usage = load_usage(usage_path(repo, RUN))
+    assert usage is not None
+    entry = next(s for s in usage.captures[0].sessions if s.session == CC_SESSION)
+    assert entry.unavailable == "reader failed: PermissionError"
+
+
+@pytest.mark.parametrize(
+    ("reason", "committed"),
+    [
+        (
+            "PermissionError: [Errno 13] Permission denied: '/Users/x/a'",
+            "reader failed: PermissionError",
+        ),
+        (
+            "OpenCode database unreadable: unable to open /home/x/db",
+            "reader failed: database unreadable",
+        ),
+        ("Hermes database unreadable: /home/x/state.db", "reader failed: database unreadable"),
+        ("unreadable transcript: abc.jsonl", "reader failed: unreadable transcript"),
+        ("unreadable subagent transcript: agent-1.jsonl", "reader failed: unreadable transcript"),
+        ("reader failed: RuntimeError", "reader failed: RuntimeError"),
+        (
+            "no transcript found for this session on this host",
+            "no transcript found for this session on this host",
+        ),
+        ("session not in the OpenCode database", "session not in the OpenCode database"),
+        ("something nobody anticipated at /Users/x", "reader failed"),
+    ],
+)
+def test_the_committed_unavailable_reason_is_a_closed_vocabulary(
+    reason: str, committed: str
+) -> None:
+    from fr.usage.file import committed_reason
+
+    assert committed_reason(reason) == committed
+
+
+def test_the_acp_constant_is_kept_verbatim() -> None:
+    from fr.usage.file import committed_reason
+    from fr.usage.readers.hermes import ACP_ZERO_TOKENS
+
+    assert committed_reason(ACP_ZERO_TOKENS) == ACP_ZERO_TOKENS
+
+
 def test_a_corrupt_usage_file_never_fails_the_resolve(tmp_path: Path, transcripts: Path) -> None:
     repo, shipped = _setup(tmp_path)
     path = usage_path(repo, RUN)
