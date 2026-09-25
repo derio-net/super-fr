@@ -3,7 +3,7 @@ run: 2026-09-26-fix-models-opencode-noop-505
 workflow: fr-goal@1
 branch: fix/models-opencode-noop-505
 started: '2026-09-25T22:34:58+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -103,6 +103,9 @@ steps:
           findings: none
           unobserved: reviewer
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-25T23:05:58+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
