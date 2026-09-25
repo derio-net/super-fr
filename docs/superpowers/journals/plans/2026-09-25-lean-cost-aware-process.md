@@ -254,3 +254,8 @@ run/cost.py:87-93: supersede per session/step, report ignored entries.
 ### p2-r23 · finding [open] (reviewer: in scope) · Dispatched reviewer attempts (agent, no agent_type) labelled role: main (phase 2)
 
 artifacts/run_usage_split.py:109-114; regenerate both committed usage files.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r24 created=2026-09-25T21:40:23 phase=2 state=open review_scope=in -->
+### p2-r24 · finding [open] (reviewer: in scope) · Capture never fills briefs (phase 2)
+
+usage/capture.py:166-171: measure dispatch-prompt size from the parent transcript's Agent tool_use input; keep migrated handoff_chars.
