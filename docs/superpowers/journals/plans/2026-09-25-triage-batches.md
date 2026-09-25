@@ -368,3 +368,8 @@ Verified: take_theirs replaced the whole file. Now a conflicted version file is 
 ### r3-f3-resolved · finding [fixed] · resolves r3-f3: MEDIUM: batch merge never checks collected-config freshness (spec §3.I), yet runs its version.files/set/relock
 
 batch merge now fetches and holds check_config_fresh (shared _fresh_config with dispatch) before planning or reading the merge method. Test: test_triage_batch_merge.py::test_merge_refuses_a_collected_config_that_differs_from_origin
+
+<!-- fr:journal kind=finding scope=plan id=r3-f4-resolved created=2026-09-26T01:12:27 state=fixed resolves=r3-f4 answered_by=agent -->
+### r3-f4-resolved · finding [fixed] · resolves r3-f4: MEDIUM: p3-merge-method squash default can silently merge with the wrong method; read the repo default via gh repo view (viewerDefaultMergeMethod/*Allowed), --method as override
+
+Added GhClient.repo_merge_methods (RealGhClient: gh repo view --json viewerDefaultMergeMethod,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed, shape captured live; glab/tea raise UnsupportedForgeOperation naming gh#611). merge defaults to the repo's default; --method is an override refused when disallowed; no usable default among several allowed asks for --method. Spec 3.F/3.J amended; supersedes decision p3-merge-method. Tests: test_forge_adapter_batch_ops.py::test_repo_merge_methods_reads_the_viewer_default_and_the_allowed_methods, ::test_glab_and_tea_declare_each_batch_operation_unsupported[repo_merge_methods], test_triage_batch_merge.py::test_the_merge_method_defaults_to_the_repos_default, ::test_an_explicit_method_the_repo_disallows_is_refused, ::test_no_repo_default_among_several_allowed_methods_asks_for_one
