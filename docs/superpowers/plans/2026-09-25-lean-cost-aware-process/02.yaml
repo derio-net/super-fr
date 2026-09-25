@@ -205,9 +205,9 @@ state:
       ticked_at: '2026-09-25T18:33:46+00:00'
       note: ruff/mypy clean; fr validate artifacts 0
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T18:43:40+00:00'
+      note: test_usage_capture.py 4 red
     P2.T3.S2:
       state: ' '
       ticked_at: null
