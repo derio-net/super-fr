@@ -353,3 +353,8 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 ### r3-f14-resolved · finding [out-of-scope] · resolves r3-f14: Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash)
 
 Follows from the spec's per-scope triage state design, not from this phase; merge-time reconcile keeps merged versions unique.
+
+<!-- fr:journal kind=finding scope=plan id=r3-f1-resolved created=2026-09-26T01:12:11 state=fixed resolves=r3-f1 answered_by=agent -->
+### r3-f1-resolved · finding [fixed] · resolves r3-f1: HIGH: dispatch launches the runner, then the open-batch rule / compare-before-write refuses in _write: no event, no forge write, batch stuck (re-run says live, --repair refuses)
+
+Verified: check_open_membership/compare-before-write ran only in _write after runner.dispatch. Now a write gate (open-batch rule + save_batches dry_run) runs before can_dispatch and again immediately before runner.dispatch; a post-launch write failure exits 1 naming handle, branch, reserved version and the exact '--repair --yes --handle H --reserved-version V' command; --repair records the missing event only when the runner reports the item live. Tests: test_triage_batch_dispatch.py::test_a_redispatch_that_would_break_the_open_batch_rule_never_reaches_the_runner, ::test_a_change_to_judgements_before_launch_is_refused_before_the_runner, ::test_an_event_write_failing_after_launch_names_the_handle_and_the_recovery, ::test_repair_records_the_missing_dispatch_of_a_live_run, ::test_repair_records_nothing_for_a_run_the_runner_does_not_hold, ::test_repair_needs_the_reserved_version_when_the_repo_reserves
