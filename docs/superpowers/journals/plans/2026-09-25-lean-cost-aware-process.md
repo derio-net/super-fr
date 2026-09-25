@@ -304,3 +304,8 @@ Briefs (p2-r24): the OpenCode task part shape (state.input.prompt, state.metadat
 ### p2-r20-resolved · finding [fixed] · resolves p2-r20: In-process refusal blocks host-worktree pods/CI: mode: worktree + container evidence is not devcontainer
 
 aaf707cf: fr isolation up writes target (devcontainer|worktree) beside unchanged mode; require_harness_host refuses iff target devcontainer + container evidence; legacy marker never refused. Edit-gate readers (Claude Code, Hermes, OpenCode bun) tested with the key. Conftest patch dropped: full suite green with evidence forced on.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r21-resolved created=2026-09-25T22:15:59 state=fixed resolves=p2-r21 -->
+### p2-r21-resolved · finding [fixed] · resolves p2-r21: unavailable reason copies exception text (absolute paths, usernames) into committed usage files
+
+1facaa02: session_entry maps unavailable through committed_reason, a closed vocabulary (known constants incl. ACP verbatim, else reader failed[: ExcType|database unreadable|unreadable transcript]); a PermissionError on a /Users path leaves no path in the committed YAML.
