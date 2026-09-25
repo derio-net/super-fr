@@ -188,6 +188,6 @@ state:
       note: triage-batch-state -> ci (unit refs model+verbs tests); forge-visible
         and dispatch stay not-implemented with notes; fr acceptance check exit 0
   completion:
-    at: null
+    at: '2026-09-25T21:28:32+00:00'
     note: null
     observed_prs: []
