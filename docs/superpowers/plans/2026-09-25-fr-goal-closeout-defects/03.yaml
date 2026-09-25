@@ -166,9 +166,11 @@ state:
       ticked_at: '2026-09-25T09:27:42+00:00'
       note: 'RED: 3 tests, HEAD subject still init/seed (no commit)'
     P3.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T09:52:33+00:00'
+      note: plan_cmd create/edit + journal_cmd add/resolve call commit_records; plan_ops
+        untouched, test_plan_ops staged-not-committed pin passes (136 passed across
+        plan_ops/plan_cmd/journal_cmd/records_commit)
     P3.T4.S3:
       state: ' '
       ticked_at: null
