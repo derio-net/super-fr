@@ -188,9 +188,10 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T18:29:00+00:00'
+      note: commit_paths + fr pickup --run present; HEAD already contains origin/main
+        (19402029), no rebase needed; full suite 5390 passed
     P2.T2.S1:
       state: ' '
       ticked_at: null
