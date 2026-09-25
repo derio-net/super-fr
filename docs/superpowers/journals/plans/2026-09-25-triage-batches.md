@@ -301,3 +301,8 @@ README.md Components table gains an fr-herdr row; HERMES.md 'Where things are' n
 ### r2p-f14-resolved · finding [fixed] · resolves r2p-f14: fr-triage SKILL.md still tells agents to write schema: 1 (lines 48, 65)
 
 fr-triage SKILL.md now says schema: 2 (loop step 3 and the example), documents batches/events, loop step 5 and the --yes rule; mirrors regenerated. Tests: test_fr_triage_skill_example.py::test_the_skill_teaches_schema_2_and_batches, ::test_the_skill_names_the_batch_verbs_and_the_yes_rule
+
+<!-- fr:journal kind=discovery scope=plan id=p3-gate-fixes created=2026-09-26T00:41:56 phase=3 -->
+### p3-gate-fixes · discovery · P3.T6 gate: the skill line cap and the older triage seam tripwire both caught phase-3 changes (phase 3)
+
+The first full run had two failures, both from this phase: (1) test_skill_validation's 120-line cap — the batch additions took fr-triage/SKILL.md to 162 lines; condensed and reflowed to 120 with loop step 5, the --yes rule and schema 2 intact (the skill-example tests pin them). (2) test_triage_collect.py::test_fr_triage_touches_gh_only_in_collect banned subprocess across fr.triage except collect.py, independent of the 3.J batch tripwire; gitseam.py is now its second, narrower exception (subprocess allowed, fr.gh still banned). The targeted runs had been green: only the full suite saw either. Re-run: 5566 passed, 89 skipped, exit 0.
