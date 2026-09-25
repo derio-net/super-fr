@@ -459,7 +459,7 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
-    for name in ("journal", "matrix", "spec"):
+    for name in ("journal", "matrix", "spec", "usage"):
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"

@@ -376,6 +376,21 @@ def validate_matrix(path: Path) -> list[str]:
     return _model_problems(Matrix, data)
 
 
+# --- usage ---------------------------------------------------------------
+
+
+def validate_usage(path: Path) -> list[str]:
+    """A usage file (spec `2026-09-25-lean-cost-aware-process-design.md` §5.B)
+    against `UsageFile` — which also refuses two captures from one host and a
+    host that is a name rather than a label."""
+    from fr.usage.file import UsageFile
+
+    data, problems = _load_mapping(path)
+    if problems or data is None:
+        return problems
+    return _model_problems(UsageFile, data)
+
+
 # --- spec ----------------------------------------------------------------
 #
 # Specs are hand-written Markdown with no schema, so the checks target the

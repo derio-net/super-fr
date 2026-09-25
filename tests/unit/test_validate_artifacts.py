@@ -146,6 +146,20 @@ It does not leak.
 """
 
 
+GOOD_USAGE = """schema_version: 1
+run: 2019-03-04-feat-widget
+captures:
+  - host: h-3f9a2c1e
+    harness: claude-code
+    mode: host-worktree
+    captured_at: '2019-03-04T00:00:00+00:00'
+    at: deliver
+    sessions:
+      - session: s-one
+        unavailable: transcript pruned
+"""
+
+
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
     plan_dir = root / "docs" / "superpowers" / "plans" / PLAN_SLUG
@@ -159,6 +173,7 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "run": _w(root, "docs/superpowers/runs/2019-03-04-feat-widget.yaml", GOOD_RUN),
         "matrix": _w(root, "docs/acceptance/matrix.yaml", GOOD_MATRIX),
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
+        "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
     }
 
 
@@ -229,6 +244,11 @@ MISSING_FIELD_CASES = {
         f"docs/superpowers/specs/{PLAN_SLUG}-design.md",
         GOOD_SPEC.replace("# Thermosiphon rebuild\n", "Thermosiphon rebuild\n"),
         "title",
+    ),
+    "usage": (
+        "docs/superpowers/usage/2019-03-04-feat-widget.yaml",
+        GOOD_USAGE.replace("    at: deliver\n", ""),
+        "at",
     ),
 }
 

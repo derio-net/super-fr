@@ -47,6 +47,7 @@ from fr.artifacts.structure import (
     validate_plan,
     validate_run,
     validate_spec,
+    validate_usage,
 )
 
 PRE_FRAMEWORK_VERSION = 1
@@ -399,6 +400,17 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_spec_stamp,
             write_version=_write_spec_stamp,
             validate=validate_spec,
+        ),
+        ArtifactKind(
+            name="usage",
+            # What a run cost, persisted beside its cursor (spec
+            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1.
+            current_version=1,
+            locator="docs/superpowers/usage/*.yaml",
+            stamp="`schema_version` in the usage yaml",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_usage,
         ),
     )
 }
