@@ -125,19 +125,30 @@ steps:
             cache_read_input_tokens: 8349337
             output_tokens: 1355
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-25T08:41:17+00:00'
           agent: a1f284c55f7631330
           harness: claude-code
           model: claude-sonnet-5
           session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
+          returned: '2026-09-25T08:47:22+00:00'
+          outcome: done
           estimate:
             journal_entries: 7
             journal_lines: 65
             handoff_chars: 3507
             spec_bytes: 14780
             plan_bytes: 24127
+          measured:
+            input_tokens: 58
+            cache_creation_input_tokens: 125434
+            cache_read_input_tokens: 2869671
+            output_tokens: 211
+        evidence:
+          review: review-p1
+          reviewer: a1f284c55f7631330
+          findings: p1-r1
   journal-check:
     state: pending
   deliver:
