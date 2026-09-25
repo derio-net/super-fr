@@ -4230,4 +4230,7 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    notes: 'Spec §9, target level: int. Phase 1 shipped the engine (fr usage report
+      --format html) with unit CLI tests (tests/unit/test_usage_report.py) and a local-only
+      golden check; the integration-level test the prose names is not written yet, so
+      the row is not flipped. Born at brainstorm 2026-09-25.'
