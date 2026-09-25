@@ -3,7 +3,7 @@
 - **Date:** 2026-09-25
 - **Status:** designed
 - **Origin:** operator request, triage session 2026-09-23 (batches of gh#574/#576/#569 and gh#577/#575/#471/#438); follow-up gh#611
-- **Journal:** `docs/superpowers/journals/specs/triage-batches.md`
+- **Journal:** `docs/superpowers/journals/specs/2026-09-25-triage-batches.md`
 - **Goal:** a batch of judged issues becomes first-class triage state that fr can
   dispatch to any run-capable runner as one fr-goal run, show on the forge, and
   merge in a computed order, with version bumps reserved up front.
