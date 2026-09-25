@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — drop_levels edit helper
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - lifecycle-acceptance-drop-level
+  skeleton: true
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/acceptance/edit.py
+  - tests/unit/test_acceptance_set_status.py
+  estimate_lines: 70
+tasks:
+- number: 1
+  title: drop_levels, red → green → refactor
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_set_status.py add unit tests (spec Test Plan item 8) importing
+      `from fr.acceptance.edit import drop_levels`: (a) `drop_levels({"unit": ("r:a", "r:b", "r:c")}, {"unit": ["r:b"]})`
+      returns a dict over all LEVELS keys with unit == ("r:a", "r:c") (order kept); (b) a repeated drop
+      `{"unit": ["r:b", "r:b"]}` drops once, no error; (c) an absent ref raises AcceptanceError whose message
+      names the level and the ref; (d) an unknown level key (e.g. "unti") raises AcceptanceError.
+      Run `uv run pytest tests/unit/test_acceptance_set_status.py -q --no-cov` — expect ImportError/failures.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add `drop_levels(existing: dict[str, tuple[str, ...]], drops: dict[str, list[str]]) -> dict[str, tuple[str, ...]]`
+      to packages/fr/src/fr/acceptance/edit.py beside merge_levels: refuse unknown keys exactly as merge_levels does,
+      dedupe drops per level, refuse any drop ref not in existing[level] with an AcceptanceError naming the level
+      and the ref (and the row's current refs for that level), and return every LEVELS key with the remaining
+      refs in original order. Update merge_levels' docstring sentence "Removing a ref stays a deliberate edit" to
+      point at drop_levels. Rerun — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: if merge_levels and drop_levels duplicate the unknown-key check, extract a private
+      `_refuse_unknown_levels(keys)` helper used by both. `uv run ruff check` and `uv run ruff format` on the
+      touched files; rerun the test file green. Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

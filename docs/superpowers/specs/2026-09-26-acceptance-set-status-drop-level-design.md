@@ -135,3 +135,9 @@ Unit tests of the engine, in `tests/unit/test_record_apply.py`:
    byte-identical.
 10. `apply_record` refuses drops keyed by an id with no item, by a create-branch
     item, and drops passed together with a `run_id`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|--|--|--|--|
+| 2026-09-26-acceptance-set-status-drop-level | `derio-net/super-fr` | `2026-09-26-acceptance-set-status-drop-level` | — |
