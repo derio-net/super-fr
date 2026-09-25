@@ -474,3 +474,8 @@ Record removed only after all writes+gates (tracked: just before the commit that
 ### p3-r4-resolved · finding [fixed] · resolves p3-r4: --record silently ignores --no-questions/--reason/--answered-by/--agent/--harness/--model
 
 Both: --record refuses --no-questions/--reason/--answered-by/--agent/--harness/--model; record gains no_questions + reason (outcome section) so the brainstorm bypass stays one --record resolve; fr-goal §1 documents it. Tests: flag refusal (5 cases) + brainstorm no_questions record.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-09-25T23:48:00 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: Record acceptance entries create-or-move by id existence, losing add/set-status refusals
+
+capability/acceptance present = create-only (existing id refused unless identical, for retry); absent = move-only (unknown id refused). Two tests in test_record_verbs.
