@@ -268,3 +268,8 @@ closeout.py:107-114: no command to get onto a housekeeping branch; a fresh sessi
 ### p4-r3 · finding [open] (reviewer: in scope) · Brief never says which checkout to run from (phase 4)
 
 closeout_brief omits the directory; only the transient handoff line has it. After merge the run file is on main and the workspace may be reaped.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-09-25T14:00:55 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · No test that resolved (deferred/fixed) out-of-scope findings are excluded from the brief (phase 4)
+
+test gap on the effective-state fold's exclusion path.
