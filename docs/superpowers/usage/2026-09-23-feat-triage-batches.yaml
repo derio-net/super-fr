@@ -120,19 +120,20 @@ captures:
 - host: h-8278cdf9
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-09-25T23:28:27+00:00'
+  captured_at: '2026-09-25T23:56:57+00:00'
   at:
   - resolve:review-phase
+  - deliver
   sessions:
   - session: dcff6006-440b-4a29-b738-f04b65457c17
     role: main
     models:
       claude-opus-5-5:
-        input: 1620
-        cache_write: 3985045
-        cache_read: 140845892
-        output: 209461
-        usd: 17.42872519999999
+        input: 1686
+        cache_write: 4018974
+        cache_read: 156105580
+        output: 228029
+        usd: 17.428725199999967
         usd_source: exact
       claude-haiku-4-5-20251001:
         input: 0
@@ -143,30 +144,33 @@ captures:
         usd_source: exact
     activity:
       implementation:
-        usd: 7.4002855496291815
-        turns: 425
+        usd: 7.374477126283053
+        turns: 438
       other:
-        usd: 5.682986270756113
-        turns: 202
+        usd: 5.673861382234231
+        turns: 212
       paperwork:
-        usd: 4.346457379614688
-        turns: 192
+        usd: 4.381390691482731
+        turns: 201
     steps:
       (outside run):
-        usd: 0.6023688557083019
+        usd: 0.5583373229605995
         turns: 32
       brainstorm:
-        usd: 1.9733440461596097
+        usd: 1.8288571141977807
         turns: 66
       spec-review:
-        usd: 1.39096402773052
+        usd: 1.2891185714213793
         turns: 81
       plan:
-        usd: 2.258841347074149
+        usd: 2.093450493582365
         turns: 44
       implement:
-        usd: 11.204210923327416
+        usd: 10.38384608906787
         turns: 577
+      deliver:
+        usd: 1.276119608770008
+        turns: 31
     briefs:
       a7d2b3feca4fcf8ed: 2205
       aa45425c178039a51: 2245
