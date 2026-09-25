@@ -196,3 +196,38 @@ class TestModelsApply:
         res = runner.invoke(app, ["models", "apply", "--harness", "bogus-harness"])
 
         assert res.exit_code != 0, "a typo'd --harness must be refused, not silently no-op"
+
+    def test_apply_reports_no_matching_files_for_empty_directory(self, tmp_path: Path) -> None:
+        """Phase 1.T1: when no agent files exist, report the absence plainly."""
+        res = runner.invoke(app, ["models", "apply", "--harness", "opencode"])
+
+        assert res.exit_code == 0, res.output
+        assert "nothing to update (no opencode agent files found)" in res.output.lower()
+
+    def test_apply_reports_discovered_count_when_files_already_correct(self, tmp_path: Path) -> None:
+        """Phase 1.T1: when agent files exist and are already correct, report
+        the count as 'already up to date', not the confusing 'nothing to update'
+        message that implies there were no files."""
+        agent_dir = _seed_opencode_agents(tmp_path / ".config")
+        # Ensure all agents are already correct by setting config matching them
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "mechanical", "--model", "m"],
+        )
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "standard", "--model", "s"],
+        )
+        runner.invoke(
+            app,
+            ["models", "set", "--harness", "opencode", "--tier", "hard", "--model", "h"],
+        )
+
+        # Now apply again — should be idempotent but report the count
+        res = runner.invoke(app, ["models", "apply", "--harness", "opencode"])
+
+        assert res.exit_code == 0, res.output
+        # Should report the count of agent files found, not "nothing to update"
+        assert "agent files already up to date" in res.output.lower(), (
+            f"apply must report discovered count for idempotent materialization, got: {res.output!r}"
+        )

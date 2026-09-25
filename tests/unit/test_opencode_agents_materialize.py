@@ -271,3 +271,42 @@ def test_an_already_correct_file_is_not_rewritten(tmp_path: Path) -> None:
 
     assert changes == []
     assert path.stat().st_mtime_ns == before, "an already-correct file must not be rewritten"
+
+
+def test_reports_count_of_discovered_agent_files_separately_from_changes(
+    tmp_path: Path,
+) -> None:
+    """Phase 1.T1: assert that the materializer reports the count of
+    discovered supported-tier agent files separately from changes. Both
+    when no matching files exist and when files are found but no changes
+    are needed, the result must include the discovery count so the CLI
+    can distinguish the two no-op cases."""
+    agent_dir = tmp_path / "opencode" / "agent"
+
+    # Case 1: No matching agent files at all — discovered count is 0
+    (agent_dir).mkdir(parents=True, exist_ok=True)
+    # Add an unrelated .md file that should not count
+    (agent_dir / "README.md").write_text("# Not an agent\n")
+
+    result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
+
+    assert hasattr(
+        result, "considered"
+    ), "result must carry a considered count separate from changes"
+    assert result.considered == 0, "unrelated .md files must not count"
+    assert result.changes == [], "no tier-suffixed agent files means no changes"
+
+    # Case 2: Agent files exist and are already correct — discovered count > 0
+    agent_dir = tmp_path / "opencode" / "agent"
+    path = _seed(
+        agent_dir,
+        "x-hard.md",
+        '---\ndescription: "x"\nmode: subagent\nmodel: model-X\n---\nbody\n',
+    )
+
+    result = materialize_agents(tmp_path, models_cfg={"opencode": {"hard": "model-X"}})
+
+    assert result.considered == 1, "one tier-suffixed agent file was discovered"
+    assert (
+        result.changes == []
+    ), "correct file not rewritten, so changes is empty, but considered is not"
