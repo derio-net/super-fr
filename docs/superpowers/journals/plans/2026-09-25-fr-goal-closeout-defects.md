@@ -328,3 +328,8 @@ Temporarily made fr.records_commit.commit_records no-op (returning CommitOutcome
 ### 9aeae7459f69 · discovery · no-refactor-because P5.T1 (phase 5)
 
 One new test file, self-contained helpers mirroring the file-local _git/_invoke convention test_run_cli.py and test_isolation.py already use — nothing to fold across files.
+
+<!-- fr:journal kind=discovery scope=plan id=0a88fd11ad39 created=2026-09-25T14:30:35 phase=5 -->
+### 0a88fd11ad39 · discovery · no-refactor-because P5.T3 (phase 5)
+
+fr acceptance set-status is the whole task — a CLI invocation that rewrites the matrix row and regenerates the three committed reports; nothing here is code to refactor.
