@@ -204,3 +204,8 @@ Not a defect: the product prices each message by its own model (spec §5.A.2); t
 ### p2-r12-resolved · finding [fixed] · resolves p2-r12: UsageRecord.tool_calls targets hold raw commands/paths; phase 2 must serialize an allowlist projection
 
 fr.usage.file.session_entry/dump_usage build plain mappings field by field (no model_dump of a UsageRecord); tests/unit/test_usage_kind.py::test_a_capture_serializes_no_host_url_path_or_content feeds a record whose tool-call targets hold a hostname, ~/ path, /Users path and URL and asserts none reach the YAML
+
+<!-- fr:journal kind=discovery scope=plan id=p2-capture-rules created=2026-09-25T20:43:55 phase=2 -->
+### p2-capture-rules · discovery · Capture decisions: new-host resolve needs a session; same-host re-capture keeps earlier readable figures; briefs deferred (phase 2)
+
+(1) A first resolve on a host captures only when there is at least one candidate session (otherwise every run's first resolve would write an empty file); deliver always writes. (2) One capture per host holds, but a re-capture (e.g. closeout on the delivering host) keeps a session's earlier entry when the new read is unavailable, and keeps sessions it no longer sees - a replace must not turn a measurement into an absence. (3) SessionEntry.briefs exists in the schema but capture does not fill it yet: Claude Code tool targets carry no prompt text; phase 3's step records are where fr knows brief sizes itself. (4) read_session/sessions_of moved from usage_cmd to fr/usage/sources.py so capture and fr usage share one lookup rule.
