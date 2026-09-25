@@ -309,3 +309,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f1 created=2026-09-26T00:54:44 phase=3 state=open review_scope=in -->
 ### r3-f1 · finding [open] (reviewer: in scope) · HIGH: dispatch launches the runner, then the open-batch rule / compare-before-write refuses in _write: no event, no forge write, batch stuck (re-run says live, --repair refuses) (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f2 created=2026-09-26T00:54:47 phase=3 state=open review_scope=in -->
+### r3-f2 · finding [open] (reviewer: in scope) · HIGH: take_theirs checks out main's WHOLE version file, discarding the PR's other edits in it (e.g. a new dependency in pyproject.toml); exceeds d3 (phase 3)
