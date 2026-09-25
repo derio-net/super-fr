@@ -9,10 +9,11 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
-from fr import parse
+from fr import parse, refs
+from fr._urls import is_cross_repo_spec
 from fr.commands.common import require_migrated_layout
 from fr.journal.model import journal_path
-from fr.parser import PlanSchemaError
+from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import (
     PhaseSpec,
     PlanEditError,
@@ -74,12 +75,14 @@ def _plan_guard() -> None:
     require_migrated_layout()
 
 
-def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path]:
+def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path] | None:
     """The candidate paths that differ from HEAD in the index — what `plan_ops`
     just staged. A foreign file it declined to touch (an untracked, non-fr
-    `scripts/validate-plans.sh`) is not staged, so it is never swept in. Where
-    git cannot answer, the existing candidates go through and `commit_paths`
-    makes the fail-closed decision itself."""
+    `scripts/validate-plans.sh`) is not staged, so it is never swept in.
+
+    `None` when git cannot answer: fail closed and commit NOTHING (p3-m3).
+    Passing the candidates on instead would hand `commit_paths` exactly the
+    foreign file this filter exists to keep out, and it would `git add` it."""
     from fr.git import GitUnavailableError, git_answer
 
     existing = [c for c in candidates if c.exists()]
@@ -88,9 +91,9 @@ def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path]:
         top = git_answer(repo_root, "rev-parse", "--show-toplevel")
         done = git_answer(repo_root, "diff", "--cached", "--name-only", "-z", "HEAD", "--", *rel)
     except GitUnavailableError:
-        return existing
+        return None
     if top.returncode != 0 or done.returncode != 0:
-        return existing
+        return None
     toplevel = Path(top.stdout.strip())
     return [toplevel / name for name in done.stdout.split("\0") if name]
 
@@ -101,9 +104,16 @@ def _commit_plan_writes(
     """gh#610 §3.C: `plan_ops` stages, the CLI commits — once, never failing the write."""
     if repo_root is None or not candidates:
         return
-    commit_records(
-        repo_root, _staged_among(repo_root, candidates), f"chore(fr): plan {slug} — {verb}"
-    )
+    staged = _staged_among(repo_root, candidates)
+    if staged is None:
+        err_console.print(
+            "fr: not committed (git could not say which plan files were staged); "
+            "the files are in your working tree",
+            soft_wrap=True,
+            markup=False,
+        )
+        return
+    commit_records(repo_root, staged, f"chore(fr): plan {slug} — {verb}")
 
 
 @plan_app.command("create")
@@ -327,6 +337,21 @@ def rework(
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+    candidates = [plan.dir]
+    spec_path = _same_repo_spec_path(plan)
+    if spec_path is not None:
+        candidates.append(spec_path)
+    _commit_plan_writes(plan.repo_root, candidates, plan.dir.name, "rework")
+
+
+def _same_repo_spec_path(plan: Plan) -> Path | None:
+    """The spec file `rework_create` appended its row to, if it could find one."""
+    if plan.repo_root is None or not plan.meta.spec or is_cross_repo_spec(plan.meta.spec):
+        return None
+    try:
+        return refs.resolve_spec_ref(plan.meta.spec, plan.repo_root).path
+    except Exception:  # noqa: BLE001 — the write landed; an unresolvable spec is just not committed
+        return None
 
 
 @plan_app.command("rework-add")
@@ -350,6 +375,10 @@ def rework_add(
     except PlanEditError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+    resolved = rework_dir.resolve()
+    _commit_plan_writes(
+        _plan_repo_root(resolved), [resolved / "_meta.yaml"], resolved.name, "rework-add"
+    )
 
 
 @plan_app.command("rework-list")

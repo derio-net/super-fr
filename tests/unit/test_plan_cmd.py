@@ -127,3 +127,84 @@ def test_plan_edit_tick_and_complete_each_commit(
         _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p — complete phase 1"
     )
     assert _git(repo, "status", "--porcelain", "--", "docs") == ""
+
+
+# --- p3-m1: rework / rework-add commit like create / edit ---------------------
+
+
+def test_plan_rework_and_rework_add_each_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _feature_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
+    spec = repo / "docs" / "superpowers" / "specs" / "2026-09-25-p-design.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(
+        "# Spec\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+    )
+    _git(repo, "add", "--", "docs")
+    _git(repo, "commit", "-qm", "spec")
+    phases = tmp_path / "phases.yaml"
+    phases.write_text(_PHASES)
+    res = CliRunner().invoke(
+        app,
+        [
+            "plan", "create", "--slug", "2026-09-25-p", "--target-repo", "o/r",
+            "--phases-file", str(phases), "--spec", "docs/superpowers/specs/2026-09-25-p-design.md",
+        ],
+    )  # fmt: skip
+    assert res.exit_code == 0, res.output
+    (repo / "unrelated.md").write_text("executor's own work\n")
+    _git(repo, "add", "--", "unrelated.md")
+
+    res = CliRunner().invoke(app, ["plan", "rework", "docs/superpowers/plans/2026-09-25-p"])
+
+    assert res.exit_code == 0, res.output
+    assert (
+        _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p-rework-1 — rework"
+    )
+    files = _git(repo, "show", "--name-only", "--format=", "HEAD").splitlines()
+    assert "docs/superpowers/plans/2026-09-25-p-rework-1/_meta.yaml" in files
+    assert "docs/superpowers/specs/2026-09-25-p-design.md" in files
+    assert "unrelated.md" not in files
+    assert _git(repo, "status", "--porcelain", "--", "docs") == ""
+
+    res = CliRunner().invoke(
+        app,
+        [
+            "plan", "rework-add", "docs/superpowers/plans/2026-09-25-p-rework-1",
+            "--item", "i", "--source", "s", "--track", "development",
+        ],
+    )  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert (
+        _git(repo, "log", "-1", "--format=%s")
+        == "chore(fr): plan 2026-09-25-p-rework-1 — rework-add"
+    )
+    assert _git(repo, "status", "--porcelain", "--", "docs") == ""
+    assert _git(repo, "diff", "--cached", "--name-only") == "unrelated.md"
+
+
+# --- p3-m3: when git cannot say what was staged, commit nothing ---------------
+
+
+def test_staged_among_commits_nothing_when_git_cannot_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.git
+    from fr.commands import plan_cmd
+
+    repo = _feature_repo(tmp_path)
+    foreign = repo / "scripts" / "validate-plans.sh"
+    foreign.parent.mkdir()
+    foreign.write_text("#!/bin/sh\nexit 0\n")
+
+    def refuse(*_a: object, **_k: object) -> object:
+        raise fr.git.GitUnavailableError("git is not installed or not on PATH")
+
+    monkeypatch.setattr(fr.git, "git_answer", refuse)
+
+    assert plan_cmd._staged_among(repo, [foreign, repo / "README.md"]) is None
