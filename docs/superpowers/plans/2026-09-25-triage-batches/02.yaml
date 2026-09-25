@@ -183,9 +183,10 @@ state:
       note: full suite 5439 passed/89 skipped exit 0 (-n auto, 231s); ruff format/check
         clean; mypy incl. fr-herdr clean
     P2.T6.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:28:25+00:00'
+      note: triage-batch-state -> ci (unit refs model+verbs tests); forge-visible
+        and dispatch stay not-implemented with notes; fr acceptance check exit 0
   completion:
     at: null
     note: null
