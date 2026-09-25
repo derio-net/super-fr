@@ -1,0 +1,10 @@
+schema_version: 1
+run: 2026-09-26-fix-models-opencode-noop-505
+captures:
+- host: h-4cb73fa1
+  harness: opencode
+  mode: host-worktree
+  captured_at: '2026-09-25T23:34:29+00:00'
+  at:
+  - deliver
+  sessions: []
