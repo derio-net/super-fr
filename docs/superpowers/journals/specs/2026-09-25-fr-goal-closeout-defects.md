@@ -24,3 +24,38 @@ Q&A 4 (operator: 'haiku/sonnet/opus (Recommended)'): fr models set --harness cla
 ### a7323cb1b1e2 · decision · Defaults stated in the Q&A preamble (not objected to)
 
 Defect 1: --default-branch optional; unset resolves via the existing _resolve_default_branch(); live path catches IsolationError -> clean exit 2; closes #469. Defect 3: fr plan create installs+stages the validator wrapper when it creates the plans dir; harness-neutral fr init validator-wrapper replaces the Claude-path REPAIR_COMMAND; the 'in the working tree' wording is corrected. Scope: all remaining defects in one spec and one PR.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-09-25T10:05:58 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · Tier-model decision not reflected in spec
+
+Reviewer (high): decision 0736967ba3dd is neither a goal nor a non-goal in the spec.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-09-25T10:05:58 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · run_cmd.py:872 journal write not covered by §3.C
+
+Reviewer (medium): fr run resolve --no-questions writes a spec-journal decision via append_journal_entry, bypassing journal_cmd; would stay uncommitted.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-09-25T10:05:59 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · SKILL §8 'commit plan + journals' not reconciled
+
+Reviewer (low): spec should say how §8's manual commit line changes once fr auto-commits.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-09-25T10:06:20 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: Tier-model decision not reflected in spec
+
+Spec §2 non-goals now records the model bindings as an operator-environment action applied at brainstorm (fr models set), no code change.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-09-25T10:06:20 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: run_cmd.py:872 journal write not covered by §3.C
+
+§3.C now covers run_cmd.py:872: fr run resolve commits cursor + spec journal together; each command commits every record path it wrote, once.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-09-25T10:06:21 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: SKILL §8 'commit plan + journals' not reconciled
+
+§3.C now specifies SKILL §8: add push after deliver; 'commit plan + journals' becomes a clean-status check.
+
+<!-- fr:journal kind=review scope=spec id=review-spec-1 created=2026-09-25T10:06:21 -->
+### review-spec-1 · review · Spec review (fr-spec-reviewer)
+
+Independent fr-spec-reviewer raised s1 (high, decision not reflected), s2 (medium, run_cmd.py:872 journal write uncovered), s3 (low, SKILL §8 commit line). All in scope, all fixed in the spec. 30 codebase claims verified by the reviewer.

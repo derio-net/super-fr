@@ -44,6 +44,11 @@ The operator's Q&A (spec journal, 2026-09-25) settles them as follows:
   change, so in-flight runs do not drift.
 - Making `fr archive` / `fr repair` commit their own output. They are the closeout's
   last writes, and their output is reviewed in the housekeeping PR, as today.
+- Tier→model bindings. The Q&A's model decision (claude-code: mechanical=haiku,
+  standard=sonnet, hard=opus) configures the operator's environment for this run's
+  dispatches. It was applied at brainstorm with `fr models set`, which writes
+  `~/.config/fr/models.yaml` outside the repo. It is recorded here and in the spec
+  journal, and it changes no code in this PR.
 - The wrapper's delegate path (`WRAPPER_TEXT` execs a Claude marketplace path) on
   non-Claude harnesses. That is a real gap with a different cause. It is filed as a
   follow-up if the reviewer confirms it.
@@ -133,6 +138,13 @@ behaviour is unchanged and its tests are unmodified. The CLI layer calls
 | `fr plan create` / `edit` (tick, complete, note, tracking) | the paths `plan_ops` staged (plan folder, spec index row, wrapper, seeded journal) | `chore(fr): plan <slug> — <verb>` |
 | `fr journal add` / `resolve` | the journal file | `chore(fr): journal <scope>/<slug> — <kind> <id>` |
 
+The table covers every `save_run_state` and `append_journal_entry` caller. One
+caller writes both files: `fr run resolve --no-questions` appends a spec-journal
+`decision` (`commands/run_cmd.py:872`) in the same invocation that saves the
+cursor. Its commit carries **both** paths, one commit per command invocation. In
+general, each committing command collects every record path it wrote and commits
+them once, at the end.
+
 Rules:
 - **Library functions stay pure.** `plan_ops`, `save_run_state` and the journal
   writer keep their current contracts. Only the CLI commands commit, which is where
@@ -151,7 +163,10 @@ Rules:
 **The `deliver` ordering.** Resolving `deliver` is fr's last cursor write, and it
 now produces a commit after the PR is open. `fr run resolve --step deliver`
 prints "cursor committed as `<sha>` — push it (`git push`) so the PR carries it".
-The fr-goal skill's §8 adds the push. That is what lets the squash-merged default
+The fr-goal skill's §8 changes in two ways. It adds the push after resolving
+`deliver`. Its "commit plan + journals" line (`SKILL.md:103`) becomes "confirm
+`git status` is clean for plan and journals (fr commits its own writes; commit any
+hand edits)", which keeps the check and drops the now-redundant manual commit. That is what lets the squash-merged default
 branch hold the final cursor, so `fr isolation down`'s unlanded-content check
 (`local.py:1135`) passes after merge instead of refusing a cursor commit that
 never landed.

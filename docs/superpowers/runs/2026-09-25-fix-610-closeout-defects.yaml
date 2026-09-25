@@ -19,7 +19,16 @@ steps:
       turns: 27
       sessions: 1
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-25T07:58:39+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-25T07:58:39+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 9599a7d1-a201-4c49-a8ff-a1bc26f5f517
   plan:
     state: pending
   plan-review:
