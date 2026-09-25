@@ -43,7 +43,7 @@ from fr.commands.triage_cmd import (
     err_console,
 )
 from fr.ghclient import GhClient, UnsupportedForgeOperation
-from fr.hostclient import client_for_backend
+from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
 from fr.triage.batch import (
     CLOSED_OUT,
@@ -255,17 +255,33 @@ def batch_cancel_command(
     if touches_forge:
         client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
         failed: list[str] = []
+        # Read every member's comments BEFORE any write (review r2p-f8): the read
+        # is the one operation a backend may not support, so an unsupported
+        # backend is refused (exit 2) with no member half-withdrawn.
+        posted: dict[str, bool] = {}
         for key in batch.ids:
+            number = int(key.rpartition("#")[2])
+            try:
+                posted[key] = withdrawn_already(
+                    client.list_issue_comments(owner_repo, number), item
+                )
+            except UnsupportedForgeOperation as exc:
+                _fail(str(exc))
+            except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
+                failed.append(f"{key}: {exc}")
+        for key in batch.ids:
+            if key not in posted:
+                continue  # its read failed: nothing written for it, reported above
             number = int(key.rpartition("#")[2])
             try:
                 client.edit_issue_labels(
                     owner_repo, number, add=frozenset(), remove=frozenset({FR_IN_PROGRESS.name})
                 )
-                if not withdrawn_already(client.list_issue_comments(owner_repo, number), item):
+                if not posted[key]:
                     client.comment_issue(owner_repo, number, withdrawal_body(batch, item, reason))
             except UnsupportedForgeOperation as exc:
                 _fail(str(exc))
-            except Exception as exc:  # any forge failure: report the issue, keep going
+            except FORGE_ERRORS as exc:  # a forge failure: report the member, keep going
                 failed.append(f"{key}: {exc}")
         if failed:
             _fail(

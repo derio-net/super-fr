@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from fr.gh import GhError
+
 
 @dataclass
 class FakeIssue:
@@ -25,12 +27,12 @@ class FakeIssue:
     linked_prs: list[dict[str, Any]] = field(default_factory=list)
 
 
-@dataclass
-class FakeGhError(Exception):
-    message: str
+class FakeGhError(GhError):
+    """The fake's forge failure: a `GhError`, as `RealGhClient` would raise."""
 
-    def __str__(self) -> str:
-        return self.message
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
 
 class FakeGhClient:

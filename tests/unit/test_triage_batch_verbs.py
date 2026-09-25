@@ -15,6 +15,7 @@ import pytest
 import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
+from fr.ghclient import UnsupportedForgeOperation
 from fr.triage.batch import resolve_launch
 from fr.triage.check import classify
 from fr.triage.errors import TriageError
@@ -388,6 +389,56 @@ def test_cancel_refuses_to_overwrite_batches_changed_while_it_ran(
     assert code == 2
     assert "changed since it was read; re-run" in out
     assert [b.id for b in _batches(tmp_path)] == ["lifecycle", "docs"]
+
+
+def test_cancel_probes_an_unsupported_backend_before_any_write(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r2p-f8: on a backend without comment reads, cancel refuses (exit 2)
+    before unlabelling anyone, so no member is left half-withdrawn."""
+    _with(
+        tmp_path,
+        {
+            "id": "lifecycle",
+            "title": "t",
+            "ids": ["super-fr#577", "super-fr#575"],
+            "events": [_DISPATCH],
+        },
+    )
+
+    def unsupported(repo: str, number: int) -> list[dict[str, Any]]:
+        raise UnsupportedForgeOperation("list_issue_comments", "gitlab")
+
+    monkeypatch.setattr(gh, "list_issue_comments", unsupported)
+    code, out = _run(tmp_path, "cancel", "lifecycle", "--yes")
+
+    assert code == 2
+    assert "list_issue_comments" in out
+    for n in (577, 575):
+        assert "fr:in-progress" in gh.issues[(REPO, n)].labels
+    assert [c for c, _ in gh.calls if c not in {"list_issue_comments"}] == []
+    assert _batches(tmp_path)[0].events[-1].kind == "dispatch"
+
+
+def test_a_programming_error_during_cancel_is_not_reported_as_a_forge_failure(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review r2p-f8: only forge errors are collected per member; a bug raises."""
+    _with(
+        tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [_DISPATCH]}
+    )
+
+    def buggy(*args: Any, **kw: Any) -> None:
+        raise TypeError("comment_issue() got an unexpected keyword argument")
+
+    monkeypatch.setattr(gh, "comment_issue", buggy)
+    result = CliRunner().invoke(
+        app,
+        ["triage", "batch", "cancel", "lifecycle", "--yes", "--repo", REPO, "--dir", str(tmp_path)],
+    )
+
+    assert isinstance(result.exception, TypeError)
+    assert "not fully withdrawn" not in result.output
 
 
 def test_cancel_refuses_a_batch_already_closed_out(tmp_path: Path, gh: FakeGhClient) -> None:
