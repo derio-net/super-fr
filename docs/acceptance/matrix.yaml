@@ -4212,9 +4212,14 @@ rows:
     acceptance: An invalid step record changes nothing
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: unit. Born at brainstorm 2026-09-25.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_record_schema.py
+    status: ci
+    notes: unknown section, unknown tick id, unknown finding id, malformed and duplicate
+      entries and the refactor gate each exit 2 with every file hash-identical, HEAD
+      unchanged and the record left in place; gate refusals restore the overlay.
   - id: stale-session-resumes-record
     capability: Lean cost-aware pipeline
     acceptance: A new session picks up an in-progress step record and completes it
