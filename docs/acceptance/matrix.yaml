@@ -4201,7 +4201,12 @@ rows:
     notes: 'Phase 3: reservation reads the source from origin/<default> by key (proven
       against a real clone), follows every live reservation with the batch''s bump;
       merge reconciles slots in merge order and re-versions with set in the scratch
-      worktree (integration test against a local bare origin).'
+      worktree (integration test against a local bare origin). After review r3-f2: a
+      version-file conflict is taken from main only when the PR''s own change to that
+      file is the version alone (a lockfile only with a declared relock); a PR that
+      also added a dependency to pyproject.toml stops the queue naming the file, the
+      dependency intact, and an up-to-date PR off its slot is re-slotted against real
+      git.'
   - id: triage-batch-merge-queue
     capability: Backlog triage
     acceptance: An operator can merge several batch PRs in a computed order that predicts
