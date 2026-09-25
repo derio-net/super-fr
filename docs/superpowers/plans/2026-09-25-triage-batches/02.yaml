@@ -152,8 +152,8 @@ state:
       note: 'red: ImportError fr.commands.triage_batch_cmd; board tests failed on
         the missing Batches section and in-progress pill'
     P2.T4.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-25T21:19:07+00:00'
       note: null
     P2.T4.S3:
       state: ' '
