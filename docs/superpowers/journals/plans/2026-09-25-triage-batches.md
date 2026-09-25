@@ -153,3 +153,9 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f6 created=2026-09-25T21:40:46 phase=2 state=open review_scope=in -->
 ### r2p-f6 · finding [open] (reviewer: in scope) · save_batches: quoted top-level "batches": key gets a duplicate appended; a file starting with --- becomes two documents and can never take a batch (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f7 created=2026-09-25T21:40:47 phase=2 state=open review_scope=in -->
+### r2p-f7 · finding [open] (reviewer: in scope) · Concurrent edit to batches: is silently lost between load and save_batches (widest in cancel); no compare-before-write (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f8 created=2026-09-25T21:40:47 phase=2 state=open review_scope=in -->
+### r2p-f8 · finding [open] (reviewer: in scope) · cancel can exit 2 after partial forge writes when a later op is unsupported; except Exception masks programming errors as forge failures (phase 2)
