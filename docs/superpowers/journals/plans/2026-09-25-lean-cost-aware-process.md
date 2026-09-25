@@ -309,3 +309,8 @@ aaf707cf: fr isolation up writes target (devcontainer|worktree) beside unchanged
 ### p2-r21-resolved · finding [fixed] · resolves p2-r21: unavailable reason copies exception text (absolute paths, usernames) into committed usage files
 
 1facaa02: session_entry maps unavailable through committed_reason, a closed vocabulary (known constants incl. ACP verbatim, else reader failed[: ExcType|database unreadable|unreadable transcript]); a PermissionError on a /Users path leaves no path in the committed YAML.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r22-resolved created=2026-09-25T22:16:00 state=fixed resolves=p2-r22 -->
+### p2-r22-resolved · finding [fixed] · resolves p2-r22: fr run cost drops all migrated entries once any live capture exists
+
+9e1ec7c2: effective_entries ignores a migrated entry only when a live capture read its session or covers every step it names; partly covered keeps uncovered steps (tokens dropped); fr run cost prints N migrated entries ignored. Tested with an unrelated live closeout session.
