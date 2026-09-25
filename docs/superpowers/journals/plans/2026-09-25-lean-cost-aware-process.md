@@ -144,3 +144,8 @@ Added the reviewer's four shapes, but they pass even with _unwrap a no-op. So al
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: Hermes/OpenCode readers catch only sqlite3.Error; one bad row crashes the report
 
 hermes.py and opencode.py: body moved to _read(); read() catches sqlite3.Error, then Exception, and returns unavailable (the claude_code.py pattern). Tests over DB copies: non-numeric token_count, bad timestamp, invalid UTF-8 (Hermes); overflowing timestamp, invalid UTF-8, text timestamp (OpenCode).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-09-25T20:22:08 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: NULL per-model Hermes cost coerced to 0.0 and priced at $0
+
+Hermes session_model_usage costs are NOT NULL DEFAULT 0, so 0 means not recorded. None and <=0 per-model figures are now omitted; with none left, by_model is empty and rollup takes the token-pool path. Test: all per-model zeros give by_model {} and nothing lands in unattributed.
