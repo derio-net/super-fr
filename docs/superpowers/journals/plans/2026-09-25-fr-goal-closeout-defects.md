@@ -298,3 +298,8 @@ a797e354: closeout brief now names its own checkout (repo_root, base clone, defa
 ### p4-r4-resolved · finding [fixed] · resolves p4-r4: No test that resolved (deferred/fixed) out-of-scope findings are excluded from the brief
 
 a797e354: backfilled coverage on effective_finding_states' exclusion path — already correct, no code change needed. Tests: test_run_closeout.py::test_closeout_brief_excludes_a_finding_later_deferred_with_a_tracker, ::test_closeout_brief_excludes_a_finding_later_fixed_by_the_operator
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-09-25T14:10:58 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: No test for missing PR / spec / plan fallbacks in the brief
+
+a797e354: backfilled coverage on the PR:(none recorded) fallback and the spec_path/plan_path guards — already correct, no code change needed. Tests: test_run_closeout.py::test_closeout_brief_reports_no_pr_recorded_when_deliver_emitted_none, ::test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_them
