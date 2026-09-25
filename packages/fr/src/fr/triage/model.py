@@ -305,6 +305,17 @@ class Judgements(_Strict):
             raise ValueError(f"judgements name undeclared tiers {undeclared}")
         return self
 
+    @model_validator(mode="after")
+    def _batches_need_schema_2(self) -> Judgements:
+        """Batches exist only under schema 2 (spec §3.A). A schema-1 stamp over a
+        `batches:` list is a writer that forgot to restamp, and a schema-1 reader
+        cannot hold it, so it is refused rather than loaded."""
+        if self.batches and self.schema_ != 2:
+            raise ValueError(
+                f"`batches:` needs schema 2, but this file is stamped schema {self.schema_}"
+            )
+        return self
+
 
 # ------------------------------------------------------------------- loaders
 

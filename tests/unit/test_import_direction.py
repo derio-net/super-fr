@@ -92,3 +92,45 @@ def test_fr_vk_strings_stay_in_the_adapter() -> None:
             if banned.search(line):
                 offenders.append(f"{py.name}:{n}: {line.strip()}")
     assert not offenders, "VK vocabulary leaked into fr_dispatch:\n" + "\n".join(offenders)
+
+
+def test_fr_never_imports_fr_herdr() -> None:
+    """Spec 2026-09-25-triage-batches §3.C: `fr` never imports `fr_herdr`;
+    the runner is reached only through the `fr.runners` entry point."""
+    offenders = {
+        str(f): roots & {"fr_herdr"}
+        for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
+        if "fr_herdr" in roots
+    }
+    assert not offenders, f"fr must not import fr_herdr: {offenders}"
+
+
+def test_fr_dispatch_never_imports_fr_herdr() -> None:
+    offenders = {
+        str(f): roots & {"fr_herdr"}
+        for f, roots in _imports_of(PACKAGES / "fr-dispatch" / "src" / "fr_dispatch").items()
+        if "fr_herdr" in roots
+    }
+    assert not offenders, f"fr_dispatch must not import the adapter: {offenders}"
+
+
+_FR_TRIAGE_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+fr\.triage\b", re.M)
+
+
+def test_fr_herdr_never_imports_fr_triage() -> None:
+    """Spec §3.C: `fr-herdr` never imports `fr.triage` — a runner takes a
+    WorkItem, never triage state. `_IMPORT_RE` captures only the root `fr`,
+    so this needs its own pattern."""
+    offenders = [
+        str(py)
+        for py in (PACKAGES / "fr-herdr" / "src" / "fr_herdr").rglob("*.py")
+        if _FR_TRIAGE_IMPORT_RE.search(py.read_text())
+    ]
+    assert not offenders, f"fr_herdr must not import fr.triage: {offenders}"
+
+
+def test_fr_herdr_tripwire_catches_a_triage_import(tmp_path: Path) -> None:
+    """The pattern above must actually fire, or the guard is decorative."""
+    assert _FR_TRIAGE_IMPORT_RE.search("from fr.triage.model import Batch\n")
+    assert _FR_TRIAGE_IMPORT_RE.search("import fr.triage\n")
+    assert not _FR_TRIAGE_IMPORT_RE.search("from fr.triaged import x\n")

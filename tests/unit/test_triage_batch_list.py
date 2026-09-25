@@ -63,3 +63,20 @@ def test_schema_3_is_refused_naming_the_schema(tmp_path: Path) -> None:
     code, out = _list(tmp_path, "schema: 3\n" + _JUDGED)
     assert code == 2, out
     assert "unsupported schema 3" in " ".join(out.split())
+
+
+def test_schema_1_carrying_batches_is_refused(tmp_path: Path) -> None:
+    """Batches exist only under schema 2 (spec §3.A: schema 1 loads as zero
+    batches). A schema-1 stamp over a `batches:` list is a writer that forgot
+    the stamp, and an older reader would mis-read the file, so refuse it."""
+    code, out = _list(
+        tmp_path,
+        "schema: 1\n"
+        + _JUDGED
+        + "batches:\n"
+        + "  - id: lifecycle\n"
+        + "    title: t\n"
+        + '    ids: ["super-fr#577"]\n',
+    )
+    assert code == 2, out
+    assert "schema 2" in out

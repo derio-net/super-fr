@@ -39,3 +39,11 @@ class HerdrRunner:
 
     def dispatch(self, item: WorkItem) -> None:
         raise NotImplementedError("runner `herdr` is a skeleton and cannot dispatch yet")
+
+
+if TYPE_CHECKING:
+    from fr_dispatch.protocols import Runner
+
+    # Conformance check: `Runner` is not runtime-checkable, so this assignment is
+    # what makes CI's mypy fail when a signature here drifts from the protocol.
+    _conforms: Runner = HerdrRunner()

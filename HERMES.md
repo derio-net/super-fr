@@ -58,7 +58,7 @@ this. Use one warm session, subagent fan-out, or batch K items per prompt.
 uv run pytest -q --no-cov                     # full suite (~6 min on macOS)
 uv run ruff check packages/ tests/ scripts/
 uv run ruff format packages/ tests/ scripts/
-uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 uv run --no-project python scripts/bump-version.py --check
 ```
 

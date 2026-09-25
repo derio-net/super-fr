@@ -94,7 +94,7 @@ tasks:
       Amend the triage paragraph of fr/artifacts/trigger.py's READ_ONLY_COMMANDS docstring for forge writes and scratch-worktree pushes, leaving the pinned tuple unchanged, and confirm test_migration_trigger.py's exemption test still passes
   - id: P3.T5.S2
     text: |-
-      Update plugins/super-fr/skills/fr-triage/SKILL.md per spec 3.H (loop step 5 batch, the --yes sentence, batches/events/schema 2 in the judgements section), then regenerate both mirrors with scripts/sync-opencode.py and scripts/sync-hermes.py, and update AGENTS.md's fr/triage paragraph for the batch verbs and schema 3 facts
+      Update plugins/super-fr/skills/fr-triage/SKILL.md per spec 3.H (loop step 5 batch, the --yes sentence, batches/events/schema 2 in the judgements section), then regenerate both mirrors with scripts/sync-opencode.py and scripts/sync-hermes.py, and update AGENTS.md's fr/triage paragraph for the batch verbs and schema 3 facts plus an fr-herdr bullet under packages/, the README.md package table and HERMES.md's package prose (phase 1 review, finding r1-docs)
   - id: P3.T5.S3
     text: |-
       Bump the minor version with `uv run --no-project python scripts/bump-version.py minor` and commit the manifests with uv.lock
