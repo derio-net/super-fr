@@ -233,3 +233,8 @@ Dispatched reviewer (opus) over 492b2577. Raised r1-r3 (important, in), m1-m3 (m
 ### p3-steer · finding [open] (reviewer: in scope) · Phase-3 tests assert commit cadence; stderr line count unpinned (phase 3)
 
 Operator steer: replace commit-COUNT assertions in phase-3 tests (test_run_cli, test_records_commit, test_plan_cmd, test_journal_cmd) with 'record paths clean after return'; keep subject-format checks; pin <=1 stderr commit line per invocation incl. the early _commit_run_writes_now + finally edge case.
+
+<!-- fr:journal kind=discovery scope=plan id=f9483f92bcfb created=2026-09-25T13:11:16 phase=4 -->
+### f9483f92bcfb · discovery · no-refactor-because P4.T2 (phase 4)
+
+pickup_cmd.py stayed thin by construction: --run mode is a load + mode-check + closeout_brief() call, no brief text lives here — nothing accumulated that needs extracting.
