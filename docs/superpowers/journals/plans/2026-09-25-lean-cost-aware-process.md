@@ -99,3 +99,8 @@ fr-audit/SKILL.md:61-63, rollup.py:64.
 ### p1-r11 · finding [open] (reviewer: in scope) · Golden test asserts only the pooled share, not the per-session 23-37% range (phase 1)
 
 test_usage_report.py:232-239 vs spec §7.3.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r13 created=2026-09-25T20:03:29 phase=1 state=open review_scope=in -->
+### p1-r13 · finding [open] (reviewer: in scope) · AGENTS.md repo shape has no fr/usage entry (phase 1)
+
+AGENTS.md Repo shape.
