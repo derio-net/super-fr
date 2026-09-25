@@ -449,3 +449,8 @@ Not caused by this change; not touched by the diff.
 ### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: test_opencode_plugin_live flaky under parallel load
 
 Pre-existing live-plugin test; this diff does not touch it; observed once under -n auto load, green alone and in the final run.
+
+<!-- fr:journal kind=review scope=plan id=r-p3 created=2026-09-25T23:23:40 phase=3 -->
+### r-p3 · review · Phase 3 review (independent reviewer): 11 findings; p3-r1..r10 in scope, p3-r11 out of scope (phase 3)
+
+Reviewer a9217b89215b69c05 (Opus 5.5). Held up: emits-literal sections, template allowed-sections + step ids + resume, blocked->failed, plan:ticks completes the phase, verbs committing per §5.C.6, test changes moved not weakened, 4.22.0 lockstep. Blockers: p3-r1, p3-r2 (bypasses), p3-r3 (atomicity).
