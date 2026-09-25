@@ -228,3 +228,8 @@ c7cc8ad2: _staged_among returns None when git cannot answer and _commit_plan_wri
 ### review-p3 · review · Phase 3 review (phase 3)
 
 Dispatched reviewer (opus) over 492b2577. Raised r1-r3 (important, in), m1-m3 (minor, in), m4/m5 (filed against phases 4/5), m6 (refuted: constant cost). r1-r3, m1-m3 fixed in 692dd2a3, 1c02f263, c7cc8ad2 by a dispatched fix agent with RED tests first; r2 settled by spec decision (record commits --no-verify, signing kept, index restored on failure). Full suite after final change: 5245 passed, 0 failed (scratchpad/p3-fixes-full-suite.log); orchestrator's independent pre-fix run 5235 passed, 0 failed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-steer created=2026-09-25T12:56:32 phase=3 state=open review_scope=in -->
+### p3-steer · finding [open] (reviewer: in scope) · Phase-3 tests assert commit cadence; stderr line count unpinned (phase 3)
+
+Operator steer: replace commit-COUNT assertions in phase-3 tests (test_run_cli, test_records_commit, test_plan_cmd, test_journal_cmd) with 'record paths clean after return'; keep subject-format checks; pin <=1 stderr commit line per invocation incl. the early _commit_run_writes_now + finally edge case.
