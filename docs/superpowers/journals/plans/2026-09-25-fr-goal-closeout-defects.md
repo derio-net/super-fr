@@ -348,3 +348,8 @@ Dispatched reviewer (sonnet) over 618fba30..HEAD: no in-scope findings; verdict 
 ### p4-dogfood · finding [open] (reviewer: in scope) · Closeout handoff and brief name the feature worktree as 'the base clone' (phase 4)
 
 Found by dogfooding deliver on this run: _closeout_handoff_lines and closeout_brief print repo_root, which inside an fr workspace is the linked feature worktree (reaped by closeout), labelled 'the base clone'. Must resolve the primary checkout (parent of git rev-parse --git-common-dir).
+
+<!-- fr:journal kind=finding scope=plan id=p4-dogfood-resolved created=2026-09-25T15:04:59 state=fixed resolves=p4-dogfood -->
+### p4-dogfood-resolved · finding [fixed] · resolves p4-dogfood: Closeout handoff and brief name the feature worktree as 'the base clone'
+
+9c05eb49: primary_checkout() for the displayed directory at both sites; RED test_closeout_brief_run_from_a_linked_worktree_names_the_primary_checkout (brief named the worktree), fallback test added; live fr pickup --run on this run now names the base clone.
