@@ -136,7 +136,18 @@ behaviour is unchanged and its tests are unmodified. The CLI layer calls
 |---|---|---|
 | `fr run start/adopt/advance/resolve/claim` (any `save_run_state`) | the run file | `chore(fr): run <id> — <verb> <step>[ <item>] <state>` |
 | `fr plan create` / `edit` (tick, complete, note, tracking) | the paths `plan_ops` staged (plan folder, spec index row, wrapper, seeded journal) | `chore(fr): plan <slug> — <verb>` |
+| `fr plan rework` / `rework-add` | the rework folder + its spec row / the rework's `_meta.yaml` | `chore(fr): plan <slug> — rework` / `— rework-add` |
 | `fr journal add` / `resolve` | the journal file | `chore(fr): journal <scope>/<slug> — <kind> <id>` |
+
+**One commit seam.** The invariant is the seam, not this list of commands. Every
+record commit goes through `commit_records` → `commit_paths`, and there is no
+other commit site. A command that writes fr records joins the table by routing
+through that seam. (`rework` / `rework-add` were added in the phase-3 review for
+exactly that reason: leaving them out would have reintroduced defect 4 for those
+two commands.) Cadence is **per invocation** today, and tests assert outcomes
+("fr's record paths are clean when the command returns"), never commit counts,
+because per-phase batching is planned in `feat/lean-cost-aware-process`. Commit
+reporting is at most one stderr line per fr invocation.
 
 The table covers every `save_run_state` and `append_journal_entry` caller. One
 caller writes both files: `fr run resolve --no-questions` appends a spec-journal
