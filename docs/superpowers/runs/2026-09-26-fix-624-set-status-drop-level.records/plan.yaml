@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: p-shape
+    global: true
     title: Three phases along the one write path — edit helper (skeleton), engine, CLI+docs+row+bump
     body: >-
       drop_levels is the single definition of "on the row" shared by the CLI pre-flight and the engine, so it lands
