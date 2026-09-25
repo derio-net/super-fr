@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import typer
@@ -9,6 +10,11 @@ import typer
 from fr.isolation.migrate import SECRETS_BLOCK, migrate_repo
 from fr.isolation.scaffold import KNOWN_TOOLS, scaffold_profile
 from fr.isolation.types import IsolationError
+from fr.plan_validator_wrapper import (
+    ValidatorWrapperError,
+    ensure_validator_wrapper,
+    validator_wrapper_path,
+)
 
 init_app = typer.Typer(
     name="init",
@@ -105,3 +111,28 @@ def migrate(
     for action in actions:
         typer.echo(f"  - {action}")
     typer.echo(SECRETS_BLOCK)
+
+
+@init_app.command("validator-wrapper")
+def validator_wrapper_cmd(
+    repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
+) -> None:
+    """Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral
+    remedy every isolation guard names when a plan repo is missing the wrapper.
+    Idempotent; refuses (exit 2) rather than overwrite a foreign file there."""
+    repo_root = repo.resolve()
+    target = validator_wrapper_path(repo_root)
+    try:
+        changed = ensure_validator_wrapper(repo_root)
+    except ValidatorWrapperError as err:
+        typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(2) from err
+    if (repo_root / ".git").exists():
+        subprocess.run(
+            ["git", "-C", str(repo_root), "add", "--", str(target.relative_to(repo_root))],
+            check=False,
+        )
+    if changed:
+        typer.echo(f"wrote {target} — commit it to make it visible to isolation guards.")
+    else:
+        typer.echo(f"{target} already up to date.")

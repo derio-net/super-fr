@@ -1889,9 +1889,9 @@ class LocalWorktreeDevcontainerTarget:
         line = result.stdout.strip()
         if result.returncode != 0 or not line:
             raise IsolationError(
-                "plan repo has scripts/validate-plans.sh in the working tree but not in "
-                f"{ref}; run `{REPAIR_COMMAND}` if needed, commit it to the isolation start "
-                "ref, then retry `fr isolation up`."
+                f"plan repo has docs/superpowers/plans in {ref} but no "
+                f"scripts/validate-plans.sh there; run `{REPAIR_COMMAND}` from the repo "
+                "root, commit it to the isolation start ref, then retry `fr isolation up`."
             )
         mode = line.split(maxsplit=1)[0]
         if mode != "100755":

@@ -411,3 +411,89 @@ def test_self_review_allows_a_manual_phase_depending_on_an_agentic_one(tmp_path)
     )
 
     assert _placement_issues(plan_dir) == []
+
+
+# ---------------------------------------------------------------------------
+# create() installs the plan-validator wrapper when it is missing
+# (2026-09-25 fr-goal-closeout-defects spec §3.B)
+
+
+def _bare_repo(tmp_path: Path) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    (tmp_path / "docs" / "superpowers" / "plans").mkdir()
+    return tmp_path
+
+
+def _create_args(repo: Path, slug: str) -> dict:
+    from fr.plan_ops import PhaseSpec
+
+    return dict(
+        repo_root=repo,
+        slug=slug,
+        spec=None,
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+
+
+def test_create_installs_missing_wrapper_and_stages_it(tmp_path):
+    from fr import plan_ops
+    from fr.plan_validator_wrapper import is_super_fr_validator_wrapper
+
+    repo = _bare_repo(tmp_path)
+
+    plan_ops.create(**_create_args(repo, "2026-05-10-no-wrapper"))
+
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    assert wrapper.is_file()
+    assert wrapper.stat().st_mode & 0o111
+    assert is_super_fr_validator_wrapper(wrapper)
+
+    staged = _staged_files(repo)
+    assert "scripts/validate-plans.sh" in staged
+    assert "docs/superpowers/plans/2026-05-10-no-wrapper/_meta.yaml" in staged
+
+
+def test_create_with_foreign_wrapper_warns_and_leaves_it_byte_identical(tmp_path, caplog):
+    from fr import plan_ops
+
+    repo = _bare_repo(tmp_path)
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    foreign = "#!/usr/bin/env bash\n# our own house validator\nexit 0\n"
+    wrapper.write_text(foreign)
+    wrapper.chmod(0o755)
+
+    with caplog.at_level("WARNING"):
+        plan = plan_ops.create(**_create_args(repo, "2026-05-10-foreign-wrapper"))
+
+    assert plan.meta.plan == "2026-05-10-foreign-wrapper"
+    assert wrapper.read_text() == foreign
+    assert any("validate-plans.sh" in r.message for r in caplog.records)
+
+
+def test_create_with_existing_super_fr_wrapper_leaves_it_unchanged(tmp_path):
+    from fr import plan_ops
+    from fr.plan_validator_wrapper import WRAPPER_TEXT
+
+    repo = _bare_repo(tmp_path)
+    wrapper = repo / "scripts" / "validate-plans.sh"
+    wrapper.parent.mkdir()
+    wrapper.write_text(WRAPPER_TEXT)
+    wrapper.chmod(0o755)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "wrapper"], check=True)
+    before = wrapper.read_bytes()
+
+    plan_ops.create(**_create_args(repo, "2026-05-10-existing-wrapper"))
+
+    assert wrapper.read_bytes() == before
+    staged = _staged_files(repo)
+    assert "scripts/validate-plans.sh" not in staged

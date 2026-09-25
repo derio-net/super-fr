@@ -17,6 +17,7 @@ Conventions:
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 import re
 import subprocess
 from collections.abc import Iterator
@@ -31,6 +32,11 @@ from fr._urls import is_cross_repo_spec
 from fr.journal.model import journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
+from fr.plan_validator_wrapper import (
+    ValidatorWrapperError,
+    ensure_validator_wrapper,
+    validator_wrapper_path,
+)
 from fr.render import plan_locally_complete
 from fr.types import PHASE_TIERS, PhaseDoc, Step
 
@@ -269,6 +275,25 @@ def create(
             depends_on="—",
         )
         written.append(spec_path)
+
+    # A repo scaffolded before its first plan never got a tracked
+    # scripts/validate-plans.sh (`fr init scaffold` only writes one when
+    # docs/superpowers/plans/ already exists at scaffold time). Installing it
+    # here means the wrapper lands in the SAME commit as this plan, so the
+    # first-plan PR carries it to the default branch and a later `fr
+    # isolation up --base origin/<default>` is never refused over it
+    # (2026-09-25 fr-goal-closeout-defects spec §3.B). A foreign file there
+    # is left untouched — the same refusal `ensure_validator_wrapper`
+    # already makes elsewhere — reported as a warning, not a failure: a
+    # plan is still worth creating even when the wrapper can't be.
+    if (repo_root / ".git").exists():
+        try:
+            if ensure_validator_wrapper(repo_root):
+                written.append(validator_wrapper_path(repo_root))
+        except ValidatorWrapperError as err:
+            logging.getLogger(__name__).warning(
+                "plan %s: could not install scripts/validate-plans.sh: %s", slug, err
+            )
 
     if written:
         _stage(repo_root, written)

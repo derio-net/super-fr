@@ -4074,9 +4074,16 @@ rows:
       wrapper; the guard's remedy is the harness-neutral 'fr init validator-wrapper'.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_cmd.py
+      - super-fr:tests/unit/test_plan_ops.py
+      - super-fr:tests/unit/test_isolation_cmd.py
+    status: ci
+    notes: fr init validator-wrapper (test_init_cmd.py), plan_ops.create installing/staging
+      the wrapper on first plan (test_plan_ops.py wrapper tests), and the reworded isolation
+      guard message (test_isolation_cmd.py) all pin phase 2 of gh#610's closeout-defects
+      plan.
   - id: closeout-fr-commits-own-records
     capability: fr-goal-closeout
     acceptance: fr commits its own record writes (run cursor, plan edits, journal entries)

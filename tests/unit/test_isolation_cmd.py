@@ -306,8 +306,11 @@ def test_up_plan_repo_without_validator_wrapper_exits_2(repo: Path, fake_run: li
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
 
     assert res.exit_code == 2
-    assert "scripts/validate-plans.sh" in res.output
-    assert "install-validator-wrapper.sh" in res.output
+    assert "docs/superpowers/plans" in res.output
+    assert "no scripts/validate-plans.sh there" in res.output
+    assert "fr init validator-wrapper" in res.output
+    assert "in the working tree" not in res.output
+    assert "~/.claude" not in res.output
     assert not fake_run
 
 
@@ -448,7 +451,11 @@ def test_up_plan_repo_with_uncommitted_validator_wrapper_exits_2(
     res = runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "b"])
 
     assert res.exit_code == 2
-    assert "not in HEAD" in res.output
+    assert "docs/superpowers/plans in HEAD" in res.output
+    assert "no scripts/validate-plans.sh there" in res.output
+    assert "fr init validator-wrapper" in res.output
+    assert "in the working tree" not in res.output
+    assert "~/.claude" not in res.output
     assert not fake_run
 
 

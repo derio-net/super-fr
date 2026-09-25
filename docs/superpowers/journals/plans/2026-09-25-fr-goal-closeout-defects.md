@@ -78,3 +78,13 @@ Verified: pre-existing in the resolver (also serves up and gc). verify-merge was
 ### review-p1 · review · Phase 1 review (phase 1)
 
 Dispatched reviewer (sonnet) over e973889c+556024d8: no critical/important findings; verdict Ready. One minor out-of-scope finding p1-r1 (untimed host-CLI lookup in _resolve_default_branch) verified against local.py and filed out-of-scope. Reviewer independently confirmed 273 tests, ruff, mypy, fr validate artifacts, acceptance check green.
+
+<!-- fr:journal kind=discovery scope=plan id=8440e1536a3c created=2026-09-25T11:00:26 phase=2 -->
+### 8440e1536a3c · discovery · no-refactor-because P2.T3 (phase 2)
+
+scaffold.py's wrapper handling (plans_dir_exists gate, raise IsolationError on ValidatorWrapperError) and create()'s (.git-exists gate, warn+continue on ValidatorWrapperError) both call ensure_validator_wrapper inside a try/except, but their error handling genuinely diverges (fatal vs. non-fatal) and their gating predicate differs (plans dir vs. git repo) — extracting a shared helper would only wrap the two-line try/except and add an indirection with no real duplication removed. Left as-is; ran tests/unit/test_plan_ops.py, tests/unit/test_v2_plan_ops.py, tests/unit/test_isolation.py (305 passed) to confirm no regression.
+
+<!-- fr:journal kind=discovery scope=plan id=6519d7c46668 created=2026-09-25T11:00:38 phase=2 -->
+### 6519d7c46668 · discovery · tests/unit/test_plan_cmd.py does not exist in this repo (phase 2)
+
+The phase brief and plan step P2.T3.S3 both name tests/unit/test_plan_cmd.py as a gate/refactor-check target; no such file exists anywhere in the tree (fr plan create's CLI layer is exercised via tests/unit/test_v2_plan_ops.py at the library level and there is no dedicated CLI test file for it). Ran the equivalent CLI-facing tests instead: tests/unit/test_plan_ops.py + tests/unit/test_v2_plan_ops.py + tests/unit/test_isolation.py (305 passed) and the new tests/unit/test_init_cmd.py. Flagging so the gap is not silently assumed closed.
