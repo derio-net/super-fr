@@ -134,3 +134,8 @@ The p1-r11 per-session assertion (23-37% within 0.5 points, spec §7.3) holds fo
 ### p1-r1-resolved · finding [fixed] · resolves p1-r1: OpenCode reader labels every non-zero cost exact; Copilot-routed must be estimated
 
 opencode.py: ESTIMATED_PROVIDERS (github-copilot prefix, confirmed against a live DB's providerIDs); a session is exact only if every priced message is. Fixture rows ses_copilot and ses_mixed (live row shape), NOTE.md sha updated; two tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-09-25T20:22:06 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: Classifier tests pass even if unwrap/prefix-strip were a no-op; $VAR substitution untested
+
+Added the reviewer's four shapes, but they pass even with _unwrap a no-op. So also added UNWRAP_DEPENDENT cases (isolation exec -- git, bash -lc 'git', GIT_PAGER=cat git, $F and ${F} heredoc writes to plan/code) and test_these_cases_need_the_unwrap, which monkeypatches _unwrap to identity and asserts each case changes answer.
