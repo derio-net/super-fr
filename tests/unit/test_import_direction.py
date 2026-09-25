@@ -25,26 +25,52 @@ def _imports_of(package_dir: Path) -> dict[Path, set[str]]:
     return out
 
 
-# The ONE sanctioned soft point (spec §Architecture): `fr apply --to`
-# imports fr_dispatch.registry behind an importlib.util.find_spec guard.
-_SOFT_POINT = ("apply_cmd.py", "fr_dispatch")
+# The sanctioned soft points (spec §Architecture; 2026-09-25-triage-batches
+# §3.C): `fr apply --to` and `fr triage batch dispatch` import fr_dispatch
+# behind an importlib.util.find_spec guard. No other fr module may.
+_SOFT_POINTS = ("apply_cmd.py", "triage_batch_cmd.py")
+_SOFT_TARGET = "fr_dispatch"
+
+
+def _sibling_offenders(src_root: Path) -> dict[str, set[str]]:
+    return {
+        str(f): roots & {"fr_dispatch", "fr_vk"}
+        for f, roots in _imports_of(src_root).items()
+        if roots & {"fr_dispatch", "fr_vk"}
+        and not (
+            f.parent.name == "commands"
+            and f.name in _SOFT_POINTS
+            and roots & {"fr_dispatch", "fr_vk"} == {_SOFT_TARGET}
+        )
+    }
 
 
 def test_fr_imports_no_siblings() -> None:
-    offenders = {
-        str(f): roots & {"fr_dispatch", "fr_vk"}
-        for f, roots in _imports_of(PACKAGES / "fr" / "src" / "fr").items()
-        if roots & {"fr_dispatch", "fr_vk"}
-        and not (f.name == _SOFT_POINT[0] and roots & {"fr_dispatch", "fr_vk"} == {_SOFT_POINT[1]})
-    }
+    offenders = _sibling_offenders(PACKAGES / "fr" / "src" / "fr")
     assert not offenders, f"fr must not import siblings: {offenders}"
 
 
-def test_soft_point_is_guarded() -> None:
-    """The sanctioned import must stay behind find_spec — never module-level."""
-    src = (PACKAGES / "fr" / "src" / "fr" / "commands" / "apply_cmd.py").read_text()
-    assert 'importlib.util.find_spec("fr_dispatch")' in src
-    assert "\nfrom fr_dispatch" not in src  # no module-level import
+def test_a_third_fr_dispatch_import_is_refused(tmp_path: Path) -> None:
+    """The soft points are a closed pair: any other module importing
+    fr_dispatch, and a soft point importing fr_vk, are offenders."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    (commands / "triage_batch_cmd.py").write_text("    from fr_dispatch.registry import x\n")
+    (commands / "other_cmd.py").write_text("    from fr_dispatch.registry import x\n")
+    (commands / "apply_cmd.py").write_text("    import fr_vk\n")
+    offenders = _sibling_offenders(tmp_path)
+    assert set(offenders) == {str(commands / "other_cmd.py"), str(commands / "apply_cmd.py")}
+
+
+def test_soft_points_are_guarded() -> None:
+    """Each sanctioned import must stay behind find_spec — never module-level —
+    and carry the same install message."""
+    for name in _SOFT_POINTS:
+        src = (PACKAGES / "fr" / "src" / "fr" / "commands" / name).read_text()
+        assert 'importlib.util.find_spec("fr_dispatch")' in src, name
+        assert "\nfrom fr_dispatch" not in src, name  # no module-level import
+        assert "\nimport fr_dispatch" not in src, name
+        assert "uv tool install --with fr-dispatch fr" in src, name
 
 
 def test_fr_dispatch_never_imports_fr_vk() -> None:

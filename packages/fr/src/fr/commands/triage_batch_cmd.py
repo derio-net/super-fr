@@ -9,6 +9,14 @@
   member and appends a `cancel` event — only with `--yes` (decision d1);
   without it, it prints what it would do and writes nothing.
 - `suggest` prints candidate groupings and writes nothing.
+- `dispatch` hands a batch to a run-capable runner as one `unit="run"` item
+  (§3.C), reserving its version (§3.D) and making it visible on the forge
+  (§3.E); `--repair` redoes only the forge writes.
+
+This module is `fr`'s second sanctioned soft point into `fr_dispatch`
+(`tests/unit/test_import_direction.py` `_SOFT_POINTS`): every such import sits
+inside a function, behind `importlib.util.find_spec("fr_dispatch")`, with the
+same install message as `apply_cmd.py`.
 
 Every forge operation goes through the `GhClient` adapter (§3.J), built by
 `make_client`; this module never runs `gh`/`glab`/`tea` and never touches
@@ -22,9 +30,10 @@ backend declares unsupported).
 
 from __future__ import annotations
 
+import importlib.util
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 from urllib.parse import urlparse
 
 import typer
@@ -47,18 +56,46 @@ from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
 from fr.triage.batch import (
     CLOSED_OUT,
+    batch_branch,
     batch_item_id,
     batch_repo,
     check_open_membership,
     derive_batch_stage,
+    resolve_launch,
     save_batches,
     suggest,
     withdrawal_body,
     withdrawn_already,
 )
+from fr.triage.batch_dispatch import (
+    TRIAGE_CONFIG_PATH,
+    check_config_fresh,
+    live_reservations,
+    render_brief,
+)
+from fr.triage.batch_version import read_source, reserve
 from fr.triage.errors import TriageError
-from fr.triage.model import Batch, CancelEvent, Facts, load_judgements, state_dir
+from fr.triage.gitseam import Checkout
+from fr.triage.model import (
+    Batch,
+    CancelEvent,
+    DispatchEvent,
+    Facts,
+    Judgements,
+    Launch,
+    load_judgements,
+    state_dir,
+)
 from fr.triage.render import plural
+
+if TYPE_CHECKING:
+    from fr_dispatch.protocols import Runner
+    from fr_dispatch.work_item import WorkItem
+
+DISPATCH_INSTALL_HINT = (
+    "dispatching to a runner requires fr-dispatch — install it "
+    "(e.g. `uv tool install --with fr-dispatch fr`) and re-run."
+)
 
 
 def make_client(url: str) -> GhClient:
@@ -66,9 +103,38 @@ def make_client(url: str) -> GhClient:
     return client_for_backend(backend_for_url(url))
 
 
+def make_checkout(path: Path | None) -> Checkout:
+    """The local clone the batch verbs work in (§3.I). Tests replace this."""
+    return Checkout.at(path)
+
+
+def load_runner(name: str) -> Runner:
+    """Build runner *name* through `fr_dispatch.registry.load_runner` (§3.C step 1).
+
+    The soft point: `fr_dispatch` is imported here, behind find_spec, never at
+    module level. Tests replace this.
+    """
+    if importlib.util.find_spec("fr_dispatch") is None:
+        _fail(DISPATCH_INSTALL_HINT)
+    from fr_dispatch.registry import RunnerLoadError
+    from fr_dispatch.registry import load_runner as _load
+
+    try:
+        return _load(name)
+    except RunnerLoadError as exc:
+        _fail(str(exc))
+
+
 def _fail(message: str, code: int = 2) -> NoReturn:
     err_console.print(f"[red]error:[/red] {escape(message)}", soft_wrap=True)
     raise typer.Exit(code=code)
+
+
+def _now_after(batch: Batch) -> datetime:
+    """Now, or the batch's last event time if the clock is behind it: a skewed
+    clock never breaks the time-order load rule."""
+    now = datetime.now(UTC)
+    return max(now, batch.events[-1].at) if batch.events else now
 
 
 def _find(batches: list[Batch], batch_id: str) -> Batch:
@@ -289,12 +355,8 @@ def batch_cancel_command(
                 "re-run to complete: " + "; ".join(failed),
                 code=1,
             )
-    last = batch.events[-1].at if batch.events else None
-    now = datetime.now(UTC)
-    at = max(now, last) if last else now  # a skewed clock never breaks event order
-    cancelled = batch.model_copy(
-        update={"events": [*batch.events, CancelEvent(kind="cancel", at=at, reason=reason)]}
-    )
+    event = CancelEvent(kind="cancel", at=_now_after(batch), reason=reason)
+    cancelled = batch.model_copy(update={"events": [*batch.events, event]})
     _write(target, _replace(judgements.batches, cancelled), facts, read=judgements.batches)
     console.print(f"cancelled batch {batch.id}", markup=False)
 
@@ -321,3 +383,156 @@ def batch_suggest_command(
         return
     for s in found:
         console.print(f"{s.signal} {s.label}: {', '.join(s.keys)}", markup=False, soft_wrap=True)
+
+
+# ---------------------------------------------------------------- dispatch
+
+CheckoutOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--checkout",
+        help="A local clone of the batch's repo; default: this directory's git toplevel.",
+    ),
+]
+
+
+def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
+    """The clone (§3.I), refused unless its origin is the batch's repo."""
+    try:
+        checkout = make_checkout(path)
+        origin = checkout.origin_repo()
+    except TriageError as exc:
+        _fail(str(exc))
+    if origin is None or origin.lower() != owner_repo.lower():
+        _fail(
+            f"--checkout {checkout.path}: its origin is {origin or 'not a forge repo'}, "
+            f"not the batch's repo {owner_repo}"
+        )
+    return checkout
+
+
+def _reservation(
+    checkout: Checkout, facts: Facts, judgements: Judgements, batch: Batch, owner_repo: str
+) -> str | None:
+    """Fetch, hold the config-freshness rule, and reserve a version (§3.D, §3.I)."""
+    config = facts.config_for(owner_repo)
+    try:
+        checkout.fetch()
+        default = f"origin/{checkout.default_branch()}"
+        check_config_fresh(facts.collected_at, checkout.last_change(default, TRIAGE_CONFIG_PATH))
+        if config.version is None:
+            return None
+        text = checkout.show(default, config.version.source.file)
+        if text is None:
+            _fail(f"{config.version.source.file} does not exist on {default}")
+        source = read_source(text, config.version.source)
+        live = live_reservations(judgements.batches, facts, owner_repo, skip=batch.id)
+        return reserve(source, live, batch.bump)
+    except TriageError as exc:
+        _fail(str(exc))
+
+
+def _work_item(
+    owner_repo: str, batch: Batch, launch: Launch, brief: str, reserved: str | None, cwd: Path
+) -> WorkItem:
+    """The run item (§3.C step 4); `tracking` stays None — a batch is many issues."""
+    from fr_dispatch.work_item import WorkItem, run_item_id
+
+    payload: dict[str, Any] = {
+        "brief": brief,
+        "harness": launch.harness,
+        "model": launch.model,
+        "branch": batch_branch(batch.id),
+        "reserved_version": reserved,
+        "issues": list(batch.ids),
+        "checkout": str(cwd),  # herdr's --cwd (decision p2-dispatch-handle)
+    }
+    return WorkItem(
+        id=run_item_id(owner_repo, f"batch-{batch.id}"),
+        unit="run",
+        workflow="fr-goal",
+        repo=owner_repo,
+        parent=None,
+        inputs=(),
+        payload=payload,
+        tracking=None,
+    )
+
+
+@batch_app.command("dispatch")
+def batch_dispatch_command(
+    batch_id: Annotated[str, typer.Argument(help="The batch to dispatch.")],
+    to: Annotated[
+        str | None, typer.Option("--to", help="Runner; default: the batch's launch.runner.")
+    ] = None,
+    checkout_path: CheckoutOpt = None,
+    repair: Annotated[
+        bool,
+        typer.Option("--repair", help="Redo only the forge writes of the last dispatch."),
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    repo: RepoOpt = None,
+    org: OrgOpt = None,
+    dir_override: DirOpt = None,
+) -> None:
+    """Hand a batch to a runner as one fr-goal run, and mark its issues taken."""
+    target, facts, judgements = _load_state(_scope(repo, org), dir_override)
+    batch = _find(judgements.batches, batch_id)
+    owner_repo = batch_repo(batch, facts)
+    if owner_repo is None:
+        _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
+    try:
+        launch = resolve_launch(
+            batch.model_copy(update={"launch": batch.launch.model_copy(update={"runner": to})})
+            if to
+            else batch,
+            facts.config_for(owner_repo),
+        )
+    except TriageError as exc:
+        _fail(str(exc))
+    assert launch.runner is not None and launch.harness is not None and launch.model is not None
+    runner = load_runner(launch.runner)
+    checkout = _open_checkout(checkout_path, owner_repo)
+    reserved = _reservation(checkout, facts, judgements, batch, owner_repo)
+    client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
+    try:
+        refs = [client.closing_ref(owner_repo, int(k.rpartition("#")[2])) for k in batch.ids]
+    except UnsupportedForgeOperation as exc:
+        _fail(str(exc))
+    brief = render_brief(
+        batch,
+        judgements,
+        facts,
+        repo=owner_repo,
+        closing_refs=refs,
+        reserved_version=reserved,
+        model=launch.model,
+    )
+    item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)
+    branch = batch_branch(batch.id)
+    console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
+    console.print(f"  runner: {launch.runner}", markup=False)
+    console.print(f"  harness: {launch.harness}", markup=False)
+    console.print(f"  model: {launch.model}", markup=False)
+    console.print(f"  branch: {branch}", markup=False)
+    console.print(f"  reserved version: {reserved or '(none: no version block)'}", markup=False)
+    console.print("  brief:", markup=False)
+    console.print(brief, markup=False, soft_wrap=True, highlight=False)
+    if not yes:
+        console.print("nothing written; re-run with --yes to act", markup=False)
+        return
+    try:
+        handle = runner.dispatch(item)
+    except Exception as exc:  # the runner's own failure: nothing is written
+        _fail(f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", code=1)
+    event = DispatchEvent(
+        kind="dispatch",
+        at=_now_after(batch),
+        runner=launch.runner,
+        handle=handle,
+        branch=branch,
+        reserved_version=reserved,
+    )
+    dispatched = batch.model_copy(update={"events": [*batch.events, event]})
+    _write(target, _replace(judgements.batches, dispatched), facts, read=judgements.batches)
+    console.print(f"dispatched batch {batch.id}", markup=False)

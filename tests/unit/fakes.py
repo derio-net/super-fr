@@ -174,6 +174,10 @@ class FakeGhClient:
         self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
         return list(self.issue_comments.get((repo, number), []))
 
+    def closing_ref(self, repo: str, number: int) -> str:
+        """GitHub's closing line, as `RealGhClient.closing_ref` spells it."""
+        return f"Closes {repo}#{number}"
+
     def create_issue(
         self,
         repo: str,
