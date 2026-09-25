@@ -419,3 +419,8 @@ apply.py:520-566. capability/acceptance present = create-only; absent = move-onl
 ### p3-r6 · finding [open] (reviewer: in scope) · fr-goal SKILL.md:96 claims record-path answered_by verification that does not exist (phase 3)
 
 Made true by p3-r1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-09-25T23:23:36 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · No test that deliver's tests= log gate still fires through --record (phase 3)
+
+tests/unit/test_record_apply.py; P3.T2.S1(c).
