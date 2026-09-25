@@ -286,3 +286,8 @@ Spec 3.F step 2 says pr_merge(..., method=<repo default>), but the 3.J adapter t
 ### p3-version-files-overlap · discovery · Declared version files are excluded from merge-order overlaps and the forecast (phase 3)
 
 Every batch PR bumps the repo's version files, so counting them made every pair of batches overlap: the 3.F rule 'not adjacent where avoidable' could never avoid anything and the board forecast listed pyproject.toml on every step. pr_open_queue now drops files matching the repo's version.files globs from each entry's overlap set (QueueEntry.files); merge resolves exactly those conflicts itself (3.F step 3). Test: test_triage_batch_merge.py::test_declared_version_files_are_not_overlaps.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-t4-green-first created=2026-09-26T00:27:54 phase=3 -->
+### p3-t4-green-first · discovery · P3.T4's integration test passed on first run; mutation-checked instead (phase 3)
+
+The execution path (scratch worktree, --theirs, set, commit, push, wait, cleanup) was written in batch_merge.py alongside P3.T3's refusals, so the real-git test was green when first run. To show it is not vacuous it was run against two mutations: skipping take_theirs (both tests red) and never removing the scratch worktree (the cleanup assertion red); both restored.
