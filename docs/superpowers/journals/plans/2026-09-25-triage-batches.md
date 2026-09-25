@@ -211,3 +211,8 @@ Batch's ids validator refuses a key that appears more than once after normalisat
 ### r2p-f6-resolved · finding [fixed] · resolves r2p-f6: save_batches: quoted top-level "batches": key gets a duplicate appended; a file starting with --- becomes two documents and can never take a batch
 
 _TOP_KEY matches plain and quoted top-level keys; _body_bounds puts a prepended schema line after a leading --- (and %directives/comments) and appended batches before a trailing ..., so the file stays one document; all other bytes are kept. Tests: test_triage_batch_model.py::test_a_quoted_batches_key_is_replaced_not_duplicated, ::test_a_leading_document_marker_stays_one_document[plain|quoted|directive], ::test_a_document_end_marker_keeps_the_batches_inside_the_document, ::test_a_prepended_key_goes_after_the_document_start, ::test_a_write_keeps_every_other_byte. Commit c1422709.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f7-resolved created=2026-09-25T23:48:34 state=fixed resolves=r2p-f7 answered_by=agent -->
+### r2p-f7-resolved · finding [fixed] · resolves r2p-f7: Concurrent edit to batches: is silently lost between load and save_batches (widest in cancel); no compare-before-write
+
+save_batches(path, batches, *, read=...) re-loads the file's current batches and refuses with 'judgements.yaml changed since it was read; re-run' (exit 2 from every verb via _write) when they differ from what the verb loaded; the file is left untouched. Tests: test_triage_batch_model.py::test_a_write_over_batches_changed_since_they_were_read_is_refused, test_triage_batch_verbs.py::test_cancel_refuses_to_overwrite_batches_changed_while_it_ran. Commit c1422709.
