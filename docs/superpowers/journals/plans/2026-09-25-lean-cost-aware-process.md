@@ -19,3 +19,8 @@ Cost gains by_model (per-model harness dollars — rollup divides each model's d
 ### 83ed2919b8c4 · finding [open] · Hermes fixture rows are constructed, not captured (phase 1)
 
 No Hermes host was available. tests/fixtures/usage/hermes/schema.sql is a verbatim copy of upstream SCHEMA_SQL (hermes-agent a3a85a31, SCHEMA_VERSION 30), but the rows, and the OpenAI-style messages.tool_calls JSON shape, are constructed against it. The reader tolerates both {function:{name,arguments}} and flat {name,arguments}. A live capture is owed before the Hermes reader is called verified.
+
+<!-- fr:journal kind=discovery scope=plan id=485ac0f469c8 created=2026-09-25T19:55:49 phase=1 -->
+### 485ac0f469c8 · discovery · Golden check: pooled 30.06% paperwork / 32.84% implementation (published 30.2 / 32.9) (phase 1)
+
+tests/unit/test_usage_report.py::test_golden_audit_pooled_shares ran locally over the nine sessions (skipped in CI) and passes within 0.5 points. Getting there needed two classifier changes vs a first cut: stripped VAR=value prefixes are substituted into the rest of the command (F=docs/... && cat $F), and a shell write is classified by its path only when it lands in the repo's own trees. The rollup was drafted before its tests so the golden could calibrate it — a TDD order deviation for P1.T4.S1/S2; the tests were then written against the spec, not the code.
