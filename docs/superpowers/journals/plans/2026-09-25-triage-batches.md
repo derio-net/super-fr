@@ -174,3 +174,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f11 created=2026-09-25T21:40:50 phase=3 state=open review_scope=in -->
 ### r2p-f11 · finding [open] (reviewer: in scope) · §3.J tripwire lists two files by name; phase-3 modules are uncovered, and merge/checkout need a git seam outside the subprocess ban (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f12b created=2026-09-25T21:40:51 phase=3 state=open review_scope=in -->
+### r2p-f12b · finding [open] (reviewer: in scope) · Test Plan 4's can_dispatch-before-preflight ordering is exercised nowhere yet; phase 3 dispatch must test it (phase 3)
