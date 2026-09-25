@@ -126,8 +126,8 @@ state:
       ticked_at: '2026-09-25T21:09:10+00:00'
       note: 'red: ImportError CONFIG_PATH (collect has no schema-3 surface)'
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-25T21:09:10+00:00'
       note: null
     P2.T2.S3:
       state: ' '
