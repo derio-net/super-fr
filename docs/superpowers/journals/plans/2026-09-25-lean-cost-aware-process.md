@@ -524,3 +524,8 @@ run_cmd.py _verify_tests_log: orchestrator_wrote_since windows are the Bash call
 ### d-oos-tests-window-resolved · finding [out-of-scope] · resolves d-oos-tests-window: deliver's tests= gate cannot see a run_in_background suite (call window ends at launch)
 
 Pre-existing gate behaviour (not introduced by this branch); found while delivering it.
+
+<!-- fr:journal kind=finding scope=plan id=d-oos-cli-gate-unobserved created=2026-09-26T00:09:56 state=open review_scope=out -->
+### d-oos-cli-gate-unobserved · finding [open] (reviewer: out of scope) · An operator gate on a kind: cli step never persists unobserved to the cursor
+
+Recorded as discovery p2-d-review-fixes during phase-2 fixes: the step has no unit to hold evidence; stderr notice only. kind: agent gates (fr-goal brainstorm) do record it.
