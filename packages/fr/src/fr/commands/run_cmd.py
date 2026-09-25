@@ -249,13 +249,17 @@ _Cmd = TypeVar("_Cmd", bound=Callable[..., None])
 
 
 def _commits_run_writes(
-    verb: str, outcome: Callable[[dict[str, Any]], str | None] | None = None
+    verb: str,
+    outcome: Callable[[dict[str, Any]], str | None] | None = None,
+    after: Callable[[_RunWrites, dict[str, Any]], None] | None = None,
 ) -> Callable[[_Cmd], _Cmd]:
     """Commit every record the wrapped command wrote, once, on every exit path.
 
     `outcome` reads the subject's closing state word off the command's own
     arguments (`resolve --state`, `claim --abandoned`) — the state the command
     was asked to record, which the cursor alone cannot always say (p3-r1).
+    `after` runs only when the command RETURNED (not on a refusal), before the
+    commit, so whatever it writes lands in the same commit.
     """
 
     def decorate(fn: _Cmd) -> _Cmd:
@@ -270,6 +274,8 @@ def _commits_run_writes(
             token = _RUN_WRITES.set(writes)
             try:
                 fn(*args, **kwargs)
+                if after is not None:
+                    after(writes, kwargs)
             finally:
                 _RUN_WRITES.reset(token)
                 writes.commit()
@@ -281,6 +287,38 @@ def _commits_run_writes(
 
 def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
+
+
+# --- usage capture (spec 2026-09-25-lean-cost-aware-process §5.B.3) ----------
+
+
+def _capture_usage(
+    repo_root: Path, state: RunState, at: str, *, require_sessions: bool = False
+) -> None:
+    """Write this host's usage capture and note it for the command's commit.
+    Never raises (`fr.usage.capture.capture`)."""
+    from fr.usage.capture import capture
+
+    path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
+    if path is not None:
+        _note_record_write(repo_root, path)
+
+
+def _capture_on_new_host(writes: _RunWrites, kwargs: dict[str, Any]) -> None:
+    """A resolve on a host with no capture of this run yet captures its
+    sessions — runners, pods, a cross-machine resume (§5.B.3 row 3)."""
+    from fr.usage.capture import needs_capture
+
+    state = writes.last
+    if state is None:
+        return
+    try:
+        repo_root = resolve_repo_root()
+    except Exception:  # noqa: BLE001 — capture never fails its step
+        return
+    if needs_capture(repo_root, state, os.environ):
+        step = kwargs.get("step_id") or state.cursor
+        _capture_usage(repo_root, state, f"resolve:{step}", require_sessions=True)
 
 
 _UNSAFE_IN_RUN_ID = re.compile(r"[^A-Za-z0-9._-]+")
@@ -3792,7 +3830,7 @@ def _resolve_member(
 
 
 @run_app.command("resolve")
-@_commits_run_writes("resolve", lambda kw: kw.get("state_value"))
+@_commits_run_writes("resolve", lambda kw: kw.get("state_value"), after=_capture_on_new_host)
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id to resolve (must be `running`)."),
@@ -4110,6 +4148,8 @@ def resolve_cmd(
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
     if step_id == "deliver" and state_value == "done":
+        # spec 2026-09-25 §5.B.3: the usage capture rides this commit
+        _capture_usage(repo_root, new_state, "deliver")
         # p3-m4: commit BEFORE reading HEAD's sha for the "push it" line below
         # — the decorator's own commit runs in `finally`, after this function
         # returns, so a sha read any earlier would not exist yet. `.commit()`

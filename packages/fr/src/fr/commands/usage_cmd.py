@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -26,15 +26,13 @@ import typer
 import yaml
 
 from fr.run.model import archived_run_path, run_path
-from fr.run.telemetry import OpenCodeReader, claude_code_session
-from fr.usage.model import UsageRecord, unavailable
+from fr.usage.model import UsageRecord
 from fr.usage.readers import READERS
 from fr.usage.render import render_html, render_table
 from fr.usage.rollup import Window, rollup, windows_from_cursor
+from fr.usage.sources import read_session, sessions_of
 
 CACHE_ENV = "FR_USAGE_CACHE"
-HERMES_DB_ENV = "FR_HERMES_DB"
-HERMES_DB = Path(".hermes") / "state.db"
 
 usage_app = typer.Typer(
     help="What harness sessions and runs cost, split by activity and step (read-only).",
@@ -52,26 +50,6 @@ def _fail(message: str) -> typer.Exit:
     return typer.Exit(2)
 
 
-def _source(harness: str, session: str, env: Mapping[str, str]) -> Path | None:
-    if harness == "claude-code":
-        return claude_code_session(env, session)
-    if harness == "opencode":
-        return OpenCodeReader().database(env)
-    override = env.get(HERMES_DB_ENV)
-    return Path(override) if override else Path.home() / HERMES_DB
-
-
-def read_session(harness: str, session: str, env: Mapping[str, str]) -> UsageRecord:
-    """The live record for one session — `unavailable` when it cannot be found,
-    or when fr has no reader for its harness (never read as another harness)."""
-    if harness not in READERS:
-        return unavailable(session, harness, "no reader for this harness")
-    source = _source(harness, session, env)
-    if source is None:
-        return unavailable(session, harness, "no transcript found for this session on this host")
-    return READERS[harness].read(source, session)
-
-
 def _cursor(repo: Path, run: str) -> dict[str, Any]:
     for path in (run_path(repo, run), archived_run_path(repo, run)):
         if path.is_file():
@@ -81,26 +59,8 @@ def _cursor(repo: Path, run: str) -> dict[str, Any]:
     raise _fail(f"no run cursor for {run!r} under {repo}")
 
 
-def _sessions_of(node: object) -> Iterator[tuple[str, str]]:
-    """Every `(harness, session)` a cursor records, wherever an attempt sits.
-
-    Only an attempt that names NO harness is read as Claude Code (the cursors
-    that predate the field); a harness fr has no reader for stays itself, and
-    `read_session` reports it unavailable rather than relabelling it."""
-    if isinstance(node, Mapping):
-        session = node.get("session")
-        if isinstance(session, str) and session:
-            harness = node.get("harness")
-            yield ("claude-code" if harness is None else str(harness), session)
-        for value in node.values():
-            yield from _sessions_of(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _sessions_of(value)
-
-
 def _run_sessions(repo: Path, run: str) -> list[tuple[str, str]]:
-    return list(dict.fromkeys(_sessions_of(_cursor(repo, run))))
+    return list(dict.fromkeys(sessions_of(_cursor(repo, run))))
 
 
 def _check_harness(harness: str) -> None:
@@ -197,7 +157,7 @@ def report(
         if index.is_file():
             pairs += [(str(h), str(s)) for h, s in json.loads(index.read_text())["sessions"]]
         if cursor is not None:
-            pairs += list(dict.fromkeys(_sessions_of(cursor)))
+            pairs += list(dict.fromkeys(sessions_of(cursor)))
         for window in windows_from_cursor(cursor) if cursor is not None else ():
             step = window.step if len(runs) == 1 else f"{run_id}:{window.step}"
             windows.append(Window(step=step, start=window.start, end=window.end))

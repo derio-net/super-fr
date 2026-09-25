@@ -474,8 +474,35 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
     dst = archived_run_path(repo_root, run_id)
     if dst.exists():
         return
+    _archive_usage(repo_root, src, run_id)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
+
+
+def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
+    """Capture the closeout session into the run's usage file, then move the
+    file to implemented/usage/ with the plan (spec 2026-09-25 §5.B.3). The
+    capture never fails the archive; the move is staged like every other."""
+    import os
+
+    from fr.usage.capture import capture
+    from fr.usage.file import archived_usage_path, usage_path
+
+    src = usage_path(repo_root, run_id)
+    dst = archived_usage_path(repo_root, run_id)
+    if dst.exists():
+        return
+    try:
+        state = parse_run_state(cursor.read_text())
+    except (OSError, RunStateError):
+        state = None
+    if state is not None:
+        capture(repo_root, state, "closeout", os.environ)
+    if not src.exists():
+        return
+    rel = src.relative_to(repo_root)
+    subprocess.run(["git", "-C", str(repo_root), "add", "--", str(rel)], check=False)
+    _git_mv(repo_root, rel, dst.relative_to(repo_root))
 
 
 def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
