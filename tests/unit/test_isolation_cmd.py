@@ -734,6 +734,9 @@ class _StubTarget:
     def __init__(self, result: dict) -> None:
         self._result = result
 
+    def _resolve_default_branch(self) -> str:
+        return "main"
+
     def verify_merge(self, state, default_branch: str = "main") -> dict:
         return self._result
 
@@ -793,6 +796,9 @@ def test_verify_merge_cmd_not_verified_exits_1(
 class _ReapedStub:
     def __init__(self, result: dict | None = None, err: str | None = None) -> None:
         self._result, self._err = result, err
+
+    def _resolve_default_branch(self) -> str:
+        return "main"
 
     def verify_merge_reaped(self, branch, default_branch: str = "main") -> dict:
         if self._err:
@@ -1674,6 +1680,9 @@ class _RoutedStub:
     def down_refusal(self, state):
         self.calls.append("down_refusal")
         return None
+
+    def _resolve_default_branch(self) -> str:
+        return "main"
 
     def verify_merge(self, state, default_branch="main"):
         self.calls.append("verify_merge")

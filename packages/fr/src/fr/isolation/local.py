@@ -989,7 +989,7 @@ class LocalWorktreeDevcontainerTarget:
     def verify_merge(
         self,
         state: IsolationState,
-        default_branch: str = "main",
+        default_branch: str,
         remote: str = "origin",
     ) -> dict[str, Any]:
         """Confirm the branch's changes reached `<remote>/<default_branch>`.
@@ -1011,7 +1011,7 @@ class LocalWorktreeDevcontainerTarget:
     def verify_merge_reaped(
         self,
         branch: str,
-        default_branch: str = "main",
+        default_branch: str,
         remote: str = "origin",
     ) -> dict[str, Any]:
         """`verify_merge` for a branch whose workspace gc already reaped.

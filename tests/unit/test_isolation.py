@@ -2611,7 +2611,7 @@ def test_verify_merge_reaped_unresolvable_ref_raises_naming_ref(tmp_path: Path) 
     _with_origin(repo)
     target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
     with pytest.raises(IsolationError, match="ghost-branch"):
-        target.verify_merge_reaped("ghost-branch")
+        target.verify_merge_reaped("ghost-branch", default_branch="main")
 
 
 def test_verify_merge_orphan_not_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -859,8 +859,10 @@ def verify_merge(
     branch: str | None = typer.Option(
         None, help="Branch whose merge to verify (default: the single active workspace)."
     ),
-    default_branch: str = typer.Option(
-        "main", "--default-branch", help="Base branch the PR merged into."
+    default_branch: str | None = typer.Option(
+        None,
+        "--default-branch",
+        help="Base branch the PR merged into (resolved from target if unset).",
     ),
 ) -> None:
     """Verify a merged branch's changes actually reached the base branch.
@@ -896,6 +898,9 @@ def verify_merge(
     # only the host to go on, so it keeps the env-based selection.
     target = _target_or_exit(root) if state is None else _target_for_or_exit(root, state)
     _refuse_external(target, "verify-merge")
+    # Resolve default_branch if not explicitly provided
+    if default_branch is None:
+        default_branch = _worktree_ops(target)._resolve_default_branch()
     if state is None:
         assert branch is not None
         try:
@@ -906,7 +911,11 @@ def verify_merge(
             _fail(err)
             return
     else:
-        res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+        try:
+            res = _worktree_ops(target).verify_merge(state, default_branch=default_branch)
+        except IsolationError as err:
+            _fail(err)
+            return
     note = " (workspace already reaped; checked from the repo root)" if reaped else ""
     if res["verified"]:
         typer.echo(
