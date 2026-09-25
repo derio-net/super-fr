@@ -172,9 +172,10 @@ state:
         untouched, test_plan_ops staged-not-committed pin passes (136 passed across
         plan_ops/plan_cmd/journal_cmd/records_commit)
     P3.T4.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T10:08:39+00:00'
+      note: 'full suite: 5234 passed, 1 failed (phase-2 stale regex p3-f1, then fixed;
+        file re-run 35 passed); ruff check/format clean; mypy clean (162 files)'
   completion:
     at: null
     note: null
