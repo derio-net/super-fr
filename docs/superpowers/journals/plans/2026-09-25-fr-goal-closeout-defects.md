@@ -213,3 +213,8 @@ Constant per command, no O(n) scan added; reviewer rated it acceptable. A few gi
 ### p3-m2-resolved · finding [fixed] · resolves p3-m2: commit_paths commits the whole working-tree file
 
 1c02f263: commit_paths docstring states the pathspec commit takes the whole working-tree file, so hand edits in an fr-owned record ride fr's commit (docs only, no test)
+
+<!-- fr:journal kind=finding scope=plan id=p3-m1-resolved created=2026-09-25T12:30:03 state=fixed resolves=p3-m1 -->
+### p3-m1-resolved · finding [fixed] · resolves p3-m1: fr plan rework / rework-add stage but never commit
+
+c7cc8ad2: plan rework commits the rework folder + resolved spec row (— rework), rework-add its _meta.yaml (— rework-add), both via _commit_plan_writes. Pinned by test_plan_cmd.py::test_plan_rework_and_rework_add_each_commit
