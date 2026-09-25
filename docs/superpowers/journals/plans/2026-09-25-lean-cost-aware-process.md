@@ -159,3 +159,8 @@ hermes._cost: per session row, actual else estimated, summed; exact only if ever
 ### p1-r6-resolved · finding [fixed] · resolves p1-r6: .fr-deliver classified verify for shell writes but journal_write for Write tool
 
 Chose verify for both: .fr-deliver/ holds deliver's tests=<log>, the suite's own output, which the shell rule (like full*.log) already calls verify. _path now returns verify for .fr-deliver/ on Read/Write/Edit; table cases for Bash, Write and Read. Golden re-run unchanged: pooled paperwork 30.06%, implementation 32.84%.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-09-25T20:22:10 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: Report CLI test needle 'implement' matches the column header
+
+The CLI test asserts a line-anchored By-step row per step (step cell then a dollar cell), and a new rollup test asserts by_step keys are exactly the cursor steps the fixture's messages fall in (plus OUTSIDE).
