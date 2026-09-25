@@ -4356,7 +4356,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: not-implemented
-    notes: 'Spec §9, target level: manual. Born at brainstorm 2026-09-25.'
+    notes: 'Live walk 2026-09-26 missed the target: 2.7 turns/step-item on Claude Code
+      (32/12, PR #635), 3.6 on OpenCode (36/10, PR #633), down from 6.1. Main drivers:
+      deliver''s tests= gate refusing real suite logs (#607 comment), OpenCode''s orphan
+      journal (#639). Stays open until a walk lands at or under 2.'
   - id: deliver-pr-body-sections
     capability: Lean cost-aware pipeline
     acceptance: A PR missing a required fr-rendered section cannot be delivered
