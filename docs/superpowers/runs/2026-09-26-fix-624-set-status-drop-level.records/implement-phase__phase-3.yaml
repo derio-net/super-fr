@@ -1,0 +1,22 @@
+schema_version: 1
+run: 2026-09-26-fix-624-set-status-drop-level
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T2.S3]
+refactor:
+  P3.T2: "docs, mirror, matrix row and version bump — no code to refactor"
+journal:
+  - kind: discovery
+    id: p3-refusal-tests-red-vacuously
+    phase: 3
+    title: Before --drop-level existed, the exit-2 refusal tests passed on typer's own "No such option"
+    body: >-
+      In RED, test items 2, 4, 5 and 6 passed vacuously: typer exits 2 for an
+      unknown option, and its error also mentions `--drop-level`. Item 6 now
+      also asserts our `'<level>=<ref>'` message, and the three refusal
+      messages (absent ref, contradiction, unknown level key) were checked
+      once by a throwaway probe after GREEN, so each exit 2 comes from the
+      intended refusal.
+resolves: []
+evidence: {}
