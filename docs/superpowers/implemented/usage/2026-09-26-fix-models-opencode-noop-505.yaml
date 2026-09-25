@@ -4,7 +4,8 @@ captures:
 - host: h-4cb73fa1
   harness: opencode
   mode: host-worktree
-  captured_at: '2026-09-25T23:34:29+00:00'
+  captured_at: '2026-09-25T23:45:06+00:00'
   at:
   - deliver
+  - closeout
   sessions: []
