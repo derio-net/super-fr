@@ -29,8 +29,9 @@ import yaml
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.run import units
-from fr.run.legacy import MEASURED_TOKEN_FIELDS_V4
-from fr.run.model import UNIT_RECORD_SCHEMA_VERSION, MeasuredTokens, parse_run_state
+from fr.run.legacy import MEASURED_TOKEN_FIELDS_V4, MeasuredTokensV6
+from fr.run.model import UNIT_RECORD_SCHEMA_VERSION, parse_run_state
+from fr.usage.file import load_usage, usage_path
 
 _V2_RUN = """\
 schema_version: 2
@@ -71,9 +72,9 @@ def _run_file(root: Path, text: str = _V2_RUN, stem: str = "r1") -> Path:
 
 def test_the_four_figures_are_the_same_four_on_both_sides_of_the_flip() -> None:
     """What "a measurement" consists of is stated twice on purpose — frozen in
-    the legacy reader, live in `MeasuredTokens` — and the two must agree or the
-    4 -> 5 rewrite would carry a figure the live model refuses."""
-    assert set(MEASURED_TOKEN_FIELDS_V4) == set(MeasuredTokens.model_fields)
+    the v4 legacy reader, and in the frozen v5/v6 `MeasuredTokensV6` — and the
+    two must agree or the 4 -> 5 rewrite would carry a figure the next hop refuses."""
+    assert set(MEASURED_TOKEN_FIELDS_V4) == set(MeasuredTokensV6.model_fields)
 
 
 def test_the_chain_reaches_the_current_version_from_both_older_versions() -> None:
@@ -106,13 +107,13 @@ def test_migrating_a_v2_run_file_carries_its_snapshot_onto_an_attempt(tmp_path: 
     kind = artifact_kind("run")
     assert kind.read_version(path) == kind.current_version
     state = parse_run_state(path.read_text())
-    estimate = units.estimate_of(state, "phase/1/code")
-    assert estimate is not None and estimate.journal_entries == 2
-    assert units.estimated_at(state, "phase/1/code") == "2026-09-20T09:00:01Z"
-    assert units.measured_of(state, "phase/1/code") is None, (
-        "a migrated cursor must not gain a fake measurement"
-    )
     assert units.unit_state(state.steps["implement"], "phase/1/code") == "running"
+    # run 7 moved the snapshot into the usage file — and still no measurement
+    usage = load_usage(usage_path(tmp_path, "r1"))
+    assert usage is not None
+    (entry,) = usage.captures[0].sessions
+    assert entry.briefs == {"phase/1/code": 900}
+    assert entry.models == {}, "a migrated cursor must not gain a fake measurement"
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -162,8 +163,15 @@ def test_a_cursor_carrying_a_full_measurement_migrates_and_is_valid(tmp_path: Pa
     path = _migrated(tmp_path, _stamped(_V2_RUN, 3) + _MEASURED)
 
     assert artifact_kind("run").validate(path) == []
-    measured = units.measured_of(parse_run_state(path.read_text()), "phase/1/code")
-    assert measured is not None and measured.total == 1 + 1000 + 20000 + 50
+    usage = load_usage(usage_path(tmp_path, "r1"))
+    assert usage is not None
+    (figures,) = usage.captures[0].sessions[0].models.values()
+    assert (figures.input, figures.cache_write, figures.cache_read, figures.output) == (
+        1,
+        1000,
+        20000,
+        50,
+    )
 
 
 @pytest.mark.parametrize("dropped", MEASURED_TOKEN_FIELDS_V4)
@@ -188,7 +196,7 @@ def test_a_half_recorded_measurement_never_reaches_the_new_shape(
 def test_a_partial_measurement_cannot_be_written_in_the_new_shape_either(dropped: str) -> None:
     figures = {name: 1 for name in MEASURED_TOKEN_FIELDS_V4 if name != dropped}
     with pytest.raises(ValueError, match=dropped):
-        MeasuredTokens(**figures)
+        MeasuredTokensV6(**figures)
 
 
 def test_a_cursor_in_the_new_shape_that_declares_an_older_one_is_reported(

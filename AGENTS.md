@@ -59,8 +59,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`model.py`'s `RunState`/`StepRecord`, `commands/run_cmd.py`). `advance`
     executes a `kind: cli` step directly and never a `kind: agent` one — it
     emits a dispatch brief instead; `resolve` is the only way an `agent`
-    step's cursor moves past `running`. `cost` prints each top-level step's
-    main-session usage (`StepRecord.main_session`); `deliver`'s derived
+    step's cursor moves past `running`. `cost` prints a run's cost per step
+    and model from its usage file (`fr/run/cost.py`; run 7 moved every figure
+    out of the cursor — the v5/v6 shape is frozen as
+    `fr.run.legacy.RunStateV6`); `deliver`'s derived
     `proportionality` evidence runs `fr plan proportionality`
     (`fr/proportionality.py`). `plugins/super-fr/workflows/` ships
     the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
@@ -116,6 +118,47 @@ uv workspace monorepo, version lockstepped across every manifest (see
     the repo was skipped, or the key was judged after the last collect). A
     DELETED issue is unreachable, not orphaned: collect views every judged key
     in a collected repo, so its failure is always recorded.
+  - **`fr/usage`** (2026-09-25 spec, `lean-cost-aware-process` §5.A) — what a
+    session or run cost, and on what, reconstructed from the harness's own
+    records: `readers/` (one per harness — Claude Code transcripts, OpenCode and
+    Hermes SQLite opened read-only — each returning a `UsageRecord` and NEVER
+    raising: a failure is `unavailable`, never a record of zeros), `classify.py`
+    (pure `(tool, command|path) -> activity`), `rollup.py` (the harness's dollars
+    split by fixed price ratios across activities and cursor step windows, plus
+    turns), `render.py` (table / one HTML page, `—` for every missing figure).
+    CLI: `fr usage collect|report|backfill` (`commands/usage_cmd.py`); the
+    cache lives under `$HOME/.cache/fr/usage/`, so `usage` is in
+    `READ_ONLY_COMMANDS` (`backfill` only CREATES archive files). Driver skill:
+    `fr-audit`. Dollars always come from the harness; fr invents no list price.
+    §5.B persists it: `file.py` is the `usage` artifact kind
+    (`docs/superpowers/usage/<run-id>.yaml`, one capture per host, host label
+    `h-<sha256(run+hostname)[:8]>`, an ALLOWLIST projection — never a
+    `model_dump` of a record, which holds raw commands and paths), `capture.py`
+    writes it at `resolve --step deliver`, a new host's first resolve and
+    `fr archive` (never failing the step), `backfill.py` fills archived runs.
+    **Host-side rule** (`fr/isolation/where.py`): `fr run`/`fr usage` execute
+    on the harness host — `fr isolation exec` refuses them in devcontainer
+    mode, and the `run`/`usage` groups refuse in-process on a devcontainer-mode
+    workspace (`target: devcontainer` marker + container evidence), never on a host-worktree pod or an
+    external marker.
+  - **`fr/record`** (2026-09-25 spec, `lean-cost-aware-process` §5.C) — step
+    records: one YAML per agent step at
+    `docs/superpowers/runs/<run-id>.records/<step>[__<item>].yaml` (artifact kind
+    `record`, transient: committed while the step runs, deleted by the resolve
+    that applies it). `model.py` (`StepRecord`; `allowed_sections` reads the
+    step's `emits:` — `journal:<scope>`, `plan:ticks`, `acceptance`, the tokens in
+    `fr.workflow.artifacts`), `apply.py` (`apply_record` — THE one bookkeeping
+    write path: validate against the manifest and disk, build every write in
+    memory, write atomically, run `fr run resolve`'s own gates in process via
+    `run_cmd.resolve_in_process`, restore every byte on a refusal, commit once,
+    one line), `template.py` (the pre-filled record in the dispatch brief's
+    `record` key and `fr pickup`, or "record in progress"), `pr_body.py`
+    (`deliver` renders `pr-body.md` and refuses a live PR missing a required
+    section, read via `fr.gh.view_pr_body`), `gates.py` (the refactor gate,
+    moved here from `fr plan self-review`). CLI: `fr run resolve --record`;
+    `fr journal add/resolve`, `fr plan edit --tick/--complete-phase` and
+    `fr acceptance add/set-status` build one-entry records through the same
+    engine.
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)

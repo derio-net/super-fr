@@ -527,13 +527,30 @@ def append_journal_entry(path: Path, slug: str, entry: JournalEntry) -> None:
     formatting Markdown by hand) is a CAPTURE of the real serializer's
     output, not a guess that can drift from it."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(appended_journal_text(path.read_text() if path.exists() else None, slug, entry))
+
+
+def appended_journal_text(prior: str | None, slug: str, entry: JournalEntry) -> str:
+    """The text a journal holds after `entry` is appended to `prior` (`None`
+    = no file yet) — the in-memory half of `append_journal_entry`, which the
+    step-record engine uses to build every write before any byte moves."""
     block = serialize_entry(entry)
-    if path.exists():
-        prior = path.read_text()
-        sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
-        path.write_text(prior + sep + block)
-    else:
-        path.write_text(f"# Journal: {slug}\n\n{block}")
+    if prior is None:
+        return f"# Journal: {slug}\n\n{block}"
+    sep = "" if prior.endswith("\n\n") else ("\n" if prior.endswith("\n") else "\n\n")
+    return prior + sep + block
+
+
+def resolution_record_id(finding_id: str, taken: set[str]) -> str:
+    """`<finding>-resolved`, then `-2`, `-3`… — predictable, and never a
+    duplicate id (which `fr validate artifacts` fails a journal for)."""
+    base = f"{finding_id}-resolved"
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
 
 
 def reviews_phase(entry: JournalEntry, phase: int) -> bool:

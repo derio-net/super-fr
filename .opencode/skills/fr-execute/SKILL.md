@@ -47,12 +47,12 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    ```bash
    fr pickup <plan-dir> --phase N
    ```
-   Output is markdown: phase title, dependency reminder, PR title template,
-   tasks + steps, a pointer to `_prose.md`. The `Depends on:` line surfaces
-   blockers — if any is not yet `Complete`, stop and report.
+   Markdown: title, `Depends on:` (not yet `Complete` → stop, report), tasks + steps, `_prose.md`. In
+   an fr-goal run it ends with a `## Step record`: keep THAT (ticks, `refactor:`, journal) instead of
+   steps 3–4's verbs — the orchestrator's `fr run resolve --record` applies it in one commit.
 
 2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
-   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal — `fr journal add --scope plan` requires `--phase N` or `--global`, so tag it explicitly. **Context discipline:** don't re-derive from the code what the handoff already states, read the narrowest thing that answers the question, and never paste verbatim tool output into your return — cache reads accumulate as context size summed over turns, so your own re-reads dominate the cost (super-fr#464).
+   end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal — `fr journal add --scope plan` requires `--phase N` or `--global`, so tag it explicitly; `--complete-phase` refuses a phase with a task that has neither. **Context discipline:** don't re-derive from the code what the handoff already states, read the narrowest thing that answers the question, and never paste verbatim tool output into your return — cache reads accumulate as context size summed over turns, so your own re-reads dominate the cost (super-fr#464).
 
 3. **Tick steps as you complete them:**
    ```bash

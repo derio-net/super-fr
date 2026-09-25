@@ -144,6 +144,7 @@ def _seed_plan_and_spec(workspace: Path) -> tuple[Path, Path]:
     return plan_dir, spec_path
 
 
+@pytest.mark.usefixtures("complete_live_pr")
 def test_squash_merged_delivery_leaves_no_hazard_fr_caused(
     fixture: tuple[Path, Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -157,3 +157,15 @@ def _fresh_vk_repo_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     from fr_vk import config
 
     monkeypatch.setattr(config, "_cache", None)
+
+
+@pytest.fixture
+def complete_live_pr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve a live PR body carrying every required section, so a `deliver`
+    resolve (or any step emitting `pr`) passes the live-PR check (spec
+    2026-09-25 §5.C.4, p3-r2) — the check runs; the PR simply complies."""
+    import fr.gh
+    from fr.record.pr_body import REQUIRED_SECTIONS
+
+    body = "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS)
+    monkeypatch.setattr(fr.gh, "view_pr_body", lambda ref, *, cwd=None: body)

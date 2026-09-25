@@ -193,7 +193,16 @@ surfaces:
     kind: interaction
     summary: A `gate operator` run step blocks until a human answers via the harness's own question tool. On claude-code `fr run resolve` VERIFIES it — an answered AskUserQuestion in the session transcript since the gate blocked, else refused (bypass only via `--no-questions --reason`, recorded); with no readable transcript `fr run advance` degrades loudly instead (debug journal 2026-09-21 C1).
     harnesses:
-      claude-code: {state: enforced}
+      claude-code:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where the session
+              transcript is — the host-side rule refuses it inside the container
+          external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
         state: advisory
         scope_note: "no operator-question tool exists on OpenCode — the gate cannot mechanically block; the measured failure of #436 instance 2"
@@ -207,7 +216,16 @@ surfaces:
     kind: interaction
     summary: A finding resolved `out-of-scope` may be moved to `fixed` only by the operator — the `fixed` record must carry `answered_by=operator`, else `fr journal check` and the review-phase findings gate report an unauthorized fix (the rule is in the journal fold, so it holds on every harness and for both `fr journal resolve` and `fr journal add --resolves`). What differs is the CLAIM. On claude-code `--answered-by operator` is verified against the session transcript — no answered question since the out-of-scope record, and the write is refused; an unreadable transcript records it with a warning (spec 2026-09-24 §A).
     harnesses:
-      claude-code: {state: enforced}
+      claude-code:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where the session
+              transcript is — the host-side rule refuses it inside the container
+          external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
         state: advisory
         scope_note: "no operator-question tool fr can read on OpenCode — `--answered-by operator` is recorded as stated; the fold still refuses a fix that does not carry it"
@@ -221,7 +239,16 @@ surfaces:
     kind: interaction
     summary: fr-goal's `spec-review` is done by a dispatched, read-only `fr-spec-reviewer` subagent — a context separate from the orchestrator that wrote the spec (spec 2026-09-24 §E, gh#593 option 2). `fr run resolve --step spec-review --state done` verifies its evidence against the spec journal on every harness (a `kind=review` entry created after the step opened; spec findings closed, out-of-scope, or deferred). What differs is `reviewer=<agent-id>`. On claude-code it must name a subagent this session dispatched after the step opened (`subagent_dispatch_since`), so the orchestrator — which has no agent id — can never pass; an unreadable transcript records it as claimed with a warning.
     harnesses:
-      claude-code: {state: enforced}
+      claude-code:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where the session
+              transcript is — the host-side rule refuses it inside the container
+          external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
       opencode:
         state: advisory
         scope_note: "no dispatch reader for OpenCode sessions — `reviewer=<agent-id>` is recorded as claimed, with a warning; the spec-journal review and findings checks still hold"
@@ -295,21 +322,58 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
-  - id: main-session-cost
+  - id: usage-capture
     kind: interaction
-    summary: The main session's own token usage per top-level run step (spec 2026-09-24-fr-goal-scope-proportion-cost §D, gh#593 option 0). `_complete_step` writes `StepRecord.main_session` on every `done` path from the harness's own session store — never zero when unobservable, never a partial sum across sessions — and `fr run cost` prints it beside the subagent total.
+    summary: A run's cost is persisted in `docs/superpowers/usage/<run-id>.yaml` (spec 2026-09-25-lean-cost-aware-process §5.B) — one capture per host, taken at `fr run resolve --step deliver`, at the first resolve on a host with no capture yet, and at `fr archive`, each committed with the cursor and never failing its step. Read on any checkout by `fr run cost`. Captures read the harness's own session store, so `fr run` / `fr usage` execute on the harness host (§5.B.6); the per-mode cells below say where that is. Replaces `main-session-cost` (run 7 removed `StepRecord.main_session`).
     harnesses:
-      claude-code: {state: enforced}
+      claude-code:
+        state: partial
+        scope_note: >-
+          implemented and unit-tested over captured transcripts; the live
+          walk that verifies it is owed (phase 4 of the plan)
+        modes:
+          host-worktree: {state: partial, scope_note: "harness and fr share the host; live walk owed (phase 4)"}
+          devcontainer:
+            state: partial
+            scope_note: >-
+              fr run executes on the host, where the transcripts are — refused
+              inside the container (bridge + in-process check); live walk owed
+          external:
+            state: partial
+            scope_note: >-
+              harness and fr both run in the container; an ephemeral pod loses
+              its transcripts at teardown, so capture-before-teardown (deliver,
+              a new host's first resolve, archive) is what keeps its figures
       opencode:
         state: partial
         scope_note: >-
-          not live-proven — read-only from the SQLite session store; sessions
-          come from `fr isolation attach --harness opencode` bindings, else the
-          unique top-level session in the workspace or base clone with
-          messages in the window (two or more records nothing). Dispatched
-          units are still unmeasured (V1 estimates).
+          implemented; $0 for free models, estimated for Copilot-routed ones;
+          the live walk that verifies it is owed (phase 4)
+        modes:
+          host-worktree: {state: partial, scope_note: "read from the host's SQLite session store; live walk owed"}
+          devcontainer:
+            state: partial
+            scope_note: >-
+              fr run executes on the host, where opencode.db is — refused
+              inside the container; live walk owed
+          external:
+            state: partial
+            scope_note: >-
+              the store is inside the pod and lost at teardown; capture-before-
+              teardown (deliver, a new host's first resolve, archive) keeps it
       hermes:
-        state: absent
-        scope_note: no reader — Hermes' session store is not read, so nothing is recorded
+        state: partial
+        scope_note: >-
+          implemented, not live-verified (pod-only, no walk scheduled);
+          per-message attribution is coarse (one token count per message);
+          ACP sessions report zero tokens (hermes-agent#6775)
+        modes:
+          host-worktree: {state: partial, scope_note: "implemented, not live-verified"}
+          devcontainer: {state: partial, scope_note: "implemented, not live-verified; fr run on the host"}
+          external:
+            state: partial
+            scope_note: >-
+              the usual Hermes shape (a prepared pod); state.db is lost at
+              teardown, so capture-before-teardown is what keeps its figures
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}

@@ -4009,16 +4009,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-24-fr-goal-scope-proportion-cost-design.md
     levels:
       unit:
-      - super-fr:tests/unit/test_run_main_session.py
-      - super-fr:tests/unit/test_run_opencode_reader.py
       - super-fr:tests/unit/test_run_cost_cmd.py
-      - super-fr:tests/unit/test_migration_run_main_session.py
-      - super-fr:tests/unit/test_run_telemetry.py
+      - super-fr:tests/unit/test_usage_capture.py
     status: skipped
-    notes: 'Live-verified on Claude Code (host-worktree): run 2026-09-25-fix-606-writes-dot-dir-prefix,
-      PR #609, all 7 steps measured. OpenCode walk (devcontainer, PR #612) measured
-      1/7: fr run executes inside the container without harness env or host data. To
-      be superseded by the lean-cost-aware-process usage rows.'
+    notes: 'claim delivered by usage/ per-step rollup (test_run_cost_cmd, test_usage_capture);
+      refs to tests of the removed main_session/attempt-measurement mechanism dropped
+      by one hand-edited line each (no drop-level verb yet: https://github.com/derio-net/super-fr/issues/624);
+      live walk in phase 4'
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -4130,3 +4127,140 @@ rows:
     notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
       conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
       handoff tests in test_run_cli.py.'
+  - id: usage-reconstruct-cross-harness
+    capability: Lean cost-aware pipeline
+    acceptance: The operator can reconstruct a run's cost per model, step and activity
+      from Claude Code, OpenCode or Hermes session data
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_readers.py
+      - super-fr:tests/unit/test_usage_report.py
+      - super-fr:tests/unit/test_usage_classify.py
+    status: ci
+    notes: 'Phase 1 of 2026-09-25-lean-cost-aware-process: per-harness readers over
+      redacted fixtures (Claude Code capture, OpenCode live-schema DB incl. Copilot-routed
+      estimated rows, Hermes upstream-schema DB), the classifier table and the rollup/CLI
+      tests run in CI; cost per model, activity and step reconstructed. Hermes rows
+      are schema-built, not a live capture (journal 83ed2919b8c4, live capture tracked
+      in #623).'
+  - id: usage-captured-at-deliver
+    capability: Lean cost-aware pipeline
+    acceptance: Delivering a run stores its usage in docs/superpowers/usage/<run-id>.yaml
+      without an extra agent turn
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_usage_capture.py
+    status: ci
+    notes: fr run resolve --step deliver writes usage/<run>.yaml in the SAME commit
+      as the cursor move, no extra agent turn; new-host and archive captures covered
+      too; phase 2
+  - id: usage-readable-on-any-host
+    capability: Lean cost-aware pipeline
+    acceptance: fr run cost shows a delivered run's cost on a checkout that never ran
+      it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_run_cost_cmd.py
+    status: ci
+    notes: fr run cost reads usage/ (then implemented/usage/) on a checkout with no
+      cursor and no transcripts; phase 2
+  - id: usage-privacy-no-host-identity
+    capability: Lean cost-aware pipeline
+    acceptance: A usage file never contains a hostname, base URL, path or message content
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_kind.py
+    status: ci
+    notes: 'test_a_capture_serializes_no_host_url_path_or_content: a capture from fixture
+      host laptop.corp.example whose tool-call targets hold a hostname, ~/ and /Users
+      paths and a URL serializes none of them (allowlist projection, p2-r12); phase
+      2'
+  - id: usage-devcontainer-captures
+    capability: Lean cost-aware pipeline
+    acceptance: A devcontainer-mode run's usage file has readable sessions
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: Spec §9, target level manual -> int. Phase 2 built the host-side rule this
+      depends on (fr run/usage refused inside a devcontainer, capture runs on the host);
+      the verifying devcontainer-mode live walk is phase 4.
+  - id: step-record-one-resolve
+    capability: Lean cost-aware pipeline
+    acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
+      commit, one line of output'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_record_verbs.py
+    status: ci
+    notes: 'fr run resolve --record over a real fr-goal run in a linked worktree: one
+      commit, clean tree for fr''s paths, one stdout line naming counts/next/sha; the
+      verbs route through the same engine (spy).'
+  - id: step-record-atomic-refusal
+    capability: Lean cost-aware pipeline
+    acceptance: An invalid step record changes nothing
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_record_schema.py
+    status: ci
+    notes: unknown section, unknown tick id, unknown finding id, malformed and duplicate
+      entries and the refactor gate each exit 2 with every file hash-identical, HEAD
+      unchanged and the record left in place; gate refusals restore the overlay.
+  - id: stale-session-resumes-record
+    capability: Lean cost-aware pipeline
+    acceptance: A new session picks up an in-progress step record and completes it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_record_template.py
+    status: ci
+    notes: 'session A commits a partial record; a fresh process with another session
+      id sees ''record in progress: 1 ticks, 1 decisions'' in fr pickup, appends and
+      resolve --record applies the whole.'
+  - id: bookkeeping-turns-per-step
+    capability: Lean cost-aware pipeline
+    acceptance: A live run spends at most 2 bookkeeping turns per step (baseline 6.1)
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels: {}
+    status: not-implemented
+    notes: 'Spec §9, target level: manual. Born at brainstorm 2026-09-25.'
+  - id: deliver-pr-body-sections
+    capability: Lean cost-aware pipeline
+    acceptance: A PR missing a required fr-rendered section cannot be delivered
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: deliver's resolve --record renders pr-body.md and, with fr.gh mocked, refuses
+      a live body missing the out-of-scope section (exit 2, named) and delivers one
+      carrying every section.
+  - id: audit-pages-regenerated
+    capability: Lean cost-aware pipeline
+    acceptance: The operator can regenerate the audit and architecture pages from run
+      data
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      int:
+      - super-fr:tests/integration/test_usage_report_cli.py
+    status: ci
+    notes: engine regenerates the audit page and the measured half of the architecture
+      page; the future-state half is authored (spec §5.A.6)

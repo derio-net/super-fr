@@ -1,0 +1,14 @@
+# The nine Claude Code sessions of the 2026-09-25 paper-trail audit (spec
+# 2026-09-25-lean-cost-aware-process §1, Test Plan item 3). Ids only: the
+# transcripts stay on the operator's host (size and privacy), so the golden
+# test skips wherever they are absent. Published pooled shares: paperwork
+# 30.2%, implementation 32.9%.
+05f4a8ab-4430-46b9-a406-8a3d597abe68
+804646ff-3618-47b5-9860-bf5f37f52c96
+59580c5a-b79e-43ab-83b7-80ff4750b0c7
+1d0b209a-09d7-44d3-b3cb-1ee482466318
+e50c7ff5-b51f-415b-bc3c-dbc90e454a47
+23343080-96cd-4d63-a694-ddef4d6fb103
+7f42d9ab-3bc6-4b91-8bc5-425e8a1df3be
+ec61d713-0539-4679-a830-b48e724c8675
+0d3c7c4c-bb15-449a-be4d-305ec50abe9f

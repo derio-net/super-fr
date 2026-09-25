@@ -44,6 +44,22 @@ class HarnessError(ValueError):
     harness key too (P1.T4 refactor)."""
 
 
+ISOLATION_MODES: tuple[str, ...] = ("host-worktree", "devcontainer", "external")
+"""The isolation modes a harness cell may be refined by (spec
+`2026-09-25-lean-cost-aware-process-design.md` §5.B.8)."""
+
+_ModeLiteral = Literal["host-worktree", "devcontainer", "external"]
+
+
+class ModeState(BaseModel):
+    """One harness's state in one isolation mode."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: _StateLiteral
+    scope_note: str | None = None
+
+
 class HarnessState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -52,6 +68,17 @@ class HarnessState(BaseModel):
     """Required when `state` is `partial` or `advisory` (enforced by
     `Surface._check_harnesses`, not here — the check needs the harness key
     to name in the error, which a lone `HarnessState` doesn't carry)."""
+    modes: dict[_ModeLiteral, ModeState] | None = None
+    """Optional per-isolation-mode refinement (§5.B.8). Absent means `state`
+    holds in every mode, so rows written before modes existed stay valid; a
+    mode it does not list falls back to `state`. The registration check
+    (`fr.harness.check`) reads `state` only: a registration file does not
+    vary by isolation mode."""
+
+    def state_in(self, mode: str) -> str:
+        """The declared state in `mode` — the mode's own, else the harness's."""
+        refined = (self.modes or {}).get(mode)  # type: ignore[call-overload]
+        return refined.state if refined is not None else self.state
 
 
 class Surface(BaseModel):
@@ -88,6 +115,12 @@ class Surface(BaseModel):
                 raise ValueError(
                     f"harness {harness!r} state {hstate.state!r} requires a scope_note"
                 )
+            for mode, mstate in (hstate.modes or {}).items():
+                if mstate.state in _NOTE_REQUIRED_STATES and not mstate.scope_note:
+                    raise ValueError(
+                        f"harness {harness!r} mode {mode!r} state {mstate.state!r} "
+                        "requires a scope_note"
+                    )
 
         if self.kind == "hook" and not self.script:
             raise ValueError("kind 'hook' requires 'script'")

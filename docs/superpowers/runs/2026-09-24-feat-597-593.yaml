@@ -1,4 +1,4 @@
-schema_version: 6
+schema_version: 7
 run: 2026-09-24-feat-597-593
 workflow: fr-goal@1
 branch: feat/597-593
@@ -46,13 +46,6 @@ steps:
   implement:
     state: done
     at: '2026-09-24T22:00:25+00:00'
-    main_session:
-      input_tokens: 118
-      cache_creation_input_tokens: 85858
-      cache_read_input_tokens: 12659188
-      output_tokens: 33884
-      turns: 49
-      sessions: 1
     members:
     - implement-phase
     - review-phase
@@ -70,17 +63,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T19:24:45+00:00'
           outcome: done
-          estimate:
-            journal_entries: 3
-            journal_lines: 16
-            handoff_chars: 347
-            spec_bytes: 20390
-            plan_bytes: 28111
-          measured:
-            input_tokens: 236
-            cache_creation_input_tokens: 468702
-            cache_read_input_tokens: 17753981
-            output_tokens: 1451
       phase/1/review-phase:
         state: done
         attempts:
@@ -91,17 +73,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T19:28:39+00:00'
           outcome: done
-          estimate:
-            journal_entries: 9
-            journal_lines: 46
-            handoff_chars: 4724
-            spec_bytes: 20390
-            plan_bytes: 28496
-          measured:
-            input_tokens: 78
-            cache_creation_input_tokens: 133934
-            cache_read_input_tokens: 3715201
-            output_tokens: 1235
         evidence:
           review: r-p1
           reviewer: a1ea2343c237b8a52
@@ -117,17 +88,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T19:50:55+00:00'
           outcome: done
-          estimate:
-            journal_entries: 12
-            journal_lines: 59
-            handoff_chars: 5371
-            spec_bytes: 20390
-            plan_bytes: 28496
-          measured:
-            input_tokens: 128
-            cache_creation_input_tokens: 317656
-            cache_read_input_tokens: 7416317
-            output_tokens: 814
       phase/2/review-phase:
         state: done
         attempts:
@@ -138,17 +98,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T19:56:46+00:00'
           outcome: done
-          estimate:
-            journal_entries: 15
-            journal_lines: 74
-            handoff_chars: 7919
-            spec_bytes: 20390
-            plan_bytes: 28734
-          measured:
-            input_tokens: 68
-            cache_creation_input_tokens: 122088
-            cache_read_input_tokens: 2952536
-            output_tokens: 796
         evidence:
           review: r-p2
           reviewer: a6dd9430e2d21f43c
@@ -164,17 +113,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T20:32:31+00:00'
           outcome: done
-          estimate:
-            journal_entries: 18
-            journal_lines: 87
-            handoff_chars: 6409
-            spec_bytes: 20390
-            plan_bytes: 28734
-          measured:
-            input_tokens: 184
-            cache_creation_input_tokens: 554138
-            cache_read_input_tokens: 11172796
-            output_tokens: 1913
       phase/3/review-phase:
         state: done
         attempts:
@@ -185,17 +123,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T20:51:44+00:00'
           outcome: done
-          estimate:
-            journal_entries: 24
-            journal_lines: 117
-            handoff_chars: 10619
-            spec_bytes: 20390
-            plan_bytes: 28933
-          measured:
-            input_tokens: 26
-            cache_creation_input_tokens: 96266
-            cache_read_input_tokens: 989631
-            output_tokens: 1271
         evidence:
           review: r-p3
           reviewer: a1948efadec1089eb
@@ -211,17 +138,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T21:31:23+00:00'
           outcome: done
-          estimate:
-            journal_entries: 37
-            journal_lines: 182
-            handoff_chars: 11576
-            spec_bytes: 20390
-            plan_bytes: 28933
-          measured:
-            input_tokens: 234
-            cache_creation_input_tokens: 640003
-            cache_read_input_tokens: 18410291
-            output_tokens: 2209
       phase/4/review-phase:
         state: done
         attempts:
@@ -232,17 +148,6 @@ steps:
           session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
           returned: '2026-09-24T22:00:25+00:00'
           outcome: done
-          estimate:
-            journal_entries: 41
-            journal_lines: 202
-            handoff_chars: 14891
-            spec_bytes: 20390
-            plan_bytes: 30183
-          measured:
-            input_tokens: 56
-            cache_creation_input_tokens: 256941
-            cache_read_input_tokens: 2613275
-            output_tokens: 1158
         evidence:
           review: r-p4
           reviewer: a979c488f146166c2
@@ -253,25 +158,11 @@ steps:
     exit: 0
     stdout: |
       1 out-of-scope finding(s): p4-f5
-    main_session:
-      input_tokens: 0
-      cache_creation_input_tokens: 0
-      cache_read_input_tokens: 0
-      output_tokens: 0
-      turns: 0
-      sessions: 1
   deliver:
     state: done
     at: '2026-09-24T22:26:00+00:00'
     emitted:
       pr: https://github.com/derio-net/super-fr/pull/604
-    main_session:
-      input_tokens: 78
-      cache_creation_input_tokens: 38985
-      cache_read_input_tokens: 12285837
-      output_tokens: 22712
-      turns: 38
-      sessions: 1
     units:
       step/deliver:
         attempts:

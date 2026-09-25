@@ -169,6 +169,14 @@ FROZEN_CLASS_SHA256: dict[str, str] = {
     "StepRecordV4": "c21f3e37706ad67b94268a78fd0754a87ca0ce38c4682f2a4aea4c067382bb50",
     "PhaseAccountingV4": "ee6f64286a0d7b4ffe787090798db6611dc1a2e66b5c126d2e8a8ea45494de64",
     "RunStateV4": "2a9bf23560d5b223d5617e6bf8bc4524b47078b207ceefb640bd3ead95e949c9",
+    # the v5/v6 shape, frozen by run 6 -> 7 (bottom of this module)
+    "ContextEstimateV6": "99e2c4859590c997d23342839f547f160e39bbf01aa1e91a994d6cf612d71e54",
+    "MeasuredTokensV6": "f6b968da0eb527cc5b063ecfd6bdb4031e275b2a893a4e5f3167817ee469e8f4",
+    "MainSessionUsageV6": "180916a5470eb04b2dad1a2f5c23f40d37e2bd234b2e41be9da76f34de0f00cb",
+    "AttemptV6": "81d96c71e60c737fcb763f5d30f4ebf977c8ab0670ba36e940779394bf033cda",
+    "UnitRecordV6": "46c2c06e2eeae7fb249cebca58bf88e3787dd558b87e1935b839f4b2906dfdcc",
+    "StepRecordV6": "774a1f3c402e88dcb3725ddc1610ed3fda3db896ca61bfbf139848a136d691da",
+    "RunStateV6": "eda937dfba50c7e8831fe98668a87af9c6d6f7b10d41a6a0858244817d0cbba6",
 }
 """SHA-256 of each frozen class's own source, as `inspect.getsource` returns it.
 
@@ -369,3 +377,135 @@ def _measured_or_none(key: str, snapshot: dict[str, Any]) -> dict[str, int] | No
             "zeros. The cursor is left unchanged."
         )
     return present
+
+
+# --- the v5/v6 shape, frozen by run 6 -> 7 ----------------------------------
+#
+# Spec `2026-09-25-lean-cost-aware-process-design.md` §5.B.4: `Attempt.estimate`,
+# `Attempt.measured` and `StepRecord.main_session` left the live model, so the
+# shape that carried them is frozen here — a superset of versions 5 and 6 (6
+# only ADDED `main_session`). Every hop from 4 -> 5 onward reads with it.
+#
+# Same two divergences as the v4 freeze, for the same reasons: vocabularies are
+# INLINED, and `harness` is not validated against the live `HARNESSES`. And one
+# more: the live model's cross-field validators (returned/outcome together, a
+# synthesized attempt claims nothing) are not copied. This reader's job is to
+# READ what fr wrote; the live model and `fr validate artifacts` check the
+# result on the way out.
+
+UNIT_STATES_V6: tuple[str, ...] = ("pending", "running", "done", "failed", "manual")
+"""A v5/v6 unit's state vocabulary, inlined and frozen."""
+
+UnitStateV6 = Literal["pending", "running", "done", "failed", "manual"]
+
+
+class ContextEstimateV6(BaseModel):
+    """FROZEN. `Attempt.estimate` as versions 5 and 6 wrote it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    journal_entries: int = 0
+    journal_lines: int = 0
+    handoff_chars: int = 0
+    spec_bytes: int = 0
+    plan_bytes: int = 0
+
+
+class MeasuredTokensV6(BaseModel):
+    """FROZEN. `Attempt.measured`: all four figures, or no record at all."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+
+
+class MainSessionUsageV6(BaseModel):
+    """FROZEN. `StepRecord.main_session` as version 6 wrote it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    output_tokens: int
+    turns: int
+    sessions: int
+    cost_usd: float | None = None
+
+
+class AttemptV6(BaseModel):
+    """FROZEN. One attempt to hold a unit, as versions 5 and 6 wrote it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dispatched: str
+    agent: str | None = None
+    agent_type: str | None = None
+    harness: str | None = None
+    model: str | None = None
+    session: str | None = None
+    returned: str | None = None
+    outcome: DispatchOutcomeV4 | None = None
+    estimate: ContextEstimateV6 | None = None
+    measured: MeasuredTokensV6 | None = None
+    synthesized: Literal[True] | None = None
+
+
+class UnitRecordV6(BaseModel):
+    """FROZEN. One unit of one step (`StepRecord.units`' value type)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: UnitStateV6 | None = None
+    attempts: tuple[AttemptV6, ...] = ()
+    evidence: dict[str, str] | None = None
+
+
+class StepRecordV6(BaseModel):
+    """FROZEN. One step of a v5/v6 cursor."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: StepStateV4
+    at: str | None = None
+    gate: Literal["cleared"] | None = None
+    answered_by: AnsweredByV4 | None = None
+    emitted: dict[str, str] | None = None
+    exit: int | None = None
+    stdout: str | None = None
+    main_session: MainSessionUsageV6 | None = None
+    members: list[str] | None = None
+    units: dict[str, UnitRecordV6] | None = None
+
+
+class RunStateV6(BaseModel):
+    """FROZEN. A run cursor as versions 5 and 6 wrote it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int = 1
+    run: str
+    workflow: str
+    branch: str
+    started: str
+    cursor: str
+    steps: dict[str, StepRecordV6]
+
+
+def parse_run_state_v6(text: str) -> RunStateV6:
+    """Parse + validate `text` as a run cursor of version 5 or 6.
+
+    Raises `RunStateError`, exactly like `parse_run_state_v4`."""
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise RunStateError(f"invalid YAML: {e}") from e
+    if not isinstance(raw, dict):
+        raise RunStateError("run state must be a YAML mapping at the top level")
+    try:
+        return RunStateV6.model_validate(raw)
+    except ValidationError as e:
+        raise RunStateError(f"invalid run state: {e}") from e

@@ -146,6 +146,20 @@ It does not leak.
 """
 
 
+GOOD_USAGE = """schema_version: 1
+run: 2019-03-04-feat-widget
+captures:
+  - host: h-3f9a2c1e
+    harness: claude-code
+    mode: host-worktree
+    captured_at: '2019-03-04T00:00:00+00:00'
+    at: [deliver]
+    sessions:
+      - session: s-one
+        unavailable: transcript pruned
+"""
+
+
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
     plan_dir = root / "docs" / "superpowers" / "plans" / PLAN_SLUG
@@ -159,6 +173,8 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "run": _w(root, "docs/superpowers/runs/2019-03-04-feat-widget.yaml", GOOD_RUN),
         "matrix": _w(root, "docs/acceptance/matrix.yaml", GOOD_MATRIX),
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
+        "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
+        "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
     }
 
 
@@ -204,6 +220,19 @@ def test_the_archive_is_never_validated(tmp_path: Path) -> None:
 
 # --- 2. a missing required field names the file AND the field -------------
 
+GOOD_RECORD_REL = (
+    "docs/superpowers/runs/2019-03-04-feat-widget.records/implement-phase__phase-1.yaml"
+)
+GOOD_RECORD = (
+    "schema_version: 1\n"
+    "run: 2019-03-04-feat-widget\n"
+    "step: implement-phase\n"
+    "item: phase/1\n"
+    "ticks: [P1.T1.S1]\n"
+    "journal:\n"
+    "  - {kind: decision, title: kept the pump}\n"
+)
+
 MISSING_FIELD_CASES = {
     "plan": (
         f"docs/superpowers/plans/{PLAN_SLUG}/_meta.yaml",
@@ -228,6 +257,16 @@ MISSING_FIELD_CASES = {
     "spec": (
         f"docs/superpowers/specs/{PLAN_SLUG}-design.md",
         GOOD_SPEC.replace("# Thermosiphon rebuild\n", "Thermosiphon rebuild\n"),
+        "title",
+    ),
+    "usage": (
+        "docs/superpowers/usage/2019-03-04-feat-widget.yaml",
+        GOOD_USAGE.replace("    at: [deliver]\n", ""),
+        "at",
+    ),
+    "record": (
+        GOOD_RECORD_REL,
+        GOOD_RECORD.replace(", title: kept the pump", ""),
         "title",
     ),
 }

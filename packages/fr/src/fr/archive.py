@@ -30,7 +30,7 @@ from fr.git import (
 )
 from fr.journal.model import archived_journal_path, journal_path, spec_journal_slug
 from fr.migrate import DirsMove, MigrationError, _spec_fully_implemented
-from fr.run.legacy import RunStateV4, parse_run_state_v4
+from fr.run.legacy import RunStateV4, RunStateV6, parse_run_state_v4, parse_run_state_v6
 from fr.run.model import (
     RUNS_REL,
     RunState,
@@ -435,7 +435,7 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     return None
 
 
-def _read_any_version(text: str) -> RunState | RunStateV4 | None:
+def _read_any_version(text: str) -> RunState | RunStateV6 | RunStateV4 | None:
     """`text` as a run cursor of ANY version, or `None` if it is not one.
 
     A cursor fr has not migrated yet is still a cursor. The live model is the
@@ -446,11 +446,16 @@ def _read_any_version(text: str) -> RunState | RunStateV4 | None:
     `--adopt` would have written a second cursor for the same plan.
 
     `emitted.plan` and `run` are the same facts in every version, so the match
-    falls back to the frozen reader (`fr.run.legacy`). Not a migration, and
+    falls back to the frozen readers (`fr.run.legacy`: v5/v6, then v1-v4).
+    Not a migration, and
     nothing is written: this only answers "whose cursor is this?".
     """
     try:
         return parse_run_state(text)
+    except RunStateError:
+        pass
+    try:
+        return parse_run_state_v6(text)
     except RunStateError:
         pass
     try:
@@ -474,8 +479,35 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
     dst = archived_run_path(repo_root, run_id)
     if dst.exists():
         return
+    _archive_usage(repo_root, src, run_id)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
+
+
+def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
+    """Capture the closeout session into the run's usage file, then move the
+    file to implemented/usage/ with the plan (spec 2026-09-25 §5.B.3). The
+    capture never fails the archive; the move is staged like every other."""
+    import os
+
+    from fr.usage.capture import capture
+    from fr.usage.file import archived_usage_path, usage_path
+
+    src = usage_path(repo_root, run_id)
+    dst = archived_usage_path(repo_root, run_id)
+    if dst.exists():
+        return
+    try:
+        state = parse_run_state(cursor.read_text())
+    except (OSError, RunStateError):
+        state = None
+    if state is not None:
+        capture(repo_root, state, "closeout", os.environ)
+    if not src.exists():
+        return
+    rel = src.relative_to(repo_root)
+    subprocess.run(["git", "-C", str(repo_root), "add", "--", str(rel)], check=False)
+    _git_mv(repo_root, rel, dst.relative_to(repo_root))
 
 
 def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:

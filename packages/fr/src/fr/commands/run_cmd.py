@@ -47,7 +47,6 @@ from fr.isolation.types import IsolationError
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
-    compose_handoff,
     effective_finding_states,
     journal_stamp_as_utc,
     parse_journal,
@@ -68,10 +67,7 @@ from fr.run.model import (
     RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
-    ContextEstimate,
     DispatchOutcome,
-    MainSessionUsage,
-    MeasuredTokens,
     RunState,
     RunStateError,
     StepRecord,
@@ -102,6 +98,19 @@ run_app = typer.Typer(
 _TEMPLATE_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
 
 
+@run_app.callback()
+def _run_group() -> None:
+    """Durable workflow-run cursor. Runs on the harness host (spec 2026-09-25
+    §5.B.6): refused from inside a devcontainer-mode workspace."""
+    from fr.isolation.where import HostSideError, require_harness_host
+
+    try:
+        require_harness_host(resolve_repo_root(), "run")
+    except HostSideError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+
+
 # --- gh#610 §3.C: fr commits its own record writes ---------------------------
 #
 # Every mutating command (start/adopt/advance/resolve/claim) is wrapped in
@@ -110,6 +119,25 @@ _TEMPLATE_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
 # traceback alike, since a write that landed must not be lost to an exit path —
 # every noted path is committed ONCE, per repo root, through `commit_records`,
 # which never fails the command. `save_run_state` and `adopt_run` stay pure.
+
+
+@dataclass
+class ResolveGuard:
+    """What the step-record engine needs to undo a `resolve` it drove (p3-r3).
+
+    `originals` holds the bytes of every path this command wrote — the cursor,
+    the usage capture, the spec journal a `--no-questions` clears into, the PR
+    render — remembered BEFORE the write, so a refusal or a crash can put each
+    one back. `landed` turns true once any commit landed: from then on the
+    tree must stay equal to HEAD, never be restored behind it.
+    `before_commit` runs once, immediately before the first commit, and names
+    extra paths to record in it (the engine's tracked record file, deleted).
+    """
+
+    originals: dict[Path, bytes | None] = field(default_factory=dict)
+    landed: bool = False
+    before_commit: Callable[[], list[Path]] | None = None
+    prepared: bool = False
 
 
 @dataclass
@@ -124,6 +152,18 @@ class _RunWrites:
     loaded_cursor: str | None = None
     last: RunState | None = None
     paths: dict[Path, list[Path]] = field(default_factory=dict)
+    # The outcome of the last commit this command made — the step-record
+    # engine reports it in its one line (spec 2026-09-25 §5.C.2.4).
+    last_outcome: CommitOutcome | None = None
+    guard: ResolveGuard | None = None
+    # p3-r10: the step-record engine prints its own one line naming the
+    # commit, so `commit_records`' "fr: committed …" echo would be a second.
+    quiet: bool = False
+
+    def remember(self, path: Path) -> None:
+        """Keep `path`'s bytes as they are now, before this command writes it."""
+        if self.guard is not None and path not in self.guard.originals:
+            self.guard.originals[path] = path.read_bytes() if path.is_file() else None
 
     def note(self, repo_root: Path, path: Path) -> None:
         self.paths.setdefault(repo_root, []).append(path)
@@ -150,14 +190,65 @@ class _RunWrites:
         pending — a caller deciding whether to print "push it" (p4-r1) must
         tell "nothing to commit" from "committed" from "refused".
         """
+        guard = self.guard
+        if guard is not None and not guard.prepared and self.paths:
+            guard.prepared = True
+            if guard.before_commit is not None:
+                root = next(iter(self.paths))
+                for path in guard.before_commit():
+                    self.note(root, path)
         pending, self.paths = self.paths, {}
         outcome: CommitOutcome | None = None
         for root, paths in pending.items():
-            outcome = commit_records(root, paths, self.message())
+            outcome = commit_records(root, paths, self.message(), quiet=self.quiet)
+            if guard is not None and outcome.committed:
+                guard.landed = True
+        if outcome is not None:
+            self.last_outcome = outcome
         return outcome
 
 
 _RUN_WRITES: ContextVar[_RunWrites | None] = ContextVar("fr_run_writes", default=None)
+
+
+# --- spec 2026-09-25 §5.B.7: transcript gates stop degrading silently ---------
+#
+# A gate that cannot observe (no harness detected, no readable transcript)
+# notes itself here and prints a warning; the resolve then records the names
+# under the unit's `unobserved` evidence, so the gap is in the cursor, not
+# only in a stderr nobody keeps.
+
+_UNOBSERVED: ContextVar[list[str] | None] = ContextVar("fr_unobserved", default=None)
+
+
+def _note_unobserved(gate: str) -> None:
+    found = _UNOBSERVED.get()
+    if found is None:
+        found = []
+        _UNOBSERVED.set(found)
+    if gate not in found:
+        found.append(gate)
+
+
+def _why_unobservable() -> str:
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        harness = None
+    if harness is None:
+        return "no harness detected"
+    if harness != "claude-code":
+        return f"fr has no transcript reader for {harness}'s questions"
+    return "no readable transcript for this session"
+
+
+def _take_unobserved() -> dict[str, str]:
+    """`{"unobserved": "<gate>,…"}` for every gate noted so far, and forget them."""
+    from fr.run.telemetry import UNOBSERVED
+
+    found = _UNOBSERVED.get() or []
+    _UNOBSERVED.set(None)
+    return {UNOBSERVED: ",".join(found)} if found else {}
 
 
 def _note_record_write(repo_root: Path, path: Path, state: RunState | None = None) -> None:
@@ -170,8 +261,17 @@ def _note_record_write(repo_root: Path, path: Path, state: RunState | None = Non
         writes.last = state
 
 
+def _remember(path: Path) -> None:
+    """Keep `path`'s current bytes for the step-record engine's restore
+    (a no-op unless the engine drives this command)."""
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        writes.remember(path)
+
+
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
+    _remember(run_path(repo_root, state.run))
     path = save_run_state(repo_root, state)
     _note_record_write(repo_root, path, state)
     return path
@@ -249,13 +349,17 @@ _Cmd = TypeVar("_Cmd", bound=Callable[..., None])
 
 
 def _commits_run_writes(
-    verb: str, outcome: Callable[[dict[str, Any]], str | None] | None = None
+    verb: str,
+    outcome: Callable[[dict[str, Any]], str | None] | None = None,
+    after: Callable[[_RunWrites, dict[str, Any]], None] | None = None,
 ) -> Callable[[_Cmd], _Cmd]:
     """Commit every record the wrapped command wrote, once, on every exit path.
 
     `outcome` reads the subject's closing state word off the command's own
     arguments (`resolve --state`, `claim --abandoned`) — the state the command
     was asked to record, which the cursor alone cannot always say (p3-r1).
+    `after` runs only when the command RETURNED (not on a refusal), before the
+    commit, so whatever it writes lands in the same commit.
     """
 
     def decorate(fn: _Cmd) -> _Cmd:
@@ -270,6 +374,8 @@ def _commits_run_writes(
             token = _RUN_WRITES.set(writes)
             try:
                 fn(*args, **kwargs)
+                if after is not None:
+                    after(writes, kwargs)
             finally:
                 _RUN_WRITES.reset(token)
                 writes.commit()
@@ -281,6 +387,40 @@ def _commits_run_writes(
 
 def _now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
+
+
+# --- usage capture (spec 2026-09-25-lean-cost-aware-process §5.B.3) ----------
+
+
+def _capture_usage(
+    repo_root: Path, state: RunState, at: str, *, require_sessions: bool = False
+) -> None:
+    """Write this host's usage capture and note it for the command's commit.
+    Never raises (`fr.usage.capture.capture`)."""
+    from fr.usage.capture import capture
+    from fr.usage.file import usage_path
+
+    _remember(usage_path(repo_root, state.run))
+    path = capture(repo_root, state, at, os.environ, require_sessions=require_sessions)
+    if path is not None:
+        _note_record_write(repo_root, path)
+
+
+def _capture_on_new_host(writes: _RunWrites, kwargs: dict[str, Any]) -> None:
+    """A resolve on a host with no capture of this run yet captures its
+    sessions — runners, pods, a cross-machine resume (§5.B.3 row 3)."""
+    from fr.usage.capture import needs_capture
+
+    state = writes.last
+    if state is None:
+        return
+    try:
+        repo_root = resolve_repo_root()
+    except Exception:  # noqa: BLE001 — capture never fails its step
+        return
+    if needs_capture(repo_root, state, os.environ):
+        step = kwargs.get("step_id") or state.cursor
+        _capture_usage(repo_root, state, f"resolve:{step}", require_sessions=True)
 
 
 _UNSAFE_IN_RUN_ID = re.compile(r"[^A-Za-z0-9._-]+")
@@ -536,8 +676,8 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
     an observability field, not a dispatch precondition, and refusing to
     dispatch over an unreadable OPTIONAL tier would be a new failure mode for
     a field whose whole point is that a phase may legitimately not set it.
-    Mirrors `_accounting_snapshot`'s stance next to it ("observability must
-    not break execution") rather than `_group_phases`'s.
+    "Observability must not break execution", rather than `_group_phases`'s
+    stance.
     """
     plan_rel = _emitted_plan(state)
     if plan_rel is None:
@@ -561,142 +701,6 @@ def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
     countable towards the group's completion.
     """
     return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
-
-
-def _accounting_snapshot(
-    repo_root: Path, state: RunState, phase_n: int, depends_on: tuple[int, ...] = ()
-) -> ContextEstimate:
-    """What the dispatched unit is about to re-read (V1 context accounting).
-
-    Measured, not metered: journal entries/lines, the composed handoff's
-    chars, spec + plan bytes — the context fr itself assembles. Never a gate:
-    anything unreadable here degrades to zeros rather than refusing the
-    dispatch (observability must not break execution).
-    """
-    from fr.parser import PlanSchemaError, parse
-
-    plan_rel = _emitted_plan(state)
-    spec_rel: str | None = None
-    for record in state.steps.values():
-        if record.emitted and "spec" in record.emitted:
-            spec_rel = record.emitted["spec"]
-    spec_bytes = 0
-    if spec_rel is not None:
-        try:
-            candidate = repo_root / spec_rel
-            spec_bytes = candidate.stat().st_size if candidate.is_file() else 0
-        except OSError:
-            spec_bytes = 0
-    plan_bytes = 0
-    slug = ""
-    if plan_rel is not None:
-        slug = plan_rel.rstrip("/").rsplit("/", 1)[-1]
-        try:
-            plan_bytes = sum(
-                f.stat().st_size for f in (repo_root / plan_rel).rglob("*") if f.is_file()
-            )
-        except OSError:
-            plan_bytes = 0
-        try:
-            plan = parse(repo_root / plan_rel)
-            depends_on = next(
-                (p.phase.depends_on for p in plan.phases if p.phase.number == phase_n),
-                depends_on,
-            )
-        except (PlanSchemaError, OSError):
-            pass
-    entries: list[JournalEntry] = []
-    journal_lines = 0
-    if slug:
-        jpath = resolve_journal_read_path(repo_root, "plan", slug)
-        if jpath.is_file():
-            try:
-                text = jpath.read_text()
-            except OSError:
-                text = ""
-            if text:
-                journal_lines = len(text.splitlines())
-                try:
-                    entries = parse_journal(text)
-                except JournalParseError:
-                    entries = []
-    handoff_chars = len(
-        compose_handoff(entries, phase=phase_n, scope="plan", slug=slug, depends_on=depends_on)
-    )
-    # No `at` here: the estimate is a VALUE (what fr assembled), and when it
-    # was assembled is the caller's to record — `units.with_estimate(..., at=)`
-    # — because in the v5 shape that moment is the attempt's own `dispatched`
-    # rather than a second timestamp beside it.
-    return ContextEstimate(
-        journal_entries=len(entries),
-        journal_lines=journal_lines,
-        handoff_chars=handoff_chars,
-        spec_bytes=spec_bytes,
-        plan_bytes=plan_bytes,
-    )
-
-
-def _with_measurement(state: RunState, step_id: str, key: str) -> RunState:
-    """`state` with V2 measured tokens folded into the attempt just CLOSED.
-
-    **Taken when the attempt closes, not when it is dispatched**, and that is
-    a deliberate departure from the plan step's wording (P4.T1.S4 pointed at
-    the advance path, where the V1 sizes are recorded). At dispatch time the
-    transcript does not exist yet, so a measurement taken there is
-    structurally always empty — it would pass a test and read zero from every
-    real run. The figure lands on the same ATTEMPT the estimate does
-    (`Attempt.measured` beside `Attempt.estimate`); only the moment differs.
-
-    Both closers call it: `resolve`, and `claim --abandoned` — an abandoned
-    agent's spend is exactly the spend worth seeing, and before §4.D it was
-    the one spend fr discarded.
-
-    **The window is the attempt's OWN `[dispatched, returned]`** (§4.D). It
-    used to be `[dispatched, now]`, under a docstring asserting *"serial
-    dispatch makes that window hold exactly one dispatch"* — an assumption
-    that is run-wide and temporal rather than per-phase, and that
-    `advance --redispatch` breaks outright: two attempts of one unit put two
-    transcripts in one window, and `select_dispatch` then yields nothing.
-    Selection no longer leans on it. A claimed attempt is matched by its
-    `agent` id, which IS the transcript's filename, so overlap cannot confuse
-    it; the window is the fallback for an attempt nobody claimed.
-
-    Four situations leave `state` untouched, each a fact rather than a
-    shortcut: no attempt at all; no estimate, so no window was ever opened (a
-    flat `kind: agent` step); **`returned is None`**, which covers both an
-    open attempt and every `synthesized` one — a migrated cost carrier fr
-    never dispatched and must never measure; and an attempt that already HAS
-    a measurement, which a later `resolve` over an abandoned attempt must not
-    rewrite.
-
-    Never a gate and never noisy: a harness with no reader, a missing or
-    unreadable transcript, or an unattributable window all leave the cost
-    untouched — `fr run status` reports that absence in band, and the V1
-    estimate stays labeled an estimate.
-    """
-    from fr.run.telemetry import measure_attempt
-
-    attempt = units.last_attempt(state, key)
-    if attempt is None or attempt.estimate is None:
-        return state
-    if attempt.returned is None or attempt.measured is not None:
-        return state
-    measured = measure_attempt(
-        os.environ,
-        session=attempt.session,
-        agent=attempt.agent,
-        start=attempt.dispatched,
-        end=attempt.returned,
-    )
-    if measured is None:
-        return state
-    return units.with_measured(
-        state,
-        step_id,
-        key,
-        MeasuredTokens.model_validate(measured.totals.as_fields()),
-        served_model=measured.totals.served_model,
-    )
 
 
 def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
@@ -845,10 +849,6 @@ def _complete_step(
         "stdout": stdout,
         "emitted": dict(emitted) if emitted else None,
     }
-    if outcome == "done":
-        main_session = _measure_main_session(state, manifest, step_id, str(completion["at"]))
-        if main_session is not None:
-            completion["main_session"] = main_session
     new_record = (
         prior.model_copy(update=completion)
         if prior is not None
@@ -860,47 +860,6 @@ def _complete_step(
         if next_id is not None:
             new_state = new_state.model_copy(update={"cursor": next_id})
     return new_state
-
-
-def _step_window_start(state: RunState, manifest: WorkflowManifest, step_id: str) -> str:
-    """Where `step_id`'s main-session window opens (spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D): the `at` of the
-    nearest EARLIER top-level step that is `done` — fr-goal's top-level steps
-    run in sequence, and a done step's `at` never moves — else the run's
-    `started`. Turns before `fr run start` belong to no step."""
-    ids = [s.id for s in manifest.steps]
-    if step_id in ids:
-        for earlier in reversed(ids[: ids.index(step_id)]):
-            record = state.steps.get(earlier)
-            if record is not None and record.state == "done" and record.at:
-                return record.at
-    return state.started
-
-
-def _measure_main_session(
-    state: RunState, manifest: WorkflowManifest, step_id: str, at: str
-) -> MainSessionUsage | None:
-    """`fr.run.telemetry.measure_step_main_session` over `step_id`'s window,
-    for `_complete_step` — the one place every `done` path meets (agent
-    `resolve`, cli `advance`, and the group's completion).
-
-    Catches EVERYTHING, on top of the callee's own guarantee: this runs inside
-    the act of completing a step, and no telemetry failure — a raising reader,
-    an unresolvable repo root — may turn a finished step into a failed
-    command. Absent `main_session` reads as "not observable", never zero.
-    """
-    from fr.run import telemetry
-
-    try:
-        return telemetry.measure_step_main_session(
-            state,
-            os.environ,
-            resolve_repo_root(),
-            _step_window_start(state, manifest, step_id),
-            at,
-        )
-    except Exception:  # noqa: BLE001 — observability never fails a completion
-        return None
 
 
 def _gate_degradation_notice() -> str | None:
@@ -1051,6 +1010,7 @@ def _gate_provenance(
             already = False
         # Review r1-6: a retry after a later refusal must not log it twice.
         if not already:
+            _remember(target)
             append_journal_entry(
                 target,
                 slug,
@@ -1071,17 +1031,17 @@ def _gate_provenance(
             soft_wrap=True,
         )
         return "agent"
-    try:
-        on_claude_code = detect_harness(os.environ) == "claude-code"
-    except HarnessError:
-        on_claude_code = False
-    if on_claude_code:
-        err_console.print(
-            f"[yellow]{step_id}: could not verify this gate — no readable transcript for "
-            f"this session, so `answered_by: {claimed}` is recorded as claimed, "
-            "unverified.[/yellow]",
-            soft_wrap=True,
-        )
+    # Wherever the gate cannot observe — no harness, no readable transcript,
+    # or a harness fr has no question reader for (OpenCode, Hermes) — it says
+    # so on the record (§5.B.7, p2-r28); `advance` already told the last two
+    # that the gate is not enforced there, which is no reason to be quiet now.
+    _note_unobserved("operator-gate")
+    err_console.print(
+        f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
+        f"so `answered_by: {claimed}` is recorded as claimed, unverified "
+        "(evidence: unobserved=operator-gate).[/yellow]",
+        soft_wrap=True,
+    )
     return claimed  # type: ignore[return-value]  # validated by the caller
 
 
@@ -1615,9 +1575,11 @@ def _verify_reviewer(
         )
         raise typer.Exit(2)
     if observed is None:
+        _note_unobserved("reviewer")
         err_console.print(
-            f"[yellow]{key}: could not verify reviewer {agent_id!r} — no readable transcript "
-            "for this session; recorded as claimed, unverified.[/yellow]",
+            f"[yellow]{key}: could not verify reviewer {agent_id!r} — "
+            f"{_why_unobservable()}; recorded as claimed, unverified "
+            "(evidence: unobserved=reviewer).[/yellow]",
             soft_wrap=True,
         )
 
@@ -1686,9 +1648,10 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
                 soft_wrap=True,
             )
             raise typer.Exit(2)
+        _note_unobserved("tests")
         err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — no readable transcript for "
-            "this session; recorded as a fresh log, unverified.[/yellow]",
+            f"[yellow]{key}: could not verify who ran {log} — {_why_unobservable()}; "
+            "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
     # Review r1-8: the witness lands in a git-tracked cursor, so it names the
@@ -1984,7 +1947,22 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         "evidence": list(step.evidence),
         "for_each": step.for_each,
         "steps": [m.model_dump(exclude_none=True) for m in step.steps],
+        # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
+        # step; a fan-out group's record is per member, in the member brief.
+        "record": None if step.steps else _record_brief(state, step),
     }
+
+
+def _record_brief(
+    state: RunState, step: Step, group: Step | None = None, item: str | None = None
+) -> dict[str, Any] | None:
+    """The brief's `record` key — never the reason a brief fails to print."""
+    from fr.record.template import record_brief
+
+    try:
+        return record_brief(resolve_repo_root(), state, step, group, item).as_dict()
+    except Exception:  # noqa: BLE001 — a brief without a template still dispatches
+        return None
 
 
 def _brief_skill(step: Step) -> str | list[str] | None:
@@ -2118,15 +2096,9 @@ def _open_dispatch(
 ) -> RunState:
     """Append a new attempt opening `key`'s hold under `step_id`.
 
-    `at` is the attempt's `dispatched`, and a caller that also records a
-    context estimate MUST pass the moment it computed that estimate at — taken
-    BEFORE the brief is built. In the v5 shape that one timestamp is both
-    "when fr dispatched this" and the start edge of the attempt's measurement
-    window; letting this function stamp its own `_now()` there would move the
-    window's start AFTER the dispatch it measures, and
-    `units.with_estimate` refuses the mismatch rather than let it pass.
-    Absent, it is stamped here — right for the flat `kind: agent` branch,
-    which records no estimate and still saves before it prints the brief.
+    `at` is the attempt's `dispatched`, taken by the grouped caller BEFORE
+    the brief is built. Absent, it is stamped here — right for the flat
+    `kind: agent` branch, which saves before it prints the brief.
 
     Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
     from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
@@ -2353,6 +2325,7 @@ def _build_member_brief(
         "resolved_tier": resolved_tier,
         "for_each": group.for_each,
         "steps": [],
+        "record": _record_brief(state, member, group, item),
     }
 
 
@@ -2693,13 +2666,7 @@ def _advance_group(
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
-    # Computed HERE, before the brief is built, and WRITTEN below once the
-    # attempt exists. `estimated_at` is the start of the measurement window, so
-    # it has to precede every transcript record of the dispatch it measures;
-    # the write has to follow `_open_dispatch`, because in the v5 shape the
-    # estimate hangs off the attempt. Splitting the two keeps both true.
-    estimate_at = _now()
-    estimate = _accounting_snapshot(repo_root, state, phase_n)
+    dispatched_at = _now()
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -2731,11 +2698,9 @@ def _advance_group(
             agent_type=member.agent,
             tier=_dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n),
             repo_root=repo_root,
-            at=estimate_at,
+            at=dispatched_at,
         )
-    _save_run_state(
-        repo_root, units.with_estimate(state, step.id, pending, estimate, at=estimate_at)
-    )
+    _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
     _print_member_dispatch(step, member, item, state, resolved_tier)
 
@@ -3149,96 +3114,11 @@ def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
     return f"{who}{suffix} {attempt.dispatched} -> {attempt.returned} {attempt.outcome}"
 
 
-def _estimate_chars(estimate: ContextEstimate) -> int:
-    """The three SIZES fr assembled, summed — what the `~tok est` divides.
-
-    `journal_entries`/`journal_lines` are counts of things, not characters,
-    and adding them here would inflate the estimate by a number with no unit.
-    """
-    return estimate.handoff_chars + estimate.spec_bytes + estimate.plan_bytes
-
-
-def _cost_observable_here(attempt: UnitAttempt) -> bool:
-    """Could THIS session produce a measurement for `attempt` at all? (§4.D.1)
-
-    False only when the attempt names a session and it is not this one — the
-    cursor travelled with the branch and the transcripts did not. An attempt
-    with no recorded session is not claimed to be elsewhere: not knowing is
-    not the same as knowing, and "not measured" is the honest line there.
-    """
-    from fr.run.telemetry import dispatched_from_this_session
-
-    if attempt.session is None:
-        return True
-    return dispatched_from_this_session(os.environ, attempt.session)
-
-
-def _render_attempt_cost(attempt: UnitAttempt, *, indent: str, console: Console) -> None:
-    """One ATTEMPT's cost, printed BENEATH its own holder line (spec §4.D).
-
-    This is gh#514's `_print_accounting` body, moved: it used to render one
-    line per accounted UNIT in a section of its own, which on a redispatched
-    unit showed the retry's figures and left the abandoned agent's spend —
-    exactly the spend worth seeing — nowhere on screen. Under the holder, a
-    figure cannot be read against the wrong attempt.
-
-    **Two numbers, two quantities, and gh#514's wording is kept verbatim
-    because labelling alone did not convey it.** A `~N tok est` is fr's own
-    4-chars-per-token arithmetic over the context it assembled for ONE
-    dispatch. A `measured: N tok` is the harness's own accounting, cumulative
-    across every turn of that dispatch and overwhelmingly `cache_read`,
-    because each turn re-reads the whole accumulated context. On a real unit
-    they differed by ~1,426x, which reads as a broken estimator unless the
-    line says what it counts.
-
-    An absent measurement is PRINTED, not skipped — leaving an estimate alone
-    with nothing beside it is how an estimate comes to be read as a
-    measurement — and the two reasons it can be absent are different facts:
-    a figure that could still arrive, and one this session can never produce.
-    """
-    estimate = attempt.estimate
-    if estimate is None:
-        return
-    chars = _estimate_chars(estimate)
-    console.print(
-        f"{indent}journal {estimate.journal_entries} entries/"
-        f"{estimate.journal_lines} lines, handoff {estimate.handoff_chars} chars, "
-        f"spec+plan {estimate.spec_bytes + estimate.plan_bytes} chars "
-        f"(~{chars // 4} tok est)",
-        soft_wrap=True,
-    )
-    tokens = attempt.measured
-    if tokens is None and not _cost_observable_here(attempt):
-        console.print(
-            f"{indent}not observable from here: this attempt was dispatched from another "
-            f"session, whose transcripts did not travel with the branch — "
-            f"the ~{chars // 4} tok above is an ESTIMATE",
-            soft_wrap=True,
-        )
-        return
-    if tokens is None:
-        console.print(
-            f"{indent}not measured: no transcript figure for this unit — "
-            f"the ~{chars // 4} tok above is an ESTIMATE",
-            soft_wrap=True,
-        )
-        return
-    console.print(
-        f"{indent}measured: {tokens.total} tok billed across the dispatch's turns "
-        f"(in {tokens.input_tokens}, cache-create {tokens.cache_creation_input_tokens}, "
-        f"cache-read {tokens.cache_read_input_tokens}, out {tokens.output_tokens}) "
-        f"— cumulative harness accounting, NOT comparable to the "
-        f"one-dispatch ~{chars // 4} tok estimate above",
-        soft_wrap=True,
-    )
-
-
 def _render_unit_dispatch(record: StepRecord, key: str, *, indent: str, console: Console) -> None:
     """Every attempt recorded for `key`, oldest first (case (e)) — each one
     followed by its own cost."""
     for attempt in units.attempts(record, key):
         console.print(f"{indent}{_render_dispatch_attempt(attempt)}", soft_wrap=True)
-        _render_attempt_cost(attempt, indent=f"{indent}  ", console=console)
 
 
 def _render_unit_evidence(
@@ -3293,51 +3173,6 @@ def _render_step_and_items(
                 _render_unit_dispatch(record, key, indent="      ", console=console)
 
 
-def _print_accounting(state: RunState) -> None:
-    """The cost TOTALS — the closing section of `fr run status`.
-
-    The per-attempt detail it used to hold moved under each holder line
-    (`_render_attempt_cost`), because cost is per ATTEMPT now and a section
-    keyed by unit could only show one attempt's figures. What is left is the
-    arithmetic that is genuinely about the whole run.
-
-    **Totals sum ATTEMPTS**, so a redispatched unit finally contributes both:
-    the abandoned agent's spend is in the figure rather than behind it. The
-    denominator is dispatched ATTEMPTS for the same reason — counting units
-    would report better coverage than there is the moment one unit is
-    redispatched, and an attempt with no estimate at all would vanish from it
-    rather than count against it.
-
-    The closing line says `none` rather than `0 tok` when nothing was
-    measured: a total of zero over no measurements is a number that looks like
-    an answer.
-    """
-    console.print("  accounting (context sizes; ~tok figures use a 4 chars/token estimate):")
-    total = 0
-    measured_total = 0
-    measured_attempts = 0
-    for _key, attempt in units.accounted_attempts(state):
-        assert attempt.estimate is not None  # `accounted_attempts` is what has one
-        total += _estimate_chars(attempt.estimate)
-        if attempt.measured is not None:
-            measured_total += attempt.measured.total
-            measured_attempts += 1
-    console.print(f"    total: {total} chars (~{total // 4} tok est)")
-    denom = units.dispatched_attempts(state)
-    if measured_attempts:
-        console.print(
-            f"    measured total: {measured_total} tok over {measured_attempts} of "
-            f"{denom} dispatched attempts (the ~tok estimates above are NOT part of this total)",
-            soft_wrap=True,
-        )
-    else:
-        console.print(
-            f"    measured total: none — no transcript figure for any of the "
-            f"{denom} dispatched attempts; every ~tok figure above is an estimate",
-            soft_wrap=True,
-        )
-
-
 def _render_cursor(state: RunState, console: Console) -> None:
     """The run's own four facts — where it is, and what it is driving."""
     console.print(f"run: {state.run}")
@@ -3349,89 +3184,113 @@ def _render_cursor(state: RunState, console: Console) -> None:
 @run_app.command("status")
 def status_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
     """Print the cursor, every step's state, who is holding each dispatched
-    unit, since when, whether it has returned (spec §4.C) — and what each
-    ATTEMPT cost, beneath its own holder line (§4.D).
+    unit, since when, and whether it has returned (spec §4.C).
 
-    Three sections, and the body is the list of them: `_render_cursor`,
-    `_render_step_and_items` (which delegates one attempt's holder line to
-    `_render_dispatch_attempt` and its cost to `_render_attempt_cost`), and
-    `_print_accounting`'s totals.
+    Two sections: `_render_cursor` and `_render_step_and_items` (which
+    delegates one attempt's holder line to `_render_dispatch_attempt`). What
+    a run COST is `fr run cost`'s, read from the usage file — the cost column
+    went with run 7 (spec 2026-09-25-lean-cost-aware-process §5.B.4).
     """
     repo_root = resolve_repo_root()
     state = _load_or_exit(repo_root, run_id)
 
     _render_cursor(state, console)
     _render_step_and_items(state, console, _unevidenced_units(repo_root, state))
-    if units.accounted_attempts(state):
-        _print_accounting(state)
 
 
 @run_app.command("cost")
-def cost_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
-    """Print what each top-level step cost the MAIN session, and the subagent
-    total beside it — gh#593's table (spec
-    `2026-09-24-fr-goal-scope-proportion-cost-design.md` §D).
+def cost_cmd(
+    run_id: str = typer.Argument(..., help="Run id."),
+    recompute: bool = typer.Option(
+        False,
+        "--recompute",
+        help="Re-derive the figures from THIS host's transcripts instead of the "
+        "run's usage file (nothing is written).",
+    ),
+) -> None:
+    """Print what a run cost, per step and per model, from its usage file
+    (`docs/superpowers/usage/<run>.yaml`, then `implemented/usage/`) — spec
+    `2026-09-25-lean-cost-aware-process-design.md` §5.B.4.
 
-    Read-only: it loads the cursor and prints; nothing is measured or written
-    here (measurement happens once, at `_complete_step`). A figure nobody
-    could observe prints as `—`, never `0`.
+    Read-only. Works on any checkout that has the file, including one that
+    never ran the run. A figure nobody could observe prints as `—`, never `0`.
     """
     from rich.table import Table
 
-    from fr.run.cost import cost_rows, possibly_over_counted, subagent_total
+    from fr.run.cost import effective_entries, load_run_usage, recompute_entries, summarize
+    from fr.usage.file import UsageFileError
 
-    state = _load_or_exit(resolve_repo_root(), run_id)
+    repo_root = resolve_repo_root()
+    order: list[str] = []
+    note = ""
+    if recompute:
+        state = _load_or_exit(repo_root, run_id)
+        entries = recompute_entries(repo_root, state, os.environ)
+        order = list(state.steps)
+        note = "recomputed from this host's transcripts (not written)"
+    else:
+        try:
+            usage = load_run_usage(repo_root, run_id)
+        except (OSError, UsageFileError) as e:
+            err_console.print(
+                f"[red]fr run cost: the usage file of {run_id} is unreadable: {e}[/red]"
+            )
+            raise typer.Exit(2) from e
+        if usage is None:
+            err_console.print(
+                f"[red]fr run cost: no usage recorded for {run_id!r} — nothing has been "
+                f"captured yet. `fr run cost {run_id} --recompute` re-derives it from this "
+                "host's transcripts.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        entries, replayed, ignored = effective_entries(usage)
+        try:
+            order = list(load_run_state(repo_root, run_id).steps)
+        except RunStateError:
+            order = []
+        captures = ", ".join(f"{'+'.join(c.at)}@{c.host}" for c in usage.captures) or "none"
+        note = f"captures: {captures}"
+        if replayed:
+            note += " — only figures migrated from the run 6 cursor (no dollars)"
+        if ignored:
+            note += f"; {ignored} migrated entries ignored (a live capture covers them)"
+    summary = summarize(entries, order)
+
+    def usd(value: float | None) -> str:
+        return "—" if value is None else f"${value:,.2f}"
 
     def n(value: int | None) -> str:
         return "—" if value is None else f"{value:,}"
 
-    table = Table(title=f"Cost — {state.run}")
-    table.add_column("step", overflow="fold", min_width=12)
-    for column in (
-        "turns",
-        "sessions",
-        "input",
-        "cache write",
-        "cache read",
-        "output",
-        "cache read/turn",
-        "cost",
-    ):
-        table.add_column(column, justify="right", overflow="fold")
-    for row in cost_rows(state):
-        table.add_row(
-            row.step,
-            n(row.turns),
-            n(row.sessions),
-            n(row.input_tokens),
-            n(row.cache_creation_input_tokens),
-            n(row.cache_read_input_tokens),
-            n(row.output_tokens),
-            n(row.cache_read_per_turn),
-            "—" if row.cost_usd is None else f"${row.cost_usd:,.2f}",
+    steps = Table(title=f"Cost — {run_id}")
+    steps.add_column("step", overflow="fold", min_width=12)
+    steps.add_column("turns", justify="right")
+    steps.add_column("cost", justify="right")
+    for row in summary.steps:
+        steps.add_row(row.step, n(row.turns), usd(row.usd))
+    steps.add_section()
+    steps.add_row("total", "", usd(summary.total))
+    console.print(steps)
+    models = Table(title="By model")
+    models.add_column("model", overflow="fold", min_width=12)
+    for column in ("input", "cache write", "cache read", "output", "cost", "source"):
+        models.add_column(column, justify="right", overflow="fold")
+    for m in summary.models:
+        models.add_row(
+            m.model,
+            n(m.input),
+            n(m.cache_write),
+            n(m.cache_read),
+            n(m.output),
+            usd(m.usd),
+            "/".join(m.sources),
         )
-    sub = subagent_total(state)
-    tokens = sub.tokens
-    table.add_section()
-    table.add_row(
-        f"subagents ({sub.measured}/{sub.attempts} measured)",
-        "—",
-        "—",
-        n(None if tokens is None else tokens.input_tokens),
-        n(None if tokens is None else tokens.cache_creation_input_tokens),
-        n(None if tokens is None else tokens.cache_read_input_tokens),
-        n(None if tokens is None else tokens.output_tokens),
-        "—",
-        "—",
+    console.print(models)
+    console.print(
+        f"sessions: {summary.read} read, {summary.unavailable} unavailable; {note}",
+        soft_wrap=True,
     )
-    console.print(table)
-    flagged = possibly_over_counted(state)
-    if flagged:
-        console.print(
-            "possibly over-counted (measured before per-message dedupe; recorded values "
-            f"are not rewritten): {', '.join(flagged)}",
-            soft_wrap=True,
-        )
 
 
 @run_app.command("advance")
@@ -3749,6 +3608,8 @@ def _resolve_member(
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
     # review this gate exists to make impossible.
+    if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
+        _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
     verified = _verified_evidence(
         repo_root,
         state,
@@ -3758,6 +3619,7 @@ def _resolve_member(
         offered=evidence_map,
         state_value=state_value,
     )
+    verified = {**verified, **_take_unobserved()}
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
     updated = _with_step(
@@ -3776,7 +3638,6 @@ def _resolve_member(
     updated = _close_on_resolve(
         updated, group.id, key, state_value, agent=agent, harness=harness, model=model
     )
-    updated = _with_measurement(updated, group.id, key)
     if state_value == "failed":
         _save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -3792,11 +3653,13 @@ def _resolve_member(
 
 
 @run_app.command("resolve")
-@_commits_run_writes("resolve", lambda kw: kw.get("state_value"))
+@_commits_run_writes("resolve", lambda kw: kw.get("state_value"), after=_capture_on_new_host)
 def resolve_cmd(
     run_id: str = typer.Argument(..., help="Run id."),
     step_id: str = typer.Option(..., "--step", help="Step id to resolve (must be `running`)."),
-    state_value: str = typer.Option(..., "--state", help="done | failed."),
+    state_value: str | None = typer.Option(
+        None, "--state", help="done | failed (required unless --record)."
+    ),
     emitted: list[str] = typer.Option(
         [], "--emitted", help="'name=path' artifact this step emitted (repeatable)."
     ),
@@ -3826,8 +3689,8 @@ def resolve_cmd(
         help="Why no operator decision was needed (with --no-questions); written "
         "to the spec journal this resolve emits.",
     ),
-    answered_by: str = typer.Option(
-        "agent",
+    answered_by: str | None = typer.Option(
+        None,
         "--answered-by",
         help="operator | agent — who answered this step's operator gate. "
         "Defaults to `agent`, the weaker claim; recorded only when a gate "
@@ -3846,6 +3709,13 @@ def resolve_cmd(
     ),
     model: str | None = typer.Option(
         None, "--model", help="The model actually dispatched, alongside --agent."
+    ),
+    record_file: Path | None = typer.Option(
+        None,
+        "--record",
+        help="The step's record (docs/superpowers/runs/<run>.records/<step>[__<item>].yaml): "
+        "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
+        "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
     ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
@@ -3877,6 +3747,116 @@ def resolve_cmd(
       verdict; `failed` records a declined gate. `resolve` executes nothing,
       ever.
     """
+    if record_file is not None:
+        # p3-r4: every flag the record carries is refused beside it, never
+        # silently dropped — a flag that is ignored reads as one honoured.
+        given = [
+            flag
+            for flag, value in (
+                ("--state", state_value),
+                ("--emitted", emitted),
+                ("--evidence", evidence),
+                ("--no-questions", no_questions),
+                ("--reason", reason),
+                ("--answered-by", answered_by),
+                ("--agent", agent),
+                ("--harness", harness),
+                ("--model", model),
+            )
+            if value not in (None, False, [])
+        ]
+        if given:
+            err_console.print(
+                f"[red]--record carries the outcome, evidence and emitted artifacts — "
+                f"do not pass {'/'.join(given)} with it (record fields: `outcome`, "
+                "`emitted`, `evidence` — answered_by/agent/harness/model go in `evidence` — "
+                "and `no_questions` + `reason`)[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        _resolve_with_record(run_id, step_id, item, record_file)
+        return
+    if state_value is None:
+        err_console.print("[red]--state done|failed is required (or pass --record <file>)[/red]")
+        raise typer.Exit(2)
+    _resolve_body(
+        run_id=run_id,
+        step_id=step_id,
+        state_value=state_value,
+        emitted=emitted,
+        evidence=evidence,
+        item=item,
+        no_questions=no_questions,
+        reason=reason,
+        answered_by=answered_by or "agent",
+        agent=agent,
+        harness=harness,
+        model=model,
+    )
+
+
+def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
+    """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
+    carries every required section (spec 2026-09-25 §5.C.4). The render is
+    the one file a refusal leaves behind: it is what the agent opens the PR
+    with. On success the render is removed — it goes with the delivered step.
+    """
+    from fr import gh
+    from fr.artifacts.atomic import write_text_atomic
+    from fr.record.model import records_dir
+    from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
+
+    body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
+    body_path.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    rel = body_path.relative_to(repo_root).as_posix()
+    ref = pr or state.branch
+    try:
+        live = gh.view_pr_body(ref, cwd=repo_root)
+    except gh.GhError as e:
+        err_console.print(
+            f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
+            f"the PR with `gh pr create --body-file {rel}`, record its url (`emitted: "
+            "{pr: <url>}` in the record, or `--emitted pr=<url>`), and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    missing = missing_sections(live)
+    if missing:
+        err_console.print(
+            f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
+            f"it from fr's render — `gh pr edit {ref} --body-file {rel}` — and resolve again",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    from fr.record.apply import _is_tracked
+
+    tracked = _is_tracked(repo_root, body_path)
+    _remember(body_path)
+    body_path.unlink()
+    if tracked:
+        _note_record_write(repo_root, body_path)
+
+
+def _resolve_body(
+    *,
+    run_id: str,
+    step_id: str,
+    state_value: str,
+    emitted: list[str],
+    evidence: list[str],
+    item: str | None,
+    no_questions: bool = False,
+    reason: str | None = None,
+    answered_by: str = "agent",
+    agent: str | None = None,
+    harness: str | None = None,
+    model: str | None = None,
+) -> None:
+    """`fr run resolve`'s body, callable in process — the flag form and the
+    step-record engine (`fr.record.apply`) both run exactly this."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
         raise typer.Exit(2)
@@ -3893,6 +3873,7 @@ def resolve_cmd(
         raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
+    _UNOBSERVED.set(None)
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -4077,6 +4058,7 @@ def resolve_cmd(
         offered=evidence_map,
         state_value=state_value,
     )
+    verified = {**verified, **_take_unobserved()}
     if verified:
         # Reached by `deliver`'s `tests` evidence (debug journal C5) — the first
         # obligation a flat unit can carry, since `review` needs a phase.
@@ -4095,6 +4077,11 @@ def resolve_cmd(
         harness=harness,
         model=model,
     )
+    if "pr" in step.emits and state_value == "done":
+        # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
+        # form and a record reach the same one — before the cursor moves.
+        pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
+        _deliver_pr_gate(repo_root, state, pr)
     new_state = _complete_step(
         state,
         manifest,
@@ -4110,6 +4097,8 @@ def resolve_cmd(
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
     if step_id == "deliver" and state_value == "done":
+        # spec 2026-09-25 §5.B.3: the usage capture rides this commit
+        _capture_usage(repo_root, new_state, "deliver")
         # p3-m4: commit BEFORE reading HEAD's sha for the "push it" line below
         # — the decorator's own commit runs in `finally`, after this function
         # returns, so a sha read any earlier would not exist yet. `.commit()`
@@ -4123,6 +4112,206 @@ def resolve_cmd(
             repo_root, run_id, committed=outcome is None or outcome.committed or outcome.unchanged
         ):
             console.print(line, soft_wrap=True)
+
+
+# --- step records (spec 2026-09-25-lean-cost-aware-process §5.C.2) ----------
+
+
+@dataclass(frozen=True)
+class InProcessResolve:
+    """What `resolve_in_process` hands the step-record engine back."""
+
+    committed: bool
+    next_step: str | None
+    notices: tuple[str, ...]
+
+
+def _next_unit(
+    repo_root: Path, run_id: str, step_id: str, item: str | None, done: bool
+) -> str | None:
+    """The unit the next `fr run advance` briefs, as `step [item]` — for the
+    step-record line. `None` when the run is complete."""
+    here = f"{step_id} {item}" if item else step_id
+    if not done:
+        return f"{here} (retry)"
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+        _step, parent = _find_step(manifest, step_id)
+    except (RunStateError, WorkflowError, AdoptError):
+        return None
+    if parent is not None:
+        grec = state.steps.get(parent.id)
+        if grec is not None and grec.state != "done":
+            try:
+                agentic, _manual = _group_phases(repo_root, state)
+            except (RunStateError, AdoptError):
+                return parent.id
+            items = units.unit_states(grec)
+            for key in _expected_group_items(parent, agentic):
+                if items.get(key) != "done":
+                    unit, _, member = key.rpartition("/")
+                    return f"{member} {unit}"
+            return parent.id
+    cursor = state.steps.get(state.cursor)
+    if (
+        cursor is not None
+        and cursor.state == "done"
+        and _next_step_id(manifest, state.cursor) is None
+    ):
+        return None
+    return state.cursor
+
+
+def resolve_in_process(
+    repo_root: Path,
+    run_id: str,
+    *,
+    step_id: str,
+    item: str | None,
+    state_value: str,
+    evidence: dict[str, str],
+    emitted: dict[str, str],
+    also_commit: list[Path],
+    no_questions: bool = False,
+    reason: str | None = None,
+    guard: ResolveGuard | None = None,
+) -> InProcessResolve:
+    """`fr run resolve` for the step-record engine: the SAME body the flags run
+    (every gate included), with the engine's written paths noted into the same
+    commit, and the body's own stdout held back — the engine prints one line.
+
+    Four non-evidence keys a record's evidence may carry are the flags of the
+    same names: `answered_by` (who answered the step's operator gate) and
+    `agent`/`harness`/`model` (the late identity of the unit's holder).
+    """
+    import contextlib
+    import io
+    import sys
+
+    offered = dict(evidence)
+    answered_by = offered.pop("answered_by", "agent")
+    agent = offered.pop("agent", None)
+    harness = offered.pop("harness", None)
+    model = offered.pop("model", None)
+    writes = _RunWrites(
+        verb="resolve", step=step_id, item=item, outcome=state_value, guard=guard, quiet=True
+    )
+    for path in also_commit:
+        writes.note(repo_root, path)
+    token = _RUN_WRITES.set(writes)
+    held = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(held):
+            _resolve_body(
+                run_id=run_id,
+                step_id=step_id,
+                state_value=state_value,
+                emitted=[f"{k}={v}" for k, v in emitted.items()],
+                evidence=[f"{k}={v}" for k, v in offered.items()],
+                item=item,
+                no_questions=no_questions,
+                reason=reason,
+                answered_by=answered_by,
+                agent=agent,
+                harness=harness,
+                model=model,
+            )
+            _capture_on_new_host(writes, {"step_id": step_id})
+        writes.commit()
+    except BaseException:
+        writes.paths = {}  # a refusal commits nothing; the engine restores the bytes
+        sys.stderr.write(held.getvalue())
+        raise
+    finally:
+        _RUN_WRITES.reset(token)
+    outcome = writes.last_outcome
+    # The body's first line restates what the engine's line says; anything
+    # after it (a group-done line, deliver's closeout handoff) is kept.
+    notices = tuple(line for line in held.getvalue().splitlines()[1:] if line.strip())
+    return InProcessResolve(
+        committed=outcome is not None and (outcome.committed or outcome.unchanged),
+        next_step=_next_unit(repo_root, run_id, step_id, item, state_value == "done"),
+        notices=notices,
+    )
+
+
+def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_file: Path) -> None:
+    """`fr run resolve --record`: parse, fill run/step/item, apply — one line."""
+    from fr.record.apply import RecordRefusedError, apply_record
+    from fr.record.model import RecordError, load_record, records_dir
+
+    repo_root = resolve_repo_root()
+    # p3-r9: a record is resolved against the repo root (never the cwd) and
+    # must live in this run's records dir — the engine deletes and commits
+    # it, which must never reach an arbitrary file.
+    path = record_file if record_file.is_absolute() else repo_root / record_file
+    home = records_dir(repo_root, run_id)
+    if not path.resolve().is_relative_to(home.resolve()):
+        err_console.print(
+            f"refused: {record_file} is not in this run's records dir "
+            f"({home.relative_to(repo_root).as_posix()}/) — nothing applied",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        record = load_record(path)
+    except RecordError as e:
+        err_console.print(f"[red]{e}[/red] Nothing applied.", soft_wrap=True, markup=False)
+        raise typer.Exit(2) from e
+    for name, flag, value in (("step", "--step", step_id), ("item", "--item", item)):
+        mine = getattr(record, name)
+        if value is not None and mine is not None and mine != value:
+            err_console.print(
+                f"record names {name} {mine!r} but {flag} is {value!r} — nothing applied",
+                markup=False,
+            )
+            raise typer.Exit(2)
+    record = record.model_copy(
+        update={"run": record.run or run_id, "step": step_id, "item": record.item or item}
+    )
+    try:
+        outcome = apply_record(repo_root, run_id, record, record_file=path)
+    except RecordRefusedError as e:
+        err_console.print(f"refused: {e} — nothing applied", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
+    for notice in outcome.notices:
+        err_console.print(notice, markup=False, soft_wrap=True)
+    typer.echo(outcome.line)
+
+
+def _refactor_gate(repo_root: Path, state: RunState, key: str, phase_n: int | None) -> None:
+    """The refactor-or-justify gate, moved here from `fr plan self-review`
+    (spec 2026-09-25 §5.C.2.2): resolving a `plan:ticks` unit `done` needs,
+    for every multi-step task of its phase with no refactor step, a reason —
+    a record's `refactor:` entry (journalled as `no-refactor-because`) or,
+    for a run started before records existed, that journal entry itself."""
+    from fr.parser import PlanSchemaError, parse
+    from fr.record.gates import refactor_gaps
+
+    plan_rel = _emitted_plan(state)
+    if plan_rel is None or phase_n is None:
+        return
+    try:
+        plan = parse(repo_root / plan_rel)
+    except PlanSchemaError:
+        return  # `_group_phases` already refused an unreadable plan
+    gaps = refactor_gaps(plan, phase_n)
+    if not gaps:
+        return
+    err_console.print(
+        f"[red]{key}: refused — task(s) {', '.join(gaps)} have no refactor step and no "
+        "refactor reason.[/red]",
+        soft_wrap=True,
+    )
+    err_console.print(
+        f"  add `refactor: {{{gaps[0]}: <why there was nothing to clean>}}` to the step "
+        "record (or journal a `no-refactor-because` discovery naming the task)",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
@@ -4162,8 +4351,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     record = state.steps[owner_id]
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
     new_record = _close_dispatch(record, key, "abandoned")
-    closed = _with_measurement(_with_step(state, owner_id, new_record), owner_id, key)
-    _save_run_state(repo_root, closed)
+    _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
     )

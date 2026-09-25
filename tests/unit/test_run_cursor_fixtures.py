@@ -59,4 +59,4 @@ def test_each_cursor_declares_the_version_its_directory_claims() -> None:
 
 
 def test_every_version_before_the_current_one_is_represented() -> None:
-    assert {name.split("/")[0] for name in _on_disk()} == {"v1", "v2", "v3", "v4", "v5"}
+    assert {name.split("/")[0] for name in _on_disk()} == {"v1", "v2", "v3", "v4", "v5", "v6"}

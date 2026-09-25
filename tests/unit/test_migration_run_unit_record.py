@@ -219,8 +219,9 @@ def test_no_run_migration_names_the_live_parser() -> None:
     """The rule in `.claude/rules/artifact-versioning.md`: no migration
     validates an old file against the live model. `parse_run_state_v4` is the
     frozen reader; a bare `parse_run_state` under `fr/artifacts/run_*.py` is
-    the live one — allowed in exactly one place, the 4 -> 5 module's
-    crash-window check of a body that is ALREADY v5."""
+    the live one — allowed in exactly one place, the NEWEST hop's (6 -> 7)
+    crash-window check of a body that is ALREADY in the live shape. The 4 -> 5
+    module's check moved to the frozen `RunStateV6` when 6 -> 7 removed fields."""
     live = re.compile(r"\bparse_run_state\b(?!_v4)")
     assert live.search("from fr.run.model import parse_run_state"), "the pattern is blind"
     assert not live.search("from fr.run.legacy import parse_run_state_v4")
@@ -228,7 +229,7 @@ def test_no_run_migration_names_the_live_parser() -> None:
     modules = sorted(ARTIFACTS_SRC.glob("run_*.py"))
     assert len(modules) >= 5, [m.name for m in modules]
     offenders = {
-        m.name for m in modules if m.name != "run_unit_record.py" and live.search(m.read_text())
+        m.name for m in modules if m.name != "run_usage_split.py" and live.search(m.read_text())
     }
     assert offenders == set()
 

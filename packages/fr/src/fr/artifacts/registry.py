@@ -45,8 +45,10 @@ from fr.artifacts.structure import (
     validate_journal,
     validate_matrix,
     validate_plan,
+    validate_record,
     validate_run,
     validate_spec,
+    validate_usage,
 )
 
 PRE_FRAMEWORK_VERSION = 1
@@ -375,7 +377,12 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 6: `StepRecord.main_session` — main-session usage per step (spec
             # `2026-09-24-fr-goal-scope-proportion-cost-design` §D), migration
             # `fr.artifacts.run_main_session`. Additive, so stamp-only.
-            current_version=6,
+            # 7: `Attempt.estimate`, `Attempt.measured` and
+            # `StepRecord.main_session` REMOVED — usage moved to its own kind
+            # (spec `2026-09-25-lean-cost-aware-process-design` §5.B.4),
+            # migration `fr.artifacts.run_usage_split`; the v5/v6 shape is
+            # frozen as `fr.run.legacy.RunStateV6`.
+            current_version=7,
             locator="docs/superpowers/runs/*.yaml",
             stamp="`schema_version` in the run yaml",
             read_stamp=_read_yaml_stamp,
@@ -399,6 +406,30 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_spec_stamp,
             write_version=_write_spec_stamp,
             validate=validate_spec,
+        ),
+        ArtifactKind(
+            name="usage",
+            # What a run cost, persisted beside its cursor (spec
+            # `2026-09-25-lean-cost-aware-process-design` §5.B). Born at 1.
+            current_version=1,
+            locator="docs/superpowers/usage/*.yaml",
+            stamp="`schema_version` in the usage yaml",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_usage,
+        ),
+        ArtifactKind(
+            name="record",
+            # One step's bookkeeping, as data (spec
+            # `2026-09-25-lean-cost-aware-process-design` §5.C.1). Transient:
+            # tracked while its step runs, deleted by the `fr run resolve
+            # --record` that applies it. Born at 1.
+            current_version=1,
+            locator="docs/superpowers/runs/*.records/*.yaml",
+            stamp="`schema_version` in the record yaml",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_record,
         ),
     )
 }

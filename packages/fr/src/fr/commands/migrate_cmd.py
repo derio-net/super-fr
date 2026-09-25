@@ -184,6 +184,10 @@ def artifacts_cmd(
         typer.echo(f"  skipped (already done by another writer): {_rel(skip.path, repo_root)}")
     for failure in report.failed:
         typer.echo(f"  FAILED: {_rel(failure.path, repo_root)} · {failure.error}", err=True)
+        for companion in failure.also_wrote:
+            typer.echo(
+                f"    it had already written {_rel(companion, repo_root)} (uncommitted)", err=True
+            )
 
     if not report.applied and not report.failed:
         typer.echo("every artifact is already current.")

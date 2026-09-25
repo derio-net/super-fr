@@ -1600,7 +1600,7 @@ def test_create_writes_skeleton_marker_only_when_set(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# fr plan self-review — refactor-or-justify gate (methodology restoration)
+# the refactor-or-justify gate (methodology restoration; at resolve since 2026-09-25)
 
 
 def _refactor_plan(tmp_path, *, step_texts=(), tag="agentic", ticked=False):
@@ -1645,19 +1645,29 @@ def _refactor_plan(tmp_path, *, step_texts=(), tag="agentic", ticked=False):
 
 
 def _refactor_issues(plan_dir):
+    """The refactor gate's verdict for phase 1. It moved from `fr plan
+    self-review` to `fr run resolve` (spec 2026-09-25 §5.C.2.2); the rules
+    are `fr.record.gates.refactor_gaps`'s."""
+    from fr.parser import parse
+    from fr.record.gates import refactor_gaps
+
+    return refactor_gaps(parse(plan_dir), 1)
+
+
+def test_self_review_no_longer_gates_a_missing_refactor(tmp_path):
     from fr.parser import parse
     from fr.plan_ops import self_review
 
-    return [i for i in self_review(parse(plan_dir)) if "no-refactor-because" in i.message]
+    issues = self_review(parse(_refactor_plan(tmp_path)))
+
+    assert not [i for i in issues if "no-refactor-because" in i.message], issues
 
 
-def test_self_review_errors_on_multi_step_task_without_refactor(tmp_path):
-    issues = _refactor_issues(_refactor_plan(tmp_path))
-
-    assert any(i.severity == "error" and "P1.T1" in i.message for i in issues), issues
+def test_the_gate_names_a_multi_step_task_without_refactor(tmp_path):
+    assert _refactor_issues(_refactor_plan(tmp_path)) == ["P1.T1"]
 
 
-def test_self_review_passes_task_with_a_refactor_step(tmp_path):
+def test_the_gate_passes_task_with_a_refactor_step(tmp_path):
     plan_dir = _refactor_plan(
         tmp_path,
         step_texts=("RED: add the test", "GREEN: implement it", "Refactor: extract it"),
@@ -1666,7 +1676,7 @@ def test_self_review_passes_task_with_a_refactor_step(tmp_path):
     assert _refactor_issues(plan_dir) == []
 
 
-def test_self_review_passes_single_step_task_without_refactor(tmp_path):
+def test_the_gate_passes_single_step_task_without_refactor(tmp_path):
     """A one-step task is trivial — fr-plan omits the refactor step when
     there is nothing to clean, and so does this gate."""
     plan_dir = _refactor_plan(tmp_path, step_texts=("Run the test suite",))
@@ -1674,15 +1684,15 @@ def test_self_review_passes_single_step_task_without_refactor(tmp_path):
     assert _refactor_issues(plan_dir) == []
 
 
-def test_self_review_passes_fully_ticked_task_without_refactor(tmp_path):
-    """Done is done: a fully-ticked task already proved its shape, so
-    historical plans (and mid-flight ones) do not retro-error."""
+def test_the_gate_still_asks_of_a_fully_ticked_task(tmp_path):
+    """At resolve every task IS ticked — the exemption plan time needed for
+    finished plans would make the gate vacuous where it now runs."""
     plan_dir = _refactor_plan(tmp_path, ticked=True)
 
-    assert _refactor_issues(plan_dir) == []
+    assert _refactor_issues(plan_dir) == ["P1.T1"]
 
 
-def test_self_review_exempts_manual_phases_from_the_refactor_gate(tmp_path):
+def test_the_gate_exempts_manual_phases(tmp_path):
     plan_dir = _refactor_plan(tmp_path, tag="manual")
 
     assert _refactor_issues(plan_dir) == []

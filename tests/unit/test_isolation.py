@@ -2703,6 +2703,8 @@ def test_up_writes_isolation_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert data["toplevel"] == str(st.worktree.resolve())
     assert data["branch"] == "feat/x"
     assert data["mode"] == "worktree"
+    # p2-r20: the chosen target rides beside the unchanged `mode`
+    assert data["target"] == "devcontainer"
     assert isinstance(data["created_at"], str) and data["created_at"]
 
 

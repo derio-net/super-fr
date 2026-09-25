@@ -21,10 +21,11 @@ stamp-only — and a body rewrite can go wrong in two ways a stamp cannot:
    was in flight. `fn` therefore accepts a body that is ALREADY wholly v5 and
    lets the runner finish stamping it.
 
-**It reads with the frozen legacy model**, like every other hop
-(`fr.artifacts.run_cursor`). The one place this module touches the LIVE parser
-is case 2 above, where the question really is "is this already a v5 body?" —
-which only the v5 model can answer. It is never used to validate an old file.
+**It reads with the frozen legacy models**, like every other hop
+(`fr.artifacts.run_cursor`). Case 2 above asks "is this already a v5 body?",
+which the v5 model answers — and since run 6 -> 7 removed fields from the live
+model, that is the frozen `fr.run.legacy.RunStateV6` (a superset of v5 and v6),
+never the live one (spec `2026-09-25-lean-cost-aware-process-design` §5.B.4).
 """
 
 from __future__ import annotations
@@ -80,12 +81,13 @@ def _already_unit_records(text: str, data: object) -> bool:
     NOT accepted), and the live model reads it. The stamp is ignored on
     purpose — it is the one thing known to be behind.
     """
-    from fr.run.model import RunStateError, parse_run_state
+    from fr.run.legacy import parse_run_state_v6
+    from fr.run.model import RunStateError
 
     if not isinstance(data, dict) or _carries_legacy_maps(data):
         return False
     try:
-        parse_run_state(text)
+        parse_run_state_v6(text)
     except RunStateError:
         return False
     return True
@@ -95,13 +97,9 @@ def is_unit_record_body(text: str) -> bool:
     """Does `text` parse as a cursor wholly in the v5 shape, stamp aside?
 
     The public face of `_already_unit_records`, for the 5 -> 6 hop's guard
-    (`fr.artifacts.run_main_session`). That hop is additive, so "can a v5 body
-    be read?" is answered by the live model — and this module is the one place
-    `tests/unit/test_migration_run_unit_record.py::
-    test_no_run_migration_names_the_live_parser` allows the live model to be
-    asked, so the question is routed through here rather than widening that
-    allowance. The first change that REMOVES a field from the live model must
-    freeze a `RunStateV5` and point this at it, exactly as 4 -> 5 did for v4.
+    (`fr.artifacts.run_main_session`). Answered by the frozen
+    `fr.run.legacy.RunStateV6`: run 6 -> 7 removed fields from the live model,
+    so the live model can no longer read a v5 body that carries them.
     """
     try:
         data = yaml.safe_load(text)
