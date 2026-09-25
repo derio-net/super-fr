@@ -91,10 +91,14 @@ def _emitted(state: RunState, name: str) -> str | None:
 
 
 def _out_of_scope_lines(repo_root: Path, scope: str, slug: str) -> list[str]:
-    """One `fr journal resolve … --state deferred --tracked-by <#N>` line per
+    """One `fr journal resolve … --state deferred --tracked-by '<#N>'` line per
     finding of `scope`/`slug`'s journal whose EFFECTIVE state (the fold over
     every record naming it) is `out-of-scope` — the same rule `journal
-    render` groups its own "Out-of-scope findings" section by."""
+    render` groups its own "Out-of-scope findings" section by.
+
+    Runnable as printed once `<#N>` is filled in (gh#621): `--note` is
+    required by `resolve`, and the placeholder sits inside single quotes
+    because a bare `#618` starts a shell comment and swallows the value."""
     path = resolve_journal_read_path(repo_root, scope, slug)  # type: ignore[arg-type]
     if not path.exists():
         return []
@@ -105,7 +109,7 @@ def _out_of_scope_lines(repo_root: Path, scope: str, slug: str) -> list[str]:
     states = effective_finding_states(entries)
     return [
         f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} "
-        "--state deferred --tracked-by <#N>"
+        "--state deferred --tracked-by '<#N>' --note 'Filed at closeout as <#N>.'"
         for fid, st in states.items()
         if st == "out-of-scope"
     ]
@@ -169,31 +173,43 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         )
     if plan_path:
         out_of_scope += _out_of_scope_lines(repo_root, "plan", Path(plan_path).name)
-    if out_of_scope:
-        lines.append("  file an issue for each out-of-scope finding below, then:")
-        lines.extend(out_of_scope)
-
     lines.append("  fr status")
-    if plan_path:
+    if plan_path or out_of_scope:
         # p4-r2: exact commands, not a "# on a housekeeping branch" comment
         # that leaves it to the reader to invent one — a fresh session with
         # no memory of this run could otherwise `fr archive` right here, in
         # the just-merged feature workspace, and commit to a dead branch.
         # Branch naming matches this repo's own housekeeping PRs (`git log
         # --oneline origin/main | grep -i archive`): `chore/archive-<slug>`.
-        plan_slug = Path(plan_path).name
-        housekeeping_branch = f"chore/archive-{plan_slug}"
+        housekeeping_branch = (
+            f"chore/archive-{Path(plan_path).name}" if plan_path else f"chore/closeout-{state.run}"
+        )
         lines.append(
             f"  fr isolation up --branch {housekeeping_branch}   "
-            f"# from the base clone above — do NOT run `fr archive` inside "
+            f"# from the base clone above — do NOT run the steps below inside "
             f"{state.branch}, that workspace is the just-merged feature branch"
         )
-        lines.append(f"  fr archive {plan_path}   # inside the new {housekeeping_branch} workspace")
-        lines.append(
-            "  git add -A && git commit -m "
-            f"'chore: archive {plan_slug}' && git push -u origin {housekeeping_branch}"
-        )
-    lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
+        if out_of_scope:
+            # gh#621: inside the housekeeping workspace, never on the default
+            # branch — there fr writes the record but commits nothing (§3.C),
+            # so it would miss the PR and the journal `fr archive` moves.
+            lines.append(
+                f"  file an issue for each out-of-scope finding below, then, inside the "
+                f"new {housekeeping_branch} workspace (fr commits each record):"
+            )
+            lines.extend(out_of_scope)
+        if plan_path:
+            plan_slug = Path(plan_path).name
+            lines.append(
+                f"  fr archive {plan_path}   # inside the new {housekeeping_branch} workspace"
+            )
+            lines.append(
+                "  git add -A && git commit -m "
+                f"'chore: archive {plan_slug}' && git push -u origin {housekeeping_branch}"
+            )
+        else:
+            lines.append(f"  git push -u origin {housekeeping_branch}")
+        lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
     lines.append(f"  fr isolation down --branch {state.branch}")
 
     return "\n".join(lines)
