@@ -269,3 +269,8 @@ matrix.yaml:4010-4016; remove stale refs; verb tracked in https://github.com/der
 ### p2-r26 · finding [open] (reviewer: in scope) · Runner companion paths: uncommitted if the stamp fails; uncommitted_veto ignores them (phase 2)
 
 artifacts/runner.py:527-550, trigger.py:477: declare companion paths up front; carry also_wrote on FailedAction.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r27 created=2026-09-25T21:40:25 phase=2 state=open review_scope=in -->
+### p2-r27 · finding [open] (reviewer: in scope) · measure_dispatch/measure_attempt/TranscriptReader.measure left without a caller (phase 2)
+
+run/telemetry.py:1000-1075 (+551, 628, 935): delete with their tests.
