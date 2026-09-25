@@ -281,3 +281,8 @@ The 3.J tripwire globs packages/fr/src/fr/triage/batch*.py and commands/triage_b
 ### p3-merge-method · decision · batch merge takes --method (default squash); the adapter has no 'repo default merge method' read (phase 3)
 
 Spec 3.F step 2 says pr_merge(..., method=<repo default>), but the 3.J adapter table adds no operation that reads a repo's allowed/default merge method, and adding one would widen the adapter beyond the spec. So merge takes --method merge|squash|rebase, default squash (this repo's own history is squash merges). A repo that disallows the method refuses the merge on the forge, which merge reports verbatim and stops on: a safe failure, never a silent different merge. Test: test_triage_batch_merge.py::test_an_up_to_date_pr_at_its_slot_merges_with_its_head (--method merge reaches pr_merge).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-version-files-overlap created=2026-09-26T00:27:54 phase=3 -->
+### p3-version-files-overlap · discovery · Declared version files are excluded from merge-order overlaps and the forecast (phase 3)
+
+Every batch PR bumps the repo's version files, so counting them made every pair of batches overlap: the 3.F rule 'not adjacent where avoidable' could never avoid anything and the board forecast listed pyproject.toml on every step. pr_open_queue now drops files matching the repo's version.files globs from each entry's overlap set (QueueEntry.files); merge resolves exactly those conflicts itself (3.F step 3). Test: test_triage_batch_merge.py::test_declared_version_files_are_not_overlaps.
