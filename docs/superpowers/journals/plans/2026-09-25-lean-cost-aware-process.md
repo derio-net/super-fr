@@ -14,3 +14,8 @@ telemetry._distinct_messages drops every record after the first per message.id, 
 ### 834e40db0862 · discovery · Model deviations: Cost.by_model, Message.agent, reader session arg (phase 1)
 
 Cost gains by_model (per-model harness dollars — rollup divides each model's dollars, so it needs them); Message gains agent (main | subagent type) so subagent spend is attributable; UsageReader.read takes (source, session=None) because OpenCode/Hermes sources are a DB plus a session id. Claude Code cache writes without a TTL split book at the 1h rate (the audit prototype's convention); OpenCode's untyped cache.write books at 5m.
+
+<!-- fr:journal kind=finding scope=plan id=83ed2919b8c4 created=2026-09-25T19:37:54 phase=1 state=open -->
+### 83ed2919b8c4 · finding [open] · Hermes fixture rows are constructed, not captured (phase 1)
+
+No Hermes host was available. tests/fixtures/usage/hermes/schema.sql is a verbatim copy of upstream SCHEMA_SQL (hermes-agent a3a85a31, SCHEMA_VERSION 30), but the rows, and the OpenAI-style messages.tool_calls JSON shape, are constructed against it. The reader tolerates both {function:{name,arguments}} and flat {name,arguments}. A live capture is owed before the Hermes reader is called verified.
