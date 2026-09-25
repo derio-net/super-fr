@@ -9,3 +9,8 @@ no refactoring needed — tests added, no implementation in this step
 ### review-cli-count-fixture · finding [fixed] (reviewer: in scope) · CLI no-op test must seed existing agent files (phase 1)
 
 Independent review found the positive branch test used the absent .opencode/agent mirror, leaving its target directory empty and failing to prove count reporting. Updated test_models_cmd.py to seed three supported-tier files directly and assert the exact count of 3.
+
+<!-- fr:journal kind=finding scope=plan id=review-cli-count-fixture-resolved created=2026-09-26T00:49:04 phase=1 state=fixed resolves=review-cli-count-fixture -->
+### review-cli-count-fixture-resolved · finding [fixed] · resolves review-cli-count-fixture: CLI no-op test must seed existing agent files (phase 1)
+
+Seeded three tier-specific agent files directly in the test and assert the exact count; verified the regression fails with the previous no-files message.
