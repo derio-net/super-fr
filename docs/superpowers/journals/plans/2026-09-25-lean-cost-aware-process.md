@@ -264,3 +264,8 @@ usage/capture.py:166-171: measure dispatch-prompt size from the parent transcrip
 ### p2-r25 · finding [open] (reviewer: in scope) · fr-goal-main-session-cost still cites tests of the removed mechanism (phase 2)
 
 matrix.yaml:4010-4016; remove stale refs; verb tracked in https://github.com/derio-net/super-fr/issues/624.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r26 created=2026-09-25T21:40:24 phase=2 state=open review_scope=in -->
+### p2-r26 · finding [open] (reviewer: in scope) · Runner companion paths: uncommitted if the stamp fails; uncommitted_veto ignores them (phase 2)
+
+artifacts/runner.py:527-550, trigger.py:477: declare companion paths up front; carry also_wrote on FailedAction.
