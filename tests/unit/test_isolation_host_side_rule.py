@@ -4,9 +4,10 @@
 Two layers, one rule. The bridge (`fr isolation exec`) refuses an inner
 `fr run`/`fr usage` in devcontainer mode and prints the exact host-side
 command; the in-process check refuses when the operated repo carries a
-`mode: worktree` marker AND container evidence exists (devcontainer and
-host-worktree both write `mode: worktree`; the container is the
-discriminator). Neither refuses host-worktree or external mode. The
+`target: devcontainer` marker AND container evidence exists (`mode` cannot
+discriminate: host-worktree writes `mode: worktree` too, and a host-worktree
+pod shows container evidence — p2-r20). Neither refuses host-worktree,
+external or a legacy marker without `target`. The
 host-side form passes the bash guards. And a transcript gate that cannot
 observe records `unobserved` and says so.
 """
@@ -144,10 +145,11 @@ def test_inner_fr_command_recognises_the_invocation_shapes() -> None:
 # --- (b) the in-process check ------------------------------------------------
 
 
-def _marker(repo: Path, mode: str) -> None:
-    (repo / ".fr-isolation").write_text(
-        json.dumps({"toplevel": str(repo.resolve()), "branch": "b", "mode": mode})
-    )
+def _marker(repo: Path, mode: str, target: str | None = None) -> None:
+    data = {"toplevel": str(repo.resolve()), "branch": "b", "mode": mode}
+    if target is not None:
+        data["target"] = target
+    (repo / ".fr-isolation").write_text(json.dumps(data))
 
 
 def _in_container(monkeypatch: pytest.MonkeyPatch, value: bool = True) -> None:
@@ -163,7 +165,7 @@ def test_fr_run_inside_a_devcontainer_workspace_is_refused(
 ) -> None:
     repo = _git_repo(tmp_path / "wt")
     (repo / "packages" / "fr").mkdir(parents=True)
-    _marker(repo, "worktree")
+    _marker(repo, "worktree", "devcontainer")
     _in_container(monkeypatch)
 
     result = _run_status(repo)
@@ -175,7 +177,7 @@ def test_fr_run_inside_a_devcontainer_workspace_is_refused(
 
 def test_fr_usage_is_refused_the_same_way(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _git_repo(tmp_path / "wt")
-    _marker(repo, "worktree")
+    _marker(repo, "worktree", "devcontainer")
     _in_container(monkeypatch)
     result = runner.invoke(
         app, ["usage", "report", "--session", "s"], env={"VK_REPO_ROOT": str(repo)}
@@ -200,12 +202,33 @@ def test_external_mode_is_never_refused(tmp_path: Path, monkeypatch: pytest.Monk
     assert "harness host" not in _run_status(repo).output
 
 
-def test_a_worktree_marker_on_the_host_is_not_refused(
+def test_a_devcontainer_marker_on_the_host_is_not_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _git_repo(tmp_path / "wt")
+    _marker(repo, "worktree", "devcontainer")
+    _in_container(monkeypatch, False)
+    assert "harness host" not in _run_status(repo).output
+
+
+def test_a_host_worktree_pod_with_container_evidence_is_not_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r20: a host-worktree workspace inside a pod or CI container shows
+    container evidence while the harness runs inside it too — `mode: worktree`
+    alone cannot tell it from a devcontainer, so the marker's `target` does."""
+    repo = _git_repo(tmp_path / "wt")
+    _marker(repo, "worktree", "worktree")
+    _in_container(monkeypatch)
+    assert "harness host" not in _run_status(repo).output
+
+
+def test_a_legacy_marker_without_target_is_never_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _git_repo(tmp_path / "wt")
     _marker(repo, "worktree")
-    _in_container(monkeypatch, False)
+    _in_container(monkeypatch)
     assert "harness host" not in _run_status(repo).output
 
 

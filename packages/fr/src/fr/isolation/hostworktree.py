@@ -39,7 +39,9 @@ class HostWorktreeTarget(LocalWorktreeDevcontainerTarget):
 
         state = carried_state(self.repo_root, branch, worktree, "host", "worktree")
         save_state(state)
-        self._write_isolation_marker(worktree, branch, created_at=state.created_at)
+        self._write_isolation_marker(
+            worktree, branch, created_at=state.created_at, target="worktree"
+        )
         self._spawn_gc()
         return state
 

@@ -2075,8 +2075,15 @@ class LocalWorktreeDevcontainerTarget:
         branch: str,
         mode: str = "worktree",
         created_at: str | None = None,
+        target: str = "devcontainer",
     ) -> None:
         """Write the `.fr-isolation` identity marker and git-exclude it.
+
+        `target` (`devcontainer | worktree`) records which isolation `up`
+        chose, beside the unchanged `mode` the edit gate reads: both targets
+        write `mode: worktree`, and only `target` tells `fr run`'s host-side
+        check a devcontainer from a host-worktree pod (spec
+        2026-09-25-lean-cost-aware-process §5.B.6, p2-r20).
 
         The marker is what the `fr-isolation-required` PreToolUse hook reads to
         decide whether an edit is inside a real isolation workspace (#328 Task
@@ -2094,6 +2101,7 @@ class LocalWorktreeDevcontainerTarget:
                     "toplevel": str(worktree.resolve()),
                     "branch": branch,
                     "mode": mode,
+                    "target": target,
                     # the state record's own created_at, so an `up` that
                     # carries the record forward does not restamp the marker
                     "created_at": created_at or datetime.now(UTC).isoformat(),

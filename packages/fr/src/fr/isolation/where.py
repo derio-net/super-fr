@@ -19,12 +19,14 @@ Two layers enforce it:
   a `bash -c` string) for an inner `fr run` / `fr usage` and, in devcontainer
   mode, refuses with the exact host-side command;
 - **in process** — `require_harness_host`, called by the `run` and `usage`
-  groups, refuses when the OPERATED repo carries a `mode: worktree`
-  `.fr-isolation` marker AND container evidence exists. Devcontainer and
-  host-worktree both write `mode: worktree`; the container is the
-  discriminator. It keys on the repo's marker, not on the environment, so a
-  test suite driving `fr run` against unmarked temp repos inside a container
-  is unaffected, and external mode (also a container) is never refused.
+  groups, refuses when the OPERATED repo carries a `.fr-isolation` marker
+  with `target: devcontainer` AND container evidence exists. `mode` cannot
+  discriminate — devcontainer and host-worktree both write `mode: worktree`,
+  and a host-worktree pod or CI container shows container evidence too — so
+  `fr isolation up` records the chosen `target`; a legacy marker without one
+  is never refused (p2-r20). It keys on the repo's marker, not on the
+  environment, so a test suite driving `fr run` against temp repos inside a
+  container is unaffected, and external mode is never refused.
 """
 
 from __future__ import annotations
@@ -116,10 +118,11 @@ def _marker(repo_root: Path) -> dict[str, object] | None:
 
 def require_harness_host(repo_root: Path, group: str, argv: Sequence[str] | None = None) -> None:
     """Raise `HostSideError` when `repo_root` is a devcontainer-mode workspace
-    seen from inside its container: a `mode: worktree` marker plus container
-    evidence. External mode and unmarked repos pass."""
+    seen from inside its container: a `target: devcontainer` marker plus
+    container evidence. Host-worktree, external, legacy (no `target`) and
+    unmarked repos pass."""
     marker = _marker(repo_root)
-    if marker is None or marker.get("mode") != "worktree" or not container_evidence():
+    if marker is None or marker.get("target") != "devcontainer" or not container_evidence():
         return
     args = list(sys.argv[1:] if argv is None else argv)
     fr_args = args[args.index(group) :] if group in args else [group, "…"]

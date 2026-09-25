@@ -157,19 +157,3 @@ def _fresh_vk_repo_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     from fr_vk import config
 
     monkeypatch.setattr(config, "_cache", None)
-
-
-@pytest.fixture(autouse=True)
-def _not_in_a_container(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pretend the suite runs on a harness host, wherever it really runs.
-
-    `fr run` / `fr usage` refuse inside a devcontainer-mode workspace — a repo
-    carrying a `mode: worktree` marker plus container evidence (spec
-    2026-09-25-lean-cost-aware-process §5.B.6). Many fixtures here ARE such a
-    repo (a real linked worktree with a marker), so a suite run inside this
-    repo's own devcontainer would refuse every `fr run` it drives. The rule's
-    own tests (`test_isolation_host_side_rule.py`) patch the probe back on.
-    """
-    from fr.isolation import where
-
-    monkeypatch.setattr(where, "container_evidence", lambda: False)

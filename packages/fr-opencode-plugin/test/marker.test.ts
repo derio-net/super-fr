@@ -66,6 +66,25 @@ describe("resolveMarker", () => {
     expect(result.hasValidMarker).toBe(false);
   });
 
+  test("a linked-worktree marker carrying fr's `target` key stays valid (p2-r20)", () => {
+    const wt = mkdtempSync(join(tmpdir(), "fr-opencode-marker-wt-"));
+    rmSync(wt, { recursive: true, force: true });
+    sh("git", ["worktree", "add", "--quiet", "-b", "feat/target", wt], repo);
+    try {
+      mkdirSync(join(wt, "docs", "superpowers", "plans"), { recursive: true });
+      const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: wt })
+        .toString()
+        .trim();
+      writeFileSync(
+        join(wt, ".fr-isolation"),
+        JSON.stringify({ toplevel: top, branch: "feat/target", mode: "worktree", target: "worktree" })
+      );
+      expect(resolveMarker(join(wt, "README.md")).hasValidMarker).toBe(true);
+    } finally {
+      rmSync(wt, { recursive: true, force: true });
+    }
+  });
+
   test("a marker recorded for a different toplevel is never valid", () => {
     mkdirSync(join(repo, "docs", "superpowers", "plans"), { recursive: true });
     writeFileSync(
