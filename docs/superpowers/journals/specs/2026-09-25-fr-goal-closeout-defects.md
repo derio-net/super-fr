@@ -64,3 +64,8 @@ Independent fr-spec-reviewer raised s1 (high, decision not reflected), s2 (mediu
 ### 248a1091887d · decision · Record commits skip hooks, keep signing, restore the index on failure
 
 Phase-3 review p3-r2: fr's record commits (run/plan/journal, not migrations) pass --no-verify — they are fr's own bookkeeping, frequent, and a fixer hook (end-of-file-fixer) would fail every tick. Commit signing is left as the repo configures it (fr never silently bypasses a signing policy). On a failed commit the index is restored to its prior state for those paths. Orchestrator's decision under the operator's 'fr commits its records' answer; surfaced in the PR body.
+
+<!-- fr:journal kind=decision scope=spec id=96fc9f38d905 created=2026-09-25T12:56:32 -->
+### 96fc9f38d905 · decision · Operator steer: one commit seam, outcome tests, <=1 stderr line, cadence note in PR
+
+Operator, mid-run (verbatim intent): (1) keep commit_paths the ONE commit seam — 'one commit seam, not a frozen list of commands': m1's rework/rework-add commits stay (they route through commit_records -> commit_paths; reverting would reintroduce defect 4) and spec §3.C's table is amended to list them; (2) tests assert outcomes ('fr's record paths are clean after the command returns'), never commit cadence/counts — per-phase batching is planned in feat/lean-cost-aware-process; replace phase-3 commit-COUNT assertions, keep subject-format checks; (3) at most one stderr commit line per fr invocation — pin it and check the early-commit + finally edge case; (4) PR body line: 'Commit cadence is per invocation; per-phase batching is planned in feat/lean-cost-aware-process.'
