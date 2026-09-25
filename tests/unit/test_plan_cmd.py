@@ -97,13 +97,23 @@ def test_plan_create_commits_the_plan_journal_and_wrapper(
     res = _create(repo, tmp_path)
 
     assert res.exit_code == 0, res.output
-    assert _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p — create"
-    files = _git(repo, "show", "--name-only", "--format=", "HEAD").splitlines()
-    assert "scripts/validate-plans.sh" in files
-    assert "docs/superpowers/journals/plans/2026-09-25-p.md" in files
-    assert "docs/superpowers/plans/2026-09-25-p/_meta.yaml" in files
-    assert "unrelated.md" not in files
+    # Outcome, not cadence (operator steer, p3-steer): fr's record paths are
+    # clean when the command returns, whatever number of commits it took —
+    # never "exactly one commit containing all three".
     assert _git(repo, "status", "--porcelain", "--", "docs", "scripts") == ""
+    for path in (
+        "scripts/validate-plans.sh",
+        "docs/superpowers/journals/plans/2026-09-25-p.md",
+        "docs/superpowers/plans/2026-09-25-p/_meta.yaml",
+    ):
+        # Format, kept (robust per path rather than assuming HEAD is "the
+        # one commit" this invocation made).
+        assert (
+            _git(repo, "log", "-1", "--format=%s", "--", path)
+            == "chore(fr): plan 2026-09-25-p — create"
+        ), path
+    # The unrelated file the "executor" staged stays staged, never swept in
+    # — an outcome, kept as-is (operator steer).
     assert _git(repo, "diff", "--cached", "--name-only") == "unrelated.md"
 
 
@@ -116,15 +126,31 @@ def test_plan_edit_tick_and_complete_each_commit(
     assert _create(repo, tmp_path).exit_code == 0
     plan = "docs/superpowers/plans/2026-09-25-p"
 
+    # Directory-scoped, not a specific file: `tick` writes the owning phase
+    # yaml, `--complete-phase` may touch a different one — either way `git
+    # log -1 -- <plan dir>` finds the fr commit that actually touched it,
+    # instead of assuming HEAD is "the one commit" (operator steer, p3-steer).
+
     res = CliRunner().invoke(app, ["plan", "edit", plan, "--tick", "P1.T1.S1"])
     assert res.exit_code == 0, res.output
-    assert _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p — tick P1.T1.S1"
+    assert (
+        _git(repo, "log", "-1", "--format=%s", "--", plan)
+        == "chore(fr): plan 2026-09-25-p — tick P1.T1.S1"
+    )
     assert _git(repo, "status", "--porcelain", "--", "docs") == ""
+    # p3-steer (c): at most one commit-report line per invocation.
+    commit_lines = [
+        ln
+        for ln in res.stderr.splitlines()
+        if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+    ]
+    assert len(commit_lines) <= 1, res.stderr
 
     res = CliRunner().invoke(app, ["plan", "edit", plan, "--complete-phase", "1"])
     assert res.exit_code == 0, res.output
     assert (
-        _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p — complete phase 1"
+        _git(repo, "log", "-1", "--format=%s", "--", plan)
+        == "chore(fr): plan 2026-09-25-p — complete phase 1"
     )
     assert _git(repo, "status", "--porcelain", "--", "docs") == ""
 
@@ -162,14 +188,22 @@ def test_plan_rework_and_rework_add_each_commit(
     res = CliRunner().invoke(app, ["plan", "rework", "docs/superpowers/plans/2026-09-25-p"])
 
     assert res.exit_code == 0, res.output
-    assert (
-        _git(repo, "log", "-1", "--format=%s") == "chore(fr): plan 2026-09-25-p-rework-1 — rework"
-    )
-    files = _git(repo, "show", "--name-only", "--format=", "HEAD").splitlines()
-    assert "docs/superpowers/plans/2026-09-25-p-rework-1/_meta.yaml" in files
-    assert "docs/superpowers/specs/2026-09-25-p-design.md" in files
-    assert "unrelated.md" not in files
+    # Outcome, not cadence (operator steer, p3-steer): fr's record paths are
+    # clean when the command returns, whatever number of commits it took.
     assert _git(repo, "status", "--porcelain", "--", "docs") == ""
+    for path in (
+        "docs/superpowers/plans/2026-09-25-p-rework-1/_meta.yaml",
+        "docs/superpowers/specs/2026-09-25-p-design.md",
+    ):
+        # Format, kept (robust per path rather than assuming HEAD is "the
+        # one commit").
+        assert (
+            _git(repo, "log", "-1", "--format=%s", "--", path)
+            == "chore(fr): plan 2026-09-25-p-rework-1 — rework"
+        ), path
+    # The unrelated file the "executor" staged stays staged, never swept in
+    # — an outcome, kept as-is (operator steer).
+    assert _git(repo, "diff", "--cached", "--name-only") == "unrelated.md"
 
     res = CliRunner().invoke(
         app,
@@ -181,7 +215,14 @@ def test_plan_rework_and_rework_add_each_commit(
 
     assert res.exit_code == 0, res.output
     assert (
-        _git(repo, "log", "-1", "--format=%s")
+        _git(
+            repo,
+            "log",
+            "-1",
+            "--format=%s",
+            "--",
+            "docs/superpowers/plans/2026-09-25-p-rework-1/_meta.yaml",
+        )
         == "chore(fr): plan 2026-09-25-p-rework-1 — rework-add"
     )
     assert _git(repo, "status", "--porcelain", "--", "docs") == ""

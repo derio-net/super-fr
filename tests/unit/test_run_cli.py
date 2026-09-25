@@ -6487,8 +6487,22 @@ def _head_files(repo: Path) -> list[str]:
     return sorted(_git_out(repo, "show", "--name-only", "--format=", "HEAD").splitlines())
 
 
+def _commit_report_lines(stderr: str) -> list[str]:
+    """The `fr: committed`/`fr: not committed` lines an invocation printed —
+    used to pin "at most one per invocation" (operator steer, p3-steer)."""
+    return [
+        ln
+        for ln in stderr.splitlines()
+        if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+    ]
+
+
 def _assert_fr_commit(repo: Path, run_id: str, verb: str) -> None:
-    subject = _git_out(repo, "log", "-1", "--format=%s")
+    # Subject located via the run-records path, not assumed to be "the one
+    # commit" at HEAD (operator steer, p3-steer): a single invocation may
+    # commit more than once (e.g. an early commit before a dispatch brief,
+    # then the wrapping decorator's own commit in `finally`).
+    subject = _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/runs")
     assert subject.startswith(f"chore(fr): run {run_id} — {verb} "), subject
     assert _head_files(repo) and all(
         f.startswith("docs/superpowers/") for f in _head_files(repo)
@@ -6516,7 +6530,7 @@ def test_start_advance_and_resolve_each_commit_the_cursor(tmp_path: Path) -> Non
     res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "done"])
     assert res.exit_code == 0, res.output
     _assert_fr_commit(repo, "r1", "resolve")
-    subject = _git_out(repo, "log", "-1", "--format=%s")
+    subject = _subject(repo)
     assert subject == f"chore(fr): run r1 — resolve {step} done", subject
 
 
@@ -6542,20 +6556,30 @@ def test_no_questions_resolve_commits_cursor_and_spec_journal_together(tmp_path:
     root = tmp_path / "projects"
     write_session(root, session_id="s-g")
     repo, shipped, _ = _gated_agent_blocked(tmp_path, root, "s-g")
-    before = int(_git_out(repo, "rev-list", "--count", "HEAD"))
 
     result = _invoke_measurable(
         repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "x"], root, "s-g"
     )
 
     assert result.exit_code == 0, result.output
-    assert int(_git_out(repo, "rev-list", "--count", "HEAD")) == before + 1
-    assert _head_files(repo) == [
-        "docs/superpowers/journals/specs/2026-09-21-x.md",
-        "docs/superpowers/runs/r1.yaml",
-    ]
+    # Outcome, not cadence (operator steer, p3-steer): both the cursor and
+    # the spec journal this invocation appended are clean when the command
+    # returns, whatever number of commits it took to get there — never
+    # "exactly one" (per-phase batching is planned in feat/lean-cost-aware-
+    # process and would land here as more than one).
+    assert _runs_clean(repo) == ""
     assert _git_out(repo, "status", "--porcelain", "--", "docs/superpowers/journals") == ""
+    # Format, kept (operator steer): the journal write landed under an fr
+    # commit with the same "resolve" subject as the cursor's — i.e. they
+    # were committed together, located by path rather than by assuming
+    # exactly one new commit landed.
+    journal_subject = _git_out(
+        repo, "log", "-1", "--format=%s", "--", "docs/superpowers/journals"
+    )
+    assert journal_subject.startswith("chore(fr): run r1 — resolve "), journal_subject
     _assert_fr_commit(repo, "r1", "resolve")
+    # p3-steer (c): at most one commit-report line per invocation.
+    assert len(_commit_report_lines(result.stderr)) <= 1, result.stderr
 
 
 def test_on_the_default_branch_the_cursor_lands_but_is_not_committed(tmp_path: Path) -> None:
@@ -6584,7 +6608,9 @@ def test_on_the_default_branch_the_cursor_lands_but_is_not_committed(tmp_path: P
 
 
 def _subject(repo: Path) -> str:
-    return _git_out(repo, "log", "-1", "--format=%s")
+    # Path-scoped for the same reason as `_assert_fr_commit` (p3-steer): do
+    # not assume HEAD is "the one commit" this invocation made.
+    return _git_out(repo, "log", "-1", "--format=%s", "--", "docs/superpowers/runs")
 
 
 def test_commit_subject_of_a_grouped_member_advance_claim_and_resolve(tmp_path: Path) -> None:
@@ -6596,6 +6622,10 @@ def test_commit_subject_of_a_grouped_member_advance_claim_and_resolve(tmp_path: 
     res = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert res.exit_code == 0, res.output
     assert _subject(repo) == "chore(fr): run r1 — advance code phase/1 running"
+    # p3-steer (c): a grouped member's dispatch commits early (before the
+    # brief, `_commit_run_writes_now()`) AND the wrapping decorator commits
+    # again in `finally` — still at most one reported stderr line.
+    assert len(_commit_report_lines(res.stderr)) <= 1, res.stderr
 
     claim = ["run", "claim", "r1", "--step", "code", "--item", "phase/1"]
     res = _invoke(repo, shipped, [*claim, "--agent", "a1"])
@@ -6767,14 +6797,9 @@ def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path
     head_sha = _git_out(repo, "rev-parse", "--short", "HEAD")
     assert f"cursor committed as {head_sha}" in stdout
 
-    # p3-m4 + operator steer (b): the early commit this print needs must not
+    # p3-m4 + operator steer (c): the early commit this print needs must not
     # make the decorator's `finally` report a SECOND commit line on stderr.
-    commit_lines = [
-        ln
-        for ln in result.stderr.splitlines()
-        if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
-    ]
-    assert len(commit_lines) <= 1, result.stderr
+    assert len(_commit_report_lines(result.stderr)) <= 1, result.stderr
 
 
 def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Path) -> None:

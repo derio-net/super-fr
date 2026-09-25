@@ -2121,22 +2121,34 @@ class TestJournalCommits:
         monkeypatch.setenv("FR_SKIP_MIGRATION", "1")
         base = ["--scope", "plan", "--slug", "S"]
 
+        journal = "docs/superpowers/journals/plans/S.md"
+
         res = runner.invoke(
             app,
             ["journal", "add", *base, "--kind", "finding", "--state", "open",
              "--title", "t", "--body", "b", "--phase", "1", "--id", "f1"],
         )  # fmt: skip
         assert res.exit_code == 0, res.output
+        # Format, kept (robust per path rather than assuming HEAD is "the
+        # one commit" this invocation made — operator steer, p3-steer).
         assert (
-            _git_out(root, "log", "-1", "--format=%s") == "chore(fr): journal plan/S — finding f1"
+            _git_out(root, "log", "-1", "--format=%s", "--", journal)
+            == "chore(fr): journal plan/S — finding f1"
         )
         assert _git_out(root, "status", "--porcelain", "--", "docs") == ""
+        # p3-steer (c): at most one commit-report line per invocation.
+        commit_lines = [
+            ln
+            for ln in res.stderr.splitlines()
+            if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+        ]
+        assert len(commit_lines) <= 1, res.stderr
 
         res = runner.invoke(
             app,
             ["journal", "resolve", *base, "--id", "f1", "--state", "fixed", "--note", "n"],
         )
         assert res.exit_code == 0, res.output
-        subject = _git_out(root, "log", "-1", "--format=%s")
+        subject = _git_out(root, "log", "-1", "--format=%s", "--", journal)
         assert subject.startswith("chore(fr): journal plan/S — finding "), subject
         assert _git_out(root, "status", "--porcelain", "--", "docs") == ""
