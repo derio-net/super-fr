@@ -300,13 +300,16 @@ def summary_cmd() -> None:
     typer.echo("\n".join(lines))
 
 
-def _parse_levels(level: list[str]) -> dict[str, list[str]]:
-    """`['unit=own:tests/x.py', …]` → `{'unit': ['own:tests/x.py']}`."""
+def _parse_levels(level: list[str], flag: str = "--level") -> dict[str, list[str]]:
+    """`['unit=own:tests/x.py', …]` → `{'unit': ['own:tests/x.py']}`.
+
+    `flag` names the option in the refusal, so a malformed `--drop-level`
+    is not reported as a malformed `--level`."""
     levels: dict[str, list[str]] = {}
     for item in level:
         lv, sep, ref = item.partition("=")
         if not sep:
-            err_console.print(f"--level must be '<level>=<ref>', got {item!r}")
+            err_console.print(f"{flag} must be '<level>=<ref>', got {item!r}")
             raise typer.Exit(2)
         levels.setdefault(lv, []).append(ref)
     return levels
@@ -326,9 +329,17 @@ def _validate_refs(row: Row) -> None:
             raise typer.Exit(2) from e
 
 
-def _apply_rows(root: Path, item: object, message: str) -> None:
+def _apply_rows(
+    root: Path,
+    item: object,
+    message: str,
+    drops: dict[str, dict[str, tuple[str, ...]]] | None = None,
+) -> None:
     """A one-entry record through the step-record engine (spec 2026-09-25
-    §5.C.6): the matrix edit, the three reports regenerated once, one commit."""
+    §5.C.6): the matrix edit, the three reports regenerated once, one commit.
+
+    `drops` (row id → level → refs to remove, gh#624) is passed only when it
+    names something: the engine refuses an empty per-row mapping."""
     from fr.record import apply as engine
     from fr.record.model import StepRecord
 
@@ -337,7 +348,7 @@ def _apply_rows(root: Path, item: object, message: str) -> None:
             root,
             None,
             StepRecord(acceptance=(item,)),  # type: ignore[arg-type]
-            target=engine.RecordTarget(message=message),
+            target=engine.RecordTarget(message=message, acceptance_drops=drops or {}),
         )
     except engine.RecordRefusedError as e:
         err_console.print(f"[red]error:[/red] {e}")
@@ -365,6 +376,12 @@ def set_status_cmd(
         help="'<level>=<repo>:<path>[#Lline]' evidence to ADD (repeatable) — the other "
         "half of the documented transition.",
     ),
+    drop_level: list[str] = typer.Option(
+        [],
+        "--drop-level",
+        help="'<level>=<ref>' evidence to REMOVE (repeatable); refused if the ref is not "
+        "on the row.",
+    ),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
 
@@ -376,10 +393,15 @@ def set_status_cmd(
 
     Refuses an unknown id rather than creating a row: that is `add`'s job, and
     silently creating one on a typo'd id is how a row gets orphaned.
+
+    `--drop-level` removes a stale evidence ref in the same rewrite (gh#624),
+    so a row can be re-pointed — drop the old ref, `--level` the new one — in
+    one call. A drop naming a ref not on the row, an unknown level, or a ref
+    also named in `--level` is refused (exit 2) with nothing changed.
     """
     from typing import get_args
 
-    from fr.acceptance.edit import merge_levels
+    from fr.acceptance.edit import drop_levels, merge_levels
     from fr.acceptance.model import Status
 
     root = resolve_repo_root()
@@ -400,8 +422,19 @@ def set_status_cmd(
         )
         raise typer.Exit(2)
 
+    additions = _parse_levels(level)
+    drops = _parse_levels(drop_level, flag="--drop-level")
+    both = sorted(
+        f"{lv}={ref}" for lv, refs in drops.items() for ref in refs if ref in additions.get(lv, [])
+    )
+    if both:
+        err_console.print(
+            f"[red]error:[/red] {', '.join(both)} named in both --level and --drop-level "
+            "— nothing changed"
+        )
+        raise typer.Exit(2)
     try:
-        merged = merge_levels(target.levels, _parse_levels(level))
+        merged = merge_levels(drop_levels(target.levels, drops), additions)
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
@@ -428,9 +461,10 @@ def set_status_cmd(
             id=row_id,
             status=status,
             notes=notes,
-            levels={k: tuple(v) for k, v in _parse_levels(level).items()},
+            levels={k: tuple(v) for k, v in additions.items()},
         ),
         f"chore(fr): acceptance — {row_id} {target.status} → {new_row.status}",
+        {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
     )
     typer.echo(f"{row_id}: {target.status} → {new_row.status}")
 
