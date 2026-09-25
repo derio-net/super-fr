@@ -29,3 +29,8 @@ This task IS the phase's refactor and quality gate; a refactor step of a refacto
 ### model-override-opus-5-5 · decision · Operator: Opus 5.5 on every tier for this run
 
 Operator (2026-09-25): run implementation with Opus 5.5 on every tier. Standing bindings (claude-code: mechanical=haiku-4.5, standard=sonnet-5, hard=opus-5.5) are left untouched; each dispatch passes Opus 5.5 explicitly and records it with fr run claim --model claude-opus-5-5.
+
+<!-- fr:journal kind=discovery scope=plan id=31dca047ed37 created=2026-09-25T22:49:07 phase=1 -->
+### 31dca047ed37 · discovery · Schema 2 judgements were pinned as refused by two existing tests (phase 1)
+
+tests/unit/test_triage_cli.py::test_a_bad_judgements_file_exits_2_naming_it and tests/unit/test_triage_model.py (renamed to test_schema_3_in_judgements_is_refused_naming_the_file) used schema 2 as the unknown version. Both now use schema 3; the loader reads JUDGEMENTS_READS = (1, 2) while JUDGEMENTS_SCHEMA stays 1 as the write version until phase 2.
