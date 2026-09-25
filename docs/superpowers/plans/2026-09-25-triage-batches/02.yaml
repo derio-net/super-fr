@@ -134,9 +134,10 @@ state:
       ticked_at: '2026-09-25T21:09:13+00:00'
       note: triage suite 239 passed; no-refactor-because P2.T2 (p2-norefactor-t2)
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T21:12:46+00:00'
+      note: 'red: ModuleNotFoundError fr.triage.batch; STAGES pin failed on the missing
+        in-progress'
     P2.T3.S2:
       state: ' '
       ticked_at: null
