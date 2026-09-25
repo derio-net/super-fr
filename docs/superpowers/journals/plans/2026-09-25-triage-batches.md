@@ -39,3 +39,8 @@ tests/unit/test_triage_cli.py::test_a_bad_judgements_file_exits_2_naming_it and 
 ### f531198b3826 · discovery · Red run masked a malformed WorkItem id in the herdr stub test (phase 1)
 
 P1.T1.S3's red run failed on ModuleNotFoundError: fr_herdr before any WorkItem was built, so the test's first ids (super-fr/<unit>) never reached WorkItem.__post_init__, which rejects them. Found in green; the test now uses one well-formed id per unit from the work_item grammar plus a guard that every Unit has an id. For phase 2's runner contract tests: build items through item_id/run_item_id.
+
+<!-- fr:journal kind=discovery scope=plan id=162b015f5356 created=2026-09-25T22:49:11 phase=1 -->
+### 162b015f5356 · discovery · fr-herdr wiring: root deps/sources and --cov added; README/HERMES lists and import-direction test not yet updated (phase 1)
+
+A workspace member's fr.runners entry point is only registered once the root pyproject depends on it (dependencies + [tool.uv.sources]); --cov=fr_herdr was added to addopts too. Left for later phases: README.md/HERMES.md package lists, AGENTS.md repo-shape prose, and tests/unit/test_import_direction.py peer rules (fr_dispatch must not import fr_herdr; fr_herdr vs fr_vk/fr_cncd).
