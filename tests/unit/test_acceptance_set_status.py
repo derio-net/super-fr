@@ -442,17 +442,29 @@ def test_drop_level_of_an_absent_ref_changes_nothing(
     before = _snapshot(root)
     result = _set_status(root, monkeypatch, "--drop-level", "unit=own:tests/test_missing.py")
     assert result.exit_code == 2, result.output
+    assert "cannot drop" in result.output, "refused for our reason, not a Typer usage error"
     assert _snapshot(root) == before
 
 
 def test_drop_level_and_level_repoint_the_row_in_one_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import fr.acceptance.edit as edit
+
     root = _two_ref_repo(tmp_path, monkeypatch)
     new = "own:tests/test_c.py"
+    rewrites: list[str] = []
+    real = edit.replace_row
+
+    def spy(text: str, row_id: str, row_: object) -> str:
+        rewrites.append(row_id)
+        return real(text, row_id, row_)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(edit, "replace_row", spy)
     result = _set_status(root, monkeypatch, "--drop-level", f"unit={_B}", "--level", f"unit={new}")
     assert result.exit_code == 0, result.output
     assert _row(root, "target").levels["unit"] == (_A, new)
+    assert rewrites == ["target"], "drop + add must land in ONE rewrite of the row"
 
 
 def test_the_same_ref_added_and_dropped_is_refused(
@@ -462,6 +474,7 @@ def test_the_same_ref_added_and_dropped_is_refused(
     before = _snapshot(root)
     result = _set_status(root, monkeypatch, "--drop-level", f"unit={_B}", "--level", f"unit={_B}")
     assert result.exit_code == 2, result.output
+    assert "named in both" in result.output, "refused for our reason, not a Typer usage error"
     assert _snapshot(root) == before
 
 
@@ -472,6 +485,7 @@ def test_drop_level_with_an_unknown_level_key_changes_nothing(
     before = _snapshot(root)
     result = _set_status(root, monkeypatch, "--drop-level", f"unti={_B}")
     assert result.exit_code == 2, result.output
+    assert "unknown level keys" in result.output, "refused for our reason, not a Typer usage error"
     assert _snapshot(root) == before
 
 
