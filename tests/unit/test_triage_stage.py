@@ -68,8 +68,17 @@ def test_derive_stage(issue: Issue, prs: list[PullRequest], stage: str) -> None:
     assert derive_stage(issue, prs) == stage
 
 
-def test_the_six_stages_in_one_order_most_advanced_first() -> None:
-    assert STAGES == ("closed", "merged", "pr-ready", "pr-draft", "blocked", "backlog")
+def test_the_seven_stages_in_one_order_most_advanced_first() -> None:
+    """`in-progress` sits between the PR stages and `blocked` (triage-batches §3.E)."""
+    assert STAGES == (
+        "closed",
+        "merged",
+        "pr-ready",
+        "pr-draft",
+        "in-progress",
+        "blocked",
+        "backlog",
+    )
 
 
 def test_an_issue_exposes_its_derived_stage() -> None:

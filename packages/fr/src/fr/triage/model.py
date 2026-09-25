@@ -16,19 +16,27 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
 FACTS_SCHEMA: Literal[3] = 3
-# The version this fr WRITES. Stays 1 until the first engine write of a batch
-# (plan phase 2); the loader already reads every version in JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[1] = 1
+# The version this fr WRITES: every engine write of `batches:` stamps 2 (spec
+# 2026-09-25-triage-batches §3.A); the loader reads every version in JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[2] = 2
 JUDGEMENTS_READS: tuple[int, ...] = (1, 2)
 
 ScopeKind = Literal["repo", "org"]
@@ -59,6 +67,11 @@ def withdrawn_marker(item_id: str) -> str:
 
 # "<repo-name>#<number>" in both scopes (spec §3.D): one code path.
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
+
+# A batch id is a slug (spec 2026-09-25-triage-batches §3.A): it becomes the
+# branch `feat/batch-<id>` and the item id `<repo>/run/batch-<id>`.
+BATCH_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
+Bump = Literal["patch", "minor", "major"]
 
 
 def normalize_key(key: str) -> str:
@@ -327,17 +340,82 @@ class Pattern(_Strict):
         return [normalize_key(k) for k in v]
 
 
+class DispatchEvent(_Strict):
+    """A batch was handed to a runner (spec §3.A). Written by the engine only."""
+
+    kind: Literal["dispatch"]
+    at: AwareDatetime
+    runner: str
+    handle: str  # opaque to triage; never posted to the forge
+    branch: str
+    reserved_version: str | None = None  # absent when the repo declares no version block
+
+
+class CancelEvent(_Strict):
+    """A batch was withdrawn (spec §3.E cancel). Written by the engine only."""
+
+    kind: Literal["cancel"]
+    at: AwareDatetime
+    reason: str = ""
+
+
+BatchEvent = Annotated[DispatchEvent | CancelEvent, Field(discriminator="kind")]
+
+
 class Batch(_Strict):
     """A group of judged issues delivered as one run (spec §3.A).
 
-    Minimal in phase 1 — id, title and member ids. The launch settings, the
-    engine-written events and the load-time membership rules land with the
-    batch verbs.
+    Structural rules hold here, from the file alone: the id is a slug, `ids` is
+    non-empty, each id is a key (normalised like `Pattern.ids`) and all name one
+    repo, and `events` is time-ordered. That every member is judged is the
+    enclosing `Judgements`' rule; the open-batch rule needs facts, so it is
+    `fr.triage.batch`'s.
     """
 
     id: str
     title: str
-    ids: list[str]
+    ids: list[str] = Field(min_length=1)
+    rationale: str = ""
+    order: int | None = None
+    bump: Bump = "patch"
+    launch: Launch = Launch()
+    events: list[BatchEvent] = []
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _id_is_a_slug(cls, v: object) -> object:
+        """Lowercased first, so `Lifecycle` and `lifecycle` are one batch id."""
+        if not isinstance(v, str) or not BATCH_ID_RE.match(v.lower()):
+            raise ValueError(f"batch id must match {BATCH_ID_RE.pattern}, got {v!r}")
+        return v.lower()
+
+    @field_validator("ids")
+    @classmethod
+    def _ids_are_keys_of_one_repo(cls, v: list[str]) -> list[str]:
+        bad = _bad_keys(list(v))
+        if bad:
+            raise ValueError(f"batch ids must be '<repo-name>#<number>', got {bad!r}")
+        keys = [normalize_key(k) for k in v]
+        repos = sorted({k.rpartition("#")[0] for k in keys})
+        if len(repos) > 1:
+            raise ValueError(f"a batch's members must be in one repo, got {repos}")
+        return keys
+
+    @field_validator("events")
+    @classmethod
+    def _events_are_time_ordered(cls, v: list[DispatchEvent | CancelEvent]) -> list[Any]:
+        for earlier, later in zip(v, v[1:], strict=False):
+            if later.at < earlier.at:
+                raise ValueError(
+                    f"batch events must be time-ordered: {later.kind} at {later.at} "
+                    f"follows {earlier.kind} at {earlier.at}"
+                )
+        return v
+
+    @property
+    def repo_name(self) -> str:
+        """The `<repo-name>` part every member key shares."""
+        return self.ids[0].rpartition("#")[0]
 
 
 class Judgements(_Strict):
@@ -378,6 +456,22 @@ class Judgements(_Strict):
         undeclared = sorted({j.tier for j in self.issues.values()} - declared)
         if undeclared:
             raise ValueError(f"judgements name undeclared tiers {undeclared}")
+        return self
+
+    @model_validator(mode="after")
+    def _batch_members_are_judged_and_ids_unique(self) -> Judgements:
+        """Every member is judged, and batch ids are unique (ids are already
+        lowercased, so this is the case-insensitive check spec §3.A asks for)."""
+        seen: set[str] = set()
+        for batch in self.batches:
+            if batch.id in seen:
+                raise ValueError(
+                    f"batch ids must be unique (case-insensitively): {batch.id!r} appears twice"
+                )
+            seen.add(batch.id)
+            unjudged = [k for k in batch.ids if k not in self.issues]
+            if unjudged:
+                raise ValueError(f"batch {batch.id!r}: members {unjudged} are not judged")
         return self
 
     @model_validator(mode="after")

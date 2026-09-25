@@ -34,6 +34,7 @@ from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
 from fr.triage.errors import TriageError
 from fr.triage.model import (
+    DispatchEvent,
     Facts,
     Judgements,
     Scope,
@@ -130,9 +131,22 @@ def collect_command(
     target_dir = state_dir(scope, dir_override)
     judgements = target_dir / "judgements.yaml"
     try:
-        judged = list(load_judgements(judgements).issues) if judgements.exists() else []
+        loaded = load_judgements(judgements) if judgements.exists() else None
+        judged = list(loaded.issues) if loaded else []
+        # The branch of each batch whose last event is a dispatch (spec
+        # 2026-09-25-triage-batches §3.A): collect looks each one up by head.
+        branches = [
+            (b.repo_name, b.events[-1].branch)
+            for b in (loaded.batches if loaded else [])
+            if b.events and isinstance(b.events[-1], DispatchEvent)
+        ]
         facts = collect_facts(
-            make_forge(), scope, now=datetime.now(UTC), judged=judged, pr_limit=pr_limit
+            make_forge(),
+            scope,
+            now=datetime.now(UTC),
+            judged=judged,
+            batch_branches=branches,
+            pr_limit=pr_limit,
         )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)

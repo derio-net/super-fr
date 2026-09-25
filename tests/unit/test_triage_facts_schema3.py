@@ -275,3 +275,33 @@ def test_schema_2_facts_are_refused_with_the_recollect_message(tmp_path: Path) -
 
     with pytest.raises(TriageError, match=r"facts\.json.*schema 2.*re-run collect"):
         load_facts(path)
+
+
+def test_the_collect_command_looks_up_the_branch_of_each_batch_last_dispatched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a batch whose LAST event is a dispatch is looked up (spec §3.A)."""
+    from fr.cli import app
+    from fr.commands import triage_cmd
+    from typer.testing import CliRunner
+
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 2\n"
+        "tiers: [{n: 1, title: Now}]\n"
+        "issues: {alpha#7: {tier: 1}, alpha#8: {tier: 1}, alpha#9: {tier: 1}}\n"
+        "batches:\n"
+        "  - {id: live, title: t, ids: [alpha#7], events: [{kind: dispatch, "
+        "at: '2026-09-25T00:00:00Z', runner: herdr, handle: h, branch: feat/batch-live}]}\n"
+        "  - {id: gone, title: t, ids: [alpha#8], events: [{kind: dispatch, "
+        "at: '2026-09-25T00:00:00Z', runner: herdr, handle: h, branch: feat/batch-gone}, "
+        "{kind: cancel, at: '2026-09-26T00:00:00Z'}]}\n"
+        "  - {id: idea, title: t, ids: [alpha#9]}\n",
+        encoding="utf-8",
+    )
+    forge = _Forge(issues={REPO: [_issue(7), _issue(8), _issue(9)]}, prs={REPO: []}, open_prs=[])
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+
+    result = CliRunner().invoke(app, ["triage", "collect", "--repo", REPO, "--dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert forge.called("list_prs_by_head") == [{"repo": REPO, "branch": "feat/batch-live"}]
