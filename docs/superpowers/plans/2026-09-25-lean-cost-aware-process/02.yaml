@@ -234,9 +234,9 @@ state:
       note: 'fr migrate artifacts --yes: 2 live cursors -> v7 + usage files (eab566e9);
         validate artifacts 0'
     P2.T4.S4:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:12:11+00:00'
+      note: ruff/mypy clean; full suite 5357 passed
     P2.T5.S1:
       state: ' '
       ticked_at: null
