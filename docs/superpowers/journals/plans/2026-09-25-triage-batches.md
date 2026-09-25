@@ -383,3 +383,8 @@ Checkout.add_worktree replaces a kept scratch worktree only when git status (unt
 ### r3-f7-resolved · finding [fixed] · resolves r3-f7: commit_all runs git add --all after set/relock in the scratch worktree, pushing any untracked artifacts to another run's PR
 
 Worktree.commit_all(message, version_files) stages git add --update plus untracked paths matching the declared version.files globs only, never --all. Tests: test_triage_gitseam.py::test_commit_all_stages_tracked_changes_and_version_files_only; test_triage_batch_merge_git.py::test_the_version_update_commits_no_untracked_build_output (set leaves setv.log behind)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f8-resolved created=2026-09-26T01:12:41 state=fixed resolves=r3-f8 answered_by=agent -->
+### r3-f8-resolved · finding [fixed] · resolves r3-f8: p3-reserve-order sound but spec §3.D and Test Plan 11 still describe explicit-order-first reservation; amend the spec
+
+Spec 3.D and Test Plan 11 amended: reservations follow dispatch sequence (next after max(origin, every live reservation)); explicit order applies at merge-time reconcile. Recorded in the spec journal as decision d-reserve-order crediting p3-reserve-order and the reviewer's verification. Tests (unchanged, already pin it): test_triage_batch_version.py::test_the_reservation_follows_the_highest_live_reservation, test_triage_batch_dispatch.py::test_successive_dispatches_reserve_successive_versions
