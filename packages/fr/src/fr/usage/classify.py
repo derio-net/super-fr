@@ -141,22 +141,34 @@ _BASH_RULES: tuple[tuple[str, str], ...] = (
 _WRITE_TARGET = re.compile(r"""(?:\bcat\s*>>?|\btee(?:\s+-a)?)\s*(["']?)([^\s;&|'"<>]+)\1""")
 
 
+_PREFIX = re.compile(
+    r"^(?:cd\s+\S+\s*(?:&&|;)\s*"  # cd <dir> && / ;
+    r"|(?:export\s+)?(\w+)=(\S*)\s*(?:&&|;)\s*"  # [export] VAR=value && / ;
+    r"|(\w+)=(\S+)\s+)"  # VAR=value <command>
+)
+
+
 def _unwrap(command: str) -> str:
-    """The command that actually runs, without the wrappers around it."""
+    """The command that actually runs, without the wrappers around it.
+
+    A stripped `VAR=value` is not thrown away: its value is substituted for
+    `$VAR` / `${VAR}` in the rest, because the value is often the only place
+    the path lives (`F=docs/superpowers/plans/x && cat $F`)."""
     c = command.strip()
     c = re.sub(r"^(cd\s+\S+\s*&&\s*)+", "", c)
     wrapped = re.search(r"fr isolation exec(?:\s+--?[\w-]+(?:\s+[^-\s]\S*)?)*\s+--\s+(.*)", c, re.S)
     if wrapped:
         c = wrapped.group(1).strip().strip("'\"")
         c = re.sub(r"^(bash|sh) -l?c\s+", "", c).strip("'\"")
-    prefix = re.compile(
-        r"^(?:cd\s+\S+\s*(?:&&|;)\s*|export\s+\w+=\S*\s*(?:&&|;)\s*|\w+=\S*\s*(?:&&|;)\s*|\w+=\S+\s+)"
-    )
     while True:
-        stripped = prefix.sub("", c, count=1)
-        if stripped == c:
+        match = _PREFIX.match(c)
+        if match is None or not match.group(0):
             return c
-        c = stripped
+        c = c[match.end() :]
+        name, value = match.group(1) or match.group(3), match.group(2) or match.group(4)
+        if name and value:
+            value = value.strip("'\"")
+            c = re.sub(r"\$\{?" + name + r"\b\}?", lambda _m: value, c)
 
 
 def _path(path: str, write: bool) -> Classification:
@@ -183,8 +195,11 @@ def _bash(command: str) -> Classification:
     for pattern, sub in _BASH_RULES:
         if sub == "__write__":
             target = _WRITE_TARGET.search(c)
-            if target:
-                return _path(target.group(2), write=True)
+            written = _path(target.group(2), write=True) if target else None
+            # only a write into the repo's own trees is classified by its path;
+            # a scratch file falls through to what the command otherwise does
+            if written is not None and written.sub not in ("other_file", "chores"):
+                return written
             continue
         if re.search(pattern, c):
             return _of(sub)

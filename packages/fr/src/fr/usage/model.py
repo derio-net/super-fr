@@ -8,6 +8,7 @@ and its `cost` is the harness's own figure for the whole session.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -34,9 +35,10 @@ class Tokens(BaseModel):
     cache_read: int = 0
     output: int = 0
 
-    def weighted(self) -> float:
+    def weighted(self, weights: Mapping[str, float] | None = None) -> float:
         """Price-weighted units: the share of a model's dollars this message earns."""
-        return float(sum(getattr(self, key) * ratio for key, ratio in WEIGHTS.items()))
+        ratios = WEIGHTS if weights is None else weights
+        return float(sum(getattr(self, key) * ratio for key, ratio in ratios.items()))
 
 
 class ToolCall(BaseModel):
