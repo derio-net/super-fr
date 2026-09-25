@@ -94,3 +94,8 @@ usage_cmd.py:88.
 ### p1-r10 · finding [open] (reviewer: in scope) · Skill says count turns but the report renders none; phase 2 schema needs turns (phase 1)
 
 fr-audit/SKILL.md:61-63, rollup.py:64.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r11 created=2026-09-25T20:03:28 phase=1 state=open review_scope=in -->
+### p1-r11 · finding [open] (reviewer: in scope) · Golden test asserts only the pooled share, not the per-session 23-37% range (phase 1)
+
+test_usage_report.py:232-239 vs spec §7.3.
