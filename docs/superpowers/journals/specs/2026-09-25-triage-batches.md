@@ -95,3 +95,52 @@ Findings s1-s17 below. Bridge question answered: diff.py/observe.py touch fr: la
 ### s17-resolved · finding [deferred → #611] · resolves s17: 'present on gitlab and gitea' is moot while triage collect is GitHub-only
 
 One clarifying sentence added to §3.F; non-GitHub triage belongs to the forge parity work (gh#611).
+
+<!-- fr:journal kind=review scope=spec id=spec-review-2 created=2026-09-25T07:39:59 -->
+### spec-review-2 · review · Second independent pass (fr-spec-reviewer) over the revised spec: 12 in scope, 1 out of scope
+
+Verified s1-s16 (s7, s8, s9, s12, s15 partial or wrong in effect); findings r2-1..r2-13 below.
+
+<!-- fr:journal kind=finding scope=spec id=r2-1 created=2026-09-25T07:40:00 state=fixed review_scope=in -->
+### r2-1 · finding [fixed] (reviewer: in scope) · Batch PR files/head_oid never reached facts (linked PRs built from PR_LIST_FIELDS) — collect joins open-PR records into linked PRs; PullRequest gains files and head_oid
+
+<!-- fr:journal kind=finding scope=spec id=r2-2 created=2026-09-25T07:40:00 state=fixed review_scope=in -->
+### r2-2 · finding [fixed] (reviewer: in scope) · .fr/triage.yaml read only from a checkout yet needed by create/edit/check — collected via Forge.read_file_at_ref into Facts.config; launch defaults resolved at dispatch
+
+<!-- fr:journal kind=finding scope=spec id=r2-3 created=2026-09-25T07:40:01 state=fixed review_scope=in -->
+### r2-3 · finding [fixed] (reviewer: in scope) · Stale dispatch lacked a facts field and Forge method — Issue.dispatch_marker_at and Forge.list_issue_comments
+
+<!-- fr:journal kind=finding scope=spec id=r2-4 created=2026-09-25T07:40:01 state=fixed review_scope=in -->
+### r2-4 · finding [fixed] (reviewer: in scope) · Marker idempotency needed a comment read — uses Forge.list_issue_comments (GitHub-only, like collect)
+
+<!-- fr:journal kind=finding scope=spec id=r2-5 created=2026-09-25T07:40:02 state=fixed review_scope=in -->
+### r2-5 · finding [fixed] (reviewer: in scope) · Re-dispatch after the runner dropped the item started a second run — stage gate refuses past proposed/cancelled/abandoned; --repair redoes forge writes only
+
+<!-- fr:journal kind=finding scope=spec id=r2-6 created=2026-09-25T07:40:02 state=fixed review_scope=in -->
+### r2-6 · finding [fixed] (reviewer: in scope) · No stage for a PR closed unmerged; PR lookup undefined — abandoned stage, highest PR number wins, batch_prs lookup by head branch
+
+<!-- fr:journal kind=finding scope=spec id=r2-7 created=2026-09-25T07:40:02 state=fixed review_scope=in -->
+### r2-7 · finding [fixed] (reviewer: in scope) · Tab label/branch collide between repo- and org-scope triage — same repo+id is the same batch; branch gate refuses the second dispatch; Test Plan 6 corrected
+
+<!-- fr:journal kind=finding scope=spec id=r2-8 created=2026-09-25T07:40:03 state=fixed review_scope=in -->
+### r2-8 · finding [fixed] (reviewer: in scope) · Brief omitted the no-tracking-issue line — added to §3.C step 3
+
+<!-- fr:journal kind=finding scope=spec id=r2-9 created=2026-09-25T07:40:03 state=fixed review_scope=in -->
+### r2-9 · finding [fixed] (reviewer: in scope) · §3.G board untested — Test Plan 19 added; cited from triage-batch-merge-queue
+
+<!-- fr:journal kind=finding scope=spec id=r2-10 created=2026-09-25T07:40:04 state=fixed review_scope=in -->
+### r2-10 · finding [fixed] (reviewer: in scope) · fr-herdr omitted name/refresh/slot_budget and repo; package wiring — specified, repo on WorkItem, mypy/CI/workspace wiring
+
+<!-- fr:journal kind=finding scope=spec id=r2-11 created=2026-09-25T07:40:04 state=fixed review_scope=in -->
+### r2-11 · finding [fixed] (reviewer: in scope) · Batch ids normalisation unstated — KEY_RE + normalize_key like Pattern.ids; case-variant test
+
+<!-- fr:journal kind=finding scope=spec id=r2-12 created=2026-09-25T07:40:05 state=fixed review_scope=in -->
+### r2-12 · finding [fixed] (reviewer: in scope) · Reconcile relied on the behind-only update path — explicit re-slot step 3b, set runs in the scratch worktree
+
+<!-- fr:journal kind=finding scope=spec id=r2-13 created=2026-09-25T07:40:05 state=open review_scope=out -->
+### r2-13 · finding [open] (reviewer: out of scope) · Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
+
+<!-- fr:journal kind=finding scope=spec id=r2-13-resolved created=2026-09-25T07:40:06 state=open resolves=r2-13 out_of_scope=true answered_by=agent -->
+### r2-13-resolved · finding [out-of-scope] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
+
+True and pre-existing; the r2-1 open-PR join fills these fields for linked open PRs as a side effect, so no separate issue is needed.

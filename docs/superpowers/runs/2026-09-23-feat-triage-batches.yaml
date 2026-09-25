@@ -3,7 +3,7 @@ run: 2026-09-23-feat-triage-batches
 workflow: fr-goal@1
 branch: feat/triage-batches
 started: '2026-09-23T13:31:29+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,13 +12,26 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-25-triage-batches-design.md
   spec-review:
-    state: running
-    at: '2026-09-25T07:33:57+00:00'
+    state: done
+    at: '2026-09-25T07:40:37+00:00'
+    main_session:
+      input_tokens: 56
+      cache_creation_input_tokens: 73959
+      cache_read_input_tokens: 6228034
+      output_tokens: 41393
+      turns: 26
+      sessions: 1
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-09-25T07:33:57+00:00'
           agent_type: super-fr:fr-spec-reviewer
+          returned: '2026-09-25T07:40:37+00:00'
+          outcome: done
+        evidence:
+          reviewer: a9ae7849864d975a9
+          review: spec-review-2
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,r2-1,r2-2,r2-3,r2-4,r2-5,r2-6,r2-7,r2-8,r2-9,r2-10,r2-11,r2-12,r2-13
   plan:
     state: pending
   plan-review:

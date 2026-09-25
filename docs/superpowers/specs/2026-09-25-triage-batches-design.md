@@ -74,14 +74,17 @@ batches:
 
 **Checked at load** (structural, from the file alone):
 
-- every id in `ids` is a key in `issues` (judged); `ids` is non-empty;
+- every id in `ids` matches `KEY_RE` and is normalised with `normalize_key`
+  (as `Pattern.ids` are), then must be a key in `issues` (judged); `ids` is
+  non-empty;
 - batch `id`s are unique, case-insensitively;
 - `events` is time-ordered and every `kind` is `dispatch` or `cancel`.
 
 **Checked by `create`, `edit` and `dispatch`** (they load `facts.json` too):
 no issue key belongs to two **open** batches. A batch is open unless its last
-event is `cancel`, or its derived stage is `merged` or `partial`. `partial` is
-terminal: its still-open members are released and may join a new batch.
+event is `cancel`, or its derived stage is `merged`, `partial` or `abandoned`.
+`partial` and `abandoned` are terminal: their still-open members are released
+and may join a new batch.
 `launch.runner` is checked at dispatch, not at load, because the runner package
 need not be installed where the board renders.
 
@@ -95,9 +98,19 @@ need not be installed where the board renders.
 | `pr-open` | that PR is open |
 | `merged` | that PR merged, every member closed |
 | `partial` | that PR merged, a member still open (a `Closes` line was missing) |
+| `abandoned` | that PR closed without merging |
 
-A cancelled batch may be dispatched again: the new `dispatch` event becomes the
-last one.
+A cancelled or abandoned batch may be dispatched again: the new `dispatch`
+event becomes the last one. `abandoned` releases its members, like `partial`.
+
+**Finding the batch PR.** The candidates are every PR with
+`head_ref == branch` among the members' `Issue.prs`, `Facts.prs`, and the
+branch lookup below; when several match, the highest PR number wins (a
+re-dispatch opens a new PR). A merged PR whose body lost every `Closes` line
+is linked to no member, so for each batch at `dispatched`, `collect` also runs
+one `gh pr list --head <branch> --state all` and stores the result in
+`Facts.batch_prs`. `collect` already reads `judgements.yaml` (to view judged
+keys that are no longer open), so it knows the branches.
 
 ### 3.B `batch create`, `edit`, `cancel`, `suggest`
 
@@ -112,8 +125,9 @@ fr triage batch suggest
 
 `create` and `edit` write only the `batches:` section of the agent-owned file,
 through the same model the loader uses, then apply the open-batch rule of §3.A.
-Launch settings resolve from the batch's `launch`, then `.fr/triage.yaml`
-`defaults.launch` (§3.I), then refuse. fr never picks a model. `edit` refuses
+They store only the launch values given explicitly. Launch settings are
+resolved **at dispatch**: the batch's `launch`, then `defaults.launch` from the
+collected config (§3.I), then refuse. fr never picks a model. `edit` refuses
 on a batch whose stage is past `proposed`, except to change `order`.
 
 `suggest` prints candidate groupings and writes nothing. It makes no model
@@ -157,7 +171,9 @@ refused by that message.
      `Closes <owner>/<repo>#<n>` for every member."
    - "Bump the version to `<reserved>`" (only when reserved)
    - "Use `<model>` for every subagent and every model tier"
-4. **Build the WorkItem:** `unit="run"`,
+   - "Do not name any member issue as a phase `tracking_issue` in the plan"
+     (§3.E: the bridge would then own that issue's `fr:` labels)
+4. **Build the WorkItem:** `unit="run"`, `repo=<owner>/<repo>`,
    `id=run_item_id(<repo>, "batch-<id>")`, `workflow="fr-goal"`,
    `parent=None`, `inputs=()`, `tracking=None`, and
    `payload={brief, harness, model, branch, reserved_version, issues}` where
@@ -167,18 +183,28 @@ refused by that message.
 5. **Without `--yes`:** print the brief, runner, harness, model, branch and
    reserved version. Write nothing.
 6. **With `--yes`**, in this order:
-   1. `runner.can_dispatch(item)` → refuse with "runner `<name>` does not take
-      run-unit work". First, because it is the cheap routing gate
-      (`protocols.py` `can_dispatch` docstring) and must not wait behind a
-      backend call.
-   2. `runner.preflight([item])`.
-   3. If `item.id in runner.existing_dispatches([item])`: when the batch's last
-      event is a `dispatch` for this runner, skip to step 6.5 (the **retry
-      path** for failed forge writes). Otherwise refuse, naming the live
-      handle.
-   4. `runner.dispatch(item)` → append the `dispatch` event.
-   5. Forge writes (§3.E). They are idempotent, so the retry path redoes only
-      what is missing.
+   1. **Stage gate.** Refuse unless the batch's stage is `proposed`,
+      `cancelled` or `abandoned`. A batch that is `dispatched` or `pr-open`
+      is never started twice, whether or not its runner still holds it (a
+      closed herdr tab is the normal end of a run, not a free slot).
+   2. **Branch gate.** Refuse if `origin/feat/batch-<id>` already exists and
+      the stage is `proposed`: another scope (e.g. an `--org` triage and a
+      repo triage of the same repo) already dispatched the same batch (§3.C
+      Identity).
+   3. `runner.can_dispatch(item)` → refuse with "runner `<name>` does not take
+      run-unit work". Before any backend call, because it is the cheap
+      routing gate (`protocols.py` `can_dispatch` docstring).
+   4. `runner.preflight([item])`; refuse if `item.id in
+      runner.existing_dispatches([item])` (a live session, naming its handle).
+   5. `runner.dispatch(item)` → append the `dispatch` event.
+   6. Forge writes (§3.E).
+
+**Repair.** `batch dispatch <id> --repair [--yes]` redoes only the §3.E forge
+writes for a batch whose last event is `dispatch`, using that event's branch
+and `reserved_version`. It never calls the runner and never re-reserves. The
+writes are idempotent (the marker check in §3.E), so repair adds only what is
+missing. This is the path after "forge write fails after a successful
+dispatch", whether or not the runner still holds the item.
 
 **Run-unit contract.** A runner takes batches when it implements `from_env`,
 its `can_dispatch` accepts `unit == "run"`, and its `dispatch` honours the
@@ -189,6 +215,9 @@ work is out of scope (§6).
 **`fr-herdr` runner** (new package `packages/fr-herdr`, entry point
 `herdr = "fr_herdr.runner:HerdrRunner"` in group `fr.runners`):
 
+- `name = "herdr"`; `refresh()` is a no-op (no cache); `slot_budget()`
+  returns 1 per call. Batch dispatch dispatches one item per invocation, so it
+  does not consult `slot_budget`; the method exists for `tick` compatibility.
 - `capabilities = {"git", "tests", "scm", "devcontainer"}` (the closed set in
   `fr/capabilities.py`; unit support is `can_dispatch`'s job, not a capability).
 - `from_env()`: no arguments; reads `HERDR_WORKSPACE_ID`.
@@ -202,10 +231,16 @@ work is out of scope (§6).
   <name> <brief>`. The harness table maps harness to agent kind and model flag
   (`claude` → `--model <m>`; others added as verified live). Returns the pane
   id as the handle.
-- **Identity.** The tab label is the full item id (`<repo>/run/batch-<id>`),
-  which is unique across triage scopes. `existing_dispatches` matches live tabs
-  by that label. The agent name only has to satisfy herdr's
-  `[a-z][a-z0-9_-]{0,31}`: `b-<first 20 chars of id>-<4 hex of sha1(item.id)>`.
+- **Identity.** A batch is identified by repo plus batch id, not by triage
+  scope: a repo triage and its owner's `--org` triage that both define batch
+  `x` for the same repo describe the **same** batch, share its item id, tab
+  label and branch, and the branch gate (step 6.2) refuses the second
+  dispatch. The tab label is the full item id (`<repo>/run/batch-<id>`), unique
+  across repos; `existing_dispatches` matches live tabs by it. The agent name
+  only has to satisfy herdr's `[a-z][a-z0-9_-]{0,31}`:
+  `b-<first 20 chars of the batch id>-<4 hex of sha1(item.id)>`.
+- The package is added to the `mypy` invocation in `AGENTS.md` and
+  `.github/workflows/ci.yml`, and to the uv workspace members.
 - `fr-herdr` never imports `fr.triage`; `fr` never imports `fr_herdr`.
 
 fr makes no model call and does not wait on the run: dispatch returns once the
@@ -245,9 +280,10 @@ batch's `bump`. It is stored in the `dispatch` event and written into the brief.
 
 **Reconcile (at merge).** §3.F computes the real order from PR files, which do
 not exist at dispatch time. Before merging, fr re-derives the reservation
-sequence in §3.F order. A PR whose version is not its slot's number is re-set
-through the §3.F update path. fr never merges a PR whose version is not higher
-than main's.
+sequence in §3.F order and reads each PR's version at its head (`git show
+<head_oid>:<source.file>`). A PR whose version is not its slot's number is
+re-versioned by §3.F step 3b, whether or not it is behind main. fr never merges
+a PR whose version is not higher than main's.
 
 Why reserve rather than bump at merge time: in the common case (order
 unchanged) a batch's CI builds and tests the number it will ship, early, and the
@@ -264,8 +300,10 @@ is the same for every runner) writes to each member issue through `GhClient`:
 2. one comment, opening with a hidden marker
    `<!-- fr-batch:<repo>/run/batch-<id> -->`, then: "Dispatched as batch
    `<id>` (<title>), with <other members>. Branch `feat/batch-<id>`." No pane
-   id, host, or other local detail. A comment carrying the marker is never
-   posted twice, which makes the retry path (§3.C step 6.3) idempotent.
+   id, host, or other local detail. Before posting, the engine lists the
+   issue's comments (the new `Forge.list_issue_comments`, §3.F Facts;
+   GitHub-only like the rest of triage collect) and skips the post when a
+   marker comment for this item id exists, which makes `--repair` idempotent.
 
 The brief's early draft PR does the rest: GitHub links it in each issue's
 Development panel, and triage's existing stage derivation moves the member to
@@ -292,10 +330,11 @@ comment "batch `<id>` withdrawn", and appends a `cancel` event.
 **Stale dispatch.** `check` gains a sixth set: an issue labelled
 `fr:in-progress` whose `fr-batch` marker comment is more than 3 days old
 (`.fr/triage.yaml` `stale_dispatch_days`) with no linked PR. The age comes from
-the forge (the marker comment's `createdAt`), so every machine agrees. `collect`
-fetches comments only for issues carrying `fr:in-progress`: one
-`gh issue view --json comments` each, a small, bounded set. Reported, never
-acted on.
+the forge (the marker comment's `createdAt`, stored as
+`Issue.dispatch_marker_at`), so every machine agrees. `collect` calls
+`Forge.list_issue_comments` only for issues carrying `fr:in-progress`: one call
+each, a small, bounded set. `check` reads the age from facts and the threshold
+from the collected config (§3.I). Reported, never acted on.
 
 ### 3.F `batch merge`
 
@@ -306,10 +345,23 @@ fr triage batch merge [<id>...] [--yes]
 No ids: every batch at stage `pr-open`.
 
 **Facts.** `facts.json` moves to schema 3 (`FACTS_SCHEMA` 2 → 3):
-`PullRequest` keeps `files` and gains `head_oid`. `files` is already fetched for
-open PRs only (`OPEN_PR_LIST_FIELDS`, used for anchoring then discarded);
-`headRefOid` is added to `OPEN_PR_LIST_FIELDS`. Collect makes no extra call for
-this. Both fields exist on open PRs only, which is all merge needs.
+
+- `PullRequest` gains `files` and `head_oid` (neither exists today).
+  `headRefOid` is added to `OPEN_PR_LIST_FIELDS`, which already carries `files`.
+- **The open-PR join.** Today a *linked* PR (one on a member's `Issue.prs`) is
+  built from `list_prs(state=all)` with `PR_LIST_FIELDS`, which has neither
+  field, and the open-PR list feeds only *unlinked* PRs into `Facts.prs`. A
+  batch PR is always linked (it closes every member), so collect joins each
+  open-PR record into the linked `PullRequest` with the same (repo, number).
+  This also fills `checks`, `mergeable` and `merge_state` on linked open PRs,
+  which today stay at their defaults.
+- `Issue` gains `dispatch_marker_at` (§3.E); `Facts` gains `batch_prs` (§3.A)
+  and `config` (§3.I).
+- The `Forge` protocol gains `list_issue_comments(repo, number)` and
+  `list_prs_by_head(repo, branch)`; `GhForge` implements both.
+
+Collect's extra calls are bounded: one per `fr:in-progress` issue, one per
+`dispatched` batch, and one config read per repo.
 
 **Order.** Explicit `order` values are hard constraints. The rest are ordered
 so that batches sharing files are not adjacent where avoidable, then by fewest
@@ -321,20 +373,24 @@ steps: that is the conflict prediction, shown before anything merges.
 
 1. Re-read the PR from the forge. Stop the queue if it is a draft, has failing
    required checks, or its head moved since the plan was printed.
-2. Up to date and green → `gh pr merge <n> --<repo default method>
+2. Up to date, green, and its version is its slot number → `gh pr merge <n> --<repo default method>
    --match-head-commit <sha>`. Never `--admin`. A protection refusal (e.g. a
    required review) stops the queue and is reported verbatim.
-3. Behind main → create a scratch worktree of the PR branch under
-   `~/.cache/fr/triage/<scope>/merge/<branch>/` (from the checkout, §3.I) and
-   `git merge origin/<default>`:
-   - no conflict → push;
+3. **Needs a change** (behind main, or 3b: its version is not its slot
+   number) → create a scratch worktree of the PR branch under
+   `~/.cache/fr/triage/<scope>/merge/<branch>/` (from the checkout, §3.I); if
+   behind, `git merge origin/<default>`:
+   - (behind only) no conflict → continue;
    - every conflicted path matches `version.files` → `git checkout --theirs --
      <those paths>` (take main's side, so no file holds conflict markers),
-     then run `set <reserved>`, then `relock`, commit "chore: take reserved
-     version <v> after batch <prev>", push;
+     then continue;
    - any other conflicted path → `git merge --abort`, stop, print the PR and
      the paths, keep the scratch worktree for inspection.
-   After a push, wait for required checks (foreground, d5), then go to step 1.
+   Then, if the version is not the slot number, run `set <slot>` and `relock`
+   **with the scratch worktree as cwd** (super-fr's `set` uses the relative
+   path `scripts/bump-version.py`). Commit ("chore: take reserved version <v>
+   after batch <prev>" when a merge happened, else "chore: re-slot version to
+   <v>"), push, wait for required checks (foreground, d5), then go to step 1.
 4. Remove the scratch worktree after a successful merge.
 
 **Resume.** Queue progress is never stored: every step re-derives from the
@@ -380,10 +436,17 @@ the version `source`, and merge's scratch worktree. So:
   `--checkout PATH`, defaulting to the current directory's git toplevel. The
   clone's `origin` must resolve to the batch's repo, else exit 2 naming both.
   `create`, `edit`, `cancel` and `suggest` need no clone.
-- `.fr/triage.yaml` is a new, optional, committed file in the target repo,
-  read from `origin/<default>` of the checkout with `git show`, never from the
-  working tree. Keys: `defaults.launch`, `version`, `stale_dispatch_days`.
+- `.fr/triage.yaml` is a new, optional, committed file in the target repo.
+  `collect` reads it through the forge (`Forge.read_file_at_ref` at the
+  default branch, which already exists) into `Facts.config`, per repo, so
+  every verb, including `create`, `edit` and `check`, sees it without a
+  clone. `dispatch` and `merge` use the collected config and refuse if it is
+  older than the checkout's `origin/<default>` commit that last touched the
+  file (re-collect). Keys: `defaults.launch`, `version`, `stale_dispatch_days`.
   Absent file: no defaults, no reservations, 3 days.
+- The version `source` itself is read from the checkout (`git show
+  origin/<default>:<file>`) at dispatch and merge, because a reservation must
+  use the version at that moment, not at the last collect.
 - For an `--org` triage, each batch belongs to one repo; its verbs need a
   checkout of that repo, and `--checkout` is how the operator gives one.
 
@@ -394,10 +457,11 @@ the version `source`, and merge's scratch worktree. So:
 | Runner package not installed | exit 2, names the package (same guard as `apply_cmd.py`) |
 | Runner has no `from_env` | exit 2, "cannot be constructed outside its own bridge" |
 | Runner refuses the unit | exit 2, "runner `<name>` does not take run-unit work"; nothing written |
-| Batch live and last event is this runner's dispatch | retry path: redo missing forge writes only |
-| Batch live otherwise | exit 2, names the handle; nothing written |
+| Batch stage `dispatched` or `pr-open` | exit 2; names the stage and, if live, the handle; suggests `--repair` for forge writes |
+| Branch `feat/batch-<id>` already on origin for a `proposed` batch | exit 2, "already dispatched from another scope" |
+| Runner reports the item live | exit 2, names the handle; nothing written |
 | `runner.dispatch` fails | no event, no forge write; exit 1 with the runner's error |
-| Forge write fails after a successful dispatch | event kept; exit 1 listing the issues not written; re-run takes the retry path |
+| Forge write fails after a successful dispatch | event kept; exit 1 listing the issues not written; `dispatch --repair` completes them |
 | Checkout's origin is not the batch's repo | exit 2, names both |
 | No `version` block | no reservation; the brief omits the bump line |
 | Merge conflict outside version files | stop, name PR and paths, keep scratch worktree, exit 1 |
@@ -440,46 +504,58 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
 
 ## 8. Test Plan
 
-1. **Schema 2 model** (unit): an unjudged member, an empty `ids`,
+1. **Schema 2 model** (unit): a case-variant member key normalises to the
+   judged key; an unjudged member, an empty `ids`,
    case-colliding batch ids and out-of-order events are refused at load;
    schema 1 loads as zero batches; a write upgrades it to 2.
 2. **Open-batch rule and stages** (unit, facts constructed): a key in two open
    batches is refused by `create`/`edit`/`dispatch`; members of a `partial` or
    `cancelled` batch may join a new one; each stage in the §3.A table; a
-   re-dispatch after `cancel` is `dispatched`.
+   re-dispatch after `cancel` is `dispatched`; a PR closed unmerged gives
+   `abandoned` and releases members; with two PRs on the branch the higher
+   number wins; a merged PR with no `Closes` lines is found via `batch_prs`
+   and gives `partial`.
 3. **create / edit / suggest** (unit): launch resolution batch → defaults →
    refuse; `edit --add-issue/--remove-issue`; `edit` refused past `proposed`
    except `order`; `suggest` groups by shared cited file, theme and pattern and
    writes nothing.
 4. **Run-unit runner contract** (unit): a reusable contract test (`from_env`,
-   `can_dispatch` on `unit == "run"`, payload honoured); `fr-herdr` passes it;
+   `name`, `refresh`, `slot_budget`, `can_dispatch` on `unit == "run"`,
+   payload honoured); `fr-herdr` passes it;
    `vk` and `cncd` are refused by `load_runner`'s `from_env` check, and a stub
    runner that has `from_env` but only takes phases is refused by
    `can_dispatch` before `preflight` runs.
 5. **Brief and WorkItem** (unit): identical judgements render byte-identical
    briefs; the brief has `Closes` for every member, the branch, the reserved
    version only when present, the model line, and the no-tracking-issue line;
-   the WorkItem has `tracking=None`, `workflow="fr-goal"`, issues in `payload`.
+   the WorkItem has `repo`, `tracking=None`, `workflow="fr-goal"`, issues in
+   `payload`.
 6. **fr-herdr** (unit, `herdr` faked): preflight refuses without `HERDR_ENV`;
    dispatch issues tab create (label = item id), agent start with the model
    flag, and prompt, in order; the agent name fits herdr's pattern for a
-   40-char batch id; two scopes' same batch id get different tab labels and
-   names; `existing_dispatches` matches by tab label.
+   40-char batch id; the same batch id in two different repos gets different
+   tab labels and names; `existing_dispatches` matches by tab label.
 7. **Dispatch without `--yes`** (unit): prints the plan, writes nothing to the
    file, the forge or the runner.
-8. **Forge writes and retry** (unit, `GhClient` faked): label and marker
-   comment on every member only after `runner.dispatch` succeeds; a failed
-   dispatch writes nothing; the comment carries no handle; a re-run after a
-   partial forge failure takes the retry path and posts no duplicate comment.
+8. **Forge writes, gates and repair** (unit, `GhClient` and `Forge`
+   faked): label and marker comment on every member only after
+   `runner.dispatch` succeeds; a failed dispatch writes nothing; the comment
+   carries no handle; `dispatch` is refused at `dispatched`/`pr-open` whether
+   or not the runner reports the item live; a `proposed` batch whose branch
+   exists on origin is refused; `--repair` after a partial forge failure calls
+   no runner, keeps the stored reserved version, and posts no duplicate
+   comment (marker read faked).
 9. **Cancel** (unit): removes the label, posts the withdrawn comment, appends
    the event; without `--yes` writes nothing.
 10. **`in-progress` stage and stale dispatch** (unit): derived from the label;
     outranked by a linked PR; outranks `blocked`; stale from the marker
-    comment's age with no PR; the board places it in-flight with its pill.
+    comment's age (`dispatch_marker_at`) with no PR, threshold from
+    `Facts.config`; the board places it in-flight with its pill.
 11. **Version reservation** (unit): source read from `origin/<default>` by key;
     sequence follows dispatch-time order and bump levels; reconcile re-assigns
-    after a reorder; never merges a version not above main's; a conflict in a
-    file outside `files` globs stops.
+    after a reorder; an up-to-date PR holding the wrong slot is re-versioned
+    (3b) with `set` run in the scratch worktree; never merges a version not
+    above main's; a conflict in a file outside `files` globs stops.
 12. **Merge order** (unit): hard `order` respected; overlapping batches not
     adjacent when avoidable; deterministic tie-breaks.
 13. **Merge refusals** (unit, forge faked): a draft, a failing required check, a
@@ -491,14 +567,21 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     a third conflicting in a non-version file stops the queue with the path
     named and the scratch worktree kept; a re-run resumes at the first unmerged
     PR.
-15. **Facts schema 3** (unit): `files` and `head_oid` kept for open PRs;
-    schema 2 facts are refused with the existing re-collect message.
+15. **Facts schema 3** (unit): an open linked PR gets `files`, `head_oid`,
+    `checks` and `merge_state` from the open-PR join; `dispatch_marker_at`,
+    `batch_prs` and `config` are collected (forge faked); schema 2 facts are
+    refused with the existing re-collect message.
 16. **Import direction** (unit): `test_import_direction.py` admits
     `triage_batch_cmd.py` as a guarded soft point and still refuses any other
     `fr` → `fr_dispatch` import.
-17. **Checkout resolution** (unit): a checkout whose origin is another repo is
-    refused; `.fr/triage.yaml` is read from `origin/<default>`, not the
-    working tree.
+17. **Checkout and config** (unit): a checkout whose origin is another repo is
+    refused; `create` resolves no launch defaults and `dispatch` resolves them
+    from `Facts.config`; `dispatch` refuses a config older than the checkout's
+    last change to `.fr/triage.yaml`; the version source is read from
+    `origin/<default>`, not the working tree.
 18. **Migration exemption** (unit): the pinned exemption test still passes.
-19. **Live walk** (manual, post-implementation): create, dispatch through
+19. **Board** (unit): the Batches section renders each batch's members,
+    derived stage, reserved version, PR, and for `pr-open` batches the planned
+    merge order with shared files; members carry a batch chip.
+20. **Live walk** (manual, post-implementation): create, dispatch through
     `fr-herdr`, and merge two real super-fr batches with overlapping files.

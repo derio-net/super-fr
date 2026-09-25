@@ -4179,4 +4179,4 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-triage-batches-design.md#3f-batch-merge
     levels: {}
     status: not-implemented
-    notes: Test Plan items 12-15; live walk (item 19) owed post-implementation.
+    notes: Test Plan items 12-15 and 19 (board); live walk (item 20) owed post-implementation.
