@@ -199,3 +199,8 @@ tests/integration/test_usage_report_cli.py runs the real fr console script (repo
 ### p1-golden-e50-resolved · finding [refuted] · resolves p1-golden-e50: Golden per-session paperwork share: e50c7ff5 reproduces 21.9% vs the audit's published 23.6%
 
 Not a defect: the product prices each message by its own model (spec §5.A.2); the published 23.6% came from the prototype's thread-level model-mix approximation, which the product reproduces when that method is applied. The test now pins the correct per-message figure (21.9±0.5).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r12-resolved created=2026-09-25T20:33:53 state=fixed resolves=p2-r12 -->
+### p2-r12-resolved · finding [fixed] · resolves p2-r12: UsageRecord.tool_calls targets hold raw commands/paths; phase 2 must serialize an allowlist projection
+
+fr.usage.file.session_entry/dump_usage build plain mappings field by field (no model_dump of a UsageRecord); tests/unit/test_usage_kind.py::test_a_capture_serializes_no_host_url_path_or_content feeds a record whose tool-call targets hold a hostname, ~/ path, /Users path and URL and asserts none reach the YAML
