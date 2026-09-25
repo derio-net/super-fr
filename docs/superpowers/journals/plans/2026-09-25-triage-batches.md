@@ -324,3 +324,6 @@ The first full run had two failures, both from this phase: (1) test_skill_valida
 
 <!-- fr:journal kind=finding scope=plan id=r3-f6 created=2026-09-26T00:54:58 phase=3 state=open review_scope=in -->
 ### r3-f6 · finding [open] (reviewer: in scope) · A re-run force-removes the scratch worktree kept for inspection, destroying manual fixes (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r3-f7 created=2026-09-26T00:54:59 phase=3 state=open review_scope=in -->
+### r3-f7 · finding [open] (reviewer: in scope) · commit_all runs git add --all after set/relock in the scratch worktree, pushing any untracked artifacts to another run's PR (phase 3)
