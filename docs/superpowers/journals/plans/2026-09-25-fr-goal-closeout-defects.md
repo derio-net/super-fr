@@ -63,3 +63,18 @@ the live/reaped resolve+except duplication was folded into one `_verify_or_fail`
 (P1.T1.S3) mirroring the existing `_fail`-then-`raise AssertionError("unreachable")` idiom
 already used elsewhere in this file. No re-bump: e973889c already moved 4.20.1 -> 4.21.0
 and `bump-version.py --check` still passes.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-09-25T10:47:20 phase=1 state=open review_scope=out -->
+### p1-r1 · finding [open] (reviewer: out of scope) · _resolve_default_branch's host-CLI lookup is untimed (phase 1)
+
+Reviewer (minor, out): local.py _resolve_default_branch calls gh/glab/tea via self.run, not _run_network (60s timeout, sanitized env); bare verify-merge now reaches it when origin/HEAD is unset.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-09-25T10:47:21 state=open resolves=p1-r1 out_of_scope=true -->
+### p1-r1-resolved · finding [out-of-scope] · resolves p1-r1: _resolve_default_branch's host-CLI lookup is untimed
+
+Verified: pre-existing in the resolver (also serves up and gc). verify-merge was never network-free — its own git fetch at local.py:1066 already runs untimed via self.run — so this change adds no new class of hang. Candidate follow-up: route both through _run_network.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-09-25T10:47:21 phase=1 -->
+### review-p1 · review · Phase 1 review (phase 1)
+
+Dispatched reviewer (sonnet) over e973889c+556024d8: no critical/important findings; verdict Ready. One minor out-of-scope finding p1-r1 (untimed host-CLI lookup in _resolve_default_branch) verified against local.py and filed out-of-scope. Reviewer independently confirmed 273 tests, ruff, mypy, fr validate artifacts, acceptance check green.
