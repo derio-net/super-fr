@@ -398,3 +398,8 @@ Post-deliver review (low): no test asserts the handoff's 'start a NEW session in
 ### pd-r2-resolved · finding [fixed] · resolves pd-r2: A failed diff --cached probe is reported as unchanged
 
 1f441b3f: commit_paths now returns committed=False with a 'could not inspect the index' reason on a non-zero diff --cached probe, instead of unchanged=True; only rc==0 + empty stdout is unchanged. Test: test_a_failed_diff_probe_is_not_reported_as_unchanged. test_migration_commit.py/test_migration_trigger.py pass unmodified.
+
+<!-- fr:journal kind=finding scope=plan id=pd-r3-resolved created=2026-09-25T15:41:21 state=fixed resolves=pd-r3 -->
+### pd-r3-resolved · finding [fixed] · resolves pd-r3: No CLI-level test at the two dogfood wiring points
+
+9364a3bf: added test_resolving_deliver_names_the_primary_checkout_from_a_linked_worktree (revert-proofed by hand against repo_root) and test_advance_on_an_already_finished_run_reports_the_cursor_as_committed (amend path prints no handoff, so the unchanged mapping is exercised via a second advance) to test_run_cli.py. Both pass against the existing implementation.
