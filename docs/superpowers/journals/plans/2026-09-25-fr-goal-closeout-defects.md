@@ -138,3 +138,8 @@ run_cmd's contract: the JSON brief is the last line a naive tail -1 reads. The c
 ### p3-f1 · finding [open] · Phase-2 regression: test_remote_row_checks_the_validator_wrapper_in_origin_ref (phase 3)
 
 Full suite (phase 3): tests/unit/test_isolation_branch_classify.py::test_remote_row_checks_the_validator_wrapper_in_origin_ref expects IsolationError matching 'not in origin/feat/x'; 99f3cb7b (phase 2, neutral remedy) reworded local.py's message to 'plan repo has docs/superpowers/plans in origin/feat/x but no scripts/validate-plans.sh there; run fr init validator-wrapper ...'. Not caused by phase 3 (no isolation code or that test touched); outside this phase's files, so left for the orchestrator. The test's intent (the check reads origin/<B>) is still met by the new text, so updating the regex is likely the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p3-f1-resolved created=2026-09-25T12:08:22 phase=3 state=fixed resolves=p3-f1 -->
+### p3-f1-resolved · finding [fixed] · resolves p3-f1: Phase-2 regression: test_remote_row_checks_the_validator_wrapper_in_origin_ref (phase 3)
+
+Regex updated to the phase-2 wording ('in origin/feat/x but no scripts/validate-plans.sh there'), equally specific to origin/<B>; test file green (35 passed). Done in phase 3 so the full-suite gate is green.
