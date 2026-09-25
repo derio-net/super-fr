@@ -275,9 +275,9 @@ state:
         / usage-captured-at-deliver / usage-readable-on-any-host -> ci; acceptance
         check 0; parity --check 0
     P2.T7.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:30:58+00:00'
+      note: ruff/mypy clean; full suite 5385 passed
   completion:
     at: null
     note: null
