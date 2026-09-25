@@ -184,3 +184,8 @@ Rollup.turns_by_activity (a message is one turn of each activity it touched, pri
 ### p1-r11-resolved · finding [fixed] · resolves p1-r11: Golden test asserts only the pooled share, not the per-session 23-37% range
 
 Added test_golden_audit_every_sessions_paperwork_share_is_23_to_37, parametrized per session, band [22.5, 37.5]. Re-run: 31.2 34.0 30.5 22.7 21.9 37.2 31.9 37.0 36.0. e50c7ff5 (21.9 vs published 23.6) is a strict xfail, journaled as open finding p1-golden-e50 rather than tuned away.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r13-resolved-2 created=2026-09-25T20:22:13 state=fixed resolves=p1-r13 -->
+### p1-r13-resolved-2 · finding [fixed] · resolves p1-r13: AGENTS.md repo shape has no fr/usage entry
+
+Supersedes the placeholder note 'x' (a diagnostic call). AGENTS.md Repo shape: fr/usage entry after fr/triage (readers, classify, rollup, render, CLI, cache location, READ_ONLY, fr-audit).
