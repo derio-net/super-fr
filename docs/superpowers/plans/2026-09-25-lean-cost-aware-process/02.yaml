@@ -201,9 +201,9 @@ state:
       ticked_at: '2026-09-25T18:33:46+00:00'
       note: fr/usage/file.py; kind usage v1 registered, validate_usage
     P2.T2.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T18:33:46+00:00'
+      note: ruff/mypy clean; fr validate artifacts 0
     P2.T3.S1:
       state: ' '
       ticked_at: null
