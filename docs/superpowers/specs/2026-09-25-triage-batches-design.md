@@ -139,6 +139,7 @@ path; the same `theme`; the same `patterns` entry. The agent accepts one with
 
 ```
 fr triage batch dispatch <id> [--to RUNNER] [--yes]
+fr triage batch dispatch <id> --repair [--handle H] [--reserved-version V] [--yes]
 ```
 
 **Where the code lives.** `fr` may import `fr_dispatch` at exactly one soft
@@ -193,20 +194,44 @@ refused by that message.
       the stage is `proposed`: another scope (e.g. an `--org` triage and a
       repo triage of the same repo) already dispatched the same batch (§3.C
       Identity).
-   3. `runner.can_dispatch(item)` → refuse with "runner `<name>` does not take
-      run-unit work". Before any backend call, because it is the cheap
+   3. **Write gate.** The judgements the dispatch event will leave must pass
+      the open-batch rule and compare-before-write (the file's batches are
+      the ones this command read) and validate through the loader's model,
+      checked without writing. A launch cannot be undone, so the write after
+      it must not be able to refuse on a rule that was checkable before it
+      (review r3-f1: a cancelled batch redispatched after a member joined a
+      new proposed batch used to launch, then fail its event write).
+   4. `runner.can_dispatch(item)` → refuse with "runner `<name>` does not take
+      run-unit work". Before any other backend call, because it is the cheap
       routing gate (`protocols.py` `can_dispatch` docstring).
-   4. `runner.preflight([item])`; refuse if `item.id in
+   5. `runner.preflight([item])`; refuse if `item.id in
       runner.existing_dispatches([item])` (a live session, naming its handle).
-   5. `runner.dispatch(item)` → append the `dispatch` event.
-   6. Forge writes (§3.E).
+   6. Compare-before-write again, immediately before the launch; then
+      `runner.dispatch(item)` → append the `dispatch` event. Should that write
+      still fail (another writer between launch and write), exit 1 naming the
+      handle, the branch, the reserved version and the exact `--repair`
+      command that records it; nothing is written to the forge.
+   7. Forge writes (§3.E).
 
 **Repair.** `batch dispatch <id> --repair [--yes]` redoes only the §3.E forge
-writes for a batch whose last event is `dispatch`, using that event's branch
-and `reserved_version`. It never calls the runner and never re-reserves. The
-writes are idempotent (the marker check in §3.E), so repair adds only what is
-missing. This is the path after "forge write fails after a successful
-dispatch", whether or not the runner still holds the item.
+writes for a batch whose last event is `dispatch` and whose stage is
+`dispatched` or `pr-open`, using that event's branch and `reserved_version`.
+A `merged`, `partial` or `abandoned` batch is refused: its members are closed
+or released, and re-labelling them would mark them taken again (review
+r3-f9). It never calls the runner and never re-reserves. The writes are
+idempotent (the marker check in §3.E), so repair adds only what is missing.
+This is the path after "forge write fails after a successful dispatch",
+whether or not the runner still holds the item.
+
+When the last event is NOT a `dispatch` (a launch whose event write failed,
+step 6.6), `--repair` records the missing event instead, and only when the
+runner reports the item live (`preflight`, then `existing_dispatches`): the
+runner's answer, not the operator's, is the evidence that a dispatch
+happened. The event takes `--handle` (default: the item id) and
+`--reserved-version`, which the failed dispatch printed and which is required
+when the repo declares a version block; the write holds the open-batch rule
+like any other; then the forge writes follow. Nothing is launched and
+nothing is re-reserved.
 
 **Run-unit contract.** A runner takes batches when it implements `from_env`,
 its `can_dispatch` accepts `unit == "run"`, and its `dispatch` honours the
@@ -275,10 +300,16 @@ version:
   explicit version, `patch|minor|major`, or `--check`) and already runs
   `uv sync`, so `relock` is redundant there.
 
-**Reserve (at dispatch).** Dispatch-time order is the batch's explicit `order`,
-then dispatch sequence. The reservation is the next version after the highest
-of (the `source` version on origin, every live reservation), bumped by the
-batch's `bump`. It is stored in the `dispatch` event and written into the brief.
+**Reserve (at dispatch).** Reservations follow dispatch sequence. The
+reservation is the next version after the highest of (the `source` version on
+origin, every live reservation), bumped by the batch's `bump`. It is stored in
+the `dispatch` event and written into the brief. A batch's explicit `order`
+does not reorder reservations: it is a merge-time constraint, applied by
+Reconcile below, which re-slots any PR whose version is not its slot in the
+real merge order. Reserving by explicit order would reuse a number already
+briefed to another live run, so two runs would build the same version; a
+monotonic reservation never does (plan journal decision `p3-reserve-order`,
+recorded in this spec's journal after review r3-f8).
 
 **Reconcile (at merge).** §3.F computes the real order from PR files, which do
 not exist at dispatch time. Before merging, fr re-derives the reservation
@@ -341,7 +372,7 @@ from the collected config (§3.I). Reported, never acted on.
 ### 3.F `batch merge`
 
 ```
-fr triage batch merge [<id>...] [--yes]
+fr triage batch merge [<id>...] [--method merge|squash|rebase] [--yes]
 ```
 
 No ids: every batch at stage `pr-open`.
@@ -378,25 +409,48 @@ steps: that is the conflict prediction, shown before anything merges.
 1. Re-read the PR from the forge. Stop the queue if it is a draft, has failing
    required checks, or its head moved since the plan was printed.
 2. Up to date, green, and its version is its slot number →
-   `GhClient.pr_merge(repo, n, head_sha=<sha>, method=<repo default>)` (on
+   `GhClient.pr_merge(repo, n, head_sha=<sha>, method=<method>)` (on
    GitHub: `gh pr merge <n> --<method> --match-head-commit <sha>`). Never `--admin`. A protection refusal (e.g. a
-   required review) stops the queue and is reported verbatim.
+   required review) stops the queue and is reported verbatim. `<method>` is
+   the repo's own default, read once before the plan through
+   `GhClient.repo_merge_methods` (on GitHub, `gh repo view --json
+   viewerDefaultMergeMethod,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed`);
+   `--method` overrides it and is refused (exit 2) when the repo does not
+   allow it. With no usable default and several allowed methods, merge asks
+   for `--method` rather than guess (review r3-f4).
 3. **Needs a change** (behind main, or 3b: its version is not its slot
    number) → create a scratch worktree of the PR branch under
    `~/.cache/fr/triage/<scope>/merge/<branch>/` (from the checkout, §3.I); if
    behind, `git merge origin/<default>`:
    - (behind only) no conflict → continue;
-   - every conflicted path matches `version.files` → `git checkout --theirs --
-     <those paths>` (take main's side, so no file holds conflict markers),
-     then continue;
-   - any other conflicted path → `git merge --abort`, stop, print the PR and
-     the paths, keep the scratch worktree for inspection.
-   Then, if the version is not the slot number, run `set <slot>` and `relock`
-   **with the scratch worktree as cwd** (super-fr's `set` uses the relative
-   path `scripts/bump-version.py`). Commit ("chore: take reserved version <v>
+   - every conflicted path matches `version.files` AND is resolvable →
+     `git checkout --theirs -- <those paths>` (take main's side, so no file
+     holds conflict markers), then continue. `--theirs` replaces the WHOLE
+     file, so a path is resolvable only when the PR's own change to it (merge
+     base → PR head) is the version and nothing else: every changed line is
+     the base line with `"<old version>"` replaced by `"<new version>"`
+     (review r3-f2; journal decision d3 confines resolution to the version).
+     A lockfile (`*.lock`, `package-lock.json`, …) the PR changed further is
+     resolvable only when `relock` is declared, because it is derived: main's
+     side plus a relock regenerates it from the PR's manifests;
+   - any other conflicted path, including a version file whose PR change is
+     more than the version (a new dependency in `pyproject.toml`) →
+     `git merge --abort`, stop, print the PR and the paths, keep the scratch
+     worktree for inspection.
+   The merge runs with `-c rerere.enabled=false`: a recorded resolution from
+   the operator's config would make a non-version conflict look clean.
+   Then, if the version is not the slot number, run `set <slot>`, and
+   `relock` after it or after taking a lockfile, **with the scratch worktree
+   as cwd** (super-fr's `set` uses the relative path
+   `scripts/bump-version.py`). Commit ("chore: take reserved version <v>
    after batch <prev>" when a merge happened, else "chore: re-slot version to
-   <v>"), push, wait for required checks (foreground, d5), then go to step 1.
-4. Remove the scratch worktree after a successful merge.
+   <v>"), staging tracked changes and the declared `version.files` only,
+   never untracked output of `set`/`relock` (review r3-f7); push, wait for
+   required checks (foreground, d5), then go to step 1.
+4. Remove the scratch worktree after a successful merge. A re-run replaces a
+   kept scratch worktree only when it is clean: one holding local changes
+   (an operator's manual fix) is refused by name, with the command that
+   discards it (review r3-f6).
 
 **Resume.** Queue progress is never stored: every step re-derives from the
 forge, so re-running after a stop starts at the first unmerged batch.
@@ -444,9 +498,11 @@ the version `source`, and merge's scratch worktree. So:
   `collect` reads it through the forge (`Forge.read_file_at_ref` at the
   default branch, which already exists) into `Facts.config`, per repo, so
   every verb, including `create`, `edit` and `check`, sees it without a
-  clone. `dispatch` and `merge` use the collected config and refuse if it is
-  older than the checkout's `origin/<default>` commit that last touched the
-  file (re-collect). Keys: `defaults.launch`, `version`, `stale_dispatch_days`.
+  clone. `dispatch` and `merge` use the collected config and refuse
+  (re-collect) unless it is the file on the checkout's `origin/<default>`
+  now, compared by content (parsed, key for key), not by committer dates,
+  which a rebase or a skewed clock sets freely (review r3-f13). A file added
+  or removed there since the collect is refused the same way. Keys: `defaults.launch`, `version`, `stale_dispatch_days`.
   Absent file: no defaults, no reservations, 3 days.
 - The version `source` itself is read from the checkout (`git show
   origin/<default>:<file>`) at dispatch and merge, because a reservation must
@@ -476,6 +532,7 @@ Operations this spec **adds** to the protocol:
 | `pr_required_checks(repo, number)` / `wait_required_checks` | §3.F steps 1 and 3 | implemented | unsupported |
 | `pr_merge(repo, number, head_sha, method)` | §3.F step 2 | implemented | unsupported |
 | `closing_ref(repo, number)` | §3.C brief | implemented | unsupported |
+| `repo_merge_methods(repo)` → default, allowed | §3.F step 2 | implemented | unsupported |
 
 "Unsupported" is a typed `UnsupportedForgeOperation(op, backend, "gh#611")`
 raised by the glab/tea adapters, which the batch verbs turn into exit 2 with
@@ -581,7 +638,11 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
    or not the runner reports the item live; a `proposed` batch whose branch
    exists on origin is refused; `--repair` after a partial forge failure calls
    no runner, keeps the stored reserved version, and posts no duplicate
-   comment (marker read faked).
+   comment (marker read faked); `--repair` refuses a merged, partial or
+   abandoned batch; a redispatch that would put a member in two open batches
+   is refused before any runner call; an event write that fails after the
+   launch exits 1 naming the handle and the `--repair` command, which then
+   records the event when the runner reports the item live.
 9. **Cancel** (unit): removes the label, posts the withdrawn comment, appends
    the event; without `--yes` writes nothing.
 10. **`in-progress` stage and stale dispatch** (unit): derived from the label;
@@ -589,8 +650,9 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     comment's age (`dispatch_marker_at`) with no PR, threshold from
     `Facts.config`; the board places it in-flight with its pill.
 11. **Version reservation** (unit): source read from `origin/<default>` by key;
-    sequence follows dispatch-time order and bump levels; reconcile re-assigns
-    after a reorder; an up-to-date PR holding the wrong slot is re-versioned
+    reservations follow dispatch sequence and bump levels, each after the
+    highest live reservation (explicit `order` is not consulted at dispatch);
+    reconcile re-assigns slots in merge order, explicit `order` included; an up-to-date PR holding the wrong slot is re-versioned
     (3b) with `set` run in the scratch worktree; never merges a version not
     above main's; a conflict in a file outside `files` globs stops.
 12. **Merge order** (unit): hard `order` respected; overlapping batches not
@@ -603,7 +665,10 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     a lockfile) merge in sequence, the second resolved via `--theirs` + `set`;
     a third conflicting in a non-version file stops the queue with the path
     named and the scratch worktree kept; a re-run resumes at the first unmerged
-    PR.
+    PR. A PR that bumped the version AND added a dependency to a version file
+    stops the queue naming it, the dependency intact; an up-to-date PR off its
+    slot is re-slotted (3b); a kept worktree with a manual fix is not
+    replaced; untracked `set` output is never committed.
 15. **Facts schema 3** (unit): an open linked PR gets `files`, `head_oid`,
     `checks` and `merge_state` from the open-PR join; `dispatch_marker_at`,
     `batch_prs` and `config` are collected (forge faked); schema 2 facts are
@@ -613,8 +678,8 @@ The fr-triage spec (`implemented/specs/2026-09-21-fr-triage-design.md`) listed:
     `fr` → `fr_dispatch` import.
 17. **Checkout and config** (unit): a checkout whose origin is another repo is
     refused; `create` resolves no launch defaults and `dispatch` resolves them
-    from `Facts.config`; `dispatch` refuses a config older than the checkout's
-    last change to `.fr/triage.yaml`; the version source is read from
+    from `Facts.config`; `dispatch` and `merge` refuse a collected config that
+    is not the `.fr/triage.yaml` on the checkout's `origin/<default>`; the version source is read from
     `origin/<default>`, not the working tree.
 18. **Migration exemption** (unit): the pinned exemption test still passes.
 19. **Forge adapter** (unit): each method §3.J adds is implemented by
