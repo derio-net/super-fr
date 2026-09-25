@@ -314,3 +314,8 @@ aaf707cf: fr isolation up writes target (devcontainer|worktree) beside unchanged
 ### p2-r22-resolved · finding [fixed] · resolves p2-r22: fr run cost drops all migrated entries once any live capture exists
 
 9e1ec7c2: effective_entries ignores a migrated entry only when a live capture read its session or covers every step it names; partly covered keeps uncovered steps (tokens dropped); fr run cost prints N migrated entries ignored. Tested with an unrelated live closeout session.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r23-resolved created=2026-09-25T22:16:00 state=fixed resolves=p2-r23 -->
+### p2-r23-resolved · finding [fixed] · resolves p2-r23: Dispatched reviewer attempts (agent, no agent_type) labelled role: main
+
+9e1ec7c2: split_usage maps an attempt with agent but no agent_type to role subagent; both committed usage files regenerated through split_run_usage (v6 cursors at eab566e9^) plus capture().
