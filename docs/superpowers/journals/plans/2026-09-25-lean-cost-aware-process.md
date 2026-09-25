@@ -464,3 +464,8 @@ verify_operator_claim moved to fr.journal.operator; the engine runs it in _journ
 ### p3-r2-resolved · finding [fixed] · resolves p3-r2: Plain resolve --step deliver --state done bypasses the live PR-section check
 
 _deliver_pr_gate in _resolve_body (step emits pr, state done, before _complete_step) renders pr-body.md and checks live missing_sections; engine pre-check removed. 15 deliver/pr-emitting tests now serve a complying PR via the complete_live_pr fixture. test_the_flag_form_deliver_is_refused_without_the_out_of_scope_section.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-09-25T23:47:58 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Invalid-record atomicity: crash window, retry wedges on existing ids, restore misses cursor/usage paths and can revert committed files
+
+Record removed only after all writes+gates (tracked: just before the commit that records it); identical re-applied journal entries/resolutions/rows are no-ops so a retry heals; ResolveGuard remembers cursor/usage/spec-journal/PR-render bytes before writing; no restore once a commit landed. Crash/heal/changed-entry/post-commit-raise tests in test_record_review_fixes.
