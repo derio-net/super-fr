@@ -55,3 +55,23 @@ Verification-only task; the loader change (a read-versions tuple in _check_schem
 
 <!-- fr:journal kind=finding scope=plan id=r1-2 created=2026-09-25T20:59:04 phase=1 state=fixed review_scope=in -->
 ### r1-2 · finding [fixed] (reviewer: in scope) · No import-boundary tripwire for fr_herdr — fr/fr_dispatch never import fr_herdr; fr_herdr never imports fr.triage (self-tested pattern) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-3 created=2026-09-25T20:59:05 phase=1 state=fixed review_scope=in -->
+### r1-3 · finding [fixed] (reviewer: in scope) · Nothing checked HerdrRunner against the Runner protocol — TYPE_CHECKING assignment; mypy verified to fail on drift (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-4 created=2026-09-25T20:59:06 phase=1 state=fixed review_scope=in -->
+### r1-4 · finding [fixed] (reviewer: in scope) · HERMES.md mypy line omitted packages/fr-herdr/src — added (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-docs created=2026-09-25T20:59:06 phase=3 state=open review_scope=in -->
+### r1-docs · finding [open] (reviewer: in scope) · README package table, HERMES.md package prose and an AGENTS.md fr-herdr bullet are owned by no phase — P3.T5.S2 widened to own them (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=r1-5 created=2026-09-25T20:59:07 phase=1 state=open review_scope=out -->
+### r1-5 · finding [open] (reviewer: out of scope) · fr_cncd missing from test_fr_imports_no_siblings banned set (pre-existing) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=r1-5-resolved created=2026-09-25T20:59:07 state=open resolves=r1-5 out_of_scope=true answered_by=agent -->
+### r1-5-resolved · finding [out-of-scope] · resolves r1-5: fr_cncd missing from test_fr_imports_no_siblings banned set (pre-existing)
+
+Pre-existing gap in test_import_direction.py, not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=r1-6 created=2026-09-25T20:59:08 phase=1 state=open review_scope=out -->
+### r1-6 · finding [open] (reviewer: out of scope) · Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take (phase 1)
