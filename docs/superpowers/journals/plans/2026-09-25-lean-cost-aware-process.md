@@ -34,3 +34,8 @@ fr usage report over the nine golden runs wrote ~/.cache/fr/usage/paper-trail.ht
 ### f23e18967c66 · discovery · install.sh needs no per-skill wiring for fr-audit (phase 1)
 
 scripts/install.sh copies every plugins/super-fr/skills/*/ by glob (Claude plugin, OpenCode, Hermes); SKILL_NAMES is the legacy stale-copy list. fr-audit ships by the glob; fr skills lists it (skills_cmd). Explainers currency: a new shipped skill — the explainer update is owed with the 4.x minor bump in phase 3, not done here.
+
+<!-- fr:journal kind=discovery scope=plan id=674d801a6362 created=2026-09-25T19:55:57 phase=1 -->
+### 674d801a6362 · discovery · no-refactor-because P1.T4 (phase 1)
+
+rollup/render/usage_cmd are fresh modules written to the shape the tests pin; ruff/mypy clean, nothing duplicated to fold.
