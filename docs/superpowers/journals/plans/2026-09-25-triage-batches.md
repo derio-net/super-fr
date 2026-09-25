@@ -19,3 +19,8 @@ This task IS the phase's refactor and quality gate; a refactor step of a refacto
 ### d92d3b3c2ec6 · discovery · no-refactor-because P3.T5 (phase 3)
 
 Docs, skill prose, mirrors and the version bump: no production code is written, so there is nothing to refactor; the mirror and bump --check gates in P3.T6 cover correctness.
+
+<!-- fr:journal kind=discovery scope=plan id=3cc7e3015849 created=2026-09-25T20:38:54 phase=3 -->
+### 3cc7e3015849 · discovery · no-refactor-because P3.T6 (phase 3)
+
+This task IS the phase's refactor and quality gate; a refactor step of a refactor step would be circular.
