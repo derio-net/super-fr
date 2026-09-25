@@ -339,3 +339,8 @@ e88deb21: SchemaMigration.companions declared up front (run 6->7 declares usage/
 ### p2-r27-resolved · finding [fixed] · resolves p2-r27: measure_dispatch/measure_attempt/TranscriptReader.measure left without a caller
 
 a268b717: measure_dispatch, measure_attempt, TranscriptReader(.measure) and the readers' measure/locate_session deleted with what only they used (Measurement, select_*, reader_for/READERS, read_claude_code, UsageTotals, ...) and their tests; kept _read_records, message_groups, attribute_dispatches, gates, dispatched_from_this_session.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r28-resolved created=2026-09-25T22:16:03 state=fixed resolves=p2-r28 -->
+### p2-r28-resolved · finding [fixed] · resolves p2-r28: Operator-gate unobserved recorded only on claude-code/no harness
+
+ea8a6b46: operator gate records unobserved=operator-gate and warns on every harness without a question reader (opencode, hermes tested); warning names the harness.
