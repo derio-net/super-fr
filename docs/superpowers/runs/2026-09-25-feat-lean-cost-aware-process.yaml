@@ -77,10 +77,28 @@ steps:
       turns: 0
       sessions: 1
   implement:
-    state: pending
+    state: running
+    at: '2026-09-25T17:23:07+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/4:
+        state: manual
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-25T17:23:07+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
+          estimate:
+            journal_entries: 1
+            journal_lines: 6
+            handoff_chars: 412
+            spec_bytes: 30323
+            plan_bytes: 35422
   journal-check:
     state: pending
   deliver:
