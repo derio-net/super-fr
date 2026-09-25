@@ -29,3 +29,8 @@ tests/unit/test_usage_report.py::test_golden_audit_pooled_shares ran locally ove
 ### b6d0f33cd59d · discovery · Audit page render vs published per-session split: 7 of 9 within 0.5 points (phase 1)
 
 fr usage report over the nine golden runs wrote ~/.cache/fr/usage/paper-trail.html. Pooled matches. Two sessions differ by more than 0.5: 05f4a8ab (paperwork 31.2 vs 30.6, implementation 38.7 vs 42.6) because its main transcript grew from 179 to 203 messages after the audit snapshot (data drift, same classification per call); and e50c7ff5 (21.9/29.4 vs 23.6/28.2) because the prototype approximated per-model dollars by each thread's model mix while the product prices each message by its own model — re-applying the prototype method to the product's classification reproduces 23.7/28.2. The product's figure is the more exact one; the published per-session figures were not re-derived.
+
+<!-- fr:journal kind=discovery scope=plan id=f23e18967c66 created=2026-09-25T19:55:50 phase=1 -->
+### f23e18967c66 · discovery · install.sh needs no per-skill wiring for fr-audit (phase 1)
+
+scripts/install.sh copies every plugins/super-fr/skills/*/ by glob (Claude plugin, OpenCode, Hermes); SKILL_NAMES is the legacy stale-copy list. fr-audit ships by the glob; fr skills lists it (skills_cmd). Explainers currency: a new shipped skill — the explainer update is owed with the 4.x minor bump in phase 3, not done here.
