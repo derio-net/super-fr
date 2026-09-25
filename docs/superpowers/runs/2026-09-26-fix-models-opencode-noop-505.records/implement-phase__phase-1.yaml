@@ -1,0 +1,12 @@
+schema_version: 1
+run: 2026-09-26-fix-models-opencode-noop-505
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+refactor:
+  P1.T1: no refactoring needed — tests added, no implementation in this step
+journal: []
+resolves: []
+evidence: {}
