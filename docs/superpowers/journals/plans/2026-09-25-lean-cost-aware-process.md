@@ -194,3 +194,8 @@ Supersedes the placeholder note 'x' (a diagnostic call). AGENTS.md Repo shape: f
 ### 7cf4d2239290-resolved · finding [fixed] · resolves 7cf4d2239290: audit-pages-regenerated not flipped: no integration test of fr usage report yet
 
 tests/integration/test_usage_report_cli.py runs the real fr console script (report --run --format html -o) over a temp git repo with a v6 cursor, FR_TRANSCRIPT_ROOT at the committed fixture, HOME and cache in tmp. It asserts the five sections, By-step rows, the dash row for a missing session, no $0, and an untouched repo. audit-pages-regenerated set to ci with the int level; usage-reconstruct-cross-harness notes now cite #623. Also: sub-cent figures render <$0.01, not $0.00.
+
+<!-- fr:journal kind=finding scope=plan id=p1-golden-e50-resolved created=2026-09-25T20:24:04 state=refuted resolves=p1-golden-e50 -->
+### p1-golden-e50-resolved · finding [refuted] · resolves p1-golden-e50: Golden per-session paperwork share: e50c7ff5 reproduces 21.9% vs the audit's published 23.6%
+
+Not a defect: the product prices each message by its own model (spec §5.A.2); the published 23.6% came from the prototype's thread-level model-mix approximation, which the product reproduces when that method is applied. The test now pins the correct per-message figure (21.9±0.5).
