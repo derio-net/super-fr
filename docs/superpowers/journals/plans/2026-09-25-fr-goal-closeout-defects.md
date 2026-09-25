@@ -318,3 +318,8 @@ Dispatched reviewer (sonnet) over 7e983b53: r1 (important: handoff claimed 'push
 ### p3-m5-resolved · finding [fixed] · resolves p3-m5: Ready-checklist 'no commits since the ok' must exempt chore(fr) commits
 
 618fba30: fr-goal SKILL.md §8 Ready-checklist now excludes fr's own chore(fr): record commits from 'no commits since the ok'
+
+<!-- fr:journal kind=discovery scope=plan id=47c79242817d created=2026-09-25T14:29:36 phase=5 -->
+### 47c79242817d · discovery · P5.T1.S1 e2e test: RED verified by disabling the commit seam (phase 5)
+
+Temporarily made fr.records_commit.commit_records no-op (returning CommitOutcome(committed=False, ...)) and reran tests/unit/test_closeout_e2e.py: it failed for the right reason (deliver's handoff printed 'cursor NOT committed' instead of 'cursor committed as'). Reverted (git checkout -- packages/fr/src/fr/records_commit.py) and confirmed green again. No fixture piece needed a live forge except the PR-state lookup in verify_merge, which is monkeypatched on a real HostWorktreeTarget instance — every git operation the test asserts on (worktree state, squash-merge, push, fetch, reap-hazard) is real.
