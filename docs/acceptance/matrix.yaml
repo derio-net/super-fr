@@ -4111,6 +4111,12 @@ rows:
       archive, down) from the run file.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-fr-goal-closeout-defects-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'gh#610; target level: unit (ci). Born at brainstorm.'
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_closeout.py
+      - super-fr:tests/unit/test_pickup_cmd.py
+      - super-fr:tests/unit/test_run_cli.py
+    status: ci
+    notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
+      conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
+      handoff tests in test_run_cli.py.'

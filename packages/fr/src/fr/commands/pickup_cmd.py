@@ -8,23 +8,63 @@ import typer
 from rich.console import Console
 
 from fr import parse
-from fr.commands.common import require_migrated_layout
+from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError
+from fr.run.closeout import CloseoutNotReadyError, closeout_brief
+from fr.run.model import RunStateError, load_run_state
 
 console = Console()
 err_console = Console(stderr=True)
 
 
 def pickup_command(
-    plan_dir: Path = typer.Argument(..., help="Path to plan folder."),
-    phase: int = typer.Option(..., "--phase", help="Phase number to pick up."),
+    plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
+    phase: int | None = typer.Option(None, "--phase", help="Phase number to pick up."),
+    run: str | None = typer.Option(
+        None,
+        "--run",
+        help="Run id — print the closeout brief for a finished run's `fr pickup --run` "
+        "handoff instead of a phase's scope. Mutually exclusive with a plan dir/--phase.",
+    ),
 ) -> None:
-    """Output a phase's scope (markdown) for an agent. No state mutation.
+    """Output a phase's scope (markdown) for an agent, or a run's closeout
+    brief. No state mutation either way.
 
-    Returns: phase title, all step text (full multi-line), PR title template,
-    dependency reminder, pointer to _prose.md for plan-level context.
+    Phase mode returns: phase title, all step text (full multi-line), PR
+    title template, dependency reminder, pointer to `_prose.md` for
+    plan-level context.
+
+    `--run` mode (spec 2026-09-25-fr-goal-closeout-defects §3.D.1) returns a
+    self-contained closeout brief for a run whose `deliver` step is done —
+    read by a brand-new session that inherits none of the delivering
+    session's context.
     """
     require_migrated_layout()
+
+    if run is not None:
+        if plan_dir is not None or phase is not None:
+            err_console.print(
+                "[red]--run cannot be combined with a plan dir or --phase — pick one mode[/red]"
+            )
+            raise typer.Exit(2)
+        repo_root = resolve_repo_root()
+        try:
+            run_state = load_run_state(repo_root, run)
+        except RunStateError as e:
+            err_console.print(f"[red]{e}[/red]")
+            raise typer.Exit(2) from e
+        try:
+            brief = closeout_brief(repo_root, run_state)
+        except CloseoutNotReadyError as e:
+            err_console.print(f"[red]{e}[/red]")
+            raise typer.Exit(2) from e
+        typer.echo(brief)
+        return
+
+    if plan_dir is None or phase is None:
+        err_console.print("[red]pass a plan dir with --phase, or --run <run-id>[/red]")
+        raise typer.Exit(2)
+
     try:
         plan = parse(plan_dir)
     except PlanSchemaError as e:

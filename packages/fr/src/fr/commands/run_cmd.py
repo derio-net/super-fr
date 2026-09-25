@@ -36,6 +36,7 @@ import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
+from fr.git import GitUnavailableError, git_answer
 from fr.harness import HARNESSES, load_matrix
 from fr.harness.detect import detect_harness
 from fr.harness.long_commands import long_command_rule
@@ -192,6 +193,29 @@ def _note_loaded(state: RunState) -> None:
     writes = _RUN_WRITES.get()
     if writes is not None and writes.loaded_cursor is None:
         writes.loaded_cursor = state.cursor
+
+
+def _closeout_handoff_lines(repo_root: Path, run_id: str) -> list[str]:
+    """The handoff toward `fr pickup --run` (spec 2026-09-25-fr-goal-closeout-
+    defects §3.D.2) — printed once `deliver` resolves `done`, and again on
+    every `advance` of an already-finished run.
+
+    Names the sha of HEAD as it stands when this prints. For the `deliver`
+    call site that must be AFTER `_commit_run_writes_now()` has run (p3-m4):
+    the wrapping decorator commits in `finally`, which runs after the
+    command's own prints, so a sha read any earlier would not exist yet.
+    """
+    lines = [
+        f"closeout: after the PR merges, start a NEW session in {repo_root} and run",
+        f"  fr pickup --run {run_id}",
+    ]
+    try:
+        sha = git_answer(repo_root, "rev-parse", "--short", "HEAD").stdout.strip()
+    except GitUnavailableError:
+        sha = None
+    if sha:
+        lines.append(f"cursor committed as {sha} — push it (git push) so the PR carries it")
+    return lines
 
 
 _Cmd = TypeVar("_Cmd", bound=Callable[..., None])
@@ -3464,6 +3488,12 @@ def advance_cmd(
         # `fr run check` had already exited 0. Nothing is written here; a
         # finished run is read-only until something else moves it.
         console.print(f"run {state.run} complete — cursor {state.cursor!r} is done")
+        # spec §3.D.2: the same `fr pickup --run` handoff `resolve` prints
+        # when `deliver` lands `done` — repeated here because a run can be
+        # rediscovered by `advance` long after that one printing scrolled
+        # out of the delivering session's transcript.
+        for line in _closeout_handoff_lines(repo_root, state.run):
+            console.print(line, soft_wrap=True)
         return
 
     if _gate_pending(step, record):
@@ -4043,6 +4073,15 @@ def resolve_cmd(
     )
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
+    if step_id == "deliver" and state_value == "done":
+        # p3-m4: commit BEFORE reading HEAD's sha for the "push it" line below
+        # — the decorator's own commit runs in `finally`, after this function
+        # returns, so a sha read any earlier would not exist yet. `.commit()`
+        # is idempotent once called (it empties the pending paths), so the
+        # decorator's later call is a no-op — never a second stderr line.
+        _commit_run_writes_now()
+        for line in _closeout_handoff_lines(repo_root, run_id):
+            console.print(line, soft_wrap=True)
 
 
 def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:

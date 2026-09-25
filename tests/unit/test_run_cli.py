@@ -6643,3 +6643,154 @@ def test_commit_subject_of_a_flat_resolve_and_a_cli_advance(tmp_path: Path) -> N
     _invoke(repo2, shipped, ["run", "start", "fails", "--branch", "b", "--run-id", "r2"])
     _invoke(repo2, shipped, ["run", "advance", "r2"])
     assert _subject(repo2) == "chore(fr): run r2 — advance boom failed"
+
+
+# --- gh#610 spec §3.D.2: resolving `deliver` and a finished `advance` hand off
+# to `fr pickup --run` — a NEW session starts closeout, inheriting none of
+# this one's context.
+
+
+_CLOSEOUT_SHAPE = """
+workflow: closeout
+schema: 1
+unit: run
+steps:
+  - id: brainstorm
+    kind: agent
+    emits: [spec]
+  - id: plan
+    kind: agent
+    needs: [spec]
+    emits: [plan]
+  - id: deliver
+    kind: agent
+    needs: [spec, plan]
+    emits: [pr]
+"""
+
+
+def _resolved_to_deliver(repo: Path, shipped: Path) -> None:
+    """Start `closeout`, resolving `brainstorm` and `plan` with real
+    artifacts on disk (rule 5's existence check), leaving `deliver` dispatched."""
+    spec_dir = repo / "docs" / "superpowers" / "specs"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (spec_dir / "2026-09-30-fixture-design.md").write_text("# Fixture\n")
+    plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-09-30-fixture"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "_meta.yaml").write_text("plan: 2026-09-30-fixture\n")
+
+    _invoke(repo, shipped, ["run", "start", "closeout", "--branch", "b", "--run-id", "r1"])
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # brainstorm: running + brief
+    resolved_spec = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "brainstorm",
+            "--state",
+            "done",
+            "--emitted",
+            "spec=docs/superpowers/specs/2026-09-30-fixture-design.md",
+        ],
+    )
+    assert resolved_spec.exit_code == 0, resolved_spec.output
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # plan: running + brief
+    resolved_plan = _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "plan",
+            "--state",
+            "done",
+            "--emitted",
+            "plan=docs/superpowers/plans/2026-09-30-fixture",
+        ],
+    )
+    assert resolved_plan.exit_code == 0, resolved_plan.output
+    _invoke(repo, shipped, ["run", "advance", "r1"])  # deliver: running + brief
+
+
+def _resolve_deliver(repo: Path, shipped: Path):
+    return _invoke(
+        repo,
+        shipped,
+        [
+            "run",
+            "resolve",
+            "r1",
+            "--step",
+            "deliver",
+            "--state",
+            "done",
+            "--emitted",
+            "pr=https://github.com/derio-net/super-fr/pull/1",
+        ],
+    )
+
+
+def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path) -> None:
+    """spec §3.D.2: once `deliver` resolves `done`, fr prints the exact
+    `fr pickup --run <id>` handoff — the only way the new closeout session
+    finds the run, since it inherits none of this one's context. The commit
+    sha named in the "push it" line must be THIS invocation's own commit
+    (p3-m4): the wrapping decorator commits in `finally`, after this
+    function's own prints, so the sha must come from an explicit early
+    commit, not a read before one exists."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+
+    result = _resolve_deliver(repo, shipped)
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
+    idx_pickup = stdout.index("fr pickup --run r1")
+    idx_push = stdout.index("push it (git push)")
+    assert idx_closeout < idx_pickup < idx_push
+
+    # Outcome, not cadence (operator steer): fr's own run path is clean,
+    # whatever number of commits it took to get there — never "exactly one".
+    assert _runs_clean(repo) == ""
+    _assert_fr_commit(repo, "r1", "resolve")
+
+    # The sha printed is real and IS the commit this resolve just made — not
+    # a stale one read before `_commit_run_writes_now()` ran.
+    head_sha = _git_out(repo, "rev-parse", "--short", "HEAD")
+    assert f"cursor committed as {head_sha}" in stdout
+
+    # p3-m4 + operator steer (b): the early commit this print needs must not
+    # make the decorator's `finally` report a SECOND commit line on stderr.
+    commit_lines = [
+        ln
+        for ln in result.stderr.splitlines()
+        if ln.startswith("fr: committed") or ln.startswith("fr: not committed")
+    ]
+    assert len(commit_lines) <= 1, result.stderr
+
+
+def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+    resolved = _resolve_deliver(repo, shipped)
+    assert resolved.exit_code == 0, resolved.output
+
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+
+    assert result.exit_code == 0, result.output
+    stdout = result.stdout
+    assert "run r1 complete — cursor 'deliver' is done" in stdout
+    idx_complete = stdout.index("run r1 complete")
+    idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
+    idx_pickup = stdout.index("fr pickup --run r1")
+    assert idx_complete < idx_closeout < idx_pickup
