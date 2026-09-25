@@ -147,3 +147,6 @@ HerdrRunner was written with the shape S4 asks for: every herdr call goes throug
 
 <!-- fr:journal kind=finding scope=plan id=r2p-f4 created=2026-09-25T21:40:43 phase=2 state=open review_scope=in -->
 ### r2p-f4 · finding [open] (reviewer: in scope) · Org collect aborts on one repo: invalid .fr/triage.yaml raises TriageError (not ForgeError) and list_issue_comments runs outside the per-repo try (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=r2p-f5 created=2026-09-25T21:40:45 phase=2 state=open review_scope=in -->
+### r2p-f5 · finding [open] (reviewer: in scope) · Duplicate member ids accepted (create/edit), then refused confusingly as 'in y, y' (phase 2)
