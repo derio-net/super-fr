@@ -418,3 +418,8 @@ check_config_fresh now parses .fr/triage.yaml at origin/<default> (Checkout.show
 ### r3-f5-resolved · finding [fixed] · resolves r3-f5: MEDIUM: branch bumps to 4.22.0 but origin/main (#628) is already 4.22.0; rebase and bump minor to 4.23.0
 
 Merged origin/main (#628, 4.22.0) in 33b1cb19 and bumped minor to 4.23.0 with bump-version.py; bump-version --check passes.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-09-26T01:28:25 phase=3 -->
+### review-phase-3 · review · Phase 3 review (general-purpose reviewer with shell, separate context): 13 in scope + 1 out of scope (phase 3)
+
+In scope, fixed with tests: r3-f1 (HIGH dispatch launched then refused), r3-f2 (HIGH version resolver took whole file), r3-f3, r3-f4 (merge method now repo default), r3-f6, r3-f7, r3-f8 (spec amended, spec decision d-reserve-order), r3-f9, r3-f10, r3-f11, r3-f12, r3-f13; r3-f5 fixed by merging main and bumping to 4.23.0. Out of scope: r3-f14 (per-scope reservations; reconcile prevents clashes). Carried phase-3 findings r1-docs, r2p-f10, r2p-f11, r2p-f12b, r2p-handle, r2p-f14 fixed during implementation.
