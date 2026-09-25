@@ -378,3 +378,8 @@ b53f7ee0: CommitOutcome.unchanged; commit_records silent on it; handoff counts i
 ### pd-r1 · finding [open] (reviewer: in scope) · primary_checkout mis-resolves a --separate-git-dir primary (phase 4)
 
 Post-deliver review (medium, verified live): the common-dir basename guard ('.git') falls back to repo_root = the worktree for a relocated git-dir. Use git worktree list --porcelain (first entry = main worktree).
+
+<!-- fr:journal kind=finding scope=plan id=pd-r2 created=2026-09-25T15:25:20 phase=3 state=open review_scope=in -->
+### pd-r2 · finding [open] (reviewer: in scope) · A failed diff --cached probe is reported as unchanged (phase 3)
+
+Post-deliver review (low-medium): commit.py's pending.returncode != 0 branch is folded into unchanged=True; with the silent-unchanged change a git error now yields false 'cursor committed' assurance. Only rc 0 + empty output is unchanged.
