@@ -326,41 +326,25 @@ def _validate_refs(row: Row) -> None:
             raise typer.Exit(2) from e
 
 
-def _commit_matrix(matrix_path: Path, new_text: str, original: str) -> Matrix:
-    """Write, re-validate, and roll back on a shape violation.
-
-    Both mutating verbs land here, so neither can leave an unparseable matrix
-    behind — the post-write invariant `add` has always carried, now shared.
-    """
-    matrix_path.write_text(new_text)
-    try:
-        return load_matrix(matrix_path)
-    except AcceptanceError as e:
-        matrix_path.write_text(original)
-        err_console.print(f"[red]error:[/red] write produced an invalid matrix, rolled back: {e}")
-        raise typer.Exit(2) from e
-
-
-def _regenerate_reports(matrix: Matrix, root: Path) -> None:
-    """Keep the three committed renderings in lockstep with `matrix.yaml`.
-
-    The matrix on disk is already valid — a render failure NEVER rolls the
-    change back (that would discard valid work); it warns, and `fr acceptance
-    check`'s drift gate is the backstop.
-    """
-    from fr.acceptance.report import prune_stale_reports, render_committed_set
+def _apply_rows(root: Path, item: object, message: str) -> None:
+    """A one-entry record through the step-record engine (spec 2026-09-25
+    §5.C.6): the matrix edit, the three reports regenerated once, one commit."""
+    from fr.record import apply as engine
+    from fr.record.model import StepRecord
 
     try:
-        for rel, html in render_committed_set(matrix, root).items():
-            path = root / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(html)
-        prune_stale_reports(root)
-    except Exception as e:  # noqa: BLE001 — never fail a valid write on a render hiccup
-        err_console.print(
-            f"[yellow]warning:[/yellow] matrix updated but the HTML reports were not "
-            f"regenerated ({e}); run `fr acceptance report --deterministic` and commit them."
+        outcome = engine.apply_record(
+            root,
+            None,
+            StepRecord(acceptance=(item,)),  # type: ignore[arg-type]
+            target=engine.RecordTarget(message=message),
         )
+    except engine.RecordRefusedError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    for notice in outcome.notices:
+        if notice.startswith("warning"):
+            err_console.print(f"[yellow]{notice}[/yellow]")
 
 
 @acceptance_app.command("set-status")
@@ -395,11 +379,10 @@ def set_status_cmd(
     """
     from typing import get_args
 
-    from fr.acceptance.edit import merge_levels, replace_row
+    from fr.acceptance.edit import merge_levels
     from fr.acceptance.model import Status
 
     root = resolve_repo_root()
-    matrix_path = root / MATRIX_REL
     matrix = _load(root)
 
     valid = list(get_args(Status))
@@ -437,15 +420,19 @@ def set_status_cmd(
         raise typer.Exit(2) from e
     _validate_refs(new_row)
 
-    original = matrix_path.read_text()
-    try:
-        new_text = replace_row(original, row_id, new_row)
-    except AcceptanceError as e:
-        err_console.print(f"[red]error:[/red] {e}")
-        raise typer.Exit(2) from e
-    reloaded = _commit_matrix(matrix_path, new_text, original)
+    from fr.record.model import AcceptanceItem
+
+    _apply_rows(
+        root,
+        AcceptanceItem(
+            id=row_id,
+            status=status,
+            notes=notes,
+            levels={k: tuple(v) for k, v in _parse_levels(level).items()},
+        ),
+        f"chore(fr): acceptance — {row_id} {target.status} → {new_row.status}",
+    )
     typer.echo(f"{row_id}: {target.status} → {new_row.status}")
-    _regenerate_reports(reloaded, root)
 
 
 @acceptance_app.command("add")
@@ -469,10 +456,8 @@ def add_cmd(
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).
     """
-    from fr.acceptance.edit import append_row
 
     root = resolve_repo_root()
-    matrix_path = root / MATRIX_REL
     matrix = _load(root)
 
     levels = _parse_levels(level)
@@ -497,11 +482,24 @@ def add_cmd(
         raise typer.Exit(2)
     _validate_refs(new_row)
 
-    # Textual append: a load→dump cycle would destroy the header comments.
-    original = matrix_path.read_text()
-    reloaded = _commit_matrix(matrix_path, append_row(original, new_row), original)
+    from fr.record.model import AcceptanceItem
+
+    # The engine appends textually: a load→dump cycle would destroy the
+    # header comments.
+    _apply_rows(
+        root,
+        AcceptanceItem(
+            id=new_row.id,
+            capability=new_row.capability,
+            acceptance=new_row.acceptance,
+            origin=new_row.origin,
+            levels={k: v for k, v in new_row.levels.items() if v},
+            status=new_row.status,
+            notes=new_row.notes,
+        ),
+        f"chore(fr): acceptance — add {new_row.id}",
+    )
     typer.echo(f"added row {new_row.id} ({new_row.status})")
-    _regenerate_reports(reloaded, root)
 
 
 @acceptance_app.command("init")

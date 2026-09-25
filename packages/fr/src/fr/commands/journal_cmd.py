@@ -28,17 +28,16 @@ from fr.journal.model import (
     EffectiveFindingState,
     JournalEntry,
     JournalParseError,
-    append_journal_entry,
     effective_finding_states,
     journal_path,
     journal_stamp_as_utc,
     open_finding_ids,
     parse_journal,
+    resolution_record_id,
     resolve_journal_read_path,
     serialize_entry,
     unauthorized_fixes,
 )
-from fr.records_commit import commit_records
 from fr.run.model import AnsweredBy
 
 console = Console(highlight=False)
@@ -314,8 +313,50 @@ def add(
         raise typer.Exit(2)
     if resolves is not None and answered_by == "operator":
         _verify_operator_claim(existing, resolves)
-    append_journal_entry(path, slug, entry)
-    commit_records(root, [path], f"chore(fr): journal {scope}/{slug} — {entry.kind} {entry.id}")
+    # spec 2026-09-25 §5.C.6: a one-entry record through the step-record engine.
+    from fr.record.model import JournalItem, StepRecord
+
+    item = JournalItem.model_validate(
+        {
+            "kind": kind,
+            "id": eid,
+            "title": title,
+            "body": body,
+            "state": state,
+            "phase": phase,
+            "global": is_global,
+            "review_scope": review_scope,
+            "resolves": resolves,
+            "answered_by": answered_by,
+        }
+    )
+    _apply(
+        root,
+        StepRecord(journal=(item,)),
+        scope=scope,
+        slug=slug,
+        path=path,
+        message=f"chore(fr): journal {scope}/{slug} — {entry.kind} {entry.id}",
+    )
+    typer.echo(f"added {entry.kind} {entry.id} to {scope}/{slug}")
+
+
+def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, message: str) -> None:
+    """Hand a one-entry record to the engine; a refusal is exit 2, as before."""
+    from fr.record import apply as engine
+
+    try:
+        engine.apply_record(
+            root,
+            None,
+            record,  # type: ignore[arg-type]
+            target=engine.RecordTarget(
+                journal_scope=scope, journal_slug=slug, journal_file=path, message=message
+            ),
+        )
+    except engine.RecordRefusedError as e:
+        err_console.print(f"[red]{e}[/red] — nothing written", soft_wrap=True)
+        raise typer.Exit(2) from e
 
 
 RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
@@ -324,16 +365,7 @@ RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
 information, which belongs in an entry with a body of its own."""
 
 
-def _record_id(finding_id: str, taken: set[str]) -> str:
-    """`<finding>-resolved`, then `-2`, `-3`… — predictable, and never a
-    duplicate id (which `fr validate artifacts` fails a journal for)."""
-    base = f"{finding_id}-resolved"
-    if base not in taken:
-        return base
-    n = 2
-    while f"{base}-{n}" in taken:
-        n += 1
-    return f"{base}-{n}"
+_record_id = resolution_record_id
 
 
 @journal_app.command("resolve")
@@ -442,28 +474,30 @@ def resolve(
     if answered_by == "operator":
         _verify_operator_claim(entries, entry_id)
 
-    record = JournalEntry(
-        kind="finding",
-        scope=scope,  # type: ignore[arg-type]
-        id=_record_id(entry_id, {e.id for e in entries}),
-        created=_timestamp(),
-        phase=phase,
-        title=f"resolves {entry_id}: {target.title}",
-        body=note,
-        # A deferral is WRITTEN as `open` + `tracked_by`: an older fr rejects an
-        # unknown `state=` value (and with it the whole journal) but ignores an
-        # unknown token, so it reads the finding as still open — fail closed.
-        # Out-of-scope is written the same way, for the same reason.
-        state="open" if state in ("deferred", "out-of-scope") else state,  # type: ignore[arg-type]
-        resolves=entry_id,
-        tracked_by=tracked_by,
-        out_of_scope=state == "out-of-scope",
-        answered_by=answered_by,  # type: ignore[arg-type]
+    from fr.record.model import Resolution, StepRecord
+
+    record_id = _record_id(entry_id, {e.id for e in entries})
+    _apply(
+        root,
+        StepRecord(
+            resolves=(
+                Resolution(
+                    id=entry_id,
+                    state=state,  # type: ignore[arg-type]  # checked above
+                    body=note,
+                    phase=phase,
+                    tracked_by=tracked_by,
+                    answered_by=answered_by,  # type: ignore[arg-type]  # checked above
+                ),
+            )
+        ),
+        scope=scope,
+        slug=slug,
+        path=path,
+        message=f"chore(fr): journal {scope}/{slug} — finding {record_id}",
     )
-    append_journal_entry(path, slug, record)
     shown = f"deferred → {tracked_by}" if tracked_by else state
-    typer.echo(f"{entry_id} → {shown} (record {record.id})")
-    commit_records(root, [path], f"chore(fr): journal {scope}/{slug} — {record.kind} {record.id}")
+    typer.echo(f"{entry_id} → {shown} (record {record_id})")
 
 
 def _deferrals(entries: list[JournalEntry]) -> list[tuple[str, str]]:
