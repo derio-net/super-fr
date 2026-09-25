@@ -239,3 +239,8 @@ HarnessState keeps its required state (what fr harness parity --check compares a
 ### p2-r20 · finding [open] (reviewer: in scope) · In-process refusal blocks host-worktree pods/CI: mode: worktree + container evidence is not devcontainer (phase 2)
 
 isolation/where.py:122, masked by tests/conftest.py:162-175. Spec §5.B.6 amended: marker records target; refuse iff target devcontainer + container evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r21 created=2026-09-25T21:40:21 phase=2 state=open review_scope=in -->
+### p2-r21 · finding [open] (reviewer: in scope) · unavailable reason copies exception text (absolute paths, usernames) into committed usage files (phase 2)
+
+usage/file.py:241-242; readers' f'{type(exc).__name__}: {exc}'.
