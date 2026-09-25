@@ -4199,9 +4199,14 @@ rows:
       commit, one line of output'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_record_verbs.py
+    status: ci
+    notes: 'fr run resolve --record over a real fr-goal run in a linked worktree: one
+      commit, clean tree for fr''s paths, one stdout line naming counts/next/sha; the
+      verbs route through the same engine (spy).'
   - id: step-record-atomic-refusal
     capability: Lean cost-aware pipeline
     acceptance: An invalid step record changes nothing
