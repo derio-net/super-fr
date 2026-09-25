@@ -254,9 +254,10 @@ state:
       ticked_at: '2026-09-25T19:24:08+00:00'
       note: test_isolation_host_side_rule.py red (collection)
     P2.T6.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T19:24:09+00:00'
+      note: fr.isolation.where (inner_fr_command, host_command, require_harness_host);
+        exec refusal; run/usage group callbacks; unobserved evidence + warnings
     P2.T6.S3:
       state: ' '
       ticked_at: null
