@@ -149,3 +149,8 @@ True and pre-existing; the r2-1 open-PR join fills these fields for linked open 
 ### d8-forge-adapter · decision · All batch forge ops go through the GhClient adapter; new ops GitHub-only, declared unsupported on glab/tea; collect stays on triage Forge until gh#611
 
 Operator (2026-09-25): the forge should be generic. Asked whether collect should move onto GhClient here: no, keep focused, GitHub gets the attention for now; gh#611 should find this surface and decide concretely.
+
+<!-- fr:journal kind=decision scope=spec id=d-reserve-order created=2026-09-26T01:11:02 -->
+### d-reserve-order · decision · Reservations follow dispatch sequence; explicit order is a merge-time constraint (§3.D)
+
+Adopted from the phase-3 implementer's plan decision p3-reserve-order and verified sound by the phase-3 reviewer (finding r3-f8). §3.D used to say both 'dispatch-time order is explicit order, then dispatch sequence' and 'the reservation is the next version after the highest of (source, every live reservation)'; read together they conflict when a batch with order 1 is dispatched after an unordered one. Chosen: the formula. A reservation is the next version after max(origin source version, every live reservation), bumped by the batch's level, in dispatch sequence; reusing a number already briefed to another live run would make two runs build the same version, and a monotonic reservation never does. The explicit order applies at merge time: reconcile (§3.F step 3b) re-slots any PR whose version is not its slot in the real order. Spec §3.D and Test Plan 11 amended to match.
