@@ -313,3 +313,8 @@ Full suite after phase 4 fixes (5258 passed, 1 failed, 97 skipped, scratchpad/p4
 ### review-p4 · review · Phase 4 review (phase 4)
 
 Dispatched reviewer (sonnet) over 7e983b53: r1 (important: handoff claimed 'push it' on a refused commit), r2/r3 (brief not self-contained: housekeeping branch + checkout), r4/r5 (test gaps). All in scope; fixed by a dispatched fix agent in a216b4a5, a797e354 with RED tests for r1-r3 (r4/r5 were pure coverage, code already correct). Seam kept: commit_records now returns its CommitOutcome. Full suite under -n auto: 5258 passed, 1 failed (test_install_bridge, container-only stale global fr; passes on host — verified by orchestrator).
+
+<!-- fr:journal kind=finding scope=plan id=p3-m5-resolved created=2026-09-25T14:20:08 state=fixed resolves=p3-m5 -->
+### p3-m5-resolved · finding [fixed] · resolves p3-m5: Ready-checklist 'no commits since the ok' must exempt chore(fr) commits
+
+618fba30: fr-goal SKILL.md §8 Ready-checklist now excludes fr's own chore(fr): record commits from 'no commits since the ok'
