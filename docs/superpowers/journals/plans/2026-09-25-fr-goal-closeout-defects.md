@@ -333,3 +333,8 @@ One new test file, self-contained helpers mirroring the file-local _git/_invoke 
 ### 0a88fd11ad39 · discovery · no-refactor-because P5.T3 (phase 5)
 
 fr acceptance set-status is the whole task — a CLI invocation that rewrites the matrix row and regenerates the three committed reports; nothing here is code to refactor.
+
+<!-- fr:journal kind=discovery scope=plan id=fd0be9e9c6bf created=2026-09-25T14:37:06 phase=5 -->
+### fd0be9e9c6bf · discovery · fr-goal SKILL.md 120-line cap + resolve-example regex both caught only by the full suite (phase 5)
+
+8f47711c: the P5.T2.S1 rewrite pushed fr-goal/SKILL.md to 128 lines (cap 120) and a hard line-wrap split 'fr journal resolve --scope ...' across a newline, which test_skill_journal_resolve_examples.py's backtick regex (no DOTALL-safe anchor) does not match across. Neither the targeted mirror/tripwire runs (opencode/hermes sync + tool-neutrality) nor a visual read of the diff caught it — only the full suite did. Fixed by tightening prose back to single-line clauses; mirrors regenerated.
