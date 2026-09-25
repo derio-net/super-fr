@@ -4245,9 +4245,13 @@ rows:
     acceptance: A PR missing a required fr-rendered section cannot be delivered
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
-    levels: {}
-    status: not-implemented
-    notes: 'Spec §9, target level: int. Born at brainstorm 2026-09-25.'
+    levels:
+      int:
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: deliver's resolve --record renders pr-body.md and, with fr.gh mocked, refuses
+      a live body missing the out-of-scope section (exit 2, named) and delivers one
+      carrying every section.
   - id: audit-pages-regenerated
     capability: Lean cost-aware pipeline
     acceptance: The operator can regenerate the audit and architecture pages from run
