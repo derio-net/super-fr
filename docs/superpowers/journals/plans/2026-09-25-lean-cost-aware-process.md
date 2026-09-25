@@ -64,3 +64,8 @@ readers/hermes.py:93,118; opencode.py:63,72 vs spec §5.A.7.
 ### p1-r4 · finding [open] (reviewer: in scope) · NULL per-model Hermes cost coerced to 0.0 and priced at $0 (phase 1)
 
 hermes.py:105,111 + rollup.py:126-133.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-09-25T20:03:24 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · Mixed actual/estimated Hermes rows discard figures as Cost() none (phase 1)
+
+hermes.py:101-114.
