@@ -12,6 +12,9 @@ phase:
   - packages/fr/src/fr/usage/capture.py
   - packages/fr/src/fr/usage/file.py
   - tests/unit/test_usage_capture.py
+  - packages/fr/src/fr/usage/backfill.py
+  - tests/unit/test_usage_backfill.py
+  - tests/unit/test_run_cost_cmd.py
   - docs/acceptance/**
   - .changes/*.yaml
   estimate_lines: 150
