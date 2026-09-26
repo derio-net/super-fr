@@ -31,3 +31,9 @@ network timeout and is not reaped on the resulting fetch failure.
 - Update the acceptance matrix with the regression test reference and set the
   row to `ci` when the test lands.
 - Run the full test suite after merge.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-isolation-gc-fetch-timeout | `derio-net/super-fr` | `2026-09-26-isolation-gc-fetch-timeout` | — |
