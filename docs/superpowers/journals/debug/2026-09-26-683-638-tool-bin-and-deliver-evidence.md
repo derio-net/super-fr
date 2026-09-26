@@ -29,3 +29,13 @@ opencode.db `part` rows for tool=bash carry state.input.command, state.status, s
 ### b71e7537bf8b · repro · #683 reproduced in the devcontainer, and caught by both new guards
 
 Running tests/integration/test_install_bridge.py in the dev container relinked /home/vscode/.local/bin/fr -> /tmp/pytest-of-vscode/.../uv-tools/fr/bin/fr. The new in-test assertion (link_state before == after) failed, and the new session-scoped conftest guard _operators_fr_survives_the_suite errored at teardown. Container link repaired with ln -sf "$(uv tool dir)/fr/bin/fr".
+
+<!-- fr:journal kind=finding scope=debug id=f-683 created=2026-09-26T12:01:42 state=fixed -->
+### f-683 · finding [fixed] · #683 fixed: UV_TOOL_BIN_DIR isolated, real fr link guarded
+
+tests/integration/test_install_bridge.py sets UV_TOOL_BIN_DIR=tmp_path/uv-bin and asserts the real bin-dir fr link is unchanged (red before: relinked into /tmp/pytest-of-vscode/...). tests/conftest.py _operators_fr_survives_the_suite snapshots the link for the whole session. Full suite in the devcontainer left the container link untouched.
+
+<!-- fr:journal kind=finding scope=debug id=f-638 created=2026-09-26T12:01:44 state=fixed -->
+### f-638 · finding [fixed] · #638 fixed: OpenCode tests= reader; .records/ holds records only
+
+telemetry._opencode_wrote_since reads opencode.db (top-level sessions, bash parts, status completed, exit 0, start >= unit open, _writes(command, log)); unreadable db stays None/unverified. run_cmd._verify_tests_log refuses a log whose parent is a *.records dir. validate._records_dir_issues flags non-record files under runs/*.records (CI validate-artifacts job). Stray logs removed. fr-goal SKILL.md now says: redirect into $TMPDIR, never .records/. Pinned by tests/unit/test_run_tests_log_opencode.py (12 tests, all red first). Hermes and a missing Claude transcript still degrade to unobserved=tests with a warning: unchanged, deliberately.
