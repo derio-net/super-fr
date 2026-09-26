@@ -1,0 +1,54 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-container-git-ownership
+captures:
+- host: h-545135b0
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-26T15:04:42+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: f1908e55-5b1f-462c-a1bc-d4f8124c1a63
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 246
+        cache_write: 653123
+        cache_read: 12916305
+        output: 37460
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 44
+      other:
+        usd: null
+        turns: 40
+      paperwork:
+        usd: null
+        turns: 37
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+      brainstorm:
+        usd: null
+        turns: 13
+      spec-review:
+        usd: null
+        turns: 11
+      plan:
+        usd: null
+        turns: 6
+      implement:
+        usd: null
+        turns: 52
+      deliver:
+        usd: null
+        turns: 34
+    briefs:
+      aa7e8eb08000d4d91: 1118
+      phase/1/implement-phase: 2056
+      phase/1/review-phase: 1425

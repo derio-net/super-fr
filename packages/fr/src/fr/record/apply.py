@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from fr.artifacts.atomic import write_text_atomic
+from fr.git import git_argv
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -741,7 +742,7 @@ def summary_counts(counts: dict[str, int]) -> list[str]:
 
 def _short_head(repo_root: Path) -> str | None:
     done = subprocess.run(
-        ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
+        git_argv(repo_root, "-C", str(repo_root), "rev-parse", "--short", "HEAD"),
         capture_output=True,
         text=True,
         check=False,
@@ -751,7 +752,7 @@ def _short_head(repo_root: Path) -> str | None:
 
 def _is_tracked(repo_root: Path, path: Path) -> bool:
     done = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", "--error-unmatch", "--", str(path)],
+        git_argv(repo_root, "-C", str(repo_root), "ls-files", "--error-unmatch", "--", str(path)),
         capture_output=True,
         text=True,
         check=False,
