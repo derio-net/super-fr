@@ -4,39 +4,64 @@ captures:
 - host: h-afad7d01
   harness: opencode
   mode: devcontainer
-  captured_at: '2026-09-26T09:49:34+00:00'
+  captured_at: '2026-09-26T10:48:27+00:00'
   at:
   - resolve:spec-review
+  - deliver
   sessions:
   - session: ses_f22e821b3ffeRpfBm6FVTW2wpx
     role: main
     models:
       gpt-6-luna:
-        input: 114216
+        input: 259681
         cache_write: 0
-        cache_read: 1796005
-        output: 11410
-        usd: 0.037939125
+        cache_read: 15313929
+        output: 53202
+        usd: 0.21218721500000004
+        usd_source: estimated
+      claude-haiku-4.5:
+        input: 291
+        cache_write: 89834
+        cache_read: 3744241
+        output: 10974
+        usd: 0.5418776000000006
         usd_source: estimated
     activity:
       implementation:
-        usd: 0.010352010732256788
-        turns: 16
+        usd: 0.2998025315322468
+        turns: 73
       other:
-        usd: 0.019616792349627647
-        turns: 16
+        usd: 0.22116586557523024
+        turns: 81
       paperwork:
-        usd: 0.007970321918115584
-        turns: 16
+        usd: 0.23309641789252292
+        turns: 98
     steps:
       (outside run):
-        usd: 0.005465561385847611
+        usd: 0.005213826536464358
         turns: 3
       brainstorm:
-        usd: 0.011786353810744265
+        usd: 0.011243493564218996
         turns: 15
       spec-review:
-        usd: 0.020687209803408147
-        turns: 22
+        usd: 0.02115110802173578
+        turns: 23
+      plan:
+        usd: 0.02187993157872609
+        turns: 23
+      plan-review:
+        usd: 0.0016972840767160748
+        turns: 2
+      implement:
+        usd: 0.5729847511784627
+        turns: 80
+      journal-check:
+        usd: 0.0009635299727135589
+        turns: 1
+      deliver:
+        usd: 0.11893089007096241
+        turns: 82
     briefs:
       ses_f22e295adffe6EvKDfQc0OLF4z: 628
+      ses_f22d54e6effeRP7mrrWe7Xm6qO: 930
+      ses_f22cf8e9affeOpmMoMwBAkBn27: 724

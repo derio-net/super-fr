@@ -84,10 +84,10 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-09-26T10:39:11+00:00'
+    state: done
+    at: '2026-09-26T10:48:27+00:00'
     emitted:
-      pr: pending
+      pr: https://github.com/derio-net/super-fr/pull/679
     units:
       step/deliver:
         attempts:
@@ -97,6 +97,9 @@ steps:
           outcome: failed
         - dispatched: '2026-09-26T10:39:11+00:00'
           harness: opencode
+          returned: '2026-09-26T10:48:27+00:00'
+          outcome: done
         evidence:
-          tests: docs/superpowers/runs/2026-09-26-fix-659-isolation-gc-fetch.records/full-suite.log@30580a1ade91
+          tests: docs/superpowers/runs/2026-09-26-fix-659-isolation-gc-fetch.records/full-suite.log@1b59e10f8530
           unobserved: tests
+          proportionality: 960e41712d14656c97d262f0746b90802231d150:4c8eb8867b04198e2b677647e5fa61bd22b2077e3e9dec22d0460f9b5808cbb1
