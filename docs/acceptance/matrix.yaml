@@ -4397,9 +4397,15 @@ rows:
       release at tag time, or a failure and issue say so
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_version_floors.py
+      - super-fr:tests/unit/test_release_script.py
+    status: ci
+    notes: 'Spec 2026-09-26-version-bump-churn §3.E, phases 2-3: at PR time a new fr_version
+      lower bound above base must equal base + the PR''s highest added fragment bump
+      (test_version_floors.py); at release time release.py still tags, then exits 3
+      and opens an issue naming a floor that differs from the released version (test_release_script.py).'
   - id: concurrent-acceptance-rows-merge-clean
     capability: Acceptance matrix
     acceptance: Two PRs adding acceptance rows to different existing capabilities merge
