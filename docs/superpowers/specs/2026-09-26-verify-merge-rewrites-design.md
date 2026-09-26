@@ -19,6 +19,21 @@ dominant repro. The generated acceptance reports
 (`docs/acceptance/report_*.{html,md}`) are rewritten by nearly every PR and
 still reproduce the original shape too.
 
+Third repro, found live 2026-09-26 on a merged, clean, fully-pushed workspace
+(`feat/batch-container-git-ownership`, PR #694 merged, housekeeping #701
+merged): `fr isolation down --branch <that>` refused with 9 files "not on
+origin/main", and `_reap_hazard` (`:1120`) uses the same `branch_changes_present`.
+A normal fr-goal closeout runs `fr archive` (`packages/fr/src/fr/archive.py`),
+which `git mv`s the branch's added fr artifacts — a plan dir (`:388`), a run
+cursor (`:469`), its usage capture (`:489`), a scoped journal (`:514`), a fully-
+implemented spec (`:553`) — from `docs/superpowers/<kind>/…` to
+`docs/superpowers/implemented/<kind>/…` on the default branch. The content is
+on `origin/main`, but under a different path than the branch added it at, so
+neither the whole-file fast path nor the per-line/blob fallback (design §A)
+ever looks there: the reap check does not follow the rename, and after a normal
+closeout `down` refuses **every** merged feature workspace, making `--force`
+routine — exactly the habit the guard exists to prevent (super-fr#598).
+
 Second half: `LocalWorktreeDevcontainerTarget.verify_merge` (`:992`) passes
 `refs=None` to `_verdict`, which then checks only the local `branch` ref
 (`refs or [branch]`, `:1068`). A local branch can be stale relative to what was
@@ -58,6 +73,59 @@ Properties, all kept:
   merges keep the final blob of the file on the base too; a fragment reworded
   during the merge (blob differs) reads as missing, i.e. a safe STOP.
 
+### C. An archived fr artifact counts as landed at its `implemented/` path
+
+`fr.archive`'s five move rules are a closed, path-shaped mapping — every
+destination is the source path with `implemented/` spliced in right after
+`docs/superpowers/`: `plans/<dir>/…` → `implemented/plans/<dir>/…`,
+`specs/<file>` → `implemented/specs/<file>`, `journals/<scope-dir>/<file>` →
+`implemented/journals/<scope-dir>/<file>`, `runs/<id>.yaml` →
+`implemented/runs/<id>.yaml`, `usage/<id>.yaml` → `implemented/usage/<id>.yaml`
+(confirmed by reading `archive.py`: `_git_mv` only, never a content rewrite —
+the move never edits the bytes it relocates). A small local helper
+(`_archived_path` in `packages/fr/src/fr/isolation/local.py`, not imported from
+`fr.archive` — `test_import_direction.py` has no rule against `isolation`
+importing `archive`, but this module already avoids depending on the archive
+command, so the five-kind mapping is a local constant instead) derives the
+alternate path from that closed set; nothing outside it (a plain `docs/**` file,
+a path already under `implemented/`) gets one.
+
+When a changed path differs on `base_ref` (or is entirely absent there — the
+common case: the branch's original path no longer exists on `origin/main` once
+archive has moved it), `_branch_change_present_in_file` now checks BOTH the
+same-path landed test (design §A, unchanged) and, only if that fails and the
+path is one of the five archived kinds, the identical test — per-line
+containment, falling back to blob equality — against `<base_ref>:<archived
+path>`. Containment rather than requiring exact blob equality on the archived
+side too: a closeout commonly appends a line (a journal resolution, a cursor
+advance) on top of the branch's own content before `fr archive` moves it, so
+the archived blob is a superset of what the branch added, not byte-identical
+to it — the same reason design §A's own per-line check exists.
+
+Why exact-blob-or-containment is the smallest safe choice, not a broader
+`docs/**` exemption: a `docs/**` exemption would wave through ANY doc edit that
+never landed, as long as some `implemented/` doc happens to exist; restricting
+to the five kinds and requiring the branch's own content (by line or by blob)
+to be positively present at the archived path keeps the same soundness as §A —
+a path with no matching archived file, or one whose content differs, stays
+missing, exactly as today.
+
+Properties, all kept:
+
+- **Only fr's own five archived kinds get an alternate path.** A code file, or
+  a doc under `docs/` that is not `docs/superpowers/{plans,specs,journals,
+  runs,usage}/…`, is checked at its original path only.
+- **Positive content evidence only** — same containment/blob-equality logic as
+  §A, just aimed at a second candidate path. Nothing is waved through by path
+  shape alone.
+- **Dirty or unpushed work still hazards.** `_reap_hazard` and the down-time
+  check gate on worktree cleanliness and ref resolution before ever reaching
+  `branch_changes_present`; this change only widens what counts as "present"
+  for one path, it does not touch those gates.
+- Both callers of `branch_changes_present` on the shared code path —
+  `verify_merge` and `_reap_hazard`/the down-time check (`:1706`) — gain this
+  for free; there is one implementation, not two.
+
 ### B. `verify_merge` checks the fetched remote branch too
 
 `verify_merge` resolves refs with `_branch_refs(state.branch, remote)`: fetch the
@@ -81,7 +149,11 @@ path does). Consequences, per the operator's answers:
 - `isolation/scaffold.py` and `artifacts/commit.py` are being edited by another
   batch (container-git-ownership) and are not touched.
 - `_reap_hazard` and the `down`-time check call `branch_changes_present`, so they
-  gain fix A (a widened, safety-relevant pass, hence tested below); their own ref selection is unchanged.
+  gain fix A and fix C (both widened, safety-relevant passes, hence tested
+  below); their own ref selection is unchanged.
+- No exemption for `docs/**` generally, and no attempt to make `fr archive`
+  itself content-rewrite-aware — the mapping is derived from `archive.py`'s
+  existing move rules, not invented, and stays a closed set of five kinds.
 - The verdict is not weakened: nothing turns a STOP into a pass except positive
   blob-equality evidence from the base's own history.
 
@@ -90,7 +162,10 @@ path does). Consequences, per the operator's answers:
 `fr isolation verify-merge` reports a merged branch as verified when a later
 merge to the default branch rewrote lines the branch added, provided the
 branch's exact file content was present on the base at some point after the
-merge; and it checks the fetched remote branch as well as the local one.
+merge; it checks the fetched remote branch as well as the local one; and it
+(along with `_reap_hazard`/`down`) reports a branch's fr artifacts as landed
+when `fr archive` has moved them to their `docs/superpowers/implemented/…`
+path with matching content.
 
 ## Test Plan
 
@@ -107,6 +182,17 @@ merge; and it checks the fetched remote branch as well as the local one.
   (red against the original `local.py`: the fragment read as missing). A fragment
   that never landed on the base stays missing, and an orphan code file still reads
   missing after the fragment landed and was consumed.
+- Unit: a branch adds a plan, a spec, and a scoped journal under
+  `docs/superpowers/…` plus a code file, is squash-merged, then a closeout
+  commit on main appends a line to each doc and `git mv`s it to its
+  `implemented/` path. `branch_changes_present` and `verify_merge` (PR stubbed
+  MERGED, real origin) report present/verified; `_reap_hazard` reports no
+  unlanded-content hazard. Guards: a doc never on main under either path stays
+  missing; an archived copy with different content stays missing; an orphan
+  code file that never landed stays missing even though the docs were
+  archived; a non-fr `docs/**` file gets no archive alternate and stays
+  missing when absent; a dirty worktree still hazards even with everything
+  else archived and landed (red against the original `local.py`).
 - Unit: `verify_merge` raises `IsolationError` when neither ref resolves.
 - Unit: `verify_merge` with a stale local ref and an advanced fetched
   `origin/<branch>`, and with an unpushed local commit, refuses; a deleted remote
