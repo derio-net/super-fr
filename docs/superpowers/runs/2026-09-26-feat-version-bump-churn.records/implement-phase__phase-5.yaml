@@ -1,0 +1,48 @@
+schema_version: 1
+run: 2026-09-26-feat-version-bump-churn
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T2.S1, P5.T2.S2, P5.T2.S3, P5.T2.S4, P5.T3.S1]
+refactor:
+  P5.T1: "tests only; the pin moved in place and the two new tests share the whitespace-normalised read, so nothing duplicated remained"
+  P5.T2: "prose and config rewrites plus four set-status calls; no code was written, so there was nothing to clean"
+journal:
+  - kind: decision
+    id: p5-matrix-levels
+    phase: 5
+    title: invariants-tripwires keeps test_version_bump_guard.py beside the new gate test; release-on-merge gains its unit refs but stays not-implemented
+    body: |
+      test_version_bump_guard.py was retargeted in phase 2 to check-change-fragment.py's kept
+      requires_bump classifier, so it is still live evidence and was not dropped;
+      test_change_fragment_gate.py was added and the notes now describe the fragment gate.
+      The row's acceptance text ("shipped behavior changes bump the version") is not editable
+      through set-status and still reads true (they trigger a release). release-on-merge got
+      test_release_script.py and test_release_workflow.py as unit levels, status unchanged:
+      the live first release (phase 6) is the owed evidence. concurrent-acceptance-rows-merge-clean
+      was already ci and was left alone.
+  - kind: discovery
+    id: p5-classifier-narrower-than-prose
+    phase: 5
+    title: The path classifier covers plugins/super-fr/skills only, while AGENTS.md/HERMES.md say plugins/*/skills
+    body: |
+      requires_bump (kept unchanged from the old gate, spec §3.B) matches
+      plugins/super-fr/skills/ and plugins/super-fr/rules/, so a plugins/super-fr-dispatch/skills
+      change needs no fragment by the gate. The docs keep the pre-existing plugins/*/skills
+      wording because the spec says the list is unchanged; either the classifier or the prose
+      is slightly off, and that predates this plan.
+  - kind: discovery
+    id: p5-stale-reference-sweep
+    phase: 5
+    title: Remaining bump-version.py / auto-tag mentions are historical or still accurate
+    body: |
+      After the rewrite, the grep hits outside AGENTS.md/HERMES.md are: other plans' completed
+      steps and older specs/audits (historical records of what was done, left as is);
+      pyproject.toml's lockstep comment and bump-version.py's own usage/DRIFT text (still true:
+      release.py drives it); release.py/tests naming auto-tag.yml as the predecessor.
+      .claude/rules/explainers-currency.md triggers on "a minor or major version bump", which now
+      maps to a minor/major fragment; left unchanged. Explainers do not mention bumping.
+resolves: []
+evidence:
+  tests: "uv run pytest -q --no-cov -n auto: 5975 passed, 97 skipped, 1 failed (test_tripwire_unarchived_plans::test_no_merged_but_unarchived_plans, known, fails on main)"
+  checks: "fr acceptance check OK (252 rows); fr validate artifacts OK (65); bump-version.py --check ok; check-change-fragment.py origin/main exit 0; ruff check + format clean; no version surface differs from origin/main"
