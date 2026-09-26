@@ -119,3 +119,8 @@ Pre-existing on main; filed as derio-net/super-fr#705.
 ### opus-c3-diff-failure-reads-as-pass-resolved · finding [deferred → derio-net/super-fr#705] · resolves opus-c3-diff-failure-reads-as-pass: failed git diff reads as all changes present
 
 Pre-existing, not caused by this change.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1-opus created=2026-09-27T00:08:08 phase=1 -->
+### review-phase-1-opus · review · Opus fresh-context code review of phase 1: 3 findings (2 in scope, fixed; 1 out of scope, deferred to #705) (phase 1)
+
+Reviewer aa1f12c594c75f3bf on claude-opus-5-5, re-run per operator (reviewers run on Opus); the earlier Sonnet reviews stay as recorded. In scope, fixed in 8540388a: opus-c1-blob-scan-cost, opus-c2-branch-fetch-ignored. Out of scope, deferred: opus-c3-diff-failure-reads-as-pass -> derio-net/super-fr#705.
