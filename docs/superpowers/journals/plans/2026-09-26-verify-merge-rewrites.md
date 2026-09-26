@@ -109,3 +109,8 @@ Pre-existing on main; filed as derio-net/super-fr#705.
 ### opus-c1-blob-scan-cost-resolved · finding [fixed] · resolves opus-c1-blob-scan-cost: per-commit rev-parse scan is O(commits) per path
 
 8540388a: one git log --raw call per path; constant-call-count test red first (28 vs 4 calls at N=25).
+
+<!-- fr:journal kind=finding scope=plan id=opus-c2-branch-fetch-ignored-resolved created=2026-09-27T00:07:43 state=fixed resolves=opus-c2-branch-fetch-ignored -->
+### opus-c2-branch-fetch-ignored-resolved · finding [fixed] · resolves opus-c2-branch-fetch-ignored: branch fetch result discarded, no explicit refspec
+
+8540388a: explicit refspec, ls-remote exit 2 = branch gone (fallback), anything else = not verified; 4 red-first tests incl. the CLI reason.
