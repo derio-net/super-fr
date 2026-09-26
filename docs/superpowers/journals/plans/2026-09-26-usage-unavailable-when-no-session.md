@@ -64,3 +64,8 @@ Test Plan item 2 names the CLI output; add a CLI-level assertion.
 ### cr4 · finding [open] (reviewer: out of scope) · existing sessions: [] usage files stay as they are (phase 1)
 
 e.g. implemented/usage/2026-09-26-fix-models-opencode-noop-505.yaml. Archived artifacts are frozen history; they already render as a dash, never 0.
+
+<!-- fr:journal kind=finding scope=plan id=cr5 created=2026-09-26T23:37:05 phase=1 state=open review_scope=in -->
+### cr5 · finding [open] (reviewer: in scope) · redundant FR_HOSTNAME monkeypatch in a new capture test (phase 1)
+
+Same nit as p1-r2 (left as recorded); the env dict already carries the value.
