@@ -44,3 +44,8 @@ Fixture only had failed; helper synthesised completed.
 ### opus-r5-unhashable-id · finding [open] (reviewer: out of scope) · unhashable tool_use_id raises TypeError
 
 Pre-existing on main (telemetry.py:717); not introduced by this change.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r1-summary-injection-resolved created=2026-09-26T23:40:25 state=fixed resolves=opus-r1-summary-injection -->
+### opus-r1-summary-injection-resolved · finding [fixed] · resolves opus-r1-summary-injection: summary-quoted description can forge <status>completed</status> or another command's id
+
+Fixed in 4053f20d with a red-first test in tests/unit/test_run_telemetry.py.
