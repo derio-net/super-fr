@@ -1,0 +1,46 @@
+{
+  "jobs": [
+    {
+      "name": "lint",
+      "started_at": "2026-09-26T12:29:51Z",
+      "completed_at": "2026-09-26T12:30:01Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "version-sync",
+      "started_at": "2026-09-26T12:29:50Z",
+      "completed_at": "2026-09-26T12:30:00Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "validate-artifacts",
+      "started_at": "2026-09-26T12:29:50Z",
+      "completed_at": "2026-09-26T12:30:00Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "test",
+      "started_at": "2026-09-26T12:29:51Z",
+      "completed_at": "2026-09-26T12:37:06Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "typecheck",
+      "started_at": "2026-09-26T12:29:50Z",
+      "completed_at": "2026-09-26T12:30:04Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "opencode-plugin-test",
+      "started_at": "2026-09-26T12:29:50Z",
+      "completed_at": "2026-09-26T12:30:18Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "change-fragment",
+      "started_at": "2026-09-26T12:29:48Z",
+      "completed_at": "2026-09-26T12:29:48Z",
+      "conclusion": "skipped"
+    }
+  ]
+}
