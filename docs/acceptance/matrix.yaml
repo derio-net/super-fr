@@ -4641,6 +4641,6 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation.py
     status: ci
-    notes: 'Unit tests over real throwaway repos: blob-equality fallback for a later
-      rewrite, orphan and branch-side deletion stay missing, verify_merge checks the
-      fetched remote ref'
+    notes: Also covers the release bot deleting the PR's .changes fragment after the
+      merge (blob-equality fallback, no special case); tests pin it, incl. never-landed
+      fragment and orphan stay missing
