@@ -25,7 +25,6 @@ journal:
       (exit code 124) is read as `unverifiable`, deferring the reap rather than treating
       network failure as safe to proceed. The local-first checks (git status) and
       no-origin handling remain unchanged.
-    review_scope: in
   - kind: discovery
     id: P1-regression-test-coverage
     title: "Regression test added to verify _reap_hazard fetch is bounded and timeout-safe"
@@ -40,7 +39,6 @@ journal:
       All 9 tests in test_isolation_network_timeouts.py pass. All 19 gc-related
       isolation tests pass (test_isolation_gc_*.py). No regressions detected in
       lint, format, or type checking.
-    review_scope: in
 resolves: []
 #   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}
 evidence: {}
