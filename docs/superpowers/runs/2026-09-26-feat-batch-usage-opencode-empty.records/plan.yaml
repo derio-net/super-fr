@@ -1,9 +1,0 @@
-schema_version: 2
-run: 2026-09-26-feat-batch-usage-opencode-empty
-step: plan
-outcome: done
-journal:
-  - {kind: decision, id: one-phase-plan, title: "Single agentic standard-tier phase", body: "Per operator: one phase, debugging-first (red tests, then fix, then refactor/gates and matrix/fragment bookkeeping)."}
-resolves: []
-emitted: {plan: docs/superpowers/plans/2026-09-26-usage-unavailable-when-no-session}
-evidence: {}
