@@ -1,0 +1,7 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-verify-merge-rewrites
+step: deliver
+outcome: done
+acceptance: []
+emitted: {}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/7c5ad7bb-e470-4cd0-b76d-c2448b14e467/scratchpad/full-suite.log}
