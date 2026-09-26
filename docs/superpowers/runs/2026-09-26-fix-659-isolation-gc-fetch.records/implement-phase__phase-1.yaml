@@ -12,7 +12,7 @@ ticks:
   - P1.T1.S3
 #   this phase: P1.T1.S1, P1.T1.S2, P1.T1.S3
 refactor:
-  P1.T1.S3: "No cleanup needed: the fetch routing change is minimal and requires no refactoring"
+  P1.T1: "No cleanup needed: the fetch routing change is minimal and requires no refactoring"
 journal:
   - kind: decision
     id: P1-use-network-timeout-on-reap-hazard-fetch
