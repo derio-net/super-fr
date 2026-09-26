@@ -1,0 +1,72 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton - one version-surface list, uv.lock members included
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  tier: mechanical
+  files:
+  - scripts/version_surfaces.py
+  - scripts/bump-version.py
+  - tests/unit/test_version_surfaces.py
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: Red - version_surfaces() contract
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests in tests/unit/test_version_surfaces.py (load scripts/version_surfaces.py by path with importlib, the way tests/unit/test_version_bump_guard.py loads its script): `version_surfaces(repo)` over THIS repo returns entries (file, locator, value) for pyproject.toml, every packages/*/pyproject.toml, every plugin.json, both marketplace.json plugin entries, packages/fr-opencode-plugin/package.json AND one uv.lock entry per workspace member ([[package]] whose source is editable or virtual); every value equals the root pyproject version; in a tmp repo a registry package in uv.lock is not counted
+  - id: P1.T1.S2
+    text: |-
+      Add the spec §7 item 9 tripwire test: every tracked manifest (git ls-files for pyproject.toml, package.json, plugin.json, marketplace.json, excluding tests/fixtures/**) that carries a project/top-level `version` key is covered by version_surfaces(); run and confirm the failures are for the missing module
+- number: 2
+  title: Green - extract the list, bump-version reads it
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Create scripts/version_surfaces.py with `version_surfaces(repo: Path) -> list[Surface]` (frozen dataclass: file, locator, value), moving the globs out of scripts/bump-version.py, plus the uv.lock member parser (tomllib; member = source has key editable or virtual) and `write_version(repo, new)` used by bump; stdlib only, runnable with `uv run --no-project`
+  - id: P1.T2.S2
+    text: |-
+      Make scripts/bump-version.py `check()` and `bump()` use version_surfaces (check now also reports the uv.lock member lines); keep its CLI and output shape; `uv run --no-project python scripts/bump-version.py --check` passes
+- number: 3
+  title: Verify delivery
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Run tests/unit/test_version_surfaces.py, then `uv run pytest -q --no-cov -n auto`, `uv run ruff check packages/ tests/`, `uv run ruff format packages/ tests/`; all green. Change NO version value in this or any phase (spec §4)
+  - id: P1.T3.S2
+    text: |-
+      Refactor pass: remove now-duplicated glob helpers from bump-version.py, or record the refactor reason in the step record
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

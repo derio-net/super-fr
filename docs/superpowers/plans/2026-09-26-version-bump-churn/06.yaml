@@ -1,0 +1,32 @@
+schema_version: 2
+phase:
+  number: 6
+  title: '[manual] Post-merge - the first bot release, live'
+  tag: manual
+  depends_on:
+  - 5
+  tracking_issue: null
+tasks:
+- number: 1
+  title: Walk spec Test Plan item 1
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      After the PR merges, confirm on github.com that release.yml ran on the merge push, committed `release: v4.24.0` to main deleting .changes/feat-version-bump-churn.yaml, pushed tag v4.24.0, and published a Release whose notes contain the fragment summary; and that no CI workflow run started for the release commit
+  - id: P6.T1.S2
+    text: |-
+      Move row release-on-merge with `fr acceptance set-status`, noting the live evidence (run URL), in the archive housekeeping PR
+state:
+  steps:
+    P6.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P6.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

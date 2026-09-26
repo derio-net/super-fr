@@ -373,4 +373,6 @@ This PR is the first to use the new process, and the last to use the old one:
 
 ## Implementation Plans
 
-_None yet._
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-version-bump-churn | `derio-net/super-fr` | `2026-09-26-version-bump-churn` | — |

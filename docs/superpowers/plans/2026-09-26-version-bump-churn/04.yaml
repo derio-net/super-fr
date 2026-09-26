@@ -1,0 +1,86 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Acceptance - insert by capability, committed reports drop cross-row content
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - concurrent-acceptance-rows-merge-clean
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/edit.py
+  - packages/fr/src/fr/acceptance/report.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/test_acceptance_*.py
+  - docs/acceptance/report_local.html
+  - docs/acceptance/report_linked.html
+  - docs/acceptance/report_linked.md
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: Red - insertion and deterministic render
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      Write failing tests: adding a row whose capability exists lands after that capability's last row (neighbouring rows and comments byte-preserved); a new capability appends at the end; the rendered order of existing rows is unchanged
+  - id: P4.T1.S2
+    text: |-
+      Write failing tests: the deterministic Markdown and HTML contain no "N rows", no status-count table or tiles and no sharp-line panels; the ad-hoc render and `fr acceptance summary` still do; move the existing assertions at tests/unit/test_acceptance_report.py:115 and :188 onto the ad-hoc render
+  - id: P4.T1.S3
+    text: |-
+      Write failing tests/unit/test_acceptance_concurrent_merge.py: a tmp git repo with a matrix of two capabilities and generated reports; branches A and B each add a not-implemented row to a different capability through the CLI and regenerate; `git merge` of B into A conflicts in none of matrix.yaml and the three reports, and `fr acceptance check` passes on the result
+- number: 2
+  title: Green - insert by capability and the aggregates flag
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Replace append_row with an insert-by-capability function in fr/acceptance/edit.py, keeping its text-preserving approach, and update its callers (acceptance_cmd add, fr/record/apply.py:635)
+  - id: P4.T2.S2
+    text: |-
+      Add `aggregates: bool` to render() and render_markdown() in fr/acceptance/report.py; the deterministic and committed paths pass False, the ad-hoc path True; regenerate the three committed reports with `uv run fr acceptance report --deterministic` and confirm `uv run fr acceptance check` passes
+- number: 3
+  title: Verify and refactor
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Run the acceptance tests and `uv run pytest -q --no-cov -n auto`, ruff check and format, and the mypy line from AGENTS.md; all green
+  - id: P4.T3.S2
+    text: |-
+      Refactor pass (one capability-boundary scan shared by insert and set-status if they overlap), or record the refactor reason
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
