@@ -440,3 +440,8 @@ Filed at closeout as #670.
 ### rp5-f1-resolved-2 · finding [deferred → #671] · resolves rp5-f1: LOW: the gate's requires_bump covers only plugins/super-fr/{skills,rules}/, narrower than the documented plugins/*/skills/**
 
 Filed at closeout as #671.
+
+<!-- fr:journal kind=finding scope=plan id=p4-unarchived-plans-tripwire-resolved-2 created=2026-09-26T08:45:43 state=fixed resolves=p4-unarchived-plans-tripwire -->
+### p4-unarchived-plans-tripwire-resolved-2 · finding [fixed] · resolves p4-unarchived-plans-tripwire: LOW: test_tripwire_unarchived_plans fails on the merged tree - two plans from origin/main are complete but unarchived (phase 4)
+
+Both plans (isolation-network-timeouts, plan-table-header) were archived on main by #660/#664.
