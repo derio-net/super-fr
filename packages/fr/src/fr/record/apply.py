@@ -862,6 +862,7 @@ def apply_record(
             emitted=dict(record.emitted),
             no_questions=record.no_questions,
             reason=record.reason,
+            questions=record.questions,
             also_commit=commit_paths,
             guard=guard,
         )
