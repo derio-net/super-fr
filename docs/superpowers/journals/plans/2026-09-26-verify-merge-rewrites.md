@@ -89,3 +89,8 @@ Reviewer aae94ddac742e9ad4 read commits 3780778c and 709b3ab7: tests reproduce t
 ### review-phase-1-archive-addition · review · independent review of the archive-move addition (#598): no in-scope findings (phase 1)
 
 Reviewer aa314fc56063d9e54: _archived_path matches archive.py for all five kinds (plans dir, specs, journals with scope subdir, runs, usage); fallback is load-bearing (reap test where the original path never reached origin/main); dirty/unpushed/git-error paths still refuse; negative guards non-vacuous; spec claims true. Out of scope, recorded in spec Non-goals: boilerplate false-match against an older archived copy on a slug-reused re-run (extension of #387's accepted tradeoff).
+
+<!-- fr:journal kind=finding scope=plan id=opus-c1-blob-scan-cost created=2026-09-27T00:07:40 phase=1 state=open review_scope=in -->
+### opus-c1-blob-scan-cost · finding [open] (reviewer: in scope) · per-commit rev-parse scan is O(commits) per path (phase 1)
+
+local.py _branch_blob_was_on_base, multiplied by refs, archive alternate and gc sweep.
