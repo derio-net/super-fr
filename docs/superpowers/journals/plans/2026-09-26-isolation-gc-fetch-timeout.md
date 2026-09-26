@@ -29,3 +29,8 @@ lint, format, or type checking.
 ### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
 
 No cleanup needed: the fetch routing change is minimal and requires no refactoring
+
+<!-- fr:journal kind=review scope=plan id=phase-1-code-review created=2026-09-26T12:10:29 phase=1 -->
+### phase-1-code-review · review · Independent review of isolation gc fetch timeout (phase 1)
+
+Reviewer ses_f22cf8e9affeOpmMoMwBAkBn27 reviewed the spec, plan and diff. No findings. Confirmed the `_run_network` call preserves `cwd=state.worktree`, nonzero results remain `unverifiable`, GC skips the hazard, and the regression test covers timeout, cwd and failure behavior. Targeted network timeout tests: 9 passed.
