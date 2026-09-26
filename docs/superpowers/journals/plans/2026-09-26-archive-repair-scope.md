@@ -14,3 +14,48 @@ T1.S3 and T2.S3 refactors were done as part of green: repair._in_scope is the so
 ### no-refactor-p1-t3 · discovery · no-refactor-because P1.T3 (phase 1)
 
 docs/mirrors/fragment task; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=r1-f1 created=2026-09-26T15:52:53 phase=1 state=open review_scope=in -->
+### r1-f1 · finding [open] (reviewer: in scope) · fr repair no longer rewrites a same-named spec at another path; no repair-level test (phase 1)
+
+Intended per spec 3.C guard. Added test_repair_leaves_a_same_named_spec_at_another_path_alone.
+
+<!-- fr:journal kind=finding scope=plan id=r1-f2 created=2026-09-26T15:52:53 phase=1 state=open review_scope=in -->
+### r1-f2 · finding [open] (reviewer: in scope) · Missing full-path back-compat test (phase 1)
+
+Added test_full_path_spec_ref_still_resolves. plan-config scoped skip covered for save_to; archive e2e for the archived plan's own row is covered at unit level by the scoped File-cell test.
+
+<!-- fr:journal kind=finding scope=plan id=r1-n1 created=2026-09-26T15:52:53 phase=1 state=open review_scope=out -->
+### r1-n1 · finding [open] (reviewer: out of scope) · Some tests are regression pins, pass before the fix (phase 1)
+
+Intended by spec 4 (repo-wide paths must stay); not a defect.
+
+<!-- fr:journal kind=finding scope=plan id=r1-n2 created=2026-09-26T15:52:53 phase=1 state=open review_scope=out -->
+### r1-n2 · finding [open] (reviewer: out of scope) · opencode live integration tests fail in this environment (phase 1)
+
+Diff touches nothing they exercise (no fr-opencode-plugin or gate code); environmental.
+
+<!-- fr:journal kind=review scope=plan id=r1-review created=2026-09-26T15:52:53 phase=1 -->
+### r1-review · review · independent code review of phase 1 (phase 1)
+
+2 minor in-scope findings, both fixed with tests; 2 out-of-scope notes; call sites verified complete.
+
+<!-- fr:journal kind=finding scope=plan id=r1-f1-resolved created=2026-09-26T15:52:53 phase=1 state=fixed resolves=r1-f1 -->
+### r1-f1-resolved · finding [fixed] · resolves r1-f1: fr repair no longer rewrites a same-named spec at another path; no repair-level test (phase 1)
+
+test added
+
+<!-- fr:journal kind=finding scope=plan id=r1-f2-resolved created=2026-09-26T15:52:53 phase=1 state=fixed resolves=r1-f2 -->
+### r1-f2-resolved · finding [fixed] · resolves r1-f2: Missing full-path back-compat test (phase 1)
+
+test added
+
+<!-- fr:journal kind=finding scope=plan id=r1-n1-resolved created=2026-09-26T15:52:53 phase=1 state=open resolves=r1-n1 out_of_scope=true -->
+### r1-n1-resolved · finding [out-of-scope] · resolves r1-n1: Some tests are regression pins, pass before the fix (phase 1)
+
+regression pins are intended by the spec; nothing this change caused
+
+<!-- fr:journal kind=finding scope=plan id=r1-n2-resolved created=2026-09-26T15:52:53 phase=1 state=open resolves=r1-n2 out_of_scope=true -->
+### r1-n2-resolved · finding [out-of-scope] · resolves r1-n2: opencode live integration tests fail in this environment (phase 1)
+
+environmental opencode binary failure; diff does not touch what they exercise
