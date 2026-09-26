@@ -89,3 +89,8 @@ check: consistency. A released fr without the new _merge rule carries the placeh
 ### o1-resolved · finding [fixed] · resolves o1: Spec did not cover backfill, which the branch now changes
 
 Spec 3.5, Test Plan item 4 and the plan files list now cover backfill (f0814595).
+
+<!-- fr:journal kind=finding scope=spec id=o2-resolved created=2026-09-26T23:36:46 state=fixed resolves=o2 -->
+### o2-resolved · finding [fixed] · resolves o2: Several spec path:line citations went stale
+
+Spec citations now name symbols (capture.py::candidates etc.), not lines.
