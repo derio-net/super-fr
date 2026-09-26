@@ -124,3 +124,8 @@ Pre-existing, not caused by this change.
 ### review-phase-1-opus · review · Opus fresh-context code review of phase 1: 3 findings (2 in scope, fixed; 1 out of scope, deferred to #705) (phase 1)
 
 Reviewer aa1f12c594c75f3bf on claude-opus-5-5, re-run per operator (reviewers run on Opus); the earlier Sonnet reviews stay as recorded. In scope, fixed in 8540388a: opus-c1-blob-scan-cost, opus-c2-branch-fetch-ignored. Out of scope, deferred: opus-c3-diff-failure-reads-as-pass -> derio-net/super-fr#705.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f1-lsremote-pattern created=2026-09-27T00:12:38 phase=1 state=open review_scope=in -->
+### opus-f1-lsremote-pattern · finding [open] (reviewer: in scope) · ls-remote matched the bare name as a pattern (foo/<b>) (phase 1)
+
+False refusal when a suffix-sharing branch exists; local.py _branch_refs.
