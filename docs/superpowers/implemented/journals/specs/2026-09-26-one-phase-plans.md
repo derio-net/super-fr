@@ -64,3 +64,8 @@ Wording remains accurate for 2+ agentic phases; this change did not make it wron
 ### skeleton-override-2026-09-26-one-phase-plans · decision · Operator-authorized skeleton override for this batch's own plan
 
 Batch one-phase-plans (super-fr#673, #662): the operator's brief plans this batch as ONE agentic phase and authorizes the override, because the installed gate refuses a one-phase plan until this very change lands.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved-2 created=2026-09-26T11:57:54 state=open resolves=s4 tracked_by=#675 -->
+### s4-resolved-2 · finding [deferred → #675] · resolves s4: plan_cmd.py help text still says marker is for the first agentic phase
+
+Filed at closeout as #675.
