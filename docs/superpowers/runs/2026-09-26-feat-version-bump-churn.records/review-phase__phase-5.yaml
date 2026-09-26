@@ -1,0 +1,38 @@
+schema_version: 1
+run: 2026-09-26-feat-version-bump-churn
+step: review-phase
+item: phase/5
+outcome: done
+journal:
+  - kind: review
+    id: rp5-review
+    phase: 5
+    title: "Independent review of phase 5: 0 findings at the reviewer's bar; 1 inherited gap filed out of scope"
+    body: |
+      Dispatched reviewer (separate context) over e1ce1c91 and the four set-status commits, checking the prose
+      against the CODE (changes.py, check-change-fragment.py, version_surfaces.py, floors.py, release.py,
+      release.yml, ci.yml, .changes/README.md, triage/model.py). Every rule, path, job name, input name and
+      escape in AGENTS.md and HERMES.md matches the code; the completeness grep is clean across skills,
+      rules, .claude/rules, the .opencode/.hermes mirrors, README.md, explainers and scripts; .fr/triage.yaml
+      is valid without `version:` (optional in TriageConfig); the matrix moves are truthful with real refs,
+      release-on-merge still owed its live walk. It confirmed byte-for-byte that the narrow bump classifier
+      predates this plan.
+  - kind: finding
+    id: rp5-f1
+    phase: 5
+    title: "LOW: the gate's requires_bump covers only plugins/super-fr/{skills,rules}/, narrower than the documented plugins/*/skills/**"
+    review_scope: out
+    body: |
+      scripts/check-change-fragment.py `requires_bump`; AGENTS.md, HERMES.md and .changes/README.md say
+      `plugins/*/skills/**`, so a super-fr-dispatch skill change needs no fragment per the gate.
+resolves:
+  - id: rp5-f1
+    state: out-of-scope
+    body: |
+      Not caused by this change: `git show 484fd508:scripts/check-version-bump-needed.py` has the identical
+      prefix check, which phase 2 kept verbatim as the spec required ("the path classifier is kept as it
+      is"). Widening it changes which PRs must release; that is its own decision, to be filed as an issue.
+evidence:
+  review: rp5-review
+  reviewer: a4064df244b67d049
+  model: claude-opus-5-5
