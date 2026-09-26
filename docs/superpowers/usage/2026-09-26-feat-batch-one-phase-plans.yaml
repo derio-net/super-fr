@@ -4,30 +4,31 @@ captures:
 - host: h-691df8d0
   harness: claude-code
   mode: devcontainer
-  captured_at: '2026-09-26T09:23:25+00:00'
+  captured_at: '2026-09-26T09:49:01+00:00'
   at:
   - resolve:brainstorm
+  - deliver
   sessions:
   - session: efc88d0a-6c63-4367-99de-454bafe7c54f
     role: main
     models:
       claude-sonnet-5:
-        input: 24
-        cache_write: 87538
-        cache_read: 1124336
-        output: 7632
+        input: 198
+        cache_write: 358307
+        cache_read: 9456656
+        output: 30305
         usd: null
         usd_source: none
     activity:
       implementation:
         usd: null
-        turns: 1
+        turns: 27
       other:
         usd: null
-        turns: 2
+        turns: 33
       paperwork:
         usd: null
-        turns: 9
+        turns: 46
     steps:
       (outside run):
         usd: null
@@ -35,3 +36,22 @@ captures:
       brainstorm:
         usd: null
         turns: 10
+      spec-review:
+        usd: null
+        turns: 12
+      plan:
+        usd: null
+        turns: 4
+      implement:
+        usd: null
+        turns: 46
+      journal-check:
+        usd: null
+        turns: 1
+      deliver:
+        usd: null
+        turns: 19
+    briefs:
+      a05822691ca586190: 1043
+      phase/1/implement-phase: 3129
+      phase/1/review-phase: 1354
