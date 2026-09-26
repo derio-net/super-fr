@@ -1,0 +1,20 @@
+# fr triage batches: repo config (spec 2026-09-25-triage-batches §3.I).
+# Read by `fr triage collect` from origin/main; dispatch and merge refuse a
+# collected copy that no longer matches origin/main, so re-collect after editing.
+defaults:
+  launch:
+    runner: herdr
+    harness: claude
+# Version reservations (§3.F): mirrors scripts/bump-version.py's globs. A file
+# missed here fails safe: merge treats its conflict as outside the version
+# files and stops the queue.
+version:
+  source: {file: pyproject.toml, key: project.version}
+  files:
+    - "pyproject.toml"
+    - "packages/*/pyproject.toml"
+    - "plugins/*/.claude-plugin/plugin.json"
+    - ".claude-plugin/*.json"
+    - "packages/fr-opencode-plugin/package.json"
+    - "uv.lock"
+  set: "uv run --no-project python scripts/bump-version.py {version}"
