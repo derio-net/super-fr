@@ -122,8 +122,8 @@ h1{font-family:var(--display);font-optical-sizing:auto;font-weight:600;font-size
 <header>
 <h1>fr-goal: One Conversation, Then a Reviewed Pull Request</h1>
 <p class="meta"><span class="archetype">skill-presentation</span> <span class="date">2026-07-17</span></p>
-<div class="tldr">Tell fr-goal what outcome you want, answer one round of questions, and it
-carries the work to a pull request. The sequence it follows is not buried in
+<div class="tldr">Tell fr-goal what outcome you want, answer one question round sized to it
+(rarely two), and it carries the work to a pull request. The sequence it follows is not buried in
 the tool: it is a workflow shape, a short YAML file listing the steps, which
 your own repository can extend or replace. Before the first step runs,
 `fr run start` creates a separate Git worktree and development container, so
@@ -215,9 +215,9 @@ are specific to this feature:</p>
 Preserve existing filters, use a documented JSON format, and include migration tests.
 </code></pre>
 
-<p>The command itself already means "ask once, work autonomously, and take this to
-a pull request," so repeating that contract wastes the most useful part of the
-prompt. Add business rules, compatibility requirements, examples, or known
+<p>The command itself already means "size the questions to the decisions, work
+autonomously, and take this to a pull request," so repeating that contract
+wastes the most useful part of the prompt. Add business rules, compatibility requirements, examples, or known
 risks instead.</p>
 <p>Because the pipeline is a shape, the command also takes an optional shape name.
 <code>/fr-goal</code> runs the feature-delivery shape this article describes;
@@ -276,8 +276,9 @@ marked handoff where a human can see it. There is no path through the engine
 that could call a language model even by accident.</p>
 <p><strong>A step can carry a gate.</strong> <code>gate: operator</code> means the run stops there until a
 person answers. The shipped shape declares exactly one such gate, on the
-batched question round — the single operator touchpoint the pipeline promises.
-An unanswered gate is a stop, not a timeout with a default. On Claude Code the
+question round or rounds — the single operator touchpoint the pipeline
+promises, whether it takes one round or (rarely) two. An unanswered round is
+a stop, not a timeout with a default. On Claude Code the
 tool checks the stop really happened: clearing the gate needs an answered
 question in the session's transcript since the run paused there. An agent that
 decides the request already settled everything can still clear it without
@@ -545,20 +546,24 @@ a less protected workspace halfway through the run. An isolation marker,
 tool-layer edit hook, and session-sentinel Bash guard also make accidental drift
 back into the base checkout harder. These are discipline backstops with
 documented escapes and fail-open cases, not a security boundary.</p>
-<h3>2. Explore first, then ask once (<code>brainstorm</code>)</h3>
+<h3>2. Explore first, then ask a round sized to the decisions (<code>brainstorm</code>)</h3>
 <p>The agent does not begin by asking questions it could answer from the project.
 It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
-question set, with no more than four questions and recommended choices first.
-A deployed change may include a question about how you will verify it in the
-real environment (<code>plugins/super-fr/skills/fr-goal/SKILL.md:42-53</code>).</p>
-<p>This is the shape's one operator gate, and an unanswered batch is a hard stop.
+round of questions, sized to those decisions, recommended choices first — a
+second round follows only when it was announced before the first round ended,
+or you ask for one, and there is never a third. A deployed change may include
+a question about how you will verify it in the real environment
+(<code>plugins/super-fr/skills/fr-goal/SKILL.md:42-53</code>).</p>
+<p>This is the shape's one operator gate, and an unanswered round is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
-decisions are batched rather than dripped out as repeated interruptions. When
-you do answer, the step is closed by recording both the outcome and the path of
-the specification it produced, which is how every later step knows where to
-find that document. This is why "one operator touchpoint" describes the
-expected path, not an unconditional promise of one conversation turn.</p>
+decisions are grouped into the round rather than dripped out as repeated
+interruptions, and a second round's questions each name the round-one answer
+or code finding they are chasing. When you do answer, the step is closed by
+recording both the outcome and the path of the specification it produced,
+which is how every later step knows where to find that document. This is why
+"one operator touchpoint" describes the expected path, not an unconditional
+promise of one conversation turn.</p>
 <table>
 <thead>
 <tr>
@@ -570,7 +575,7 @@ expected path, not an unconditional promise of one conversation turn.</p>
 <tbody>
 <tr>
 <td>Initial product and architecture decisions</td>
-<td style="text-align: right;">Yes, once</td>
+<td style="text-align: right;">Yes, one round (rarely two)</td>
 <td>These decisions belong to the operator.</td>
 </tr>
 <tr>
@@ -966,7 +971,7 @@ than looking for a flag that bends this one.</p>
 </tr>
 <tr>
 <td>Product decisions</td>
-<td>One batched Q&amp;A</td>
+<td>One question round (rarely two)</td>
 <td>Constrains the spec and all later work.</td>
 </tr>
 <tr>
@@ -1036,7 +1041,8 @@ Keep existing saved filters compatible, document the JSON format, and test round
 <ol>
 <li>The agent announces <code>fr-goal</code>, starts the run, and enters isolation before
    examining code.</li>
-<li>It explores the implementation and asks one consolidated question set.</li>
+<li>It explores the implementation and asks one question round sized to the
+   decisions (rarely two).</li>
 <li>After your answers, it writes and reviews the spec without section approvals.</li>
 <li>It creates the plan, and the plan self-review runs as a command whose exit
    code decides whether the run continues.</li>

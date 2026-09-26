@@ -7,8 +7,8 @@ series: [explainers]
 post_number: 1
 archetype: skill-presentation
 tldr: |
-  Tell fr-goal what outcome you want, answer one round of questions, and it
-  carries the work to a pull request. The sequence it follows is not buried in
+  Tell fr-goal what outcome you want, answer one question round sized to it
+  (rarely two), and it carries the work to a pull request. The sequence it follows is not buried in
   the tool: it is a workflow shape, a short YAML file listing the steps, which
   your own repository can extend or replace. Before the first step runs,
   `fr run start` creates a separate Git worktree and development container, so
@@ -117,9 +117,9 @@ are specific to this feature:
 Preserve existing filters, use a documented JSON format, and include migration tests.
 ```
 
-The command itself already means "ask once, work autonomously, and take this to
-a pull request," so repeating that contract wastes the most useful part of the
-prompt. Add business rules, compatibility requirements, examples, or known
+The command itself already means "size the questions to the decisions, work
+autonomously, and take this to a pull request," so repeating that contract
+wastes the most useful part of the prompt. Add business rules, compatibility requirements, examples, or known
 risks instead.
 
 Because the pipeline is a shape, the command also takes an optional shape name.
@@ -188,8 +188,9 @@ that could call a language model even by accident.
 
 **A step can carry a gate.** `gate: operator` means the run stops there until a
 person answers. The shipped shape declares exactly one such gate, on the
-batched question round — the single operator touchpoint the pipeline promises.
-An unanswered gate is a stop, not a timeout with a default. On Claude Code the
+question round or rounds — the single operator touchpoint the pipeline
+promises, whether it takes one round or (rarely) two. An unanswered round is
+a stop, not a timeout with a default. On Claude Code the
 tool checks the stop really happened: clearing the gate needs an answered
 question in the session's transcript since the run paused there. An agent that
 decides the request already settled everything can still clear it without
@@ -491,26 +492,30 @@ tool-layer edit hook, and session-sentinel Bash guard also make accidental drift
 back into the base checkout harder. These are discipline backstops with
 documented escapes and fail-open cases, not a security boundary.
 
-### 2. Explore first, then ask once (`brainstorm`)
+### 2. Explore first, then ask a round sized to the decisions (`brainstorm`)
 
 The agent does not begin by asking questions it could answer from the project.
 It first studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into one
-question set, with no more than four questions and recommended choices first.
-A deployed change may include a question about how you will verify it in the
-real environment (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
+round of questions, sized to those decisions, recommended choices first — a
+second round follows only when it was announced before the first round ended,
+or you ask for one, and there is never a third. A deployed change may include
+a question about how you will verify it in the real environment
+(`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
 
-This is the shape's one operator gate, and an unanswered batch is a hard stop.
+This is the shape's one operator gate, and an unanswered round is a hard stop.
 "Recommended" communicates judgment; it is not a timeout default. Straggling
-decisions are batched rather than dripped out as repeated interruptions. When
-you do answer, the step is closed by recording both the outcome and the path of
-the specification it produced, which is how every later step knows where to
-find that document. This is why "one operator touchpoint" describes the
-expected path, not an unconditional promise of one conversation turn.
+decisions are grouped into the round rather than dripped out as repeated
+interruptions, and a second round's questions each name the round-one answer
+or code finding they are chasing. When you do answer, the step is closed by
+recording both the outcome and the path of the specification it produced,
+which is how every later step knows where to find that document. This is why
+"one operator touchpoint" describes the expected path, not an unconditional
+promise of one conversation turn.
 
 | Event | Pause? | Why |
 |---|---:|---|
-| Initial product and architecture decisions | Yes, once | These decisions belong to the operator. |
+| Initial product and architecture decisions | Yes, one round (rarely two) | These decisions belong to the operator. |
 | Spec and plan approvals | No | Approval pauses become review-and-fix passes. |
 | A valid finding this change caused | No | The agent fixes it and tests the fix. |
 | A true finding this change did not cause | No | Filed as out of scope, listed in the PR for you. |
@@ -898,7 +903,7 @@ than looking for a flag that bends this one.
 | Goal and autonomy request | Operator prompt | Defines scope and activates the skill. |
 | Workflow shape | `docs/superpowers/workflows/<name>.yaml`, else the shipped copy | Defines the steps, their kinds, gates, and dispatch granularity. |
 | Run record | `docs/superpowers/runs/<run-id>.yaml` | Tracks the cursor, each step's outcome, and what it emitted. |
-| Product decisions | One batched Q&A | Constrains the spec and all later work. |
+| Product decisions | One question round (rarely two) | Constrains the spec and all later work. |
 | Devcontainer profile | `.devcontainer/<profile>/devcontainer.json` | Defines isolated execution. |
 | Profile secrets | `~/.config/fr/secrets/<repo>/<profile>.env` | Exposes only configured runtime secrets. |
 | Spec | `docs/superpowers/specs/` | Records design, acceptance tests, and optional manual Test Plan. |
@@ -938,7 +943,8 @@ Expect this visible sequence:
 
 1. The agent announces `fr-goal`, starts the run, and enters isolation before
    examining code.
-2. It explores the implementation and asks one consolidated question set.
+2. It explores the implementation and asks one question round sized to the
+   decisions (rarely two).
 3. After your answers, it writes and reviews the spec without section approvals.
 4. It creates the plan, and the plan self-review runs as a command whose exit
    code decides whether the run continues.
