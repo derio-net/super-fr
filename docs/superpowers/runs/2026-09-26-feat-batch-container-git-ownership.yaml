@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-container-git-ownership
 workflow: fr-goal@1
 branch: feat/batch-container-git-ownership
 started: '2026-09-26T12:59:11+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -81,6 +81,10 @@ steps:
           reviewer: a98a133af5876f27e
           findings: r1-profile-parity,r2-restore-untested,r3-home-leak,r4-shared-seam-trust,r5-tmp-in-repo
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-26T13:55:45+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): r4-shared-seam-trust, r5-tmp-in-repo
   deliver:
     state: pending
