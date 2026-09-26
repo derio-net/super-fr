@@ -436,3 +436,8 @@ Pre-existing test (#615); this branch does not touch its probe's imports (tests/
 ### r1-5-resolved-2 · finding [deferred → #643] · resolves r1-5: fr_cncd missing from test_fr_imports_no_siblings banned set (pre-existing)
 
 Filed at closeout as #643.
+
+<!-- fr:journal kind=finding scope=plan id=r1-6-resolved-2 created=2026-09-26T07:21:37 state=open resolves=r1-6 tracked_by=#644 -->
+### r1-6-resolved-2 · finding [deferred → #644] · resolves r1-6: Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take
+
+Filed at closeout as #644.
