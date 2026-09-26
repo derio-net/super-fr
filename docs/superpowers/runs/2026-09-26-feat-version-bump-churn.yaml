@@ -158,7 +158,7 @@ steps:
           reviewer: af4e3ecd6efef8e83
           findings: p4-unarchived-plans-tripwire,rp4-f1,rp4-f2,rp4-f3
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-26T07:59:14+00:00'
           agent: aa0498afff373a5bf
@@ -166,6 +166,8 @@ steps:
           harness: claude-code
           model: claude-haiku-4-5-20251001
           session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T08:08:57+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
