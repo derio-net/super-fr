@@ -89,3 +89,8 @@ Reviewer a5d182fc33b6777d7 (opus). Re-run because phase1-review ran on Sonnet. C
 ### o3 · finding [open] (reviewer: in scope) · F3 assignment scan resolves variables the shell would not (Opus) (phase 1)
 
 Prefix assignment, quoted text, here-doc. Fixed: command-start only.
+
+<!-- fr:journal kind=finding scope=plan id=o4 created=2026-09-26T23:50:58 phase=1 state=open review_scope=in -->
+### o4 · finding [open] (reviewer: in scope) · F4 quadratic _NOTIFIED_STATUS regex (Opus) (phase 1)
+
+Replaced with a linear pattern.
