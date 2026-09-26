@@ -79,56 +79,64 @@ captures:
 - host: h-3c3cf7b7
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-09-25T22:10:43+00:00'
+  captured_at: '2026-09-25T23:57:27+00:00'
   at:
   - resolve:implement-phase
   - deliver
+  - closeout
   sessions:
   - session: 64c6527d-a7ed-4b81-a4cd-0cef16c2085d
     role: main
     models:
       claude-opus-5-5:
-        input: 2460
-        cache_write: 3514247
-        cache_read: 265156561
-        output: 284889
-        usd: null
-        usd_source: none
+        input: 2484
+        cache_write: 3526611
+        cache_read: 271426209
+        output: 294166
+        usd: 118.6250566
+        usd_source: exact
       claude-sonnet-5:
         input: 40
         cache_write: 128871
         cache_read: 1857611
         output: 305
-        usd: null
-        usd_source: none
+        usd: 1.1009164
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.039092
+        usd_source: exact
     activity:
       implementation:
-        usd: null
-        turns: 777
+        usd: 60.66532156761042
+        turns: 780
       other:
-        usd: null
-        turns: 226
+        usd: 27.14571696488836
+        turns: 231
       paperwork:
-        usd: null
-        turns: 258
+        usd: 31.954026467501247
+        turns: 262
     steps:
       (outside run):
-        usd: null
-        turns: 40
+        usd: 6.868199395150722
+        turns: 52
       brainstorm:
-        usd: null
+        usd: 8.494861171262425
         turns: 60
       spec-review:
-        usd: null
+        usd: 2.2205808302000207
         turns: 27
       plan:
-        usd: null
+        usd: 2.0131014337714803
         turns: 11
       implement:
-        usd: null
+        usd: 95.72342291389073
         turns: 1076
       deliver:
-        usd: null
+        usd: 4.444899255724659
         turns: 23
     briefs:
       toolu_01SB7Gf6a54CfM5eoF7QNYHS: 293
@@ -142,3 +150,27 @@ captures:
       phase/3/implement-phase: 3871
       phase/3/review-phase: 3382
       a093671f3f334af42: 4961
+  - session: cc6e6f76-0f88-4b67-90f5-49d5045cf981
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 258
+        cache_write: 137274
+        cache_read: 10711613
+        output: 34966
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 2
+      other:
+        usd: null
+        turns: 60
+      paperwork:
+        usd: null
+        turns: 29
+    steps:
+      (outside run):
+        usd: null
+        turns: 91

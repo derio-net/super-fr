@@ -31,14 +31,25 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T23:57:03+00:00'
+      note: 'Walked 2026-09-26: /fr-goal on #624, Claude Code, devcontainer mode (PR
+        #635). Usage file readable (1 session, host label only, no host names); fr
+        isolation exec -- fr run/usage refused exit 2 naming the host command; bookkeeping
+        2.7 turns/step-item (32/12), deliver alone 4 tests= records (#607 comment).
+        Subagents missing from capture (#637), no USD on Claude Code.'
     P4.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-25T23:57:04+00:00'
+      note: 'Walked 2026-09-26: /fr-goal on #505, OpenCode, host-worktree mode (PR
+        #633). Capture recorded sessions: [] (#636); reader works given the id. fr
+        run cost from a fresh clone with an empty HOME renders both runs (Claude Code
+        with figures, OpenCode empty). Bookkeeping 3.6 turns/step-item (36/10). Also
+        #638 (prose tests= log accepted), #639 (orphan journal), #640 (flaky test).
+        Rows moved per operator: passing ones flipped, failing ones kept with evidence.'
   completion:
-    at: null
-    note: null
+    at: '2026-09-25T23:57:15+00:00'
+    note: 'Post-merge live walk done 2026-09-26 on Claude Code (#635) and OpenCode
+      (#633); Hermes not walked per parity.yaml. Outcome and defects: #636-#640, #607
+      comment.'
     observed_prs: []

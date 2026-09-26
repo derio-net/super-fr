@@ -4023,10 +4023,9 @@ rows:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
     status: skipped
-    notes: 'claim delivered by usage/ per-step rollup (test_run_cost_cmd, test_usage_capture);
-      refs to tests of the removed main_session/attempt-measurement mechanism dropped
-      by one hand-edited line each (no drop-level verb yet: https://github.com/derio-net/super-fr/issues/624);
-      live walk in phase 4'
+    notes: 'Live walk 2026-09-26: Claude Code shows per-step turns and tokens but no
+      USD (transcripts carry no cost; fr invents no price) and omits subagents (#637);
+      OpenCode captured no session (#636). Unit-pinned only until both are fixed.'
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -4287,8 +4286,10 @@ rows:
       int:
       - super-fr:tests/unit/test_run_cost_cmd.py
     status: ci
-    notes: fr run cost reads usage/ (then implemented/usage/) on a checkout with no
-      cursor and no transcripts; phase 2
+    notes: 'CI unit-pinned; live-verified 2026-09-26: fr run cost from a fresh clone
+      with an empty HOME rendered the Claude Code run''s per-step turns and per-model
+      tokens from the committed usage file. The OpenCode run rendered empty because
+      nothing was captured (#636).'
   - id: usage-privacy-no-host-identity
     capability: Lean cost-aware pipeline
     acceptance: A usage file never contains a hostname, base URL, path or message content
@@ -4308,10 +4309,11 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
-    status: not-implemented
-    notes: Spec §9, target level manual -> int. Phase 2 built the host-side rule this
-      depends on (fr run/usage refused inside a devcontainer, capture runs on the host);
-      the verifying devcontainer-mode live walk is phase 4.
+    status: skipped
+    notes: 'Live-verified 2026-09-26 (Test Plan 15, #628 phase 4): /fr-goal on #624
+      in devcontainer mode (PR #635) captured a readable session (host label only, no
+      host names); fr run/usage refused inside the container. Manual walk, not in CI.
+      Caveat: subagent transcripts omitted (#637).'
   - id: step-record-one-resolve
     capability: Lean cost-aware pipeline
     acceptance: 'Each agent step''s bookkeeping is one fr run resolve --record: one
@@ -4358,7 +4360,10 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
     levels: {}
     status: not-implemented
-    notes: 'Spec §9, target level: manual. Born at brainstorm 2026-09-25.'
+    notes: 'Live walk 2026-09-26 missed the target: 2.7 turns/step-item on Claude Code
+      (32/12, PR #635), 3.6 on OpenCode (36/10, PR #633), down from 6.1. Main drivers:
+      deliver''s tests= gate refusing real suite logs (#607 comment), OpenCode''s orphan
+      journal (#639). Stays open until a walk lands at or under 2.'
   - id: deliver-pr-body-sections
     capability: Lean cost-aware pipeline
     acceptance: A PR missing a required fr-rendered section cannot be delivered
