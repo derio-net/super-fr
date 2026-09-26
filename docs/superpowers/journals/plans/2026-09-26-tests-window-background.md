@@ -114,3 +114,8 @@ Docstring updated with the window-length limit.
 ### o8 · finding [open] (reviewer: out of scope) · F10 OpenCode & detach zero-length window (Opus) (phase 1)
 
 Spec non-goal; same as r6/s2. Follow-up to be filed at the merge touchpoint.
+
+<!-- fr:journal kind=finding scope=plan id=o1-resolved created=2026-09-26T23:51:01 state=fixed resolves=o1 -->
+### o1-resolved · finding [fixed] · resolves o1: F1 queued-attachment task-notification shape never seen (Opus code review)
+
+fixed in 33d01601
