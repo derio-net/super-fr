@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check-version-bump-needed.py"
-spec = importlib.util.spec_from_file_location("check_version_bump_needed", SCRIPT)
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check-change-fragment.py"
+spec = importlib.util.spec_from_file_location("check_change_fragment", SCRIPT)
 assert spec and spec.loader
 guard = importlib.util.module_from_spec(spec)
+sys.modules["check_change_fragment"] = guard
 spec.loader.exec_module(guard)
 
 

@@ -1,0 +1,59 @@
+name: Release
+
+# Replaces auto-tag.yml (spec 2026-09-26-version-bump-churn §3.C). PRs never
+# edit a version: they add a `.changes/<branch-slug>.yaml` fragment, and this
+# workflow turns every pending fragment into one `release: vX.Y.Z` commit on
+# `main` (`scripts/release.py`), then tags it and publishes a GitHub Release.
+# Idempotent: with no fragments and the version already tagged it is a no-op,
+# and a rerun reads its notes from the release commit's body.
+#
+# No CI runs on the release commit. It is pushed with the GITHUB_TOKEN, and a
+# push made with the GITHUB_TOKEN triggers no workflow. That is safe only
+# because release.py verifies the staged diff first: nothing but
+# version_surfaces() lines and the consumed fragments, and a stale uv.lock is
+# refused rather than re-resolved.
+#
+# Pushing to main works today because main's ruleset forbids only force-push
+# and deletion. If a required-PR or required-checks rule is ever added, the
+# release bot needs a bypass actor on that rule; release.py reports a
+# protection refusal (GH006) as exactly that, never as a lost race.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release exactly this X.Y.Z (must be above the current version); empty = from fragments"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Release pending change fragments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "${RELEASE_VERSION}" ]; then
+            uv run --no-project python scripts/release.py --version "${RELEASE_VERSION}"
+          else
+            uv run --no-project python scripts/release.py
+          fi

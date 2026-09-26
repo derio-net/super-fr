@@ -103,7 +103,7 @@ def test_twin_following_requires_git_for_siblings(tmp_path: Path) -> None:
 def _render(root: Path, rows_text: str) -> str:
     (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + rows_text)
     matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    return render(matrix, _links(root, "local"), stamp="test-stamp")
+    return render(matrix, _links(root, "local"), stamp="test-stamp", aggregates=True)
 
 
 def test_tiles_computed_from_rows(tmp_path: Path) -> None:
@@ -185,8 +185,27 @@ def test_deterministic_report_reproducible_no_git_stamp(
     second = out.read_text()
 
     assert first == second
-    assert "2 rows · links: local" in first
+    assert "links: local" in first
     assert "matrix @" not in first
+    # §3.I: the row count is a cross-row aggregate, so the committed render
+    # omits it; the ad-hoc render below still carries it.
+    assert "2 rows" not in first
+
+
+def test_adhoc_report_keeps_row_count_and_tiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ad-hoc gitignored report.html is where a human reads counts: it
+    keeps the `N rows` figure, the tiles and the sharp-line panels (§3.I)."""
+    root = make_repo(tmp_path, row(id="a") + row(id="b", status="skipped"))
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    res = runner.invoke(app, ["acceptance", "report"])
+    assert res.exit_code == 0, res.output
+    adhoc = (root / "docs" / "acceptance" / "report.html").read_text()
+    assert "(2 rows)" in adhoc
+    assert '<div class="tiles">' in adhoc
+    assert "The sharp line" in adhoc
+    assert '<div class="panel' in adhoc
 
 
 # ── the committed report SET (local html + linked html + linked md) ─────────
@@ -201,7 +220,7 @@ def test_render_markdown_is_github_flavored(tmp_path: Path) -> None:
 
     root = make_repo(tmp_path, row(id="a") + row(id="b", status="skipped"))
     matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    md = render_markdown(matrix, _links(root, "github"), stamp="2 rows · links: github")
+    md = render_markdown(matrix, _links(root, "github"), stamp="links: github", aggregates=False)
     assert md.startswith("# Acceptance coverage")
     assert "| Acceptance |" in md  # a GFM table header
     assert "| --- |" in md or "|---|" in md  # a delimiter row
@@ -217,7 +236,7 @@ def test_markdown_escapes_pipe_in_cells(tmp_path: Path) -> None:
     evil = row(id="a").replace('"Operator can do X"', '"a | b\nc"')
     (root / "docs" / "acceptance" / "matrix.yaml").write_text(MATRIX_HEADER + evil)
     matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
-    md = render_markdown(matrix, _links(root, "github"), stamp="s")
+    md = render_markdown(matrix, _links(root, "github"), stamp="s", aggregates=False)
     # the literal cell pipe is escaped and the newline flattened → table stays valid
     assert r"a \| b" in md
     assert "a | b\nc" not in md
@@ -369,3 +388,61 @@ def test_report_github_mode_embeds_ref(tmp_path: Path, monkeypatch: pytest.Monke
     text = (root / "docs" / "acceptance" / "report.html").read_text()
     assert "blob/abc123/" in text
     assert "links: github (ref abc123)" in text
+
+
+# ── §3.I: committed reports are a pure per-row rendering ───────────────────
+
+# One row of every status that has a sharp-line panel, so an aggregate that
+# survives into the committed set cannot hide behind an empty section.
+_EVERY_PANEL = (
+    row(id="a")
+    + row(id="s", status="skipped")
+    + row(id="n", status="not-implemented", unit="")
+    + row(id="f", status="failing")
+)
+
+
+def test_committed_set_omits_every_cross_row_aggregate(tmp_path: Path) -> None:
+    import re
+
+    from fr.acceptance.report import render_committed_set
+
+    root = make_repo(tmp_path, _EVERY_PANEL)
+    files = render_committed_set(load_matrix(root / "docs" / "acceptance" / "matrix.yaml"), root)
+    for rel, text in files.items():
+        assert not re.search(r"\b\d+ rows\b", text), rel
+        assert '<div class="tiles">' not in text, rel
+        assert "| status | count |" not in text, rel
+        assert "sharp line" not in text, rel
+        assert '<div class="panel' not in text, rel
+        assert "### Not implemented" not in text, rel
+
+
+def test_aggregates_flag_toggles_both_renderers(tmp_path: Path) -> None:
+    from fr.acceptance.report import render_markdown
+
+    root = make_repo(tmp_path, _EVERY_PANEL)
+    m = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    links = _links(root, "github")
+    md_on = render_markdown(m, links, stamp="s", aggregates=True)
+    md_off = render_markdown(m, links, stamp="s", aggregates=False)
+    assert "| status | count |" in md_on and "| status | count |" not in md_off
+    assert "sharp line" in md_on and "sharp line" not in md_off
+    assert "(4 rows)" in md_on and "rows)" not in md_off
+    html_on = render(m, links, stamp="s", aggregates=True)
+    html_off = render(m, links, stamp="s", aggregates=False)
+    assert '<div class="tiles">' in html_on and '<div class="tiles">' not in html_off
+    assert "sharp line" in html_on and "sharp line" not in html_off
+    assert "(4 rows)" in html_on and "rows)" not in html_off
+
+
+def test_summary_still_carries_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`fr acceptance summary` (the Actions job summary) and `status` keep the
+    counts the committed reports dropped."""
+    root = make_repo(tmp_path, _EVERY_PANEL)
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    summary = runner.invoke(app, ["acceptance", "summary"])
+    assert summary.exit_code == 0, summary.output
+    assert "| not-implemented | 1 |" in summary.output
+    status = runner.invoke(app, ["acceptance", "status"])
+    assert "not-implemented: 1" in status.output

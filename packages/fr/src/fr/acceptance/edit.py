@@ -1,7 +1,8 @@
 """Textual writes into `matrix.yaml` — the ONE place that renders a row block.
 
-`fr acceptance add` appends and `fr acceptance set-status` replaces; both come
-through here, so the two cannot disagree about the file's shape. Every write is
+`fr acceptance add` inserts (by capability) and `fr acceptance set-status`
+replaces; both come through here, so the two cannot disagree about the file's
+shape. Every write is
 line surgery on the original text rather than a `yaml.safe_dump` round trip: a
 dump would reflow the header comments (23 lines of schema documentation), the
 key order and the blank lines of EVERY row in the file, turning a one-row flip
@@ -54,19 +55,17 @@ def render_row_block(row: Row) -> str:
     )
 
 
-def append_row(text: str, row: Row) -> str:
-    """`text` with `row` appended as the last item of `rows:`."""
-    body = text if text.endswith("\n") else text + "\n"
-    return body + render_row_block(row)
+def _row_blocks(text: str) -> list[tuple[int, int, dict[str, object]]]:
+    """`(start, end, parsed)` for every list item under `rows:`, end-exclusive
+    line indices, in file order — the ONE scan of the row blocks that
+    `insert_row` and `replace_row` both read.
 
-
-def _row_span(text: str, row_id: str) -> tuple[int, int]:
-    """`(start, end)` line indices of `row_id`'s block, end-exclusive.
-
-    Found by parsing each list item under `rows:`, never by pattern-matching
-    `id: <row_id>` — a row whose *notes* quote another row's id would otherwise
-    hijack the span, and that is the class of silent mis-edit this module is
-    written to avoid.
+    Each block is found by parsing the list items under `rows:`, never by
+    pattern-matching `id:` or `capability:` lines — a row whose *notes* quote
+    another row's id or capability would otherwise hijack the result, and that
+    is the class of silent mis-edit this module is written to avoid. A block's
+    span runs to the next item, so it includes any blank or comment lines that
+    precede the next row.
     """
     lines = text.splitlines(keepends=True)
     rows_at = next((i for i, ln in enumerate(lines) if _ROWS_KEY_RE.match(ln)), None)
@@ -89,16 +88,68 @@ def _row_span(text: str, row_id: str) -> tuple[int, int]:
             end_of_rows = i
             break
 
-    bounds = [(s, e) for s, e in zip(starts, starts[1:] + [end_of_rows], strict=True)]
-    for start, end in bounds:
+    blocks: list[tuple[int, int, dict[str, object]]] = []
+    if not starts:  # `rows:` with no items yet (a fresh skeleton)
+        return blocks
+    for start, end in zip(starts, starts[1:] + [end_of_rows], strict=True):
         block = "".join(lines[start:end])
         try:
             parsed = yaml.safe_load(block)
         except yaml.YAMLError as e:
             raise AcceptanceError(f"row block at line {start + 1} is not valid YAML: {e}") from e
         if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
-            if parsed[0].get("id") == row_id:
-                return start, end
+            blocks.append((start, end, parsed[0]))
+    return blocks
+
+
+def insert_row(text: str, row: Row) -> str:
+    """`text` with `row` inserted after the last row sharing its `capability`
+    (spec 2026-09-26-version-bump-churn §3.H); a capability not yet present
+    appends at the end of the file.
+
+    Reports render capabilities in first-seen order and rows in matrix order,
+    so this renders exactly as an append would — but two branches adding rows
+    to DIFFERENT capabilities now edit different places in the file instead
+    of both appending at EOF, which made every concurrent `add` a conflict.
+
+    The new block goes directly after the last content line of that row, so
+    the blank or comment lines introducing the next row stay attached to it.
+    Every existing byte is kept.
+    """
+    same = [
+        (s, e) for s, e, parsed in _row_blocks(text) if parsed.get("capability") == row.capability
+    ]
+    if not same:
+        body = text if text.endswith("\n") else text + "\n"
+        return body + render_row_block(row)
+    lines = text.splitlines(keepends=True)
+    start, end = same[-1]
+    item_indent = len(lines[start]) - len(lines[start].lstrip())
+    while end - 1 > start and _is_between_rows(lines[end - 1], item_indent):
+        end -= 1
+    head = "".join(lines[:end])
+    if not head.endswith("\n"):
+        head += "\n"
+    return head + render_row_block(row) + "".join(lines[end:])
+
+
+def _is_between_rows(line: str, item_indent: int) -> bool:
+    """A blank line, or a comment no deeper than the `- ` of a row item —
+    what sits between rows. A deeper line starting with `#` is NOT one: it can
+    be the continuation of a multi-line scalar (the real matrix has notes
+    whose wrapped line begins `#352, ...`), and moving it would break the row.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return True
+    return stripped.startswith("#") and len(line) - len(line.lstrip()) <= item_indent
+
+
+def _row_span(text: str, row_id: str) -> tuple[int, int]:
+    """`(start, end)` line indices of `row_id`'s block, end-exclusive."""
+    for start, end, parsed in _row_blocks(text):
+        if parsed.get("id") == row_id:
+            return start, end
     raise AcceptanceError(f"no row with id {row_id!r}")
 
 

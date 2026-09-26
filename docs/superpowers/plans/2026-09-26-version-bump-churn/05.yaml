@@ -1,0 +1,76 @@
+schema_version: 2
+phase:
+  number: 5
+  title: Docs, Hermes, triage config and the matrix rows
+  tag: agentic
+  depends_on:
+  - 2
+  - 3
+  - 4
+  tracking_issue: null
+  tier: mechanical
+  files:
+  - AGENTS.md
+  - HERMES.md
+  - tests/unit/test_hermes_docs.py
+  - .fr/triage.yaml
+  - docs/acceptance/*
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: Red - docs pins
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      Update tests/unit/test_hermes_docs.py so the release-rule pin requires `.changes/` instead of bump-version.py and the protection sentence no longer claims branch protection blocks direct pushes; run it and confirm it fails on the current HERMES.md
+- number: 2
+  title: Green - rewrite the rules and config
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      Rewrite AGENTS.md "Release / version bumping" (a fragment is required on the unchanged path list, the format, never run bump-version.py in a PR, the workflow_dispatch escape, the release bot owns main's version); rename version-bump-required to change-fragment in the CI job list; correct the "PR workflow" protection sentence per spec §3.C
+  - id: P5.T2.S2
+    text: |-
+      Apply the same rewrite to HERMES.md rule 2 (protection sentence), rule 3 (fragment instead of bump) and its gate list; run tests/unit/test_hermes_docs.py green
+  - id: P5.T2.S3
+    text: |-
+      Drop the `version:` block from .fr/triage.yaml, keeping `defaults`; confirm the triage tests stay green
+  - id: P5.T2.S4
+    text: |-
+      Update row invariants-tripwires with `uv run fr acceptance set-status --id invariants-tripwires --status ci --notes "<the fragment gate replaces the version-bump gate; the release bot assigns numbers>" --level unit=super-fr:tests/unit/test_change_fragment_gate.py`, and move this spec's rows whose tests landed (prs-never-conflict-on-version, version-floor-guard, concurrent-acceptance-rows-merge-clean) to ci with their test refs; release-on-merge stays not-implemented until the live walk
+- number: 3
+  title: Verify
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      Run `uv run fr acceptance check`, `uv run --no-project python scripts/bump-version.py --check`, `python scripts/check-change-fragment.py origin/main`, `uv run pytest -q --no-cov -n auto` and ruff; all green, and no version value differs from origin/main
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+    P5.T2.S4:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+    P5.T3.S1:
+      state: x
+      ticked_at: '2026-09-26T08:08:57+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T08:08:57+00:00'
+    note: null
+    observed_prs: []

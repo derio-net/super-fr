@@ -251,7 +251,7 @@ def status_cmd(
         typer.echo("no acceptance debt.")
         return
     shown = opens[:3] if brief else opens
-    for r in shown:  # matrix order = append order = oldest first
+    for r in shown:  # open_rows: oldest origin date first
         typer.echo(f"  {r.id} [{r.status}] {r.acceptance} — {r.notes}")
     if brief and len(opens) > len(shown):
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")
@@ -485,7 +485,8 @@ def add_cmd(
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
 ) -> None:
-    """Append a schema-validated row (agents never hand-edit YAML shapes).
+    """Insert a schema-validated row after its capability's last row (agents
+    never hand-edit YAML shapes); a new capability appends at the end.
 
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).
@@ -518,7 +519,7 @@ def add_cmd(
 
     from fr.record.model import AcceptanceItem
 
-    # The engine appends textually: a load→dump cycle would destroy the
+    # The engine inserts textually: a load→dump cycle would destroy the
     # header comments.
     _apply_rows(
         root,

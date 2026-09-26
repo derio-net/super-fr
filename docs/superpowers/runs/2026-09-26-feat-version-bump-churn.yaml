@@ -1,0 +1,208 @@
+schema_version: 7
+run: 2026-09-26-feat-version-bump-churn
+workflow: fr-goal@1
+branch: feat/version-bump-churn
+started: '2026-09-26T05:53:18+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-26T06:04:37+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+  spec-review:
+    state: done
+    at: '2026-09-26T06:12:00+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-26T06:04:51+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:12:00+00:00'
+          outcome: done
+        evidence:
+          review: sr1-review
+          reviewer: a15762a75cbbfc6da
+          findings: sr1-f1,sr1-f2,sr1-f3,sr1-f4,sr1-f5,sr1-f6,sr1-f7,sr1-f8,sr1-f9,sr1-f10,sr1-f11,sr1-f12
+  plan:
+    state: done
+    at: '2026-09-26T06:15:24+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-26-version-bump-churn
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-26T06:12:06+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:15:24+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-26T06:15:34+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-26T08:14:06+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/6:
+        state: manual
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T06:15:46+00:00'
+          agent: a12bb5ca9ae1ede4e
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-haiku-4-5-20251001
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:24:56+00:00'
+          outcome: done
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T06:24:57+00:00'
+          agent: a639d969cbba502e0
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:37:34+00:00'
+          outcome: done
+        evidence:
+          review: rp1-review
+          reviewer: a639d969cbba502e0
+          findings: rp1-f1,rp1-f2,rp1-f3
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T06:37:37+00:00'
+          agent: a21e636ca045f2eb5
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:48:12+00:00'
+          outcome: done
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T06:48:13+00:00'
+          agent: a1f70362325f62932
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:03:31+00:00'
+          outcome: done
+        evidence:
+          review: rp2-review
+          reviewer: a1f70362325f62932
+          findings: rp2-f1,rp2-f2
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T07:03:33+00:00'
+          agent: a7087737de3e11c1d
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:15:50+00:00'
+          outcome: done
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T07:15:51+00:00'
+          agent: a1444f4272114db98
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:33:34+00:00'
+          outcome: done
+        evidence:
+          review: rp3-review
+          reviewer: a1444f4272114db98
+          findings: rp3-f1
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T07:33:37+00:00'
+          agent: a18d46976db5da945
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:46:29+00:00'
+          outcome: done
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T07:46:30+00:00'
+          agent: af4e3ecd6efef8e83
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:59:12+00:00'
+          outcome: done
+        evidence:
+          review: rp4-review
+          reviewer: af4e3ecd6efef8e83
+          findings: p4-unarchived-plans-tripwire,rp4-f1,rp4-f2,rp4-f3
+      phase/5/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T07:59:14+00:00'
+          agent: aa0498afff373a5bf
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-haiku-4-5-20251001
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T08:08:57+00:00'
+          outcome: done
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T08:08:58+00:00'
+          agent: a4064df244b67d049
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T08:14:06+00:00'
+          outcome: done
+        evidence:
+          review: rp5-review
+          reviewer: a4064df244b67d049
+          findings: rp5-f1
+  journal-check:
+    state: done
+    at: '2026-09-26T08:14:09+00:00'
+    exit: 0
+    stdout: |
+      5 out-of-scope finding(s): rp1-f3, rp2-f2, p4-unarchived-plans-tripwire, rp4-f3,
+      rp5-f1
+  deliver:
+    state: done
+    at: '2026-09-26T08:30:03+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/666
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-26T08:19:17+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T08:30:03+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@9c60f595bfc1
+          proportionality: fdbe500cb3940be0f8cb40ebdd3be674544b7be1:c8bc4bc3033e1ef41f34cdeb275c1e16b280645230f0394a74cb245dde59c9b2

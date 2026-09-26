@@ -226,7 +226,7 @@ pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
 `test`, `validate-artifacts`, `opencode-plugin-test`, `version-sync`,
-`version-bump-required` jobs) is the single source of truth for the gate; if
+`change-fragment` jobs) is the single source of truth for the gate; if
 this file and `ci.yml` ever disagree, trust `ci.yml` and fix this file. Run
 `ruff format` then `pytest` yourself before pushing — CI is slow to fail-loud.
 
@@ -311,34 +311,63 @@ gap, not a sanctioned bypass.)
 
 ## Release / version bumping
 
-**Any PR that changes user-observable plugin behavior MUST bump the version
-before it merges.** The installer caches by version; forgetting this strands
-the change on old clients until the number moves next.
+**A PR never edits a version. Any PR that changes user-observable plugin
+behavior adds a change fragment instead, and `main` assigns the number.** The
+installer caches by version, so a change that ships without a release is
+stranded on old clients until the number moves next; the fragment is how the
+release learns about it. (Spec
+`docs/superpowers/specs/2026-09-26-version-bump-churn-design.md`: every PR
+used to bump the same lines, so every pair of open PRs conflicted.)
 
-Bump if the PR changes any of: `plugins/*/skills/**`, `packages/*/src/**`
-(Python), `plugins/super-fr/rules/**`, or `scripts/install.sh` /
-`scripts/install-validator-wrapper.sh` / `scripts/validate-plans.sh` (skill
-validation itself is `tests/unit/test_skill_validation.py`, not a script —
-don't look for `validate-skills.sh`, it was deleted). Do **not** bump for
-`docs/**`, `tests/**`, `.github/**`, or `README.md`/`CLAUDE.md`/`AGENTS.md`
-alone. Mixed PRs bump.
+A fragment is required if the PR changes any of: `plugins/*/skills/**`,
+`packages/*/src/**` (Python), `plugins/super-fr/rules/**`, or
+`scripts/install.sh` / `scripts/install-validator-wrapper.sh` /
+`scripts/validate-plans.sh` (skill validation itself is
+`tests/unit/test_skill_validation.py`, not a script — don't look for
+`validate-skills.sh`, it was deleted). None is needed for `docs/**`,
+`tests/**`, `.github/**`, or `README.md`/`CLAUDE.md`/`AGENTS.md` alone. Mixed
+PRs need one.
 
-The workspace-root `pyproject.toml`'s `[project].version` is canonical. Use
-`scripts/bump-version.py {patch,minor,major,X.Y.Z,--check}` — never hand-edit
-the version-bearing surfaces (member `pyproject.toml`s, per-plugin
-`plugin.json`, root `marketplace.json`, or
-`packages/fr-opencode-plugin/package.json`). It also runs `uv sync` and verifies
-`uv run fr --version`; commit the changed manifests + `uv.lock` together.
+The fragment is one file, `.changes/<branch-slug>.yaml` (`feat/foo` →
+`feat-foo.yaml`, so two PRs never share a path), with exactly two keys:
+
+```yaml
+bump: minor            # patch | minor | major
+summary: one line, as it should read in the release notes
+```
+
+`scripts/changes.py` owns the schema; `.changes/README.md` restates it. The
+PR must **add** a fragment — editing or deleting an existing one does not
+count.
+
+**Never run `scripts/bump-version.py` in a PR, and never hand-edit a
+version-bearing surface** (the list is `scripts/version_surfaces.py`: member
+`pyproject.toml`s, per-plugin `plugin.json`, root `marketplace.json`,
+`packages/fr-opencode-plugin/package.json`, and the workspace members'
+`uv.lock` entries). The `change-fragment` CI job
+(`scripts/check-change-fragment.py <base-ref>`) fails a PR that changes one,
+fails a PR on a fragment-required path with no added fragment, and prints the
+fix either way. `bump-version.py --check` (the `version-sync` job) is
+read-only and fine to run anywhere. A hand-written `fr_version` floor
+(`>=X.Y.Z,<X.Y.Z` under `packages/*/src`) naming an unreleased version must
+name the predicted one: the base version plus this PR's highest fragment bump.
+
+On every push to `main`, `.github/workflows/release.yml` runs
+`scripts/release.py`: it takes the highest pending bump, runs `bump-version.py`,
+`git rm`s the consumed fragments, pushes one `release: vX.Y.Z` commit to `main`
+(the only commits that land there without a PR), then tags it and publishes a
+GitHub Release whose notes are the fragment summaries. To release a specific
+number, run the workflow by hand (`workflow_dispatch`) with an explicit
+`version`. `main`'s ruleset forbids only force-push and deletion today; **if a
+required-PR or required-checks rule is ever added, the release bot needs a
+bypass actor on it**, or every release fails (release.py reports that refusal
+by name, never as a lost race).
 
 Patch = default (skill copy, CLI fixes, refactors). Minor = user-visible
 workflow additions (new subcommand/skill/mandatory behavior) — e.g. the
 OpenCode-support release. Major = breaking CLI/plan-schema changes (e.g.
 2.0.0's plan-folder rewrite) — rare but not unprecedented, don't assume it
 can't happen. If in doubt, patch.
-
-On merge to `main`, `.github/workflows/auto-tag.yml` tags `vX.Y.Z` and
-publishes a release automatically from the `pyproject.toml` change — no
-human action needed.
 
 ## Marketplace names are `<org>--<repo>`; the bare org name is retired
 
@@ -426,9 +455,10 @@ exists and how it's checked, not a restatement:
 
 ## PR workflow
 
-- Feature branch → PR → review → merge; branch-protection blocks direct
-  commits to `main`, including housekeeping (archiving a plan, spec-index
-  updates).
+- Feature branch → PR → review → merge, including housekeeping (archiving a
+  plan, spec-index updates). The process forbids direct commits; the ruleset
+  forbids only force-push and deletion; only the release bot commits to
+  `main` (see "Release / version bumping").
 - `fr apply --yes` refuses to dispatch a plan's phases to a runner unless the
   plan and spec are merged to `origin/HEAD` (the runner works from its own
   checkout of main). See

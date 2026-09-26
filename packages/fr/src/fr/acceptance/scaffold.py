@@ -38,8 +38,9 @@ MATRIX_TEMPLATE = """\
 #
 # Rule: .claude/rules/acceptance-matrix.md — update rows in the SAME PR that
 # changes a Test Plan, adds tests, ships a surface, or touches CI.
-# Add rows with `fr acceptance add` (schema-validated append). Keep `rows:`
-# as the LAST top-level key — `add` appends to the end of this file.
+# Add rows with `fr acceptance add` (schema-validated). It inserts a row after
+# the last row of the same capability, and appends to the end of this file only
+# for a new capability — so keep `rows:` as the LAST top-level key.
 
 org: {org}
 repo: {repo}

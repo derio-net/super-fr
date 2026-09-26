@@ -91,12 +91,12 @@ jobs:
       - name: pyproject.toml / plugin.json / marketplace.json agree
         run: uv run --no-project python scripts/bump-version.py --check
 
-  version-bump-required:
+  change-fragment:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: User-visible changes include a version bump
-        run: python scripts/check-version-bump-needed.py "origin/${{ github.base_ref }}"
+      - name: User-visible changes add a change fragment; no PR edits a version
+        run: python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"
