@@ -13,10 +13,18 @@ import sys
 from pathlib import Path
 
 from fr import _hosts
+from fr.gh import GhError
 from fr.ghclient import GhClient
+from fr.glab import GlabError
 from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
+from fr.tea import TeaError
+
+# What a `GhClient` adapter raises when the FORGE refuses or fails: one error
+# class per backend CLI. A caller that collects per-item forge failures catches
+# exactly these, so a programming error is never reported as a forge failure.
+FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
 
 # Warn-once guard for a DECLARED host fr cannot thread to the resolved
 # backend (gh-486, spec §4.D) — keyed on (host, backend) so a repo that

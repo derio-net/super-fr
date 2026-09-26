@@ -49,6 +49,8 @@ class FakeForge:
         failing: dict[str, str] | None = None,
         closed: dict[tuple[str, int], dict[str, Any]] | None = None,
         file_bodies: dict[tuple[str, str, str], str | Exception] | None = None,
+        comments: dict[tuple[str, int], list[dict[str, Any]]] | None = None,
+        head_prs: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
     ) -> None:
         self.issues = issues
         self.prs = prs
@@ -56,6 +58,8 @@ class FakeForge:
         self.failing = failing or {}
         self.closed = closed or {}
         self.file_bodies = file_bodies or {}
+        self.comments = comments or {}
+        self.head_prs = head_prs or {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def list_repos(self, *, owner: str, limit: int) -> list[dict[str, Any]]:
@@ -82,10 +86,26 @@ class FakeForge:
 
     def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
         self.calls.append(("read_file_at_ref", {"repo": repo, "path": path, "ref": ref}))
+        if (repo, path, ref) not in self.file_bodies:
+            # What the contents API answers for an absent file (captured live
+            # 2026-09-25, `gh api repos/derio-net/super-fr/contents/.fr/triage.yaml`).
+            raise ForgeError("Not Found (HTTP 404)")
         body = self.file_bodies[(repo, path, ref)]
         if isinstance(body, Exception):
             raise body
         return body
+
+    def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
+        self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
+        return self.comments.get((repo, number), [])
+
+    def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
+        self.calls.append(("list_prs_by_head", {"repo": repo, "branch": branch}))
+        return self.head_prs.get((repo, branch), [])
+
+    def anchor_reads(self) -> list[dict[str, Any]]:
+        """`read_file_at_ref` calls other than collect's one config read per repo."""
+        return [kw for kw in self.called("read_file_at_ref") if kw["path"] != ".fr/triage.yaml"]
 
     def called(self, name: str) -> list[dict[str, Any]]:
         return [kw for n, kw in self.calls if n == name]

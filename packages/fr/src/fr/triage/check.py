@@ -12,7 +12,14 @@ Pure: facts and judgements in, sets out. The command only formats them.
   not exist — a deleted issue or a typo'd number), its repo was `Facts.skipped`,
   or its key names a collected repo but was added after the last collect. Never
   orphaned: pruning a judgement over a transient failure, or over stale facts,
-  would destroy the ranking (reviews r-p2-check-sets, phase-4 C1/C2).
+  would destroy the ranking (reviews r-p2-check-sets, phase-4 C1/C2);
+- **stale dispatch** — an open issue labelled `fr:in-progress` whose fr-batch
+  marker comment is older than the repo's `stale_dispatch_days` (default 3)
+  with no open or merged linked PR — a closed-unmerged one is not progress
+  (spec 2026-09-25-triage-batches §3.E). The age is measured from the
+  marker's forge `createdAt` to `collected_at`, so every machine agrees and no
+  clock is read; a marker time that cannot be read is skipped, never raised.
+  Reported, never acted on.
 
 Every key comparison goes through `fr.triage.model.normalize_key` (or
 `issue_key`, which is built on it). There is no second normaliser here.
@@ -20,9 +27,11 @@ Every key comparison goes through `fr.triage.model.normalize_key` (or
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 
+from fr.labels import FR_IN_PROGRESS
 from fr.triage.model import Facts, Issue, Judgements, PullRequest, issue_key, normalize_key
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
@@ -42,12 +51,22 @@ class Unreachable:
 
 
 @dataclass(frozen=True)
+class Stale:
+    key: str
+    title: str
+    url: str
+    marker_at: str
+    days: int  # whole days between the marker and the collect
+
+
+@dataclass(frozen=True)
 class CheckResult:
     unranked: list[Issue]
     unranked_prs: list[PullRequest]
     settled: list[Issue]
     orphaned: list[str]
     unreachable: list[Unreachable]
+    stale: list[Stale] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -68,6 +87,16 @@ class CheckResult:
             "settled": [row(i) for i in self.settled],
             "orphaned": list(self.orphaned),
             "unreachable": [{"key": u.key, "reason": u.reason} for u in self.unreachable],
+            "stale_dispatch": [
+                {
+                    "key": s.key,
+                    "title": s.title,
+                    "url": s.url,
+                    "marker_at": s.marker_at,
+                    "days": s.days,
+                }
+                for s in self.stale
+            ],
         }
 
 
@@ -87,8 +116,55 @@ def _unreachable_reason(key: str, facts: Facts) -> str | None:
     return None
 
 
+def _aware(stamp: str | None) -> datetime | None:
+    """*stamp* as an aware datetime; None when it is missing, unparseable or naive.
+
+    `check` always exits 0 (review r2p-f13), so a time it cannot compare is
+    skipped rather than raised.
+    """
+    if not stamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def stale_dispatches(facts: Facts) -> list[Stale]:
+    """The stale-dispatch set: see the module docstring."""
+    collected = _aware(facts.collected_at)
+    if collected is None:
+        return []
+    out: list[Stale] = []
+    for i in facts.issues:
+        # Only an OPEN or MERGED linked PR is progress; one closed unmerged is
+        # not, so it does not hide a stale dispatch (review r2p-f13).
+        if (
+            i.state != "open"
+            or any(p.state in {"OPEN", "MERGED"} for p in i.prs)
+            or FR_IN_PROGRESS.name not in i.labels
+        ):
+            continue
+        marker = _aware(i.dispatch_marker_at)
+        if marker is None:
+            continue
+        age = collected - marker
+        if age > timedelta(days=facts.config_for(i.repo).stale_dispatch_days):
+            out.append(
+                Stale(
+                    key=i.key,
+                    title=i.title,
+                    url=i.url,
+                    marker_at=i.dispatch_marker_at or "",
+                    days=age.days,
+                )
+            )
+    return out
+
+
 def classify(facts: Facts, judgements: Judgements) -> CheckResult:
-    """Sort issues into their four sets and report open PRs without a judgement."""
+    """Sort issues into their sets and report open PRs without a judgement."""
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
     unranked = [i for i in facts.issues if i.state == "open" and i.key not in judged]
@@ -110,4 +186,5 @@ def classify(facts: Facts, judgements: Judgements) -> CheckResult:
         settled=settled,
         orphaned=orphaned,
         unreachable=unreachable,
+        stale=stale_dispatches(facts),
     )

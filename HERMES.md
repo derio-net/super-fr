@@ -58,7 +58,7 @@ this. Use one warm session, subagent fan-out, or batch K items per prompt.
 uv run pytest -q --no-cov                     # full suite (~6 min on macOS)
 uv run ruff check packages/ tests/ scripts/
 uv run ruff format packages/ tests/ scripts/
-uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src
+uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 uv run --no-project python scripts/bump-version.py --check
 ```
 
@@ -87,6 +87,7 @@ pushing.
 ## Where things are
 
 `packages/fr` is the CLI/engine (plans, journals, isolation, acceptance);
-`packages/fr-dispatch` + `fr-vk`/`fr-cncd` are the runner protocol and adapters;
+`packages/fr-dispatch` + `fr-vk`/`fr-cncd`/`fr-herdr` are the runner protocol and
+adapters (`fr-herdr` takes `fr triage batch dispatch` runs);
 `plugins/super-fr*` are the shipped skills/rules/hooks. `AGENTS.md` has the full
 map, the bridge-audit rule, and the marketplace-naming invariants — read it.

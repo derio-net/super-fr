@@ -3,8 +3,10 @@
 `collect` reads the forge and writes `facts.json` under the scope's state
 directory (`$HOME/.cache/fr/triage/<scope>/`, or `--dir`). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
-`render` writes `triage.html`, and `--open` hands it to `webbrowser`. The
-engine lives in `fr.triage`; this module only parses flags and does I/O.
+`render` writes `triage.html`, and `--open` hands it to `webbrowser`.
+The `batch` sub-app's verbs live in `fr.commands.triage_batch_cmd` (spec
+2026-09-25-triage-batches). The engine lives in `fr.triage`; this module only
+parses flags and does I/O.
 
 Gate-exempt: `triage` is in `fr.artifacts.trigger.READ_ONLY_COMMANDS` because
 it never reads or writes a registered artifact (spec §3.F′).
@@ -32,8 +34,10 @@ from fr.triage.check import classify
 from fr.triage.collect import PR_LIMIT, Forge, GhForge, collect_facts
 from fr.triage.errors import TriageError
 from fr.triage.model import (
+    DispatchEvent,
     Facts,
     Judgements,
+    PullRequest,
     Scope,
     issue_key,
     load_facts,
@@ -52,7 +56,15 @@ triage_app = typer.Typer(
 )
 
 
-# One option set for --repo/--org/--dir, shared by collect, check and render.
+batch_app = typer.Typer(
+    name="batch",
+    help="Batches: groups of judged issues delivered as one run.",
+    no_args_is_help=True,
+)
+triage_app.add_typer(batch_app)
+
+
+# One option set for --repo/--org/--dir, shared by collect, check, render and batch.
 RepoOpt = Annotated[str | None, typer.Option("--repo", help="Triage one repo: OWNER/REPO.")]
 OrgOpt = Annotated[str | None, typer.Option("--org", help="Triage every repo of OWNER.")]
 DirOpt = Annotated[
@@ -120,9 +132,24 @@ def collect_command(
     target_dir = state_dir(scope, dir_override)
     judgements = target_dir / "judgements.yaml"
     try:
-        judged = list(load_judgements(judgements).issues) if judgements.exists() else []
+        loaded = load_judgements(judgements) if judgements.exists() else None
+        judged = list(loaded.issues) if loaded else []
+        # The branch and time of each batch whose last event is a dispatch (spec
+        # 2026-09-25-triage-batches §3.A): collect looks each one up by head,
+        # unless the previous facts already show it terminal (review r2p-f3).
+        branches = [
+            (b.repo_name, event.branch, event.at)
+            for b in (loaded.batches if loaded else [])
+            if b.events and isinstance(event := b.events[-1], DispatchEvent)
+        ]
         facts = collect_facts(
-            make_forge(), scope, now=datetime.now(UTC), judged=judged, pr_limit=pr_limit
+            make_forge(),
+            scope,
+            now=datetime.now(UTC),
+            judged=judged,
+            batch_branches=branches,
+            known_batch_prs=_previous_batch_prs(target_dir / "facts.json"),
+            pr_limit=pr_limit,
         )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
@@ -135,6 +162,20 @@ def collect_command(
     _report(facts)
     n_open = sum(1 for i in facts.issues if i.state == "open")
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
+
+
+def _previous_batch_prs(path: Path) -> list[PullRequest]:
+    """The previous collect's `batch_prs`; none when there is no readable facts.json.
+
+    Only an optimisation (review r2p-f3): unreadable or older-schema facts
+    just mean every dispatched batch is looked up again.
+    """
+    if not path.exists():
+        return []
+    try:
+        return load_facts(path).batch_prs
+    except TriageError:
+        return []
 
 
 def _load_state(scope: Scope, dir_override: Path | None) -> tuple[Path, Facts, Judgements]:
@@ -173,7 +214,10 @@ def check_command(
     dir_override: DirOpt = None,
     as_json: bool = typer.Option(False, "--json", help="Emit check sets as JSON."),
 ) -> None:
-    """Report unranked issues and PRs, settled, orphaned and unreachable. Always exits 0."""
+    """Report unranked issues and PRs, settled, orphaned, unreachable and stale dispatches.
+
+    Always exits 0.
+    """
     _, facts, judgements = _load_state(_scope(repo, org), dir_override)
     result = classify(facts, judgements)
     if as_json:
@@ -200,6 +244,15 @@ def check_command(
     )
     for u in result.unreachable:
         console.print(f"  {escape(u.key)}  {escape(u.reason)}", soft_wrap=True)
+    console.print(
+        f"[bold]stale dispatch[/bold] ({len(result.stale)}) — fr:in-progress, batch marker "
+        "older than the repo's threshold, no linked PR"
+    )
+    for st in result.stale:
+        console.print(
+            f"  {escape(st.key)}  {st.days}d since {escape(st.marker_at)}  {escape(st.title)}",
+            soft_wrap=True,
+        )
 
 
 @triage_app.command("render")
@@ -218,3 +271,11 @@ def render_command(
     )
     if open_:
         webbrowser.open(out.resolve().as_uri())
+
+
+# The batch verbs live in `triage_batch_cmd` (spec 2026-09-25-triage-batches
+# §3.C names it as fr's second soft point for fr_dispatch). It reuses the
+# helpers above and registers its commands on `batch_app`, so it is imported
+# LAST: whichever of the two modules loads first, every name the other needs
+# already exists.
+import fr.commands.triage_batch_cmd  # noqa: E402, F401

@@ -32,6 +32,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from fr import glab as _glab
+from fr.ghclient import UnsupportedBatchOps
 from fr.labels import LabelDef
 
 # GitLab-specific MR URL shape — deliberately NOT in the shared fr._urls
@@ -51,7 +52,7 @@ _MR_URL_RE = re.compile(r"^https://[^/]+/(.+?)(?:/-)?/merge_requests/(\d+)/?$")
 _CONTENTS_REF = "HEAD"
 
 
-class RealGlabClient:
+class RealGlabClient(UnsupportedBatchOps):
     """Wraps `fr.glab` to satisfy the `GhClient` Protocol for GitLab repos.
 
     `host` names a self-hosted instance and is carried into every glab
@@ -62,6 +63,8 @@ class RealGlabClient:
     checkout, `fr_vk.pr_observe` from a bare PR URL, and neither
     provenance changes what this class does with it (gh-486; spec §4.C).
     """
+
+    backend = "gitlab"  # §3.J batch operations: declared unsupported (gh#611)
 
     def __init__(self, *, host: str | None = None) -> None:
         self._host = host

@@ -7,6 +7,7 @@ members = [
     "fr",
     "fr-cncd",
     "fr-dispatch",
+    "fr-herdr",
     "fr-vk",
     "super-fr-workspace",
 ]
@@ -165,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "fr"
-version = "4.22.1"
+version = "4.23.0"
 source = { editable = "packages/fr" }
 dependencies = [
     { name = "packaging" },
@@ -186,7 +187,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-cncd"
-version = "4.22.1"
+version = "4.23.0"
 source = { editable = "packages/fr-cncd" }
 dependencies = [
     { name = "fr" },
@@ -201,7 +202,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-dispatch"
-version = "4.22.1"
+version = "4.23.0"
 source = { editable = "packages/fr-dispatch" }
 dependencies = [
     { name = "fr" },
@@ -211,8 +212,23 @@ dependencies = [
 requires-dist = [{ name = "fr", editable = "packages/fr" }]
 
 [[package]]
+name = "fr-herdr"
+version = "4.23.0"
+source = { editable = "packages/fr-herdr" }
+dependencies = [
+    { name = "fr" },
+    { name = "fr-dispatch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fr", editable = "packages/fr" },
+    { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+]
+
+[[package]]
 name = "fr-vk"
-version = "4.22.1"
+version = "4.23.0"
 source = { editable = "packages/fr-vk" }
 dependencies = [
     { name = "fr" },
@@ -687,12 +703,13 @@ wheels = [
 
 [[package]]
 name = "super-fr-workspace"
-version = "4.22.1"
+version = "4.23.0"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
     { name = "fr-cncd" },
     { name = "fr-dispatch" },
+    { name = "fr-herdr" },
     { name = "fr-vk" },
 ]
 
@@ -711,6 +728,7 @@ requires-dist = [
     { name = "fr", editable = "packages/fr" },
     { name = "fr-cncd", editable = "packages/fr-cncd" },
     { name = "fr-dispatch", editable = "packages/fr-dispatch" },
+    { name = "fr-herdr", editable = "packages/fr-herdr" },
     { name = "fr-vk", editable = "packages/fr-vk" },
 ]
 

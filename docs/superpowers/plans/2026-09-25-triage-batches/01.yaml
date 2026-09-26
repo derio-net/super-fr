@@ -1,0 +1,92 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton - batch list and the fr-herdr package wired into CI
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  skeleton: true
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr-herdr/**
+  - pyproject.toml
+  - uv.lock
+  - .github/workflows/ci.yml
+  - AGENTS.md
+  - tests/unit/test_triage_batch_list.py
+  - tests/unit/test_fr_herdr_package.py
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: Red - batch list and fr-herdr registration
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Write failing tests in tests/unit/test_triage_batch_list.py following superpowers:test-driven-development: `fr triage batch list --dir <tmp>` over a schema 1 judgements.yaml prints "no batches" and exits 0; over a schema 2 file with one batch (id, title, ids of a judged key) prints the batch id and member count; a schema 3 file is refused with exit 2 naming the schema
+  - id: P1.T1.S2
+    text: |-
+      Write failing tests in tests/unit/test_fr_herdr_package.py: `fr_herdr` imports; `fr_dispatch.registry.runner_names()` includes "herdr"; the stub runner's `name == "herdr"` and its `can_dispatch` returns False for every unit (the real behaviour arrives in phase 2)
+  - id: P1.T1.S3
+    text: |-
+      Run both test files and confirm every test fails for the missing command, schema or package rather than for an import typo
+- number: 2
+  title: Green - schema 2 loader, batch group, fr-herdr stub
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      In fr/triage/model.py accept `schema` 1 or 2 (JUDGEMENTS_SCHEMA stays the write version until phase 2) and add a minimal strict `Batch` (id, title, ids) with `batches: list[Batch] = []` on `Judgements`; schema 1 files load as zero batches
+  - id: P1.T2.S2
+    text: |-
+      Add a `batch` Typer sub-app to commands/triage_cmd.py sharing --repo/--org/--dir, with `list` printing one line per batch or "no batches"
+  - id: P1.T2.S3
+    text: |-
+      Create packages/fr-herdr (pyproject at the workspace's current version so `bump-version.py --check` stays green, `fr.runners` entry point `herdr = "fr_herdr.runner:HerdrRunner"`, stub `HerdrRunner` satisfying the `fr_dispatch.protocols.Runner` shape with `can_dispatch` returning False); add it to the uv workspace members, to the mypy line in AGENTS.md Dev commands, and to the typecheck job in .github/workflows/ci.yml
+- number: 3
+  title: Verify delivery end to end
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Run the phase tests, then the full suite with `uv run pytest -q --no-cov -n auto`, `uv run ruff check packages/ tests/`, the mypy line from AGENTS.md including packages/fr-herdr/src, and `uv run --no-project python scripts/bump-version.py --check`; all green
+  - id: P1.T3.S2
+    text: |-
+      Record `no-refactor-because` for this phase in the plan journal unless the stub or the loader change needed a cleanup pass
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T20:46:43+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T20:46:44+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-25T20:46:45+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T20:48:28+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T20:48:29+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T20:48:29+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-25T20:54:18+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-25T20:54:19+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T20:54:20+00:00'
+    note: null
+    observed_prs: []

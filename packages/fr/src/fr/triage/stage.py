@@ -8,16 +8,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+from fr.labels import FR_IN_PROGRESS
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from fr.triage.model import Issue, PullRequest
 
-Stage = Literal["closed", "merged", "pr-ready", "pr-draft", "blocked", "backlog"]
+Stage = Literal["closed", "merged", "pr-ready", "pr-draft", "in-progress", "blocked", "backlog"]
 
 # Most advanced first. The ONE ordering: `derive_stage`, the collector's
-# most-advanced-PR rule and the page's display order all read it.
-STAGES: tuple[Stage, ...] = ("closed", "merged", "pr-ready", "pr-draft", "blocked", "backlog")
+# most-advanced-PR rule and the page's display order all read it. `in-progress`
+# (the `fr:in-progress` label a batch dispatch sets, spec 2026-09-25-triage-batches
+# §3.E) sits below every PR stage and above `blocked`.
+STAGES: tuple[Stage, ...] = (
+    "closed",
+    "merged",
+    "pr-ready",
+    "pr-draft",
+    "in-progress",
+    "blocked",
+    "backlog",
+)
 
 
 def pr_stage(pr: PullRequest) -> Stage | None:
@@ -42,6 +54,8 @@ def derive_stage(issue: Issue, prs: Iterable[PullRequest]) -> Stage:
     from_prs = [s for s in map(pr_stage, prs) if s is not None]
     if from_prs:
         return min(from_prs, key=STAGES.index)
+    if FR_IN_PROGRESS.name in issue.labels:
+        return "in-progress"
     if any(label.lower() == "blocked" for label in issue.labels):
         return "blocked"
     return "backlog"

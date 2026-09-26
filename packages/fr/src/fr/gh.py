@@ -22,10 +22,15 @@ T = TypeVar("T")
 class GhError(Exception):
     """Error from a gh CLI invocation."""
 
-    def __init__(self, message: str, *, stderr: str = "", returncode: int = 0) -> None:
+    def __init__(
+        self, message: str, *, stderr: str = "", returncode: int = 0, stdout: str = ""
+    ) -> None:
         super().__init__(message)
         self.stderr = stderr
         self.returncode = returncode
+        # Some gh commands answer on a non-zero exit (`gh pr checks` exits 8
+        # while checks are pending, with its JSON on stdout), so it is kept.
+        self.stdout = stdout
 
 
 def _run_gh(args: list[str]) -> str:
@@ -39,7 +44,9 @@ def _run_gh(args: list[str]) -> str:
         )
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"gh exited with code {exc.returncode}"
-        raise GhError(msg, stderr=exc.stderr or "", returncode=exc.returncode) from exc
+        raise GhError(
+            msg, stderr=exc.stderr or "", returncode=exc.returncode, stdout=exc.stdout or ""
+        ) from exc
     return result.stdout.strip()
 
 
@@ -280,9 +287,11 @@ def list_repos(
 
 
 ISSUE_LIST_FIELDS = "number,title,labels,createdAt,updatedAt,url,body"
-PR_LIST_FIELDS = "number,title,state,isDraft,mergedAt,url,headRefName,closingIssuesReferences"
+PR_LIST_FIELDS = (
+    "number,title,state,isDraft,createdAt,mergedAt,url,headRefName,closingIssuesReferences"
+)
 OPEN_PR_LIST_FIELDS = (
-    PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision"
+    PR_LIST_FIELDS + ",files,statusCheckRollup,mergeable,mergeStateStatus,reviewDecision,headRefOid"
 )
 
 
@@ -349,6 +358,29 @@ def list_open_prs(*, repo: str, limit: int) -> list[dict[str, object]]:
             str(limit),
             "--json",
             OPEN_PR_LIST_FIELDS,
+        ]
+    )
+    return json.loads(out) if out else []
+
+
+def list_prs_by_head(*, repo: str, branch: str, limit: int = 100) -> list[dict[str, object]]:
+    """Every PR (any state) whose head is *branch*: `PR_LIST_FIELDS` plus `headRefOid`."""
+    import json
+
+    out = _run_gh(
+        [
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--head",
+            branch,
+            "--state",
+            "all",
+            "--limit",
+            str(limit),
+            "--json",
+            PR_LIST_FIELDS + ",headRefOid",
         ]
     )
     return json.loads(out) if out else []

@@ -107,10 +107,15 @@ the command's whole purpose is to work where there is no checkout to be
 stale. `fr triage` (2026-09-21 fr-triage, spec §3.F′) meets the promise
 strictly: it never reads or writes a registered artifact, and every file it
 writes is under its own state directory (`$HOME/.cache/fr/triage/<scope>/`, or
-`--dir`). Gating it protects nothing, since triage cannot proceed *over* a
-stale artifact; it would only refuse an agent's triage, commonly an org triage
-run from inside some unrelated repo, over artifacts the command never
-touches. `fr usage` (2026-09-25 lean-cost-aware-process, spec §5.A.5) is the
+`--dir`). Its batch verbs (2026-09-25 triage-batches, spec §5) also write the
+forge — labels, marker comments, merges — behind `--yes`, and `batch merge`
+commits and pushes from scratch worktrees under that same state directory. A
+`git merge` there moves whatever artifacts the default branch carries, which
+is ordinary git, not an fr rewrite of an artifact in the invoking checkout, so
+the promise still holds. Gating it protects nothing, since triage cannot
+proceed *over* a stale artifact; it would only refuse an agent's triage,
+commonly an org triage run from inside some unrelated repo, over artifacts the
+command never touches. `fr usage` (2026-09-25 lean-cost-aware-process, spec §5.A.5) is the
 same shape as `triage`: it READS a run cursor (for its sessions and step
 windows) and the harness's own transcripts, and writes only under its cache
 directory (`$HOME/.cache/fr/usage/`, or `FR_USAGE_CACHE`) — never a registered

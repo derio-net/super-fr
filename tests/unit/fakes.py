@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from fr.gh import GhError
+
 
 @dataclass
 class FakeIssue:
@@ -25,12 +27,12 @@ class FakeIssue:
     linked_prs: list[dict[str, Any]] = field(default_factory=list)
 
 
-@dataclass
-class FakeGhError(Exception):
-    message: str
+class FakeGhError(GhError):
+    """The fake's forge failure: a `GhError`, as `RealGhClient` would raise."""
 
-    def __str__(self) -> str:
-        return self.message
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
 
 class FakeGhClient:
@@ -50,6 +52,9 @@ class FakeGhClient:
         # (repo, path) -> raw file content, backing list_dir / read_file
         # (the cross-repo spec-status resolver, #339).
         self.remote_tree: dict[tuple[str, str], str] = {}
+        # (repo, number) -> comments, oldest first, in the adapter's
+        # `list_issue_comments` shape (spec 2026-09-25-triage-batches §3.J).
+        self.issue_comments: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
     # ---- preload helpers (test setup) ----
 
@@ -161,6 +166,21 @@ class FakeGhClient:
     def comment_issue(self, repo: str, number: int, body: str) -> None:
         self._gate()
         self.calls.append(("comment_issue", {"repo": repo, "number": number, "body": body}))
+        self.issue_comments.setdefault((repo, number), []).append(
+            {"author": "fr", "body": body, "created_at": "2026-09-26T00:00:00Z"}
+        )
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        self.calls.append(("list_issue_comments", {"repo": repo, "number": number}))
+        return list(self.issue_comments.get((repo, number), []))
+
+    def closing_ref(self, repo: str, number: int) -> str:
+        """GitHub's closing line, as `RealGhClient.closing_ref` spells it."""
+        return f"Closes {repo}#{number}"
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        """A repo allowing every method, squash by default."""
+        return {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
 
     def create_issue(
         self,

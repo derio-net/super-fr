@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from fr.cli import app
+from fr.triage.errors import ForgeError
 from typer.testing import CliRunner
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "triage"
@@ -48,6 +49,16 @@ class FixtureForge:
     def view_issue(self, *, repo: str, number: int) -> dict[str, Any]:
         raise AssertionError("the skeleton never views a single issue")
 
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        assert path == ".fr/triage.yaml", path  # the captured PRs carry no anchor files
+        raise ForgeError("Not Found (HTTP 404)")
+
+    def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:
+        return []
+
+    def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]:
+        raise AssertionError("the skeleton has no batches")
+
 
 def test_collect_writes_facts_json_from_the_forge(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -64,7 +75,7 @@ def test_collect_writes_facts_json_from_the_forge(
     facts_path = tmp_path / "facts.json"
     assert facts_path.exists()
     facts = json.loads(facts_path.read_text(encoding="utf-8"))
-    assert facts["schema"] == 2
+    assert facts["schema"] == 3
     assert facts["scope"] == "derio-net--super-fr"
     assert facts["kind"] == "repo"
     collected = {(i["repo"], i["number"]) for i in facts["issues"]}

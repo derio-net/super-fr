@@ -96,11 +96,14 @@ class Runner(Protocol):
         """
         ...
 
-    def dispatch(self, item: WorkItem) -> None:
+    def dispatch(self, item: WorkItem) -> str | None:
         """Hand one item to the backend (create card/job/workspace…).
 
         Raising marks the item failed for this tick; the dispatch stamp is
-        NOT written, so the next tick retries.
+        NOT written, so the next tick retries. May return an opaque handle
+        for the dispatched work (herdr returns the pane id; spec
+        2026-09-25-triage-batches §3.C records it in the batch's dispatch
+        event); `tick` ignores it, and a runner with none returns None.
         """
         ...
 
