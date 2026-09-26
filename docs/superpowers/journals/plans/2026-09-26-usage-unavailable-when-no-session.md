@@ -94,3 +94,8 @@ Added test_a_no_session_placeholder_prints_a_dash_and_counts_unavailable (CLI). 
 ### cr4-resolved · finding [out-of-scope] · resolves cr4: existing sessions: [] usage files stay as they are
 
 Not caused by this change: archived files are frozen by artifact-versioning; spec 3.5 and the PR body say so.
+
+<!-- fr:journal kind=finding scope=plan id=cr5-resolved created=2026-09-26T23:37:10 state=fixed resolves=cr5 -->
+### cr5-resolved · finding [fixed] · resolves cr5: redundant FR_HOSTNAME monkeypatch in a new capture test
+
+Removed the redundant setenv (9746ee60).
