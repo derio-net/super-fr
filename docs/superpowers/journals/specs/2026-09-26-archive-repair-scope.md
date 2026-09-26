@@ -79,3 +79,8 @@ Fresh-context Opus reviewer (agent a85d442d1deeaebef). 3 in scope, 1 out. The ea
 ### s2-1 · finding [open] (reviewer: in scope) · §3.C strict same-file rule would stop fr repair fixing stale full paths
 
 Opus spec review. Reworded §3.C to the implemented rule (keep verbatim only when the value names an existing different file; a moved spec still canonicalizes) and added a repair-level test-plan case.
+
+<!-- fr:journal kind=finding scope=spec id=s2-2 created=2026-09-26T23:36:22 state=open review_scope=in -->
+### s2-2 · finding [open] (reviewer: in scope) · Spec carried an empty duplicate Implementation Plans section
+
+Opus spec review. Deleted the empty numbered section.
