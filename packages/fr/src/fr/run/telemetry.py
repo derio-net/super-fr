@@ -704,6 +704,7 @@ def orchestrator_wrote_since(
             ):
                 issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    backgrounded: set[str] = set()
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
@@ -718,8 +719,77 @@ def orchestrator_wrote_since(
                 and block.get("is_error") is not True
                 and done is not None
             ):
-                windows.append((issued[block["tool_use_id"]], done))
+                if _is_launch_ack(record):
+                    # A `run_in_background` command's result is only its launch
+                    # ack, a second after the call. Its real end is the
+                    # notification below; the ack must not stand in for it.
+                    backgrounded.add(block["tool_use_id"])
+                else:
+                    windows.append((issued[block["tool_use_id"]], done))
+    # When the harness QUEUED a notice (the command's end), which can precede
+    # its delivery by a whole turn. Used only to NARROW a window, never to open
+    # one, so a queued prompt that merely looks like a notice can only refuse.
+    queued: dict[str, _dt.datetime] = {}
+    for record in records:
+        if record.get("type") != "queue-operation" or record.get("operation") != "enqueue":
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        parsed = _task_notice(record.get("content"))
+        if parsed is not None and stamp is not None and parsed[0] not in queued:
+            queued[parsed[0]] = stamp
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        origin = record.get("origin")
+        if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
+            # Only the harness's own notice counts: an operator prompt or `!cmd`
+            # output is also a string-content `user` record (Opus review r2).
+            continue
+        done = parse_timestamp(record.get("timestamp"))
+        message = record.get("message")
+        parsed = _task_notice(message.get("content") if isinstance(message, Mapping) else None)
+        if parsed is None or done is None:
+            continue
+        tool_use_id, status = parsed
+        if tool_use_id not in backgrounded:
+            continue
+        # The first notice is final, whatever it says: a later one — duplicate
+        # or forged — can neither widen a window nor revive a failed command.
+        backgrounded.discard(tool_use_id)
+        if status == "completed":
+            start = issued[tool_use_id]
+            end = min(done, queued.get(tool_use_id, done))
+            windows.append((start, end if end >= start else done))
     return windows
+
+
+_NOTICE_FIELD = re.compile(r"<(tool-use-id|status)>\s*([^<]*?)\s*</\1>")
+
+
+def _is_launch_ack(record: Mapping[str, Any]) -> bool:
+    """Is this `tool_result` the ack of a backgrounded command (its
+    `toolUseResult.backgroundTaskId` is set), not the command's own result?"""
+    result = record.get("toolUseResult")
+    return isinstance(result, Mapping) and bool(result.get("backgroundTaskId"))
+
+
+def _task_notice(content: object) -> tuple[str, str] | None:
+    """`(tool_use_id, status)` of a `<task-notification>` — the text the
+    harness writes when a backgrounded command ends (`status` is `completed`,
+    `failed` or `killed`) — else `None`.
+
+    Read from the notice's HEADER only, first occurrence of each field: its
+    `<summary>` quotes the command's own `description`, which the agent wrote
+    and could carry a `<status>completed</status>` of its own (Opus review r1).
+    """
+    if not isinstance(content, str) or not content.lstrip().startswith("<task-notification>"):
+        return None
+    header = content.split("<summary>", 1)[0]
+    fields: dict[str, str] = {}
+    for name, value in _NOTICE_FIELD.findall(header):
+        fields.setdefault(name, value)
+    tool_use_id, status = fields.get("tool-use-id"), fields.get("status")
+    return (tool_use_id, status) if tool_use_id and status else None
 
 
 OPENCODE_DB_ENV = "FR_OPENCODE_DB"
