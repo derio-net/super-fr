@@ -1,9 +1,0 @@
-schema_version: 2
-run: 2026-09-26-feat-ci-time-budget
-step: deliver
-outcome: done
-acceptance: []
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/703
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/5a0e742d-bf50-45cc-95d6-4ea24cff3336/scratchpad/deliver-tests.log
