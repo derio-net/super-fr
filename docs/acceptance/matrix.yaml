@@ -4097,11 +4097,12 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
-    status: not-implemented
-    notes: 'Gate half landed (phase 2): answered_rounds_since counts consecutive AskUserQuestion
-      calls as ONE round, so a batch above the tool''s per-call limit clears the gate
-      as one round (unit-tested). Stays not-implemented until the sizing prose lands
-      in phase 3.'
+      - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py
+    status: ci
+    notes: 'Phase 3 landed the sizing prose (spec §3.A/§3.A.1): fr-goal asks one question
+      per operator-owned decision with no fixed cap, justifying or proposing a split
+      above ~10; the tripwire pins the old max-4/ONE-batch wording gone and the sizing
+      rule stated on every §3.A.1 surface.'
   - id: fr-goal-second-round-announced-and-verified
     capability: fr-goal-methodology
     acceptance: 'A brainstorm may take a second question round only when the record
