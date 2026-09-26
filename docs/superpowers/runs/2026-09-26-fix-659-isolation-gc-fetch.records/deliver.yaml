@@ -1,0 +1,9 @@
+schema_version: 1
+run: 2026-09-26-fix-659-isolation-gc-fetch
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/659
+evidence:
+  tests: docs/superpowers/runs/2026-09-26-fix-659-isolation-gc-fetch.records/full-suite.log
