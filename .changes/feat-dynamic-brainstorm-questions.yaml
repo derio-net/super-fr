@@ -1,2 +1,2 @@
 bump: minor
-summary: fr-goal brainstorming asks a question round sized to the feature (rarely a second, announced round), verified against the transcript, instead of a fixed batch of at most four questions
+summary: "fr-goal brainstorming asks a question round sized to the feature instead of a fixed batch of at most four questions: a second round only when announced up front or requested by the operator, never a third, declared in the step record's new `questions:` field (record kind moves to v2) or with `fr run resolve --question-rounds`, and verified against the transcript"
