@@ -3418,10 +3418,12 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_tests_log_opencode.py
     status: ci
-    notes: gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
-      file (run 2026-09-26-fix-models-opencode-noop-505 delivered on prose reporting
-      a failed test). Fixture uses the real opencode.db bash-part shape; not yet proven
-      on a live OpenCode deliver.
+    notes: 'gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
+      file. Live-verified 2026-09-26: against the real opencode.db (OpenCode 1.18.32)
+      a bash-redirect log matched one window containing its mtime and a write-tool log
+      matched none (1.3 s over a 1.5 GB db); the same pair on a live Claude Code transcript
+      behaved identically. Hermes is declared unsupported (parity row deliver-tests-provenance,
+      operator decision).'
   - id: run-records-dir-holds-only-records
     capability: Run cursor
     acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
