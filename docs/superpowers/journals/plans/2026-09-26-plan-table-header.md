@@ -119,3 +119,8 @@ migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3).
 ### r1-3-resolved-2 · finding [deferred → #661] · resolves r1-3: test _HEADER duplicates the literal
 
 Filed at closeout as #661.
+
+<!-- fr:journal kind=finding scope=plan id=r1-4-resolved-2 created=2026-09-26T09:54:05 state=open resolves=r1-4 tracked_by=#662 -->
+### r1-4-resolved-2 · finding [deferred → #662] · resolves r1-4: no spec no-mutation assertion in the no-table create test
+
+Filed at closeout as #662.
