@@ -1,2 +1,0 @@
-bump: patch
-summary: Bound isolation GC reap-hazard fetches with the network timeout
