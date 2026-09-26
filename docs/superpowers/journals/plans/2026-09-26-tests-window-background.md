@@ -139,3 +139,8 @@ fixed in 33d01601
 ### o5-resolved · finding [fixed] · resolves o5: F5 exit code taken from model-written summary text (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o6-resolved created=2026-09-26T23:51:05 state=fixed resolves=o6 -->
+### o6-resolved · finding [fixed] · resolves o6: F7 test gaps, weak assertion, fixtures not captured (Opus)
+
+fixed in 33d01601
