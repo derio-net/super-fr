@@ -287,3 +287,9 @@ has more than 4 decisions and confirm that one round spans several
 `AskUserQuestion` calls and resolves. Then run one with a design-risk second
 round and confirm that the brainstorm resolve records the
 `gate-question-rounds-brainstorm` decision.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-dynamic-brainstorm-question-rounds | `derio-net/super-fr` | `2026-09-26-dynamic-brainstorm-question-rounds` | — |
