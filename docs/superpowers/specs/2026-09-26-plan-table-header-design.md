@@ -24,36 +24,45 @@ for `fr migrate v1-to-v2`; `create` does not reuse it.
 
 | # | Decision |
 |---|---|
-| d1 | A spec with **no** `## Implementation Plans` section gets one, with the canonical header, appended by `create`. Pre-flight stays read-only: it accepts the spec, and the section is written together with the row, after the plan folder. |
-| d2 | Every table error names the canonical header, from one constant: the mismatch error, and the "section present but no table" error. The missing-section error no longer exists on `create`'s path. |
-| d3 | The header text has one definition in `plan_ops` (`_CANONICAL_HEADER_LINE` and its separator), used by `create` and by `migrate._ensure_spec_plan_row`, so the two cannot drift. |
-| d4 | A section whose header is *mislabeled* is still refused, never rewritten (unchanged: the existing guard). |
+| d1 | A spec with **no** `## Implementation Plans` section gets one, with the canonical header, appended by `create` only. Pre-flight stays read-only: `_validate_spec_section` accepts a missing section and writes nothing. `create` writes the section immediately before its `_append_spec_row` call (`plan_ops.py:273`), so it lands with the row, after the plan folder. |
+| d2 | `_append_spec_row` stays strict: `rework` (`plan_ops.py:765`) keeps raising on a missing section, and its message names the header. Rework's behaviour is deliberately unchanged. |
+| d3 | Every table error names the canonical header through one builder: the mismatch error, and BOTH no-table sites (`_check_table_header` `plan_ops.py:414` and `_append_spec_row` `:477`), plus the missing-section error `_append_spec_row` still raises for `rework`. |
+| d4 | One header definition. `_CANONICAL_HEADER_LINE` is the source; `_CANONICAL_HEADER_CELLS` (`plan_ops.py:398`) is derived from it, and the separator row and every error text are built from it. `migrate._ensure_spec_plan_row` uses the same text helper. |
+| d5 | A section whose header is *mislabeled* is still refused, never rewritten (unchanged). |
 
 ## 3. Design
 
-- `plan_ops.py`: add `_CANONICAL_HEADER_LINE = "| Plan | Repo | File | Depends on |"`,
-  `_CANONICAL_HEADER_SEPARATOR`, and `_ensure_section_text(text) -> str` returning
-  the text with the section appended when absent (same blank-line handling as
-  today's migrate helper). `_validate_spec_section` returns quietly on a missing
-  section (nothing to validate, `create` will add it). `_append_spec_row` calls
-  `_ensure_section_text` before locating the table. The no-table error reads
-  "…has no table to append to; add `<header>` and its separator row."
-  The mismatch message keeps its wording but is built from the constant.
-- `migrate.py`: `_ensure_spec_plan_row` uses `_ensure_section_text` instead of its
-  own literal; behaviour is byte-identical.
+- `plan_ops.py`: add `_CANONICAL_HEADER_LINE = "| Plan | Repo | File | Depends on |"`; derive
+  `_CANONICAL_HEADER_CELLS` and `_CANONICAL_HEADER_SEPARATOR` from it; add
+  `_ensure_section_text(text) -> str` (returns the text with the section appended when absent,
+  same blank-line handling as today's migrate helper) and `_header_hint()` producing
+  "expected `<header>` followed by its separator row" for all errors.
+- `_validate_spec_section`: a missing section returns quietly; a present section is still checked.
+- `create`: when the spec exists, rewrite it through `_ensure_section_text` right before
+  `_append_spec_row`, then append the row. The spec path is already in `written` for staging.
+- `_append_spec_row` and `_check_table_header`: all three raises use `_header_hint()`.
+- `migrate.py`: `_ensure_spec_plan_row` uses `_ensure_section_text`; output byte-identical.
 - No artifact shape changes (spec text only) → no stamp bump or migration.
 
 ## 4. Test Plan
 
 **In this PR:**
 
-1. `create` on a spec with no `## Implementation Plans` section succeeds; the spec
-   ends with the canonical header, separator and the plan's row, and a blank line
-   separates it from the prior prose (with and without a trailing newline).
-2. `create` on a spec whose section has no table raises `PlanEditError` whose
-   message contains `| Plan | Repo | File | Depends on |`, leaving no plan folder.
-3. The mismatch error still names the header and still leaves the spec untouched.
-4. `migrate`'s section-creating helper output is unchanged (existing tests).
+1. `create` on a spec with no section succeeds: the spec ends with header, separator and the
+   plan's row, blank-line separated from prior prose (with and without a trailing newline).
+2. Pre-flight is read-only: `_validate_spec_section` on a section-less spec returns and leaves
+   the file byte-identical.
+3. Re-run: the plan folder already exists (matching) and the spec has no section: `create`
+   finishes the job and adds section and row once (idempotent on a third run).
+4. Section present, no table: `create` raises `PlanEditError` containing
+   `| Plan | Repo | File | Depends on |`, no plan folder created; the same for the second
+   no-table site in `_append_spec_row`.
+5. Mismatch error still names the header and leaves the spec untouched.
+6. `rework` on a section-less spec still raises, and the message names the header.
+7. `migrate`'s section-creating helper output is unchanged (existing tests).
+
+Acceptance matrix: new rows for items 1, 4 and 6 are added in this PR via
+`fr acceptance add` (`ci` status), citing this spec.
 
 ## 5. Non-goals
 

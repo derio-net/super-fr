@@ -1,0 +1,16 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-plan-table-header
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "_append_spec_row is also called by rework; auto-creating the section there changes rework", body: "Reviewer: creation belongs in create only."}
+  - {kind: finding, id: s2, review_scope: in, title: "A second no-table error site is not covered by d2", body: "plan_ops.py:477 duplicates :414."}
+  - {kind: finding, id: s3, review_scope: in, title: "d3 claims one header definition, but the design leaves three", body: "Derive cells and separator from one line."}
+  - {kind: finding, id: s4, review_scope: in, title: "Test Plan gaps", body: "Pre-flight read-only, idempotent re-run, rework, second no-table site, matrix rows."}
+  - {kind: review, id: spec-review, title: "independent spec review: 4 findings", body: "Reviewer verified plan_ops.py:390-477, :216, :273, migrate.py:737-767 against the spec; all named symbols exist; 4 in-scope findings, all fixed in the spec."}
+resolves:
+  - {id: s1, state: fixed, body: "d1/d2: creation only in create; _append_spec_row stays strict, rework unchanged and tested (item 6)."}
+  - {id: s2, state: fixed, body: "d3: both no-table sites and the missing-section error use one hint builder; test item 4."}
+  - {id: s3, state: fixed, body: "d4: cells and separator derived from _CANONICAL_HEADER_LINE."}
+  - {id: s4, state: fixed, body: "Test Plan items 2, 3, 4, 6 added; matrix rows called out."}
+evidence: {review: spec-review, reviewer: a9fc3a850e1706d67}
