@@ -109,3 +109,8 @@ Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_i
 ### opus-s2-resolved · finding [fixed] · resolves opus-s2: §C test passed on §A alone
 
 Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s3-resolved created=2026-09-27T00:07:38 state=fixed resolves=opus-s3 -->
+### opus-s3-resolved · finding [fixed] · resolves opus-s3: gc's PR-less _merged_by_content is the third caller, without a MERGED backstop
+
+Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
