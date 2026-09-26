@@ -3,4 +3,4 @@ run: 2026-09-26-feat-batch-isolation-timeouts
 step: deliver
 outcome: done
 emitted: {pr: https://github.com/derio-net/super-fr/pull/652}
-evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4a592a0c-4f8c-47c4-8037-d27b4112c4dc/scratchpad/full-suite2.log}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/4a592a0c-4f8c-47c4-8037-d27b4112c4dc/scratchpad/full-suite3.log}
