@@ -140,8 +140,10 @@ the next run carries the same signal.
 decisions can be unit-tested against captured fixtures:
 
 - `wall_clock(jobs) -> seconds | None`: max `completedAt` minus min
-  `startedAt` over jobs that actually ran. Skipped jobs, with null
-  timestamps, are ignored. `None` when no job ran.
+  `startedAt` over jobs that actually ran. Jobs are left out by
+  `conclusion == skipped`: GitHub DOES stamp skipped jobs (observed on run
+  36247922786: `change-fragment` started 14:16:03 and completed 14:16:02), so
+  missing timestamps are not the test. `None` when no job ran.
 - `counted(workflow_on, run) -> bool`: derived from the workflow file's own
   `on:` block, which is read at the run's `head_sha`. (PyYAML parses the bare
   key `on` as `True`, and the loader handles both.) If the workflow triggers
@@ -265,10 +267,13 @@ about the watcher under "Dev commands" / CI.
 Unit level (CI, `tests/unit/test_ci_budget.py`, fixtures captured from real
 `gh api` output of this repo's runs, trimmed but never composed):
 
-1. **Shard coverage:** collecting with `--splits 4 --group k` for k = 1..4
-   yields disjoint sets whose union is the unsplit collection.
+1. **Shard coverage:** pytest-split's own `least_duration` algorithm, run
+   in-process over the node ids in `.test_durations` plus ids missing from it,
+   yields 4 non-empty, disjoint groups whose union is the input. (This is not
+   done with five full `--collect-only` subprocesses, which cost 30–90s: phase 1
+   review.)
 2. **`wall_clock`:** a captured `CI` run's jobs give first start to last end.
-   Skipped jobs with null timestamps are ignored. A run where every job was
+   Skipped jobs are ignored by conclusion, even though they carry timestamps (fixture: run 36247922786). A run where every job was
    skipped gives `None`.
 3. **Watched-list tripwire:** every workflow file is watched or excluded, and
    every config key names a real file. Negative cases run on a temp directory:

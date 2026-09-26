@@ -804,7 +804,7 @@
     "tests/unit/test_check_pinned_clis.py::test_the_default_fetch_reads_in_bounded_chunks": 0.0009463740279898047,
     "tests/unit/test_check_pinned_clis.py::test_the_default_pins_are_the_shipped_ones": 0.0008860420202836394,
     "tests/unit/test_ci_shards.py::test_coverage_job_combines_and_gates": 0.014849583036266267,
-    "tests/unit/test_ci_shards.py::test_shard_partition_is_disjoint_and_complete": 31.048595875152387,
+    "tests/unit/test_ci_shards.py::test_shard_partition_is_disjoint_and_complete": 0.36,
     "tests/unit/test_ci_shards.py::test_test_job_checkout_has_full_fetch_depth": 0.00852025009226054,
     "tests/unit/test_ci_shards.py::test_test_job_matrix_shape": 0.010082957916893065,
     "tests/unit/test_ci_shards.py::test_test_job_pytest_step_pins_addopts_and_splitting": 0.007469458156265318,

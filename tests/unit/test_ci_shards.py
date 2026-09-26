@@ -6,28 +6,27 @@ ci-time-budget §3.A, Test Plan §7.1/§7.8).
 `--strict-markers --cov`, and a `coverage` job (`needs: test`) combines the
 shards and gates at 75.
 
-(b) Partition: pytest-split's `--splits 4 --group k` must cover every
-collected test exactly once, with no gaps and no overlaps. Run as
-subprocesses so a real `pytest --collect-only` decides this, not a guess
-about pytest-split's algorithm.
+(b) Partition: pytest-split's `least_duration` grouping must place every
+test in exactly one of the 4 groups. This calls pytest-split's own algorithm
+in process over the real node ids in `.test_durations`, plus ids absent from
+it (a new test gets the average duration), so the check exercises the real
+algorithm and costs milliseconds. Earlier versions of this test ran five
+full-suite `--collect-only` subprocesses, which took 30-90s inside a change
+whose whole point is CI time.
 """
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
+import json
 from pathlib import Path
 
 import yaml
+from pytest_split.algorithms import LeastDurationAlgorithm
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_YAML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
-# Set on the subprocesses this test itself spawns, so that if a full-suite
-# invocation's own subprocess call somehow re-entered this test file, it
-# would skip part (b) instead of recursing.
-_INNER_ENV_VAR = "PYTEST_SPLIT_INNER"
+DURATIONS = REPO_ROOT / ".test_durations"
 
 
 def _load_ci_workflow() -> dict:
@@ -88,65 +87,27 @@ def test_coverage_job_combines_and_gates() -> None:
 # ── (b) partition: every collected test exactly once across 4 groups ──
 
 
-def _collect_node_ids(extra_args: list[str]) -> set[str]:
-    """Run `pytest --collect-only -q` as a subprocess and return the set of
-    collected node ids (lines containing `::`, excluding the trailing
-    summary line)."""
-    env = dict(os.environ)
-    env[_INNER_ENV_VAR] = "1"
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "--collect-only",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            "-o",
-            "addopts=",
-            *extra_args,
-        ],
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    node_ids = {line.strip() for line in result.stdout.splitlines() if "::" in line}
-    assert node_ids, (
-        f"no node ids collected (exit={result.returncode}); "
-        f"stdout={result.stdout[-2000:]} stderr={result.stderr[-2000:]}"
-    )
-    return node_ids
+class _Item:
+    """The one attribute pytest-split's algorithm reads from a pytest Item."""
+
+    def __init__(self, nodeid: str) -> None:
+        self.nodeid = nodeid
 
 
 def test_shard_partition_is_disjoint_and_complete() -> None:
-    if os.environ.get(_INNER_ENV_VAR) == "1":
-        import pytest
+    durations: dict[str, float] = json.loads(DURATIONS.read_text())
+    assert len(durations) > 1000, "the committed .test_durations looks truncated"
+    node_ids = [*durations, *(f"tests/unit/test_new_{i}.py::test_x" for i in range(7))]
+    items = [_Item(n) for n in node_ids]
 
-        pytest.skip(
-            f"{_INNER_ENV_VAR}=1: this is already a subprocess spawned by this "
-            "test's own partition check — skip to avoid recursing"
-        )
+    groups_raw = LeastDurationAlgorithm()(4, items, durations)
+    groups = [{it.nodeid for it in g.selected} for g in groups_raw]
 
-    unsplit = _collect_node_ids([])
-
-    groups: list[set[str]] = []
-    for k in (1, 2, 3, 4):
-        groups.append(
-            _collect_node_ids(
-                ["--splits", "4", "--group", str(k), "--splitting-algorithm", "least_duration"]
-            )
-        )
-
-    # pairwise disjoint
+    assert len(groups) == 4
+    assert all(groups), "an empty shard means the matrix is wider than the suite"
     for i in range(len(groups)):
         for j in range(i + 1, len(groups)):
             overlap = groups[i] & groups[j]
-            assert not overlap, f"group {i + 1} and group {j + 1} overlap: {overlap}"
-
+            assert not overlap, f"group {i + 1} and group {j + 1} overlap: {sorted(overlap)[:5]}"
     union = set().union(*groups)
-    assert union == unsplit, (
-        f"missing from shards: {unsplit - union}; extra in shards: {union - unsplit}"
-    )
+    assert union == set(node_ids), f"missing from shards: {sorted(set(node_ids) - union)[:5]}"
