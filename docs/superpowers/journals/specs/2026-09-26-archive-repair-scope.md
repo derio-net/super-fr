@@ -14,3 +14,58 @@ Operator chose an only_plans filter on repair_repo; --all, --sweep-only and fr r
 ### no-test-plan · decision · No post-merge Test Plan
 
 Bug fix, CI tests only.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-09-26T15:10:34 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · Scoped row match key ambiguous
+
+Pinned to refs.plan_slug(file_cell); out-of-scope rows emit no warnings (spec 3.A).
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-09-26T15:10:34 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · Scoped meta lookup and slug source underspecified
+
+Spec 3.A/3.B now state the glob filter and only_plans = names of archived paths.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-09-26T15:10:34 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · Create normalization guard
+
+Spec 3.C: shared helper, value-only, shortens only when resolved file equals named file.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-09-26T15:10:34 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · Readers/tests inventory missing
+
+Test plan 5-6 cover readers and updated create tests.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-09-26T15:10:34 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · Untested create cases
+
+Test plan 3b and 4 extended.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-09-26T15:10:34 -->
+### spec-review · review · independent spec review: 5 findings
+
+5 in-scope findings, all fixed in the spec; verified file:line claims held.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-09-26T15:10:34 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: Scoped row match key ambiguous
+
+spec 3.A
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-09-26T15:10:34 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: Scoped meta lookup and slug source underspecified
+
+spec 3.A/3.B
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-09-26T15:10:34 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: Create normalization guard
+
+spec 3.C
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-09-26T15:10:34 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: Readers/tests inventory missing
+
+spec 4 tests 5-6
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-09-26T15:10:34 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: Untested create cases
+
+spec 4 tests 3b/4
