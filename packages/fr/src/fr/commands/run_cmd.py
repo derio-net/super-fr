@@ -1607,9 +1607,21 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     """
     import hashlib
 
+    from fr.record.model import RECORDS_SUFFIX
     from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
     path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
+    if path.parent.name.endswith(RECORDS_SUFFIX):
+        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
+        # and fr empties it; a log written there got committed and reached
+        # `main` with nothing to remove it.
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
+            "holds step records only and is emptied by fr. Write the suite log outside "
+            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     try:
         data = path.read_bytes()
     except OSError:
