@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-archive-repair-scope
 workflow: fr-goal@1
 branch: feat/batch-archive-repair-scope
 started: '2026-09-26T13:00:07+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -43,7 +43,14 @@ steps:
           returned: '2026-09-26T13:11:29+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-26T13:11:40+00:00'
+    exit: 0
+    stdout: "[warn] phases carry a tier but fr_version '>=3.0.0,<5.0.0' admits a pre-tier\
+      \ fr \n— floor it at '>=3.12.0,<5.0.0'.\n[warn] phase 1 is agentic but lists\
+      \ no files — `fr plan proportionality` cannot \ntell its touches from out-of-plan\
+      \ ones. Add `files` (repo-relative globs) and \n`estimate_lines` to the phase\
+      \ header.\n"
   implement:
     state: pending
     members:
