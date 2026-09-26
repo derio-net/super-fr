@@ -4648,6 +4648,9 @@ rows:
       git so a fresh container needs no manual safe.directory
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_container_git_ownership.py
+    status: ci
+    notes: POST_CREATE adds git config --global --add safe.directory "$PWD" || true;
+      committed profiles regenerated
