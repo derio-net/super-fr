@@ -74,3 +74,8 @@ Stated design of the spec, not a defect introduced here.
 ### r5-tmp-in-repo-resolved · finding [out-of-scope] · resolves r5-tmp-in-repo: outside-any-repo test assumes TMPDIR is not inside a repo; _run_git unchanged (phase 1)
 
 Test assumption is pre-existing style; _run_git excluded by spec.
+
+<!-- fr:journal kind=finding scope=plan id=r4-shared-seam-trust-resolved-2 created=2026-09-26T17:17:01 state=open resolves=r4-shared-seam-trust tracked_by=#700 -->
+### r4-shared-seam-trust-resolved-2 · finding [deferred → #700] · resolves r4-shared-seam-trust: git_answer trusts enclosing repo for every caller; walk-up trusts any ancestor .git
+
+Filed at closeout as #700.
