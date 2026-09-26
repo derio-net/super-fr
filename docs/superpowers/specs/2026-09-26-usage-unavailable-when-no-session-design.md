@@ -72,14 +72,16 @@ already permits it, `schema_version` stays 1, no released `fr` rejects the file
 validator is owed; a test pins that the file still validates and round-trips.
 (The rule's own test for "shape": would an older reader raise? It would not.)
 
-### 3.2 A later real capture drops the placeholder (decision: drop)
+### 3.2 The placeholder exists only when the merged result is empty (decision: drop)
 
-`_merge` discards a previous entry with `session == ""` and
-`unavailable == "no session found"` whenever the new capture has entries of its
-own with real session ids. Real per-session unavailable entries keep today's
-behaviour (kept, unless a fresh read replaced them). When the new capture is
-*also* empty, the fresh placeholder simply replaces the old one (same host,
-one entry) — never two.
+`_merge` always discards a previous entry that is the placeholder
+(`session == ""`, `unavailable == "no session found"`); real per-session
+unavailable entries keep today's behaviour. The placeholder is then built
+**after** the merge and appended only if the merged list is empty. So: real
+sessions now or carried forward from an earlier capture → no placeholder; a
+later capture finding real sessions replaces an earlier placeholder; two empty
+captures on one host leave exactly one placeholder. A placeholder is never
+written beside real figures (reviewer finding s2).
 
 ### 3.3 First-resolve path unchanged (decision: keep skipping)
 
@@ -90,9 +92,14 @@ write the placeholder.
 
 ### 3.4 Rendering and cost
 
-`fr run cost` / `fr usage report` from the file already render an
-`unavailable` entry as `—` with its reason. A test pins that a file consisting
-solely of the placeholder produces no total and shows the reason, never `$0`.
+`fr run cost` (`run/cost.py:162-165`, `run_cmd.py:3485`) counts an
+`unavailable` entry ("N read, M unavailable", total `—`) and never prints its
+reason text; a file holding only the placeholder therefore prints `total —` and
+`0 read, 1 unavailable`, never `$0`. The reason lives in the committed file.
+Surfacing reason text in the cost summary is a non-goal of this cut (the count
+already stops it reading as free). The placeholder validates under
+`validate_usage` (`structure.py:372`, a `UsageFile` round-trip) and, because a
+placeholder-only host capture is a capture, `needs_capture` returns False for it.
 
 ## 4. Approach: debugging-first
 
@@ -101,9 +108,12 @@ This is a bug. Phase 1 opens with a failing test that reproduces it (empty
 
 ## 5. Risks
 
-- **`session: ""` collides in `effective_entries`** across captures on
-  different hosts (keyed by session). Harmless: all are unavailable, and the
-  loop keeps an unavailable entry only when nothing better is held.
+- **`session: ""` collides in `effective_entries`** (`cost.py:105-110`, keyed by
+  session) with the placeholder of another host and with the legacy
+  `session: ""` entries the OpenCode/Hermes readers emit. No dollar error —
+  an unavailable entry never displaces a held one and duplicates collapse to
+  one — but host A's placeholder still counts as "1 unavailable" beside host
+  B's real reads. Accepted, and pinned by a two-host test.
 - **Reason text drift**: mitigated by putting the string in one module constant
   used by both `capture.py` and `_KEPT_REASONS`, with a vocabulary test.
 
@@ -112,7 +122,7 @@ This is a bug. Phase 1 opens with a failing test that reproduces it (empty
 1. On an OpenCode run with no bound session, `fr run resolve --step deliver`
    writes `sessions: [{session: '', unavailable: no session found}]`, never
    `sessions: []`.
-2. `fr run cost <run-id>` on that run prints `—` and the reason for it, no
+2. `fr run cost <run-id>` on that run prints `total —` and `1 unavailable`, no
    dollar total.
 3. After session discovery lands (#537), a later closeout capture on the same
    host replaces the placeholder with the real sessions.
