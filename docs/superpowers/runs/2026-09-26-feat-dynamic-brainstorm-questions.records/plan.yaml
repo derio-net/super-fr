@@ -1,0 +1,11 @@
+schema_version: 1
+run: 2026-09-26-feat-dynamic-brainstorm-questions
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-three-phases
+    title: "Three phases: record v2 skeleton -> gate -> contract prose"
+    body: "Phase 1 is the walking skeleton (record kind bump, dogfooded via fr migrate artifacts on this run's own live records so later phases resolve on v2). Gate before prose so the prose never promises a verification that does not exist."
+emitted:
+  plan: docs/superpowers/plans/2026-09-26-dynamic-brainstorm-question-rounds
