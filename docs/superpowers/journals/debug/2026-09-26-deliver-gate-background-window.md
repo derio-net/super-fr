@@ -14,3 +14,8 @@ telemetry.orchestrator_wrote_since (windows.append((issued[id], done)) with done
 ### fix-notice-window · finding [fixed] (reviewer: in scope) · window ends at the task-notification for a backgrounded command
 
 telemetry.orchestrator_wrote_since: a tool_result with toolUseResult.backgroundTaskId is the launch ack and no longer closes the window; the user <task-notification> record naming the same <tool-use-id> with <status>completed</status> does. failed/killed/still-running yield no window (same rule as a foreground is_error). Pinned by 5 tests in tests/unit/test_run_telemetry.py over a captured fixture (claude-code-bash-background.jsonl).
+
+<!-- fr:journal kind=review scope=debug id=review-gate-fix created=2026-09-26T17:28:17 -->
+### review-gate-fix · review · independent review of the gate fix: no provenance weakening found
+
+Reviewer a3be0e06072843aad: notices read only from main-thread user records with string content, id must belong to an orchestrator command that wrote the log, only status completed counts, OpenCode path untouched, 5 tests non-vacuous, fixture redacted. Noted, out of scope: the window for a backgrounded command is as wide as the suite (inherent to anchoring on the log's mtime, covered by the docstring's forgery limit); a duplicate/failed-then-completed notice pair is not emitted by the harness; a tool_use_id TypeError on malformed transcripts pre-exists; an unrecognised notice shape reports the generic 'no command of YOURS wrote it'.
