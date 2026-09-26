@@ -84,3 +84,8 @@ Same #594 symptom via the auto-background path. Fixed: covered in spec §2/§3.A
 ### s7 · finding [open] (reviewer: in scope) · Notification timestamp is when recorded, not when finished; wait/retry undocumented (Opus)
 
 §2 reworded; §3.C states retrying deliver until the notification exists is the intended recovery.
+
+<!-- fr:journal kind=finding scope=spec id=s8 created=2026-09-26T23:50:52 state=open review_scope=in -->
+### s8 · finding [open] (reviewer: in scope) · §3.B assignment grammar differs from the implemented one (Opus)
+
+§3.B now describes command-start-only assignments.
