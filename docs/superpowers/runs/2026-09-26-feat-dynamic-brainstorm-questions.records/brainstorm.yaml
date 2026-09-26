@@ -1,0 +1,40 @@
+schema_version: 1
+run: 2026-09-26-feat-dynamic-brainstorm-questions
+step: brainstorm
+outcome: done
+journal:
+  - kind: decision
+    id: d1-enforcement
+    title: "Enforcement: prose + record check"
+    body: "The brainstorm step record declares question rounds (questions: {rounds, trigger, reason}); fr run resolve verifies against the transcript where readable. Record kind bumps 1->2 with a stamp-only migration."
+  - kind: decision
+    id: d2-sizing
+    title: "Sizing: per operator-owned decision, soft ceiling ~10"
+    body: "No numeric cap. Above ~10 questions the agent justifies or proposes splitting the goal. On Claude Code a round spans ceil(N/4) consecutive AskUserQuestion calls with no other tool call between. Prose only, not counted in code."
+  - kind: decision
+    id: d3-round-two
+    title: "Round 2 asks only what round 1 opened; never a round 3"
+    body: "Each round-2 question names the round-1 answer or code finding behind it. Triggers: design-risk (announced as Round 1 of 2) or operator-request (asked in prose during round 1)."
+  - kind: decision
+    id: d4-contract-prose
+    title: "The fr-goal contract prose changes on every surface that states it"
+    body: "Operator, mid-brainstorm: 'you'll need to change the prose, as we are changing the fr-goal contract'. Spec §3.A.1 enumerates every surface (skill description, opening, touchpoints, §1, fr-brainstorming, explainer .md+.html, README) and Test Plan 6 pins it with a tripwire."
+acceptance:
+  - id: fr-goal-question-batch-sized-to-feature
+    capability: fr-goal-methodology
+    acceptance: "fr-goal's brainstorm asks one question per operator-owned decision with no fixed cap of 4; a round larger than the harness question tool's limit spans consecutive calls and still clears the gate as one round."
+    origin: ["super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md"]
+    status: not-implemented
+  - id: fr-goal-second-round-announced-and-verified
+    capability: fr-goal-methodology
+    acceptance: "A brainstorm may take a second question round only when the record declares rounds: 2 with a trigger (design-risk announced as Round 1 of 2, or operator-request); fr run resolve refuses a round count that differs from the declaration, a design-risk round 2 that round 1 never announced, and any third round."
+    origin: ["super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md"]
+    status: not-implemented
+  - id: fr-goal-contract-prose-two-rounds
+    capability: fr-goal-methodology
+    acceptance: "Every surface stating fr-goal's operator contract (skill, mirrors, explainer, README) describes one gate with sized, at-most-two announced rounds; none still promises a four-question single batch."
+    origin: ["super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md"]
+    status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+evidence: {}
