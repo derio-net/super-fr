@@ -78,3 +78,51 @@ saying why; the loud-failure and registry-exclusion tests still exercise the rea
 
 Not caused by this change: the same regex and count=1 substitution lived in bump-version.py before
 phase 1 moved it. Every current pyproject has [project].version before any other table.
+
+<!-- fr:journal kind=decision scope=plan id=p2-surfaces-at-ref created=2026-09-26T08:48:12 phase=2 -->
+### p2-surfaces-at-ref · decision · The gate reads version_surfaces at a git ref by materialising candidate files into a temp dir (phase 2) (phase 2)
+
+`surfaces_at(repo, ref)` lists the tree at the ref, writes every file whose basename is one
+of pyproject.toml, package.json, plugin.json, marketplace.json, uv.lock into a temp dir via
+`git show`, and calls `version_surfaces(tmp)`. The basename set is only a superset filter;
+which files are surfaces stays version_surfaces' decision, so there is still one list and
+version_surfaces.py was not changed. A (file, locator) key present at HEAD but not at base
+is an added surface and passes only at the base version.
+
+<!-- fr:journal kind=decision scope=plan id=p2-merge-base-and-git-content created=2026-09-26T08:48:12 phase=2 -->
+### p2-merge-base-and-git-content · decision · Every rule compares the merge base with HEAD and reads content from git, never the working tree (phase 2) (phase 2)
+
+Rule 2 compares version values at `git merge-base <base> HEAD`, not the base tip, so a
+release on main after the branch point is not reported as this PR's version edit (pinned by
+test_version_is_compared_at_the_merge_base_not_the_base_tip). One `Diff` reader
+(merge base + name-status, `before()`/`after()` via `git show`) feeds rule 1, rule 2 and the
+floor rule, so an uncommitted fragment cannot make a red branch look green.
+
+<!-- fr:journal kind=decision scope=plan id=p2-floor-scope created=2026-09-26T08:48:12 phase=2 -->
+### p2-floor-scope · decision · Floors are found by tokenize in Python string tokens only; new floors are a per-file multiset of lower bounds (phase 2) (phase 2)
+
+scripts/floors.py scans only `packages/<pkg>/src/**.py`, and only STRING / FSTRING_MIDDLE
+tokens (comments excluded; a regex over quoted text is the fallback for untokenizable
+source). A floor must not be preceded by an identifier char, so "demo>=1.0.0,<2.0.0" is not
+one. The gate compares lower bounds per changed file as a multiset (base vs HEAD), so
+reformatting a historical floor or moving its upper bound introduces nothing new; a new
+lower bound above base must equal base + the highest bump among ADDED fragments.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fragment-yaml-subset created=2026-09-26T08:48:12 phase=2 -->
+### p2-fragment-yaml-subset · discovery · Fragments are parsed as a flat key-scalar YAML subset with the stdlib; richer YAML is refused (phase 2) (phase 2)
+
+The gate and release script run under plain `python` / `uv run --no-project`, so no PyYAML.
+changes.parse_text accepts `key: value` lines (plain or quoted, ` #` comments on plain
+values, as YAML does) and refuses block scalars, continuation lines, duplicate and unknown
+keys, each naming the file and field. A plain summary containing ` #` loses the tail, exactly
+as real YAML would; quote it to keep it.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-26T08:48:12 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+tests only; written table-driven from the start (one CASES list and shared edit builders), so nothing duplicated remained to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-26T08:48:12 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the cleanup owed here is the one P2.T3.S2 names (a single diff reader shared by the three rules) and was done there, not twice
