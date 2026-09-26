@@ -435,3 +435,8 @@ Filed at closeout as #669.
 ### rp2-f2-resolved-2 · finding [deferred → #670] · resolves rp2-f2: LOW: the change-fragment CI step runs bare `python`, not uv-managed Python
 
 Filed at closeout as #670.
+
+<!-- fr:journal kind=finding scope=plan id=rp5-f1-resolved-2 created=2026-09-26T08:45:42 state=open resolves=rp5-f1 tracked_by=#671 -->
+### rp5-f1-resolved-2 · finding [deferred → #671] · resolves rp5-f1: LOW: the gate's requires_bump covers only plugins/super-fr/{skills,rules}/, narrower than the documented plugins/*/skills/**
+
+Filed at closeout as #671.
