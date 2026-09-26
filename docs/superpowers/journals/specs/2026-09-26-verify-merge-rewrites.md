@@ -114,3 +114,8 @@ Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_i
 ### opus-s3-resolved · finding [fixed] · resolves opus-s3: gc's PR-less _merged_by_content is the third caller, without a MERGED backstop
 
 Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s4-resolved created=2026-09-27T00:07:38 state=fixed resolves=opus-s4 -->
+### opus-s4-resolved · finding [fixed] · resolves opus-s4: wrong line cites; wrong reason unpushed work still hazards
+
+Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
