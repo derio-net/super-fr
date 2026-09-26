@@ -79,3 +79,8 @@ Re-run on claude-opus-5-5 per operator correction (the earlier review-phase ran 
 ### cr1-resolved · finding [fixed] · resolves cr1: backfill writes sessions: [] for a cursor naming no session
 
 backfill writes the no-session placeholder; red-then-green test test_a_run_naming_no_session_is_recorded_unavailable_never_empty (9746ee60).
+
+<!-- fr:journal kind=finding scope=plan id=cr2-resolved created=2026-09-26T23:37:07 state=fixed resolves=cr2 -->
+### cr2-resolved · finding [fixed] · resolves cr2: change fragment summary is not valid YAML
+
+Summary quoted; yaml.safe_load and scripts/changes.py both parse it (9746ee60).
