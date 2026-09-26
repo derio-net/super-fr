@@ -1,0 +1,18 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-verify-merge-rewrites
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "Spec cites wrong line numbers for two helpers", body: "local.py:259 and :1036, not :263/:1043."}
+  - {kind: finding, id: s2, review_scope: in, title: "Fix A fallback ambiguous for the early-return paths", body: "Say whether the empty-added and path-absent returns reach the fallback."}
+  - {kind: finding, id: s3, review_scope: in, title: "Test Plan does not cover _reap_hazard gain", body: "Widened pass loosens the reap guard; needs a test."}
+  - {kind: finding, id: s4, review_scope: in, title: "State verify_merge raises when neither ref resolves", body: "_branch_refs runs at repo_root and raises IsolationError; add to design and Test Plan."}
+  - {kind: finding, id: s5, review_scope: out, title: "Blob equality misses concurrent-edit-then-rewrite", body: "Known limit of #598 option 1; fails safe."}
+  - {kind: review, id: spec-review, title: "independent spec review: 5 findings (4 in, 1 out)", body: "Reviewer a6c16f87ab38181f3 checked decisions d1-d3 and x1 against local.py; all named helpers verified."}
+resolves:
+  - {id: s1, state: fixed, body: "Line numbers corrected."}
+  - {id: s2, state: fixed, body: "Fallback runs on every False path where the branch still has the file; pure branch deletion stays STOP; test added to Test Plan."}
+  - {id: s3, state: fixed, body: "_reap_hazard test added to Test Plan."}
+  - {id: s4, state: fixed, body: "Design line and Test Plan test added."}
+  - {id: s5, state: out-of-scope, body: "Inherent to option 1 of #598, not caused by this change; recorded as a known limit in Non-goals; fails safe."}
+evidence: {review: spec-review, reviewer: a6c16f87ab38181f3}
