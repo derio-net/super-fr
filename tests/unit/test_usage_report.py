@@ -138,6 +138,10 @@ def transcripts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("FR_TRANSCRIPT_ROOT", str(root))
     monkeypatch.setenv("FR_USAGE_CACHE", str(tmp_path / "cache"))
     monkeypatch.setenv("COLUMNS", "200")
+    # The CLI resolves its default repo from cwd. Keep these tests on their
+    # temporary fixture tree rather than inheriting the developer's isolated
+    # worktree marker (usage is correctly refused inside devcontainers).
+    monkeypatch.chdir(tmp_path)
     return tmp_path
 
 

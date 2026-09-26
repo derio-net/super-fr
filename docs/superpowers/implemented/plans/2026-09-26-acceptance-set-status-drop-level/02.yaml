@@ -1,0 +1,64 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Engine — RecordTarget.acceptance_drops through _acceptance_writes
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - lifecycle-acceptance-drop-level
+  tier: standard
+  files:
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/test_record_apply.py
+  estimate_lines: 140
+tasks:
+- number: 1
+  title: Drops reach the move branch, red → green → refactor
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_record_apply.py add engine tests calling `fr.record.apply.apply_record(root, None,
+      StepRecord(acceptance=(AcceptanceItem(id=..., status=..., notes=...),)), target=RecordTarget(message="m",
+      acceptance_drops={...}))` on a git repo with a matrix (model the fixture on tests/unit/test_record_verbs.py's
+      `repo` fixture and tests/unit/acceptance_helpers.make_repo/row). Cases (spec Test Plan 9, 10): (a) a present
+      drop removes the ref from the row in matrix.yaml; (b) an absent-ref drop raises RecordRefusedError and
+      matrix.yaml plus all three docs/acceptance/report_* files are byte-identical to before; (c) drops keyed by a
+      row id with no item in the record → RecordRefusedError; (d) drops keyed by an item that creates a row
+      (capability+acceptance given) → RecordRefusedError; (e) non-empty acceptance_drops with a run_id →
+      RecordRefusedError. Run the file — expect failures (unknown field).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/record/apply.py add `acceptance_drops: Mapping[str, Mapping[str, tuple[str, ...]]]
+      = field(default_factory=dict)` to the frozen RecordTarget dataclass. Its docstring says: verb-only, fed by CLI
+      `set-status --drop-level`, and the record kind's shape is deliberately unchanged (spec d-carrier). Give
+      `_acceptance_writes` a `drops` parameter; pass `target.acceptance_drops` from apply_record (empty when target
+      is None). Refuse before any write: drops with a run_id; drop ids with no item in record.acceptance; drops on
+      a create-branch item. In the move branch compute levels as
+      `merge_levels(drop_levels(existing.levels, {k: list(v) for k, v in drops.get(item.id, {}).items()}), additions)`,
+      mapping AcceptanceError to RecordRefusedError via the existing except. Rerun green, plus
+      tests/unit/test_record_verbs.py and tests/unit/test_acceptance_set_status.py.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: keep the three misalignment refusals in one small helper (e.g. `_check_drops(record, drops, run_id)`)
+      if it reads cleaner; ruff check + format touched files; `uv run mypy packages/fr/src`; rerun the three test
+      files green. Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T22:52:20+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T22:52:20+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-25T22:52:20+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T22:52:20+00:00'
+    note: null
+    observed_prs: []

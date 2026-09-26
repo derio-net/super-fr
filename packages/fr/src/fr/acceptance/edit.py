@@ -23,6 +23,7 @@ Spec: `docs/superpowers/specs/2026-09-18-harness-parity-matrix-design.md` §3.G.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping, Sequence
 
 import yaml
 
@@ -116,6 +117,16 @@ def replace_row(text: str, row_id: str, row: Row) -> str:
     return "".join(lines[:start]) + render_row_block(row) + "".join(tail) + "".join(lines[end:])
 
 
+def _refuse_unknown_levels(keys: Iterable[str]) -> None:
+    """Refuse any level key outside `LEVELS` — a typo would silently drop refs."""
+    unknown = set(keys) - set(LEVELS)
+    if unknown:
+        raise AcceptanceError(
+            f"unknown level keys {sorted(unknown)} (allowed: {list(LEVELS)}) "
+            "— a typo would silently drop refs"
+        )
+
+
 def merge_levels(
     existing: dict[str, tuple[str, ...]], additions: dict[str, list[str]]
 ) -> dict[str, tuple[str, ...]]:
@@ -123,15 +134,11 @@ def merge_levels(
 
     Additive because the documented transition is "add the ref to `levels`,
     move `status` up" (`.claude/rules/acceptance-matrix.md`): evidence
-    accumulates as more levels come to verify a row. Removing a ref stays a
-    deliberate edit, not something a status flip does silently.
+    accumulates as more levels come to verify a row. Removing a ref is
+    `drop_levels`'s job — explicit, never something a status flip does
+    silently.
     """
-    unknown = set(additions) - set(LEVELS)
-    if unknown:
-        raise AcceptanceError(
-            f"unknown level keys {sorted(unknown)} (allowed: {list(LEVELS)}) "
-            "— a typo would silently drop refs"
-        )
+    _refuse_unknown_levels(additions)
     merged: dict[str, tuple[str, ...]] = {}
     for lv in LEVELS:
         seen = list(existing.get(lv, ()))
@@ -140,3 +147,33 @@ def merge_levels(
                 seen.append(ref)
         merged[lv] = tuple(seen)
     return merged
+
+
+def drop_levels(
+    existing: Mapping[str, Sequence[str]], drops: Mapping[str, Sequence[str]]
+) -> dict[str, tuple[str, ...]]:
+    """Existing level refs minus `drops`, the remaining refs in their order.
+
+    The one definition of "this ref is on the row" (gh#624): a drop naming a
+    ref the row does not carry is refused, never ignored — a typo'd ref that
+    silently removed nothing would leave stale evidence behind while reporting
+    success. A ref named twice in `drops` is dropped once; a ref a (hand-edited)
+    row carries twice loses every copy — a drop means "this evidence is no
+    longer on the row". Typed over `Mapping`/`Sequence` so the CLI's parsed
+    lists and the engine's `RecordTarget.acceptance_drops` tuples both pass
+    straight through.
+    """
+    _refuse_unknown_levels(drops)
+    for lv, refs in drops.items():
+        current = existing.get(lv, ())
+        for ref in dict.fromkeys(refs):
+            if ref not in current:
+                raise AcceptanceError(
+                    f"cannot drop {ref!r} from level {lv!r}: the row does not carry it "
+                    f"(current {lv} refs: {list(current)})"
+                )
+    remaining: dict[str, tuple[str, ...]] = {}
+    for lv in LEVELS:
+        gone = set(drops.get(lv, ()))
+        remaining[lv] = tuple(ref for ref in existing.get(lv, ()) if ref not in gone)
+    return remaining

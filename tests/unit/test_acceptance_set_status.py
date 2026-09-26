@@ -327,3 +327,188 @@ def test_an_id_that_is_a_prefix_of_another_edits_only_the_exact_match(
     assert loaded["foo-2"]["status"] == "ci"
     assert loaded["foo"]["status"] == "ci"
     assert loaded["foo"]["notes"] == "n", "the prefix row's notes were rewritten"
+
+
+# --- drop_levels (gh#624, spec Test Plan item 8) -----------------------------
+
+
+def test_drop_levels_removes_a_ref_and_keeps_order() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import LEVELS
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:c")}, {"unit": ["r:b"]})
+    assert set(out) == set(LEVELS)
+    assert out["unit"] == ("r:a", "r:c")
+
+
+def test_drop_levels_dedupes_a_repeated_drop() -> None:
+    from fr.acceptance.edit import drop_levels
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:c")}, {"unit": ["r:b", "r:b"]})
+    assert out["unit"] == ("r:a", "r:c")
+
+
+def test_drop_levels_refuses_a_ref_not_on_the_row() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError) as exc:
+        drop_levels({"unit": ("r:a",)}, {"unit": ["r:missing"]})
+    msg = str(exc.value)
+    assert "unit" in msg
+    assert "r:missing" in msg
+
+
+def test_drop_levels_refuses_an_unknown_level_key() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError, match="unti"):
+        drop_levels({"unit": ("r:a",)}, {"unti": ["r:a"]})
+
+
+def test_drop_levels_refuses_a_drop_from_a_level_the_row_has_no_refs_in() -> None:
+    from fr.acceptance.edit import drop_levels
+    from fr.acceptance.model import AcceptanceError
+
+    with pytest.raises(AcceptanceError, match="e2e"):
+        drop_levels({"unit": ("r:a",)}, {"e2e": ["r:a"]})
+
+
+def test_drop_levels_removes_every_copy_of_a_duplicated_existing_ref() -> None:
+    from fr.acceptance.edit import drop_levels
+
+    out = drop_levels({"unit": ("r:a", "r:b", "r:a")}, {"unit": ("r:a",)})
+    assert out["unit"] == ("r:b",)
+
+
+# --- set-status --drop-level (gh#624, spec Test Plan items 1-7) ---------------
+
+_A = "own:tests/test_a.py"
+_B = "own:tests/test_b.py"
+_REPORTS = ("report_local.html", "report_linked.html", "report_linked.md")
+
+
+def _two_ref_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str = "skipped") -> Path:
+    root = make_repo(tmp_path, row(id="target", status=status, unit=f'"{_A}", "{_B}"'))
+    (root / "tests" / "test_b.py").write_text("def test_b(): pass\n")
+    (root / "tests" / "test_c.py").write_text("def test_c(): pass\n")
+    assert _invoke(root, monkeypatch, "report", "--deterministic").exit_code == 0
+    return root
+
+
+def _snapshot(root: Path) -> dict[str, bytes]:
+    d = root / "docs" / "acceptance"
+    return {name: (d / name).read_bytes() for name in ("matrix.yaml", *_REPORTS)}
+
+
+def _set_status(root: Path, monkeypatch: pytest.MonkeyPatch, *extra: str):
+    return _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "--id",
+        "target",
+        "--status",
+        "ci",
+        "--notes",
+        "re-pointed",
+        *extra,
+    )
+
+
+def test_drop_level_removes_the_ref_and_keeps_the_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = _set_status(root, monkeypatch, "--drop-level", f"unit={_B}")
+    assert result.exit_code == 0, result.output
+    target = _row(root, "target")
+    assert target.levels["unit"] == (_A,)
+    assert target.status == "ci"
+    assert target.notes == "re-pointed"
+    after = _snapshot(root)
+    for name in _REPORTS:
+        assert (root / "docs" / "acceptance" / name).exists()
+        assert after[name] != before[name], f"{name} was not regenerated"
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+def test_drop_level_of_an_absent_ref_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = _set_status(root, monkeypatch, "--drop-level", "unit=own:tests/test_missing.py")
+    assert result.exit_code == 2, result.output
+    assert "cannot drop" in result.output, "refused for our reason, not a Typer usage error"
+    assert _snapshot(root) == before
+
+
+def test_drop_level_and_level_repoint_the_row_in_one_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fr.acceptance.edit as edit
+
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    new = "own:tests/test_c.py"
+    rewrites: list[str] = []
+    real = edit.replace_row
+
+    def spy(text: str, row_id: str, row_: object) -> str:
+        rewrites.append(row_id)
+        return real(text, row_id, row_)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(edit, "replace_row", spy)
+    result = _set_status(root, monkeypatch, "--drop-level", f"unit={_B}", "--level", f"unit={new}")
+    assert result.exit_code == 0, result.output
+    assert _row(root, "target").levels["unit"] == (_A, new)
+    assert rewrites == ["target"], "drop + add must land in ONE rewrite of the row"
+
+
+def test_the_same_ref_added_and_dropped_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = _set_status(root, monkeypatch, "--drop-level", f"unit={_B}", "--level", f"unit={_B}")
+    assert result.exit_code == 2, result.output
+    assert "named in both" in result.output, "refused for our reason, not a Typer usage error"
+    assert _snapshot(root) == before
+
+
+def test_drop_level_with_an_unknown_level_key_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = _set_status(root, monkeypatch, "--drop-level", f"unti={_B}")
+    assert result.exit_code == 2, result.output
+    assert "unknown level keys" in result.output, "refused for our reason, not a Typer usage error"
+    assert _snapshot(root) == before
+
+
+def test_a_malformed_drop_level_names_the_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _two_ref_repo(tmp_path, monkeypatch)
+    before = _snapshot(root)
+    result = _set_status(root, monkeypatch, "--drop-level", "foo")
+    assert result.exit_code == 2, result.output
+    assert "--drop-level" in result.output
+    assert "'<level>=<ref>'" in result.output
+    assert _snapshot(root) == before
+
+
+def test_dropping_the_only_ref_of_a_ci_row_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """d-empty-evidence: an empty `ci` row is a matrix-policy question, not
+    this verb's to refuse."""
+    root = make_repo(tmp_path, row(id="target", status="ci"))
+    result = _set_status(root, monkeypatch, "--drop-level", f"unit={_A}")
+    assert result.exit_code == 0, result.output
+    target = _row(root, "target")
+    assert not target.levels.get("unit")
+    assert target.status == "ci"
