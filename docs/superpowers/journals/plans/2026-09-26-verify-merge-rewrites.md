@@ -94,3 +94,8 @@ Reviewer aa314fc56063d9e54: _archived_path matches archive.py for all five kinds
 ### opus-c1-blob-scan-cost · finding [open] (reviewer: in scope) · per-commit rev-parse scan is O(commits) per path (phase 1)
 
 local.py _branch_blob_was_on_base, multiplied by refs, archive alternate and gc sweep.
+
+<!-- fr:journal kind=finding scope=plan id=opus-c2-branch-fetch-ignored created=2026-09-27T00:07:41 phase=1 state=open review_scope=in -->
+### opus-c2-branch-fetch-ignored · finding [open] (reviewer: in scope) · branch fetch result discarded, no explicit refspec (phase 1)
+
+Single-branch clone or failed fetch left origin/<b> stale; verify_merge could pass over a post-merge push.
