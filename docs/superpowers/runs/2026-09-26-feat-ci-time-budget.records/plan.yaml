@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: plan-two-phases
+    global: true
     title: Two agentic phases, sharding (skeleton, proven live on the branch CI run) then the watcher
     body: The watcher is inert until merge, so only the sharding can be proven live pre-merge; making it the skeleton puts the riskiest claim (under 240s) first. There is no manual phase, because the post-merge Test Plan is operator-driven.
 resolves: []
