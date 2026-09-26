@@ -64,3 +64,8 @@ Reworded §3.A.
 ### s4-resolved · finding [fixed] · resolves s4: §3.B edge cases missing from Test Plan
 
 §3.B and §5.3 extended; residual weakness stated.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus created=2026-09-26T23:50:15 -->
+### spec-review-opus · review · independent spec review on claude-opus-5-5 (fresh context): 4 findings
+
+Reviewer a238c5d3a9f9c36c0 (opus). Re-run because the first review (spec-review) ran on Sonnet. Findings s5-s8, all in scope, all fixed in 33d01601 / 716b3ca4.
