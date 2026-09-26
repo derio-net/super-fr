@@ -4191,9 +4191,11 @@ rows:
       held in a shell variable
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-tests-window-background-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
