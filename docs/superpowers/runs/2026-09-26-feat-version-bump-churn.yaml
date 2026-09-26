@@ -190,8 +190,10 @@ steps:
       5 out-of-scope finding(s): rp1-f3, rp2-f2, p4-unarchived-plans-tripwire, rp4-f3,
       rp5-f1
   deliver:
-    state: running
-    at: '2026-09-26T08:19:17+00:00'
+    state: done
+    at: '2026-09-26T08:30:03+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/666
     units:
       step/deliver:
         attempts:
@@ -199,3 +201,8 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T08:30:03+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@9c60f595bfc1
+          proportionality: fdbe500cb3940be0f8cb40ebdd3be674544b7be1:c8bc4bc3033e1ef41f34cdeb275c1e16b280645230f0394a74cb245dde59c9b2
