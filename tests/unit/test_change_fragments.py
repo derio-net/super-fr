@@ -54,6 +54,19 @@ def test_a_quoted_summary_is_unquoted(tmp_path: Path) -> None:
     assert (fragment.bump, fragment.summary) == ("patch", "fix: a colon # and a hash")
 
 
+def test_a_quoted_value_followed_by_a_comment_is_unquoted(tmp_path: Path) -> None:
+    # Review rp2-f1: the quotes used to survive into the release notes.
+    path = _write(tmp_path, "x.yaml", "bump: 'minor' # why\nsummary: \"quoted # text\" # note\n")
+    fragment = changes.parse_fragment(path)
+    assert (fragment.bump, fragment.summary) == ("minor", "quoted # text")
+
+
+def test_text_after_a_closing_quote_that_is_not_a_comment_is_refused(tmp_path: Path) -> None:
+    path = _write(tmp_path, "x.yaml", 'bump: patch\nsummary: "quoted" trailing\n')
+    with pytest.raises(changes.FragmentError, match="summary"):
+        changes.parse_fragment(path)
+
+
 @pytest.mark.parametrize(
     ("text", "field"),
     [

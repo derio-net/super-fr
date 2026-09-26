@@ -42,12 +42,32 @@ class Fragment:
     summary: str
 
 
+def _quoted(raw: str) -> str:
+    """A quoted scalar, then optionally a ` #` comment; any other trailing text is refused."""
+    quote, i = raw[0], 1
+    while i < len(raw):
+        if quote == "'" and raw.startswith("''", i):
+            i += 2
+            continue
+        if quote == '"' and raw[i] == "\\":
+            i += 2
+            continue
+        if raw[i] == quote:
+            break
+        i += 1
+    else:
+        raise ValueError("unterminated quoted value")
+    body, rest = raw[1:i], raw[i + 1 :]
+    if rest.strip() and not re.match(r"\s+#", rest):
+        raise ValueError(f"unexpected text after the closing quote: {rest.strip()!r}")
+    return body.replace("''", "'") if quote == "'" else body.replace('\\"', '"')
+
+
 def _scalar(raw: str) -> str:
-    """A plain or quoted YAML scalar on one line; a plain one drops a ` #` comment."""
+    """A plain or quoted YAML scalar on one line; either may carry a ` #` comment."""
     raw = raw.strip()
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
-        body = raw[1:-1]
-        return body.replace("''", "'") if raw[0] == "'" else body.replace('\\"', '"')
+    if raw[:1] in ("'", '"'):
+        return _quoted(raw)
     if raw.startswith("#"):
         return ""
     return re.split(r"\s+#", raw, maxsplit=1)[0].strip()
@@ -76,7 +96,10 @@ def parse_text(text: str, name: str) -> tuple[str, str]:
             raise fail(key, "duplicate key")
         if raw.strip()[:1] in ("|", ">"):
             raise fail(key, "must be a single line (block scalar found)")
-        values[key] = _scalar(raw)
+        try:
+            values[key] = _scalar(raw)
+        except ValueError as exc:
+            raise fail(key, str(exc)) from None
         last = key
 
     bump = values.get("bump")
