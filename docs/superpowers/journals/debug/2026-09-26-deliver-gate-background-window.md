@@ -59,3 +59,8 @@ Fixed in e0c74fa7 with a red-first test in tests/unit/test_run_telemetry.py.
 ### opus-r3-late-window-end-resolved · finding [fixed] · resolves opus-r3-late-window-end: window ended at notice delivery, not the command's end
 
 Fixed in 0f2352f4 with a red-first test in tests/unit/test_run_telemetry.py.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r4-completed-uncaptured-resolved created=2026-09-26T23:40:30 state=refuted resolves=opus-r4-completed-uncaptured -->
+### opus-r4-completed-uncaptured-resolved · finding [refuted] · resolves opus-r4-completed-uncaptured: completed status never captured live
+
+Verified against the live transcript of this session: 3 genuine user notices carry <status>completed</status> and origin.kind task-notification (plus 2 failed); the literal the helper substitutes is the real one.
