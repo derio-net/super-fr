@@ -446,3 +446,8 @@ Filed at closeout as #644.
 ### r2p-envtest-resolved-2 · finding [deferred → #645] · resolves r2p-envtest: test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge
 
 Filed at closeout as #645.
+
+<!-- fr:journal kind=finding scope=plan id=r3-f14-resolved-2 created=2026-09-26T07:21:39 state=open resolves=r3-f14 tracked_by=#646 -->
+### r3-f14-resolved-2 · finding [deferred → #646] · resolves r3-f14: Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash)
+
+Filed at closeout as #646.
