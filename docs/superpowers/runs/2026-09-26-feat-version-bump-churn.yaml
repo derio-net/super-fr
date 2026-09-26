@@ -58,7 +58,7 @@ steps:
       phase/6:
         state: manual
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-26T06:15:46+00:00'
           agent: a12bb5ca9ae1ede4e
@@ -66,6 +66,8 @@ steps:
           harness: claude-code
           model: claude-haiku-4-5-20251001
           session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:24:56+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
