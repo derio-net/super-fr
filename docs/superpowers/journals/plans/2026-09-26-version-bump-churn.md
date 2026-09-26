@@ -400,3 +400,28 @@ tests only; the pin moved in place and the two new tests share the whitespace-no
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 prose and config rewrites plus four set-status calls; no code was written, so there was nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=rp5-review created=2026-09-26T10:14:06 phase=5 -->
+### rp5-review · review · Independent review of phase 5: 0 findings at the reviewer's bar; 1 inherited gap filed out of scope (phase 5)
+
+Dispatched reviewer (separate context) over e1ce1c91 and the four set-status commits, checking the prose
+against the CODE (changes.py, check-change-fragment.py, version_surfaces.py, floors.py, release.py,
+release.yml, ci.yml, .changes/README.md, triage/model.py). Every rule, path, job name, input name and
+escape in AGENTS.md and HERMES.md matches the code; the completeness grep is clean across skills,
+rules, .claude/rules, the .opencode/.hermes mirrors, README.md, explainers and scripts; .fr/triage.yaml
+is valid without `version:` (optional in TriageConfig); the matrix moves are truthful with real refs,
+release-on-merge still owed its live walk. It confirmed byte-for-byte that the narrow bump classifier
+predates this plan.
+
+<!-- fr:journal kind=finding scope=plan id=rp5-f1 created=2026-09-26T10:14:06 phase=5 state=open review_scope=out -->
+### rp5-f1 · finding [open] (reviewer: out of scope) · LOW: the gate's requires_bump covers only plugins/super-fr/{skills,rules}/, narrower than the documented plugins/*/skills/** (phase 5)
+
+scripts/check-change-fragment.py `requires_bump`; AGENTS.md, HERMES.md and .changes/README.md say
+`plugins/*/skills/**`, so a super-fr-dispatch skill change needs no fragment per the gate.
+
+<!-- fr:journal kind=finding scope=plan id=rp5-f1-resolved created=2026-09-26T10:14:06 phase=5 state=open resolves=rp5-f1 out_of_scope=true -->
+### rp5-f1-resolved · finding [out-of-scope] · resolves rp5-f1: LOW: the gate's requires_bump covers only plugins/super-fr/{skills,rules}/, narrower than the documented plugins/*/skills/** (phase 5)
+
+Not caused by this change: `git show 484fd508:scripts/check-version-bump-needed.py` has the identical
+prefix check, which phase 2 kept verbatim as the spec required ("the path classifier is kept as it
+is"). Widening it changes which PRs must release; that is its own decision, to be filed as an issue.
