@@ -25,9 +25,12 @@ tasks:
 state:
   steps:
     P4.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-26T07:12:50+00:00'
+      note: '2026-09-26, herdr workspace on this host: batches plan-table-header (#603)
+        and isolation-timeouts (#618) dispatched --to herdr --yes; each member fr:in-progress
+        + one marker comment; draft PRs #651/#652 with Closes lines. Needed .fr/triage.yaml
+        (#649) and uv run fr (#650: install.sh omits fr-herdr).'
     P4.T1.S2:
       state: ' '
       ticked_at: null
