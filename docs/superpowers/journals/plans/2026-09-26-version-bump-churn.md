@@ -425,3 +425,8 @@ scripts/check-change-fragment.py `requires_bump`; AGENTS.md, HERMES.md and .chan
 Not caused by this change: `git show 484fd508:scripts/check-version-bump-needed.py` has the identical
 prefix check, which phase 2 kept verbatim as the spec required ("the path classifier is kept as it
 is"). Widening it changes which PRs must release; that is its own decision, to be filed as an issue.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f3-resolved-2 created=2026-09-26T08:45:40 state=open resolves=rp1-f3 tracked_by=#669 -->
+### rp1-f3-resolved-2 · finding [deferred → #669] · resolves rp1-f3: LOW: write_version's TOML rewrite uses a table-unaware first-match regex
+
+Filed at closeout as #669.
