@@ -54,3 +54,8 @@ backfill.py::_entries returned [] with no sessions and no cursor figures; same #
 ### cr2 · finding [open] (reviewer: in scope) · change fragment summary is not valid YAML (phase 1)
 
 Unquoted plain scalar containing ': ' made yaml.safe_load raise; scripts/changes.py accepted it, other tools would not.
+
+<!-- fr:journal kind=finding scope=plan id=cr3 created=2026-09-26T23:37:04 phase=1 state=open review_scope=in -->
+### cr3 · finding [open] (reviewer: in scope) · matrix row at ci covers fr run cost only via summarize(), not the CLI (phase 1)
+
+Test Plan item 2 names the CLI output; add a CLI-level assertion.
