@@ -59,3 +59,8 @@ Spec §4 names the row id and the set-status --drop-level re-pointing.
 ### s4-resolved · finding [out-of-scope] · resolves s4: plan_cmd.py help text still says marker is for the first agentic phase
 
 Wording remains accurate for 2+ agentic phases; this change did not make it wrong.
+
+<!-- fr:journal kind=decision scope=spec id=skeleton-override-2026-09-26-one-phase-plans created=2026-09-26T11:25:35 -->
+### skeleton-override-2026-09-26-one-phase-plans · decision · Operator-authorized skeleton override for this batch's own plan
+
+Batch one-phase-plans (super-fr#673, #662): the operator's brief plans this batch as ONE agentic phase and authorizes the override, because the installed gate refuses a one-phase plan until this very change lands.
