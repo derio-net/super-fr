@@ -154,3 +154,8 @@ A future caller omitting it would pass without a branch fetch.
 ### opus-f6-user-log-config · finding [open] (reviewer: out of scope) · user git config (log.follow, color.ui) can change git log output (phase 1)
 
 Negligible; fails safe for colour.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f1-lsremote-pattern-resolved created=2026-09-27T00:12:42 state=fixed resolves=opus-f1-lsremote-pattern -->
+### opus-f1-lsremote-pattern-resolved · finding [fixed] · resolves opus-f1-lsremote-pattern: ls-remote matched the bare name as a pattern (foo/<b>)
+
+Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
