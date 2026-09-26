@@ -1,0 +1,62 @@
+schema_version: 2
+run: 2026-09-26-feat-ci-time-budget
+step: implement-phase
+item: phase/2
+outcome: done
+ticks:
+  - P2.T1.S1
+  - P2.T2.S1
+  - P2.T3.S1
+  - P2.T4.S1
+  - P2.T4.S2
+  - P2.T5.S1
+  - P2.T5.S2
+  - P2.T6.S1
+refactor: {}
+journal:
+  - kind: discovery
+    id: ci-budget-skipped-job-fixture-proves-155-vs-157
+    title: "Captured fixture (run 36247922786) proves the 155s/157s skipped-job distinction"
+    body: >-
+      tests/fixtures/ci_budget/jobs_sharded.json's `change-fragment` job
+      (skipped, started_at 14:16:03Z, completed_at 14:16:02Z) is 2s earlier
+      than the earliest real job's start (lint, 14:16:05Z). `wall_clock`
+      filtering by `conclusion == "skipped"` gives 155s; a naive filter that
+      included it (flipped to `success` in a test-only copy) gives exactly
+      157s, matching the orchestrator's finding precisely. Both figures are
+      asserted directly in
+      test_wall_clock_sharded_run_excludes_the_skipped_job_by_conclusion.
+    phase: 2
+  - kind: discovery
+    id: ci-budget-pinned-clis-name-is-not-its-filename
+    title: "pinned-clis.yml's own `name:` is \"Pinned CLIs\", not \"pinned-clis\""
+    body: >-
+      workflow_run.workflows matches on a workflow's `name:` field, not its
+      filename. The plan step's prose lists the watch set loosely by
+      filename-ish shorthand ("pinned-clis"); the real file's `name:` is
+      "Pinned CLIs", which is what ci-budget.yml's watch list and
+      check_watch_list's names_by_file both use. Verified by
+      test_counted_pinned_clis_counts_every_event and the real-repo
+      watch-list tripwire test passing.
+    phase: 2
+  - kind: discovery
+    id: no-refactor-p2-t4-t5
+    title: "no-refactor-because P2.T4, P2.T5"
+    body: >-
+      Tasks 4 (gh adapter + dedup + CLI) and 5 (workflow/config/tripwire)
+      have no dedicated refactor step of their own; their cleanup (the one
+      dead constant found, WORKFLOWS_DIR, plus the AGENTS.md doc note) was
+      done in P2.T6.S1, the phase's explicit REFACTOR task.
+    phase: 2
+resolves:
+  - id: r1-skipped-jobs-have-timestamps
+    state: fixed
+    body: >-
+      scripts/ci_budget.py's `wall_clock`/`slowest_job` filter jobs by
+      `conclusion == "skipped"` (see `_ran`), never by missing timestamps —
+      GitHub does stamp skipped jobs, as the finding observed. Fixture test
+      test_wall_clock_sharded_run_excludes_the_skipped_job_by_conclusion
+      asserts both figures against the real captured fixture (run
+      36247922786): 155s with the fix, 157s if the skipped job were
+      wrongly included.
+evidence: {}
