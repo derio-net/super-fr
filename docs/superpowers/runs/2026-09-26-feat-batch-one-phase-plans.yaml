@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-one-phase-plans
 workflow: fr-goal@1
 branch: feat/batch-one-phase-plans
 started: '2026-09-26T09:22:05+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -81,6 +81,10 @@ steps:
           reviewer: aceee76c23b119e5b
           findings: r1,r2
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-26T09:34:18+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): r2
   deliver:
     state: pending
