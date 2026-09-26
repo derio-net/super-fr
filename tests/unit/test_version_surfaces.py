@@ -190,6 +190,11 @@ def _project_version(path: Path) -> str:
     return tomllib.loads(path.read_text())["project"]["version"]
 
 
+# Puts a decoy version ahead of [project]: on the old first-match rewrite each
+# scoping case below would edit this instead of [project].
+_TOOL_FIRST = '[tool.y]\nversion = "0.0.2"\n\n'
+
+
 def test_write_version_ignores_a_tool_table_ahead_of_project(tmp_path: Path) -> None:
     tool = '[tool.x]\nversion = "0.0.1"\n\n'
     member = tool + '[project]\nname = "a"\nversion = "1.2.3"\n'
@@ -203,9 +208,11 @@ def test_write_version_ignores_a_tool_table_ahead_of_project(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     "member",
     [
-        '[project]\nname = "a"\nversion = "1.2.3"\n\n[project.urls]\nversion = "0.0.1"\n',
-        '[project]\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
-        '[project]  # the project\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
+        _TOOL_FIRST
+        + '[project]\nname = "a"\nversion = "1.2.3"\n\n[project.urls]\nversion = "0.0.1"\n',
+        _TOOL_FIRST + '[project]\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
+        _TOOL_FIRST
+        + '[project]  # p\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
     ],
     ids=["project-urls", "tool-after", "header-comment"],
 )
@@ -215,11 +222,12 @@ def test_write_version_scopes_to_the_project_table(tmp_path: Path, member: str) 
     vs.write_version(repo, "1.3.0")
     data = tomllib.loads(path.read_text())
     assert data["project"]["version"] == "1.3.0"
+    assert data["tool"]["y"]["version"] == "0.0.2"
     assert "0.0.1" in path.read_text()  # the other table's version is untouched
 
 
 def test_write_version_survives_a_bracket_line_inside_a_project_array(tmp_path: Path) -> None:
-    member = (
+    member = _TOOL_FIRST + (
         '[project]\nname = "a"\nkeywords = [\n  "x",\n  ["nested"],\n]\n'
         'version = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n'
     )
@@ -229,6 +237,7 @@ def test_write_version_survives_a_bracket_line_inside_a_project_array(tmp_path: 
     data = tomllib.loads(path.read_text())
     assert data["project"]["version"] == "1.3.0"
     assert data["tool"]["x"]["version"] == "0.0.1"
+    assert data["tool"]["y"]["version"] == "0.0.2"
 
 
 def test_a_single_quoted_version_refuses_and_writes_nothing(tmp_path: Path) -> None:
@@ -237,3 +246,14 @@ def test_a_single_quoted_version_refuses_and_writes_nothing(tmp_path: Path) -> N
     with pytest.raises(ValueError, match="pyproject.toml"):
         vs.write_version(repo, "1.3.0")
     assert {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()} == before
+
+
+def test_a_misread_table_boundary_refuses_rather_than_rewriting_wrongly(tmp_path: Path) -> None:
+    # A column-0 `["nested"]` array element reads as a table header and truncates
+    # [project]; the post-rewrite parse check turns that into a refusal.
+    member = '[project]\nname = "a"\nkeywords = [\n"x",\n["nested"]\n]\nversion = "1.2.3"\n'
+    repo = _member_repo(tmp_path, member)
+    before = (repo / "packages" / "a" / "pyproject.toml").read_bytes()
+    with pytest.raises(ValueError, match="pyproject.toml"):
+        vs.write_version(repo, "1.3.0")
+    assert (repo / "packages" / "a" / "pyproject.toml").read_bytes() == before

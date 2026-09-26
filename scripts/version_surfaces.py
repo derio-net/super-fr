@@ -154,14 +154,22 @@ def _set_project_version(text: str, new: str, path: Path) -> str:
     body, count = _TOML_VERSION_RE.subn(rf"\g<1>{new}\g<3>", text[start:end], count=1)
     if not count:
         raise ValueError(f"no double-quoted [project].version to rewrite in {path}")
-    return text[:start] + body + text[end:]
+    out = text[:start] + body + text[end:]
+    # Belt and braces for a boundary the regexes misread: the only parsed
+    # difference may be [project].version.
+    expected = tomllib.loads(text)
+    expected["project"]["version"] = new
+    if tomllib.loads(out) != expected:
+        raise ValueError(f"rewriting [project].version in {path} would change something else")
+    return out
 
 
 def write_version(repo: Path, new: str) -> list[str]:
     """Write `new` to every surface; return the repo-relative files touched.
 
     Every pyproject rewrite is computed before any file is written, so a
-    refusal leaves the tree untouched.
+    refusal there leaves the tree untouched (the JSON and uv.lock writes that
+    follow have no refusal path on well-formed input).
     """
     repo = Path(repo)
     files: list[str] = []
