@@ -94,3 +94,8 @@ Opus spec review. Documented as an accepted edge in §3.C (operator deletes the 
 ### s2-4 · finding [open] (reviewer: out of scope) · fr migrate dirs also runs repair_repo repo-wide
 
 Opus spec review. Pre-existing; a repo-level migration, repo-wide by intent; not named by the repair-scope decision.
+
+<!-- fr:journal kind=finding scope=spec id=s2-1-resolved created=2026-09-26T23:36:24 state=fixed resolves=s2-1 -->
+### s2-1-resolved · finding [fixed] · resolves s2-1: §3.C strict same-file rule would stop fr repair fixing stale full paths
+
+spec edited in the Opus-review commit
