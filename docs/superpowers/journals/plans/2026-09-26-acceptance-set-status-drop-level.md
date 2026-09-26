@@ -149,3 +149,8 @@ The wording lives in the unknown-level refusal written for --level before this c
 ### p1-r4-resolved-2 · finding [deferred → #656] · resolves p1-r4: No direct test of merge_levels refusing an unknown key
 
 Filed at closeout as #656.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-09-26T08:41:17 state=open resolves=p2-r4 tracked_by=#655 -->
+### p2-r4-resolved-2 · finding [deferred → #655] · resolves p2-r4: The engine accepts the same ref in the drops and in levels (drop then re-add)
+
+Filed at closeout as #655.
