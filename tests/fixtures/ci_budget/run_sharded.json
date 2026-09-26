@@ -1,0 +1,10 @@
+{
+  "id": 36247922786,
+  "name": "CI",
+  "path": ".github/workflows/ci.yml",
+  "event": "push",
+  "head_branch": "feat/ci-time-budget",
+  "head_sha": "1230fe03533079b32618372cc8ada266a5536355",
+  "conclusion": "success",
+  "html_url": "https://github.com/derio-net/super-fr/actions/runs/36247922786"
+}

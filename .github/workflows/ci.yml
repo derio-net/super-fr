@@ -21,18 +21,54 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
           # test_tripwire_unarchived_plans reads origin/main to scope the
           # merged-but-unarchived check (#334); full history makes the ref
-          # available.
+          # available. Kept on every shard, not just one.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v4
       - run: uv sync
-      # pytest-xdist: pytest-cov combines worker coverage, so --cov-fail-under=75
-      # (pyproject addopts) still gates the whole suite.
-      - run: uv run pytest -n auto
+      # Sharded with pytest-split (CI time budget, spec 2026-09-26 §3.A).
+      # addopts is CLEARED, not patched, and --strict-markers/--cov are
+      # re-added explicitly: pytest-cov accumulates --cov-report values into
+      # a dict, so a CLI --cov-report= cannot cancel addopts' term-missing,
+      # and each shard would otherwise print a whole-codebase coverage table
+      # for a quarter of the tests. The `coverage` job below holds the
+      # --cov-fail-under=75 gate that addopts holds for a local run.
+      - run: >-
+          uv run pytest -o addopts="--strict-markers --cov" --cov-report=
+          -n auto --splits 4 --group ${{ matrix.shard }}
+          --splitting-algorithm least_duration
+        env:
+          COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: .coverage.shard${{ matrix.shard }}
+          include-hidden-files: true
+          retention-days: 1
+
+  # Combines the 4 shards' coverage data and holds the --cov-fail-under=75
+  # gate that a single unsharded `test` job used to hold via addopts.
+  coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
+      - run: uv run coverage combine .coverage.shard*
+      - run: uv run coverage report --fail-under=75
 
   validate-artifacts:
     runs-on: ubuntu-latest
