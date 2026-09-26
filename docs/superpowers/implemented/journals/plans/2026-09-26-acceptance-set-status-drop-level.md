@@ -144,3 +144,18 @@ The re-point test spies on fr.acceptance.edit.replace_row and asserts exactly on
 ### p3-r3-resolved · finding [out-of-scope] · resolves p3-r3: _refuse_unknown_levels' suffix 'a typo would silently drop refs' reads oddly for --drop-level (phase 3)
 
 The wording lives in the unknown-level refusal written for --level before this change; it stays accurate for additions, and rewording a shared pre-existing message is not this fix's job.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved-2 created=2026-09-26T08:41:16 state=open resolves=p1-r4 tracked_by=#656 -->
+### p1-r4-resolved-2 · finding [deferred → #656] · resolves p1-r4: No direct test of merge_levels refusing an unknown key
+
+Filed at closeout as #656.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-09-26T08:41:17 state=open resolves=p2-r4 tracked_by=#655 -->
+### p2-r4-resolved-2 · finding [deferred → #655] · resolves p2-r4: The engine accepts the same ref in the drops and in levels (drop then re-add)
+
+Filed at closeout as #655.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved-2 created=2026-09-26T08:41:18 state=open resolves=p3-r3 tracked_by=#654 -->
+### p3-r3-resolved-2 · finding [deferred → #654] · resolves p3-r3: _refuse_unknown_levels' suffix 'a typo would silently drop refs' reads oddly for --drop-level
+
+Filed at closeout as #654.
