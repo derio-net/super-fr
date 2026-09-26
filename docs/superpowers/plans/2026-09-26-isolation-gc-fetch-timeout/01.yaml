@@ -9,10 +9,11 @@ phase:
   skeleton: true
   tier: mechanical
   files:
-  - packages/fr/src/fr/isolation/local.py
-  - tests/unit/test_isolation_network_timeouts.py
-  - docs/acceptance/matrix.yaml
-  estimate_lines: 35
+    - packages/fr/src/fr/isolation/local.py
+    - tests/unit/test_isolation_network_timeouts.py
+    - docs/acceptance/matrix.yaml
+    - .changes/fix-659-isolation-gc-fetch.yaml
+  estimate_lines: 40
 tasks:
 - number: 1
   title: Route and verify the reap-hazard fetch
@@ -26,6 +27,9 @@ tasks:
   - id: P1.T1.S3
     text: |-
       REFACTOR: Run `uv run ruff check packages/ tests/`, `uv run ruff format --check packages/fr/src/fr/isolation/local.py tests/unit/test_isolation_network_timeouts.py`, and `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src`; resolve any regression. Confirm the acceptance row `isolation-gc-fetch-is-bounded` references the test file and is `ci`.
+  - id: P1.T1.S4
+    text: |-
+      REFACTOR: Add `.changes/<branch-slug>.yaml` with a patch bump and a one-line summary, run `uv run --no-project python scripts/check-change-fragment.py origin/main`, then run `uv run fr plan proportionality docs/superpowers/plans/2026-09-26-isolation-gc-fetch-timeout` and report its output. The fragment is a required release artifact, excluded from the source-code size estimate.
 state:
   steps:
     P1.T1.S1:
@@ -37,6 +41,10 @@ state:
       ticked_at: '2026-09-26T10:08:44+00:00'
       note: null
     P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-26T10:08:44+00:00'
+      note: null
+    P1.T1.S4:
       state: x
       ticked_at: '2026-09-26T10:08:44+00:00'
       note: null
