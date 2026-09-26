@@ -3140,3 +3140,147 @@ class TestPushCheck:
         # sub-payload (the worktree path legitimately appears elsewhere, in
         # `guidance`'s `cd <worktree>` — that's not the socket).
         assert "/tmp" not in str(result["ssh_agent_in_container"])
+
+
+# ---------- verify-merge survives later rewrites (2026-09-26 spec) ----------
+
+
+def _squash_then_rewrite(repo: Path) -> None:
+    """`report.md` gains lines on `feature`, which is squash-merged; a LATER
+    commit on main then rewrites those very lines (a generated report)."""
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "head\nFOO2\nBAR2\n", "later merge rewrites the lines")
+
+
+def test_branch_changes_present_survives_a_later_rewrite_of_its_lines(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _squash_then_rewrite(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_orphan_after_merge_and_rewrite_still_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _squash_then_rewrite(repo)
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\nbaz\n", "orphan pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_file_deleted_from_base_later_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gone.txt", "one\ntwo\n", "add gone")
+    _squash_merge(repo, "feature", "squash gone")
+    _git(repo, "rm", "-q", "gone.txt")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "delete gone")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_branch_side_deletion_that_differs_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _commit(repo, "d.txt", "1\n2\n", "add d")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _git(repo, "rm", "-q", "d.txt")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "branch deletes d")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "d.txt", "1\n3\n", "main edits d instead")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["d.txt"]
+
+
+def test_verify_merge_checks_the_fetched_remote_branch_not_a_stale_local_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "late.py", "late\n", "pushed after the merge")
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "reset", "-q", "--hard", "HEAD~1")  # local feature is now stale
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False and "late.py" in res["missing"]
+
+
+def test_verify_merge_refuses_an_unpushed_local_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "local_only.py", "x\n", "never pushed")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False and "local_only.py" in res["missing"]
+
+
+def test_verify_merge_falls_back_to_the_local_ref_when_the_remote_branch_is_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "push", "-q", "origin", "--delete", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+
+
+def test_verify_merge_unresolvable_ref_raises_naming_the_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _with_origin(repo)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    with pytest.raises(IsolationError, match="ghost-branch"):
+        target.verify_merge(_state(repo, "ghost-branch"), default_branch="main")
+
+
+def test_reap_hazard_ignores_lines_a_later_merge_rewrote_but_flags_unlanded_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/rewrite")
+    _commit_in_worktree(wt, "report.md", "head\nfoo\nbar\n")
+    _land_on_origin_main(repo, "report.md", "head\nfoo\nbar\n")  # squash-equivalent
+    _land_on_origin_main(repo, "report.md", "head\nFOO2\nBAR2\n")  # later rewrite
+    st = load_state(repo, "feat/rewrite")
+    assert st is not None
+    assert target._reap_hazard(st) is None
+
+    _commit_in_worktree(wt, "report.md", "head\nfoo\nbar\nbaz\n")  # never landed
+    hazard = target._reap_hazard(st)
+    assert hazard is not None and hazard.kind == "unlanded-content"
