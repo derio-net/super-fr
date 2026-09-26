@@ -124,3 +124,8 @@ Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_i
 ### opus-s5-resolved · finding [fixed] · resolves opus-s5: tests covered 3 of 5 archived kinds; red-first note on the wrong assertion
 
 Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus created=2026-09-27T00:07:39 -->
+### spec-review-opus · review · Opus fresh-context spec review: 5 in-scope findings, all fixed
+
+Reviewer accc6bb7ff1d8d049 on claude-opus-5-5, re-run per operator (reviewers run on Opus). The earlier Sonnet spec-review stays as recorded.
