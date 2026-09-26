@@ -84,3 +84,8 @@ Path is only passed after `--` and inside <rev>:<path>, never parsed as an optio
 ### review-phase-1-fragment-addition · review · independent review of the release-bot fragment-deletion addition: no in-scope findings (phase 1)
 
 Reviewer aae94ddac742e9ad4 read commits 3780778c and 709b3ab7: tests reproduce the real shape (squash adds fragment+code, release: commit deletes fragment), red on the original code (proven by the executor by restoring origin/main's local.py), negative guards non-vacuous, no .changes special case needed. Out of scope: byte-identical same-slug fragment collision (noted in spec), stale line refs in spec (pre-fix numbers).
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1-archive-addition created=2026-09-26T17:44:23 phase=1 -->
+### review-phase-1-archive-addition · review · independent review of the archive-move addition (#598): no in-scope findings (phase 1)
+
+Reviewer aa314fc56063d9e54: _archived_path matches archive.py for all five kinds (plans dir, specs, journals with scope subdir, runs, usage); fallback is load-bearing (reap test where the original path never reached origin/main); dirty/unpushed/git-error paths still refuse; negative guards non-vacuous; spec claims true. Out of scope, recorded in spec Non-goals: boilerplate false-match against an older archived copy on a slug-reused re-run (extension of #387's accepted tradeoff).
