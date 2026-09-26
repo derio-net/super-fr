@@ -104,3 +104,8 @@ Reviewer confirmed 4.23.1 on every version surface, three rows at ci citing 8 ex
 ### r3-1-resolved · finding [out-of-scope] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there (phase 3)
 
 Accurate as regression coverage; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved-2 created=2026-09-26T09:54:03 state=fixed resolves=r1-1 -->
+### r1-1-resolved-2 · finding [fixed] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
+
+Consumer landed in phase 2 (_ensure_section_text), as planned.
