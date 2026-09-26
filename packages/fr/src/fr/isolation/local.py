@@ -256,6 +256,32 @@ def _branch_added_lines(
     return added
 
 
+def _branch_blob_was_on_base(
+    run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str, path: str
+) -> bool:
+    """Did the branch's exact content of `path` ever appear on the base?
+
+    True when `<branch>:<path>` resolves to the same blob as `<c>:<path>` for
+    some commit `c` in `merge_base..base_ref` that touched `path`. A later merge
+    that rewrote the branch's lines leaves the branch's blob in the base's own
+    history; an orphan (content that never landed) matches nothing. Every
+    failure — the branch lacks the file (a deletion has no blob), an
+    unresolvable rev, a failed git call — reads as no match, never as a pass.
+    """
+    want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
+    if want.returncode != 0 or not want.stdout.strip():
+        return False
+    blob = want.stdout.strip()
+    commits = run(["git", "rev-list", f"{merge_base}..{base_ref}", "--", path], cwd=repo_root)
+    if commits.returncode != 0:
+        return False
+    for commit in commits.stdout.split():
+        got = run(["git", "rev-parse", "--verify", "--quiet", f"{commit}:{path}"], cwd=repo_root)
+        if got.returncode == 0 and got.stdout.strip() == blob:
+            return True
+    return False
+
+
 def _branch_change_present_in_file(
     run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str, path: str
 ) -> bool:
@@ -268,20 +294,24 @@ def _branch_change_present_in_file(
     lines intact, so whole-file equality false-negatives while containment does
     not.
 
+    When containment fails (including a file with no added line, or one absent
+    from `base_ref`), fall back to blob equality (`_branch_blob_was_on_base`): a
+    LATER merge that rewrote the branch's lines does not un-land them if the
+    branch's exact file content was on the base after the merge.
+
     Conservative in the missing direction: a file whose branch-side change added
-    no identifiable line (a pure deletion / pure line-removal that did NOT land
-    byte-identically — it only reaches here because whole-file content already
-    differs) reports *not present*, i.e. a safe "STOP and check", never a false
-    "verified".
+    no identifiable line and whose blob never appeared on the base (a pure
+    deletion that did NOT land byte-identically) reports *not present*, i.e. a
+    safe "STOP and check", never a false "verified".
     """
     added = _branch_added_lines(run, repo_root, merge_base, branch, path)
-    if not added:
-        return False
-    show = run(["git", "show", f"{base_ref}:{path}"], cwd=repo_root)
-    if show.returncode != 0:
-        return False  # path absent on base_ref — the branch's additions cannot be present
-    base_lines = set(show.stdout.splitlines())
-    return all(line in base_lines for line in added)
+    if added:
+        show = run(["git", "show", f"{base_ref}:{path}"], cwd=repo_root)
+        if show.returncode == 0:
+            base_lines = set(show.stdout.splitlines())
+            if all(line in base_lines for line in added):
+                return True
+    return _branch_blob_was_on_base(run, repo_root, merge_base, branch, base_ref, path)
 
 
 def branch_changes_present(
@@ -303,7 +333,9 @@ def branch_changes_present(
        the merge shows up as a path whose added lines are absent → missing) from
        a CONCURRENT merge that later edits the same file elsewhere (#387 — the
        branch's added lines are still there, so it is NOT missing even though
-       whole-file content diverged).
+       whole-file content diverged). If containment fails, the branch's exact
+       blob having appeared on the base after the merge also counts as landed
+       (a later merge rewrote those lines).
 
     Conservative: anything it cannot positively confirm reads as missing (a safe
     "STOP and check", never a false "verified").
@@ -1006,9 +1038,15 @@ class LocalWorktreeDevcontainerTarget:
         conservatively NOT verified, never a silent pass. The close-out (#320)
         STOPs (and the caller inspects which signal is missing) when not
         verified.
+
+        The branch is checked at EVERY ref that resolves — `<remote>/<branch>`
+        after a fresh fetch of it, and the local branch — so a stale local ref
+        cannot decide alone and an unpushed local commit still refuses. Raises
+        IsolationError naming the branch when neither resolves.
         """
+        refs = self._branch_refs(state.branch, remote)
         return self._verdict(
-            state.worktree, state.branch, default_branch, remote, pr=self._pr(state)
+            state.worktree, state.branch, default_branch, remote, pr=self._pr(state), refs=refs
         )
 
     def verify_merge_reaped(
