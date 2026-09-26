@@ -69,3 +69,8 @@ The gate's documented forgery limit; this change adds no new class.
 ### r6-resolved · finding [out-of-scope] · resolves r6: OpenCode & detach still has a zero-length window (phase 1)
 
 Also spec-review s2; OpenCode has no completion event and needs its own design.
+
+<!-- fr:journal kind=review scope=plan id=phase1-review-opus created=2026-09-26T23:50:23 phase=1 -->
+### phase1-review-opus · review · independent code review on claude-opus-5-5 (fresh context): 8 findings (7 in, 1 out) (phase 1)
+
+Reviewer a5d182fc33b6777d7 (opus). Re-run because phase1-review ran on Sonnet. Checked against ~240 real notifications; F1/F2 were high severity.
