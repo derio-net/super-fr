@@ -208,6 +208,62 @@ def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
     assert slug not in spec_path.read_text()
 
 
+_HEADER = "| Plan | Repo | File | Depends on |"
+
+
+def test_create_no_table_error_names_the_header_and_creates_nothing(tmp_path):
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-table.md"
+    spec_path.write_text("# Test spec\n\n## Implementation Plans\n\nJust prose.\n")
+    slug = "2026-05-10-no-table-plan"
+    with pytest.raises(PlanEditError) as exc:
+        create(
+            repo_root=repo,
+            slug=slug,
+            spec=str(spec_path.relative_to(repo)),
+            target_repo="derio-net/test",
+            fr_version=">=1.0.0,<5.0.0",
+            phases=[PhaseSpec(number=1, title="t", tasks=())],
+            prose="# x\n",
+        )
+    assert _HEADER in str(exc.value)
+    assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
+
+
+def test_append_spec_row_no_table_error_names_the_header(tmp_path):
+    from fr.plan_ops import PlanEditError, _append_spec_row
+
+    spec_path = tmp_path / "spec.md"
+    spec_path.write_text("# S\n\n## Implementation Plans\n\nprose\n")
+    with pytest.raises(PlanEditError) as exc:
+        _append_spec_row(spec_path, plan_name="p", repo="r", file="f", depends_on="-")
+    assert _HEADER in str(exc.value)
+
+
+def test_append_spec_row_missing_section_error_names_the_header(tmp_path):
+    from fr.plan_ops import PlanEditError, _append_spec_row
+
+    spec_path = tmp_path / "spec.md"
+    spec_path.write_text("# S\n\nprose\n")
+    with pytest.raises(PlanEditError) as exc:
+        _append_spec_row(spec_path, plan_name="p", repo="r", file="f", depends_on="-")
+    assert _HEADER in str(exc.value)
+
+
+def test_rework_on_sectionless_spec_names_the_header(tmp_path):
+    from fr.plan_ops import PlanEditError, rework_create
+
+    repo = _make_repo(tmp_path)
+    spec = repo / "docs" / "superpowers" / "specs" / "2026-05-10-bare.md"
+    spec.write_text("# S\n\nprose\n")
+    parent = _make_archived_parent_plan(repo, "2026-05-08-parent", spec)
+    with pytest.raises(PlanEditError) as exc:
+        rework_create(parent)
+    assert _HEADER in str(exc.value)
+
+
 def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
     """#133: re-running create with matching content finishes the job (appends
     the missing spec row) instead of dead-ending at 'already exists'."""

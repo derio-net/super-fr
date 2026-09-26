@@ -395,7 +395,18 @@ _SPEC_TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE
 # `Phases | Status | Created`) still accepts the append silently, producing a
 # table that lies about what each column holds. Both entry points below check
 # the header names against this contract before writing.
-_CANONICAL_HEADER_CELLS = ("plan", "repo", "file", "depends on")
+_CANONICAL_HEADER_LINE = "| Plan | Repo | File | Depends on |"
+_CANONICAL_HEADER_CELLS = tuple(
+    c.strip().lower() for c in _CANONICAL_HEADER_LINE.strip("|").split("|")
+)
+_CANONICAL_HEADER_SEPARATOR = (
+    "|" + "|".join("-" * (len(c) + 2) for c in _CANONICAL_HEADER_CELLS) + "|"
+)
+
+
+def _header_hint() -> str:
+    """The one phrase every table error uses to name the header it wants."""
+    return f"expected '{_CANONICAL_HEADER_LINE}' followed by its separator row"
 
 
 def _first_table_line(text: str, m: re.Match[str]) -> str | None:
@@ -411,12 +422,14 @@ def _first_table_line(text: str, m: re.Match[str]) -> str | None:
 def _check_table_header(spec_path: Path, text: str, m: re.Match[str]) -> None:
     header_line = _first_table_line(text, m)
     if header_line is None:
-        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+        raise PlanEditError(
+            f"{spec_path}: '## Implementation Plans' has no table to append to; {_header_hint()}."
+        )
     cells = tuple(c.strip().lower() for c in header_line.strip("|").split("|"))
     if cells != _CANONICAL_HEADER_CELLS:
         raise PlanEditError(
             f"{spec_path}: '## Implementation Plans' table header is {header_line!r}, "
-            f"expected '| Plan | Repo | File | Depends on |'. fr plan create appends rows "
+            f"{_header_hint()}. fr plan create appends rows "
             f"assuming those exact column semantics — a differently-labeled header would "
             f"silently mislabel the row it writes. Fix the header before scaffolding a plan."
         )
@@ -433,7 +446,7 @@ def _validate_spec_section(spec_path: Path) -> None:
     if not m:
         raise PlanEditError(
             f"{spec_path}: no '## Implementation Plans' section found. "
-            f"Add the section (with a 4-column table header) before scaffolding plans."
+            f"Add the section with a table header; {_header_hint()}."
         )
     _check_table_header(spec_path, text, m)
 
@@ -455,7 +468,7 @@ def _append_spec_row(
     if not m:
         raise PlanEditError(
             f"{spec_path}: no '## Implementation Plans' section found. "
-            f"Add the section (with a 4-column table header) before scaffolding plans."
+            f"Add the section with a table header; {_header_hint()}."
         )
     _check_table_header(spec_path, text, m)
 
@@ -474,7 +487,9 @@ def _append_spec_row(
         else:
             abs_offset += len(line)
     if not saw_pipe:
-        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+        raise PlanEditError(
+            f"{spec_path}: '## Implementation Plans' has no table to append to; {_header_hint()}."
+        )
 
     # Idempotence check is scoped to the TABLE region only. Scanning the whole
     # spec (the pre-2026-07-24 behavior) let any backticked slug mention in the
