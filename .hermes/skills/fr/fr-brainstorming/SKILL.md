@@ -60,9 +60,9 @@ design.
 
 - **Standalone invocation:** fully interactive — ask questions as they
   arise, section-by-section validation, the normal brainstorming flow.
-- **Under fr-goal:** the batched-Q&A contract applies instead — collect
-  every operator-owned decision and ask ONCE (fr-goal's rules win while it
-  drives).
+- **Under fr-goal:** the sized-round contract applies instead — collect every
+  operator-owned decision into one round, rarely two (fr-goal's rules win
+  while it drives).
 
 ## 2. Hand off
 
