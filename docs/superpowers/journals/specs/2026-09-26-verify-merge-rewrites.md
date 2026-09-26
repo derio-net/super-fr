@@ -94,3 +94,8 @@ Known limits were justified by 'verified needs PR MERGED', not true on reap/gc p
 ### opus-s4 · finding [open] (reviewer: in scope) · wrong line cites; wrong reason unpushed work still hazards
 
 _reap_hazard :1082/:1196, _merged_by_content :1668 on origin/main; unpushed content is caught inside branch_changes_present.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s5 created=2026-09-27T00:07:36 state=open review_scope=in -->
+### opus-s5 · finding [open] (reviewer: in scope) · tests covered 3 of 5 archived kinds; red-first note on the wrong assertion
+
+Add runs and usage; move the parenthetical.
