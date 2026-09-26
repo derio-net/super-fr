@@ -4630,3 +4630,13 @@ rows:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
     status: ci
     notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)
+  - id: verify-merge-survives-later-rewrites
+    capability: isolation verify-merge
+    acceptance: verify-merge accepts a merged branch whose added lines a later merge
+      rewrote (its exact file content was on the base after the merge) and checks the
+      fetched remote branch as well as the local one; unlanded content still refuses
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-verify-merge-rewrites-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
