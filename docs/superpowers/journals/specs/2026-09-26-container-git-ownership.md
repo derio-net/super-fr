@@ -69,3 +69,8 @@ Test Plan rewritten; line refs corrected.
 ### s5-resolved · finding [out-of-scope] · resolves s5: Brainstorm record path did not exist when reviewer looked
 
 Process timing of the brainstorm record; this change did not cause it.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved-2 created=2026-09-26T17:17:00 state=open resolves=s5 tracked_by=#699 -->
+### s5-resolved-2 · finding [deferred → #699] · resolves s5: Brainstorm record path did not exist when reviewer looked
+
+Filed at closeout as #699.
