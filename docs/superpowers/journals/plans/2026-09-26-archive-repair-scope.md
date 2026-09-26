@@ -149,3 +149,8 @@ pre-existing; not caused by this change
 ### r2-f8-resolved · finding [out-of-scope] · resolves r2-f8: Archive runs repair twice and can print warnings twice
 
 pre-existing; not caused by this change
+
+<!-- fr:journal kind=finding scope=plan id=r2-f9-resolved created=2026-09-26T23:40:29 state=open resolves=r2-f9 out_of_scope=true -->
+### r2-f9-resolved · finding [out-of-scope] · resolves r2-f9: v1-to-v2 migration writes spec: verbatim
+
+pre-existing; not caused by this change
