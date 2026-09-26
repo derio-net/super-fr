@@ -79,3 +79,8 @@ Opus review. Added test_single_plan_archive_canonicalizes_the_archived_plans_own
 ### r2-f4 · finding [open] (reviewer: in scope) · Spec had an empty duplicate Implementation Plans section (phase 1)
 
 Opus review. Same as spec finding s2-2; removed in the spec re-review commit.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f5 created=2026-09-26T23:40:02 phase=1 state=open review_scope=in -->
+### r2-f5 · finding [open] (reviewer: in scope) · This plan's own _meta.yaml stored a non-canonical spec: (phase 1)
+
+Opus review. Repaired via repair_repo(only_plans={this plan}).
