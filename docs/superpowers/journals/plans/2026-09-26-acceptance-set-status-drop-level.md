@@ -154,3 +154,8 @@ Filed at closeout as #656.
 ### p2-r4-resolved-2 · finding [deferred → #655] · resolves p2-r4: The engine accepts the same ref in the drops and in levels (drop then re-add)
 
 Filed at closeout as #655.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved-2 created=2026-09-26T08:41:18 state=open resolves=p3-r3 tracked_by=#654 -->
+### p3-r3-resolved-2 · finding [deferred → #654] · resolves p3-r3: _refuse_unknown_levels' suffix 'a typo would silently drop refs' reads oddly for --drop-level
+
+Filed at closeout as #654.
