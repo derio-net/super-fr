@@ -159,3 +159,8 @@ Adopted from the phase-3 implementer's plan decision p3-reserve-order and verifi
 ### r2-13-resolved-2 · finding [fixed] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
 
 Closed at closeout without an issue: the r2-1 open-PR join fills checks/mergeable/merge_state for linked open PRs (as r2-13-resolved already recorded).
+
+<!-- fr:journal kind=finding scope=spec id=r2-13-resolved-3 created=2026-09-26T07:21:35 state=open resolves=r2-13 tracked_by=#648 -->
+### r2-13-resolved-3 · finding [deferred → #648] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
+
+Filed at closeout as #648 (narrowed to linked non-open PRs; open ones are filled by the r2-1 join).
