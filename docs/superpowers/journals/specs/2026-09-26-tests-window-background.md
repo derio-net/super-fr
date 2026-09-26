@@ -79,3 +79,8 @@ No captured background exchange was committed; background_rows hand-built the re
 ### s6 · finding [open] (reviewer: in scope) · Timeout-moved foreground Bash replies with different ack text (Opus)
 
 Same #594 symptom via the auto-background path. Fixed: covered in spec §2/§3.A and code.
+
+<!-- fr:journal kind=finding scope=spec id=s7 created=2026-09-26T23:50:51 state=open review_scope=in -->
+### s7 · finding [open] (reviewer: in scope) · Notification timestamp is when recorded, not when finished; wait/retry undocumented (Opus)
+
+§2 reworded; §3.C states retrying deliver until the notification exists is the intended recovery.
