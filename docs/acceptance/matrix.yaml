@@ -4180,7 +4180,12 @@ rows:
     notes: 'Phase 3: dispatch writes fr:in-progress and one marker comment per member
       only after the runner accepted, idempotently (--repair posts no duplicate; a redispatch
       after cancel posts a new marker); adapter faked. Cancel, the in-progress stage
-      and stale dispatch were covered in phase 2.'
+      and stale dispatch were covered in phase 2. Live walk 2026-09-26 (Test Plan 21,
+      phase 4) on derio-net/super-fr: two batches dispatched --to herdr --yes each carried
+      fr:in-progress plus exactly one fr-batch marker comment on the member (#603, #618),
+      each run opened a draft PR with its Closes line (#651, #652), a second dispatch
+      of a live batch was refused, and the board showed both batches dispatched, then
+      merged.'
   - id: triage-batch-version-reserve
     capability: Backlog triage
     acceptance: Each dispatched batch bumps to a version reserved in merge order, so
