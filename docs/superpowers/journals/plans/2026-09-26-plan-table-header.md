@@ -129,3 +129,8 @@ Filed at closeout as #662.
 ### r3-1-resolved-2 · finding [deferred → #663] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there
 
 Filed at closeout as #663.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved-3 created=2026-09-26T09:54:21 state=open resolves=r1-1 out_of_scope=true -->
+### r1-1-resolved-3 · finding [out-of-scope] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
+
+Not a defect: the consumer landed in phase 2 (_ensure_section_text) as planned. Operator chose not to file.
