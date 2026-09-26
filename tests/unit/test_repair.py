@@ -344,3 +344,105 @@ def test_repair_quiet_on_pending_row(repo: Path) -> None:
     # no rewrite targets the pending cell; the row is left verbatim
     assert all("Slice B" not in r.field for r in result.rewrites)
     assert "| Slice B | `derio-net/other` | `pending` | — |" in spec.read_text()
+
+
+# --- scoped repair + canonical spec form (2026-09-26 archive-repair-scope) ---
+
+
+def _plan_with_spec(repo: Path, slug: str, spec: str) -> Path:
+    plan = repo / "docs/superpowers/plans" / slug
+    plan.mkdir()
+    meta = plan / "_meta.yaml"
+    meta.write_text(f"plan: {slug}\nspec: {spec}\n")
+    return meta
+
+
+def _bare_spec(repo: Path, name: str = "x-design.md") -> Path:
+    p = repo / "docs/superpowers/specs" / name
+    p.write_text("# X\n")
+    return p
+
+
+def test_scoped_repair_touches_only_named_plans(repo: Path) -> None:
+    _bare_spec(repo)
+    full = "docs/superpowers/specs/x-design.md"
+    a = _plan_with_spec(repo, "2026-09-01-a", full)
+    b = _plan_with_spec(repo, "2026-09-02-b", full)
+    before_b = b.read_bytes()
+    result = repair_repo(repo, write=True, only_plans=frozenset({"2026-09-01-a"}))
+    assert a.read_text() == "plan: 2026-09-01-a\nspec: x-design.md\n"
+    assert b.read_bytes() == before_b
+    assert [r.file for r in result.rewrites] == [a]
+
+
+def test_unscoped_repair_still_rewrites_every_plan(repo: Path) -> None:
+    _bare_spec(repo)
+    full = "docs/superpowers/specs/x-design.md"
+    a = _plan_with_spec(repo, "2026-09-01-a", full)
+    b = _plan_with_spec(repo, "2026-09-02-b", full)
+    repair_repo(repo, write=True)
+    assert "spec: x-design.md" in a.read_text()
+    assert "spec: x-design.md" in b.read_text()
+
+
+def test_scoped_repair_only_rewrites_named_file_cell_rows(repo: Path) -> None:
+    (repo / "docs/superpowers/implemented/plans" / "2026-09-01-a").mkdir()
+    (repo / "docs/superpowers/plans" / "2026-09-02-b").mkdir()
+    spec = repo / "docs/superpowers/specs/2026-09-fixture.md"
+    spec.write_text(
+        "# F\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+        "| Free label | `o/r` | `docs/superpowers/plans/2026-09-01-a/` | — |\n"
+        "| 2026-09-01-a | `o/r` | `docs/superpowers/plans/2026-09-02-b/` | — |\n"
+        "| Gone | `o/r` | `docs/superpowers/plans/2026-09-03-missing/` | — |\n"
+    )
+    result = repair_repo(repo, write=True, only_plans=frozenset({"2026-09-01-a"}))
+    text = spec.read_text()
+    assert "| Free label | `o/r` | `2026-09-01-a` | — |" in text
+    # Name cell matches the scope but the File cell slug does not: untouched.
+    assert "`docs/superpowers/plans/2026-09-02-b/`" in text
+    assert "2026-09-03-missing/" in text
+    assert len(result.rewrites) == 1
+    assert not result.warnings
+
+
+def test_scoped_repair_skips_plan_config_and_header_repair(repo: Path) -> None:
+    cfg = repo / "docs/superpowers/plan-config.yaml"
+    cfg.write_text("plan:\n  save_to: docs/x\n")
+    spec = repo / "docs/superpowers/specs/2026-09-hdr.md"
+    spec.write_text(
+        "# H\n\n## Implementation Plans\n\n| Name | Where | Path | After |\n|---|---|---|---|\n"
+    )
+    cfg_before, spec_before = cfg.read_bytes(), spec.read_bytes()
+    result = repair_repo(repo, write=True, only_plans=frozenset({"2026-09-01-a"}))
+    assert cfg.read_bytes() == cfg_before
+    assert spec.read_bytes() == spec_before
+    assert not result.rewrites
+    unscoped = repair_repo(repo, write=True)
+    assert any(r.field == "Implementation Plans header" for r in unscoped.rewrites)
+    assert any(r.field == "plan-config dead key" for r in unscoped.rewrites)
+
+
+# --- canonical_spec_ref ---
+
+
+def test_canonical_spec_ref_shortens_only_the_same_file(repo: Path) -> None:
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    other = repo / "notes"
+    other.mkdir()
+    (other / "x-design.md").write_text("# other\n")
+    assert canonical_spec_ref("docs/superpowers/specs/x-design.md", repo) == "x-design.md"
+    assert canonical_spec_ref("x-design.md", repo) == "x-design.md"
+    # same name, different file: resolution by slug would repoint it — leave verbatim
+    assert canonical_spec_ref("notes/x-design.md", repo) == "notes/x-design.md"
+    # unresolvable and cross-repo refs are left verbatim
+    assert canonical_spec_ref("docs/superpowers/specs/nope.md", repo) == (
+        "docs/superpowers/specs/nope.md"
+    )
+    cross = "owner/repo:docs/superpowers/specs/x-design.md"
+    assert canonical_spec_ref(cross, repo) == cross
+    # a spec that moved to implemented/ still canonicalizes a stale full path
+    (repo / "docs/superpowers/implemented/specs/y-design.md").write_text("# y\n")
+    assert canonical_spec_ref("docs/superpowers/specs/y-design.md", repo) == "y-design.md"

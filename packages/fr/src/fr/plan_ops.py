@@ -223,7 +223,7 @@ def create(
     meta: dict[str, Any] = {
         "schema_version": 2,
         "plan": slug,
-        "spec": spec_str,
+        "spec": refs.canonical_spec_ref(spec_str, repo_root) if spec_str else spec_str,
         "target_repo": target_repo,
         "fr_version": fr_version,
         "created": _dt.date.today().isoformat(),

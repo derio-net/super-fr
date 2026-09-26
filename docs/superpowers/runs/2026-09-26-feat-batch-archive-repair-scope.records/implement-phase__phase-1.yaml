@@ -1,0 +1,25 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-archive-repair-scope
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2]
+refactor:
+  P1.T3: "docs/mirrors/fragment task; nothing to clean"
+journal:
+  - kind: decision
+    id: canonical-spec-ref-lenient-on-moved-paths
+    title: canonical_spec_ref keeps repair's slug fallback for a path that no longer exists
+    body: >-
+      The helper shortens to the bare filename unless the named path exists as a file
+      different from the one slug resolution picks (same-name-different-path stays
+      verbatim). A stale full path whose spec moved to implemented/specs/ still
+      canonicalizes by slug, preserving repair's existing doctrine.
+  - kind: discovery
+    id: scoping-single-predicate
+    title: Scoping lives in one _in_scope predicate; canonicalization in refs.canonical_spec_ref
+    body: >-
+      T1.S3 and T2.S3 refactors were done as part of green: repair._in_scope is the sole
+      scoping predicate, and _repair_meta delegates spec canonicalization to refs.
+resolves: []
+evidence: {}

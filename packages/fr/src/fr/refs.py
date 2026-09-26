@@ -119,3 +119,28 @@ def resolve_spec_ref(ref: str, repo_root: Path) -> RefResolution:
     appended (the canonical form keeps the extension).
     """
     return _resolve(ref, repo_root, SPEC_ROOTS, is_dir=False, suffix=".md")
+
+
+def canonical_spec_ref(value: str, repo_root: Path) -> str:
+    """The one definition of the canonical `spec:` value: the bare filename.
+
+    Lifecycle-independent (it still resolves once the spec moves to
+    `implemented/specs/`), unlike a full path. Shared by `plan_ops.create` and
+    `repair._repair_meta` so the two writers cannot drift (#686). A ref is left
+    verbatim when it is cross-repo notation, when it does not resolve, or when
+    it names an existing file other than the one slug resolution would pick
+    (shortening would silently repoint the plan at a same-named spec elsewhere).
+    A path that no longer exists (the spec moved) still canonicalizes by slug —
+    that is the repair doctrine.
+    """
+    from fr._urls import is_cross_repo_spec
+
+    if is_cross_repo_spec(value):
+        return value
+    res = resolve_spec_ref(value, repo_root)
+    if res.path is None:
+        return value
+    candidate = (repo_root / value).resolve()
+    if candidate.is_file() and candidate != res.path.resolve():
+        return value
+    return res.path.name

@@ -1209,7 +1209,7 @@ def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
     meta = repo / "docs" / "superpowers" / "plans" / "2026-05-10-specwarn" / "_meta.yaml"
     meta.write_text(
         meta.read_text().replace(
-            f"spec: {spec_path.relative_to(repo)}",
+            f"spec: {spec_path.name}",
             "spec: willikins/docs/superpowers/specs/nope.md",
         )
     )

@@ -88,7 +88,19 @@ def _canonical_cell(cell: str, slug: str) -> str:
     return f"{canonical} {tail}".strip()
 
 
-def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, write: bool) -> None:
+def _in_scope(slug: str, only_plans: frozenset[str] | None) -> bool:
+    """The one scoping predicate: repo-wide (`None`) or the named plan slugs."""
+    return only_plans is None or slug in only_plans
+
+
+def _repair_spec_table(
+    spec_path: Path,
+    repo_root: Path,
+    out: RepairResult,
+    *,
+    write: bool,
+    only_plans: frozenset[str] | None = None,
+) -> None:
     text = spec_path.read_text()
     if "## Implementation Plans" not in text:
         return
@@ -127,6 +139,8 @@ def _repair_spec_table(spec_path: Path, repo_root: Path, out: RepairResult, *, w
         token_slug = refs.plan_slug(file_cell)
         if not token_slug:
             continue  # placeholder row
+        if not _in_scope(token_slug, only_plans):
+            continue  # scoped run: another plan's row (File cell, not the free-label Name)
         res = refs.resolve_plan_ref(file_cell, repo_root)
         if res.path is None:
             _warn_unresolved(out, spec_path, f"File cell (row {name!r})", file_cell, res)
@@ -219,7 +233,7 @@ def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: 
             continue
         if len(res.matches) > 1:
             _warn_ambiguous(out, meta_path, f"{fname}:", res)
-        canonical = res.path.name
+        canonical = refs.canonical_spec_ref(value, repo_root) if fname == "spec" else res.path.name
         if value == canonical:
             continue
         lines[i] = f"{fname}: {canonical}\n"
@@ -229,12 +243,19 @@ def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: 
         meta_path.write_text("".join(lines))
 
 
-def repair_repo(repo_root: Path, *, write: bool) -> RepairResult:
+def repair_repo(
+    repo_root: Path, *, write: bool, only_plans: frozenset[str] | None = None
+) -> RepairResult:
     """Repair every spec table and plan `_meta.yaml` under the tree.
 
     `write=False` plans only (dry-run); the returned rewrites are what
     `write=True` would apply. Per-file failures accumulate — one broken
     file never aborts the walk (apply's doctrine).
+
+    `only_plans` (plan slugs) scopes the walk to those plans' own `_meta.yaml`
+    and spec-table rows (matched on the File cell slug); header normalization
+    and `plan-config.yaml` repair are repo-level and skipped. `None` is the
+    repo-wide behaviour (#686).
     """
     sp = repo_root / "docs" / "superpowers"
     out = RepairResult()
@@ -245,22 +266,26 @@ def repair_repo(repo_root: Path, *, write: bool) -> RepairResult:
             continue
         for spec_path in sorted(d.glob("*.md")):
             try:
-                _repair_spec_table_header(spec_path, out, write=write)
-                _repair_spec_table(spec_path, repo_root, out, write=write)
+                if only_plans is None:
+                    _repair_spec_table_header(spec_path, out, write=write)
+                _repair_spec_table(spec_path, repo_root, out, write=write, only_plans=only_plans)
             except OSError as e:  # pragma: no cover - exercised via failures test
                 out.failures.append(f"{spec_path}: {e}")
     for d in plan_dirs:
         if not d.is_dir():
             continue
         for meta_path in sorted(d.glob("*/_meta.yaml")):
+            if not _in_scope(meta_path.parent.name, only_plans):
+                continue
             try:
                 _repair_meta(meta_path, repo_root, out, write=write)
             except OSError as e:  # pragma: no cover
                 out.failures.append(f"{meta_path}: {e}")
-    try:
-        _repair_plan_config(sp / "plan-config.yaml", out, write=write)
-    except OSError as e:  # pragma: no cover
-        out.failures.append(f"{sp / 'plan-config.yaml'}: {e}")
+    if only_plans is None:
+        try:
+            _repair_plan_config(sp / "plan-config.yaml", out, write=write)
+        except OSError as e:  # pragma: no cover
+            out.failures.append(f"{sp / 'plan-config.yaml'}: {e}")
     return out
 
 
