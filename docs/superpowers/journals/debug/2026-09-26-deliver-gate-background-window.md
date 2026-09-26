@@ -49,3 +49,8 @@ Pre-existing on main (telemetry.py:717); not introduced by this change.
 ### opus-r1-summary-injection-resolved · finding [fixed] · resolves opus-r1-summary-injection: summary-quoted description can forge <status>completed</status> or another command's id
 
 Fixed in 4053f20d with a red-first test in tests/unit/test_run_telemetry.py.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r2-unmarked-notice-resolved created=2026-09-26T23:40:27 state=fixed resolves=opus-r2-unmarked-notice -->
+### opus-r2-unmarked-notice-resolved · finding [fixed] · resolves opus-r2-unmarked-notice: any string-content user record with the tag was accepted as a notice
+
+Fixed in e0c74fa7 with a red-first test in tests/unit/test_run_telemetry.py.
