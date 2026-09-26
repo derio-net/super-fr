@@ -129,3 +129,8 @@ fixed in 33d01601
 ### o3-resolved · finding [fixed] · resolves o3: F3 assignment scan resolves variables the shell would not (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o4-resolved created=2026-09-26T23:51:03 state=fixed resolves=o4 -->
+### o4-resolved · finding [fixed] · resolves o4: F4 quadratic _NOTIFIED_STATUS regex (Opus)
+
+fixed in 33d01601
