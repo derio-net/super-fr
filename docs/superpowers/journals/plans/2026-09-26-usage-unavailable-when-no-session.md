@@ -59,3 +59,8 @@ Unquoted plain scalar containing ': ' made yaml.safe_load raise; scripts/changes
 ### cr3 · finding [open] (reviewer: in scope) · matrix row at ci covers fr run cost only via summarize(), not the CLI (phase 1)
 
 Test Plan item 2 names the CLI output; add a CLI-level assertion.
+
+<!-- fr:journal kind=finding scope=plan id=cr4 created=2026-09-26T23:37:04 phase=1 state=open review_scope=out -->
+### cr4 · finding [open] (reviewer: out of scope) · existing sessions: [] usage files stay as they are (phase 1)
+
+e.g. implemented/usage/2026-09-26-fix-models-opencode-noop-505.yaml. Archived artifacts are frozen history; they already render as a dash, never 0.
