@@ -123,8 +123,11 @@ and forcing git's ownership check with `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`
 
 ## Implementation Plans
 
-One phase (bug fix, tightly coupled): tests first, then A, then B and profile
-regeneration, then sync/docs checks.
+One phase (bug fix, tightly coupled): tests first, then the git-call override, then the scaffold and profile regeneration, then acceptance and gates.
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-container-git-ownership | `derio-net/super-fr` | `2026-09-26-container-git-ownership` | — |
 
 ## 7. Acceptance rows (born here; presented at spec review)
 

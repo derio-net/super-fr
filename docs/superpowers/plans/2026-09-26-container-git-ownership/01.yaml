@@ -1,0 +1,103 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Container git ownership — safe.directory on fr's git calls and in the scaffold
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - container-record-commits
+  - scaffold-trusts-workspace
+  tier: standard
+  files:
+  - packages/fr/src/fr/git.py
+  - packages/fr/src/fr/artifacts/commit.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - .devcontainer/**
+  - tests/unit/**
+  - docs/acceptance/**
+  - .changes/**
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: RED — reproduce the dubious-ownership refusal
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add a test module under tests/unit that builds a real repo plus a LINKED worktree in tmp_path, points GIT_CONFIG_GLOBAL at an empty file and sets GIT_TEST_ASSUME_DIFFERENT_OWNER=1 (skip with a reason when the installed git predates 2.35.2). Cases: (a) commit_paths from the worktree toplevel commits; (b) same with root = a subdirectory of the worktree; (c) record/apply.py _is_tracked and _short_head answer correctly. Confirm each fails on main with the dubious-ownership refusal (quote the stderr).
+  - id: P1.T1.S2
+    text: |-
+      RED: add unit tests for a new fr.git.safe_directory_args(root): returns ["-c", "safe.directory=<realpath of nearest ancestor holding .git>"] for a directory .git and for a linked-worktree .git file, from a subdirectory too, and [] outside any repo; and an argument-vector test that git_answer places it before the subcommand. Confirm they fail (helper does not exist).
+- number: 2
+  title: GREEN — the override on every record-commit git call
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: implement safe_directory_args in packages/fr/src/fr/git.py per spec §3.A (realpath, walk up to nearest .git entry, [] when none) and prepend it in git_answer before the subcommand.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: use it for the raw update-index restore in artifacts/commit.py and for _is_tracked / _short_head in record/apply.py (no other behaviour change; _run_git stays excluded). Run the Task 1 tests, confirm green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: single construction of the git argument vector shared by git_answer and the raw callers, no duplicated `-c` literals; or record a refactor: reason.
+- number: 3
+  title: Scaffold trusts its workspace; regenerate profiles
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED then GREEN: a scaffold test asserts POST_CREATE contains `git config --global --add safe.directory "$PWD"` guarded with `|| true` (failing first), then extend POST_CREATE in isolation/scaffold.py so it does.
+  - id: P1.T3.S2
+    text: |-
+      Regenerate .devcontainer/dev and .devcontainer/admin so their postCreateCommand equals a fresh scaffold render (use the scaffold's own renderer, never hand-edit), and confirm the existing profile-drift tests pass.
+- number: 4
+  title: Acceptance, change fragment, gates
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Move acceptance rows container-record-commits and scaffold-trusts-workspace with `fr acceptance set-status` (status ci, evidence refs to the new tests), regenerating the reports.
+  - id: P1.T4.S2
+    text: |-
+      Add .changes/feat-batch-container-git-ownership.yaml (bump: patch, one-line summary). Run ruff check, ruff format, mypy on the four packages and the full pytest suite `-n auto`; all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
