@@ -1,0 +1,127 @@
+schema_version: 7
+run: 2026-09-26-feat-batch-isolation-timeouts
+workflow: fr-goal@1
+branch: feat/batch-isolation-timeouts
+started: '2026-09-26T05:35:17+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-26T05:36:31+00:00'
+    answered_by: agent
+    emitted:
+      spec: docs/superpowers/specs/2026-09-26-isolation-network-timeouts-design.md
+  spec-review:
+    state: done
+    at: '2026-09-26T05:37:59+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-26T05:36:48+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:37:59+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a326796a5749e4782
+          findings: f1-reap-hazard-fetch-untimed,s1,s2,s3
+  plan:
+    state: done
+    at: '2026-09-26T05:38:58+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-26-isolation-network-timeouts
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-26T05:38:01+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:38:58+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-26T05:39:01+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-26T05:55:39+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T05:39:05+00:00'
+          agent: a192bdf7e63f156ae
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-haiku-4-5-20251001
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:40:06+00:00'
+          outcome: done
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T05:40:09+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:41:24+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: aca4bff05ad38be9e
+          findings: p1-r1
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T05:41:27+00:00'
+          agent: aca213c62eda06aae
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:54:47+00:00'
+          outcome: done
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-26T05:54:51+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T05:55:39+00:00'
+          outcome: done
+        evidence:
+          review: p2-review
+          reviewer: a67c29e8964b36116
+          findings: none
+  journal-check:
+    state: done
+    at: '2026-09-26T05:55:45+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-09-26T06:24:47+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/652
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-26T06:05:01+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+          returned: '2026-09-26T06:24:47+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-suite.log@d09fb7bc2622
+          proportionality: 484fd50874c9da0e8f724397901b94747eb5c011:61d69d1684dea983d50301eb50596a9b4a68c3d854fb744be48a6cc9671d18db
