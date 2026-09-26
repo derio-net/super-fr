@@ -34,3 +34,8 @@ the 'Deliberately a SEPARATE branch' docstring wording is still true after the s
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 matrix move, version bump and gate only; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-26T07:55:39 phase=2 -->
+### p2-review · review · independent review of phase 2: no in-scope findings (phase 2)
+
+Reviewer verified routing of all five call sites through _run_network with the right cwd, symbolic-ref and _reap_hazard untouched, tests pass with and without GIT_SSH*, version 4.23.2 across manifests, row moved to ci. Observation, not a finding: the exit-124 assertions alone would also pass on old code (any non-zero fetch already gave fetched False); the timeout-kwarg assertions are what guard the change.

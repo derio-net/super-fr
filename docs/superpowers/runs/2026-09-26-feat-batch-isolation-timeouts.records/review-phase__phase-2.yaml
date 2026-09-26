@@ -1,8 +1,0 @@
-schema_version: 1
-run: 2026-09-26-feat-batch-isolation-timeouts
-step: review-phase
-item: phase/2
-outcome: done
-journal:
-  - {kind: review, id: p2-review, phase: 2, title: "independent review of phase 2: no in-scope findings", body: "Reviewer verified routing of all five call sites through _run_network with the right cwd, symbolic-ref and _reap_hazard untouched, tests pass with and without GIT_SSH*, version 4.23.2 across manifests, row moved to ci. Observation, not a finding: the exit-124 assertions alone would also pass on old code (any non-zero fetch already gave fetched False); the timeout-kwarg assertions are what guard the change."}
-evidence: {review: p2-review, reviewer: a67c29e8964b36116, model: claude-sonnet-5}
