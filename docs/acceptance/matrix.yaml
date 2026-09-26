@@ -3406,6 +3406,22 @@ rows:
       Claude Code fr-goal run on #526, 2026-09-23): every attempt records the served
       model id (claude-opus-5-5 for the orchestrator and executors, claude-sonnet-5
       for reviewers), not an alias.'
+  - id: run-deliver-tests-log-opencode
+    capability: Run cursor
+    acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
+      database: only a completed, exit-0 bash command in a top-level (orchestrator)
+      session that wrote the log since the unit opened counts; an agent-composed log
+      is refused'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
+      file (run 2026-09-26-fix-models-opencode-noop-505 delivered on prose reporting
+      a failed test). Fixture uses the real opencode.db bash-part shape; not yet proven
+      on a live OpenCode deliver.
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
