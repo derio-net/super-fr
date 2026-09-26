@@ -11,4 +11,4 @@ resolves:
   - {id: s1, state: fixed, body: "§3.C and Test Plan 2 now separate the two fetches."}
   - {id: s2, state: fixed, body: "§3.B states the extra git config call; Test Plan 3 selects by argv."}
   - {id: s3, state: fixed, body: "New §4 Obligations names the matrix row and the 4.23.2 bump."}
-evidence: {review: spec-review, reviewer: a326796a5749e4782, findings: "s1,s2,s3"}
+evidence: {review: spec-review, reviewer: a326796a5749e4782}
