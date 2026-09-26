@@ -64,3 +64,8 @@ environmental opencode binary failure; diff does not touch what they exercise
 ### r2-f1 · finding [open] (reviewer: in scope) · fr repair stopped shortening ambiguous lifecycle-root full paths (phase 1)
 
 Opus review. Guard now applies only to existing files outside SPEC_ROOTS; test_repair_still_shortens_an_ambiguous_lifecycle_path.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f2 created=2026-09-26T23:39:58 phase=1 state=open review_scope=in -->
+### r2-f2 · finding [open] (reviewer: in scope) · rework_create is a third spec: writer with its own canonical form (phase 1)
+
+Opus review. Routed through canonical_spec_ref; test_rework_create_writes_the_same_canonical_spec_as_repair.
