@@ -134,3 +134,8 @@ fixed in 33d01601
 ### o4-resolved · finding [fixed] · resolves o4: F4 quadratic _NOTIFIED_STATUS regex (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o5-resolved created=2026-09-26T23:51:04 state=fixed resolves=o5 -->
+### o5-resolved · finding [fixed] · resolves o5: F5 exit code taken from model-written summary text (Opus)
+
+fixed in 33d01601
