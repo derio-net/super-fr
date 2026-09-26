@@ -109,3 +109,8 @@ Opus review. Legacy writer, untouched here.
 ### r2-review-opus · review · independent code re-review of phase 1 on claude-opus-5-5: 9 findings (phase 1)
 
 Fresh-context Opus reviewer (agent a154d6fb3340dc945). 6 in scope (all fixed), 3 out of scope. The earlier Sonnet review r1-review stays recorded. No correctness bug in the main fix; call sites complete; mirrors in sync.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f1-resolved created=2026-09-26T23:40:13 state=fixed resolves=r2-f1 -->
+### r2-f1-resolved · finding [fixed] · resolves r2-f1: fr repair stopped shortening ambiguous lifecycle-root full paths
+
+fixed in the Opus-review commits
