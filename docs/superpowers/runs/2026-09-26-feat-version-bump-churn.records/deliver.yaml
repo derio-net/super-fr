@@ -3,6 +3,7 @@ run: 2026-09-26-feat-version-bump-churn
 step: deliver
 outcome: done
 acceptance: []
-emitted: {}
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/666
 evidence:
   tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d/scratchpad/deliver-suite.log
