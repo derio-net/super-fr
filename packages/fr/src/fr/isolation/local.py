@@ -1130,8 +1130,8 @@ class LocalWorktreeDevcontainerTarget:
         (`branch_fetched`: fetched, or confirmed deleted by `ls-remote`). Every
         ref of the branch that resolves — the fetched `<remote>/<branch>` and
         the local branch — must have its changes on the base. The content check
-        alone can be fooled by genuinely convergent content (the same fix landing twice), so the MERGED PR is the
-        load-bearing tiebreak; an unknown PR state or a failed fetch is
+        alone can be fooled by genuinely convergent content (the same fix
+        landing twice), so the MERGED PR is the load-bearing tiebreak; an unknown PR state or a failed fetch is
         conservatively NOT verified, never a silent pass. The close-out (#320)
         STOPs (and the caller inspects which signal is missing) when not
         verified.
