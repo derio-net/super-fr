@@ -139,3 +139,8 @@ fixed in the Opus-review commits
 ### r2-f6-resolved · finding [fixed] · resolves r2-f6: _repair_meta resolved the spec ref twice
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f7-resolved created=2026-09-26T23:40:25 state=open resolves=r2-f7 out_of_scope=true -->
+### r2-f7-resolved · finding [out-of-scope] · resolves r2-f7: A ref escaping the repo is shortened to a local spec
+
+pre-existing; not caused by this change
