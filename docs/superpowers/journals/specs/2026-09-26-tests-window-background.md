@@ -69,3 +69,8 @@ Reworded §3.A.
 ### spec-review-opus · review · independent spec review on claude-opus-5-5 (fresh context): 4 findings
 
 Reviewer a238c5d3a9f9c36c0 (opus). Re-run because the first review (spec-review) ran on Sonnet. Findings s5-s8, all in scope, all fixed in 33d01601 / 716b3ca4.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-09-26T23:50:50 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · §2 'captured' shapes were hand-built, not captured (Opus re-review)
+
+No captured background exchange was committed; background_rows hand-built the records. Fixed: redacted real fixture tests/fixtures/transcripts/claude-code-background.jsonl.
