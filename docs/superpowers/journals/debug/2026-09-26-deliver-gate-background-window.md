@@ -69,3 +69,8 @@ Verified against the live transcript of this session: 3 genuine user notices car
 ### opus-r5-unhashable-id-resolved · finding [out-of-scope] · resolves opus-r5-unhashable-id: unhashable tool_use_id raises TypeError
 
 Pre-existing on origin/main, needs a malformed transcript; not caused by this change.
+
+<!-- fr:journal kind=review scope=debug id=review-gate-fix-opus created=2026-09-26T23:40:34 -->
+### review-gate-fix-opus · review · Opus fresh-context review of the gate fix: 2 in-scope findings (+3 below threshold, 1 out of scope)
+
+Reviewer a5afa72445b4ed929 on claude-opus-5-5 (re-run per operator: reviewers run on Opus; the earlier review-gate-fix ran on Sonnet and stays as recorded). In scope and fixed: summary-injection (r1), unmarked notice / failed-not-final (r2); below threshold, fixed: late window end (r3); refuted with live evidence: completed uncaptured (r4); out of scope: unhashable id (r5); docstring nits fixed.
