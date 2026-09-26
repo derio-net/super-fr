@@ -431,3 +431,8 @@ In scope, fixed with tests: r3-f1 (HIGH dispatch launched then refused), r3-f2 (
 ### deliver-flaky-columns-resolved · finding [out-of-scope] · resolves deliver-flaky-columns: test_an_inherited_columns_does_not_freeze_module_consoles timed out once under -n auto: its child pytest printed '1 passed' then was killed at the 120 s timeout on a saturated host
 
 Pre-existing test (#615); this branch does not touch its probe's imports (tests/conftest.py, fr.commands.journal_cmd, fr.cli unchanged vs main); passes 6/6 in isolation and in the delivery run. A load-sensitive timeout, not a regression.
+
+<!-- fr:journal kind=finding scope=plan id=r1-5-resolved-2 created=2026-09-26T07:21:36 state=open resolves=r1-5 tracked_by=#643 -->
+### r1-5-resolved-2 · finding [deferred → #643] · resolves r1-5: fr_cncd missing from test_fr_imports_no_siblings banned set (pre-existing)
+
+Filed at closeout as #643.
