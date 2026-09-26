@@ -164,3 +164,8 @@ Closeout triage: regression pins that pass before the fix are intended by spec �
 ### r1-n2-resolved-2 · finding [refuted] · resolves r1-n2: opencode live integration tests fail in this environment
 
 Closeout triage: not reproducible — tests/integration -k opencode passed 9/9 on origin/main @ 5cb4bc56 (2026-09-27); the phase-1 failure was environmental.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f7-resolved-2 created=2026-09-27T00:02:46 state=open resolves=r2-f7 tracked_by=#709 -->
+### r2-f7-resolved-2 · finding [deferred → #709] · resolves r2-f7: A ref escaping the repo is shortened to a local spec
+
+Filed at closeout as #709.
