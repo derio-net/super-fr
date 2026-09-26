@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One-phase plans are first-class
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - plan-one-phase-is-first-class
+  tier: standard
+  files:
+  - packages/fr/src/fr/plan_ops.py
+  - tests/unit/**
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - docs/acceptance/**
+  - .changes/**
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: Gate the skeleton rule on two or more agentic phases
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Red: in tests/unit/test_v2_plan_ops.py, invert the sole-skeleton parametrized test (one marked agentic phase, with and without a manual phase, raises no skeleton issue), rename and flip the minimal-fixture test to assert no issues, delete test_sole_skeleton_error_is_silenced_by_the_skeleton_override, add a one-unmarked-agentic-phase-passes test and a sole-marked-phase-with-old-fr_version floor-error test; run them and see the inverted ones fail.
+  - id: P1.T1.S2
+    text: |-
+      Green: in _skeleton_issues (plan_ops.py) delete the sole-skeleton error block and add the `agentic >= 2` condition to the unmarked-first error; run tests/unit/test_v2_plan_ops.py and see it pass, with the two-agentic-phase tests unchanged.
+  - id: P1.T1.S3
+    text: |-
+      Refactor: update the _skeleton_issues docstring and the stale comments in tests/unit/skeleton_override.py and tests/unit/test_run_cli.py so none describes the removed error; ruff format and check clean.
+- number: 2
+  title: '#662 — spec is untouched when the no-table pre-flight raises'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red/green: in test_create_no_table_error_names_the_header_and_creates_nothing capture the spec text before the call and assert it is byte-identical after the raise; the test passes (pre-flight raises before any write) — confirm it would fail if create wrote the spec first.
+  - id: P1.T2.S2
+    text: |-
+      Refactor: none needed, refactor: a single added assertion with nothing to restructure.
+- number: 3
+  title: Rewrite the prose and regenerate both mirrors
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Rewrite the Walking-skeleton rule in plugins/super-fr/skills/fr-plan/SKILL.md and §3 of plugins/super-fr/skills/fr-goal/SKILL.md: size phases to the change, a one-agentic-phase plan is first-class with no marker or override, and the first agentic phase is a marked skeleton only when there are two or more.
+  - id: P1.T3.S2
+    text: |-
+      Run scripts/sync-opencode.py and scripts/sync-hermes.py, then their --check forms, and run the skill/tripwire tests (test_skill_tokens, the opencode and hermes sync tripwires, skill validation, harness prose neutrality).
+  - id: P1.T3.S3
+    text: |-
+      Refactor: reread both rewritten passages against the spec §2.B for wording drift; none expected beyond what S1 wrote.
+- number: 4
+  title: Acceptance matrix, change fragment, full verification
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Red: run fr acceptance check and see the retired row plan-skeleton-is-not-the-whole-plan and the new row plan-one-phase-is-first-class need attention.
+  - id: P1.T4.S2
+    text: |-
+      Green: with fr acceptance set-status invert or replace plan-skeleton-is-not-the-whole-plan (dropping the stale #L1554/#L1567 refs) and move plan-one-phase-is-first-class to ci with its test refs; add .changes/feat-batch-one-phase-plans.yaml (bump patch); run fr acceptance check, fr validate artifacts, ruff format/check, mypy, and the full pytest suite into a log, all green.
+  - id: P1.T4.S3
+    text: |-
+      Refactor: none needed, refactor: bookkeeping only, nothing to restructure.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-09-26T09:32:49+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T09:32:49+00:00'
+    note: null
+    observed_prs: []

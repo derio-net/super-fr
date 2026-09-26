@@ -69,8 +69,10 @@ Never review the spec yourself: dispatch the read-only `fr-spec-reviewer` (the b
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep
 TDD-shaped steps (red → green → refactor, or a `refactor:` reason in the phase's step record — an older run's `no-refactor-because:` journal entry still counts);
-fr-plan tags each phase a `tier`. Phase 1 is the walking skeleton — CI green on a trivial test,
-minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
+fr-plan tags each phase a `tier`. Size phases to the change: a one-agentic-phase plan is first-class
+(no skeleton marker, no override). With two or more agentic phases the first is the marked walking
+skeleton — CI green on a trivial test, minimum runtime exercised, external fixtures captured never
+constructed. `fr plan self-review`
 must pass and phases must read back against the spec. fr-plan's agentic-purity gate collects manual
 work into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
 PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work

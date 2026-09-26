@@ -3362,17 +3362,18 @@ rows:
       a full suite the orchestrator itself ran during delivery (4980 passed).'
   - id: plan-skeleton-is-not-the-whole-plan
     capability: fr-goal-methodology
-    acceptance: A plan whose only agentic phase is the walking skeleton fails self-review
-      unless an operator override records why
+    acceptance: A plan whose only agentic phase carries the walking-skeleton marker
+      no longer fails self-review (superseded by plan-one-phase-is-first-class; the
+      skeleton rule applies only with two or more agentic phases)
     origin:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_v2_plan_ops.py#L1554
-      - super-fr:tests/unit/test_v2_plan_ops.py#L1567
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1639
     status: ci
-    notes: C2. A one-phase plan carried the whole change under the skeleton marker,
-      so the per-phase implement/review loop ran once.
+    notes: 'Inverted 2026-09-26 (gh#673): the C2 rule (sole-skeleton is an error) is
+      retired; a one-agentic-phase plan now passes self-review. Kept as the pin for
+      the sole-marked-phase case.'
   - id: isolation-session-bound-without-flags
     capability: isolation-traceability
     acceptance: Starting a run or entering isolation binds the calling session to the
@@ -4071,6 +4072,21 @@ rows:
     notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
       test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
       is this change''s own deliver.'
+  - id: plan-one-phase-is-first-class
+    capability: fr-goal-methodology
+    acceptance: A plan with one agentic phase self-reviews clean with no skeleton marker
+      or override; the skeleton gate applies only to plans with two or more agentic
+      phases
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-one-phase-plans-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1649
+      - super-fr:tests/unit/test_v2_plan_ops.py#L603
+    status: ci
+    notes: 'gh#673: skeleton gate applies only with 2+ agentic phases. The 2+ side (unmarked-first
+      error, override, misplaced marker) stays pinned by the existing goal-phase-one-skeleton-smoke
+      row''s tests.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged

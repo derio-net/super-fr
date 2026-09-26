@@ -249,6 +249,7 @@ def test_create_no_table_error_names_the_header_and_creates_nothing(tmp_path):
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-table.md"
     spec_path.write_text("# Test spec\n\n## Implementation Plans\n\nJust prose.\n")
+    spec_before = spec_path.read_bytes()
     slug = "2026-05-10-no-table-plan"
     with pytest.raises(PlanEditError) as exc:
         create(
@@ -262,6 +263,7 @@ def test_create_no_table_error_names_the_header_and_creates_nothing(tmp_path):
         )
     assert _HEADER in str(exc.value)
     assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
+    assert spec_path.read_bytes() == spec_before  # #662: the spec is untouched
 
 
 def test_append_spec_row_no_table_error_names_the_header(tmp_path):
@@ -598,13 +600,10 @@ def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
     assert "text: |-" in phase_text, "step text must use `|-` after round-trip write"
 
 
-def test_self_review_minimal_plan_raises_only_its_sole_skeleton(tmp_path):
-    """Was `..._clean_plan_has_no_issues`. The minimal fixture is ONE agentic
-    phase marked skeleton — exactly the shape 2026-09-21 debug journal C2 made
-    an error (a skeleton with no work after it is the whole plan wearing the
-    marker). The fixture is shared by ten test files, so it keeps its shape;
-    what this test still guarantees is that the minimal plan raises NOTHING
-    else."""
+def test_self_review_minimal_plan_has_no_issues(tmp_path):
+    """The minimal fixture is ONE agentic phase marked skeleton. Since the
+    one-phase-plans spec (2026-09-26) that is a first-class plan: the skeleton
+    rule applies only with two or more agentic phases, so it raises nothing."""
     from fr import parse
     from fr.plan_ops import self_review
 
@@ -612,9 +611,7 @@ def test_self_review_minimal_plan_raises_only_its_sole_skeleton(tmp_path):
     dest = tmp_path / "v2_plan_minimal"
     shutil.copytree(fixture, dest)
 
-    plan = parse(dest)
-    issues = self_review(plan)
-    assert [(i.severity, "only agentic phase" in i.message) for i in issues] == [("error", True)]
+    assert self_review(parse(dest)) == []
 
 
 def test_self_review_detects_manual_complete_without_note(tmp_path):
@@ -1587,7 +1584,7 @@ def test_skeleton_override_survives_spec_archival(tmp_path):
     assert _skeleton_issues(plan_dir) == []
 
 
-def _sole_skeleton_plan(tmp_path, *, with_manual=False):
+def _sole_skeleton_plan(tmp_path, *, with_manual=False, marked=True):
     """ONE agentic phase, marked `skeleton: true` — the shape of the #497 run's
     plan (2026-09-21 debug journal C2). `with_manual` appends a manual phase,
     which must not count as the "real work" after the smoke."""
@@ -1607,7 +1604,7 @@ def _sole_skeleton_plan(tmp_path, *, with_manual=False):
                     "steps": [{"id": "P1.T1.S1", "text": "Run the test suite"}],
                 },
             ),
-            skeleton=True,
+            skeleton=marked,
         )
     ]
     if with_manual:
@@ -1639,38 +1636,36 @@ def _sole_skeleton_plan(tmp_path, *, with_manual=False):
 
 
 @pytest.mark.parametrize("with_manual", [False, True])
-def test_self_review_errors_when_the_skeleton_is_the_only_agentic_phase(tmp_path, with_manual):
-    """2026-09-21 debug journal C2: the first fr-goal run after #508 shipped a
-    one-phase plan whose single phase was marked the walking skeleton AND
-    carried the whole change (tests, rewrite, mirrors, matrix, version bump).
-    The gate only checked WHERE the marker sat, so it passed, and the per-phase
-    implement → review loop ran exactly once. A skeleton is the smoke BEFORE the
-    expensive part; with nothing after it, it is not a skeleton, it is the plan.
-    Operator decision: an error, overridable like every other skeleton error."""
+def test_a_sole_marked_agentic_phase_raises_no_skeleton_error(tmp_path, with_manual):
+    """One agentic phase is a first-class plan (2026-09-26 one-phase-plans):
+    the skeleton rule needs something to build on, so with a single agentic
+    phase the marker is harmless and no error fires. A manual phase after it
+    changes nothing."""
     issues = _skeleton_issues(_sole_skeleton_plan(tmp_path, with_manual=with_manual))
 
-    assert any(i.severity == "error" and "only agentic phase" in i.message for i in issues), issues
+    assert all(i.severity != "error" for i in issues), issues
 
 
-def test_sole_skeleton_error_is_silenced_by_the_skeleton_override(tmp_path):
-    """The same escape hatch as the unmarked-first-phase error: a genuinely
-    tiny change records WHY on the spec journal instead of splitting itself
-    into ceremony phases."""
-    from fr.journal.model import journal_path
+def test_a_sole_unmarked_agentic_phase_passes_with_no_override(tmp_path):
+    """No marker, no override, one agentic phase: nothing to say."""
+    from fr.parser import parse
+    from fr.plan_ops import self_review
 
-    plan_dir = _sole_skeleton_plan(tmp_path)
-    repo = plan_dir.parents[3]
-    journal = journal_path(repo, "spec", "2026-05-10-test-spec")
-    journal.parent.mkdir(parents=True, exist_ok=True)
-    journal.write_text(
-        "# Journal: 2026-05-10-test-spec\n\n"
-        "<!-- fr:journal kind=decision scope=spec "
-        "id=skeleton-override-2026-09-09-skeleton created=2026-09-09T00:00:00 -->\n"
-        "### skeleton-override-2026-09-09-skeleton · decision · One-line fix\n\n"
-        "Single-line change; a separate smoke phase would test nothing new.\n"
-    )
+    plan_dir = _sole_skeleton_plan(tmp_path, marked=False)
 
+    assert [i for i in self_review(parse(plan_dir)) if i.severity == "error"] == []
     assert _skeleton_issues(plan_dir) == []
+
+
+def test_a_sole_marked_phase_still_gets_the_fr_version_floor_error(tmp_path):
+    """The floor probe is about the marker key, not the phase count: a plan
+    that marks a skeleton while admitting a pre-marker fr still fails."""
+    plan_dir = _sole_skeleton_plan(tmp_path)
+    meta = plan_dir / "_meta.yaml"
+    meta.write_text(meta.read_text().replace(">=4.2.0,<5.0.0", ">=3.0.0,<5.0.0"))
+    issues = _skeleton_issues(plan_dir)
+
+    assert any("floor it at" in i.message for i in issues), issues
 
 
 def test_create_writes_skeleton_marker_only_when_set(tmp_path):
