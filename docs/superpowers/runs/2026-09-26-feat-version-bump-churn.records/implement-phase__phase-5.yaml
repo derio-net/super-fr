@@ -43,6 +43,4 @@ journal:
       .claude/rules/explainers-currency.md triggers on "a minor or major version bump", which now
       maps to a minor/major fragment; left unchanged. Explainers do not mention bumping.
 resolves: []
-evidence:
-  tests: "uv run pytest -q --no-cov -n auto: 5975 passed, 97 skipped, 1 failed (test_tripwire_unarchived_plans::test_no_merged_but_unarchived_plans, known, fails on main)"
-  checks: "fr acceptance check OK (252 rows); fr validate artifacts OK (65); bump-version.py --check ok; check-change-fragment.py origin/main exit 0; ruff check + format clean; no version surface differs from origin/main"
+evidence: {}
