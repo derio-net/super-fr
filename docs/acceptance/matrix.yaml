@@ -4173,6 +4173,29 @@ rows:
       prose-only cross-examination instruction remains; on fr-brainstorming, the explainer
       .md, README and index.html it asserts only that a question round is described.
       It is a wording check, not a behavioural one.'
+  - id: deliver-tests-log-background
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the
+      background once its task-notification reports success
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-tests-window-background-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: A backgrounded writing Bash now yields a window ending at its successful
+      task-notification (gh#594/#607/#631)
+  - id: deliver-tests-log-shell-variable
+    capability: fr-goal-methodology
+    acceptance: deliver's tests=<log> gate accepts a log whose path the writing command
+      held in a shell variable
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-tests-window-background-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged

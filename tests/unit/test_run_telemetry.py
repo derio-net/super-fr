@@ -657,3 +657,286 @@ def test_an_unknown_session_id_locates_nothing(tmp_path: Path) -> None:
     }
 
     assert claude_code_session(env) is None
+
+
+def _bg_windows(tmp_path: Path, rows: list[dict], log: str = "/tmp/scratchpad/c1.log"):  # type: ignore[type-arg]
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import ORCHESTRATOR, records, write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-bg", rows=[*records(ORCHESTRATOR), *rows])
+    return orchestrator_wrote_since(
+        _question_env(root, "s-bg"), Path(log), "2026-09-21T16:00:00+00:00"
+    )
+
+
+@pytest.mark.parametrize("text_blocks", [False, True])
+def test_a_backgrounded_write_ends_at_its_task_notification(
+    tmp_path: Path, text_blocks: bool
+) -> None:
+    """Spec 5.1 (gh#594/#607): the ack returns at once; the window runs to the
+    notification's timestamp."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z", text_blocks=text_blocks
+    )
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+@pytest.mark.parametrize("text_blocks", [False, True])
+@pytest.mark.parametrize(
+    "variant",
+    ["running", "failed", "nonzero", "other-id", "non-writing"],
+)
+def test_a_backgrounded_write_without_a_successful_notification_has_no_window(
+    tmp_path: Path, variant: str, text_blocks: bool
+) -> None:
+    """Spec 5.2: fail closed."""
+    from tests.unit.transcript_sessions import background_rows
+
+    kw: dict = {"notified": "2026-09-21T16:09:00.000Z", "text_blocks": text_blocks}  # type: ignore[type-arg]
+    if variant == "running":
+        kw = {"text_blocks": text_blocks}
+    elif variant == "failed":
+        kw["status"] = "failed"
+        kw["exit_code"] = 1
+    elif variant == "nonzero":
+        kw["exit_code"] = 1
+    elif variant == "other-id":
+        kw["notice_id"] = "toolu_other"
+    else:
+        kw["command"] = "uv run pytest -q"
+    assert _bg_windows(tmp_path, background_rows("2026-09-21T16:05:00.000Z", **kw)) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("L=/x/t.log; pytest > $L", True),
+        ('L=/x/t.log; pytest > "${L}"', True),
+        ("export L=/x/t.log; pytest > $L", True),
+        ("L=/x/a.log; L=/x/t.log; pytest > $L", True),
+        ("A=/x; L=$A/t.log; pytest > $L", True),
+        ("L=$TMPDIR/t.log; pytest > $L", True),
+        ('L=/x/t.log; pytest > "$L" 2>&1', True),
+        ("pytest > $L", False),
+        ("pytest > /y/$UNSET/t.log", False),
+        ("pytest > $L; L=/x/t.log", False),
+        ("cd /x && L=/x/t.log && pytest > $L", True),
+        ("L=/x/t.log\npytest > $L", True),
+        ("declare -x L=/x/t.log; pytest > $L", True),
+        ("L=/x/t.log pytest > $L", False),
+        ('echo "L=/x/t.log"; pytest > $L', False),
+        ("echo 'a; L=/x/t.log'; pytest > $L", False),
+        ("cat <<EOF\nL=/x/t.log\nEOF\npytest > $L", False),
+        ("cat <<'EOF'\nx; L=/x/t.log\nEOF\npytest > $L", False),
+        ("pytest > $(mktemp)", False),
+        ("L=/x/other.log; pytest > $L", False),
+    ],
+)
+def test_writes_resolves_shell_variable_targets(command: str, expected: bool) -> None:
+    """Spec 5.3."""
+    from fr.run.telemetry import _writes
+
+    assert _writes(command, Path("/x/t.log")) is expected
+
+
+def test_exit_code_text_outside_the_summary_does_not_reject_a_success(tmp_path: Path) -> None:
+    """Review: only the notification's `<summary>` reports the exit code; suite
+    output echoed elsewhere in it must not. The window still ends at the
+    notification's own timestamp."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows("2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z")
+    rows[-1]["message"]["content"] = rows[-1]["message"]["content"].replace(
+        "</task-notification>", "<result>3 tests said exit code 1</result></task-notification>"
+    )
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+@pytest.mark.parametrize("attachment", [False, True])
+def test_a_model_written_label_naming_an_exit_code_does_not_fail_a_success(
+    tmp_path: Path, attachment: bool
+) -> None:
+    """Review F5: the exit code is the one ENDING the summary."""
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        notified="2026-09-21T16:09:00.000Z",
+        attachment=attachment,
+        label="handle exit code 1 in the wrapper",
+    )
+    assert len(_bg_windows(tmp_path, rows) or []) == 1
+
+
+@pytest.mark.parametrize("attachment", [False, True])
+@pytest.mark.parametrize("status", ["failed", "killed"])
+def test_a_real_shaped_failure_has_no_window(tmp_path: Path, status: str, attachment: bool) -> None:
+    """Review F5: `failed with exit code N` is how a real failure reads."""
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        notified="2026-09-21T16:09:00.000Z",
+        status=status,
+        exit_code=143,
+        attachment=attachment,
+    )
+    assert _bg_windows(tmp_path, rows) == []
+
+
+def test_the_captured_background_command_is_recognised_as_writing_its_log(
+    tmp_path: Path,
+) -> None:
+    """The captured `Bash` command, untouched: `L=<log>; { ... } > $L 2>&1`."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import BACKGROUND, background_rows, records
+
+    captured = records(BACKGROUND)[0]["message"]["content"][0]["input"]["command"]
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z", command=captured, notified="2026-09-21T16:09:00.000Z"
+    )
+    assert _bg_windows(tmp_path, rows, log="/tmp/scratchpad/deliver-tests.log") == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+def test_a_queued_attachment_notification_ends_the_window(tmp_path: Path) -> None:
+    """Review F1: ~1 in 5 real notifications arrive ONLY as a `queued_command`
+    attachment record, not a `type: user` one."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z", attachment=True
+    )
+    assert rows[-1]["type"] == "attachment"
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+@pytest.mark.parametrize("attachment", [False, True])
+def test_a_command_moved_to_the_background_at_its_timeout_ends_at_its_notification(
+    tmp_path: Path, attachment: bool
+) -> None:
+    """Review F2: a foreground call that hits its timeout is acked with `Command
+    did not complete within its ...s timeout and was moved to the background`."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        notified="2026-09-21T16:09:00.000Z",
+        timeout=True,
+        attachment=attachment,
+    )
+    assert "moved to the background" in rows[1]["message"]["content"][0]["content"]
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+    assert _bg_windows(tmp_path, rows[:2]) == []
+
+
+def test_a_foreground_command_echoing_the_ack_phrase_is_not_background(tmp_path: Path) -> None:
+    """Review F6: the harness marks a real ack with `toolUseResult.backgroundTaskId`;
+    a foreground command whose output merely starts with the phrase has none, and
+    its window ends at its own result."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows("2026-09-21T16:05:00.000Z")
+    rows[1]["toolUseResult"].pop("backgroundTaskId")
+    rows[1]["timestamp"] = "2026-09-21T16:06:00.000Z"
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:06:00.000Z"))
+    ]
+
+
+def test_duplicate_notifications_for_one_command_yield_one_window(tmp_path: Path) -> None:
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows, copy_of
+
+    rows = background_rows("2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z")
+    again = copy_of(rows[-1])
+    again["timestamp"] = "2026-09-21T16:30:00.000Z"
+    assert _bg_windows(tmp_path, [*rows, again]) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+def test_a_notification_recorded_before_its_ack_has_no_window(tmp_path: Path) -> None:
+    """Fail closed: a notification for a command not (yet) known to be
+    backgrounded proves nothing."""
+    from tests.unit.transcript_sessions import background_rows
+
+    call, ack, note = background_rows(
+        "2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z"
+    )
+    assert _bg_windows(tmp_path, [call, note, ack]) == []
+
+
+@pytest.mark.parametrize("attachment", [False, True])
+def test_a_sidechain_notification_is_ignored(tmp_path: Path, attachment: bool) -> None:
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        notified="2026-09-21T16:09:00.000Z",
+        attachment=attachment,
+        sidechain_notice=True,
+    )
+    assert _bg_windows(tmp_path, rows) == []
+
+
+def test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec 5.1 through `_verify_tests_log`: a log written inside the background
+    window is accepted; one written after the notification is refused."""
+    import datetime as dt
+
+    import click
+    import typer
+    from fr.commands.run_cmd import _verify_tests_log
+
+    from tests.unit.transcript_sessions import ORCHESTRATOR, background_rows, records, write_session
+
+    log = tmp_path / "suite.log"
+    log.write_text("1 passed\n")
+    root = tmp_path / "projects"
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        command=f"uv run pytest -q > {log} 2>&1",
+        notified="2026-09-21T16:09:00.000Z",
+    )
+    write_session(root, session_id="s-bg", rows=[*records(ORCHESTRATOR), *rows])
+    for k, v in _question_env(root, "s-bg").items():
+        monkeypatch.setenv(k, v)
+    opened = "2026-09-21T16:00:00+00:00"
+
+    def _touch(iso: str) -> None:
+        t = dt.datetime.fromisoformat(iso).timestamp()
+        os.utime(log, (t, t))
+
+    _touch("2026-09-21T16:08:30+00:00")
+    assert _verify_tests_log("deliver", str(log), tmp_path, opened=opened).startswith("suite.log@")
+    _touch("2026-09-21T16:20:00+00:00")
+    with pytest.raises((typer.Exit, click.exceptions.Exit)):
+        _verify_tests_log("deliver", str(log), tmp_path, opened=opened)

@@ -1823,7 +1823,8 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     slack = _dt.timedelta(seconds=1)
     if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
         why = (
-            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it)"
+            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it; a "
+            "backgrounded suite counts once its task-notification reports it completed)"
             if not windows
             else "its bytes were not written by the command of yours that names it"
         )

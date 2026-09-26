@@ -635,8 +635,72 @@ transcript, so a parent hop cannot be resolved, and `../x.log` keeps matching
 `…/x.log` as it always has. A `..` mid-path is not collapsed and fails closed."""
 
 
+_ASSIGNMENT = re.compile(
+    r"""(?:\A|[;\n]|&&|\|\|)[ \t]*(?:(?:export|declare(?:[ \t]+-\w+)*)[ \t]+)?"""
+    r"""([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]*)(?=[ \t]*(?:\Z|[;&|\n]))"""
+)
+"""A `NAME=value` that is a whole command of its own: at the start of the string
+or after `;`, `&&`, `||` or a newline, optionally behind `export`/`declare`,
+and followed by a command separator or the end. NOT recognised (fail closed,
+review F3): a prefix assignment that scopes to the next word (`L=x pytest >
+$L` leaves `$L` unset), and anything inside quotes or a here-doc body."""
+_QUOTED = re.compile(r"""\"(?:\\.|[^"\\])*\"|'[^']*'""", re.DOTALL)
+_HEREDOC = re.compile(
+    r"""<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?:\n|\Z)""", re.DOTALL
+)
+
+
+def _assignments(command: str) -> list[tuple[int, str, str]]:
+    """`(end, name, value)` of each command-start assignment in `command` that
+    does not sit inside a quoted string or a here-doc body."""
+    scratch = command
+    protected: list[tuple[int, int]] = []
+    for doc in _HEREDOC.finditer(command):
+        protected.append(doc.span(3))
+        scratch = (
+            scratch[: doc.start(3)] + " " * (doc.end(3) - doc.start(3)) + scratch[doc.end(3) :]
+        )
+    protected += [m.span() for m in _QUOTED.finditer(scratch)]
+    found = []
+    for m in _ASSIGNMENT.finditer(command):
+        at = m.start(1)
+        if any(start <= at < end for start, end in protected):
+            continue
+        found.append((m.end(), m.group(1), m.group(2)))
+    return found
+
+
+_VARIABLE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
+_SUBSTITUTION_ROUNDS = 5
+
+
+def _resolve_target(target: str, assignments: list[tuple[int, str, str]], at: int) -> str | None:
+    """`target` with same-command variables substituted (spec §3.B). Only
+    assignments that END before `at` (the redirect) count. A variable still
+    unresolved is dropped when it LEADS the path — the environment root is as
+    unknowable from the transcript as the cwd — and anything else (mid-path,
+    the whole target, a command substitution) is `None`: fail closed."""
+    known = {name: value.strip("\"'") for end, name, value in assignments if end <= at}
+    for _ in range(_SUBSTITUTION_ROUNDS):
+        replaced = _VARIABLE.sub(lambda m: known.get(m.group(1) or m.group(2), m.group(0)), target)
+        if replaced == target:
+            break
+        target = replaced
+    lead = _VARIABLE.match(target)
+    if lead:
+        target = target[lead.end() :]
+        if not target.startswith("/") or target == "/":
+            return None
+        target = target.lstrip("/")
+    return None if "$" in target or "(" in target or "`" in target else target
+
+
 def _writes(command: str, log: Path) -> bool:
-    for _quote, target in _WRITE_TARGET.findall(command):
+    assignments = _assignments(command)
+    for match in _WRITE_TARGET.finditer(command):
+        target = _resolve_target(match.group(2), assignments, match.start())
+        if target is None:
+            continue
         if Path(target).is_absolute():
             if Path(target) == log:
                 return True
@@ -647,6 +711,86 @@ def _writes(command: str, log: Path) -> bool:
         if parts and log.parts[-len(parts) :] == parts:
             return True
     return False
+
+
+_BACKGROUND_ACKS = ("Command running in background", "Command did not complete within its")
+_NOTIFIED_ID = re.compile(r"<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>")
+_NOTIFIED_STATUS = re.compile(r"<status>([^<]*)</status>")
+_NOTIFIED_SUMMARY = re.compile(r"<summary>(.*?)</summary>", re.DOTALL)
+_NOTIFIED_EXIT = re.compile(r"\bexit code (-?\d+)\)?\s*$")
+
+
+def _text_of(content: object) -> str:
+    """A message/tool_result `content` as text: a plain string, or a list of
+    `text` blocks (both shapes occur)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            b["text"]
+            for b in content
+            if isinstance(b, Mapping) and b.get("type") == "text" and isinstance(b.get("text"), str)
+        )
+    return ""
+
+
+def _notification_text(record: Mapping[str, Any]) -> str | None:
+    """The `<task-notification>` text of a main-thread record, in either shape
+    Claude Code writes it (both observed live): a `type: user` record with
+    `origin.kind: task-notification`, or a `type: attachment` record carrying a
+    `queued_command` in `commandMode: task-notification` whose `prompt` is the
+    text. Sidechain records are never the orchestrator's."""
+    if record.get("isSidechain") is True:
+        return None
+    if record.get("type") == "user":
+        origin = record.get("origin")
+        if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
+            return None
+        message = record.get("message")
+        return _text_of(message.get("content") if isinstance(message, Mapping) else None)
+    if record.get("type") == "attachment":
+        attachment = record.get("attachment")
+        if (
+            isinstance(attachment, Mapping)
+            and attachment.get("type") == "queued_command"
+            and attachment.get("commandMode") == "task-notification"
+        ):
+            return _text_of(attachment.get("prompt"))
+    return None
+
+
+def _successful_notification(record: Mapping[str, Any]) -> str | None:
+    """The tool_use id a `task-notification` record reports as COMPLETED with no
+    non-zero exit code, else `None` (spec §3.A). The exit code is the one that
+    ENDS the `<summary>` (`... completed (exit code 0)`), so a description the
+    model wrote cannot fake or hide it."""
+    text = _notification_text(record)
+    if text is None:
+        return None
+    ident, status = _NOTIFIED_ID.search(text), _NOTIFIED_STATUS.search(text)
+    if not ident or not status or status.group(1).strip() != "completed":
+        return None
+    summary = _NOTIFIED_SUMMARY.search(text)
+    code = _NOTIFIED_EXIT.search(summary.group(1).strip()) if summary else None
+    if code and code.group(1) != "0":
+        return None
+    return ident.group(1)
+
+
+def _is_background_ack(record: Mapping[str, Any], text: str) -> bool:
+    """Whether a `Bash` tool_result says the command was moved to the background,
+    either because it asked for `run_in_background` or because a foreground call
+    hit its timeout (spec §3.A). Claude Code sets `toolUseResult.backgroundTaskId`
+    on BOTH acks (187 of 187 in real transcripts, none without), so it decides
+    when `toolUseResult` is an object — and its id must appear in the text, which
+    keeps a record carrying several results honest. A foreground command that
+    merely echoes the phrase has an object without the key: not background. Only
+    when there is no object at all (an older harness) is the text prefix used."""
+    result = record.get("toolUseResult")
+    if isinstance(result, Mapping):
+        task = result.get("backgroundTaskId")
+        return isinstance(task, str) and bool(task) and task in text
+    return text.startswith(_BACKGROUND_ACKS) and "background" in text[:120]
 
 
 def orchestrator_wrote_since(
@@ -671,6 +815,13 @@ def orchestrator_wrote_since(
     command was a real test suite — `echo ok > log` passes. That is forgery,
     not the drift this gate closes (relaying someone else's green), and
     closing it needs a per-repo test-runner declaration fr does not have.
+
+    A window may END at a `task-notification` (a backgrounded command: an
+    explicit `run_in_background`, or a foreground call moved to the background
+    by its timeout), stamped when the harness RECORDED the notification — at or
+    after the command finished. A background window can therefore span most of
+    the run, so any process that writes the log during it satisfies the mtime
+    check: the same documented `echo ok > log` limit, not a new hole.
     """
     start = parse_timestamp(since)
     if start is not None and detect_harness(env) == OpenCodeReader.harness:
@@ -704,10 +855,18 @@ def orchestrator_wrote_since(
             ):
                 issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    background: set[str] = set()
+    closed: set[str] = set()
     for record in records:
+        done = parse_timestamp(record.get("timestamp"))
+        finished = _successful_notification(record)
+        if finished is not None:
+            if finished in background and finished not in closed and done is not None:
+                closed.add(finished)
+                windows.append((issued[finished], done))
+            continue
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
-        done = parse_timestamp(record.get("timestamp"))
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
@@ -718,7 +877,10 @@ def orchestrator_wrote_since(
                 and block.get("is_error") is not True
                 and done is not None
             ):
-                windows.append((issued[block["tool_use_id"]], done))
+                if _is_background_ack(record, _text_of(block.get("content"))):
+                    background.add(block["tool_use_id"])
+                else:
+                    windows.append((issued[block["tool_use_id"]], done))
     return windows
 
 
