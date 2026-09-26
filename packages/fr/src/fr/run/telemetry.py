@@ -726,20 +726,40 @@ def orchestrator_wrote_since(
                     backgrounded.add(block["tool_use_id"])
                 else:
                     windows.append((issued[block["tool_use_id"]], done))
+    # When the harness QUEUED a notice (the command's end), which can precede
+    # its delivery by a whole turn. Used only to NARROW a window, never to open
+    # one, so a queued prompt that merely looks like a notice can only refuse.
+    queued: dict[str, _dt.datetime] = {}
+    for record in records:
+        if record.get("type") != "queue-operation" or record.get("operation") != "enqueue":
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        parsed = _task_notice(record.get("content"))
+        if parsed is not None and stamp is not None and parsed[0] not in queued:
+            queued[parsed[0]] = stamp
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
+        origin = record.get("origin")
+        if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
+            # Only the harness's own notice counts: an operator prompt or `!cmd`
+            # output is also a string-content `user` record (Opus review r2).
+            continue
         done = parse_timestamp(record.get("timestamp"))
         message = record.get("message")
-        notice = message.get("content") if isinstance(message, Mapping) else None
-        parsed = _task_notice(notice)
+        parsed = _task_notice(message.get("content") if isinstance(message, Mapping) else None)
         if parsed is None or done is None:
             continue
         tool_use_id, status = parsed
-        if tool_use_id in backgrounded and status == "completed":
-            # Once: a later duplicate must not add a second, wider window.
-            backgrounded.discard(tool_use_id)
-            windows.append((issued[tool_use_id], done))
+        if tool_use_id not in backgrounded:
+            continue
+        # The first notice is final, whatever it says: a later one — duplicate
+        # or forged — can neither widen a window nor revive a failed command.
+        backgrounded.discard(tool_use_id)
+        if status == "completed":
+            start = issued[tool_use_id]
+            end = min(done, queued.get(tool_use_id, done))
+            windows.append((start, end if end >= start else done))
     return windows
 
 
@@ -754,12 +774,20 @@ def _is_launch_ack(record: Mapping[str, Any]) -> bool:
 
 
 def _task_notice(content: object) -> tuple[str, str] | None:
-    """`(tool_use_id, status)` of a `<task-notification>` — the `user` record the
+    """`(tool_use_id, status)` of a `<task-notification>` — the text the
     harness writes when a backgrounded command ends (`status` is `completed`,
-    `failed` or `killed`) — else `None`."""
-    if not isinstance(content, str) or "<task-notification>" not in content:
+    `failed` or `killed`) — else `None`.
+
+    Read from the notice's HEADER only, first occurrence of each field: its
+    `<summary>` quotes the command's own `description`, which the agent wrote
+    and could carry a `<status>completed</status>` of its own (Opus review r1).
+    """
+    if not isinstance(content, str) or not content.lstrip().startswith("<task-notification>"):
         return None
-    fields = dict(_NOTICE_FIELD.findall(content))
+    header = content.split("<summary>", 1)[0]
+    fields: dict[str, str] = {}
+    for name, value in _NOTICE_FIELD.findall(header):
+        fields.setdefault(name, value)
     tool_use_id, status = fields.get("tool-use-id"), fields.get("status")
     return (tool_use_id, status) if tool_use_id and status else None
 

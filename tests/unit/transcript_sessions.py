@@ -23,6 +23,10 @@ SUBAGENT = FIXTURES / "claude-code-subagent.jsonl"
 SUBAGENT_META = FIXTURES / "claude-code-subagent.meta.json"
 QUESTION = FIXTURES / "claude-code-askuserquestion.jsonl"
 BASH = FIXTURES / "claude-code-bash.jsonl"
+"""Captured 2026-09-21 from the same live session (local and scratchpad paths
+redacted): line 0 a main-thread `assistant` record whose `Bash` tool_use runs
+a test suite into a log file (`.../c1.log`), line 1 its `tool_result`
+(`is_error: false`)."""
 BASH_BACKGROUND = FIXTURES / "claude-code-bash-background.jsonl"
 """Captured 2026-09-26 from a live Claude Code 2.1.283 session (local paths and
 identity redacted): a `Bash` call run with `run_in_background` that writes a
@@ -31,10 +35,6 @@ the LAUNCH ack (`toolUseResult.backgroundTaskId` set), ~1 s after the call —
 line 2 the `queue-operation` enqueue of the completion, line 3 the `user`
 record carrying the `<task-notification>` (`<tool-use-id>`, `<status>`) ~32
 minutes later. The command's real end is line 3, not line 1."""
-"""Captured 2026-09-21 from the same live session (local and scratchpad paths
-redacted): line 0 a main-thread `assistant` record whose `Bash` tool_use runs
-a test suite into a log file (`.../c1.log`), line 1 its `tool_result`
-(`is_error: false`)."""
 """Captured 2026-09-21 from a live Claude Code 2.1.278 session (local paths
 redacted to `/home/user`): line 0 is the `assistant` record carrying an
 `AskUserQuestion` tool_use, line 1 the `user` record carrying its tool_result,
