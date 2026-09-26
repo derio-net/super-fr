@@ -79,3 +79,8 @@ Inherent to option 1 of #598, not caused by this change; recorded as a known lim
 ### opus-s1 · finding [open] (reviewer: in scope) · §C claimed archive never rewrites moved bytes; usage is re-captured first
 
 archive.py _archive_usage -> upsert_capture replaces the host entry before git mv.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s2 created=2026-09-27T00:07:34 state=open review_scope=in -->
+### opus-s2 · finding [open] (reviewer: in scope) · §C test passed on §A alone
+
+The squash commit carries the branch blob at the original path; §C needed a test that fails without _archived_path.
