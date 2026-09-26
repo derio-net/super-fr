@@ -1,8 +1,0 @@
-schema_version: 2
-run: 2026-09-26-feat-dynamic-brainstorm-questions
-step: deliver
-outcome: done
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/06faf166-f1db-4ef3-9bab-d2a3c15e0e32/scratchpad/full-suite.log
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/689
