@@ -84,3 +84,8 @@ archive.py _archive_usage -> upsert_capture replaces the host entry before git m
 ### opus-s2 · finding [open] (reviewer: in scope) · §C test passed on §A alone
 
 The squash commit carries the branch blob at the original path; §C needed a test that fails without _archived_path.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s3 created=2026-09-27T00:07:34 state=open review_scope=in -->
+### opus-s3 · finding [open] (reviewer: in scope) · gc's PR-less _merged_by_content is the third caller, without a MERGED backstop
+
+Known limits were justified by 'verified needs PR MERGED', not true on reap/gc paths.
