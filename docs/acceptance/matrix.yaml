@@ -4099,10 +4099,13 @@ rows:
       - super-fr:tests/unit/test_run_telemetry.py
       - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py
     status: ci
-    notes: 'Phase 3 landed the sizing prose (spec §3.A/§3.A.1): fr-goal asks one question
-      per operator-owned decision with no fixed cap, justifying or proposing a split
-      above ~10; the tripwire pins the old max-4/ONE-batch wording gone and the sizing
-      rule stated on every §3.A.1 surface.'
+    notes: Phase 3 landed the sizing prose (spec §3.A/§3.A.1). test_run_telemetry.py
+      pins that a round spanning consecutive question calls counts as one round. The
+      tripwire pins, on normalised text, the old fixed-batch phrases (max 4, ONE batch,
+      batched Q&A and the rest) absent from every §3.A.1 surface plus both explainer
+      pages, the OpenCode /fr-goal command and the README; the sizing markers (one question
+      per decision, ~10) are asserted only on the canonical fr-goal skill and its two
+      mirrors — the other surfaces are only required to describe a question round.
   - id: fr-goal-second-round-announced-and-verified
     capability: fr-goal-methodology
     acceptance: 'A brainstorm may take a second question round only when the record
