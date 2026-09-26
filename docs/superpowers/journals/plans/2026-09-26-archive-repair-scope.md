@@ -84,3 +84,8 @@ Opus review. Same as spec finding s2-2; removed in the spec re-review commit.
 ### r2-f5 · finding [open] (reviewer: in scope) · This plan's own _meta.yaml stored a non-canonical spec: (phase 1)
 
 Opus review. Repaired via repair_repo(only_plans={this plan}).
+
+<!-- fr:journal kind=finding scope=plan id=r2-f6 created=2026-09-26T23:40:04 phase=1 state=open review_scope=in -->
+### r2-f6 · finding [open] (reviewer: in scope) · _repair_meta resolved the spec ref twice (phase 1)
+
+Opus review. canonical_spec_ref takes an optional pre-computed resolution.
