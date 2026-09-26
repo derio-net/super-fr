@@ -63,7 +63,16 @@ EXIT_REFUSED = 1  # a refusal: invalid input, stale lock, stray diff, protection
 EXIT_RACE = 2  # lost the push race MAX_ATTEMPTS times; the next push retries
 EXIT_FLOOR = 3  # tagged and released, but a floor names another release
 
-_PROTECTED_MARKERS = ("GH006", "protected branch")
+# GH006 is classic branch protection, GH013 a ruleset (what `protect main` is);
+# `[remote rejected]` is any server-side decline, which a lost race never is — a
+# non-fast-forward is refused client-side as a plain `[rejected]`.
+_PROTECTED_MARKERS = (
+    "GH006",
+    "protected branch",
+    "GH013",
+    "repository rule violations",
+    "[remote rejected]",
+)
 _RACE_MARKERS = ("non-fast-forward", "fetch first", "[rejected]")
 
 

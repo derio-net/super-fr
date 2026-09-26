@@ -305,18 +305,28 @@ def test_three_lost_races_exit_non_zero(world: World, capsys: pytest.CaptureFixt
     assert "3" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        # Classic branch protection.
+        "error: GH006: Protected branch update failed for refs/heads/main.",
+        # A ruleset — what THIS repo's `protect main` would send once it gains a
+        # required-PR rule (review rp3-f1): no GH006, no "protected branch".
+        "error: GH013: Repository rule violations found for refs/heads/main.\\n"
+        "- Changes must be made through a pull request.",
+        # Any other server-side decline: git reports it as `[remote rejected]`,
+        # never as a race's plain `[rejected]`.
+        "error: refusing the update",
+    ],
+    ids=["gh006-classic", "gh013-ruleset", "generic-remote-rejected"],
+)
 def test_a_protection_refusal_fails_at_once_naming_the_bypass_actor(
-    world: World, capsys: pytest.CaptureFixture[str]
+    world: World, capsys: pytest.CaptureFixture[str], refusal: str
 ) -> None:
     world.fragment("fix-a", "patch", "fix the thing")
-    # The GH006 line GitHub sends when a branch rule refuses a push; a pre-receive
-    # hook relays it as `remote: error: GH006: ...`, as GitHub's reply reads.
+    # A pre-receive hook relays the line as `remote: error: ...`, as GitHub's reply reads.
     hook = world.origin / "hooks" / "pre-receive"
-    hook.write_text(
-        "#!/bin/sh\n"
-        "echo 'error: GH006: Protected branch update failed for refs/heads/main.' >&2\n"
-        "exit 1\n"
-    )
+    hook.write_text(f"#!/bin/sh\nprintf '{refusal}\\n' >&2\nexit 1\n")
     hook.chmod(0o755)
 
     code = world.run()
