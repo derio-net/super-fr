@@ -198,9 +198,10 @@ def create(
     spec_str = str(spec) if spec is not None else None
 
     # Pre-flight: validate every external precondition BEFORE mutating the
-    # filesystem. A spec missing its '## Implementation Plans' section must
-    # fail loud here — not after the folder is half-built — so a re-run after
-    # adding the section isn't blocked by a stranded folder (#133). Mirrors how
+    # filesystem. A spec whose '## Implementation Plans' table is malformed
+    # must fail loud here — not after the folder is half-built — so a re-run
+    # after fixing it isn't blocked by a stranded folder (#133). (A spec with
+    # no section at all is fine: `create` writes it below.) Mirrors how
     # `fr apply` validates the diff before `--yes` touches GitHub. Same
     # doctrine for phase numbering and tier below: their schema gates
     # (PhaseHeader's `ge=1` and `Literal`) would only reject at the post-write
