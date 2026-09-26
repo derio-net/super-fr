@@ -84,4 +84,10 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-26T10:19:24+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-26T10:19:24+00:00'
+          harness: opencode
