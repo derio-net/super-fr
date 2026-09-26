@@ -59,3 +59,8 @@ fr-spec-reviewer verified every file:line claim in the spec; raised s1-s3, all i
 ### s3-resolved · finding [fixed] · resolves s3: Spec omits matrix and version obligations
 
 New §4 Obligations names the matrix row and the 4.23.2 bump.
+
+<!-- fr:journal kind=finding scope=spec id=f1-reap-hazard-fetch-untimed-resolved-2 created=2026-09-26T09:49:04 state=open resolves=f1-reap-hazard-fetch-untimed tracked_by=#659 -->
+### f1-reap-hazard-fetch-untimed-resolved-2 · finding [deferred → #659] · resolves f1-reap-hazard-fetch-untimed: _reap_hazard's git fetch (gc) is also untimed
+
+Filed at closeout as #659.
