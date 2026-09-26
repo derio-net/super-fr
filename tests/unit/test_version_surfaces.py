@@ -34,22 +34,27 @@ def _root_version() -> str:
 
 
 def _lock_members() -> set[str]:
-    lock = tomllib.loads((REPO / "uv.lock").read_text())
-    return {
-        p["name"]
-        for p in lock["package"]
-        if "editable" in p.get("source", {}) or "virtual" in p.get("source", {})
-    }
+    # Hand-enumerated (review rp1-f2): the workspace's uv members today.
+    return {"fr", "fr-cncd", "fr-dispatch", "fr-herdr", "fr-vk", "super-fr-workspace"}
 
 
 def test_surfaces_cover_every_known_manifest_in_this_repo() -> None:
     files = {s.file for s in vs.version_surfaces(REPO)}
-    expected = {"pyproject.toml", "packages/fr-opencode-plugin/package.json"}
-    expected |= {str(p.relative_to(REPO)) for p in (REPO / "packages").glob("*/pyproject.toml")}
-    expected |= {
-        str(p.relative_to(REPO)) for p in (REPO / "plugins").glob("*/.claude-plugin/plugin.json")
+    # Hand-enumerated on purpose: re-deriving this with the module's own globs
+    # would share any bug in them (review rp1-f2).
+    expected = {
+        "pyproject.toml",
+        "packages/fr/pyproject.toml",
+        "packages/fr-cncd/pyproject.toml",
+        "packages/fr-dispatch/pyproject.toml",
+        "packages/fr-herdr/pyproject.toml",
+        "packages/fr-vk/pyproject.toml",
+        "packages/fr-opencode-plugin/package.json",
+        "plugins/super-fr/.claude-plugin/plugin.json",
+        "plugins/super-fr-dispatch/.claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        "uv.lock",
     }
-    expected |= {".claude-plugin/marketplace.json", "uv.lock"}
     assert expected <= files
 
 
@@ -95,6 +100,25 @@ def _write_tmp_repo(root: Path) -> None:
         '[[package]]\nname = "pydantic"\nversion = "2.11.0"\n'
         'source = { registry = "https://pypi.org/simple" }\n'
     )
+    (root / ".claude-plugin").mkdir()
+    (root / ".claude-plugin" / "marketplace.json").write_text(
+        '{"plugins": [{"name": "demo", "version": "1.2.3"}]}\n'
+    )
+    (root / "packages" / "fr-opencode-plugin").mkdir()
+    (root / "packages" / "fr-opencode-plugin" / "package.json").write_text(
+        '{"name": "demo-plugin", "version": "1.2.3"}\n'
+    )
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [".claude-plugin/marketplace.json", "packages/fr-opencode-plugin/package.json", "uv.lock"],
+)
+def test_a_missing_single_instance_surface_fails_loudly(tmp_path: Path, missing: str) -> None:
+    _write_tmp_repo(tmp_path)
+    (tmp_path / missing).unlink()
+    with pytest.raises(SystemExit, match="missing"):
+        vs.version_surfaces(tmp_path)
 
 
 def test_registry_packages_in_uv_lock_are_not_surfaces(tmp_path: Path) -> None:

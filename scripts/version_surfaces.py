@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,9 +78,16 @@ def _is_member(package: dict[str, Any]) -> bool:
 
 def _lock_members(repo: Path) -> list[dict[str, Any]]:
     lock = repo / UV_LOCK
-    if not lock.exists():
-        return []
-    return [p for p in tomllib.loads(lock.read_text()).get("package", []) if _is_member(p)]
+    return [
+        p for p in tomllib.loads(_required(lock).read_text()).get("package", []) if _is_member(p)
+    ]
+
+
+def _required(path: Path) -> Path:
+    """A single-instance surface that must exist: a lost manifest is drift, never a skip."""
+    if not path.exists():
+        sys.exit(f"error: version surface {path} is missing")
+    return path
 
 
 def version_surfaces(repo: Path) -> list[Surface]:
@@ -90,15 +98,13 @@ def version_surfaces(repo: Path) -> list[Surface]:
         out.append(Surface(_rel(repo, toml), "project.version", _toml_version(toml)))
     for pj in plugin_jsons(repo):
         out.append(Surface(_rel(repo, pj), "version", json.loads(pj.read_text())["version"]))
-    opencode = repo / OPENCODE_PACKAGE_JSON
-    if opencode.exists():
-        out.append(
-            Surface(OPENCODE_PACKAGE_JSON, "version", json.loads(opencode.read_text())["version"])
-        )
-    market = repo / MARKETPLACE_JSON
-    if market.exists():
-        for i, plugin in enumerate(json.loads(market.read_text())["plugins"]):
-            out.append(Surface(MARKETPLACE_JSON, f"plugins[{i}].version", plugin["version"]))
+    opencode = _required(repo / OPENCODE_PACKAGE_JSON)
+    out.append(
+        Surface(OPENCODE_PACKAGE_JSON, "version", json.loads(opencode.read_text())["version"])
+    )
+    market = _required(repo / MARKETPLACE_JSON)
+    for i, plugin in enumerate(json.loads(market.read_text())["plugins"]):
+        out.append(Surface(MARKETPLACE_JSON, f"plugins[{i}].version", plugin["version"]))
     for package in _lock_members(repo):
         out.append(Surface(UV_LOCK, f"package[{package['name']}].version", package["version"]))
     return out
