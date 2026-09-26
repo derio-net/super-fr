@@ -144,3 +144,8 @@ fixed in 33d01601
 ### o6-resolved · finding [fixed] · resolves o6: F7 test gaps, weak assertion, fixtures not captured (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o7-resolved created=2026-09-26T23:51:05 state=fixed resolves=o7 -->
+### o7-resolved · finding [fixed] · resolves o7: F8/F9 stale docstring; a background window can span the whole run (Opus)
+
+fixed in 33d01601
