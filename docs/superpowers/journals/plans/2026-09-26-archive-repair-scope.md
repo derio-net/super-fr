@@ -144,3 +144,8 @@ fixed in the Opus-review commits
 ### r2-f7-resolved · finding [out-of-scope] · resolves r2-f7: A ref escaping the repo is shortened to a local spec
 
 pre-existing; not caused by this change
+
+<!-- fr:journal kind=finding scope=plan id=r2-f8-resolved created=2026-09-26T23:40:27 state=open resolves=r2-f8 out_of_scope=true -->
+### r2-f8-resolved · finding [out-of-scope] · resolves r2-f8: Archive runs repair twice and can print warnings twice
+
+pre-existing; not caused by this change
