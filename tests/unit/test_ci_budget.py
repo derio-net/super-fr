@@ -551,3 +551,49 @@ def test_render_of_parse_is_byte_identical_with_no_rows_no_streak() -> None:
     )
     roundtripped = ci_budget.render_body(ci_budget.parse_body(original))
     assert roundtripped == original
+
+
+# ── phase 2 review fixes (review-phase-2) ────────────────────────────────
+
+
+def test_render_of_parse_round_trips_a_non_default_budget() -> None:
+    """A 360s override must survive parse -> render (it used to fall back to 240)."""
+    original = ci_budget.render_body(
+        ci_budget.ParsedBody(file="slow.yml", budget_seconds=360.0, rows=(), streak=0)
+    )
+    parsed = ci_budget.parse_body(original)
+    assert parsed.budget_seconds == 360.0
+    assert ci_budget.render_body(parsed) == original
+
+
+def test_fetch_jobs_follows_every_page() -> None:
+    """The jobs endpoint pages at 30; a truncated list would corrupt wall_clock silently."""
+    seen: list[list[str]] = []
+
+    def gh(argv: list[str]) -> str:
+        seen.append(argv)
+        page = lambda lo, hi: {  # noqa: E731
+            "total_count": 35,
+            "jobs": [{"name": f"j{i}"} for i in range(lo, hi)],
+        }
+        return json.dumps([page(0, 30), page(30, 35)])
+
+    jobs = ci_budget.GhAdapter("derio-net/super-fr", run=gh).fetch_jobs("123")
+    assert [j["name"] for j in jobs] == [f"j{i}" for i in range(35)]
+    assert "--paginate" in seen[0] and "--slurp" in seen[0]
+
+
+def test_run_id_must_be_numeric() -> None:
+    with pytest.raises(SystemExit):
+        ci_budget.main(["--run-id", "1; echo pwned"])
+
+
+def test_watcher_workflow_never_interpolates_expressions_into_shell() -> None:
+    """Values reach `run:` through `env:` only (script-injection shape), and the
+    `--no-project` script needs no `uv sync`."""
+    wf = yaml.safe_load((REPO / ".github" / "workflows" / "ci-budget.yml").read_text())
+    for job in wf["jobs"].values():
+        for step in job["steps"]:
+            run = step.get("run", "")
+            assert "${{" not in run, f"expression interpolated into run: {run!r}"
+            assert run.strip() != "uv sync", "the --no-project watcher needs no uv sync"

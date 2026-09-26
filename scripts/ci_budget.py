@@ -230,7 +230,8 @@ def _num(value: float) -> str:
 
 
 MARKER_RE = re.compile(r"<!-- ci-budget:(?P<file>\S+) -->")
-BUDGET_RE = re.compile(r"budget: (?P<seconds>[\d.]+)s", re.IGNORECASE)
+# Matches render_body's heading, so parse -> render round-trips any budget.
+BUDGET_RE = re.compile(r"is over its (?P<seconds>[\d.]+)s CI time budget")
 GREEN_RE = re.compile(r"<!-- ci-budget-green:(?P<n>\d+) -->")
 GREEN_ROW_RE = re.compile(r"<!-- ci-budget-green-row:(?P<data>[^>]*) -->")
 REGRESSION_RE = re.compile(r"regressed again; previously #(?P<n>\d+)", re.IGNORECASE)
@@ -587,8 +588,19 @@ class GhAdapter:
         )
 
     def fetch_jobs(self, run_id: str) -> list[dict[str, Any]]:
-        raw = json.loads(self._run(["api", f"repos/{self.repo}/actions/runs/{run_id}/jobs"]))
-        return cast(list[dict[str, Any]], raw["jobs"])
+        # The endpoint pages at 30 jobs. `--slurp` gathers every page into one
+        # array, so a larger matrix can never silently truncate wall_clock.
+        pages = json.loads(
+            self._run(
+                [
+                    "api",
+                    "--paginate",
+                    "--slurp",
+                    f"repos/{self.repo}/actions/runs/{run_id}/jobs",
+                ]
+            )
+        )
+        return [job for page in pages for job in cast(list[dict[str, Any]], page["jobs"])]
 
 
 # ── main ─────────────────────────────────────────────────────────────────
@@ -652,7 +664,7 @@ def run_once(
 
 def main(argv: list[str] | None = None, *, run: Callable[[list[str]], str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="CI time-budget watcher")
-    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--budget-seconds", type=float, default=None)
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -663,7 +675,7 @@ def main(argv: list[str] | None = None, *, run: Callable[[list[str]], str] | Non
 
     gh = GhAdapter(repo, run=run)
     config = load_config()
-    print(f"ci_budget: {run_once(gh, args.run_id, config, args.budget_seconds)}")
+    print(f"ci_budget: {run_once(gh, str(args.run_id), config, args.budget_seconds)}")
     return 0
 
 

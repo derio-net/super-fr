@@ -49,11 +49,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync
       - name: Measure the run and update/create/close its ci-budget issue
+        # Values reach the shell through env only, never `${{ }}` inside run:
+        # (script-injection shape; release.yml and acceptance-report.yml do the same).
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+          BUDGET_SECONDS: ${{ inputs.budget_seconds }}
         run: >-
           uv run --no-project --with pyyaml python scripts/ci_budget.py
-          --run-id "${{ github.event.workflow_run.id || inputs.run_id }}"
-          ${{ inputs.budget_seconds && format('--budget-seconds {0}', inputs.budget_seconds) || '' }}
+          --run-id "$RUN_ID" ${BUDGET_SECONDS:+--budget-seconds "$BUDGET_SECONDS"}
