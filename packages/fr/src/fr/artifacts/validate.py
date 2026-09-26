@@ -146,6 +146,38 @@ def _workflow_issues(repo_root: Path) -> list[ValidationIssue]:
     return out
 
 
+RECORD_KIND = "record"
+
+
+def _records_dir_issues(repo_root: Path) -> list[ValidationIssue]:
+    """Anything in a `<run>.records/` dir that is neither a step record
+    (`*.yaml`, validated above as the `record` kind) nor fr's own `pr-body.md`
+    render (gh#638). The locator only matches `*.yaml`, so a suite log an agent
+    parked there was invisible here, got committed, and reached `main`: the
+    dir is fr's, and fr empties it, but only of what it put there."""
+    from fr.record.model import RECORDS_SUFFIX
+    from fr.record.pr_body import PR_BODY_NAME
+
+    out: list[ValidationIssue] = []
+    for home in sorted((repo_root / "docs" / "superpowers" / "runs").glob(f"*{RECORDS_SUFFIX}")):
+        if not home.is_dir():
+            continue
+        for path in sorted(home.iterdir()):
+            if path.suffix == ".yaml" or path.name == PR_BODY_NAME:
+                continue
+            out.append(
+                ValidationIssue(
+                    kind=RECORD_KIND,
+                    path=path,
+                    message=(
+                        "is not a step record: a run's records dir holds step records "
+                        "only, and fr empties it — keep evidence logs out of the repo"
+                    ),
+                )
+            )
+    return out
+
+
 def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> ValidationReport:
     """Validate every live artifact under `repo_root` (or just one kind's).
 
@@ -183,6 +215,8 @@ def validate_repo(repo_root: Path, *, kind_name: str | None = None) -> Validatio
             seen.add(real)
             checked += 1
             issues.extend(validate_artifact(kind, path))
+    if kind_name in (None, RECORD_KIND):
+        issues.extend(_records_dir_issues(repo_root))
     if kind_name is None:
         issues.extend(_workflow_issues(repo_root))
     return ValidationReport(issues=tuple(issues), checked=checked)

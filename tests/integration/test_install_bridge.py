@@ -11,6 +11,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from tests.conftest import link_state, uv_tool_bin_dir
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
@@ -24,6 +26,13 @@ def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["VK_BRIDGE_WRAPPER_PATH"] = str(wrapper_path)
     env["UV_TOOL_DIR"] = str(tool_dir)
+    # gh#683: the BIN dir too. Without it uv links the disposable `fr` into the
+    # real `~/.local/bin` and `--force` replaces the operator's link, which
+    # dangles once pytest reaps tmp_path. `--install-bridge` reads only
+    # `uv tool dir`, so nothing here needs the link on PATH.
+    env["UV_TOOL_BIN_DIR"] = str(tmp_path / "uv-bin")
+    real_fr = uv_tool_bin_dir(os.environ) / "fr"
+    before = link_state(real_fr)
     subprocess.run(
         [
             "uv",
@@ -39,6 +48,8 @@ def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
         text=True,
         env=env,
     )
+    # gh#683: the operator's real `fr` link is untouched by the disposable install.
+    assert link_state(real_fr) == before, f"{real_fr} was relinked into {tool_dir}"
     # PATH still needs python3 for the venv-resolve fallback.
     result = subprocess.run(
         ["bash", str(INSTALL_SH), "--install-bridge"],

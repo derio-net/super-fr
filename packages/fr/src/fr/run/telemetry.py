@@ -663,6 +663,9 @@ def orchestrator_wrote_since(
     locally". The caller also requires the file's mtime to fall INSIDE one of
     these windows, which ties the bytes on disk to that command.
 
+    Claude Code reads this session's transcript; OpenCode reads its session
+    database (`_opencode_wrote_since`, gh#638). Any other harness is `None`.
+
     BE HONEST ABOUT THE LIMIT (review r1-1): this proves the orchestrator
     produced the log, in this session, during delivery. It cannot prove the
     command was a real test suite — `echo ok > log` passes. That is forgery,
@@ -670,6 +673,8 @@ def orchestrator_wrote_since(
     closing it needs a per-repo test-runner declaration fr does not have.
     """
     start = parse_timestamp(since)
+    if start is not None and detect_harness(env) == OpenCodeReader.harness:
+        return _opencode_wrote_since(env, log, start)
     session = _this_session(env)
     if start is None or session is None:
         return None
@@ -735,6 +740,77 @@ class OpenCodeReader:
     def database(self, env: Mapping[str, str]) -> Path:
         override = env.get(OPENCODE_DB_ENV)
         return Path(override) if override else Path.home() / OPENCODE_DB
+
+
+def _ms_to_dt(value: object) -> _dt.datetime | None:
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return None
+    return _dt.datetime.fromtimestamp(value / 1000, tz=_dt.UTC)
+
+
+def _opencode_wrote_since(
+    env: Mapping[str, str], log: Path, start: _dt.datetime
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`orchestrator_wrote_since` over OpenCode's database (gh#638): the
+    `(start, end)` of every `bash` tool part that WROTE `log`, started at or
+    after `start`, completed with exit 0 — in a TOP-LEVEL session, the
+    orchestrator's (a `task` subagent is a child session, `parent_id` set).
+    `None` when the database cannot be read.
+
+    Before this, OpenCode had no reader, so the gate degraded to "a fresh,
+    non-empty file" and accepted a log the agent composed with its edit tool.
+
+    No OpenCode session id reaches fr's environment, so this cannot pin THE
+    session the way the Claude Code reader does: any top-level session active
+    since the unit opened counts. Weaker than one session, still proof that an
+    orchestrator's own shell command produced the bytes — which is the drift
+    this gate closes. Exit 0 stands in for Claude Code's `is_error`, which a
+    non-zero exit sets.
+    """
+    import sqlite3
+    from contextlib import closing
+
+    from fr.usage.readers.opencode import open_ro
+
+    since_ms = int(start.timestamp() * 1000)
+    try:
+        with closing(open_ro(OpenCodeReader().database(env))) as con:
+            rows = con.execute(
+                "SELECT p.data FROM part p JOIN session s ON s.id = p.session_id "
+                "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
+                (since_ms,),
+            ).fetchall()
+    except sqlite3.Error:
+        return None
+    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    for (raw,) in rows:
+        try:
+            part = json.loads(raw) if isinstance(raw, str | bytes) else None
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(part, Mapping) or part.get("tool") != "bash":
+            continue
+        state = part.get("state")
+        state = state if isinstance(state, Mapping) else {}
+        tool_input = state.get("input")
+        command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
+        meta = state.get("metadata")
+        exit_code = meta.get("exit") if isinstance(meta, Mapping) else None
+        times = state.get("time")
+        times = times if isinstance(times, Mapping) else {}
+        began, ended = _ms_to_dt(times.get("start")), _ms_to_dt(times.get("end"))
+        if (
+            state.get("status") == "completed"
+            and type(exit_code) is int
+            and exit_code == 0
+            and isinstance(command, str)
+            and began is not None
+            and ended is not None
+            and began >= start
+            and _writes(command, log)
+        ):
+            windows.append((began, ended))
+    return windows
 
 
 __all__ = [

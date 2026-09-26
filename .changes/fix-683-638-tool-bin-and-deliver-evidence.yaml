@@ -1,0 +1,2 @@
+bump: patch
+summary: "deliver's tests= log is now verified on OpenCode against its session database, and a log under a run's .records/ dir is refused (and flagged by fr validate artifacts); the suite no longer relinks the operator's ~/.local/bin/fr (#683, #638)"

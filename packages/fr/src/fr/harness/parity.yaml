@@ -258,6 +258,50 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: deliver-tests-provenance
+    kind: interaction
+    summary: fr-goal's `deliver` names the log of a full suite the ORCHESTRATOR itself ran during delivery (`--evidence tests=<log>`, debug journal 2026-09-21 C5). `fr run resolve --step deliver` ties the log's bytes to one of the orchestrator's own completed shell commands that wrote it (`>`, `>>` or `tee`) since the unit opened, read from the harness's session store; a log composed with an edit tool, written by a subagent, or by a failing command is refused. On every harness, a log under `docs/superpowers/runs/*.records/` is refused and `fr validate artifacts` flags any non-record file there (gh#638). An unreadable session store records the log as unverified with a warning, never silently.
+    harnesses:
+      claude-code:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where the session
+              transcript is — the host-side rule refuses it inside the container
+          external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
+        scope_note: >-
+          the transcript's main-thread Bash tool_use/tool_result pair, is_error
+          not true; live-verified 2026-09-26 (a redirect-written log matched, a
+          Write-tool log did not)
+      opencode:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where opencode.db
+              is — the host-side rule refuses it inside the container
+          external: {state: enforced, scope_note: "harness and fr share the container, and its database"}
+        scope_note: >-
+          `bash` tool parts in opencode.db, status completed and exit 0, in a
+          top-level session (a `task` subagent is a child session). No session
+          id reaches fr, so ANY top-level session active since the unit opened
+          counts, not only this one. Live-verified 2026-09-26 on 1.18.32 (a
+          bash-redirect log matched, a write-tool log did not)
+      hermes:
+        state: unsupported
+        scope_note: >-
+          dropped by operator decision 2026-09-26 (gh#638): no reader for
+          Hermes' session store is built or planned; a tests= log is recorded
+          unverified with a warning naming this row. The .records/ refusal is
+          harness-neutral and still applies
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
   - id: phase-sequence
     kind: interaction
     summary: fr run enforces spec/plan before implementation (`implement` declares `needs [spec, plan]`).
