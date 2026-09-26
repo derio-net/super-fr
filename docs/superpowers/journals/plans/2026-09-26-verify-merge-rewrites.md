@@ -129,3 +129,8 @@ Reviewer aa1f12c594c75f3bf on claude-opus-5-5, re-run per operator (reviewers ru
 ### opus-f1-lsremote-pattern · finding [open] (reviewer: in scope) · ls-remote matched the bare name as a pattern (foo/<b>) (phase 1)
 
 False refusal when a suffix-sharing branch exists; local.py _branch_refs.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f2-merge-only-blob created=2026-09-27T00:12:39 phase=1 state=open review_scope=in -->
+### opus-f2-merge-only-blob · finding [open] (reviewer: in scope) · git log --raw without -m misses merge-result blobs (phase 1)
+
+Regression vs the per-commit scan; false refusal.
