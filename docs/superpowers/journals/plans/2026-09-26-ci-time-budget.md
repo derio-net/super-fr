@@ -59,3 +59,23 @@ The in-process LeastDurationAlgorithm check takes 0.36s (was 30-90s). The .test_
 ### r1-dead-recursion-guard-resolved · finding [fixed] · resolves r1-dead-recursion-guard: The PYTEST_SPLIT_INNER recursion guard was dead code (subprocesses were --collect-only) (phase 1)
 
 Removed together with the subprocesses; no nested pytest invocation remains.
+
+<!-- fr:journal kind=discovery scope=plan id=ci-budget-skipped-job-fixture-proves-155-vs-157 created=2026-09-26T17:26:28 phase=2 -->
+### ci-budget-skipped-job-fixture-proves-155-vs-157 · discovery · Captured fixture (run 36247922786) proves the 155s/157s skipped-job distinction (phase 2)
+
+tests/fixtures/ci_budget/jobs_sharded.json's `change-fragment` job (skipped, started_at 14:16:03Z, completed_at 14:16:02Z) is 2s earlier than the earliest real job's start (lint, 14:16:05Z). `wall_clock` filtering by `conclusion == "skipped"` gives 155s; a naive filter that included it (flipped to `success` in a test-only copy) gives exactly 157s, matching the orchestrator's finding precisely. Both figures are asserted directly in test_wall_clock_sharded_run_excludes_the_skipped_job_by_conclusion.
+
+<!-- fr:journal kind=discovery scope=plan id=ci-budget-pinned-clis-name-is-not-its-filename created=2026-09-26T17:26:28 phase=2 -->
+### ci-budget-pinned-clis-name-is-not-its-filename · discovery · pinned-clis.yml's own `name:` is "Pinned CLIs", not "pinned-clis" (phase 2)
+
+workflow_run.workflows matches on a workflow's `name:` field, not its filename. The plan step's prose lists the watch set loosely by filename-ish shorthand ("pinned-clis"); the real file's `name:` is "Pinned CLIs", which is what ci-budget.yml's watch list and check_watch_list's names_by_file both use. Verified by test_counted_pinned_clis_counts_every_event and the real-repo watch-list tripwire test passing.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4-t5 created=2026-09-26T17:26:28 phase=2 -->
+### no-refactor-p2-t4-t5 · discovery · no-refactor-because P2.T4, P2.T5 (phase 2)
+
+Tasks 4 (gh adapter + dedup + CLI) and 5 (workflow/config/tripwire) have no dedicated refactor step of their own; their cleanup (the one dead constant found, WORKFLOWS_DIR, plus the AGENTS.md doc note) was done in P2.T6.S1, the phase's explicit REFACTOR task.
+
+<!-- fr:journal kind=finding scope=plan id=r1-skipped-jobs-have-timestamps-resolved created=2026-09-26T17:26:28 phase=2 state=fixed resolves=r1-skipped-jobs-have-timestamps -->
+### r1-skipped-jobs-have-timestamps-resolved · finding [fixed] · resolves r1-skipped-jobs-have-timestamps: GitHub stamps skipped jobs, so wall_clock must drop jobs by conclusion == skipped, not by null timestamps (phase 2)
+
+scripts/ci_budget.py's `wall_clock`/`slowest_job` filter jobs by `conclusion == "skipped"` (see `_ran`), never by missing timestamps — GitHub does stamp skipped jobs, as the finding observed. Fixture test test_wall_clock_sharded_run_excludes_the_skipped_job_by_conclusion asserts both figures against the real captured fixture (run 36247922786): 155s with the fix, 157s if the skipped job were wrongly included.
