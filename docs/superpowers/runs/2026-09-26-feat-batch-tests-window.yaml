@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-tests-window
 workflow: fr-goal@1
 branch: feat/batch-tests-window
 started: '2026-09-26T12:58:51+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -49,8 +49,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-09-26T13:07:29+00:00'
+    state: done
+    at: '2026-09-26T13:11:05+00:00'
     members:
     - implement-phase
     - review-phase
@@ -67,12 +67,18 @@ steps:
           returned: '2026-09-26T13:07:27+00:00'
           outcome: done
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-26T13:07:29+00:00'
           harness: claude-code
           model: claude-sonnet-5
           session: 7a118265-cd9c-4a47-a464-08497a2f3b87
+          returned: '2026-09-26T13:11:05+00:00'
+          outcome: done
+        evidence:
+          review: phase1-review
+          reviewer: af94f054d5c0bb13d
+          findings: r1,r2,r3,r4,r5,r6
   journal-check:
     state: pending
   deliver:
