@@ -99,3 +99,8 @@ Opus review. Predates this change (repair already did it; readers resolve by slu
 ### r2-f8 · finding [open] (reviewer: out of scope) · Archive runs repair twice and can print warnings twice (phase 1)
 
 Opus review. Pre-existing _report_sweep + tail double call.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f9 created=2026-09-26T23:40:09 phase=1 state=open review_scope=out -->
+### r2-f9 · finding [open] (reviewer: out of scope) · v1-to-v2 migration writes spec: verbatim (phase 1)
+
+Opus review. Legacy writer, untouched here.
