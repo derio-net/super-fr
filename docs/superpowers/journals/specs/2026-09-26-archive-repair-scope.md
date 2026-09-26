@@ -104,3 +104,8 @@ spec edited in the Opus-review commit
 ### s2-2-resolved · finding [fixed] · resolves s2-2: Spec carried an empty duplicate Implementation Plans section
 
 spec edited in the Opus-review commit
+
+<!-- fr:journal kind=finding scope=spec id=s2-3-resolved created=2026-09-26T23:36:26 state=fixed resolves=s2-3 -->
+### s2-3-resolved · finding [fixed] · resolves s2-3: Canonical create output breaks #133 idempotent re-run of an old half-built folder
+
+spec edited in the Opus-review commit
