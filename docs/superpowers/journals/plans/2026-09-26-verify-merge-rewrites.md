@@ -189,3 +189,8 @@ Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f
 ### review-phase-1-opus-fixes · review · Opus review of the C1/C2/S1-S5 fix commits: 5 in-scope findings + 1 out of scope, all fixed (phase 1)
 
 Reviewer a9c7c97d8ebf515d7 on claude-opus-5-5. None let a failure pass; all were false refusals, doc drift or an unsafe default. Fixed in aa1bc209.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config-resolved-2 created=2026-09-27T00:12:58 state=open resolves=opus-f6-user-log-config out_of_scope=true -->
+### opus-f6-user-log-config-resolved-2 · finding [out-of-scope] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
+
+Reclassified back: the reviewer tagged it out of scope, and moving an out-of-scope finding to fixed is the operator's call. The one-line hardening (-c log.follow=false, --no-color) did ship in aa1bc209 with f2's change to the same git log call.
