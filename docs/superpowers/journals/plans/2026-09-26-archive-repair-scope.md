@@ -119,3 +119,8 @@ fixed in the Opus-review commits
 ### r2-f2-resolved · finding [fixed] · resolves r2-f2: rework_create is a third spec: writer with its own canonical form
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f3-resolved created=2026-09-26T23:40:17 state=fixed resolves=r2-f3 -->
+### r2-f3-resolved · finding [fixed] · resolves r2-f3: No test that a scoped archive canonicalizes the archived plan's own spec
+
+fixed in the Opus-review commits
