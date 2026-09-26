@@ -4368,3 +4368,13 @@ rows:
     levels: {}
     status: not-implemented
     notes: gh#603; added at planning, flipped at phase 2.
+  - id: plan-create-table-errors-name-header
+    capability: Plan scaffolding
+    acceptance: Every Implementation Plans table error from fr plan create names the
+      canonical '| Plan | Repo | File | Depends on |' header, so the first failure carries
+      its own fix.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
+    levels: {}
+    status: not-implemented
+    notes: gh#603; added at planning, flipped at phase 1.
