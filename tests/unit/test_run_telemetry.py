@@ -689,19 +689,20 @@ def test_a_backgrounded_write_ends_at_its_task_notification(
     ]
 
 
+@pytest.mark.parametrize("text_blocks", [False, True])
 @pytest.mark.parametrize(
     "variant",
     ["running", "failed", "nonzero", "other-id", "non-writing"],
 )
 def test_a_backgrounded_write_without_a_successful_notification_has_no_window(
-    tmp_path: Path, variant: str
+    tmp_path: Path, variant: str, text_blocks: bool
 ) -> None:
     """Spec 5.2: fail closed."""
     from tests.unit.transcript_sessions import background_rows
 
-    kw: dict = {"notified": "2026-09-21T16:09:00.000Z"}  # type: ignore[type-arg]
+    kw: dict = {"notified": "2026-09-21T16:09:00.000Z", "text_blocks": text_blocks}  # type: ignore[type-arg]
     if variant == "running":
-        kw = {}
+        kw = {"text_blocks": text_blocks}
     elif variant == "failed":
         kw["status"] = "failed"
     elif variant == "nonzero":
@@ -724,7 +725,7 @@ def test_a_backgrounded_write_without_a_successful_notification_has_no_window(
         ("L=$TMPDIR/t.log; pytest > $L", True),
         ('L=/x/t.log; pytest > "$L" 2>&1', True),
         ("pytest > $L", False),
-        ("L=/x/t.log; pytest > /y/$L", False),
+        ("pytest > /y/$UNSET/t.log", False),
         ("pytest > $L; L=/x/t.log", False),
         ("pytest > $(mktemp)", False),
         ("L=/x/other.log; pytest > $L", False),
@@ -735,3 +736,52 @@ def test_writes_resolves_shell_variable_targets(command: str, expected: bool) ->
     from fr.run.telemetry import _writes
 
     assert _writes(command, Path("/x/t.log")) is expected
+
+
+def test_exit_code_text_outside_the_summary_does_not_reject_a_success(tmp_path: Path) -> None:
+    """Review: only the notification's `<summary>` reports the exit code; suite
+    output echoed elsewhere in it must not."""
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows("2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z")
+    rows[-1]["message"]["content"] = rows[-1]["message"]["content"].replace(
+        "</task-notification>", "<result>3 tests said exit code 1</result></task-notification>"
+    )
+    assert len(_bg_windows(tmp_path, rows) or []) == 1
+
+
+def test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec 5.1 through `_verify_tests_log`: a log written inside the background
+    window is accepted; one written after the notification is refused."""
+    import datetime as dt
+
+    import click
+    import typer
+    from fr.commands.run_cmd import _verify_tests_log
+
+    from tests.unit.transcript_sessions import ORCHESTRATOR, background_rows, records, write_session
+
+    log = tmp_path / "suite.log"
+    log.write_text("1 passed\n")
+    root = tmp_path / "projects"
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z",
+        command=f"uv run pytest -q > {log} 2>&1",
+        notified="2026-09-21T16:09:00.000Z",
+    )
+    write_session(root, session_id="s-bg", rows=[*records(ORCHESTRATOR), *rows])
+    for k, v in _question_env(root, "s-bg").items():
+        monkeypatch.setenv(k, v)
+    opened = "2026-09-21T16:00:00+00:00"
+
+    def _touch(iso: str) -> None:
+        t = dt.datetime.fromisoformat(iso).timestamp()
+        os.utime(log, (t, t))
+
+    _touch("2026-09-21T16:08:30+00:00")
+    assert _verify_tests_log("deliver", str(log), tmp_path, opened=opened).startswith("suite.log@")
+    _touch("2026-09-21T16:20:00+00:00")
+    with pytest.raises((typer.Exit, click.exceptions.Exit)):
+        _verify_tests_log("deliver", str(log), tmp_path, opened=opened)
