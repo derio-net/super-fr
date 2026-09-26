@@ -124,3 +124,8 @@ fixed in 33d01601
 ### o2-resolved · finding [fixed] · resolves o2: F2 timeout-moved foreground command not recognised as background (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o3-resolved created=2026-09-26T23:51:03 state=fixed resolves=o3 -->
+### o3-resolved · finding [fixed] · resolves o3: F3 assignment scan resolves variables the shell would not (Opus)
+
+fixed in 33d01601
