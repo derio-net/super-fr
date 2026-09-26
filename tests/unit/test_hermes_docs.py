@@ -8,7 +8,8 @@ first match wins) and has no include mechanism — so HERMES.md *shadows*
 1. it must point at `AGENTS.md` (which must still exist) so the full guide is
    one tool call away rather than silently lost;
 2. it must inline the invariants that are unsafe to discover late (isolation,
-   never commit to main, version bump, regenerate mirrors).
+   never commit to main, change fragment instead of a version edit, regenerate
+   mirrors).
 
 The README must document how to install into a Hermes Agent, mirroring the
 OpenCode opt-in note — an undocumented install path is invisible to consumers.
@@ -41,10 +42,31 @@ def test_hermes_md_inlines_the_non_negotiables() -> None:
     for needle, why in [
         ("fr isolation up", "isolation entry is the primary invariant"),
         (".fr-isolation", "the marker/gate must be named"),
-        ("bump-version.py", "the release rule must be inline"),
+        (".changes/", "the release rule (add a change fragment) must be inline"),
         ("sync-hermes.py", "generated mirrors must not be hand-edited"),
     ]:
         assert needle in text, f"HERMES.md must inline {needle!r} — {why}"
+
+
+def test_hermes_md_states_main_protection_accurately() -> None:
+    """Spec 2026-09-26-version-bump-churn §3.C: the ruleset forbids only
+    force-push and deletion, so "branch protection blocks direct pushes"
+    overstates it; the process forbids direct commits and only the release
+    bot commits to `main`."""
+    text = " ".join(HERMES_MD.read_text().split())
+    assert "Branch protection blocks direct pushes" not in text, (
+        "the ruleset does not block direct pushes; only the process forbids them"
+    )
+    for needle in ("forbids only force-push and deletion", "only the release bot commits"):
+        assert needle in text, f"HERMES.md must state {needle!r} (spec §3.C)"
+
+
+def test_hermes_md_release_rule_never_runs_bump_version_in_a_pr() -> None:
+    text = " ".join(HERMES_MD.read_text().split())
+    assert "bump-version.py {patch|minor|major}" not in text, (
+        "a PR never runs bump-version.py — release.yml assigns the number"
+    )
+    assert "workflow_dispatch" in text, "the explicit-number escape must be named"
 
 
 def test_hermes_md_documents_the_first_run_model_question() -> None:

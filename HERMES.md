@@ -23,18 +23,25 @@ fr isolation up --branch feat/<slug>     # then edit inside the worktree it prin
 Escapes, in preference order: enter isolation; add an operator-managed path to
 `.fr-isolation-allow`; `FR_BASE_OK=1` for one deliberate base-clone edit.
 
-**2. Never commit to `main`.** Branch → PR → review → merge. Branch protection
-blocks direct pushes, including housekeeping.
+**2. Never commit to `main`.** Branch → PR → review → merge, including
+housekeeping. The process forbids direct commits; the ruleset forbids only
+force-push and deletion; only the release bot commits to `main`.
 
-**3. Bump the version when plugin behavior changes.** Any PR touching
-`plugins/*/skills/**`, `packages/*/src/**`, `plugins/super-fr/rules/**`, or
-`scripts/install.sh` must bump before merge — the installer caches by version.
+**3. Declare a release with a change fragment — never edit a version.** Any PR
+touching `plugins/*/skills/**`, `packages/*/src/**`, `plugins/super-fr/rules/**`,
+or `scripts/install.sh` (plus `install-validator-wrapper.sh` /
+`validate-plans.sh`) adds one file, `.changes/<branch-slug>.yaml`
+(`feat/foo` → `feat-foo.yaml`):
 
-```bash
-uv run --no-project python scripts/bump-version.py {patch|minor|major}
+```yaml
+bump: patch            # patch | minor | major
+summary: one line, as it should read in the release notes
 ```
 
-Do **not** hand-edit version-bearing manifests. Docs/tests-only PRs don't bump.
+A PR never edits a version value and never runs `scripts/bump-version.py` —
+the `change-fragment` CI job refuses both. `release.yml` assigns the number on
+merge to `main` and tags it; `workflow_dispatch` with an explicit `version` is
+the escape for a specific number. Docs/tests-only PRs need no fragment.
 
 **4. Never hand-edit a generated mirror.** `.hermes/`, `.opencode/skills/`,
 `.opencode/instructions/`, `.opencode/commands/` are generated. Edit the
@@ -59,7 +66,8 @@ uv run pytest -q --no-cov                     # full suite (~6 min on macOS)
 uv run ruff check packages/ tests/ scripts/
 uv run ruff format packages/ tests/ scripts/
 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
-uv run --no-project python scripts/bump-version.py --check
+uv run --no-project python scripts/bump-version.py --check   # version-sync: read-only
+python scripts/check-change-fragment.py origin/main           # the change-fragment job
 ```
 
 The suite is subprocess-heavy (real `git`/`install.sh` runs), so it is slow

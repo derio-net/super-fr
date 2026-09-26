@@ -5,16 +5,6 @@ defaults:
   launch:
     runner: herdr
     harness: claude
-# Version reservations (§3.F): mirrors scripts/bump-version.py's globs. A file
-# missed here fails safe: merge treats its conflict as outside the version
-# files and stops the queue.
-version:
-  source: {file: pyproject.toml, key: project.version}
-  files:
-    - "pyproject.toml"
-    - "packages/*/pyproject.toml"
-    - "plugins/*/.claude-plugin/plugin.json"
-    - ".claude-plugin/*.json"
-    - "packages/fr-opencode-plugin/package.json"
-    - "uv.lock"
-  set: "uv run --no-project python scripts/bump-version.py {version}"
+# No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
+# super-fr PRs never edit a version, so a batch reserves no number. The worker
+# adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.
