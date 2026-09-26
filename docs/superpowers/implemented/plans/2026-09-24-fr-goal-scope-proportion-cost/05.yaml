@@ -32,10 +32,12 @@ state:
       ticked_at: '2026-09-25T13:04:45+00:00'
       note: null
     P5.T1.S2:
-      state: ' '
-      ticked_at: null
+      state: x
+      ticked_at: '2026-09-26T11:17:09+00:00'
       note: null
   completion:
-    at: null
-    note: null
+    at: '2026-09-26T11:17:40+00:00'
+    note: 'Both live walks done: Claude Code (host-worktree) run 2026-09-25-fix-606-writes-dot-dir-prefix
+      / PR #609; OpenCode (devcontainer) run 2026-09-26-fix-659-isolation-gc-fetch
+      / PR #679. See x-p5-live-walk, x-p5-opencode-walk.'
     observed_prs: []

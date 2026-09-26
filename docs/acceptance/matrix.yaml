@@ -4020,9 +4020,10 @@ rows:
       - super-fr:tests/unit/test_run_cost_cmd.py
       - super-fr:tests/unit/test_usage_capture.py
     status: skipped
-    notes: 'Live walk 2026-09-26: Claude Code shows per-step turns and tokens but no
-      USD (transcripts carry no cost; fr invents no price) and omits subagents (#637);
-      OpenCode captured no session (#636). Unit-pinned only until both are fixed.'
+    notes: 'Both harnesses walked live: Claude Code (PR #609) and OpenCode in devcontainer
+      mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
+      skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
+      an explicit session binding until #636.'
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
