@@ -104,3 +104,8 @@ Now the trailing (exit code N) only.
 ### o6 · finding [open] (reviewer: in scope) · F7 test gaps, weak assertion, fixtures not captured (Opus) (phase 1)
 
 Added attachment, timeout-ack, misresolution, duplicate, ordering, sidechain cases; strengthened assertion; 12 new tests confirmed red on the old code.
+
+<!-- fr:journal kind=finding scope=plan id=o7 created=2026-09-26T23:51:00 phase=1 state=open review_scope=in -->
+### o7 · finding [open] (reviewer: in scope) · F8/F9 stale docstring; a background window can span the whole run (Opus) (phase 1)
+
+Docstring updated with the window-length limit.
