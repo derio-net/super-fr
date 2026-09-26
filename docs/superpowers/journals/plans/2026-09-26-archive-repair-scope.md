@@ -59,3 +59,8 @@ regression pins are intended by the spec; nothing this change caused
 ### r1-n2-resolved · finding [out-of-scope] · resolves r1-n2: opencode live integration tests fail in this environment (phase 1)
 
 environmental opencode binary failure; diff does not touch what they exercise
+
+<!-- fr:journal kind=finding scope=plan id=r2-f1 created=2026-09-26T23:39:56 phase=1 state=open review_scope=in -->
+### r2-f1 · finding [open] (reviewer: in scope) · fr repair stopped shortening ambiguous lifecycle-root full paths (phase 1)
+
+Opus review. Guard now applies only to existing files outside SPEC_ROOTS; test_repair_still_shortens_an_ambiguous_lifecycle_path.
