@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-usage-opencode-empty
 workflow: fr-goal@1
 branch: feat/batch-usage-opencode-empty
 started: '2026-09-26T13:00:36+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -43,7 +43,11 @@ steps:
           returned: '2026-09-26T13:06:48+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-26T13:06:51+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
