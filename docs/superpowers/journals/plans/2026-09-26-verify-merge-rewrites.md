@@ -144,3 +144,8 @@ Design text contradicted the code after C1/C2.
 ### opus-f4-docstrings-three · finding [open] (reviewer: in scope) · docstrings say three signals; there are four (phase 1)
 
 verify_merge, verify_merge_reaped.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f5-default-true created=2026-09-27T00:12:41 phase=1 state=open review_scope=in -->
+### opus-f5-default-true · finding [open] (reviewer: in scope) · _verdict defaulted branch_fetched to True (phase 1)
+
+A future caller omitting it would pass without a branch fetch.
