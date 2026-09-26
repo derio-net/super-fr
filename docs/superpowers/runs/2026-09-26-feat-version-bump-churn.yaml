@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-09-26-feat-version-bump-churn
+workflow: fr-goal@1
+branch: feat/version-bump-churn
+started: '2026-09-26T05:53:18+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
