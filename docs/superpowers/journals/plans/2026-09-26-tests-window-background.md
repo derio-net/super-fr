@@ -79,3 +79,8 @@ Reviewer a5d182fc33b6777d7 (opus). Re-run because phase1-review ran on Sonnet. C
 ### o1 · finding [open] (reviewer: in scope) · F1 queued-attachment task-notification shape never seen (Opus code review) (phase 1)
 
 45 of ~240 real notifications arrive as attachment/queued_command and got no window. Fixed.
+
+<!-- fr:journal kind=finding scope=plan id=o2 created=2026-09-26T23:50:56 phase=1 state=open review_scope=in -->
+### o2 · finding [open] (reviewer: in scope) · F2 timeout-moved foreground command not recognised as background (Opus) (phase 1)
+
+36 real cases; keyed on toolUseResult.backgroundTaskId (set on 187/187 real acks). Fixed; also closes F6.
