@@ -3286,3 +3286,79 @@ def test_reap_hazard_ignores_lines_a_later_merge_rewrote_but_flags_unlanded_cont
     _commit_in_worktree(wt, "report.md", "head\nfoo\nbar\nbaz\n")  # never landed
     hazard = target._reap_hazard(st)
     assert hazard is not None and hazard.kind == "unlanded-content"
+
+
+# ---------- the release bot consumes the change fragment (#666 / #665) ----------
+# Every PR ADDS `.changes/<slug>.yaml`; the next `release: vX.Y.Z` commit on the
+# default branch DELETES it. The branch's fragment is then absent from base.
+
+_FRAGMENT = "bump: patch\nsummary: fix a thing\n"
+
+
+def _release_consumes_fragment(repo: Path, fragment: str) -> None:
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "rm", "-q", fragment)
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "release: v1.2.3")
+
+
+def _fragment_branch(repo: Path) -> None:
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / ".changes").mkdir(exist_ok=True)
+    _commit(repo, ".changes/feat-x.yaml", _FRAGMENT, "add fragment")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+
+
+def test_branch_changes_present_fragment_consumed_by_release_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_verify_merge_fragment_consumed_by_release_is_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+    assert res["missing"] == []
+
+
+def test_branch_changes_present_fragment_that_never_landed_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / ".changes").mkdir(exist_ok=True)
+    _commit(repo, ".changes/feat-x.yaml", _FRAGMENT, "add fragment")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "unrelated main commit")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == [".changes/feat-x.yaml"]
+
+
+def test_branch_changes_present_orphan_code_file_still_missing_after_fragment_consumed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "orphan.py", "late\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["orphan.py"]
