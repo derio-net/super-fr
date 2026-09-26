@@ -99,3 +99,8 @@ Spec citations now name symbols (capture.py::candidates etc.), not lines.
 ### o3-resolved · finding [fixed] · resolves o3: deliver/closeout/archive are two capture sites, not three
 
 Spec 2 and 3.3 name the deliver resolve and fr archive (event closeout).
+
+<!-- fr:journal kind=finding scope=spec id=o4-resolved created=2026-09-26T23:36:48 state=fixed resolves=o4 -->
+### o4-resolved · finding [fixed] · resolves o4: Older fr re-capture keeps the placeholder beside real sessions
+
+Added to spec 5 Risks as an accepted mixed-version effect.
