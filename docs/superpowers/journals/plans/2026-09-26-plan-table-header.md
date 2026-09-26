@@ -109,3 +109,8 @@ Accurate as regression coverage; not caused by this change.
 ### r1-1-resolved-2 · finding [fixed] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
 
 Consumer landed in phase 2 (_ensure_section_text), as planned.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved-2 created=2026-09-26T09:54:04 state=fixed resolves=r1-2 -->
+### r1-2-resolved-2 · finding [fixed] · resolves r1-2: migrate.py:761 still hard-codes the header
+
+migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3).
