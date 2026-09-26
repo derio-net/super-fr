@@ -159,3 +159,8 @@ pre-existing; not caused by this change
 ### r1-n1-resolved-2 · finding [refuted] · resolves r1-n1: Some tests are regression pins, pass before the fix
 
 Closeout triage: regression pins that pass before the fix are intended by spec §4 (repo-wide paths must stay); not a defect, so no issue filed.
+
+<!-- fr:journal kind=finding scope=plan id=r1-n2-resolved-2 created=2026-09-27T00:02:46 state=refuted resolves=r1-n2 -->
+### r1-n2-resolved-2 · finding [refuted] · resolves r1-n2: opencode live integration tests fail in this environment
+
+Closeout triage: not reproducible — tests/integration -k opencode passed 9/9 on origin/main @ 5cb4bc56 (2026-09-27); the phase-1 failure was environmental.
