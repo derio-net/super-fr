@@ -3501,9 +3501,16 @@ def test_branch_changes_present_orphan_code_file_still_missing_after_fragment_co
 
 _SP = "docs/superpowers"
 _ARCHIVED_DOCS = {
+    # S5: all FIVE archived kinds, not just three — a run cursor and a usage
+    # capture behave the same as plans/specs/journals for this generic
+    # git-mv+rewrite fixture (the usage-specific RE-CAPTURE case, where the
+    # archive step doesn't just append but REPLACES bytes, gets its own test
+    # below per review S1).
     f"{_SP}/plans/p1/01.yaml": "phase: 1\nsteps: [a, b]\n",
     f"{_SP}/specs/s1.md": "# spec\nbody line\n",
     f"{_SP}/journals/specs/s1.md": "# journal\nfinding one\n",
+    f"{_SP}/runs/r1.yaml": "run: r1\ncursor: deliver\n",
+    f"{_SP}/usage/r1.yaml": "run: r1\ncaptures: []\n",
 }
 
 
@@ -3646,3 +3653,86 @@ def test_branch_changes_present_non_fr_docs_get_no_archive_alternate(tmp_path: P
     _commit(repo, "docs/implemented/guide.md", "guide\n", "elsewhere")
     res = branch_changes_present(subprocess_runner, repo, "feature", "main")
     assert res.missing == ["docs/guide.md"]
+
+
+def test_branch_changes_present_path_only_ever_reachable_via_the_archive_commit(
+    tmp_path: Path,
+) -> None:
+    """S2: isolates what ONLY §C (`_archived_path`) catches, distinct from what
+    §A's own multi-commit blob-equality history scan already covers for free.
+
+    Here the file's ORIGINAL path never appears ANYWHERE in the base's history
+    — not even in the squash commit — because the branch renamed it away
+    BEFORE the squash (it never landed at the original path at all, only ever
+    reaching main via a later archive-shaped commit at the implemented path
+    with DIFFERENT content). §A's same-path scan has nothing to find; only
+    checking the archived path lands it."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "code.py", "x = 1\n", "code")
+    _squash_merge(repo, "feature", "squash feature")
+    rel = f"{_SP}/plans/p2/01.yaml"
+    _git(repo, "checkout", "-q", "feature")
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text("phase: 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "closeout: add plan")
+    # main NEVER holds `rel` at its original path — the archive commit lands it
+    # DIRECTLY under implemented/, with content that also differs from the
+    # branch's own bytes (a closeout line the branch itself never wrote).
+    dst = rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+    _git(repo, "checkout", "-q", "main")
+    (repo / dst).parent.mkdir(parents=True, exist_ok=True)
+    (repo / dst).write_text("phase: 1\nclosed: true\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "archive")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_usage_recaptured_before_archive_still_lands_via_squash_blob(
+    tmp_path: Path,
+) -> None:
+    """S1: unlike plan/spec/journal (a pure `git mv`, no rewrite), `fr archive`
+    RE-CAPTURES the usage file (`upsert_capture` can REPLACE a host's entry,
+    not just append) before moving it — so the archived path's final content
+    can differ entirely from the branch's own blob. It still lands via §A: the
+    squash commit preserves the branch's ORIGINAL blob at the original path,
+    in history, independent of what a later commit does to a different path."""
+    repo = make_repo(tmp_path)
+    rel = f"{_SP}/usage/run-1.yaml"
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text("run: run-1\ncaptures:\n- host: h-aaa\n  dollars: 1.0\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "usage capture")
+    _squash_merge(repo, "feature", "squash feature")
+    # A SEPARATE main-side archive commit re-captures — REPLACING the host's
+    # entry outright, not appending — then moves it.
+    _archive_on_main(
+        repo,
+        [rel],
+        rewrite={rel: "run: run-1\ncaptures:\n- host: h-aaa\n  dollars: 9.9\n"},
+    )
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_merged_by_content_does_not_classify_unlanded_content_as_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: `_merged_by_content` (gc's PR-less classifier, the third caller of
+    `branch_changes_present`) must not read genuinely unlanded content as
+    merged just because §A/§C now recognize MORE content as landed elsewhere —
+    an unrelated later commit on main must not paper over a file the branch
+    itself never got onto main."""
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/wip")
+    _commit_in_worktree(wt, "wip.txt", "not on main yet\n")
+    _land_on_origin_main(repo, "unrelated.txt", "unrelated\n")  # main moves on, unrelated
+
+    st = load_state(repo, "feat/wip")
+    assert st is not None
+    assert target._merged_by_content(st) is False
