@@ -451,3 +451,8 @@ Filed at closeout as #645.
 ### r3-f14-resolved-2 · finding [deferred → #646] · resolves r3-f14: Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash)
 
 Filed at closeout as #646.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-flaky-columns-resolved-2 created=2026-09-26T07:21:39 state=open resolves=deliver-flaky-columns tracked_by=#647 -->
+### deliver-flaky-columns-resolved-2 · finding [deferred → #647] · resolves deliver-flaky-columns: test_an_inherited_columns_does_not_freeze_module_consoles timed out once under -n auto: its child pytest printed '1 passed' then was killed at the 120 s timeout on a saturated host
+
+Filed at closeout as #647.
