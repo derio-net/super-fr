@@ -1,0 +1,11 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-isolation-timeouts
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: p1-r1, phase: 1, title: "Phase 1 tests depend on GIT_SSH* being set in the environment", review_scope: in, body: "The recorder captured every runner call, and _network_env adds a git config probe when GIT_SSH_COMMAND/GIT_SSH are unset, so both tests failed in a clean env. Reproduced with env -u."}
+  - {kind: review, id: p1-review, phase: 1, title: "independent review of phase 1: 1 finding", body: "Independent reviewer confirmed the local.py change is correct and existing callers unchanged; raised p1-r1 (in scope), fixed by selecting recorded calls by argv."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "The recorder now records only the git status call; both tests pass with and without GIT_SSH* set."}
+evidence: {review: p1-review, reviewer: aca4bff05ad38be9e, model: claude-sonnet-5}

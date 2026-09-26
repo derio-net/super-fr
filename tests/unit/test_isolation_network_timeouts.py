@@ -24,8 +24,11 @@ class _Recorder:
         capture: bool = True,
         **kw: Any,
     ) -> subprocess.CompletedProcess[str]:
-        self.cwds.append(cwd)
-        self.kwargs.append(kw)
+        # Select by argv: `_network_env` may probe `git config` first, which is
+        # not the call under test (and is skipped when GIT_SSH* is set).
+        if argv[:2] == ["git", "status"]:
+            self.cwds.append(cwd)
+            self.kwargs.append(kw)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
