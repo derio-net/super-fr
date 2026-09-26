@@ -147,8 +147,10 @@ def started_run(tmp_path: Path) -> Path:
 
 
 def implement_record(**overrides: object) -> dict[str, object]:
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
     record: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": RECORD_SCHEMA_VERSION,
         "run": RUN,
         "step": "implement-phase",
         "item": "phase/1",

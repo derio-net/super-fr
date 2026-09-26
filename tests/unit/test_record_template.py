@@ -59,6 +59,74 @@ def test_pickup_carries_the_template_for_the_runs_unit(tmp_path: Path) -> None:
     assert "--record docs/superpowers/runs/r1.records/implement-phase__phase-1.yaml" in out.stdout
 
 
+_SHIPPED_MANIFEST = (
+    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+)
+
+
+def _all_manifest_steps():
+    from fr.workflow.model import parse_manifest
+
+    manifest = parse_manifest(_SHIPPED_MANIFEST.read_text())
+    pairs = []
+    for step in manifest.steps:
+        pairs.append((step, None))
+        for member in step.steps:
+            pairs.append((member, step))
+    return pairs
+
+
+def test_a_template_for_every_shipped_step_parses_under_the_live_schema_version() -> None:
+    """Spec §3.B, Test Plan item 5: bumping `RECORD_SCHEMA_VERSION` must not
+    make a freshly rendered template fail its own parse."""
+    from fr.record.model import RECORD_SCHEMA_VERSION, allowed_sections, parse_record
+    from fr.record.template import render_template
+
+    for step, group in _all_manifest_steps():
+        emits = tuple(step.emits) or (tuple(group.emits) if group is not None else ())
+        allowed = allowed_sections(step, group)
+        text = render_template(
+            run="r1",
+            step=step.id,
+            item=None,
+            allowed=allowed,
+            tick_ids=[],
+            refactor_tasks=[],
+            evidence=list(step.evidence),
+            emitted=[n for n in ("spec", "plan", "pr") if n in emits],
+            resolve=f"fr run resolve r1 --step {step.id}",
+            gated=step.gate == "operator",
+        )
+        record = parse_record(text)
+        assert record.schema_version == RECORD_SCHEMA_VERSION, step.id
+
+
+def test_a_gated_steps_template_carries_a_commented_questions_hint() -> None:
+    """§3.B: `render_template` puts a commented `questions:` hint on any
+    gated step's template — `brainstorm` is the one shipped example."""
+    from fr.record.model import allowed_sections
+    from fr.record.template import render_template
+
+    gated = [step for step, _ in _all_manifest_steps() if step.gate == "operator"]
+    assert gated, "no gated step in the shipped manifest — fixture is stale"
+    for step in gated:
+        text = render_template(
+            run="r1",
+            step=step.id,
+            item=None,
+            allowed=allowed_sections(step),
+            tick_ids=[],
+            refactor_tasks=[],
+            evidence=list(step.evidence),
+            emitted=[],
+            resolve=f"fr run resolve r1 --step {step.id}",
+            gated=True,
+        )
+        assert "questions:" in text
+        lines = [line for line in text.splitlines() if "questions:" in line]
+        assert any(line.strip().startswith("#") for line in lines)
+
+
 def test_a_stale_session_resumes_an_in_progress_record(tmp_path: Path) -> None:
     root = started_run(tmp_path)
     # Session A: one tick and one decision, committed with its work, then gone.

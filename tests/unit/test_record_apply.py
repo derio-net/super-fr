@@ -125,8 +125,10 @@ def _implemented(tmp_path: Path, **overrides: object) -> Path:
 
 
 def _review_record(**overrides: object) -> dict[str, object]:
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
     record: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": RECORD_SCHEMA_VERSION,
         "run": RUN,
         "step": "review-phase",
         "item": "phase/1",

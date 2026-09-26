@@ -423,8 +423,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # One step's bookkeeping, as data (spec
             # `2026-09-25-lean-cost-aware-process-design` §5.C.1). Transient:
             # tracked while its step runs, deleted by the `fr run resolve
-            # --record` that applies it. Born at 1.
-            current_version=1,
+            # --record` that applies it. Born at 1; 1 -> 2 for `questions`
+            # (spec `2026-09-26-dynamic-brainstorm-question-rounds-design`
+            # §3.B), migration `fr.artifacts.record_questions`.
+            current_version=2,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,
