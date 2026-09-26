@@ -139,3 +139,8 @@ Regression vs the per-commit scan; false refusal.
 ### opus-f3-spec-ab-stale · finding [open] (reviewer: in scope) · spec §A/§B still describe rev-list and the old fetch fallback (phase 1)
 
 Design text contradicted the code after C1/C2.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f4-docstrings-three created=2026-09-27T00:12:40 phase=1 state=open review_scope=in -->
+### opus-f4-docstrings-three · finding [open] (reviewer: in scope) · docstrings say three signals; there are four (phase 1)
+
+verify_merge, verify_merge_reaped.
