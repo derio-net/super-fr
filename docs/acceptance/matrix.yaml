@@ -4071,6 +4071,16 @@ rows:
     notes: 'gh#606. Unit: test_a_relative_dot_directory_log_is_matched (red→green) and
       test_writes_matches_relative_targets_segment_wise pin spec §2 in CI; live proof
       is this change''s own deliver.'
+  - id: plan-one-phase-is-first-class
+    capability: fr-goal-methodology
+    acceptance: A plan with one agentic phase self-reviews clean with no skeleton marker
+      or override; the skeleton gate applies only to plans with two or more agentic
+      phases
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-one-phase-plans-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
