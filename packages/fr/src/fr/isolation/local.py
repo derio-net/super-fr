@@ -2021,11 +2021,13 @@ class LocalWorktreeDevcontainerTarget:
                 env["GIT_SSH_COMMAND"] = _BATCH_SSH
         return env
 
-    def _run_network(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
+    def _run_network(
+        self, argv: list[str], cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]:
         """A bounded, non-interactive git call against origin. A timeout comes
         back as a non-zero, non-2 exit — `unknown`, never `absent`."""
         return self.run(
-            argv, cwd=self.repo_root, env=self._network_env(), timeout=_NETWORK_TIMEOUT_S
+            argv, cwd=cwd or self.repo_root, env=self._network_env(), timeout=_NETWORK_TIMEOUT_S
         )
 
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
