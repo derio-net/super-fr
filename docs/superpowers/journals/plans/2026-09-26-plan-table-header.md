@@ -124,3 +124,8 @@ Filed at closeout as #661.
 ### r1-4-resolved-2 · finding [deferred → #662] · resolves r1-4: no spec no-mutation assertion in the no-table create test
 
 Filed at closeout as #662.
+
+<!-- fr:journal kind=finding scope=plan id=r3-1-resolved-2 created=2026-09-26T09:54:06 state=open resolves=r3-1 tracked_by=#663 -->
+### r3-1-resolved-2 · finding [deferred → #663] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there
+
+Filed at closeout as #663.
