@@ -154,3 +154,13 @@ Operator (2026-09-25): the forge should be generic. Asked whether collect should
 ### d-reserve-order · decision · Reservations follow dispatch sequence; explicit order is a merge-time constraint (§3.D)
 
 Adopted from the phase-3 implementer's plan decision p3-reserve-order and verified sound by the phase-3 reviewer (finding r3-f8). §3.D used to say both 'dispatch-time order is explicit order, then dispatch sequence' and 'the reservation is the next version after the highest of (source, every live reservation)'; read together they conflict when a batch with order 1 is dispatched after an unordered one. Chosen: the formula. A reservation is the next version after max(origin source version, every live reservation), bumped by the batch's level, in dispatch sequence; reusing a number already briefed to another live run would make two runs build the same version, and a monotonic reservation never does. The explicit order applies at merge time: reconcile (§3.F step 3b) re-slots any PR whose version is not its slot in the real order. Spec §3.D and Test Plan 11 amended to match.
+
+<!-- fr:journal kind=finding scope=spec id=r2-13-resolved-2 created=2026-09-26T07:21:08 state=fixed resolves=r2-13 -->
+### r2-13-resolved-2 · finding [fixed] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
+
+Closed at closeout without an issue: the r2-1 open-PR join fills checks/mergeable/merge_state for linked open PRs (as r2-13-resolved already recorded).
+
+<!-- fr:journal kind=finding scope=spec id=r2-13-resolved-3 created=2026-09-26T07:21:35 state=open resolves=r2-13 tracked_by=#648 -->
+### r2-13-resolved-3 · finding [deferred → #648] · resolves r2-13: Linked PRs never carry checks/mergeable/merge_state in facts (pre-existing collect behaviour)
+
+Filed at closeout as #648 (narrowed to linked non-open PRs; open ones are filled by the r2-1 join).

@@ -431,3 +431,28 @@ In scope, fixed with tests: r3-f1 (HIGH dispatch launched then refused), r3-f2 (
 ### deliver-flaky-columns-resolved · finding [out-of-scope] · resolves deliver-flaky-columns: test_an_inherited_columns_does_not_freeze_module_consoles timed out once under -n auto: its child pytest printed '1 passed' then was killed at the 120 s timeout on a saturated host
 
 Pre-existing test (#615); this branch does not touch its probe's imports (tests/conftest.py, fr.commands.journal_cmd, fr.cli unchanged vs main); passes 6/6 in isolation and in the delivery run. A load-sensitive timeout, not a regression.
+
+<!-- fr:journal kind=finding scope=plan id=r1-5-resolved-2 created=2026-09-26T07:21:36 state=open resolves=r1-5 tracked_by=#643 -->
+### r1-5-resolved-2 · finding [deferred → #643] · resolves r1-5: fr_cncd missing from test_fr_imports_no_siblings banned set (pre-existing)
+
+Filed at closeout as #643.
+
+<!-- fr:journal kind=finding scope=plan id=r1-6-resolved-2 created=2026-09-26T07:21:37 state=open resolves=r1-6 tracked_by=#644 -->
+### r1-6-resolved-2 · finding [deferred → #644] · resolves r1-6: Registering herdr under fr.runners lets fr apply --to herdr pass the runner-name check and project runner:herdr onto phase issues it will never take
+
+Filed at closeout as #644.
+
+<!-- fr:journal kind=finding scope=plan id=r2p-envtest-resolved-2 created=2026-09-26T07:21:37 state=open resolves=r2p-envtest tracked_by=#645 -->
+### r2p-envtest-resolved-2 · finding [deferred → #645] · resolves r2p-envtest: test_install_bridge_flag_writes_wrapper fails in the container: the container's uv-tool fr python cannot import fr_vk.bridge
+
+Filed at closeout as #645.
+
+<!-- fr:journal kind=finding scope=plan id=r3-f14-resolved-2 created=2026-09-26T07:21:39 state=open resolves=r3-f14 tracked_by=#646 -->
+### r3-f14-resolved-2 · finding [deferred → #646] · resolves r3-f14: Live reservations only see the current scope's judgements; a repo and an org triage can reserve the same number (reconcile at merge still prevents a clash)
+
+Filed at closeout as #646.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-flaky-columns-resolved-2 created=2026-09-26T07:21:39 state=open resolves=deliver-flaky-columns tracked_by=#647 -->
+### deliver-flaky-columns-resolved-2 · finding [deferred → #647] · resolves deliver-flaky-columns: test_an_inherited_columns_does_not_freeze_module_consoles timed out once under -n auto: its child pytest printed '1 passed' then was killed at the 120 s timeout on a saturated host
+
+Filed at closeout as #647.
