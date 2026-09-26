@@ -24,3 +24,13 @@ Independent reviewer confirmed the local.py change is correct and existing calle
 ### p1-r1-resolved · finding [fixed] · resolves p1-r1: Phase 1 tests depend on GIT_SSH* being set in the environment (phase 1)
 
 The recorder now records only the git status call; both tests pass with and without GIT_SSH* set.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-26T07:54:47 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the 'Deliberately a SEPARATE branch' docstring wording is still true after the swap; three call-site swaps, nothing to consolidate
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-09-26T07:54:47 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+matrix move, version bump and gate only; no code to clean
