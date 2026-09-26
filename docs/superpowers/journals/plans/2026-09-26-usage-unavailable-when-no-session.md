@@ -69,3 +69,8 @@ e.g. implemented/usage/2026-09-26-fix-models-opencode-noop-505.yaml. Archived ar
 ### cr5 · finding [open] (reviewer: in scope) · redundant FR_HOSTNAME monkeypatch in a new capture test (phase 1)
 
 Same nit as p1-r2 (left as recorded); the env dict already carries the value.
+
+<!-- fr:journal kind=review scope=plan id=p1-review-opus created=2026-09-26T23:37:06 phase=1 -->
+### p1-review-opus · review · Opus fresh-context whole-feature code review: 5 findings (phase 1)
+
+Re-run on claude-opus-5-5 per operator correction (the earlier review-phase ran on claude-sonnet-5 and is kept as-is). Raised cr1-cr5 (0 critical, 1 important, 4 minor). Verified: no shape change, every usage-file reader handles session '', tests fail without the fix. Verdict: ready with fixes.
