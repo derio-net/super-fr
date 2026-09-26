@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-09-26-feat-ci-time-budget
+workflow: fr-goal@1
+branch: feat/ci-time-budget
+started: '2026-09-26T12:39:41+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
