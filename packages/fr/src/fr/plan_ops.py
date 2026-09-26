@@ -198,9 +198,10 @@ def create(
     spec_str = str(spec) if spec is not None else None
 
     # Pre-flight: validate every external precondition BEFORE mutating the
-    # filesystem. A spec missing its '## Implementation Plans' section must
-    # fail loud here — not after the folder is half-built — so a re-run after
-    # adding the section isn't blocked by a stranded folder (#133). Mirrors how
+    # filesystem. A spec whose '## Implementation Plans' table is malformed
+    # must fail loud here — not after the folder is half-built — so a re-run
+    # after fixing it isn't blocked by a stranded folder (#133). (A spec with
+    # no section at all is fine: `create` writes it below.) Mirrors how
     # `fr apply` validates the diff before `--yes` touches GitHub. Same
     # doctrine for phase numbering and tier below: their schema gates
     # (PhaseHeader's `ge=1` and `Literal`) would only reject at the post-write
@@ -270,6 +271,9 @@ def create(
             written.append(journal_p)
 
     if spec_path is not None:
+        spec_text = spec_path.read_text()
+        if not _SPEC_TABLE_HEADER_RE.search(spec_text):
+            spec_path.write_text(_ensure_section_text(spec_text))
         _append_spec_row(
             spec_path,
             plan_name=slug,
@@ -395,7 +399,18 @@ _SPEC_TABLE_HEADER_RE = re.compile(r"^## Implementation Plans\s*$", re.MULTILINE
 # `Phases | Status | Created`) still accepts the append silently, producing a
 # table that lies about what each column holds. Both entry points below check
 # the header names against this contract before writing.
-_CANONICAL_HEADER_CELLS = ("plan", "repo", "file", "depends on")
+_CANONICAL_HEADER_LINE = "| Plan | Repo | File | Depends on |"
+_CANONICAL_HEADER_CELLS = tuple(
+    c.strip().lower() for c in _CANONICAL_HEADER_LINE.strip("|").split("|")
+)
+_CANONICAL_HEADER_SEPARATOR = (
+    "|" + "|".join("-" * (len(c) + 2) for c in _CANONICAL_HEADER_CELLS) + "|"
+)
+
+
+def _header_hint() -> str:
+    """The one phrase every table error uses to name the header it wants."""
+    return f"expected '{_CANONICAL_HEADER_LINE}' followed by its separator row"
 
 
 def _first_table_line(text: str, m: re.Match[str]) -> str | None:
@@ -411,30 +426,43 @@ def _first_table_line(text: str, m: re.Match[str]) -> str | None:
 def _check_table_header(spec_path: Path, text: str, m: re.Match[str]) -> None:
     header_line = _first_table_line(text, m)
     if header_line is None:
-        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+        raise PlanEditError(
+            f"{spec_path}: '## Implementation Plans' has no table to append to; {_header_hint()}."
+        )
     cells = tuple(c.strip().lower() for c in header_line.strip("|").split("|"))
     if cells != _CANONICAL_HEADER_CELLS:
         raise PlanEditError(
             f"{spec_path}: '## Implementation Plans' table header is {header_line!r}, "
-            f"expected '| Plan | Repo | File | Depends on |'. fr plan create appends rows "
+            f"{_header_hint()}. fr plan create appends rows "
             f"assuming those exact column semantics — a differently-labeled header would "
             f"silently mislabel the row it writes. Fix the header before scaffolding a plan."
         )
 
 
-def _validate_spec_section(spec_path: Path) -> None:
-    """Pre-flight: confirm the spec has an appendable Implementation Plans table.
+def _ensure_section_text(text: str) -> str:
+    """Return `text` with the canonical `## Implementation Plans` header appended.
 
-    Read-only. Raises the same errors `_append_spec_row` would, but BEFORE any
-    folder is created so a failed `create` leaves no stranded state (#133).
+    Pure. Blank-line separated from any prose; the caller must only use it when
+    the section is absent. `fr.migrate._ensure_spec_plan_row` shares it.
+    """
+    sep = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+    return (
+        f"{text}{sep}## Implementation Plans\n\n"
+        f"{_CANONICAL_HEADER_LINE}\n{_CANONICAL_HEADER_SEPARATOR}\n"
+    )
+
+
+def _validate_spec_section(spec_path: Path) -> None:
+    """Pre-flight: confirm an existing Implementation Plans table is appendable.
+
+    Read-only. A missing section is accepted — `create` writes it right before
+    appending the row. A present-but-malformed table raises the same errors
+    `_append_spec_row` would, BEFORE any folder is created (#133).
     """
     text = spec_path.read_text()
     m = _SPEC_TABLE_HEADER_RE.search(text)
     if not m:
-        raise PlanEditError(
-            f"{spec_path}: no '## Implementation Plans' section found. "
-            f"Add the section (with a 4-column table header) before scaffolding plans."
-        )
+        return
     _check_table_header(spec_path, text, m)
 
 
@@ -455,7 +483,7 @@ def _append_spec_row(
     if not m:
         raise PlanEditError(
             f"{spec_path}: no '## Implementation Plans' section found. "
-            f"Add the section (with a 4-column table header) before scaffolding plans."
+            f"Add the section with a table header; {_header_hint()}."
         )
     _check_table_header(spec_path, text, m)
 
@@ -474,7 +502,9 @@ def _append_spec_row(
         else:
             abs_offset += len(line)
     if not saw_pipe:
-        raise PlanEditError(f"{spec_path}: '## Implementation Plans' has no table to append to.")
+        raise PlanEditError(
+            f"{spec_path}: '## Implementation Plans' has no table to append to; {_header_hint()}."
+        )
 
     # Idempotence check is scoped to the TABLE region only. Scanning the whole
     # spec (the pre-2026-07-24 behavior) let any backticked slug mention in the
