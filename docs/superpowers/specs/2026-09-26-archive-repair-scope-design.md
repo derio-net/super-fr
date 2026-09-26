@@ -71,16 +71,24 @@ A shared helper `canonical_spec_ref(value, repo_root) -> str` (in `fr.refs`)
 is called by both `plan_ops.create` and `repair._repair_meta`. `create`
 normalizes only the value written to `_meta.yaml` (plan_ops.py:226), keeping
 `spec_str` for the on-disk candidate and section validation (:215). It
-shortens a same-repo ref to the bare filename only when
-`refs.resolve_spec_ref` resolves to the very file named (`res.path.resolve()
-== candidate`), since resolution is by slug and could otherwise repoint the
-plan at a same-named spec elsewhere (cross-repo notation is left as-is,
+shortens a same-repo ref to the bare filename by slug resolution, except
+that it keeps the value verbatim when the value names an **existing** file
+other than the one `refs.resolve_spec_ref` picks (resolution is by slug and
+would otherwise repoint the plan at a same-named spec elsewhere). A path that
+no longer exists — the spec has moved to `implemented/specs/` — still
+canonicalizes by slug: that stale full path is exactly what `fr repair`
+exists to rewrite, so the repair doctrine is unchanged (cross-repo notation is left as-is,
 matching `_repair_meta`; an unresolvable ref — a spec not yet written — is
 stored verbatim, as today). The normalization function is shared with
 `repair._repair_meta` so there is one definition of canonical. Readers
 (`resolve_spec_ref`, the structure validator) keep accepting the full path for
 back-compat, so plans already carrying it stay valid and `fr repair`
 converges them.
+
+Accepted edge: a folder half-built by an older `fr plan create` (with a
+full-path `spec:`) and re-run under this one no longer matches byte-for-byte
+(`plan_ops._folder_matches`), so the #133 "finish the job" path reports a
+collision instead. The operator deletes the stranded folder and re-runs.
 
 ## 4. Test plan (CI only)
 
@@ -99,16 +107,12 @@ Bug, debugging-first: each test is written red before the fix.
    as-is; a same-named file at a different path is not shortened.
 5. A plan carrying the full-path `spec:` still validates and resolves; a
    bare-`spec:` plan parses to `spec_path` and still resolves after the spec
-   moves to `implemented/specs/`.
+   moves to `implemented/specs/`; `fr repair` still rewrites a full-path
+   `spec:` whose spec has moved to `implemented/specs/`.
 6. Existing `create` tests asserting a full-path `spec:` are updated. Readers
    falling back to raw `meta.spec` (plan_ops.py:911, render.py:333,
    item_graph.py:132,151) are only reached for an unresolvable ref, which
    normalization never rewrites, so they are unaffected.
-
-## 5. Implementation Plans
-
-| Plan | Repo | File | Depends on |
-|------|------|------|------------|
 
 ## Implementation Plans
 
