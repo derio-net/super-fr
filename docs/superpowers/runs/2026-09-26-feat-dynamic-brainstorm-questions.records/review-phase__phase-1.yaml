@@ -1,0 +1,22 @@
+schema_version: 2
+run: 2026-09-26-feat-dynamic-brainstorm-questions
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "Template gate wiring untested: tests recompute gated= instead of going through record_brief", body: "tests/unit/test_record_template.py copied record_brief's gated= logic; deleting the wiring would stay green."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "Unreadable-record refusal not asserted byte-identical; no invalid-YAML case", body: "test_migration_record_questions.py checked only a missing stamp and only a schema-invalid body."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "v1 fixture lacks the `schema_version: 1` line every real template-rendered record carries", body: "The stamp-rewrite path for real in-flight records was untested."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "Migration guard refuses an empty record that parse_record accepts", body: "record_questions._guard raised on None; the file would stay stale and block the CLI gate."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "Whitespace-only questions.reason accepted for rounds: 2", body: "model.py used `not self.reason`; phase 2 writes the reason into a journal decision."}
+  - {kind: review, id: review-phase-1, phase: 1, title: "Phase 1 code review: 5 in-scope findings, 0 out of scope", body: "Dispatched code reviewer over 6342e663..HEAD (packages, tests) against spec §3.B, plan 01.yaml and artifact-versioning.md. No blocking issues; versioning obligations met. Raised p1-r1..p1-r5 (2 medium, 3 low), all verified against the code and fixed with tests. Two sub-threshold notes (message names live version; frozen-ness tested by config) not filed."}
+resolves:
+  - {id: p1-r1, phase: 1, state: fixed, body: "New test drives record_brief for the gated brainstorm step; implement-phase brief asserted to carry no questions hint."}
+  - {id: p1-r2, phase: 1, state: fixed, body: "Refusal asserts byte-identity; new invalid-YAML (truncated) case asserts failed + byte-identical."}
+  - {id: p1-r3, phase: 1, state: fixed, body: "Stamp test parametrized over no-stamp and schema_version: 1; the latter asserts exact text with only the stamp line changed."}
+  - {id: p1-r4, phase: 1, state: fixed, body: "Guard treats None as {} like parse_record; new test stamps a comment-only record."}
+  - {id: p1-r5, phase: 1, state: fixed, body: "Validator strips reason; parametrized whitespace case added."}
+evidence:
+  review: review-phase-1
+  reviewer: a2a52ab2ac4e70498
+  model: claude-opus-5-5
