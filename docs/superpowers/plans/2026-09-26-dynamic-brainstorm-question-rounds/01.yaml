@@ -1,0 +1,75 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Walking skeleton: the record kind declares question rounds (v2)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - fr-goal-second-round-announced-and-verified
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/record/template.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/record_questions.py
+  - tests/unit/**
+  - docs/superpowers/runs/**
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: QuestionRounds model on the record artifact
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Red: in tests/unit/test_record_schema.py add tests for spec §3.B: `questions: {rounds: 2, trigger: design-risk, reason: "x"}` parses into a frozen QuestionRounds; `rounds: 3` refused; `rounds: 2` without trigger or without reason refused; `rounds: 1` with a trigger or reason refused; `questions` together with `no_questions: true` refused; an unknown trigger refused; `questions` counts toward the `outcome` section in present_sections. Run `uv run pytest tests/unit/test_record_schema.py -q --no-cov` and see them fail.
+  - id: P1.T1.S2
+    text: |-
+      Green: in packages/fr/src/fr/record/model.py add `QuestionRounds(_Strict)` (rounds: Literal[1, 2] = 1; trigger: Literal["design-risk", "operator-request"] | None; reason: StrictStr | None; a model_validator enforcing required-iff-2 and forbidden-at-1), `StepRecord.questions: QuestionRounds | None = None` with a docstring, the no_questions exclusivity in `_ids_are_shaped`, "questions" appended to `_SECTION_FIELDS["outcome"]`, and QuestionRounds in `__all__`. Re-run the test file and see it pass.
+  - id: P1.T1.S3
+    text: |-
+      Refactor: ruff format + ruff check the touched files; make sure the QuestionRounds docstring cites spec 2026-09-26-dynamic-brainstorm-question-rounds §3.B and states that a round 3 is unrepresentable by design.
+- number: 2
+  title: Record kind 1 -> 2 with stamp-only migration; template tracks the constant
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red: add tests/unit/test_migration_record_questions.py: a v1 record yaml (schema_version: 1, any valid body) is stamped 2 by the migration runner and its body is otherwise byte-identical; a truncated/unparseable v1 record is refused and left byte-identical; `artifact_kind("record").current_version == 2` and the chain reaches 2 from 1 (assert the hop list is [2]). In tests/unit/test_record_template.py add: for every step of the shipped fr-goal manifest, `render_template(...)` output parses with `parse_record` under the live RECORD_SCHEMA_VERSION, and a gated step's template carries a commented `questions:` hint. Run them and see them fail.
+  - id: P1.T2.S2
+    text: |-
+      Green: bump `record` to current_version=2 in packages/fr/src/fr/artifacts/registry.py (comment naming this spec) and RECORD_SCHEMA_VERSION = 2 in record/model.py; create packages/fr/src/fr/artifacts/record_questions.py with a SchemaMigration(kind="record", 1 -> 2) whose fn loads the yaml mapping, validates a copy with schema_version replaced by 2 against the live StepRecord (a v1 body is a valid v2 body — the change is additive) and raises on failure so nothing is stamped; import it for its side effect in fr/artifacts/__init__.py beside run_provenance. In record/template.py replace the literal "schema_version: 1" with RECORD_SCHEMA_VERSION and add the commented `questions:` hint lines (rounds 1|2, trigger design-risk|operator-request, reason) when the step has `gate: operator`. Re-run both test files and see them pass.
+  - id: P1.T2.S3
+    text: |-
+      Refactor: run `uv run fr migrate artifacts --yes` in the workspace (dogfood — this run's own live records under docs/superpowers/runs/*.records/ must reach v2, including this phase's record), then `uv run fr validate artifacts`; commit whatever it migrated. Run `uv run pytest tests/unit/test_record_*.py tests/unit/test_migration_*.py tests/unit/test_validate_artifacts.py tests/unit/test_tripwire_artifact_kinds.py -q --no-cov -n auto` and see it pass.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-26T11:03:32+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T11:03:32+00:00'
+    note: null
+    observed_prs: []

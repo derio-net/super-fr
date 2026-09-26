@@ -311,6 +311,166 @@ def test_unobservable_is_none_never_false(tmp_path: Path) -> None:
     assert operator_answered_since({"FR_HARNESS": "opencode"}, "2026-09-21T16:00:00+00:00") is None
 
 
+# --- how many question ROUNDS were answered? (2026-09-26 spec §3.C) -------
+
+_SINCE = "2026-09-21T16:00:00+00:00"
+
+
+def _rounds(tmp_path: Path, rows: list[dict]) -> list | None:
+    from fr.run.telemetry import answered_rounds_since
+
+    from tests.unit.transcript_sessions import conversation_at
+
+    root = tmp_path / "projects"
+    conversation_at(root, rows, session_id="s-r")
+    return answered_rounds_since(_question_env(root, "s-r"), _SINCE)
+
+
+def test_one_answered_call_is_one_round(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import question_rows
+
+    rounds = _rounds(tmp_path, question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"))
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_a_round_carries_no_answered_flag() -> None:
+    """Only answered rounds are returned, so a per-round `answered` field could
+    only ever be True — review p2-r3 removed it."""
+    from fr.run.telemetry import Round
+
+    assert "answered" not in Round.__dataclass_fields__
+
+
+def test_a_progress_tracking_tool_between_calls_keeps_one_round(tmp_path: Path) -> None:
+    """Review p2-r8: `TodoWrite` and friends touch no project state, so they are
+    not the cross-examination that separates rounds."""
+    from tests.unit.transcript_sessions import question_rows, tool_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        *tool_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_t1", name="TodoWrite"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_a_read_between_calls_makes_two_rounds(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import question_rows, tool_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        *tool_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_r1", name="Read"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 2
+
+
+def test_the_round_neutral_tools_are_exactly_the_progress_trackers() -> None:
+    from fr.run.telemetry import ROUND_NEUTRAL_TOOLS
+
+    expected = {"TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"}
+    assert frozenset(expected) == ROUND_NEUTRAL_TOOLS
+
+
+def test_consecutive_question_calls_with_only_text_between_are_one_round(
+    tmp_path: Path,
+) -> None:
+    """A batch of more than 4 questions spans several AskUserQuestion calls;
+    the tool's own limit must not turn one round into two."""
+    from tests.unit.transcript_sessions import question_rows, text_row
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        text_row("2026-09-21T16:06:00.000Z"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_a_non_question_tool_use_between_calls_makes_two_rounds(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import bash_rows, question_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        *bash_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_b1"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 2
+
+
+def test_a_declined_only_round_is_not_counted(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import bash_rows, question_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1", answered=False),
+        *bash_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_b1"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_a_round_counts_when_any_of_its_calls_was_answered(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import question_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1", answered=False),
+        *question_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_sidechain_question_calls_are_ignored(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import question_rows
+
+    rows = question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1", sidechain=True)
+    assert _rounds(tmp_path, rows) == []
+
+
+def test_question_calls_before_since_are_ignored(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import bash_rows, question_rows
+
+    rows = [
+        *question_rows("2026-09-21T15:05:00.000Z", tool_use_id="toolu_q0"),
+        *bash_rows("2026-09-21T15:06:00.000Z", tool_use_id="toolu_b0"),
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_each_round_exposes_its_question_texts(tmp_path: Path) -> None:
+    """The `Round 1 of 2` announcement is checked against these texts."""
+    from tests.unit.transcript_sessions import bash_rows, question_rows
+
+    rows = [
+        *question_rows(
+            "2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1", first_question="(Round 1 of 2) A?"
+        ),
+        *bash_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_b1"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None
+    assert "(Round 1 of 2) A?" in rounds[0].question_texts
+    assert "Gate (C1)" in rounds[0].question_texts  # the captured header
+    assert all("Round 1 of 2" not in t for t in rounds[1].question_texts)
+
+
+def test_rounds_are_unobservable_on_another_harness_or_without_a_transcript(
+    tmp_path: Path,
+) -> None:
+    from fr.run.telemetry import answered_rounds_since
+
+    assert answered_rounds_since({"FR_HARNESS": "opencode"}, _SINCE) is None
+    assert answered_rounds_since(_question_env(tmp_path, "missing"), _SINCE) is None
+
+
 # --- separate-context review and orchestrator-run tests (debug C6 / C5) ---
 
 

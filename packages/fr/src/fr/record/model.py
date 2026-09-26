@@ -35,6 +35,7 @@ __all__ = [
     "AcceptanceItem",
     "CompleteItem",
     "JournalItem",
+    "QuestionRounds",
     "RecordError",
     "Resolution",
     "StepRecord",
@@ -47,7 +48,11 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 1
+RECORD_SCHEMA_VERSION = 2
+"""Bumped 1 -> 2 for `questions` (spec
+`2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
+change under `.claude/rules/artifact-versioning.md`. Migration:
+`fr.artifacts.record_questions`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -142,6 +147,35 @@ class AcceptanceItem(_Strict):
     notes: StrictStr | None = None
 
 
+class QuestionRounds(_Strict):
+    """How many operator question rounds a cleared gate took (spec
+    `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B).
+
+    `rounds` is `Literal[1, 2]`, so a round 3 is unrepresentable by design —
+    there is no value this field can hold that means "three rounds happened".
+    `trigger`/`reason` are required when `rounds: 2` (the second round must
+    explain itself) and forbidden when `rounds: 1` (the default needs no
+    justification)."""
+
+    rounds: Literal[1, 2] = 1
+    trigger: Literal["design-risk", "operator-request"] | None = None
+    reason: StrictStr | None = None
+
+    @model_validator(mode="after")
+    def _round_two_explains_itself(self) -> QuestionRounds:
+        if self.rounds == 2:
+            if self.trigger is None:
+                raise ValueError("questions.trigger is required when rounds: 2")
+            if not (self.reason or "").strip():
+                raise ValueError("questions.reason is required when rounds: 2")
+        else:
+            if self.trigger is not None:
+                raise ValueError("questions.trigger is only for rounds: 2")
+            if self.reason is not None:
+                raise ValueError("questions.reason is only for rounds: 2")
+        return self
+
+
 class StepRecord(_Strict):
     """The §5.C.1 record. Every section is optional; which ones a step may
     carry is `allowed_sections`' business, not the model's."""
@@ -156,6 +190,12 @@ class StepRecord(_Strict):
     having asked the operator — the explicit, recorded bypass (needs `reason`)."""
     reason: StrictStr | None = None
     """`--reason`: why no operator decision was needed (with `no_questions`)."""
+    questions: QuestionRounds | None = None
+    """`questions: {rounds, trigger, reason}` (spec
+    `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B): how many
+    operator question rounds this gate's resolve took. Absent means one round.
+    Mutually exclusive with `no_questions` — a gate is either cleared by
+    asking, or explicitly cleared without asking."""
     ticks: tuple[StrictStr | TickItem, ...] = ()
     complete: CompleteItem | None = None
     refactor: dict[StrictStr, StrictStr] = {}
@@ -172,6 +212,8 @@ class StepRecord(_Strict):
                 f"schema_version {self.schema_version} — this fr reads record "
                 f"version {RECORD_SCHEMA_VERSION}"
             )
+        if self.questions is not None and self.no_questions:
+            raise ValueError("questions and no_questions are mutually exclusive")
         for tick in self.ticks:
             if isinstance(tick, str) and not _TICK_ID_RE.match(tick):
                 raise ValueError(f"tick id must look like P<n>.T<m>.S<k>, got {tick!r}")
@@ -194,7 +236,7 @@ _SECTION_FIELDS: dict[str, tuple[str, ...]] = {
     "journal": ("journal",),
     "resolves": ("resolves",),
     "acceptance": ("acceptance",),
-    "outcome": ("outcome", "no_questions", "reason"),
+    "outcome": ("outcome", "no_questions", "reason", "questions"),
     "evidence": ("evidence", "emitted"),
 }
 

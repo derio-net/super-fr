@@ -1,0 +1,85 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The gate counts answered rounds and verifies the declaration
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-goal-second-round-announced-and-verified
+  - fr-goal-question-batch-sized-to-feature
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/telemetry.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/**
+  - tests/fixtures/transcripts/**
+  - docs/acceptance/**
+  estimate_lines: 520
+tasks:
+- number: 1
+  title: answered_rounds_since reads rounds from the transcript
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Red: in tests/unit/test_run_telemetry.py add answered_rounds_since tests, building transcripts in the exact record shape of tests/fixtures/transcripts/ (reuse the helpers the operator_answered_since tests already use): one round of one answered call; one round of two consecutive answered AskUserQuestion calls with only text between (a >4 batch) = 1 round; two rounds separated by a Bash tool_use = 2; a declined-only group (string toolUseResult) is not counted; sidechain question calls ignored; calls before `since` ignored; each Round exposes its question texts; a non-Claude harness returns None. Run and see them fail.
+  - id: P2.T1.S2
+    text: |-
+      Green: in packages/fr/src/fr/run/telemetry.py add a frozen `Round` (question_texts: tuple[str, ...], answered: bool) and `answered_rounds_since(env, since) -> list[Round] | None` per spec §3.C: same harness/transcript/None rules as operator_answered_since, walk main-thread assistant records in order from `since`, group consecutive QUESTION_TOOL tool_uses, close a group on any other tool_use, mark a group answered when any of its ids has a tool_result with a non-empty `answers` map; return only answered rounds. Collect question texts from each tool_use input's `questions[].question` and `header`. Re-run and see them pass.
+  - id: P2.T1.S3
+    text: |-
+      Refactor: have operator_answered_since and answered_rounds_since share one private record walk if it removes duplication without changing operator_answered_since's observable results (its existing tests stay green); otherwise record the refactor reason in the step record.
+- number: 2
+  title: Thread the declaration to _gate_provenance on both paths
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      Red: in tests/unit/test_record_apply.py (and the flag-path resolve tests, whichever file covers `_gate_provenance` today) add, per spec §3.C's table and Test Plan 3/4/7: declared 1 + one answered round -> operator; declared 2 design-risk + two rounds whose first has "(Round 1 of 2)" -> operator and exactly one spec-journal decision `gate-question-rounds-brainstorm`, not duplicated on retry; declared 2 design-risk + round 1 without the announcement -> exit 2; declared 2 operator-request + two rounds -> operator; declared 1 + two rounds -> exit 2 naming both numbers; declared 2 + one round -> exit 2; three rounds -> exit 2 "never a round 3"; `questions` on a resolve that clears no gate -> exit 2; every refusal leaves cursor and record byte-identical; each case via BOTH `--record` and the flags `--question-rounds/--round-two-trigger/--round-two-reason`; the flags with `--record` are refused; unobservable harness -> claim recorded with the unverified notice. Run and see them fail.
+  - id: P2.T2.S2
+    text: |-
+      Green: add `questions: QuestionRounds | None` to run_cmd.resolve_in_process, _resolve_body and _gate_provenance, and pass `record.questions` from record/apply.py beside no_questions/reason; add the three typer options to `fr run resolve`, build a QuestionRounds from them (a validation error -> exit 2), and add them to the with-`--record` refusal list; extend the `_clears_gate` refusal to cover `questions`; in _gate_provenance replace the `observed is True` branch with the §3.C verdict table using answered_rounds_since (keep operator_answered_since's False path as the zero-rounds refusal), and on a verified or claimed `rounds: 2` append the `gate-question-rounds-<step>` decision exactly like the gate-no-questions entry. Re-run and see them pass.
+  - id: P2.T2.S3
+    text: |-
+      Refactor: extract the verdict table into one pure helper (observed rounds, declaration) -> verdict/message so both paths and the tests share it; ruff format/check; run `uv run pytest tests/unit/test_run_*.py tests/unit/test_record_*.py tests/unit/test_run_telemetry.py -q --no-cov -n auto`.
+- number: 3
+  title: Acceptance evidence for the gate rows
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Move fr-goal-second-round-announced-and-verified to `ci` with `uv run fr acceptance set-status --id fr-goal-second-round-announced-and-verified --status ci --notes "<why>" --level unit=super-fr:<the new gate test file>` and add the round-grouping test as a unit level on fr-goal-question-batch-sized-to-feature (status stays not-implemented until the prose lands in phase 3); run `uv run fr acceptance check` and see it pass.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-26T11:20:43+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T11:20:43+00:00'
+    note: null
+    observed_prs: []

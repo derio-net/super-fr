@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Describe a feature, get back a reviewed pull request.** Tell super-fr what you
-want, answer one short round of questions, and an agent designs it, writes it
+want, answer a question round sized to the feature (rarely two), and an agent designs it, writes it
 test-first, reviews its own work, and opens a single PR for you to merge — all
 inside an isolated workspace that never touches your checkout.
 
@@ -63,7 +63,8 @@ missing):
 /fr-goal add rate limiting to the webhook receiver
 ```
 
-The agent isolates, brainstorms, asks its questions once, then drives
+The agent isolates, brainstorms, asks one question round sized to the feature
+(a second only when announced up front or you ask for it), then drives
 spec → plan → test-driven implementation → review → a single PR for you to
 merge. That's the whole loop — everything below is detail you can reach for
 when you need it.
@@ -105,8 +106,8 @@ runner that executes them asynchronously, one agent per phase.
 
 ### Flow 1 — goal to PR, locally (`/fr-goal`)
 
-The operator describes a feature, answers one batched round of questions, and
-gets back a single reviewed PR. Everything in between — brainstorming via
+The operator describes a feature, answers one question round sized to it (rarely
+two), and gets back a single reviewed PR. Everything in between — brainstorming via
 superpowers, spec, plan, TDD implementation, code review — runs autonomously
 inside an isolated workspace.
 
@@ -115,7 +116,7 @@ flowchart TD
     Goal(["/fr-goal — feature description"]) --> Iso["fr isolation up<br/>git worktree + devcontainer"]
     Iso -. no devcontainer profile .-> Init["fr-init interview<br/>scaffold a profile"] -.-> Iso
     Iso --> BS["fr-brainstorming<br/>(wraps superpowers:brainstorming)"]
-    BS --> QA["ONE batched Q&A<br/>(operator answers ≤4 questions)"]
+    BS --> QA["one question round<br/>(sized to the feature, rarely two)"]
     QA --> Spec["spec committed to<br/>docs/superpowers/specs/"]
     Spec --> Plan["fr-plan: phase-structured plan<br/>_meta.yaml + NN.yaml per phase"]
     Plan --> SR["fr plan self-review"]
@@ -136,7 +137,7 @@ unimplemented, and the operator implements it and pushes to the same PR.
 on the manual output: the run opens a spec+plan PR — the manual instructions
 are the deliverable — pauses, and resumes only on the operator's go.) And
 when the deliverable deploys, the spec carries a post-merge **Test Plan**
-(offered in the batched Q&A) that the agent drives interactively after the
+(offered in the question round) that the agent drives interactively after the
 merge — it runs the checks it can reach, the operator confirms what it can't —
 before the run closes out with `fr archive` and `fr isolation down`.
 
@@ -379,8 +380,8 @@ unit/api/int/ui verification levels and an honesty-scale status: `ci` /
 `scheduled` (automated, can't drift) → `skipped` (verified, but not in CI) →
 `not-implemented` (nothing yet) → `failing` (known red, fails CI by design).
 
-Rows are born at brainstorm time (presented with defenses in the batched
-Q&A), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan
+Rows are born at brainstorm time (presented with defenses in the brainstorm's
+question round), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan
 self-review` errors on a Test-Plan spec with zero linked rows), and flipped
 up the ladder as `fr plan edit --complete-phase` lands evidence — the CLI
 warns on phases that complete without flipping their rows. Mid-flight

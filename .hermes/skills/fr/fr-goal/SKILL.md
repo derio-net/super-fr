@@ -2,7 +2,8 @@
 name: fr-goal
 description: >
   Run a feature goal end-to-end autonomously via the `fr-goal` workflow shape (optional
-  shape-name argument; no argument resolves `fr-goal`): brainstorm, one batched Q&A, then
+  shape-name argument; no argument resolves `fr-goal`): brainstorm, one question round sized
+  to the feature (rarely two), then
   spec → review → fr-plan → review → TDD implementation → review → single PR, fixing every
   finding in scope and filing the rest, no intermediate approval gates. ALWAYS use when the operator invokes /fr-goal or
   /goal, says "build this autonomously", "ask your questions once then build it", "take this
@@ -11,7 +12,7 @@ description: >
 
 # fr-goal
 
-One operator touchpoint — the batched Q&A — from goal to reviewed PR, driven by a **workflow
+One operator gate — a question round sized to the feature, rarely two — from goal to reviewed PR, driven by a **workflow
 shape** (spec §4.A, `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`): `fr run
 start <shape> --branch <b>` (defaults to `fr-goal`), then loop `fr run advance <run-id>`.
 **Shape lookup:** repo `docs/superpowers/workflows/<shape>.yaml` (overrides wholesale) →
@@ -39,27 +40,14 @@ stranded — offered, never forced (`--yes --adopt` does all of them).
 
 **Announce at start:** "I'm using fr-goal to run this goal autonomously."
 
-**Interactive touchpoints (all else autonomous):** `brainstorm`'s batched Q&A (`gate: operator`),
+**Interactive touchpoints (all else autonomous):** `brainstorm`'s question round(s) (`gate: operator`),
 with any cross-repo location question folded in; manual phases from `plan`; PR merge after
 `deliver` — never self-merged — and the post-merge Test Plan.
 
-### 1. brainstorm — batched Q&A, in isolation (`gate: operator`)
-Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision — including one
-repo-location question per other repo of a cross-repo spec (ask only if not found on disk) —
-into ONE batch (max 4, recommended first) put to the operator, then STOP; add a post-merge Test
-Plan question when the deliverable deploys, a model-per-tier one if `fr models resolve` is
-unbound. Each answer is a `decision` in the brainstorm record, each acceptance row an `acceptance:`
-entry. **Hard gate:** an unanswered batch is a stop signal — restate the open questions, never
-default. The record carries `emitted: {spec: <path>}`. "The
-request already decided everything" is still a question to put, not a reason to skip the batch;
-the one bypass is `no_questions: true` + `reason: "…"` in the record (with `--record`, fr refuses
-the `--no-questions`/`--reason` flags), written to the spec journal and the PR body.
+### 1. brainstorm — a question round sized to the feature, in isolation (`gate: operator`)
+Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision — including one repo-location question per other repo of a cross-repo spec (ask only if not found on disk) — one question per decision, recommended option first, leaving out anything the code answers; past ~10, say why inline or propose splitting the goal instead. **Announce the round count before the first question:** every round-1 question text starts `(Round 1 of 2)` or `(Round 1 of 1)` — 2 iff round 1's answers could still change the design significantly (a choice between approaches whose sub-decisions differ, or an unknown the code cannot settle); with `of 1`, say a second round is available on request. Add a post-merge Test Plan question when the deliverable deploys, a model-per-tier one if `fr models resolve` is unbound. Each answer is a `decision` in the brainstorm record, each acceptance row an `acceptance:` entry. **Hard gate, per round:** an unanswered round is a stop signal — restate the open questions, never default. After an answered round 1 of 2, check every answer against the code — open the files and run the searches the answers point at; that check is what separates the rounds — then ask round 2 in the SAME turn — each round-2 question starts `(Round 2 of 2)` and names the round-1 answer or code finding behind it — then STOP again; there is never a round 3. An announced round 2 is a ceiling, not a promise: if round 1's answers opened nothing, tell the operator so and resolve with `rounds: 1`. An operator's prose request for a second round during round 1 turns a declared `of 1` into `rounds: 2, trigger: operator-request`. Resolve `brainstorm` only once every round you asked is answered; the record carries `questions: {rounds, trigger, reason}` (absent ≡ `rounds: 1`; `trigger`/`reason` required together iff `rounds: 2`) alongside `emitted: {spec: <path>}`. A `rounds: 2` declaration is written to the spec journal (`gate-question-rounds-<step>`), so the PR body shows the gate took two rounds. "The request already decided everything" is still a round to run, not a reason to skip it; the one bypass is `no_questions: true` + `reason: "…"` in the record (with `--record`, fr refuses the `--no-questions`/`--reason` flags, and refuses `questions` alongside `no_questions`), written to the spec journal and the PR body.
 
-**Harness — questions:** Claude Code batches them into one `AskUserQuestion` call, and `resolve`
-VERIFIES it: no answered question in the session transcript since the gate blocked → refused.
-Hermes and OpenCode have no question tool: put the numbered batch in your reply and END THE TURN,
-then `evidence: {answered_by: operator}` in the record
-(`--answered-by operator` in the flag form) once the operator answered — unverified, so advisory.
+**Harness — questions:** Claude Code takes at most 4 questions per `AskUserQuestion` call, so a round of N questions is `ceil(N/4)` CONSECUTIVE calls, back-to-back with no other tool call between them; any other tool call between two question calls starts a new round. Round 1's cross-examination therefore uses real tool calls (`Read`, `Grep`, `Bash`) before round 2's first `AskUserQuestion` call — without them the two rounds merge into one and a declared `rounds: 2` is refused. Progress-tracking tools do not separate rounds: `TodoWrite`/`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet` read/write no project state, so they neither split one round nor count as the cross-examination. `resolve` VERIFIES the declared round count against the session transcript — it counts answered rounds since the gate blocked and refuses a mismatch, a `design-risk` round 2 whose round-1 question text never announced it, or any third round. Hermes and OpenCode have no question tool: number the round in your reply (`(Round 1 of N)`, `(Round 2 of 2)`) and END THE TURN, then `evidence: {answered_by: operator}` in the record (`--answered-by operator` in the flag form) once the operator answered — unverified, so advisory.
 
 ### 2. spec-review
 Never review the spec yourself: dispatch the read-only `fr-spec-reviewer` (the brief's `agent` and `tier`) INTO this workspace with the spec and spec-journal paths. It checks the spec against the Q&A decisions AND codebase reality (a file:line for every named file/helper/service), and tags each finding in or out of scope (§6's definitions). Its return IS the step's record (findings with `review_scope`, plus a `kind: review` entry): save it at the brief's `record` path, fix every finding in scope, add a `resolves:` entry per finding (the rest `state: out-of-scope`, the body saying why this change did not cause it) and `evidence: {review: <entry-id>, reviewer: <agent-id>}`, then `fr run resolve <run-id> --step spec-review --record <file>`. fr refuses a review entry older than the step, a reviewer this session did not dispatch after it opened, and — `findings` is derived — any spec finding still open. Cross-repo spec: this session owns ONE repo's plan + PR; for each other repo, dispatch one agent with the spec ref and this pipeline from `plan` onward — one plan, one PR, one workspace per repo: brief it to enter isolation in ITS repo first, `fr isolation up --repo <path> --branch <b>` (it inherits your cwd).

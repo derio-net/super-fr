@@ -353,9 +353,9 @@ strong{font-weight:600;color:#f2ecdd}
       </div>
 
       <div class="stage human"><span class="node"></span>
-        <h3>Brainstorm &amp; one batched Q&amp;A <span class="who">you decide</span></h3>
-        <p>The agent designs the feature and asks <span class="g">all of its questions at once</span> — a
-          single short round — then commits to a written spec. Intent is pinned here, on the record,
+        <h3>Brainstorm &amp; one question round <span class="who">you decide</span></h3>
+        <p>The agent designs the feature and asks <span class="g">one question round sized to the feature</span> — rarely
+          two, and only when announced up front or you ask — then commits to a written spec. Intent is pinned here, on the record,
           so nothing downstream has to guess what you meant.</p>
       </div>
 
@@ -435,8 +435,8 @@ strong{font-weight:600;color:#f2ecdd}
         <div class="idx"><span class="num">02</span><span class="name">Correct</span></div>
         <div class="body">
           <h3>Wrong is caught early, by something adversarial.</h3>
-          <p>Correctness is defended in three places at once. <b>Intent</b> is pinned up front in one
-            batched Q&amp;A, so the build isn't chasing a moving target. <b>Construction</b> is test-first,
+          <p>Correctness is defended in three places at once. <b>Intent</b> is pinned up front at one
+            operator gate — a question round sized to the feature, rarely two — so the build isn't chasing a moving target. <b>Construction</b> is test-first,
             so behaviour is specified before it's implemented. And <b>judgment</b> comes from independent
             adversarial reviews at each meaningful stage.</p>
           <ul>
@@ -457,8 +457,8 @@ strong{font-weight:600;color:#f2ecdd}
             The <b>acceptance matrix</b> tracks business-level truths — “an operator can do X” — as
             first-class, durable tests.</p>
           <ul>
-            <li>Acceptance rows are <b>born at design time</b>, presented for defense in the same batched
-              Q&amp;A, and <b>linked to the plan phases</b> that satisfy them.</li>
+            <li>Acceptance rows are <b>born at design time</b>, presented for defense in the same question
+              round, and <b>linked to the plan phases</b> that satisfy them.</li>
             <li>Each row carries an <b>honesty status</b> — automated-and-can't-drift, verified-but-manual,
               not-yet, or known-failing-on-purpose — so the matrix can never quietly overstate coverage.</li>
           </ul>
@@ -515,8 +515,9 @@ strong{font-weight:600;color:#f2ecdd}
     <div class="seam-grid rv">
       <div class="seam">
         <div class="t">§ once, up front</div>
-        <h4>The batched Q&amp;A</h4>
-        <p>All the design questions in a single round, before the build. You set direction once; the agent
+        <h4>The question round</h4>
+        <p>The design questions in one round sized to the feature, before the build — rarely two, announced
+          up front or asked for by you, never three. You set direction at one gate; the agent
           doesn't interrupt you eight times later.</p>
       </div>
       <div class="seam">
@@ -551,7 +552,7 @@ strong{font-weight:600;color:#f2ecdd}
       <a class="read" href="./01-fr-goal.html">
         <span class="rk">the pipeline</span>
         <h3>fr-goal &mdash; one conversation, then a reviewed PR</h3>
-        <p>The full local flow, step by step: brainstorm, one batched Q&amp;A, spec, plan, test-first build, review, merge, and the post-merge Test Plan.</p>
+        <p>The full local flow, step by step: brainstorm, a question round sized to the feature, spec, plan, test-first build, review, merge, and the post-merge Test Plan.</p>
         <span class="go">Read the deep-dive &rarr;</span>
       </a>
       <a class="read" href="./fr-isolation.html">

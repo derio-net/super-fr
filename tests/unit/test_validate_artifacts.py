@@ -33,6 +33,7 @@ import pytest
 from fr.artifacts.registry import ARTIFACT_KINDS, artifact_kind
 from fr.artifacts.validate import validate_artifact, validate_repo
 from fr.cli import app
+from fr.record.model import RECORD_SCHEMA_VERSION
 from typer.testing import CliRunner
 
 runner_cli = CliRunner()
@@ -224,7 +225,7 @@ GOOD_RECORD_REL = (
     "docs/superpowers/runs/2019-03-04-feat-widget.records/implement-phase__phase-1.yaml"
 )
 GOOD_RECORD = (
-    "schema_version: 1\n"
+    f"schema_version: {RECORD_SCHEMA_VERSION}\n"
     "run: 2019-03-04-feat-widget\n"
     "step: implement-phase\n"
     "item: phase/1\n"

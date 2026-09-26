@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.record.model import RECORD_SCHEMA_VERSION
 
 REPO = Path(__file__).resolve().parents[2]
 SHIPPED = REPO / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
@@ -32,7 +33,7 @@ SPEC_EXAMPLE = textwrap.dedent(
       - {id: row-a, capability: c, acceptance: a, origin: ["o:d/x.md"], status: not-implemented}
     evidence: {review: r-p2, reviewer: agent-1}
     """
-)
+).replace("schema_version: 1", f"schema_version: {RECORD_SCHEMA_VERSION}", 1)
 
 
 def test_the_spec_example_parses() -> None:
@@ -57,7 +58,7 @@ def test_the_spec_example_parses() -> None:
         ("refactor: {T2: x}\n", "task id"),
         ("journal: [{kind: nope, title: t}]\n", "journal"),
         ("resolves: [{id: f, state: deferred, body: b}]\n", "tracked_by"),
-        ("schema_version: 2\n", "schema_version"),
+        (f"schema_version: {RECORD_SCHEMA_VERSION + 1}\n", "schema_version"),
         ("- a list\n", "mapping"),
     ],
 )
@@ -126,11 +127,62 @@ def test_workflow_check_accepts_the_new_tokens() -> None:
     assert check_workflow(parse_manifest(SHIPPED.read_text())) == []
 
 
+def test_questions_parses_into_a_frozen_question_rounds() -> None:
+    """Spec 2026-09-26-dynamic-brainstorm-question-rounds §3.B."""
+    from fr.record.model import parse_record
+
+    text = "outcome: done\nquestions: {rounds: 2, trigger: design-risk, reason: x}\n"
+    record = parse_record(text)
+    assert record.questions is not None
+    assert record.questions.rounds == 2
+    assert record.questions.trigger == "design-risk"
+    assert record.questions.reason == "x"
+    assert type(record.questions).model_config.get("frozen") is True
+
+
+def test_questions_counts_toward_the_outcome_section() -> None:
+    from fr.record.model import parse_record, present_sections
+
+    text = "questions: {rounds: 2, trigger: design-risk, reason: x}\n"
+    record = parse_record(text)
+    assert "outcome" in present_sections(record)
+
+
+@pytest.mark.parametrize(
+    "text, needle",
+    [
+        ("outcome: done\nquestions: {rounds: 3}\n", "rounds"),
+        ("outcome: done\nquestions: {rounds: 2, reason: x}\n", "trigger"),
+        ("outcome: done\nquestions: {rounds: 2, trigger: design-risk}\n", "reason"),
+        ("outcome: done\nquestions: {rounds: 2, trigger: design-risk, reason: '  '}\n", "reason"),
+        (
+            "outcome: done\nquestions: {rounds: 1, trigger: design-risk, reason: x}\n",
+            "trigger",
+        ),
+        ("outcome: done\nquestions: {rounds: 1, reason: x}\n", "reason"),
+        (
+            "outcome: done\nno_questions: true\n"
+            "questions: {rounds: 2, trigger: design-risk, reason: x}\n",
+            "mutually exclusive",
+        ),
+        (
+            "outcome: done\nquestions: {rounds: 2, trigger: nope, reason: x}\n",
+            "trigger",
+        ),
+    ],
+)
+def test_a_malformed_questions_section_is_refused(text: str, needle: str) -> None:
+    from fr.record.model import RecordError, parse_record
+
+    with pytest.raises(RecordError, match=needle):
+        parse_record(text)
+
+
 def test_the_record_kind_is_registered_and_validated(tmp_path: Path) -> None:
     from fr.artifacts.registry import artifact_kind, iter_artifact_paths
 
     kind = artifact_kind("record")
-    assert kind.current_version == 1
+    assert kind.current_version == RECORD_SCHEMA_VERSION
     good = tmp_path / "docs/superpowers/runs/r.records/implement-phase__phase-2.yaml"
     good.parent.mkdir(parents=True)
     good.write_text(SPEC_EXAMPLE)

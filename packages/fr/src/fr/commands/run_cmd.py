@@ -30,7 +30,7 @@ from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar, cast
 
 import typer
 from rich.console import Console
@@ -79,6 +79,12 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from fr.record.model import QuestionRounds
+    from fr.run.telemetry import Round
 from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
@@ -916,6 +922,17 @@ def _gate_degradation_notice() -> str | None:
     )
 
 
+def _refuse_gate_flags(step_id: str) -> NoReturn:
+    """Gate flags on a resolve that clears no gate — refused, because silently
+    ignored flags read as honoured ones (review r1-7)."""
+    err_console.print(
+        f"[red]{step_id}: --no-questions/--reason and question rounds only apply to a "
+        "resolve that clears an operator gate, and this one clears none.[/red]",
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
+
+
 def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
     """Does this `resolve` CLEAR an operator gate (rather than decline it, or
     resolve a step that never had one)?
@@ -930,6 +947,116 @@ def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
     return step.gate == "operator" and record.state == "blocked" and outcome == "done"
 
 
+ANNOUNCEMENT = "round 1 of 2"
+"""What a design-risk second round's first round must say, case-insensitively,
+in one of its question texts (spec 2026-09-26 §3.C): the operator is told a
+second round will follow before answering the first."""
+
+
+def question_rounds_refusal(
+    rounds: Sequence[Round], questions: QuestionRounds | None
+) -> str | None:
+    """The §3.C verdict table: `None` when the observed ANSWERED rounds agree
+    with the declaration (absent ≡ `rounds: 1`), else why they do not.
+
+    Pure — the gate calls it with the transcript's rounds, the tests with
+    hand-built ones. Zero rounds is not this table's case: that is the
+    existing "no answered question" refusal, decided before it.
+    """
+    n = len(rounds)
+    declared = questions.rounds if questions is not None else 1
+    if n > 2:
+        return (
+            f"the transcript shows {n} answered question rounds since the gate blocked — "
+            "there is never a round 3. A gate asked in three rounds is not one fr records "
+            "as answered: decline it (`--state failed`) and re-run the step, asking at "
+            "most two rounds."
+        )
+    if n != declared:
+        plural = "round" if n == 1 else "rounds"
+        fix = (
+            "Declare the second round: `questions: {rounds: 2, trigger: "
+            'design-risk|operator-request, reason: "…"}` in the record, or '
+            '`--question-rounds 2 --round-two-trigger … --round-two-reason "…"`.'
+            if n == 2
+            else "The transcript shows only one round: drop the `questions: {rounds: 2, …}` "
+            "declaration (or `--question-rounds 2`)."
+        )
+        return (
+            f"the transcript shows {n} answered question {plural} since the gate blocked, "
+            f"but this resolve declares {declared}. {fix}"
+        )
+    if (
+        questions is not None
+        and questions.rounds == 2
+        and questions.trigger == "design-risk"
+        and not any(ANNOUNCEMENT in text.lower() for text in rounds[0].question_texts)
+    ):
+        return (
+            "the operator was not told a second round would follow: no round-1 question "
+            "says `Round 1 of 2`. A design-risk second round is announced in round 1, "
+            "before the operator answers it."
+        )
+    return None
+
+
+def _append_gate_decision(
+    repo_root: Path, spec: str, entry_id: str, *, title: str, body: str
+) -> None:
+    """Append one spec-journal `decision` about a cleared operator gate — once:
+    a retry after a later refusal must not log it twice (review r1-6).
+
+    A retry that would write a DIFFERENT body under the same id is refused
+    (exit 2) before any write (review p2-r6): keeping the first body silently
+    would leave the journal — and the PR body read from it — describing a
+    trigger or reason this resolve no longer declares."""
+    from fr.journal.model import append_journal_entry, journal_path
+
+    slug = spec_journal_slug(Path(spec).name[: -len(".md")])
+    target = journal_path(repo_root, "spec", slug)
+    try:
+        existing = (
+            next((e for e in parse_journal(target.read_text()) if e.id == entry_id), None)
+            if target.is_file()
+            else None
+        )
+    except JournalParseError:
+        existing = None
+    if existing is not None:
+        if existing.body.strip() == body.strip():
+            return
+        shown = (
+            target.relative_to(repo_root).as_posix()
+            if target.is_relative_to(repo_root)
+            else str(target)
+        )
+        err_console.print(
+            f"journal entry `{entry_id}` in {shown} already records a different body "
+            f"({existing.body.strip()!r}) than this resolve would write ({body.strip()!r}). "
+            "Resolve again with what that entry says, or correct the entry first if it is "
+            "the one that is wrong — nothing applied.",
+            style="red",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    _remember(target)
+    append_journal_entry(
+        target,
+        slug,
+        JournalEntry(
+            kind="decision",
+            scope="spec",
+            id=entry_id,
+            # `fr journal add`'s own stamp shape (local, second precision).
+            created=_dt.datetime.now().replace(microsecond=0).isoformat(),
+            title=title,
+            body=body,
+        ),
+    )
+    _note_record_write(repo_root, target)
+
+
 def _gate_provenance(
     repo_root: Path,
     step_id: str,
@@ -938,6 +1065,7 @@ def _gate_provenance(
     claimed: str,
     no_questions: bool,
     reason: str | None,
+    questions: QuestionRounds | None = None,
     emitted: Mapping[str, str],
     state: RunState,
 ) -> AnsweredBy:
@@ -957,9 +1085,13 @@ def _gate_provenance(
       written to the spec journal this resolve emits (when it emits one);
     - not observable (another harness, no transcript) → the claim stands, as
       before, and on Claude Code it says out loud that it could not verify.
+
+    `questions` is the declared round count (spec 2026-09-26 §3.C): observed
+    answered rounds are checked against it by `question_rounds_refusal`, and a
+    verified or claimed `rounds: 2` appends `gate-question-rounds-<step>` to
+    the same spec journal the bypass writes to.
     """
-    from fr.journal.model import append_journal_entry, journal_path
-    from fr.run.telemetry import operator_answered_since
+    from fr.run.telemetry import answered_rounds_since
 
     if no_questions and not (reason and reason.strip()):
         err_console.print(
@@ -984,8 +1116,24 @@ def _gate_provenance(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = operator_answered_since(os.environ, record.at) if record.at else None
+    round_two = questions is not None and questions.rounds == 2
+    if round_two and not (spec_for_reason and spec_for_reason.endswith(".md")):
+        err_console.print(
+            f"[red]{step_id}: a second question round has nowhere to record its reason — "
+            "this resolve emits no spec and the run has none yet. Pass the spec with "
+            "`--emitted spec=<path>` (or `emitted: {spec: <path>}` in the record).[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    rounds = answered_rounds_since(os.environ, record.at) if record.at else None
+    observed = None if rounds is None else bool(rounds)
     if observed is True and not no_questions:
+        assert rounds is not None
+        refusal = question_rounds_refusal(rounds, questions)
+        if refusal is not None:
+            err_console.print(f"{step_id}: {refusal}", style="red", markup=False, soft_wrap=True)
+            raise typer.Exit(2)
+        _record_round_two(repo_root, step_id, questions, spec_for_reason)
         return "operator"
     if observed is False and not no_questions:
         err_console.print(
@@ -999,32 +1147,13 @@ def _gate_provenance(
         raise typer.Exit(2)
     if no_questions:
         assert spec_for_reason is not None  # refused above otherwise
-        slug = spec_journal_slug(Path(spec_for_reason).name[: -len(".md")])
-        target = journal_path(repo_root, "spec", slug)
-        entry_id = f"gate-no-questions-{step_id}"
-        try:
-            already = target.is_file() and any(
-                e.id == entry_id for e in parse_journal(target.read_text())
-            )
-        except JournalParseError:
-            already = False
-        # Review r1-6: a retry after a later refusal must not log it twice.
-        if not already:
-            _remember(target)
-            append_journal_entry(
-                target,
-                slug,
-                JournalEntry(
-                    kind="decision",
-                    scope="spec",
-                    id=entry_id,
-                    # `fr journal add`'s own stamp shape (local, second precision).
-                    created=_dt.datetime.now().replace(microsecond=0).isoformat(),
-                    title=f"Operator gate `{step_id}` cleared without asking",
-                    body=reason or "",
-                ),
-            )
-            _note_record_write(repo_root, target)
+        _append_gate_decision(
+            repo_root,
+            spec_for_reason,
+            f"gate-no-questions-{step_id}",
+            title=f"Operator gate `{step_id}` cleared without asking",
+            body=reason or "",
+        )
         err_console.print(
             f"[yellow]{step_id}: operator gate cleared WITHOUT asking (answered_by: "
             f"agent). Reason: {reason}[/yellow]",
@@ -1036,13 +1165,42 @@ def _gate_provenance(
     # so on the record (§5.B.7, p2-r28); `advance` already told the last two
     # that the gate is not enforced there, which is no reason to be quiet now.
     _note_unobserved("operator-gate")
+    _record_round_two(repo_root, step_id, questions, spec_for_reason)
+    # p2-r2: only `rounds: 2` writes anything (`_record_round_two`); `rounds: 1`
+    # is the default and is merely accepted.
+    if questions is None:
+        declared = ""
+    elif questions.rounds == 2:
+        declared = " The declared `questions: {rounds: 2}` is recorded as claimed too."
+    else:
+        declared = (
+            f" The declared `questions: {{rounds: {questions.rounds}}}` is accepted, unverified."
+        )
     err_console.print(
         f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
         f"so `answered_by: {claimed}` is recorded as claimed, unverified "
-        "(evidence: unobserved=operator-gate).[/yellow]",
+        f"(evidence: unobserved=operator-gate).{declared}[/yellow]",
         soft_wrap=True,
     )
     return claimed  # type: ignore[return-value]  # validated by the caller
+
+
+def _record_round_two(
+    repo_root: Path, step_id: str, questions: QuestionRounds | None, spec: str | None
+) -> None:
+    """A cleared gate that took two question rounds says so on the spec journal
+    (spec 2026-09-26 §3.C) — where the PR body reads it. `rounds: 1` is the
+    default and writes nothing."""
+    if questions is None or questions.rounds != 2:
+        return
+    assert spec is not None  # refused before observation otherwise
+    _append_gate_decision(
+        repo_root,
+        spec,
+        f"gate-question-rounds-{step_id}",
+        title=f"Operator gate `{step_id}` took two question rounds",
+        body=f"Trigger: {questions.trigger}. {questions.reason}",
+    )
 
 
 def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
@@ -3689,6 +3847,25 @@ def resolve_cmd(
         help="Why no operator decision was needed (with --no-questions); written "
         "to the spec journal this resolve emits.",
     ),
+    question_rounds: int | None = typer.Option(
+        None,
+        "--question-rounds",
+        help="1 | 2 — how many operator question rounds cleared this gate (default 1). "
+        "Verified against the session transcript on Claude Code; 2 needs "
+        "--round-two-trigger and --round-two-reason.",
+    ),
+    round_two_trigger: str | None = typer.Option(
+        None,
+        "--round-two-trigger",
+        help="design-risk | operator-request — why a second round was asked "
+        "(with --question-rounds 2). A design-risk round 1 must announce `Round 1 of 2`.",
+    ),
+    round_two_reason: str | None = typer.Option(
+        None,
+        "--round-two-reason",
+        help="What round 1 opened that round 2 settled (with --question-rounds 2); "
+        "written to the spec journal.",
+    ),
     answered_by: str | None = typer.Option(
         None,
         "--answered-by",
@@ -3758,6 +3935,9 @@ def resolve_cmd(
                 ("--evidence", evidence),
                 ("--no-questions", no_questions),
                 ("--reason", reason),
+                ("--question-rounds", question_rounds),
+                ("--round-two-trigger", round_two_trigger),
+                ("--round-two-reason", round_two_reason),
                 ("--answered-by", answered_by),
                 ("--agent", agent),
                 ("--harness", harness),
@@ -3770,7 +3950,7 @@ def resolve_cmd(
                 f"[red]--record carries the outcome, evidence and emitted artifacts — "
                 f"do not pass {'/'.join(given)} with it (record fields: `outcome`, "
                 "`emitted`, `evidence` — answered_by/agent/harness/model go in `evidence` — "
-                "and `no_questions` + `reason`)[/red]",
+                "and `no_questions` + `reason`, or `questions`)[/red]",
                 soft_wrap=True,
             )
             raise typer.Exit(2)
@@ -3779,6 +3959,7 @@ def resolve_cmd(
     if state_value is None:
         err_console.print("[red]--state done|failed is required (or pass --record <file>)[/red]")
         raise typer.Exit(2)
+    questions = _questions_from_flags(question_rounds, round_two_trigger, round_two_reason)
     _resolve_body(
         run_id=run_id,
         step_id=step_id,
@@ -3788,11 +3969,44 @@ def resolve_cmd(
         item=item,
         no_questions=no_questions,
         reason=reason,
+        questions=questions,
         answered_by=answered_by or "agent",
         agent=agent,
         harness=harness,
         model=model,
     )
+
+
+def _questions_from_flags(
+    rounds: int | None, trigger: str | None, reason: str | None
+) -> QuestionRounds | None:
+    """The flag form of a record's `questions:` section — the SAME model, so
+    both paths hand `_gate_provenance` one value (spec 2026-09-26 §3.B)."""
+    from pydantic import ValidationError
+
+    from fr.record.model import QuestionRounds
+
+    if rounds is None:
+        if trigger is not None or reason is not None:
+            err_console.print(
+                "--round-two-trigger/--round-two-reason describe a second round: pass "
+                "them with --question-rounds 2",
+                style="red",
+                markup=False,
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        return None
+    try:
+        return QuestionRounds.model_validate(
+            {"rounds": rounds, "trigger": trigger, "reason": reason}
+        )
+    except ValidationError as e:
+        detail = "; ".join(str(err["msg"]) for err in e.errors())
+        err_console.print(
+            f"--question-rounds {rounds}: {detail}", style="red", markup=False, soft_wrap=True
+        )
+        raise typer.Exit(2) from e
 
 
 def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
@@ -3850,6 +4064,7 @@ def _resolve_body(
     item: str | None,
     no_questions: bool = False,
     reason: str | None = None,
+    questions: QuestionRounds | None = None,
     answered_by: str = "agent",
     agent: str | None = None,
     harness: str | None = None,
@@ -3897,6 +4112,11 @@ def _resolve_body(
         err_console.print(f"[red]{e}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
+    if parent is not None and (no_questions or reason is not None or questions is not None):
+        # A grouped member never carries an operator gate, and `_resolve_member`
+        # has no gate path: before this, the gate flags were dropped silently
+        # here (review r1-7's refusal only covered top-level steps).
+        _refuse_gate_flags(step_id)
     if parent is not None:
         _resolve_member(
             repo_root,
@@ -3953,14 +4173,17 @@ def _resolve_body(
 
     # Decided ONCE, before either branch writes a byte: a refused gate leaves
     # the cursor exactly as it was (debug journal C1).
-    if (no_questions or reason is not None) and not _clears_gate(step, record, state_value):
-        # Review r1-7: silently ignored flags read as honoured ones.
+    if no_questions and questions is not None:
         err_console.print(
-            f"[red]{step_id}: --no-questions/--reason only apply to a resolve that clears "
-            "an operator gate, and this one clears none.[/red]",
+            f"[red]{step_id}: --no-questions and a question-rounds declaration contradict "
+            "each other — a gate cleared without asking took no rounds.[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    gate_flags = no_questions or reason is not None or questions is not None
+    if gate_flags and not _clears_gate(step, record, state_value):
+        # Review r1-7: silently ignored flags read as honoured ones.
+        _refuse_gate_flags(step_id)
     gate_by: AnsweredBy | None = (
         _gate_provenance(
             repo_root,
@@ -3969,6 +4192,7 @@ def _resolve_body(
             claimed=answered_by,
             no_questions=no_questions,
             reason=reason,
+            questions=questions,
             emitted=emitted_map,
             state=state,
         )
@@ -4175,6 +4399,7 @@ def resolve_in_process(
     also_commit: list[Path],
     no_questions: bool = False,
     reason: str | None = None,
+    questions: QuestionRounds | None = None,
     guard: ResolveGuard | None = None,
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
@@ -4212,6 +4437,7 @@ def resolve_in_process(
                 item=item,
                 no_questions=no_questions,
                 reason=reason,
+                questions=questions,
                 answered_by=answered_by,
                 agent=agent,
                 harness=harness,

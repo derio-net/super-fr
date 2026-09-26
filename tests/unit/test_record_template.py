@@ -46,6 +46,23 @@ def test_the_dispatch_brief_carries_a_prefilled_record(tmp_path: Path) -> None:
     assert "P1.T1.S1, P1.T1.S2, P1.T2.S1" in text
     assert "P1.T1" in text.split("owed by tasks with no refactor step:")[1].splitlines()[0]
     assert record["in_progress"] is None
+    assert "questions" not in text  # implement-phase clears no operator gate
+
+
+def test_record_brief_hands_a_gated_step_the_questions_hint(tmp_path: Path) -> None:
+    """p1-r1: through `record_brief`, the one production caller, not a copy of
+    its `gated=` argument — deleting that wiring must fail this test."""
+    from fr.record.template import record_brief
+    from fr.run.model import load_run_state
+    from fr.workflow.model import parse_manifest
+
+    root = started_run(tmp_path)
+    state = load_run_state(root, RUN)
+    manifest = parse_manifest(_SHIPPED_MANIFEST.read_text())
+    brainstorm = next(s for s in manifest.steps if s.gate == "operator")
+    text = record_brief(root, state, brainstorm).template
+    assert any(line.strip().startswith("#") and "questions:" in line for line in text.splitlines())
+    parse_record(text)
 
 
 def test_pickup_carries_the_template_for_the_runs_unit(tmp_path: Path) -> None:
@@ -57,6 +74,74 @@ def test_pickup_carries_the_template_for_the_runs_unit(tmp_path: Path) -> None:
     assert "## Step record" in out.stdout
     assert f"run: {RUN}" in out.stdout and "item: phase/1" in out.stdout
     assert "--record docs/superpowers/runs/r1.records/implement-phase__phase-1.yaml" in out.stdout
+
+
+_SHIPPED_MANIFEST = (
+    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+)
+
+
+def _all_manifest_steps():
+    from fr.workflow.model import parse_manifest
+
+    manifest = parse_manifest(_SHIPPED_MANIFEST.read_text())
+    pairs = []
+    for step in manifest.steps:
+        pairs.append((step, None))
+        for member in step.steps:
+            pairs.append((member, step))
+    return pairs
+
+
+def test_a_template_for_every_shipped_step_parses_under_the_live_schema_version() -> None:
+    """Spec §3.B, Test Plan item 5: bumping `RECORD_SCHEMA_VERSION` must not
+    make a freshly rendered template fail its own parse."""
+    from fr.record.model import RECORD_SCHEMA_VERSION, allowed_sections, parse_record
+    from fr.record.template import render_template
+
+    for step, group in _all_manifest_steps():
+        emits = tuple(step.emits) or (tuple(group.emits) if group is not None else ())
+        allowed = allowed_sections(step, group)
+        text = render_template(
+            run="r1",
+            step=step.id,
+            item=None,
+            allowed=allowed,
+            tick_ids=[],
+            refactor_tasks=[],
+            evidence=list(step.evidence),
+            emitted=[n for n in ("spec", "plan", "pr") if n in emits],
+            resolve=f"fr run resolve r1 --step {step.id}",
+            gated=step.gate == "operator",
+        )
+        record = parse_record(text)
+        assert record.schema_version == RECORD_SCHEMA_VERSION, step.id
+
+
+def test_a_gated_steps_template_carries_a_commented_questions_hint() -> None:
+    """§3.B: `render_template` puts a commented `questions:` hint on any
+    gated step's template — `brainstorm` is the one shipped example."""
+    from fr.record.model import allowed_sections
+    from fr.record.template import render_template
+
+    gated = [step for step, _ in _all_manifest_steps() if step.gate == "operator"]
+    assert gated, "no gated step in the shipped manifest — fixture is stale"
+    for step in gated:
+        text = render_template(
+            run="r1",
+            step=step.id,
+            item=None,
+            allowed=allowed_sections(step),
+            tick_ids=[],
+            refactor_tasks=[],
+            evidence=list(step.evidence),
+            emitted=[],
+            resolve=f"fr run resolve r1 --step {step.id}",
+            gated=True,
+        )
+        assert "questions:" in text
+        lines = [line for line in text.splitlines() if "questions:" in line]
+        assert any(line.strip().startswith("#") for line in lines)
 
 
 def test_a_stale_session_resumes_an_in_progress_record(tmp_path: Path) -> None:

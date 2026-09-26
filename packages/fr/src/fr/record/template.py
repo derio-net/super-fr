@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fr.record.model import (
+    RECORD_SCHEMA_VERSION,
     RecordError,
     StepRecord,
     allowed_sections,
@@ -45,19 +46,31 @@ def render_template(
     evidence: list[str],
     emitted: list[str],
     resolve: str,
+    gated: bool = False,
 ) -> str:
-    """The YAML text of an empty record for one unit — valid as it stands."""
+    """The YAML text of an empty record for one unit — valid as it stands.
+
+    `gated` is whether the step being handed this template clears an operator
+    gate (`Step.gate == "operator"`) — spec
+    `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B: such a
+    step's template carries a commented `questions:` hint, so the agent
+    resolving it sees the declaration is available without reading the spec.
+    """
     lines = [
         "# Step record. Fill it as you work and commit it with your work; then",
         f"#   {resolve}",
         "# applies all of it in one commit (spec 2026-09-25 §5.C).",
-        "schema_version: 1",
+        f"schema_version: {RECORD_SCHEMA_VERSION}",
         f"run: {run}",
         f"step: {step}",
     ]
     if item is not None:
         lines.append(f"item: {item}")
     lines.append("outcome: done            # done | failed | blocked")
+    if gated:
+        lines.append(
+            "# questions: {rounds: 1|2, trigger: design-risk|operator-request, reason: <why>}"
+        )
     if "ticks" in allowed:
         lines.append("ticks: []                # step ids you completed, e.g. [P1.T1.S1]")
         if tick_ids:
@@ -173,6 +186,7 @@ def record_brief(
         evidence=list(step.evidence),
         emitted=[n for n in _EMITTED_NAMES if n in emits],
         resolve=resolve,
+        gated=step.gate == "operator",
     )
     progress: str | None = None
     if path.is_file():
