@@ -47,9 +47,7 @@ def test_test_job_pytest_step_pins_addopts_and_splitting() -> None:
     workflow = _load_ci_workflow()
     test_job = workflow["jobs"]["test"]
 
-    pytest_steps = [
-        step for step in test_job["steps"] if "run" in step and "pytest" in step["run"]
-    ]
+    pytest_steps = [step for step in test_job["steps"] if "run" in step and "pytest" in step["run"]]
     assert len(pytest_steps) == 1, f"expected exactly one pytest step, got {pytest_steps}"
     run = pytest_steps[0]["run"]
 
@@ -65,9 +63,7 @@ def test_test_job_checkout_has_full_fetch_depth() -> None:
     test_job = workflow["jobs"]["test"]
 
     checkout_steps = [
-        step
-        for step in test_job["steps"]
-        if step.get("uses", "").startswith("actions/checkout")
+        step for step in test_job["steps"] if step.get("uses", "").startswith("actions/checkout")
     ]
     assert len(checkout_steps) == 1
     assert checkout_steps[0]["with"]["fetch-depth"] == 0
