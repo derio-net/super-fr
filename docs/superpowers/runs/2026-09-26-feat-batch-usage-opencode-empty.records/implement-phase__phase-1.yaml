@@ -1,0 +1,13 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-usage-opencode-empty
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2]
+refactor:
+  P1.T1: "RED-only task: it adds failing tests and no production code, so there was nothing to clean."
+  P1.T2: "The change is a three-line filter in _merge plus one fallback after it; nothing duplicated to extract."
+journal:
+  - {kind: decision, id: placeholder-after-merge, title: Placeholder written after the merge, body: "capture() builds the no-session-found placeholder only when the merged list is empty, and _merge drops any earlier placeholder, so real sessions always win and repeated empty captures keep exactly one. Reason is kept verbatim in _KEPT_REASONS (NO_SESSION_FOUND)."}
+resolves: []
+evidence: {}
