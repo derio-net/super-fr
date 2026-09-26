@@ -104,3 +104,8 @@ Opus review. Pre-existing _report_sweep + tail double call.
 ### r2-f9 · finding [open] (reviewer: out of scope) · v1-to-v2 migration writes spec: verbatim (phase 1)
 
 Opus review. Legacy writer, untouched here.
+
+<!-- fr:journal kind=review scope=plan id=r2-review-opus created=2026-09-26T23:40:11 phase=1 -->
+### r2-review-opus · review · independent code re-review of phase 1 on claude-opus-5-5: 9 findings (phase 1)
+
+Fresh-context Opus reviewer (agent a154d6fb3340dc945). 6 in scope (all fixed), 3 out of scope. The earlier Sonnet review r1-review stays recorded. No correctness bug in the main fix; call sites complete; mirrors in sync.
