@@ -4641,9 +4641,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation.py
     status: ci
-    notes: Also covers the release bot deleting the PR's .changes fragment after the
-      merge (blob-equality fallback, no special case), and fr archive git-mv-ing a merged
-      branch's plans/specs/journals/runs/usage to docs/superpowers/implemented/... (both
-      verify-merge and the down/reap-hazard path, per-line containment or blob equality
-      at the archived path); tests pin never-landed / content-differs / orphan-after-archive
-      as still missing, and dirty/unpushed as still hazarding.
+    notes: 'Review fixes (super-fr#665 review): C1 perf (constant-cost archived-path
+      blob scan), C2 correctness (verify_merge fetches the branch with an explicit refspec
+      and requires branch_fetched), and S1-S5 spec/test corrections — now also covers
+      the run+usage archived kinds, a §C-only archive test, a usage re-capture test,
+      and gc''s _merged_by_content not classifying unlanded content as merged. Still
+      unit-only in tests/unit/test_isolation.py.'
