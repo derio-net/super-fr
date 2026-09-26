@@ -24,3 +24,8 @@ opencode.db `part` rows for tool=bash carry state.input.command, state.status, s
 ### 5f2b434f6caf · root-cause · #638: OpenCode has no tests= reader; .records/ is not guarded as fr-owned
 
 (a) orchestrator_wrote_since has only a Claude Code reader, so on OpenCode the tests= provenance gate degrades to "a fresh non-empty file". (b) fr renders pr-body.md into <run>.records/, so agents treat that dir as the evidence dir and commit logs there (a5182264, 79bb92a6, c422fed0 are all agent commits). The record kind locator is *.records/*.yaml, so `fr validate artifacts` never looks at a .log in that dir, and nothing on deliver or in CI refuses it. The fix-659 run leaked the same way, not only fix-505.
+
+<!-- fr:journal kind=repro scope=debug id=b71e7537bf8b created=2026-09-26T11:54:14 -->
+### b71e7537bf8b · repro · #683 reproduced in the devcontainer, and caught by both new guards
+
+Running tests/integration/test_install_bridge.py in the dev container relinked /home/vscode/.local/bin/fr -> /tmp/pytest-of-vscode/.../uv-tools/fr/bin/fr. The new in-test assertion (link_state before == after) failed, and the new session-scoped conftest guard _operators_fr_survives_the_suite errored at teardown. Container link repaired with ln -sf "$(uv tool dir)/fr/bin/fr".
