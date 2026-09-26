@@ -4636,6 +4636,9 @@ rows:
       a reason, never as an empty or free run
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-usage-unavailable-when-no-session-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_capture.py
+    status: ci
+    notes: 'Capture writes a no-session-found placeholder (unit-proven). OpenCode live
+      proof stays owed until #537.'
