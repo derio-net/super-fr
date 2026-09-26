@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-release-scripts
 workflow: fr-goal@1
 branch: feat/batch-release-scripts
 started: '2026-09-26T10:06:38+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-26-release-scripts-hardening-design.md
   spec-review:
-    state: running
-    at: '2026-09-26T10:07:52+00:00'
+    state: done
+    at: '2026-09-26T10:09:34+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: adff62ba-fe43-4680-a6fe-ab62c9883057
+          returned: '2026-09-26T10:09:34+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ad2c6bee0d16b44ed
+          findings: s1,s2,s3,s4,s5,s6
   plan:
     state: pending
   plan-review:
