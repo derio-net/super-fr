@@ -84,3 +84,8 @@ backfill writes the no-session placeholder; red-then-green test test_a_run_namin
 ### cr2-resolved · finding [fixed] · resolves cr2: change fragment summary is not valid YAML
 
 Summary quoted; yaml.safe_load and scripts/changes.py both parse it (9746ee60).
+
+<!-- fr:journal kind=finding scope=plan id=cr3-resolved created=2026-09-26T23:37:08 state=fixed resolves=cr3 -->
+### cr3-resolved · finding [fixed] · resolves cr3: matrix row at ci covers fr run cost only via summarize(), not the CLI
+
+Added test_a_no_session_placeholder_prints_a_dash_and_counts_unavailable (CLI). OpenCode live proof stays the post-merge Test Plan, as the row notes say.
