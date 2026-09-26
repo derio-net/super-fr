@@ -1,0 +1,2 @@
+bump: minor
+summary: PRs declare a bump in a .changes/ fragment and never edit a version; main assigns the number
