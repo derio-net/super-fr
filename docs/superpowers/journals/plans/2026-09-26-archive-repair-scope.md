@@ -174,3 +174,8 @@ Filed at closeout as #709.
 ### r2-f8-resolved-2 · finding [deferred → #710] · resolves r2-f8: Archive runs repair twice and can print warnings twice
 
 Filed at closeout as #710.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f9-resolved-2 created=2026-09-27T00:02:48 state=open resolves=r2-f9 tracked_by=#711 -->
+### r2-f9-resolved-2 · finding [deferred → #711] · resolves r2-f9: v1-to-v2 migration writes spec: verbatim
+
+Filed at closeout as #711.
