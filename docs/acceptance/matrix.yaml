@@ -4105,9 +4105,15 @@ rows:
       round 2 that round 1 never announced, and any third round.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_question_rounds.py
+    status: ci
+    notes: 'Phase 2 of 2026-09-26-dynamic-brainstorm-question-rounds: fr run resolve
+      checks the declared question rounds against the transcript''s answered rounds
+      (spec §3.C verdict table), through both the --record path and the --question-rounds
+      flags; every refusal (count mismatch, unannounced design-risk round 2, a third
+      round) is tested byte-identical in CI.'
   - id: fr-goal-contract-prose-two-rounds
     capability: fr-goal-methodology
     acceptance: Every surface stating fr-goal's operator contract (skill, mirrors, explainer,
