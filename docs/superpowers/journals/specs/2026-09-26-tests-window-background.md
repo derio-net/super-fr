@@ -74,3 +74,8 @@ Reviewer a238c5d3a9f9c36c0 (opus). Re-run because the first review (spec-review)
 ### s5 · finding [open] (reviewer: in scope) · §2 'captured' shapes were hand-built, not captured (Opus re-review)
 
 No captured background exchange was committed; background_rows hand-built the records. Fixed: redacted real fixture tests/fixtures/transcripts/claude-code-background.jsonl.
+
+<!-- fr:journal kind=finding scope=spec id=s6 created=2026-09-26T23:50:51 state=open review_scope=in -->
+### s6 · finding [open] (reviewer: in scope) · Timeout-moved foreground Bash replies with different ack text (Opus)
+
+Same #594 symptom via the auto-background path. Fixed: covered in spec §2/§3.A and code.
