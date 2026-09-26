@@ -34,3 +34,8 @@ Operator paste or !cmd stdout; the harness marker origin.kind=task-notification 
 ### opus-r3-late-window-end · finding [open] (reviewer: in scope) · window ended at notice delivery, not the command's end
 
 Below reviewer threshold but taken: the queue-operation enqueue is earlier when the orchestrator is mid-turn.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r4-completed-uncaptured created=2026-09-26T23:40:20 state=open review_scope=in -->
+### opus-r4-completed-uncaptured · finding [open] (reviewer: in scope) · completed status never captured live
+
+Fixture only had failed; helper synthesised completed.
