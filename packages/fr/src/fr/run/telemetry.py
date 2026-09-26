@@ -683,6 +683,7 @@ def _writes(command: str, log: Path) -> bool:
 _BACKGROUND_ACK = "Command running in background"
 _NOTIFIED_ID = re.compile(r"<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>")
 _NOTIFIED_STATUS = re.compile(r"<status>\s*([^<]*?)\s*</status>")
+_NOTIFIED_SUMMARY = re.compile(r"<summary>(.*?)</summary>", re.DOTALL)
 _NOTIFIED_EXIT = re.compile(r"exit code\s+(-?\d+)")
 
 
@@ -711,7 +712,8 @@ def _successful_notification(record: Mapping[str, Any]) -> str | None:
     ident, status = _NOTIFIED_ID.search(text), _NOTIFIED_STATUS.search(text)
     if not ident or not status or status.group(1) != "completed":
         return None
-    if any(code != "0" for code in _NOTIFIED_EXIT.findall(text)):
+    summary = _NOTIFIED_SUMMARY.search(text)
+    if summary and any(code != "0" for code in _NOTIFIED_EXIT.findall(summary.group(1))):
         return None
     return ident.group(1)
 
