@@ -14,3 +14,68 @@ Task 1 only adds failing tests; there was no production code to clean.
 ### no-refactor-p1-t3 · discovery · no-refactor-because P1.T3 (phase 1)
 
 Task 3 is a matrix status move, a change fragment and a verification run; nothing to refactor.
+
+<!-- fr:journal kind=finding scope=plan id=r1 created=2026-09-26T15:52:41 phase=1 state=open review_scope=in -->
+### r1 · finding [open] (reviewer: in scope) · unresolvable-ref test passes on the old code too (phase 1)
+
+test_verify_merge_unresolvable_ref_raises_naming_the_branch matched a branch name the old merge-base error also carried; assert _branch_refs' own wording.
+
+<!-- fr:journal kind=finding scope=plan id=r2 created=2026-09-26T15:52:41 phase=1 state=open review_scope=in -->
+### r2 · finding [open] (reviewer: in scope) · two verify_merge tests are guards, not red-before-fix (phase 1)
+
+Unpushed-local and deleted-remote tests were probably green before; they guard the fail-safe.
+
+<!-- fr:journal kind=finding scope=plan id=r3 created=2026-09-26T15:52:41 phase=1 state=open review_scope=out -->
+### r3 · finding [open] (reviewer: out of scope) · A reverted merge still passes the blob fallback (phase 1)
+
+Design-inherent to spec §A (positive evidence from base history); verify-merge still needs PR MERGED; reap keeps the branch ref.
+
+<!-- fr:journal kind=finding scope=plan id=r4 created=2026-09-26T15:52:41 phase=1 state=open review_scope=out -->
+### r4 · finding [open] (reviewer: out of scope) · diff --name-only without -z quotes special paths (phase 1)
+
+Pre-existing; fails safe.
+
+<!-- fr:journal kind=finding scope=plan id=r5 created=2026-09-26T15:52:41 phase=1 state=open review_scope=out -->
+### r5 · finding [open] (reviewer: out of scope) · One rev-parse per commit touching the path (phase 1)
+
+Spec accepts cost bounded to one path; early exit already present.
+
+<!-- fr:journal kind=finding scope=plan id=r6 created=2026-09-26T15:52:41 phase=1 state=open review_scope=in -->
+### r6 · finding [open] (reviewer: in scope) · No test for path with space/dash/glob or failed rev-list (phase 1)
+
+Optional; code is safe by inspection.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-26T15:52:41 phase=1 -->
+### review-phase-1 · review · independent review of phase 1: 6 findings (3 in, 3 out), no critical (phase 1)
+
+Reviewer a6a03ceb06e10253d. Blob fallback cannot pass unlanded content except the accepted revert case; ref set matches spec B; scaffold.py/commit.py untouched (verified by diff --stat, 0 lines).
+
+<!-- fr:journal kind=finding scope=plan id=r1-resolved created=2026-09-26T15:52:41 phase=1 state=fixed resolves=r1 -->
+### r1-resolved · finding [fixed] · resolves r1: unresolvable-ref test passes on the old code too (phase 1)
+
+Assertion now matches 'cannot resolve branch ref' (_branch_refs' wording).
+
+<!-- fr:journal kind=finding scope=plan id=r2-resolved created=2026-09-26T15:52:41 phase=1 state=refuted resolves=r2 -->
+### r2-resolved · finding [refuted] · resolves r2: two verify_merge tests are guards, not red-before-fix (phase 1)
+
+Spec Test Plan lists them as guards for the fail-safe; the PR body will not call them red-before-fix.
+
+<!-- fr:journal kind=finding scope=plan id=r3-resolved created=2026-09-26T15:52:41 phase=1 state=open resolves=r3 out_of_scope=true -->
+### r3-resolved · finding [out-of-scope] · resolves r3: A reverted merge still passes the blob fallback (phase 1)
+
+Follows from spec §A, not a defect of this change; noted for the operator.
+
+<!-- fr:journal kind=finding scope=plan id=r4-resolved created=2026-09-26T15:52:41 phase=1 state=open resolves=r4 out_of_scope=true -->
+### r4-resolved · finding [out-of-scope] · resolves r4: diff --name-only without -z quotes special paths (phase 1)
+
+Pre-existing behaviour, fails safe.
+
+<!-- fr:journal kind=finding scope=plan id=r5-resolved created=2026-09-26T15:52:41 phase=1 state=open resolves=r5 out_of_scope=true -->
+### r5-resolved · finding [out-of-scope] · resolves r5: One rev-parse per commit touching the path (phase 1)
+
+Spec accepts the bounded cost; early exit already present.
+
+<!-- fr:journal kind=finding scope=plan id=r6-resolved created=2026-09-26T15:52:41 phase=1 state=refuted resolves=r6 -->
+### r6-resolved · finding [refuted] · resolves r6: No test for path with space/dash/glob or failed rev-list (phase 1)
+
+Path is only passed after `--` and inside <rev>:<path>, never parsed as an option; pathspec magic can only widen candidates and the blob compare uses the literal path, so no false pass.
