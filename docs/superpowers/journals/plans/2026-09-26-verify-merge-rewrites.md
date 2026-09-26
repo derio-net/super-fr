@@ -184,3 +184,8 @@ Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f
 ### opus-f6-user-log-config-resolved · finding [fixed] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
 
 Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1-opus-fixes created=2026-09-27T00:12:46 phase=1 -->
+### review-phase-1-opus-fixes · review · Opus review of the C1/C2/S1-S5 fix commits: 5 in-scope findings + 1 out of scope, all fixed (phase 1)
+
+Reviewer a9c7c97d8ebf515d7 on claude-opus-5-5. None let a failure pass; all were false refusals, doc drift or an unsafe default. Fixed in aa1bc209.
