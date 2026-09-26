@@ -198,16 +198,12 @@ rows:
       - super-fr:tests/unit/test_install_copies_rules.py
       - super-fr:tests/unit/test_version_bump_guard.py
       - super-fr:tests/unit/test_change_fragment_gate.py
+      - super-fr:tests/unit/test_version_surfaces.py
       int:
       - super-fr:tests/integration/test_install_sh.py
     status: ci
-    notes: 'Tripwires ARE the acceptance (#328). Since spec 2026-09-26-version-bump-churn
-      the release half is the change-fragment gate (scripts/check-change-fragment.py):
-      a PR that changes shipped source/skills/rules/install surfaces must ADD a .changes/
-      fragment and may not edit any version surface; the release bot assigns the number
-      on main. test_version_bump_guard.py pins the kept path classifier, test_change_fragment_gate.py
-      the gate. Integration test verifies every rule in install.sh''s shared list is
-      removed by --uninstall.'
+    notes: 'Added test_version_surfaces.py as evidence: release scripts hardening (gh#669)
+      pins the [project]-anchored TOML rewrite the release bot depends on; status unchanged.'
   - id: auto-archive-merged-plans
     capability: Lifecycle
     acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
