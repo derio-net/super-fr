@@ -109,3 +109,8 @@ spec edited in the Opus-review commit
 ### s2-3-resolved · finding [fixed] · resolves s2-3: Canonical create output breaks #133 idempotent re-run of an old half-built folder
 
 spec edited in the Opus-review commit
+
+<!-- fr:journal kind=finding scope=spec id=s2-4-resolved created=2026-09-26T23:36:26 state=open resolves=s2-4 out_of_scope=true -->
+### s2-4-resolved · finding [out-of-scope] · resolves s2-4: fr migrate dirs also runs repair_repo repo-wide
+
+pre-existing repo-level migration; not caused by this change
