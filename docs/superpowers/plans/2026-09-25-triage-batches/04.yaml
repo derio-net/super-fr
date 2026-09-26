@@ -44,6 +44,7 @@ state:
       note: Evidence recorded on triage-batch-merge-queue and triage-batch-forge-visible
         (set-status ci, 2026-09-26).
   completion:
-    at: null
-    note: null
+    at: '2026-09-26T07:12:55+00:00'
+    note: 'Live walk 2026-09-26: #651 and #652 dispatched through fr-herdr and merged
+      through fr triage batch merge.'
     observed_prs: []
