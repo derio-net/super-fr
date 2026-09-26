@@ -10,10 +10,14 @@ read as `missing`, so `fr isolation verify-merge` says NOT verified for a PR
 that is genuinely merged. It fails safe (a STOP), but it blocks every closeout
 in a batch queue merged back to back (super-fr#665, #598).
 
-With `.changes/` fragments (#666) a PR no longer edits version lines, so that
-half of the repro is mostly gone. The generated acceptance reports
-(`docs/acceptance/report_*.{html,md}`) are rewritten by nearly every PR, so that
-half still reproduces.
+With `.changes/` fragments (#666) a PR no longer edits version lines, but it
+ADDS `.changes/<slug>.yaml`, and the release bot's next commit on the default
+branch (`release: vX.Y.Z`) DELETES it after consuming it. The fragment the
+branch added is then absent from `origin/<default>`, so without a fix
+`verify-merge` reports NOT verified for EVERY merged PR: this is now the
+dominant repro. The generated acceptance reports
+(`docs/acceptance/report_*.{html,md}`) are rewritten by nearly every PR and
+still reproduce the original shape too.
 
 Second half: `LocalWorktreeDevcontainerTarget.verify_merge` (`:992`) passes
 `refs=None` to `_verdict`, which then checks only the local `branch` ref
@@ -45,6 +49,14 @@ Properties, all kept:
 - The existing whole-file fast path and per-line containment run first and are
   unchanged; the fallback only adds passes for files they reject.
 - Cost is bounded to commits touching the one differing path.
+- **No `.changes/` special case.** The release-bot deletion needs none: the
+  fragment is on the base in the squash commit (blob equal to the branch's) and
+  is deleted by a later commit, so it takes the path-absent-on-base early return
+  into this same fallback and matches that squash commit's blob. A special
+  case that exempted `.changes/*.yaml` would also wave through a fragment that
+  never landed, so it is deliberately not added. Rebase and multi-commit
+  merges keep the final blob of the file on the base too; a fragment reworded
+  during the merge (blob differs) reads as missing, i.e. a safe STOP.
 
 ### B. `verify_merge` checks the fetched remote branch too
 
@@ -88,6 +100,12 @@ merge; and it checks the fetched remote branch as well as the local one.
   file, still reports missing.
 - Unit: a file deleted from the base after the merge counts as landed; a branch-side pure deletion stays missing.
 - Unit: `_reap_hazard` reports no hazard for a branch whose lines a later merge rewrote, and still reports one for unlanded content.
+- Unit: a branch adds `.changes/feat-x.yaml` plus a code file, is squash-merged,
+  and a `release: vX.Y.Z` commit then deletes the fragment. `branch_changes_present`
+  and `verify_merge` (PR stubbed MERGED, real origin) report present/verified
+  (red against the original `local.py`: the fragment read as missing). A fragment
+  that never landed on the base stays missing, and an orphan code file still reads
+  missing after the fragment landed and was consumed.
 - Unit: `verify_merge` raises `IsolationError` when neither ref resolves.
 - Unit: `verify_merge` with a stale local ref and an advanced fetched
   `origin/<branch>`, and with an unpushed local commit, refuses; a deleted remote
