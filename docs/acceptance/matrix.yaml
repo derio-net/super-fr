@@ -4381,9 +4381,15 @@ rows:
       PR gate demands an added change fragment and refuses any edit to a version surface
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_change_fragment_gate.py
+      - super-fr:tests/unit/test_change_fragments.py
+    status: ci
+    notes: 'Spec 2026-09-26-version-bump-churn §3.A/§3.B, phase 2: the change-fragment
+      CI job fails a bump-required PR with no added fragment and any PR that changes
+      a version_surfaces() value (added surfaces pass only at the base version); fragments
+      are one file per branch slug, so two PRs never share a path.'
   - id: version-floor-guard
     capability: Release integrity
     acceptance: A hand-written fr_version floor can never silently admit an fr that
