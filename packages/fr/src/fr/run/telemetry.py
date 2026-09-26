@@ -461,6 +461,39 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
     `tool_result` for it whose `toolUseResult` is an object with a non-empty
     `answers` map. A declined or failed call carries a plain string there
     (captured, `tests/fixtures/transcripts/`), and asking is not answering.
+
+    Exactly "at least one answered round": a round counts when any of its calls
+    was answered, so the two readings cannot drift apart.
+    """
+    rounds = answered_rounds_since(env, since)
+    return None if rounds is None else bool(rounds)
+
+
+@dataclass(frozen=True)
+class Round:
+    """One operator question round (spec 2026-09-26 §3.C): a maximal run of
+    main-thread `QUESTION_TOOL` calls with no other tool_use between them.
+
+    `question_texts` holds every `questions[].question` and `header` of its
+    calls, in order — where a `Round 1 of 2` announcement is looked for.
+    """
+
+    question_texts: tuple[str, ...]
+    answered: bool
+
+
+def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
+    """The ANSWERED question rounds of this session at or after `since`, in
+    order; `None` exactly where `operator_answered_since` is `None` (another
+    harness, no session id, no readable transcript).
+
+    Only main-thread (non-sidechain) assistant records stamped at or after
+    `since` are walked. Consecutive `QUESTION_TOOL` tool_uses form one round —
+    text-only turns and the calls' own tool_results do not break it, so a batch
+    larger than the tool's per-call limit stays ONE round; any other tool_use
+    closes it. A round is answered when any of its calls has a `tool_result`
+    whose `toolUseResult` carries a non-empty `answers` map; a round that was
+    only declined is not returned.
     """
     if detect_harness(env) != ClaudeCodeReader.harness:
         return None
@@ -476,7 +509,8 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
     records = _read_records(transcript)
     if records is None:
         return None
-    asked: set[str] = set()
+    groups: list[tuple[list[str], list[str]]] = []  # (tool_use ids, question texts)
+    open_group: tuple[list[str], list[str]] | None = None
     for record in records:
         if record.get("type") != "assistant" or record.get("isSidechain") is True:
             continue
@@ -486,15 +520,43 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
-            if (
-                isinstance(block, Mapping)
-                and block.get("type") == "tool_use"
-                and block.get("name") == QUESTION_TOOL
-                and isinstance(block.get("id"), str)
-            ):
-                asked.add(block["id"])
-    if not asked:
-        return False
+            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
+                continue
+            if block.get("name") != QUESTION_TOOL or not isinstance(block.get("id"), str):
+                open_group = None
+                continue
+            if open_group is None:
+                open_group = ([], [])
+                groups.append(open_group)
+            open_group[0].append(block["id"])
+            open_group[1].extend(_question_texts(block.get("input")))
+    if not groups:
+        return []
+    answered = _answered_ids(records)
+    return [
+        Round(question_texts=tuple(texts), answered=True)
+        for ids, texts in groups
+        if any(i in answered for i in ids)
+    ]
+
+
+def _question_texts(tool_input: object) -> list[str]:
+    """Every `question` and `header` string of one `QUESTION_TOOL` call's input."""
+    questions = tool_input.get("questions") if isinstance(tool_input, Mapping) else None
+    texts: list[str] = []
+    for question in questions if isinstance(questions, list) else ():
+        if not isinstance(question, Mapping):
+            continue
+        for key in ("question", "header"):
+            value = question.get(key)
+            if isinstance(value, str):
+                texts.append(value)
+    return texts
+
+
+def _answered_ids(records: list[dict[str, Any]]) -> set[str]:
+    """The tool_use ids whose `tool_result` carries a non-empty `answers` map."""
+    answered: set[str] = set()
     for record in records:
         if record.get("type") != "user":
             continue
@@ -507,10 +569,10 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
             if (
                 isinstance(block, Mapping)
                 and block.get("type") == "tool_result"
-                and block.get("tool_use_id") in asked
+                and isinstance(block.get("tool_use_id"), str)
             ):
-                return True
-    return False
+                answered.add(block["tool_use_id"])
+    return answered
 
 
 def _this_session(env: Mapping[str, str]) -> Path | None:

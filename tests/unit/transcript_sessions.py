@@ -201,3 +201,62 @@ def ran_at(
         block = call["message"]["content"][0]
         block["input"]["command"] = block["input"]["command"].replace(CAPTURED_LOG, str(log))
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])
+
+
+TEXT_LINE = 6
+"""Index of a captured main-thread `assistant` record whose content is text
+only — a turn that asks nothing and runs nothing."""
+
+
+def question_rows(
+    timestamp: str,
+    *,
+    tool_use_id: str,
+    answered: bool = True,
+    first_question: str | None = None,
+    sidechain: bool = False,
+) -> list[dict[str, Any]]:
+    """The captured `AskUserQuestion` exchange (call + result), re-keyed to
+    `tool_use_id` and moved to `timestamp` — the building block of a question
+    ROUND (spec 2026-09-26 §3.C). `first_question` replaces the text of the
+    call's first question (where a `Round 1 of 2` announcement would sit);
+    `answered=False` swaps in the declined string form, as `asked_at` does;
+    `sidechain=True` marks both records as a subagent's."""
+    question, answer = copy_of(records(QUESTION))
+    question["timestamp"] = timestamp
+    answer["timestamp"] = timestamp
+    question["uuid"] = f"uuid-{tool_use_id}"
+    question["message"]["content"][0]["id"] = tool_use_id
+    answer["message"]["content"][0]["tool_use_id"] = tool_use_id
+    answer["sourceToolAssistantUUID"] = question["uuid"]
+    if first_question is not None:
+        question["message"]["content"][0]["input"]["questions"][0]["question"] = first_question
+    if not answered:
+        answer["toolUseResult"] = "User rejected tool use"
+    if sidechain:
+        question["isSidechain"] = True
+        answer["isSidechain"] = True
+    return [question, answer]
+
+
+def bash_rows(timestamp: str, *, tool_use_id: str) -> list[dict[str, Any]]:
+    """The captured orchestrator `Bash` exchange, re-keyed and moved — a
+    non-question tool_use, which closes a question round."""
+    call, result = copy_of(records(BASH))
+    call["timestamp"] = timestamp
+    result["timestamp"] = timestamp
+    call["message"]["content"][0]["id"] = tool_use_id
+    result["message"]["content"][0]["tool_use_id"] = tool_use_id
+    return [call, result]
+
+
+def text_row(timestamp: str) -> dict[str, Any]:
+    """The captured text-only assistant turn, moved to `timestamp`."""
+    row = copy_of(records(ORCHESTRATOR)[TEXT_LINE])
+    row["timestamp"] = timestamp
+    return row
+
+
+def conversation_at(root: Path, rows: list[dict[str, Any]], *, session_id: str) -> Path:
+    """A session: the captured orchestrator prelude, then `rows` in order."""
+    return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), *rows])
