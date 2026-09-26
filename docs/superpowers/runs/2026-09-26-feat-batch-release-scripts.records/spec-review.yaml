@@ -1,0 +1,20 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-release-scripts
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "Missing-[project]-version ValueError unreachable via write_version; 'before a byte is written' false across files", body: "version_surfaces() already raises for a missing version via tomllib; the reachable guard is regex-mismatch (single-quoted). write_version writes file by file."}
+  - {kind: finding, id: s2, review_scope: in, title: "[project] table bounding underspecified", body: "Header regex rejects a trailing comment; 'next line starting with [' is cut short by nested-array lines."}
+  - {kind: finding, id: s3, review_scope: in, title: "2.C hedges on setup-uv", body: "change-fragment job has only checkout (ci.yml:94-102); setup-uv step is definite."}
+  - {kind: finding, id: s4, review_scope: in, title: "Acceptance row does not cite test_version_surfaces.py", body: "Spec claimed all three test files were cited."}
+  - {kind: finding, id: s5, review_scope: in, title: "requires_bump edge cases and rules handling implicit", body: "Pin plugins/[^/]+/skills/ and negative cases."}
+  - {kind: finding, id: s6, review_scope: out, title: "check-change-fragment.py docstring advertises plain python", body: "Prose adjacent to the change; harmless."}
+  - {kind: review, id: spec-review, title: "independent spec review: 6 findings (5 in scope, 1 out)", body: "Reviewer fr-spec-reviewer verified decisions honoured and every named file/line against the codebase; 5 in-scope findings fixed in the spec, 1 out-of-scope."}
+resolves:
+  - {id: s1, state: fixed, body: "Spec 2.A rewritten: guard covers regex-mismatch; all rewrites computed before any write; test uses single-quoted version."}
+  - {id: s2, state: fixed, body: "Spec 2.A specifies header/boundary regexes, trailing comment, nested-array and [project.urls] tests."}
+  - {id: s3, state: fixed, body: "Spec 2.C states the setup-uv step; tripwire asserts it."}
+  - {id: s4, state: fixed, body: "Spec section 4 corrects the claim and adds a set-status --level ref for test_version_surfaces.py."}
+  - {id: s5, state: fixed, body: "Spec 2.B pins the regex and negative cases."}
+  - {id: s6, state: out-of-scope, body: "Stale docstring line is not caused by this change's defect; spec 2.C touches it in passing anyway."}
+evidence: {review: spec-review, reviewer: ad2c6bee0d16b44ed}
