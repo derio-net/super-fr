@@ -29,3 +29,8 @@ telemetry._task_notice read every field occurrence and kept the last; the <summa
 ### opus-r2-unmarked-notice · finding [open] (reviewer: in scope) · any string-content user record with the tag was accepted as a notice
 
 Operator paste or !cmd stdout; the harness marker origin.kind=task-notification was ignored; a failed notice did not retire the id, so a later forged completed counted.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r3-late-window-end created=2026-09-26T23:40:18 state=open review_scope=in -->
+### opus-r3-late-window-end · finding [open] (reviewer: in scope) · window ended at notice delivery, not the command's end
+
+Below reviewer threshold but taken: the queue-operation enqueue is earlier when the orchestrator is mid-turn.
