@@ -39,3 +39,8 @@ Below reviewer threshold but taken: the queue-operation enqueue is earlier when 
 ### opus-r4-completed-uncaptured · finding [open] (reviewer: in scope) · completed status never captured live
 
 Fixture only had failed; helper synthesised completed.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r5-unhashable-id created=2026-09-26T23:40:23 state=open review_scope=out -->
+### opus-r5-unhashable-id · finding [open] (reviewer: out of scope) · unhashable tool_use_id raises TypeError
+
+Pre-existing on main (telemetry.py:717); not introduced by this change.
