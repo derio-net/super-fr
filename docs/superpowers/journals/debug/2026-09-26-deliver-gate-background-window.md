@@ -19,3 +19,8 @@ telemetry.orchestrator_wrote_since: a tool_result with toolUseResult.backgroundT
 ### review-gate-fix · review · independent review of the gate fix: no provenance weakening found
 
 Reviewer a3be0e06072843aad: notices read only from main-thread user records with string content, id must belong to an orchestrator command that wrote the log, only status completed counts, OpenCode path untouched, 5 tests non-vacuous, fixture redacted. Noted, out of scope: the window for a backgrounded command is as wide as the suite (inherent to anchoring on the log's mtime, covered by the docstring's forgery limit); a duplicate/failed-then-completed notice pair is not emitted by the harness; a tool_use_id TypeError on malformed transcripts pre-exists; an unrecognised notice shape reports the generic 'no command of YOURS wrote it'.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r1-summary-injection created=2026-09-26T23:40:14 state=open review_scope=in -->
+### opus-r1-summary-injection · finding [open] (reviewer: in scope) · summary-quoted description can forge <status>completed</status> or another command's id
+
+telemetry._task_notice read every field occurrence and kept the last; the <summary> quotes the agent-written Bash description.
