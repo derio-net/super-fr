@@ -69,3 +69,8 @@ Opus review. Guard now applies only to existing files outside SPEC_ROOTS; test_r
 ### r2-f2 · finding [open] (reviewer: in scope) · rework_create is a third spec: writer with its own canonical form (phase 1)
 
 Opus review. Routed through canonical_spec_ref; test_rework_create_writes_the_same_canonical_spec_as_repair.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f3 created=2026-09-26T23:39:59 phase=1 state=open review_scope=in -->
+### r2-f3 · finding [open] (reviewer: in scope) · No test that a scoped archive canonicalizes the archived plan's own spec (phase 1)
+
+Opus review. Added test_single_plan_archive_canonicalizes_the_archived_plans_own_spec.
