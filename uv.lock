@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "fr"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "packages/fr" }
 dependencies = [
     { name = "packaging" },
@@ -187,7 +187,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-cncd"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "packages/fr-cncd" }
 dependencies = [
     { name = "fr" },
@@ -202,7 +202,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-dispatch"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "packages/fr-dispatch" }
 dependencies = [
     { name = "fr" },
@@ -213,7 +213,7 @@ requires-dist = [{ name = "fr", editable = "packages/fr" }]
 
 [[package]]
 name = "fr-herdr"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "packages/fr-herdr" }
 dependencies = [
     { name = "fr" },
@@ -228,7 +228,7 @@ requires-dist = [
 
 [[package]]
 name = "fr-vk"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "packages/fr-vk" }
 dependencies = [
     { name = "fr" },
@@ -703,7 +703,7 @@ wheels = [
 
 [[package]]
 name = "super-fr-workspace"
-version = "4.23.1"
+version = "4.23.3"
 source = { editable = "." }
 dependencies = [
     { name = "fr" },
