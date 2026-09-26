@@ -79,3 +79,13 @@ Reviewer confirmed section written only when absent right before the strict appe
 ### r2-1-resolved · finding [fixed] · resolves r2-1: stale pre-flight comment in create (plan_ops.py:200) (phase 2)
 
 Comment rewritten to describe the malformed-table pre-flight and the create-writes-section behaviour.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-set-status-self-commits created=2026-09-26T07:52:23 phase=3 -->
+### p3-set-status-self-commits · discovery · fr acceptance set-status commits each row itself (phase 3)
+
+Each set-status call made its own chore(fr) commit (three), so the matrix flips are separate commits from the version bump commit.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-26T07:52:23 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+release/bookkeeping task (version bump, matrix rows, verification); no code written, nothing to clean
