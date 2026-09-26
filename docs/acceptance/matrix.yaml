@@ -3437,6 +3437,21 @@ rows:
     status: ci
     notes: gh#638. Two runs committed suite logs under <run>.records/ and they reached
       main; the record locator matched *.yaml only, so nothing saw them.
+  - id: run-deliver-tests-log-background-command
+    capability: Run cursor
+    acceptance: 'On Claude Code, deliver''s tests=<log> is accepted when the orchestrator
+      wrote it from a backgrounded command that completed: the window runs from the
+      call to its task-notification, not to the launch ack; a still-running, failed
+      or killed background command yields no window'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-deliver-gate-background-window.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'Live: a full suite run with run_in_background (32 min) was refused because
+      the tool_result window closed at the ~1 s launch ack; captured fixture claude-code-bash-background.jsonl
+      pins the ack/notice shape.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
