@@ -74,3 +74,8 @@ Design line and Test Plan test added.
 ### s5-resolved · finding [out-of-scope] · resolves s5: Blob equality misses concurrent-edit-then-rewrite
 
 Inherent to option 1 of #598, not caused by this change; recorded as a known limit in Non-goals; fails safe.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s1 created=2026-09-27T00:07:33 state=open review_scope=in -->
+### opus-s1 · finding [open] (reviewer: in scope) · §C claimed archive never rewrites moved bytes; usage is re-captured first
+
+archive.py _archive_usage -> upsert_capture replaces the host entry before git mv.
