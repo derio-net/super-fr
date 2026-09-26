@@ -50,6 +50,7 @@ from fr.git import (
     GIT_TIMEOUT_SECONDS,
     GitRefusal,
     GitUnavailableError,
+    git_argv,
     remote_default_ref,
     remote_name,
 )
@@ -681,7 +682,7 @@ def _restore_index(toplevel: Path, rel: Sequence[str], before: str) -> str:
         entries = "".join(f"{entry}\0" for entry in before.split("\0") if entry.strip())
         if entries:
             done = subprocess.run(
-                ["git", "update-index", "-z", "--index-info"],
+                git_argv(toplevel, "update-index", "-z", "--index-info"),
                 cwd=toplevel,
                 input=entries,
                 capture_output=True,

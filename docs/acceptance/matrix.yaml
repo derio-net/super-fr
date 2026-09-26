@@ -3406,6 +3406,37 @@ rows:
       Claude Code fr-goal run on #526, 2026-09-23): every attempt records the served
       model id (claude-opus-5-5 for the orchestrator and executors, claude-sonnet-5
       for reviewers), not an alias.'
+  - id: run-deliver-tests-log-opencode
+    capability: Run cursor
+    acceptance: 'On OpenCode, deliver''s tests=<log> is verified against the session
+      database: only a completed, exit-0 bash command in a top-level (orchestrator)
+      session that wrote the log since the unit opened counts; an agent-composed log
+      is refused'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: 'gh#638. Before, OpenCode had no reader and the gate passed any fresh non-empty
+      file. Live-verified 2026-09-26: against the real opencode.db (OpenCode 1.18.32)
+      a bash-redirect log matched one window containing its mtime and a write-tool log
+      matched none (1.3 s over a 1.5 GB db); the same pair on a live Claude Code transcript
+      behaved identically. Hermes is declared unsupported (parity row deliver-tests-provenance,
+      operator decision).'
+  - id: run-records-dir-holds-only-records
+    capability: Run cursor
+    acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
+      only: a tests= log inside it is refused at deliver, and fr validate artifacts
+      (CI) flags any other file there'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#638. Two runs committed suite logs under <run>.records/ and they reached
+      main; the record locator matched *.yaml only, so nothing saw them.
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
@@ -4638,3 +4669,27 @@ rows:
     notes: check_watch_list's tripwire tests (real repo passes; negative cases on a
       tmp dir for an unlisted workflow and a stale config key) exercise the exact check
       CI runs on every push via test_ci_budget.py
+  - id: container-record-commits
+    capability: isolation-git-ownership
+    acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted
+      worktree git considers foreign-owned
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_container_git_ownership.py
+    status: ci
+    notes: safe.directory override on git_answer, update-index restore and record/apply
+      git calls; proven in a foreign-owned linked worktree from root and subdirectory
+  - id: scaffold-trusts-workspace
+    capability: isolation-git-ownership
+    acceptance: A scaffolded devcontainer profile trusts its own workspace path for
+      git so a fresh container needs no manual safe.directory
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_container_git_ownership.py
+    status: ci
+    notes: POST_CREATE adds git config --global --add safe.directory "$PWD" || true;
+      committed profiles regenerated

@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 
 import os
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,45 @@ def _wide_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
 # module-level console live. Pinned by test_suite_isolation_inherited_columns.
 for _inherited in ("COLUMNS", "LINES"):
     os.environ.pop(_inherited, None)
+
+
+def uv_tool_bin_dir(env: Mapping[str, str]) -> Path:
+    """Where `uv tool install` links executables under `env` — uv's own order:
+    `UV_TOOL_BIN_DIR`, `XDG_BIN_HOME`, `$XDG_DATA_HOME/../bin`, `~/.local/bin`."""
+    for key in ("UV_TOOL_BIN_DIR", "XDG_BIN_HOME"):
+        if env.get(key):
+            return Path(env[key])
+    if env.get("XDG_DATA_HOME"):
+        return Path(env["XDG_DATA_HOME"]).parent / "bin"
+    return Path(env.get("HOME") or Path.home()) / ".local" / "bin"
+
+
+def link_state(path: Path) -> str:
+    """What `path` is, as a comparable string: a symlink's target, a file's
+    size and mtime, or absent."""
+    if path.is_symlink():
+        return f"symlink to {os.readlink(path)}"
+    if path.exists():
+        st = path.stat()
+        return f"file {st.st_size} {st.st_mtime_ns}"
+    return "absent"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _operators_fr_survives_the_suite() -> Iterator[None]:
+    """gh#683: an install test that isolated `UV_TOOL_DIR` but not
+    `UV_TOOL_BIN_DIR` relinked the operator's real `~/.local/bin/fr` into a
+    pytest tmpdir, and every host suite run left `fr` dangling. Whatever a test
+    installs, the real `fr` link must be exactly as the suite found it."""
+    real = uv_tool_bin_dir(os.environ) / "fr"
+    before = link_state(real)
+    yield
+    after = link_state(real)
+    assert after == before, (
+        f"the suite changed the operator's {real}: was {before}, now {after}. An install "
+        "test is missing UV_TOOL_BIN_DIR isolation. Repair: "
+        'ln -sf "$(uv tool dir)/fr/bin/fr" ' + str(real)
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -115,7 +115,7 @@ def git_answer(
     """
     try:
         return subprocess.run(
-            ["git", *args],
+            git_argv(root, *args),
             cwd=root,
             capture_output=True,
             text=True,
@@ -200,3 +200,29 @@ def remote_default_ref(root: Path) -> str | None | GitRefusal:
         if ref_exists(root, f"refs/remotes/{remote}/{name}"):
             return f"{remote}/{name}"
     return None
+
+
+def safe_directory_args(root: Path) -> list[str]:
+    """`-c safe.directory=<repo>` for the repository enclosing `root`, else [].
+
+    A bind-mounted worktree is foreign-owned inside a container, and git then
+    refuses every call ("dubious ownership"). `safe.directory` is honoured only
+    from system/global/command-line config, so a per-process `-c` naming exactly
+    the enclosing worktree is valid, never persisted, and never a wildcard.
+    Walks UP to the nearest `.git` entry (a file for a linked worktree, a
+    directory otherwise) because git matches the repository toplevel, not the
+    caller's cwd. Returns [] outside any repository, leaving the refusal loud.
+    """
+    try:
+        here = Path(root).resolve()
+    except OSError:
+        return []
+    for candidate in (here, *here.parents):
+        if (candidate / ".git").exists():
+            return ["-c", f"safe.directory={candidate}"]
+    return []
+
+
+def git_argv(root: Path, *args: str) -> list[str]:
+    """The one construction of a git argument vector that trusts `root`'s repo."""
+    return ["git", *safe_directory_args(root), *args]

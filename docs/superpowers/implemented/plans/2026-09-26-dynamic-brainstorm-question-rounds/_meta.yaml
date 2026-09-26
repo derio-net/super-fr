@@ -1,6 +1,6 @@
 schema_version: 2
 plan: 2026-09-26-dynamic-brainstorm-question-rounds
-spec: docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+spec: 2026-09-26-dynamic-brainstorm-question-rounds-design.md
 target_repo: derio-net/super-fr
 fr_version: '>=4.20.0,<5.0.0'
 created: '2026-09-26'
