@@ -124,3 +124,8 @@ fixed in the Opus-review commits
 ### r2-f3-resolved · finding [fixed] · resolves r2-f3: No test that a scoped archive canonicalizes the archived plan's own spec
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f4-resolved created=2026-09-26T23:40:19 state=fixed resolves=r2-f4 -->
+### r2-f4-resolved · finding [fixed] · resolves r2-f4: Spec had an empty duplicate Implementation Plans section
+
+fixed in the Opus-review commits
