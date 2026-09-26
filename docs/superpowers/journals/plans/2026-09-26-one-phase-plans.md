@@ -44,3 +44,8 @@ Notes rewritten with fr acceptance set-status (c81ba771, c488a9ec).
 ### r2-resolved · finding [out-of-scope] · resolves r2: New matrix row cites no test for the 2+-phases-still-errors half (phase 1)
 
 Covered by existing rows and tests; this change did not remove that coverage.
+
+<!-- fr:journal kind=finding scope=plan id=r2-resolved-2 created=2026-09-26T11:57:55 state=open resolves=r2 tracked_by=#676 -->
+### r2-resolved-2 · finding [deferred → #676] · resolves r2: New matrix row cites no test for the 2+-phases-still-errors half
+
+Filed at closeout as #676.
