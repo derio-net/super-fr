@@ -9,3 +9,8 @@ Orchestrator runs 'pytest ... > log 2>&1' with run_in_background; the transcript
 ### rc-ack-is-not-completion · root-cause · window end is the launch ack, not the command's completion
 
 telemetry.orchestrator_wrote_since (windows.append((issued[id], done)) with done = the tool_result timestamp) treats every tool_result as completion. For a backgrounded Bash the tool_result says 'Command running in background with ID: X'; real completion is a later user record whose string content holds <task-notification> with <tool-use-id> and <status> (completed|failed|killed). The gate never reads it.
+
+<!-- fr:journal kind=finding scope=debug id=fix-notice-window created=2026-09-26T17:26:43 state=fixed review_scope=in -->
+### fix-notice-window · finding [fixed] (reviewer: in scope) · window ends at the task-notification for a backgrounded command
+
+telemetry.orchestrator_wrote_since: a tool_result with toolUseResult.backgroundTaskId is the launch ack and no longer closes the window; the user <task-notification> record naming the same <tool-use-id> with <status>completed</status> does. failed/killed/still-running yield no window (same rule as a foreground is_error). Pinned by 5 tests in tests/unit/test_run_telemetry.py over a captured fixture (claude-code-bash-background.jsonl).
