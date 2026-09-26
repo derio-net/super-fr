@@ -134,3 +134,8 @@ False refusal when a suffix-sharing branch exists; local.py _branch_refs.
 ### opus-f2-merge-only-blob · finding [open] (reviewer: in scope) · git log --raw without -m misses merge-result blobs (phase 1)
 
 Regression vs the per-commit scan; false refusal.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f3-spec-ab-stale created=2026-09-27T00:12:39 phase=1 state=open review_scope=in -->
+### opus-f3-spec-ab-stale · finding [open] (reviewer: in scope) · spec §A/§B still describe rev-list and the old fetch fallback (phase 1)
+
+Design text contradicted the code after C1/C2.
