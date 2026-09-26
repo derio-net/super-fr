@@ -106,7 +106,7 @@ the old contract and is rewritten to the new one in this PR:
 | `fr-goal/SKILL.md:5` (frontmatter `description`, the trigger text) | "brainstorm, one batched Q&A, then …" |
 | `fr-goal/SKILL.md:14` (opening sentence) | "One operator touchpoint — the batched Q&A —" |
 | `fr-goal/SKILL.md:42` (interactive touchpoints) | "`brainstorm`'s batched Q&A" |
-| `fr-goal/SKILL.md:46-55` (§1 heading, body and harness clause) | "batched Q&A", "ONE batch (max 4 …)", "one `AskUserQuestion` call" |
+| `fr-goal/SKILL.md:46-62` (§1 heading, body and the "Harness — questions" clause at :58) | "batched Q&A", "ONE batch (max 4 …)", "one `AskUserQuestion` call" |
 | `fr-brainstorming/SKILL.md:64` | "ask ONCE" |
 | `docs/explainers/01-fr-goal.md:10,120,191,494,499,508,513,901,941` (+ `.html`) | "one round of questions", "ask once", "no more than four questions", "Yes, once", "One batched Q&A", "one consolidated question set" |
 | `README.md:108,118,139` | "one batched round", "≤4 questions", "the batched Q&A" |
@@ -140,8 +140,25 @@ questions:
 - The flag form gets parity for humans and runners: `--question-rounds
   1|2`, `--round-two-trigger`, `--round-two-reason`. With `--record` they are
   refused, like the other record-carried flags (`run_cmd.py:3759`).
+- **Threading the declaration to the gate** (review s1). Two classes are
+  both called `StepRecord`. The new field lives on `fr.record.model.StepRecord`,
+  the step-record *artifact*. `_gate_provenance`'s `record` parameter is
+  `fr.run.model.StepRecord`, the *cursor's* per-step state
+  (`run_cmd.py:66-73`), which never sees it. So the declaration goes in as an
+  explicit `questions: QuestionRounds | None` parameter along the path
+  `no_questions`/`reason` already use: `apply_record`
+  (`record/apply.py:855-867`) → `run_cmd.resolve_in_process`
+  (`run_cmd.py:4166`) → `_resolve_body` (`run_cmd.py:3843`) →
+  `_gate_provenance` (`run_cmd.py:933`). The flag form builds the same
+  `QuestionRounds` from its three flags, so both paths call the gate with one
+  value.
 - `fr.record.template.render_template` puts a commented `questions:` hint in
-  the template of any gated step.
+  the template of any gated step. It also stops hardcoding
+  `"schema_version: 1"` (`template.py:54`) and writes
+  `RECORD_SCHEMA_VERSION` (review s2). Otherwise the bump would make every
+  freshly rendered template fail its own parse ("schema_version 1 — this fr
+  reads record version 2") for every dispatched step of every run. Test Plan
+  item 5 pins that a rendered template parses.
 - **Artifact versioning** (`.claude/rules/artifact-versioning.md`): the new
   field changes the shape of the `record` kind, because fr 4.24.1 reads records
   and `StepRecord` is `extra="forbid"`. So: `record` goes from
@@ -251,7 +268,13 @@ Unit level (CI):
    writes it only once on a retry.
 5. Record kind migration 1 → 2: a v1 record is stamped 2; an unreadable one is
    refused and left untouched; the `record` kind reaches version 2
-   (`fr validate artifacts` over this repo stays green).
+   (`fr validate artifacts` over this repo stays green); and a template from
+   `render_template` for every step of the shipped fr-goal manifest parses
+   under the live `RECORD_SCHEMA_VERSION` (review s2).
+7. The declaration reaches the gate on BOTH paths: a `--record` resolve and a
+   flag resolve that declare `rounds: 2` against a one-round transcript are
+   each refused (review s1). A test that only exercises the flags would pass
+   while the `--record` path, the one fr-goal uses, never saw the value.
 6. Contract-prose tripwire: on every §3.A.1 surface, the old contract
    ("max 4", "≤4 questions", "ONE batch", "one batched Q&A") is gone. The
    canonical fr-goal skill and both generated mirrors state the new contract:
