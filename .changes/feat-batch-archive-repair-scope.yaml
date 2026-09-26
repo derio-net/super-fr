@@ -1,2 +1,0 @@
-bump: patch
-summary: fr archive <plan> repairs only that plan's refs, and fr plan create stores the same bare spec filename fr repair does (#686)
