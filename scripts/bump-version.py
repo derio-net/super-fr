@@ -2,9 +2,9 @@
 """Bump or verify the workspace version (lockstep).
 
 The workspace-root `pyproject.toml` `[project].version` is the canonical
-source. Every member pyproject under `packages/*/pyproject.toml` and
-every plugin version in `.claude-plugin/{plugin.json,marketplace.json}`
-and the standalone OpenCode plugin package version must match it byte-for-byte.
+source. Every surface `scripts/version_surfaces.py` lists — member pyprojects,
+plugin manifests, marketplace entries, the standalone OpenCode plugin package
+and the `uv.lock` entries of workspace members — must match it byte-for-byte.
 Python code reads its version dynamically via `importlib.metadata`, so it
 follows the member pyprojects automatically — no other surfaces need updating.
 
@@ -18,54 +18,36 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import pathlib
 import re
 import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-PYPROJECT = REPO / "pyproject.toml"
-PLUGIN_DIR = REPO / ".claude-plugin"
-MARKETPLACE_JSON = PLUGIN_DIR / "marketplace.json"
-OPENCODE_PLUGIN_PACKAGE_JSON = REPO / "packages" / "fr-opencode-plugin" / "package.json"
-
-VERSION_RE = re.compile(r'^(version\s*=\s*")([^"]+)(")', re.M)
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
-
-def member_pyprojects() -> list[pathlib.Path]:
-    return sorted((REPO / "packages").glob("*/pyproject.toml"))
-
-
-def plugin_jsons() -> list[pathlib.Path]:
-    """Every plugin manifest — per-plugin dirs since the split."""
-    return sorted(
-        [
-            *PLUGIN_DIR.glob("**/plugin.json"),
-            *(REPO / "plugins").glob("*/.claude-plugin/plugin.json"),
-        ]
-    )
+# The surface list lives in one module (spec 2026-09-26-version-bump-churn
+# §3.B); every reader — this script, the change-fragment gate, release.py —
+# imports it so there is exactly one list.
+sys.path.insert(0, str(REPO / "scripts"))
+from version_surfaces import Surface, version_surfaces, write_version  # noqa: E402
 
 
-def read_version(toml: pathlib.Path) -> str:
-    m = VERSION_RE.search(toml.read_text())
-    if not m:
-        sys.exit(f'error: no `version = "..."` line in {toml}')
-    return m.group(2)
+def root_version() -> str:
+    return next(s.value for s in version_surfaces(REPO) if s.file == "pyproject.toml")
+
+
+_BRACKET_RE = re.compile(r"\[([^\]]+)\]")
+
+
+def _label(surface: Surface) -> str:
+    """`marketplace.json[0]`, `uv.lock[fr]`, else the file itself."""
+    m = _BRACKET_RE.search(surface.locator)
+    return f"{pathlib.PurePosixPath(surface.file).name}[{m.group(1)}]" if m else surface.file
 
 
 def check() -> int:
-    versions: dict[str, str] = {"pyproject.toml": read_version(PYPROJECT)}
-    for member in member_pyprojects():
-        versions[str(member.relative_to(REPO))] = read_version(member)
-    for pj in plugin_jsons():
-        versions[str(pj.relative_to(REPO))] = json.loads(pj.read_text())["version"]
-    versions[str(OPENCODE_PLUGIN_PACKAGE_JSON.relative_to(REPO))] = json.loads(
-        OPENCODE_PLUGIN_PACKAGE_JSON.read_text()
-    )["version"]
-    for i, plugin in enumerate(json.loads(MARKETPLACE_JSON.read_text())["plugins"]):
-        versions[f"marketplace.json[{i}]"] = plugin["version"]
+    versions = {_label(s): s.value for s in version_surfaces(REPO)}
     width = max(len(k) for k in versions)
     for k, v in versions.items():
         print(f"{k:<{width}}  {v}")
@@ -89,33 +71,15 @@ def compute_new(old: str, arg: str) -> str:
     sys.exit(f"error: expected patch|minor|major|X.Y.Z, got {arg!r}")
 
 
-def write_toml(toml: pathlib.Path, new: str) -> None:
-    toml.write_text(VERSION_RE.sub(rf"\g<1>{new}\g<3>", toml.read_text(), count=1))
-
-
 def bump(arg: str) -> int:
-    old = read_version(PYPROJECT)
+    old = root_version()
     new = compute_new(old, arg)
     if new == old:
         print(f"already at {new}, nothing to do")
         return 0
 
-    tomls = [PYPROJECT, *member_pyprojects()]
-    for toml in tomls:
-        write_toml(toml, new)
-    for pj in plugin_jsons():
-        data = json.loads(pj.read_text())
-        data["version"] = new
-        pj.write_text(json.dumps(data, indent=4) + "\n")
-    data = json.loads(OPENCODE_PLUGIN_PACKAGE_JSON.read_text())
-    data["version"] = new
-    OPENCODE_PLUGIN_PACKAGE_JSON.write_text(json.dumps(data, indent=2) + "\n")
-    data = json.loads(MARKETPLACE_JSON.read_text())
-    for plugin in data["plugins"]:
-        plugin["version"] = new
-    MARKETPLACE_JSON.write_text(json.dumps(data, indent=4) + "\n")
-    n_files = len(tomls) + len(plugin_jsons()) + 2
-    print(f"bumped {old} -> {new} in {n_files} files")
+    files = write_version(REPO, new)
+    print(f"bumped {old} -> {new} in {len(files)} files")
 
     # uv sync refreshes uv.lock with the new member entries.
     print("running `uv sync`...")
