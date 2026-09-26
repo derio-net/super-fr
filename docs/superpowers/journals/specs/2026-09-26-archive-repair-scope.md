@@ -89,3 +89,8 @@ Opus spec review. Deleted the empty numbered section.
 ### s2-3 · finding [open] (reviewer: in scope) · Canonical create output breaks #133 idempotent re-run of an old half-built folder
 
 Opus spec review. Documented as an accepted edge in §3.C (operator deletes the stranded folder).
+
+<!-- fr:journal kind=finding scope=spec id=s2-4 created=2026-09-26T23:36:23 state=open review_scope=out -->
+### s2-4 · finding [open] (reviewer: out of scope) · fr migrate dirs also runs repair_repo repo-wide
+
+Opus spec review. Pre-existing; a repo-level migration, repo-wide by intent; not named by the repair-scope decision.
