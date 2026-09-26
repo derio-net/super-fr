@@ -33,3 +33,48 @@ tests only; the one cleanup (a tuple-assert ruff flagged F631 and a hand-rolled 
 ### no-refactor-p1-t2 · discovery · no-refactor-because P1.T2 (phase 1)
 
 the glob helpers and per-file writers moved wholesale into scripts/version_surfaces.py, so nothing duplicated remained in bump-version.py; the label formatting was collapsed to one regex in P1.T3.S2
+
+<!-- fr:journal kind=review scope=plan id=rp1-review created=2026-09-26T08:37:34 phase=1 -->
+### rp1-review · review · Independent code review of phase 1: 3 findings (1 HIGH in, 1 MEDIUM in, 1 LOW out) (phase 1)
+
+Dispatched reviewer (separate context, not the implementer) over dff6586e against spec §3.B/§7.9
+and plan 01.yaml. Extraction sound; uv.lock rewrite byte-stable; no version value changed.
+Raised: silent skip of missing single-instance surfaces (HIGH), tautological glob-derived test
+expectations (MEDIUM), table-unaware first-match TOML regex (LOW, pre-existing).
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f1 created=2026-09-26T08:37:34 phase=1 state=open review_scope=in -->
+### rp1-f1 · finding [open] (reviewer: in scope) · HIGH: version_surfaces() silently skips a missing marketplace.json / opencode package.json, weakening --check (phase 1)
+
+scripts/version_surfaces.py guarded both with `.exists()`, so a lost manifest dropped out of
+--check and write_version and still printed "ok". The old bump-version.py read both unconditionally.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f2 created=2026-09-26T08:37:34 phase=1 state=open review_scope=in -->
+### rp1-f2 · finding [open] (reviewer: in scope) · MEDIUM: tests re-derive expectations with the module's own globs and member predicate (phase 1)
+
+tests/unit/test_version_surfaces.py rebuilt `expected` with the same globs and duplicated
+`_is_member`, so a shared bug would pass silently.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f3 created=2026-09-26T08:37:34 phase=1 state=open review_scope=out -->
+### rp1-f3 · finding [open] (reviewer: out of scope) · LOW: write_version's TOML rewrite uses a table-unaware first-match regex (phase 1)
+
+scripts/version_surfaces.py `_TOML_VERSION_RE` matches the first `version =` line in any table.
+Identical to the pre-existing bump-version.py VERSION_RE/write_toml, relocated verbatim.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f1-resolved created=2026-09-26T08:37:34 phase=1 state=fixed resolves=rp1-f1 -->
+### rp1-f1-resolved · finding [fixed] · resolves rp1-f1: HIGH: version_surfaces() silently skips a missing marketplace.json / opencode package.json, weakening --check (phase 1)
+
+`_required()` now fails loudly (SystemExit "version surface <path> is missing") for marketplace.json,
+the OpenCode package.json and uv.lock; the temp-repo fixture writes them; a parametrized test pins
+each missing file failing.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f2-resolved created=2026-09-26T08:37:34 phase=1 state=fixed resolves=rp1-f2 -->
+### rp1-f2-resolved · finding [fixed] · resolves rp1-f2: MEDIUM: tests re-derive expectations with the module's own globs and member predicate (phase 1)
+
+The coverage test and the uv member set are hand-enumerated (11 files; 6 members), with a comment
+saying why; the loud-failure and registry-exclusion tests still exercise the real parser.
+
+<!-- fr:journal kind=finding scope=plan id=rp1-f3-resolved created=2026-09-26T08:37:34 phase=1 state=open resolves=rp1-f3 out_of_scope=true -->
+### rp1-f3-resolved · finding [out-of-scope] · resolves rp1-f3: LOW: write_version's TOML rewrite uses a table-unaware first-match regex (phase 1)
+
+Not caused by this change: the same regex and count=1 substitution lived in bump-version.py before
+phase 1 moved it. Every current pyproject has [project].version before any other table.
