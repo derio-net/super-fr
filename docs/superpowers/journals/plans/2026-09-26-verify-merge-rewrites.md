@@ -114,3 +114,8 @@ Pre-existing on main; filed as derio-net/super-fr#705.
 ### opus-c2-branch-fetch-ignored-resolved · finding [fixed] · resolves opus-c2-branch-fetch-ignored: branch fetch result discarded, no explicit refspec
 
 8540388a: explicit refspec, ls-remote exit 2 = branch gone (fallback), anything else = not verified; 4 red-first tests incl. the CLI reason.
+
+<!-- fr:journal kind=finding scope=plan id=opus-c3-diff-failure-reads-as-pass-resolved created=2026-09-27T00:07:58 state=open resolves=opus-c3-diff-failure-reads-as-pass tracked_by=derio-net/super-fr#705 -->
+### opus-c3-diff-failure-reads-as-pass-resolved · finding [deferred → derio-net/super-fr#705] · resolves opus-c3-diff-failure-reads-as-pass: failed git diff reads as all changes present
+
+Pre-existing, not caused by this change.
