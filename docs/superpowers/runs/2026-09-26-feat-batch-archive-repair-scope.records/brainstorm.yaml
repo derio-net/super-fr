@@ -1,0 +1,11 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-archive-repair-scope
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - {kind: decision, id: canonical-spec-form, title: "Canonical spec: form is the bare filename", body: "Operator chose bare <name>-design.md (lifecycle-independent). plan create normalizes to it; validator/resolver keep accepting the full path."}
+  - {kind: decision, id: repair-scope, title: "Single-plan archive repairs only the archived plan's rows", body: "Operator chose an only_plans filter on repair_repo; --all, --sweep-only and fr repair stay repo-wide."}
+  - {kind: decision, id: no-test-plan, title: "No post-merge Test Plan", body: "Bug fix, CI tests only."}
+emitted: {spec: docs/superpowers/specs/2026-09-26-archive-repair-scope-design.md}
+evidence: {}
