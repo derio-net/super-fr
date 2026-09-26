@@ -241,3 +241,59 @@ actor" message never fired and the only test simulated GH006.
 race is always a client-side plain `[rejected]`, never a remote decline). The protection test is
 parametrized over classic GH006, a GH013 ruleset reply and a generic server-side decline; the two
 new cases were red first. The lost-race tests still classify as races.
+
+<!-- fr:journal kind=decision scope=plan id=p4-insert-boundary created=2026-09-26T09:46:29 phase=4 -->
+### p4-insert-boundary · decision · insert_row places the new block after the last content line of the capability's last row, found by one shared row-block scan (phase 4) (phase 4)
+
+fr/acceptance/edit.py `_row_blocks` parses every list item under `rows:` (never pattern-matches
+`capability:`), and both `insert_row` and `replace_row` (via `_row_span`) read it. The insertion
+point trims trailing blank lines and comments NO DEEPER than the row's `- ` indent, so a comment
+introducing the next row stays attached to it; a deeper `#`-leading line is a wrapped scalar
+continuation (the real matrix has `      #352, not automated.'`) and stays in its row. A capability
+not yet present appends at EOF exactly as the old append_row did. `append_row` is gone; its one
+caller is fr/record/apply.py (acceptance_cmd add goes through the engine).
+
+<!-- fr:journal kind=decision scope=plan id=p4-aggregates-keyword-only created=2026-09-26T09:46:29 phase=4 -->
+### p4-aggregates-keyword-only · decision · `aggregates` is a required keyword-only argument on render()/render_markdown() (phase 4) (phase 4)
+
+No default, so every caller states which kind of report it renders: render_deterministic passes
+False (and its stamp drops `N rows ·`, now `links: <mode>`), render_report (ad-hoc report.html)
+passes True. False drops the meta-line row count, the HTML tiles / Markdown status-count table
+and the sharp-line panels. `summary`, `status` and the digest never rendered through report.py,
+so they keep their counts untouched (pinned by test_summary_still_carries_counts).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-row-ids-only-in-panels created=2026-09-26T09:46:29 phase=4 -->
+### p4-row-ids-only-in-panels · discovery · Committed reports no longer contain row ids - the id appeared only in the sharp-line panels (phase 4) (phase 4)
+
+The per-capability tables render acceptance/origin/levels/status/notes, never the id; the only
+place an id reached a committed report was a panel. test_acceptance_status_add
+test_add_regenerates_report_set asserted the id and now asserts the acceptance text. Not a
+regression the spec asks to fix; noted in case a reviewer wants ids in the table.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-concurrent-merge-reproduced created=2026-09-26T09:46:29 phase=4 -->
+### p4-concurrent-merge-reproduced · discovery · The concurrent-merge test reproduced the exact merge-conflict shape before the fix and merges clean after (phase 4) (phase 4)
+
+tests/unit/test_acceptance_concurrent_merge.py (tmp git repo, isolated global git config) failed
+red with CONFLICT in matrix.yaml and all three reports - the f977eaab merge's shape - and passes
+green, with `report --check` and `check` clean on the merged tree. The matrix row
+concurrent-acceptance-rows-merge-clean moved not-implemented -> ci via `fr acceptance set-status`
+(own commit), citing the three phase-4 test files.
+
+<!-- fr:journal kind=finding scope=plan id=p4-unarchived-plans-tripwire created=2026-09-26T09:46:29 phase=4 state=open review_scope=out -->
+### p4-unarchived-plans-tripwire · finding [open] (reviewer: out of scope) · LOW: test_tripwire_unarchived_plans fails on the merged tree - two plans from origin/main are complete but unarchived (phase 4) (phase 4)
+
+The full suite is 1 failed / 5971 passed / 97 skipped; the one failure is
+test_no_merged_but_unarchived_plans naming 2026-09-26-isolation-network-timeouts and
+2026-09-26-plan-table-header, both brought in by the origin/main merge (f977eaab) and complete
+on origin/main. Not caused by phase 4; the fix is `fr archive` on main (or in this PR), an
+orchestrator decision.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-09-26T09:46:29 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+tests only; the one cleanup (a convoluted render-order test that diffed line sets) was rewritten to render_row_block before the red commit
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-09-26T09:46:29 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+the capability-boundary scan was written once as _row_blocks and shared with _row_span/replace_row in the green step itself, which is the whole of P4.T3.S2's refactor; nothing duplicated remained
