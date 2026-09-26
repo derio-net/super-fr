@@ -4630,3 +4630,21 @@ rows:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
     status: ci
     notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)
+  - id: container-record-commits
+    capability: isolation-git-ownership
+    acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted
+      worktree git considers foreign-owned
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: scaffold-trusts-workspace
+    capability: isolation-git-ownership
+    acceptance: A scaffolded devcontainer profile trusts its own workspace path for
+      git so a fresh container needs no manual safe.directory
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
