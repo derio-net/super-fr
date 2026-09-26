@@ -114,3 +114,8 @@ Fresh-context Opus reviewer (agent a154d6fb3340dc945). 6 in scope (all fixed), 3
 ### r2-f1-resolved · finding [fixed] · resolves r2-f1: fr repair stopped shortening ambiguous lifecycle-root full paths
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f2-resolved created=2026-09-26T23:40:15 state=fixed resolves=r2-f2 -->
+### r2-f2-resolved · finding [fixed] · resolves r2-f2: rework_create is a third spec: writer with its own canonical form
+
+fixed in the Opus-review commits
