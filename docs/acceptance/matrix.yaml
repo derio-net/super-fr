@@ -4372,9 +4372,16 @@ rows:
       and no CI run starts for that commit
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py
+      - super-fr:tests/unit/test_release_workflow.py
     status: not-implemented
-    notes: ''
+    notes: 'Unit half landed (phase 3): release.py against a temp bare origin (aggregate,
+      consume fragments, verified staged diff, lost-race recompute, idempotent tag +
+      Release) and release.yml''s shape. Stays not-implemented: the owed evidence is
+      the live first release on main (plan phase 6, manual) — one bot commit, tag and
+      Release, and no CI run for it.'
   - id: prs-never-conflict-on-version
     capability: Release integrity
     acceptance: Two PRs that both need a release never conflict over the version — the
