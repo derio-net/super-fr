@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Scope archive repair to the archived plan; one canonical spec form
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+tasks:
+- number: 1
+  title: Reproduce and fix scoped repair (red first)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Red: write failing tests in tests/unit/test_repair.py and test_archive_cmd.py — archiving one plan leaves a second live plan's non-canonical spec: byte-identical; repair_repo(only_plans=...) touches only named plans' meta and File-cell rows; --all/--sweep-only stay repo-wide; scoped runs skip plan-config and header repair
+  - id: P1.T1.S2
+    text: |-
+      Green: add only_plans to repair_repo and thread it through archive_cmd (_report_sweep and the tail call) per spec 3.A/3.B
+  - id: P1.T1.S3
+    text: |-
+      Refactor: keep scoping in one predicate helper, or record a refactor reason
+- number: 2
+  title: One canonical spec form shared by create and repair (red first)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red: failing tests — plan create with a full spec path writes the bare filename and repair then reports zero rewrites; unresolvable, cross-repo and same-name-different-path refs are left verbatim; full-path plans still validate and a bare spec parses to spec_path before and after archive; update existing create assertions
+  - id: P1.T2.S2
+    text: |-
+      Green: add canonical_spec_ref to fr.refs, call it from plan_ops.create (meta value only) and repair._repair_meta per spec 3.C
+  - id: P1.T2.S3
+    text: |-
+      Refactor: remove the duplicated canonicalization in repair._repair_meta, or record a refactor reason
+- number: 3
+  title: Docs, mirrors, fragment, quality gate
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Update the fr-plan SKILL.md spec: notation note to the bare canonical form, run scripts/sync-opencode.py and scripts/sync-hermes.py, add .changes/feat-batch-archive-repair-scope.yaml (bump patch)
+  - id: P1.T3.S2
+    text: |-
+      Run ruff format, ruff check, mypy, the full pytest suite and fr validate artifacts; all green
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

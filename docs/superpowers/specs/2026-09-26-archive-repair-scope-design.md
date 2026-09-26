@@ -109,3 +109,9 @@ Bug, debugging-first: each test is written red before the fix.
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-archive-repair-scope | `derio-net/super-fr` | `2026-09-26-archive-repair-scope` | — |
