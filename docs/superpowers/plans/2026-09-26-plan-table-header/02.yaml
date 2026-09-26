@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 2
+  title: create appends the missing section; migrate shares the helper
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - plan-create-creates-missing-table
+  - plan-rework-missing-table-stays-strict
+  tier: standard
+  files:
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/migrate.py
+  - tests/unit/test_v2_plan_ops.py
+  - tests/unit/test_v2_migrate.py
+  estimate_lines: 110
+tasks:
+- number: 1
+  title: Red then green — create writes the section
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: add tests that (a) create on a spec with no section (with and without a trailing newline) yields header, separator and one row for the plan, blank-line separated from prose; (b) _validate_spec_section on a section-less spec returns and leaves the file byte-identical; (c) re-running create when the matching plan folder exists and the spec still has no section adds the section and row exactly once, and a third run changes nothing; (d) rework on a section-less spec still raises. Run them; (a)-(c) fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add _ensure_section_text(text) to plan_ops.py (same blank-line handling as migrate._ensure_spec_plan_row), make _validate_spec_section return on a missing section, and in create rewrite the spec through it right before _append_spec_row. _append_spec_row stays strict. Tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: make migrate._ensure_spec_plan_row use plan_ops._ensure_section_text instead of its own literal; run tests/unit/test_v2_migrate.py and confirm unchanged output.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

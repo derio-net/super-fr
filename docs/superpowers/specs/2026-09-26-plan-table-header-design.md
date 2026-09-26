@@ -73,3 +73,4 @@ table (named, not created — the operator's prose under it is unknown).
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-09-26-plan-table-header | `derio-net/super-fr` | `2026-09-26-plan-table-header` | — |
