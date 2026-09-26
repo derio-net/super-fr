@@ -94,3 +94,8 @@ Spec 3.5, Test Plan item 4 and the plan files list now cover backfill (f0814595)
 ### o2-resolved · finding [fixed] · resolves o2: Several spec path:line citations went stale
 
 Spec citations now name symbols (capture.py::candidates etc.), not lines.
+
+<!-- fr:journal kind=finding scope=spec id=o3-resolved created=2026-09-26T23:36:47 state=fixed resolves=o3 -->
+### o3-resolved · finding [fixed] · resolves o3: deliver/closeout/archive are two capture sites, not three
+
+Spec 2 and 3.3 name the deliver resolve and fr archive (event closeout).
