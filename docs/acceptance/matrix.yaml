@@ -4637,6 +4637,10 @@ rows:
       fetched remote branch as well as the local one; unlanded content still refuses
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-verify-merge-rewrites-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Unit tests over real throwaway repos: blob-equality fallback for a later
+      rewrite, orphan and branch-side deletion stay missing, verify_merge checks the
+      fetched remote ref'
