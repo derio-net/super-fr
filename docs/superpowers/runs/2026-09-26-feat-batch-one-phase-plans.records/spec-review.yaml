@@ -1,0 +1,16 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-one-phase-plans
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "Spec never says the sole-skeleton override test is retired", body: "check: consistency. tests/unit/test_v2_plan_ops.py:1655 becomes vacuous; :601 name is stale. State in spec."}
+  - {kind: finding, id: s2, review_scope: in, title: "Docstring and comment surfaces describing the old rule are not in Scope", body: "check: consistency. plan_ops.py _skeleton_issues docstring, skeleton_override.py docstring, test_run_cli.py comments."}
+  - {kind: finding, id: s3, review_scope: in, title: "Matrix row to retire is described vaguely; line-anchored refs go stale", body: "check: consistency. Row plan-skeleton-is-not-the-whole-plan, refs L1554/L1567."}
+  - {kind: finding, id: s4, review_scope: out, title: "plan_cmd.py help text still says marker is for the first agentic phase", body: "check: codebase. plan_cmd.py:153; wording stays accurate for 2+ phase plans."}
+  - {kind: review, id: spec-review, title: "independent spec review: 4 findings", body: "Decisions honoured; every named file/helper verified with file:line; 3 in scope (fixed in spec), 1 out of scope."}
+resolves:
+  - {id: s1, state: fixed, body: "Spec §3 items 2-3 now name the retired and renamed tests."}
+  - {id: s2, state: fixed, body: "Spec §2.D and §4 list the docstring/comment surfaces."}
+  - {id: s3, state: fixed, body: "Spec §4 names the row id and the set-status --drop-level re-pointing."}
+  - {id: s4, state: out-of-scope, body: "Wording remains accurate for 2+ agentic phases; this change did not make it wrong."}
+evidence: {review: spec-review, reviewer: a05822691ca586190}

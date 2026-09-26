@@ -79,8 +79,9 @@ pre-flight raises before any write), so it is folded in rather than filed.
 
 No new phase-count vocabulary, no change to `PHASE_TIERS`, the refactor gate, or
 `fr run` cursor semantics. No artifact shape changes, so no stamp bump or
-migration. The shared one-phase fixture's `write_skeleton_override` callers are
-left as harmless no-ops beyond a corrected docstring.
+migration. The `write_skeleton_override` callers (`test_run_cli.py`,
+`test_plan_workflow_binding.py`) are left as harmless no-ops; only the stale
+docstring/comments describing the removed error are corrected (§4).
 
 ## 3. Test Plan
 
@@ -88,8 +89,14 @@ left as harmless no-ops beyond a corrected docstring.
 
 1. One agentic phase, unmarked: `self_review` raises no skeleton issue.
 2. One agentic phase, marked, with and without a trailing manual phase: no
-   skeleton issue (inverts the C2 tests).
-3. The shared minimal fixture (one marked agentic phase) self-reviews clean.
+   skeleton issue (inverts the parametrized C2 error test,
+   `test_self_review_errors_when_the_skeleton_is_the_only_agentic_phase`).
+   `test_sole_skeleton_error_is_silenced_by_the_skeleton_override` is retired:
+   with no error to silence it would assert nothing, so it is deleted and item 1/2
+   cover the override-free pass.
+3. The shared minimal fixture (one marked agentic phase) self-reviews clean;
+   `test_self_review_minimal_plan_raises_only_its_sole_skeleton` is renamed to say
+   so and asserts no issues.
 4. Two agentic phases, first unmarked: still an error; override still silences
    it; marker on a later phase still an error (existing tests, unchanged).
 5. A sole marked phase whose `fr_version` admits a pre-marker `fr` still gets
@@ -99,9 +106,15 @@ left as harmless no-ops beyond a corrected docstring.
 
 ## 4. Scope
 
-`plan_ops.py`, `test_v2_plan_ops.py`, the two SKILL.md files and their
-generated mirrors, the acceptance matrix row for the retired C2 behaviour plus a
-new row, one `.changes` fragment (patch: skill copy and a CLI fix).
+`plan_ops.py` (gate plus the `_skeleton_issues` docstring and the comment on
+the deleted block), `test_v2_plan_ops.py`, the stale wording in
+`tests/unit/skeleton_override.py` (module docstring) and the two comments in
+`test_run_cli.py`, the two SKILL.md files and their generated mirrors, the
+acceptance matrix (row `plan-skeleton-is-not-the-whole-plan` has its claim
+inverted or is replaced, its stale `#L1554`/`#L1567` refs dropped via
+`fr acceptance set-status --drop-level`, plus the new
+`plan-one-phase-is-first-class` row), one `.changes` fragment (patch: skill copy
+and a CLI fix).
 
 ## Implementation Plans
 
