@@ -179,3 +179,8 @@ Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f
 ### opus-f5-default-true-resolved · finding [fixed] · resolves opus-f5-default-true: _verdict defaulted branch_fetched to True
 
 Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config-resolved created=2026-09-27T00:12:45 state=fixed resolves=opus-f6-user-log-config -->
+### opus-f6-user-log-config-resolved · finding [fixed] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
+
+Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
