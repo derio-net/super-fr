@@ -29,7 +29,15 @@ steps:
           reviewer: a326796a5749e4782
           findings: f1-reap-hazard-fetch-untimed,s1,s2,s3
   plan:
-    state: pending
+    state: running
+    at: '2026-09-26T05:38:01+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-26T05:38:01+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
   plan-review:
     state: pending
   implement:
