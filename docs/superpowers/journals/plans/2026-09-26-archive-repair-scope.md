@@ -89,3 +89,8 @@ Opus review. Repaired via repair_repo(only_plans={this plan}).
 ### r2-f6 · finding [open] (reviewer: in scope) · _repair_meta resolved the spec ref twice (phase 1)
 
 Opus review. canonical_spec_ref takes an optional pre-computed resolution.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f7 created=2026-09-26T23:40:06 phase=1 state=open review_scope=out -->
+### r2-f7 · finding [open] (reviewer: out of scope) · A ref escaping the repo is shortened to a local spec (phase 1)
+
+Opus review. Predates this change (repair already did it; readers resolve by slug).
