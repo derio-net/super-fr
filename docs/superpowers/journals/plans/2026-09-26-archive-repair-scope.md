@@ -169,3 +169,8 @@ Closeout triage: not reproducible — tests/integration -k opencode passed 9/9 o
 ### r2-f7-resolved-2 · finding [deferred → #709] · resolves r2-f7: A ref escaping the repo is shortened to a local spec
 
 Filed at closeout as #709.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f8-resolved-2 created=2026-09-27T00:02:47 state=open resolves=r2-f8 tracked_by=#710 -->
+### r2-f8-resolved-2 · finding [deferred → #710] · resolves r2-f8: Archive runs repair twice and can print warnings twice
+
+Filed at closeout as #710.
