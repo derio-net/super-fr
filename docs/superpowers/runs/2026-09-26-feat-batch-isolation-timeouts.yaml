@@ -3,7 +3,7 @@ run: 2026-09-26-feat-batch-isolation-timeouts
 workflow: fr-goal@1
 branch: feat/batch-isolation-timeouts
 started: '2026-09-26T05:35:17+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -43,7 +43,11 @@ steps:
           returned: '2026-09-26T05:38:58+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-26T05:39:01+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
