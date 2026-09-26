@@ -4180,7 +4180,12 @@ rows:
     notes: 'Phase 3: dispatch writes fr:in-progress and one marker comment per member
       only after the runner accepted, idempotently (--repair posts no duplicate; a redispatch
       after cancel posts a new marker); adapter faked. Cancel, the in-progress stage
-      and stale dispatch were covered in phase 2.'
+      and stale dispatch were covered in phase 2. Live walk 2026-09-26 (Test Plan 21,
+      phase 4) on derio-net/super-fr: two batches dispatched --to herdr --yes each carried
+      fr:in-progress plus exactly one fr-batch marker comment on the member (#603, #618),
+      each run opened a draft PR with its Closes line (#651, #652), a second dispatch
+      of a live batch was refused, and the board showed both batches dispatched, then
+      merged.'
   - id: triage-batch-version-reserve
     capability: Backlog triage
     acceptance: Each dispatched batch bumps to a version reserved in merge order, so
@@ -4221,7 +4226,15 @@ rows:
     notes: 'Phase 3: merge order, printed plan, reconcile, refusals (draft, failing
       check, moved head, protection refusal verbatim, unsupported backend) unit-tested
       with the forge faked; execution against real git with a local bare origin, including
-      resume. The live walk (Test Plan 21, phase 4) is still owed.'
+      resume. Live walk 2026-09-26 (Test Plan 21, phase 4) on derio-net/super-fr: the
+      printed plan predicted the shared docs/acceptance files; the queue stopped on
+      a real matrix.yaml conflict naming the file and pushing nothing; after a manual
+      matrix union a re-run merged #652 at its reserved 4.23.2 and stopped on #651''s
+      matrix plus reports; after that union a re-run resumed at #651 and re-slotted
+      it from 4.23.1 to 4.23.3 (a third version, #635, had taken 4.23.1 on main mid-flight),
+      pushed, waited for checks and merged. The verb resolved no conflict in the four
+      generated acceptance files: every super-fr batch pair conflicts there (structural
+      fix in flight on feat/version-bump-churn).'
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
