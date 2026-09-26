@@ -1,0 +1,41 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-container-git-ownership
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: s1
+    review_scope: in
+    title: "§3.A subdirectory-root claim is wrong: safe.directory=<cwd> does not cover a toplevel above cwd"
+    body: "git matches safe.directory against the worktree toplevel, so git_context's first rev-parse from a subdirectory root is refused. Evidence: commit.py:291,303; git.py:107-124."
+  - kind: finding
+    id: s2
+    review_scope: in
+    title: "record/apply.py _is_tracked and _short_head bypass the seam"
+    body: "Raw git -C calls at record/apply.py:742-759 degrade silently in a foreign-owned tree (misclassify tracked records, drop sha)."
+  - kind: finding
+    id: s3
+    review_scope: in
+    title: "Override in shared git_answer contradicts the stated non-goal"
+    body: "Non-goal wording needed a precise definition of the trust boundary, and a note that -c appends to user config."
+  - kind: finding
+    id: s4
+    review_scope: in
+    title: "Test Plan lacks a subdirectory-root case; scaffold.py line ref off"
+    body: "workspaceMount is at scaffold.py:512-513, not 510."
+  - kind: finding
+    id: s5
+    review_scope: out
+    title: "Brainstorm record path did not exist when reviewer looked"
+    body: "Process note about dispatch timing, not a spec defect."
+  - kind: review
+    id: spec-review
+    title: "independent spec review: 5 findings (4 in scope, 1 out of scope)"
+    body: "Reviewer verified git.py:107, commit.py:57/264/291/303/683-691, scaffold.py:426/497-513, records_commit.py:40 against the spec."
+resolves:
+  - {id: s1, state: fixed, body: "§3.A now walks up to the nearest .git ancestor (safe_directory_args) and Test Plan 2 covers a subdirectory root."}
+  - {id: s2, state: fixed, body: "§3.A lists record/apply.py _is_tracked/_short_head as call sites; Test Plan 3."}
+  - {id: s3, state: fixed, body: "§1 non-goal and §3.A state the trust boundary precisely."}
+  - {id: s4, state: fixed, body: "Test Plan rewritten; line refs corrected."}
+  - {id: s5, state: out-of-scope, body: "Process timing of the brainstorm record; this change did not cause it."}
+evidence: {review: spec-review, reviewer: aa7e8eb08000d4d91}

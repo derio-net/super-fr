@@ -17,9 +17,8 @@ survives), but the commit is never made.
 
 ### Non-goals
 
-- No change to the refusal semantics for a *real* unsafe repo outside fr's own
-  working tree: fr never widens git's trust beyond the directory it was asked
-  to operate on.
+- No blanket trust: fr trusts only the enclosing repository of the directory it
+  was handed (§3.A), never a wildcard, never persisted config.
 - No wildcard `safe.directory = '*'`.
 - `package-lists` (#650/#645) edits the same `POST_CREATE` and lands after this.
 
@@ -31,7 +30,8 @@ survives), but the commit is never made.
   `cwd=root` and no `-c` config. `git_context` (`commit.py:264`) asks
   `rev-parse` first, so a dubious-ownership refusal poisons every later step.
 - `commit.py:683` restores the index with a raw `subprocess.run(["git",
-  "update-index", ...])` that bypasses `git_answer` — a second call site.
+  "update-index", ...])`, and `record/apply.py:742-759` (`_is_tracked`,
+  `_short_head`) runs raw `git -C` too — all bypass `git_answer`.
 - Nothing under `fr/isolation`, `fr/record` or `fr/commands` sets
   `safe.directory`. `POST_CREATE` is `isolation/scaffold.py:426`; both committed
   profiles (`.devcontainer/dev|admin/devcontainer.json`) carry its rendered
@@ -46,18 +46,37 @@ Two ends of one root cause, each sufficient alone; both ship.
 
 ### A. fr's own git calls — works in containers that already exist
 
-`git_answer` and the `update-index` restore pass `-c safe.directory=<root>`
-where `<root>` is the resolved absolute `cwd` git is run in. Trust is scoped
-to the one directory fr was pointed at. Because `git_context` asks from that
-same `root` (which may be a subdirectory), the override also covers the
-toplevel: `git_answer` is given the root the caller passed, and
-`git_context`'s follow-up calls use the discovered `toplevel`, which — for a
-worktree bind-mounted at its host path — is that directory or an ancestor the
-caller already named. If a subdirectory `root` still trips the check, the
-refusal remains loud (`GitRefusal`), never silent.
+One helper in `fr/git.py`, `safe_directory_args(root) -> list[str]`, is the
+only place the override is built. It resolves `root` (realpath — git compares
+`safe.directory` after resolution), walks UP to the nearest ancestor holding a
+`.git` entry (file for a linked worktree, directory otherwise) and returns
+`["-c", "safe.directory=<that ancestor>"]`; when none is found it returns `[]`
+and the refusal stays loud. Walking up is required: git matches the setting
+against the repository's worktree toplevel, not the caller's cwd, and
+`git_context`'s first call (`rev-parse --is-inside-work-tree`, `commit.py:291`)
+runs from a possibly-subdirectory `root` before any toplevel is known.
 
-`-c` goes before the subcommand (`git -c safe.directory=… <args>`). The
-helper builds the arg vector in one place so the two call sites cannot drift.
+Every raw git call on the record-commit path uses it:
+
+- `git_answer` (`git.py:107`) — prepended before the subcommand
+  (`git -c safe.directory=… <args>`); covers `fr.artifacts.commit` (`_git`) and
+  `records_commit.py:40`.
+- the `update-index` index restore (`commit.py:683`), which needs stdin and so
+  cannot use `git_answer`;
+- `fr/record/apply.py` `_is_tracked` / `_short_head` (`:742-759`). Unfixed,
+  they degrade silently in a foreign-owned tree (`_is_tracked` → False
+  misclassifies tracked records at `:810`, `:843`; `_short_head` → None drops
+  the sha), which is worse than a loud refusal.
+
+`fr.git._run_git` (`git.py:22`, the vk toolchain wrappers) is deliberately
+excluded: it is not on the record-commit path.
+
+Trust boundary, stated precisely: `-c` is per-process and never persisted, it
+appends to (never replaces) the user's own `safe.directory` entries, and it
+names exactly one path — the enclosing repository of the directory fr was
+handed — never `*`. `git_answer` is a shared seam, so this applies to every
+root a caller passes; that is deliberate (fr operating on a path it was
+explicitly pointed at), and is the whole behaviour, not an exception.
 
 ### B. The scaffold — new containers are right from the start
 
@@ -65,7 +84,7 @@ helper builds the arg vector in one place so the two call sites cannot drift.
 (operator decision: workspace path, not `*`). A devcontainer's
 `postCreateCommand` runs with the workspace folder as its cwd, and the
 scaffold already mounts the workspace at its host path
-(`scaffold.py:510`), so `$PWD` is exactly the worktree. Idempotent
+(`workspaceMount`, `scaffold.py:512-513`), so `$PWD` is exactly the worktree. Idempotent
 (`--add` of an identical value is harmless; guarded with `|| true` like its
 neighbours so a missing git never fails the container build).
 
@@ -92,11 +111,14 @@ and forcing git's ownership check with `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`
 
 ## 6. Test Plan (automated; no post-merge step)
 
-1. `commit_paths` commits under a forced foreign-owner environment (red on
-   `main`, green after).
-2. `git_answer` and the index-restore path both carry
-   `-c safe.directory=<cwd>` before the subcommand.
-3. `POST_CREATE` contains the `safe.directory "$PWD"` step, and the committed
+1. `commit_paths` commits under a forced foreign-owner environment, from a
+   **linked worktree** (fr's real shape) (red on `main`, green after).
+2. Same, with `root` = a **subdirectory** of the worktree (the s1 case).
+3. `_is_tracked` and `_short_head` answer correctly under a foreign owner.
+4. `safe_directory_args` returns the enclosing repo (file `.git` and dir
+   `.git`), realpath-resolved, and `[]` outside any repo; `git_answer` and the
+   index restore carry it before the subcommand.
+5. `POST_CREATE` contains the `safe.directory "$PWD"` step, and the committed
    `dev` and `admin` profiles equal a fresh scaffold.
 
 ## Implementation Plans
