@@ -4,7 +4,7 @@
 
 `branch_changes_present` (`packages/fr/src/fr/isolation/local.py:287`) reports a
 file as landed only when every non-blank line the branch ADDED still appears in
-`<base_ref>:<path>` (`_branch_change_present_in_file`, `:263`). A merge that
+`<base_ref>:<path>` (`_branch_change_present_in_file`, `:259`). A merge that
 lands AFTER the branch's own merge and rewrites those same lines makes the file
 read as `missing`, so `fr isolation verify-merge` says NOT verified for a PR
 that is genuinely merged. It fails safe (a STOP), but it blocks every closeout
@@ -19,7 +19,7 @@ Second half: `LocalWorktreeDevcontainerTarget.verify_merge` (`:992`) passes
 `refs=None` to `_verdict`, which then checks only the local `branch` ref
 (`refs or [branch]`, `:1068`). A local branch can be stale relative to what was
 pushed and merged. `verify_merge_reaped` already resolves and checks the fetched
-`origin/<branch>` plus the local one via `_branch_refs` (`:1043`); the
+`origin/<branch>` plus the local one via `_branch_refs` (`:1036`); the
 non-reaped path does not.
 
 ## Design
@@ -27,7 +27,7 @@ non-reaped path does not.
 ### A. A rewritten file counts as landed if the branch's blob was once on the base
 
 In `_branch_change_present_in_file`, when the per-line containment check fails,
-fall back to a blob-equality check (option 1 of #598): the file counts as landed
+fall back to a blob-equality check (option 1 of #598). The fallback runs on EVERY path that would otherwise return False, including the two early returns (path absent on `base_ref`, i.e. deleted later; no added lines) provided the branch itself still has the file. A branch that DELETED the file has no blob to compare, so a pure-deletion file that differs stays a STOP, as today. The file counts as landed
 when `git rev-parse <branch>:<path>` equals `git rev-parse <c>:<path>` for some
 commit `c` in `merge_base..base_ref` (restricted to commits touching `<path>`,
 via `git rev-list <merge_base>..<base_ref> -- <path>`). That is: the branch's
@@ -56,6 +56,7 @@ path does). Consequences, per the operator's answers:
   checked as well.
 - Unpushed local commits still refuse (the local ref is still checked), and dirty
   worktrees are unaffected (that is `_reap_hazard`, not touched here).
+- `_branch_refs` runs at `repo_root` (refs are shared across linked worktrees) and raises `IsolationError` naming the branch when neither ref resolves.
 - A failed fetch of the branch (e.g. GitHub deleted the merged branch) is not a
   verdict: fall back to whichever refs still resolve, as `_branch_refs` does. The
   overall `verified` still requires content present, PR `MERGED` and a successful
@@ -63,10 +64,11 @@ path does). Consequences, per the operator's answers:
 
 ### Non-goals
 
+- Known limit (out of scope, fails safe): if a concurrent merge edited the file elsewhere BEFORE the branch landed and a later merge then rewrote the branch's lines, no base blob equals the branch's blob and the file still reads missing (STOP).
 - `isolation/scaffold.py` and `artifacts/commit.py` are being edited by another
   batch (container-git-ownership) and are not touched.
 - `_reap_hazard` and the `down`-time check call `branch_changes_present`, so they
-  gain fix A for free; their own ref selection is unchanged.
+  gain fix A (a widened, safety-relevant pass, hence tested below); their own ref selection is unchanged.
 - The verdict is not weakened: nothing turns a STOP into a pass except positive
   blob-equality evidence from the base's own history.
 
@@ -84,6 +86,9 @@ merge; and it checks the fetched remote branch as well as the local one.
   present (red before the fix).
 - Unit: an orphan branch content that never landed, plus a later rewrite of the
   file, still reports missing.
+- Unit: a file deleted from the base after the merge counts as landed; a branch-side pure deletion stays missing.
+- Unit: `_reap_hazard` reports no hazard for a branch whose lines a later merge rewrote, and still reports one for unlanded content.
+- Unit: `verify_merge` raises `IsolationError` when neither ref resolves.
 - Unit: `verify_merge` with a stale local ref and an advanced fetched
   `origin/<branch>`, and with an unpushed local commit, refuses; a deleted remote
   branch falls back to the local ref.
