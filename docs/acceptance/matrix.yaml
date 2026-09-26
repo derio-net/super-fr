@@ -4127,9 +4127,14 @@ rows:
       promises a four-question single batch.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py
+    status: ci
+    notes: Phase 3 rewrote every §3.A.1 surface (fr-goal + fr-brainstorming SKILL.md,
+      both mirrors, the explainer, README) to the sized/at-most-two-round contract;
+      the tripwire asserts the old fixed-batch wording is gone everywhere and the new
+      round markers are present on the canonical skill and both mirrors.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
