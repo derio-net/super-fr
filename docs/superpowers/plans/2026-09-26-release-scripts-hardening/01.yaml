@@ -1,11 +1,13 @@
 schema_version: 2
 phase:
   number: 1
-  title: Release scripts hardening (#669 TOML anchor,
+  title: Release scripts hardening — TOML anchor, fragment rule, CI uv python
   tag: agentic
   depends_on: []
   tracking_issue: null
   tier: standard
+  acceptance:
+  - invariants-tripwires
   files:
   - scripts/version_surfaces.py
   - scripts/check-change-fragment.py
@@ -71,7 +73,7 @@ tasks:
   - id: P1.T3.S2
     text: |-
       Add test_version_surfaces.py as a unit evidence ref on the existing change-fragment-gate row
-      (the one citing test_change_fragment_gate.py) with `fr acceptance set-status --id <row>
+      (the one citing test_change_fragment_gate.py) with `fr acceptance set-status --id invariants-tripwires
       --status ci --notes "..." --level unit=super-fr:tests/unit/test_version_surfaces.py`, and
       commit the regenerated reports. Run the full suite into a log
       (`uv run pytest -q --no-cov -n auto`) and confirm green.
