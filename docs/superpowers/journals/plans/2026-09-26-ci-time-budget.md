@@ -79,3 +79,68 @@ Tasks 4 (gh adapter + dedup + CLI) and 5 (workflow/config/tripwire) have no dedi
 ### r1-skipped-jobs-have-timestamps-resolved · finding [fixed] · resolves r1-skipped-jobs-have-timestamps: GitHub stamps skipped jobs, so wall_clock must drop jobs by conclusion == skipped, not by null timestamps (phase 2)
 
 scripts/ci_budget.py's `wall_clock`/`slowest_job` filter jobs by `conclusion == "skipped"` (see `_ran`), never by missing timestamps — GitHub does stamp skipped jobs, as the finding observed. Fixture test test_wall_clock_sharded_run_excludes_the_skipped_job_by_conclusion asserts both figures against the real captured fixture (run 36247922786): 155s with the fix, 157s if the skipped job were wrongly included.
+
+<!-- fr:journal kind=finding scope=plan id=r2-budget-re-mismatch created=2026-09-26T17:35:10 phase=2 state=open review_scope=in -->
+### r2-budget-re-mismatch · finding [open] (reviewer: in scope) · BUDGET_RE never matched render_body's heading, so a non-default budget parsed back as 240s (phase 2)
+
+scripts/ci_budget.py:233 and :278. Inert today (decide always uses the fresh measurement budget) but it broke the §7.7 round-trip claim for any override.
+
+<!-- fr:journal kind=finding scope=plan id=r2-run-step-injection created=2026-09-26T17:35:10 phase=2 state=open review_scope=in -->
+### r2-run-step-injection · finding [open] (reviewer: in scope) · ci-budget.yml interpolated ${{ inputs.* }} into run:, the script-injection shape, on an issues:write token (phase 2)
+
+.github/workflows/ci-budget.yml:56-59; release.yml and acceptance-report.yml route such values through env.
+
+<!-- fr:journal kind=finding scope=plan id=r2-wasted-uv-sync created=2026-09-26T17:35:10 phase=2 state=open review_scope=in -->
+### r2-wasted-uv-sync · finding [open] (reviewer: in scope) · The watcher ran uv sync before a --no-project invocation (phase 2)
+
+.github/workflows/ci-budget.yml:53; about 20s wasted on every watched run.
+
+<!-- fr:journal kind=finding scope=plan id=r2-jobs-not-paginated created=2026-09-26T17:35:10 phase=2 state=open review_scope=in -->
+### r2-jobs-not-paginated · finding [open] (reviewer: in scope) · fetch_jobs did not paginate, so past 30 jobs wall_clock would truncate silently (phase 2)
+
+scripts/ci_budget.py:589-591.
+
+<!-- fr:journal kind=finding scope=plan id=r2-run-id-unvalidated created=2026-09-26T17:35:10 phase=2 state=open review_scope=in -->
+### r2-run-id-unvalidated · finding [open] (reviewer: in scope) · --run-id was not validated as numeric (phase 2)
+
+scripts/ci_budget.py:655.
+
+<!-- fr:journal kind=finding scope=plan id=r2-actions-pinned-by-tag created=2026-09-26T17:35:10 phase=2 state=open review_scope=out -->
+### r2-actions-pinned-by-tag · finding [open] (reviewer: out of scope) · Third-party actions pinned by tag rather than SHA (flagged by a background security scan) (phase 2)
+
+Every workflow here pins by tag, including release.yml and acceptance-report.yml, which already hold issues:write. This is a pre-existing repo-wide convention that the change follows, not one it introduced.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-09-26T17:35:10 phase=2 -->
+### review-phase-2 · review · Code review of phase 2 (ci-budget watcher) (phase 2)
+
+Dispatched reviewer (separate context). It verified the §3.B state machine row by row, conclusion-based skipped-job filtering on the real fixture, the issue-list dedup with --limit 100 and no gh search, and the watch-list tripwire's negative paths. Findings: r2-budget-re-mismatch, r2-run-step-injection, r2-wasted-uv-sync, r2-jobs-not-paginated, r2-run-id-unvalidated (in, all fixed); r2-actions-pinned-by-tag (out).
+
+<!-- fr:journal kind=finding scope=plan id=r2-budget-re-mismatch-resolved created=2026-09-26T17:35:10 phase=2 state=fixed resolves=r2-budget-re-mismatch -->
+### r2-budget-re-mismatch-resolved · finding [fixed] · resolves r2-budget-re-mismatch: BUDGET_RE never matched render_body's heading, so a non-default budget parsed back as 240s (phase 2)
+
+BUDGET_RE now matches the rendered heading; test_render_of_parse_round_trips_a_non_default_budget (360s).
+
+<!-- fr:journal kind=finding scope=plan id=r2-run-step-injection-resolved created=2026-09-26T17:35:10 phase=2 state=fixed resolves=r2-run-step-injection -->
+### r2-run-step-injection-resolved · finding [fixed] · resolves r2-run-step-injection: ci-budget.yml interpolated ${{ inputs.* }} into run:, the script-injection shape, on an issues:write token (phase 2)
+
+RUN_ID and BUDGET_SECONDS pass through env, with ${BUDGET_SECONDS:+...} in run:. A hostile value stays one argv element (checked in a shell) and argparse types reject it. Pinned by test_watcher_workflow_never_interpolates_expressions_into_shell.
+
+<!-- fr:journal kind=finding scope=plan id=r2-wasted-uv-sync-resolved created=2026-09-26T17:35:10 phase=2 state=fixed resolves=r2-wasted-uv-sync -->
+### r2-wasted-uv-sync-resolved · finding [fixed] · resolves r2-wasted-uv-sync: The watcher ran uv sync before a --no-project invocation (phase 2)
+
+Step removed; the same test pins it.
+
+<!-- fr:journal kind=finding scope=plan id=r2-jobs-not-paginated-resolved created=2026-09-26T17:35:10 phase=2 state=fixed resolves=r2-jobs-not-paginated -->
+### r2-jobs-not-paginated-resolved · finding [fixed] · resolves r2-jobs-not-paginated: fetch_jobs did not paginate, so past 30 jobs wall_clock would truncate silently (phase 2)
+
+gh api --paginate --slurp, flattened across pages; test_fetch_jobs_follows_every_page (35 jobs over 2 pages). Checked live: run 36247922786 gives 11 jobs and 155s.
+
+<!-- fr:journal kind=finding scope=plan id=r2-run-id-unvalidated-resolved created=2026-09-26T17:35:10 phase=2 state=fixed resolves=r2-run-id-unvalidated -->
+### r2-run-id-unvalidated-resolved · finding [fixed] · resolves r2-run-id-unvalidated: --run-id was not validated as numeric (phase 2)
+
+--run-id is type=int; test_run_id_must_be_numeric.
+
+<!-- fr:journal kind=finding scope=plan id=r2-actions-pinned-by-tag-resolved created=2026-09-26T17:35:10 phase=2 state=open resolves=r2-actions-pinned-by-tag out_of_scope=true -->
+### r2-actions-pinned-by-tag-resolved · finding [out-of-scope] · resolves r2-actions-pinned-by-tag: Third-party actions pinned by tag rather than SHA (flagged by a background security scan) (phase 2)
+
+Repo-wide convention across all 7 workflows, including two with issues:write that predate this change. SHA-pinning belongs to a repo-wide change, not this PR.
