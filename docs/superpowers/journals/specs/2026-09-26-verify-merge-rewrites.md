@@ -99,3 +99,8 @@ _reap_hazard :1082/:1196, _merged_by_content :1668 on origin/main; unpushed cont
 ### opus-s5 · finding [open] (reviewer: in scope) · tests covered 3 of 5 archived kinds; red-first note on the wrong assertion
 
 Add runs and usage; move the parenthetical.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s1-resolved created=2026-09-27T00:07:36 state=fixed resolves=opus-s1 -->
+### opus-s1-resolved · finding [fixed] · resolves opus-s1: §C claimed archive never rewrites moved bytes; usage is re-captured first
+
+Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
