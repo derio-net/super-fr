@@ -4084,7 +4084,9 @@ rows:
       - super-fr:tests/unit/test_v2_plan_ops.py#L1649
       - super-fr:tests/unit/test_v2_plan_ops.py#L603
     status: ci
-    notes: Re-point refs to line anchors.
+    notes: 'gh#673: skeleton gate applies only with 2+ agentic phases. The 2+ side (unmarked-first
+      error, override, misplaced marker) stays pinned by the existing goal-phase-one-skeleton-smoke
+      row''s tests.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
