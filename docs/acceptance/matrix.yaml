@@ -4134,10 +4134,17 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_fr_goal_question_rounds.py
     status: ci
-    notes: Phase 3 rewrote every §3.A.1 surface (fr-goal + fr-brainstorming SKILL.md,
-      both mirrors, the explainer, README) to the sized/at-most-two-round contract;
-      the tripwire asserts the old fixed-batch wording is gone everywhere and the new
-      round markers are present on the canonical skill and both mirrors.
+    notes: 'Phase 3 rewrote the §3.A.1 surfaces (fr-goal + fr-brainstorming SKILL.md,
+      both mirrors, the explainer .md and rendered .html, the explainers index page,
+      README, OpenCode /fr-goal command) to the sized, at-most-two-round contract. The
+      tripwire (normalised, casefolded text) asserts the old fixed-batch phrase list
+      is absent from all of them; on the canonical fr-goal skill and both mirrors it
+      asserts the behavioural markers (questions: {rounds, (Round 1 of, (Round 2 of
+      2), design-risk, operator-request, never a round 3, tool-call round separation,
+      announced round 2 as a ceiling, gate-question-rounds journal entry) and that no
+      prose-only cross-examination instruction remains; on fr-brainstorming, the explainer
+      .md, README and index.html it asserts only that a question round is described.
+      It is a wording check, not a behavioural one.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
