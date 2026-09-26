@@ -59,3 +59,8 @@ Docstring now says the guarantee covers the pyproject rewrites.
 ### r4-resolved · finding [out-of-scope] · resolves r4: Only a literal [project] table is recognised (phase 1)
 
 Pre-existing fail-closed limitation of the [project] literal; no such file exists in the repo.
+
+<!-- fr:journal kind=finding scope=plan id=r4-resolved-2 created=2026-09-26T13:02:57 state=open resolves=r4 tracked_by=#681 -->
+### r4-resolved-2 · finding [deferred → #681] · resolves r4: Only a literal [project] table is recognised
+
+Filed at closeout as #681.
