@@ -109,4 +109,12 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: pending
+    state: running
+    at: '2026-09-26T06:05:01+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-26T06:05:01+00:00'
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
