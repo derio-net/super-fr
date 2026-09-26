@@ -54,3 +54,13 @@ Intentional test pin, not a defect.
 ### r1-4-resolved · finding [out-of-scope] · resolves r1-4: no spec no-mutation assertion in the no-table create test (phase 1)
 
 Covered indirectly; not caused by this change.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-tests-red-then-green created=2026-09-26T07:42:31 phase=2 -->
+### p2-tests-red-then-green · discovery · create appends missing section; existing #133 preflight test replaced (phase 2)
+
+test_create_preflight_validates_spec_before_creating_folder asserted the old missing-section refusal; replaced by tests for the new behaviour. _CANONICAL_HEADER_SEPARATOR now has a consumer (_ensure_section_text). migrate output byte-identical (test_v2_migrate unchanged, green).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-26T07:42:31 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the refactor step (S3) was the cleanup: migrate._ensure_spec_plan_row now reuses plan_ops._ensure_section_text, leaving one header literal; nothing further to clean
