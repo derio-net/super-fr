@@ -16,7 +16,15 @@ steps:
         evidence:
           unobserved: operator-gate
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-26T09:48:04+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-26T09:48:04+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: opencode
+          model: github-copilot/gpt-6-luna
   plan:
     state: pending
   plan-review:
