@@ -169,3 +169,8 @@ Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f
 ### opus-f3-spec-ab-stale-resolved · finding [fixed] · resolves opus-f3-spec-ab-stale: spec §A/§B still describe rev-list and the old fetch fallback
 
 Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
+
+<!-- fr:journal kind=finding scope=plan id=opus-f4-docstrings-three-resolved created=2026-09-27T00:12:44 state=fixed resolves=opus-f4-docstrings-three -->
+### opus-f4-docstrings-three-resolved · finding [fixed] · resolves opus-f4-docstrings-three: docstrings say three signals; there are four
+
+Fixed in aa1bc209 (f1/f2 with red-first tests in tests/unit/test_isolation.py; f6 fixed cheaply with -c log.follow=false and --no-color).
