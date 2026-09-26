@@ -64,3 +64,40 @@ Guard treats None as {} like parse_record; new test stamps a comment-only record
 ### p1-r5-resolved · finding [fixed] · resolves p1-r5: Whitespace-only questions.reason accepted for rounds: 2 (phase 1)
 
 Validator strips reason; parametrized whitespace case added.
+
+<!-- fr:journal kind=decision scope=plan id=p2-rounds-share-one-walk created=2026-09-26T13:20:43 phase=2 -->
+### p2-rounds-share-one-walk · decision · operator_answered_since is now "at least one answered round" over answered_rounds_since's walk (phase 2) (phase 2)
+
+P2.T1.S3. The two predicates read the same records by the same rules (main thread,
+stamped at/after `since`, answered = non-empty `toolUseResult.answers` paired by
+tool_use id). Every asked id belongs to exactly one round and a round counts when any
+of its ids was answered, so `bool(answered_rounds_since(...))` equals the old result
+exactly; operator_answered_since delegates to it and its existing tests stay green
+unchanged. The gate calls answered_rounds_since once and derives the observed/unobserved
+split from it, so the two can never disagree inside one resolve.
+
+<!-- fr:journal kind=decision scope=plan id=p2-round-two-needs-a-spec created=2026-09-26T13:20:43 phase=2 -->
+### p2-round-two-needs-a-spec · decision · A declared second round with no spec to journal it on is refused, like --no-questions (phase 2) (phase 2)
+
+Spec §3.C says the `gate-question-rounds-<step>` decision goes "to the same journal"
+as the no-questions entry. That journal is the spec this resolve emits, else one an
+earlier step emitted; with neither, review r1-5's reasoning applies unchanged — the
+reason would reach only stderr. So `rounds: 2` without a reachable spec is refused
+before the transcript is read and before any byte moves. The brainstorm step always
+emits its spec, so the shipped fr-goal path never hits it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-member-resolve-dropped-gate-flags created=2026-09-26T13:20:43 phase=2 state=open review_scope=in -->
+### p2-member-resolve-dropped-gate-flags · finding [open] (reviewer: in scope) · Gate flags on a grouped-member resolve were silently dropped (phase 2) (phase 2)
+
+Found by the new "questions on a resolve that clears no gate" test: `_resolve_body`
+delegates a `for_each` member (implement-phase, review-phase) to `_resolve_member`
+BEFORE the review r1-7 "clears none" refusal, so `--no-questions --reason` (and now
+`questions`) on a member resolve exited 0 with the flags ignored — on both the flag
+path and the record path. Fixed: the member branch refuses gate flags first, via one
+`_refuse_gate_flags` helper shared with the top-level refusal. Both paths tested in
+tests/unit/test_run_question_rounds.py.
+
+<!-- fr:journal kind=finding scope=plan id=p2-member-resolve-dropped-gate-flags-resolved created=2026-09-26T13:20:43 phase=2 state=fixed resolves=p2-member-resolve-dropped-gate-flags -->
+### p2-member-resolve-dropped-gate-flags-resolved · finding [fixed] · resolves p2-member-resolve-dropped-gate-flags: Gate flags on a grouped-member resolve were silently dropped (phase 2) (phase 2)
+
+member branch now refuses gate flags before delegating; tested on both paths.
