@@ -4527,5 +4527,4 @@ rows:
       unit:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
     status: ci
-    notes: Regression test asserts the reap-hazard fetch uses the bounded network helper
-      and a timeout remains an unverifiable hazard.
+    notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)
