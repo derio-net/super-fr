@@ -4,3 +4,28 @@
 ### plan-two-phases · decision · Two agentic phases, sharding (skeleton, proven live on the branch CI run) then the watcher
 
 The watcher is inert until merge, so only the sharding can be proven live pre-merge; making it the skeleton puts the riskiest claim (under 240s) first. There is no manual phase, because the post-merge Test Plan is operator-driven.
+
+<!-- fr:journal kind=discovery scope=plan id=pytest-split-store-durations-with-xdist created=2026-09-26T16:43:10 phase=1 -->
+### pytest-split-store-durations-with-xdist · discovery · --store-durations works fine together with -n auto (phase 1)
+
+Ran `uv run pytest -n auto --no-cov --store-durations` over the full suite. It completed cleanly and wrote a `.test_durations` with 6413 entries — one per collected test, matching the full collection size. No warning or degraded behavior observed from pytest-split (0.11.0) under xdist. No fallback to a serial run was needed.
+
+<!-- fr:journal kind=discovery scope=plan id=ci-branch-run-wall-clock created=2026-09-26T16:43:10 phase=1 -->
+### ci-branch-run-wall-clock · discovery · Branch CI run 36247922786: 4 green test shards + coverage, 155s wall clock (phase 1)
+
+First push (run 36247574806) failed `lint` (ruff format --check) on the newly-added tests/unit/test_ci_shards.py — a formatting miss from writing it outside `ruff format`. Fixed and re-pushed; the resulting run, 36247922786, is fully green: lint, typecheck, `test (1..4)`, `coverage`, validate-artifacts, opencode-plugin-test, version-sync (change-fragment skipped, correctly, as this is a push not a PR). Wall clock = max(completedAt) - min(startedAt) over non-skipped jobs = 2026-09-26T14:18:40Z (coverage's completedAt) minus 2026-09-26T14:16:05Z (the earliest job start) = 155s, well under the 240s budget (spec §3.A predicted ~150-180s).
+
+<!-- fr:journal kind=discovery scope=plan id=ci-coverage-total-before-after-source-move created=2026-09-26T16:43:10 phase=1 -->
+### ci-coverage-total-before-after-source-move · discovery · Coverage TOTAL unchanged by moving --cov=<pkg> into [tool.coverage.run] source (phase 1)
+
+Before (main, commit 7f50d74c, CI job log): TOTAL 21824 stmts, 1542 miss, `Total coverage: 92.93%`. After (this branch, local full-suite run with the coverage-source move applied, ci.yml not yet sharded): TOTAL 21753 stmts, 1527 miss, `Total coverage: 92.98%`. The statement-count difference (21824 vs 21753) is expected — different commits, different code — not a sign of divergence: both runs measure exactly the same 5-package source list (fr, fr_dispatch, fr_vk, fr_cncd, fr_herdr) and both gate at 75%, confirming the move from CLI `--cov=<pkg>` flags in addopts to `[tool.coverage.run] source = [...]` is behaviorally inert locally, as spec §3.A intends.
+
+<!-- fr:journal kind=finding scope=plan id=flaky-index-lock-test-under-host-contention created=2026-09-26T16:43:10 phase=1 state=refuted review_scope=out -->
+### flaky-index-lock-test-under-host-contention · finding [refuted] (reviewer: out of scope) · test_records_commit.py::test_a_record_commit_gives_up_on_a_stuck_index_lock_quickly failed once under heavy host load, unrelated to this phase (phase 1)
+
+During the first full-suite run today (26m24s wall clock — the host had 5+ other fr worktrees running their own full suites concurrently, vs. AGENTS.md's ~150s baseline), this test failed once: it asserts `1.0 <= elapsed < 5.0` seconds for a retry-on-stuck-lock code path, which is exactly the wall-clock-tight shape AGENTS.md already warns about for `-n auto`. A second full-suite run (17m24s, same host, still contended) passed it cleanly, with no code changes in between. Not caused by this phase's changes (pyproject.toml / ci.yml / new test file never touch fr.records_commit), and not reproducible on retry — recorded for visibility, not as a regression to fix here.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t2 created=2026-09-26T16:43:10 phase=1 -->
+### no-refactor-p1-t2 · discovery · no-refactor-because P1.T2 (phase 1)
+
+Task 2 (GREEN) has no dedicated refactor step of its own; the cleanup (ci.yml comment tidy, AGENTS.md refresh-command doc, fr acceptance set-status) was done in P1.T3.S1, the phase's explicit REFACTOR task.
