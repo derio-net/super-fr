@@ -129,3 +129,8 @@ fixed in the Opus-review commits
 ### r2-f4-resolved · finding [fixed] · resolves r2-f4: Spec had an empty duplicate Implementation Plans section
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f5-resolved created=2026-09-26T23:40:21 state=fixed resolves=r2-f5 -->
+### r2-f5-resolved · finding [fixed] · resolves r2-f5: This plan's own _meta.yaml stored a non-canonical spec:
+
+fixed in the Opus-review commits
