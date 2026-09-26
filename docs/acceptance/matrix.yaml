@@ -4226,7 +4226,15 @@ rows:
     notes: 'Phase 3: merge order, printed plan, reconcile, refusals (draft, failing
       check, moved head, protection refusal verbatim, unsupported backend) unit-tested
       with the forge faked; execution against real git with a local bare origin, including
-      resume. The live walk (Test Plan 21, phase 4) is still owed.'
+      resume. Live walk 2026-09-26 (Test Plan 21, phase 4) on derio-net/super-fr: the
+      printed plan predicted the shared docs/acceptance files; the queue stopped on
+      a real matrix.yaml conflict naming the file and pushing nothing; after a manual
+      matrix union a re-run merged #652 at its reserved 4.23.2 and stopped on #651''s
+      matrix plus reports; after that union a re-run resumed at #651 and re-slotted
+      it from 4.23.1 to 4.23.3 (a third version, #635, had taken 4.23.1 on main mid-flight),
+      pushed, waited for checks and merged. The verb resolved no conflict in the four
+      generated acceptance files: every super-fr batch pair conflicts there (structural
+      fix in flight on feat/version-bump-churn).'
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
