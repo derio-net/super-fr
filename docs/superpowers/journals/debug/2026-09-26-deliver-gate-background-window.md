@@ -24,3 +24,8 @@ Reviewer a3be0e06072843aad: notices read only from main-thread user records with
 ### opus-r1-summary-injection · finding [open] (reviewer: in scope) · summary-quoted description can forge <status>completed</status> or another command's id
 
 telemetry._task_notice read every field occurrence and kept the last; the <summary> quotes the agent-written Bash description.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r2-unmarked-notice created=2026-09-26T23:40:16 state=open review_scope=in -->
+### opus-r2-unmarked-notice · finding [open] (reviewer: in scope) · any string-content user record with the tag was accepted as a notice
+
+Operator paste or !cmd stdout; the harness marker origin.kind=task-notification was ignored; a failed notice did not retire the id, so a later forged completed counted.
