@@ -3265,7 +3265,9 @@ def test_verify_merge_unresolvable_ref_raises_naming_the_branch(
     _with_origin(repo)
     target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
     monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
-    with pytest.raises(IsolationError, match="ghost-branch"):
+    # "cannot resolve branch ref" is _branch_refs' own message; the old
+    # refs=None path failed later, at merge-base, with different wording.
+    with pytest.raises(IsolationError, match="cannot resolve branch ref 'ghost-branch'"):
         target.verify_merge(_state(repo, "ghost-branch"), default_branch="main")
 
 
