@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-isolation-timeouts
+captures:
+- host: h-a746f11d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-26T05:36:31+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 4a592a0c-4f8c-47c4-8037-d27b4112c4dc
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 24
+        cache_write: 82236
+        cache_read: 1099609
+        output: 7259
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 3
+      other:
+        usd: null
+        turns: 1
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+      brainstorm:
+        usd: null
+        turns: 10

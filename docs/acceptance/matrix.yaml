@@ -4359,3 +4359,12 @@ rows:
     status: ci
     notes: engine regenerates the audit page and the measured half of the architecture
       page; the future-state half is authored (spec §5.A.6)
+  - id: isolation-network-calls-bounded
+    capability: isolation network calls are bounded
+    acceptance: The default-branch forge lookup and verify-merge's fetches are timed
+      and non-interactive; a timeout reads as unknown, never as a verdict
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-isolation-network-timeouts-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
