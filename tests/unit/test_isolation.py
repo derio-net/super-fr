@@ -3362,3 +3362,157 @@ def test_branch_changes_present_orphan_code_file_still_missing_after_fragment_co
     res = branch_changes_present(subprocess_runner, repo, "feature", "main")
     assert not res.changes_present
     assert res.missing == ["orphan.py"]
+
+
+# ---------- `fr archive` moves the branch's fr artifacts after merge (#598 / #665) ----------
+# The closeout's `fr archive` `git mv`s docs/superpowers/{plans,specs,journals,runs,usage}/…
+# to docs/superpowers/implemented/… on the default branch, so the branch's added
+# paths are absent from base under their ORIGINAL name.
+
+_SP = "docs/superpowers"
+_ARCHIVED_DOCS = {
+    f"{_SP}/plans/p1/01.yaml": "phase: 1\nsteps: [a, b]\n",
+    f"{_SP}/specs/s1.md": "# spec\nbody line\n",
+    f"{_SP}/journals/specs/s1.md": "# journal\nfinding one\n",
+}
+
+
+def _archive_branch(repo: Path, docs: dict[str, str] | None = None) -> None:
+    _git(repo, "checkout", "-q", "-b", "feature")
+    for rel, body in (docs or _ARCHIVED_DOCS).items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body)
+    (repo / "code.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work")
+
+
+def _archive_on_main(repo: Path, rels: list[str], *, rewrite: dict[str, str] | None = None) -> None:
+    _git(repo, "checkout", "-q", "main")
+    for rel in rels:
+        dst = rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+        (repo / dst).parent.mkdir(parents=True, exist_ok=True)
+        _git(repo, "mv", rel, dst)
+        if rewrite and rel in rewrite:
+            (repo / dst).write_text(rewrite[rel])
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "archive")
+
+
+def _final(rel: str) -> str:
+    """The branch's FINAL content of an archived doc: the squash carried v1; the
+    closeout then appended a line (journal entry / cursor advance) that reaches
+    the default branch only inside the archive commit, under the implemented path."""
+    return _ARCHIVED_DOCS[rel] + "closeout line\n"
+
+
+def _merged_then_archived(repo: Path, **kw: Any) -> None:
+    _archive_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _git(repo, "checkout", "-q", "feature")
+    for rel in _ARCHIVED_DOCS:
+        (repo / rel).write_text(_final(rel))
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "closeout")
+    rewrite = {rel: _final(rel) for rel in _ARCHIVED_DOCS}
+    _archive_on_main(repo, list(_ARCHIVED_DOCS), rewrite=rewrite, **kw)
+
+
+def test_branch_changes_present_archive_moved_docs_count_as_landed(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_verify_merge_archive_moved_docs_are_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+    assert res["missing"] == []
+
+
+def test_reap_hazard_archive_moved_docs_are_not_an_unlanded_content_hazard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/archived")
+    for rel, body in _ARCHIVED_DOCS.items():
+        (wt / rel).parent.mkdir(parents=True, exist_ok=True)
+        (wt / rel).write_text(body)
+    _commit_in_worktree(wt, "code.py", "x = 1\n")
+    _land_on_origin_main(repo, "code.py", "x = 1\n")
+    for rel in _ARCHIVED_DOCS:
+        (wt / rel).write_text(_final(rel))
+    _commit_in_worktree(wt, "closeout.txt", "closeout\n")
+    _land_on_origin_main(repo, "closeout.txt", "closeout\n")
+    for rel in _ARCHIVED_DOCS:
+        dst = repo / rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(_final(rel))
+    _land_on_origin_main(repo, "note.txt", "archive\n")
+    st = load_state(repo, "feat/archived")
+    assert st is not None
+    assert target._reap_hazard(st) is None
+    # a dirty worktree still hazards
+    (wt / "dirty.txt").write_text("wip\n")
+    assert target._reap_hazard(st) is not None
+
+
+def test_branch_changes_present_docs_never_on_main_under_either_path_stay_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _archive_branch(repo)
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "unrelated main commit")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert f"{_SP}/plans/p1/01.yaml" in res.missing
+
+
+def test_branch_changes_present_archived_copy_with_different_content_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _archive_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _git(repo, "checkout", "-q", "feature")
+    spec = f"{_SP}/specs/s1.md"
+    _commit(repo, spec, _final(spec), "closeout")
+    _archive_on_main(repo, [spec], rewrite={spec: "# something else entirely\n"})
+    _git(repo, "checkout", "-q", "main")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert spec in res.missing
+
+
+def test_branch_changes_present_orphan_code_file_still_missing_after_docs_archived(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "orphan.py", "late\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["orphan.py"]
+
+
+def test_branch_changes_present_non_fr_docs_get_no_archive_alternate(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / "docs").mkdir()
+    _commit(repo, "docs/guide.md", "guide\n", "add guide")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "docs/implemented").mkdir(parents=True)
+    _commit(repo, "docs/implemented/guide.md", "guide\n", "elsewhere")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.missing == ["docs/guide.md"]

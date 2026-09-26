@@ -237,6 +237,28 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     return "\n".join(lines)
 
 
+# `fr archive` (fr/archive.py) `git mv`s a finished run's fr artifacts from
+# docs/superpowers/<kind>/<rest> to docs/superpowers/implemented/<kind>/<rest>
+# (plans/<dir>, specs/<file>, journals/<scope-dir>/<file>, runs/<id>.yaml,
+# usage/<id>.yaml — every destination is the source path with `implemented/`
+# spliced in after `docs/superpowers/`). Kept as a local constant, not imported
+# from fr.archive: this module must not depend on the archive command.
+_ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
+_SUPERPOWERS = "docs/superpowers/"
+
+
+def _archived_path(path: str) -> str | None:
+    """Where `fr archive` moves `path` to, or None when it never moves it.
+
+    Only the five archived kinds under docs/superpowers/ map; anything else
+    (including a path already under `implemented/`) has no alternate.
+    """
+    for kind in _ARCHIVED_KINDS:
+        if path.startswith(f"{_SUPERPOWERS}{kind}/"):
+            return f"{_SUPERPOWERS}implemented/{path[len(_SUPERPOWERS) :]}"
+    return None
+
+
 def _branch_added_lines(
     run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
 ) -> list[str]:
@@ -257,7 +279,13 @@ def _branch_added_lines(
 
 
 def _branch_blob_was_on_base(
-    run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str, path: str
+    run: Runner,
+    repo_root: Path,
+    merge_base: str,
+    branch: str,
+    base_ref: str,
+    path: str,
+    base_path: str | None = None,
 ) -> bool:
     """Did the branch's exact content of `path` ever appear on the base?
 
@@ -267,19 +295,44 @@ def _branch_blob_was_on_base(
     history; an orphan (content that never landed) matches nothing. Every
     failure — the branch lacks the file (a deletion has no blob), an
     unresolvable rev, a failed git call — reads as no match, never as a pass.
+
+    `base_path` is where to look on the base side (default: `path` itself) — the
+    `implemented/` path `fr archive` moved it to.
     """
+    bpath = base_path or path
     want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
     if want.returncode != 0 or not want.stdout.strip():
         return False
     blob = want.stdout.strip()
-    commits = run(["git", "rev-list", f"{merge_base}..{base_ref}", "--", path], cwd=repo_root)
+    commits = run(["git", "rev-list", f"{merge_base}..{base_ref}", "--", bpath], cwd=repo_root)
     if commits.returncode != 0:
         return False
     for commit in commits.stdout.split():
-        got = run(["git", "rev-parse", "--verify", "--quiet", f"{commit}:{path}"], cwd=repo_root)
+        got = run(["git", "rev-parse", "--verify", "--quiet", f"{commit}:{bpath}"], cwd=repo_root)
         if got.returncode == 0 and got.stdout.strip() == blob:
             return True
     return False
+
+
+def _landed_at(
+    run: Runner,
+    repo_root: Path,
+    merge_base: str,
+    branch: str,
+    base_ref: str,
+    path: str,
+    base_path: str,
+) -> bool:
+    """The branch's contribution to `path` (per-line containment, then blob
+    equality) against `base_ref:base_path`."""
+    added = _branch_added_lines(run, repo_root, merge_base, branch, path)
+    if added:
+        show = run(["git", "show", f"{base_ref}:{base_path}"], cwd=repo_root)
+        if show.returncode == 0:
+            base_lines = set(show.stdout.splitlines())
+            if all(line in base_lines for line in added):
+                return True
+    return _branch_blob_was_on_base(run, repo_root, merge_base, branch, base_ref, path, base_path)
 
 
 def _branch_change_present_in_file(
@@ -299,19 +352,26 @@ def _branch_change_present_in_file(
     LATER merge that rewrote the branch's lines does not un-land them if the
     branch's exact file content was on the base after the merge.
 
+    An fr artifact that `fr archive` later moved to `implemented/` is judged the
+    same way at its archived path (`_archived_path`): the branch's added lines
+    contained in `<base_ref>:<implemented path>`, or the branch's blob on that
+    path in the base's history. Same soundness as the same-path check, and no
+    looser than it: a missing archived file, or unrelated content, stays missing.
+    Containment (not only exact blob equality) because the archive commit can carry
+    the closeout's appended lines (usage capture, cursor advance) on top of the
+    branch's content.
+
     Conservative in the missing direction: a file whose branch-side change added
     no identifiable line and whose blob never appeared on the base (a pure
     deletion that did NOT land byte-identically) reports *not present*, i.e. a
     safe "STOP and check", never a false "verified".
     """
-    added = _branch_added_lines(run, repo_root, merge_base, branch, path)
-    if added:
-        show = run(["git", "show", f"{base_ref}:{path}"], cwd=repo_root)
-        if show.returncode == 0:
-            base_lines = set(show.stdout.splitlines())
-            if all(line in base_lines for line in added):
-                return True
-    return _branch_blob_was_on_base(run, repo_root, merge_base, branch, base_ref, path)
+    if _landed_at(run, repo_root, merge_base, branch, base_ref, path, path):
+        return True
+    archived = _archived_path(path)
+    return archived is not None and _landed_at(
+        run, repo_root, merge_base, branch, base_ref, path, archived
+    )
 
 
 def branch_changes_present(
