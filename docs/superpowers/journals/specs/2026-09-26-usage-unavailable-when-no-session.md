@@ -84,3 +84,8 @@ check: codebase. fr archive's event IS closeout (archive.py); the deliver resolv
 ### o4 · finding [open] (reviewer: in scope) · Older fr re-capture keeps the placeholder beside real sessions
 
 check: consistency. A released fr without the new _merge rule carries the placeholder forward; no dollar error. Needs a scoped risk line.
+
+<!-- fr:journal kind=finding scope=spec id=o1-resolved created=2026-09-26T23:36:46 state=fixed resolves=o1 -->
+### o1-resolved · finding [fixed] · resolves o1: Spec did not cover backfill, which the branch now changes
+
+Spec 3.5, Test Plan item 4 and the plan files list now cover backfill (f0814595).
