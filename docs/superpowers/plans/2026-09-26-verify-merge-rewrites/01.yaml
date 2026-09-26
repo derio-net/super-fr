@@ -1,0 +1,81 @@
+schema_version: 2
+phase:
+  number: 1
+  title: verify-merge survives later rewrites and checks the fetched branch (debugging-first)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - verify-merge-survives-later-rewrites
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - tests/unit/test_isolation.py
+  - docs/acceptance/**
+  - .changes/*.yaml
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: RED — reproduce the two defects with failing tests
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_isolation.py beside the other branch_changes_present tests (helpers _git/_commit/_squash_merge/make_repo), add tests using real throwaway repos: (a) branch adds lines to a file, is squash-merged, then a later commit on main rewrites those same lines -> branch_changes_present reports changes_present and missing == []; (b) the same but the branch also has an orphan commit pushed after the merge -> still missing; (c) the file is deleted from main after the merge -> landed; a branch-side pure deletion that differs stays missing. Run pytest on them and confirm (a) and (c-deleted-later) fail for the right reason.
+  - id: P1.T1.S2
+    text: |-
+      RED: add verify_merge tests (helper _with_origin, monkeypatch target._pr): stale local branch with an advanced fetched origin/<branch> containing unlanded content -> not verified; an unpushed local commit -> not verified; remote branch deleted -> falls back to the local ref and verifies; neither ref resolves -> IsolationError naming the branch. Add a _reap_hazard test: no hazard for a branch whose lines a later merge rewrote, a hazard for unlanded content. Confirm the stale-ref one fails before the fix.
+- number: 2
+  title: GREEN — fix in packages/fr/src/fr/isolation/local.py
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: in _branch_change_present_in_file add the blob-equality fallback per spec §A: the branch's `git rev-parse <branch>:<path>` equals `<c>:<path>` for some c in `git rev-list <merge_base>..<base_ref> -- <path>`. Run it on every path that would otherwise return False (including empty-added and path-absent-on-base) provided the branch has the file; any failed git call or unresolvable rev reads as no match. Do not touch isolation/scaffold.py or artifacts/commit.py.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in verify_merge resolve refs with self._branch_refs(state.branch, remote) and pass refs to _verdict, per spec §B. Run the new tests and the whole tests/unit/test_isolation.py; all green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: tidy docstrings of branch_changes_present/_branch_change_present_in_file/verify_merge to describe the fallback and ref set; refactor: none beyond that. Run ruff format, ruff check, mypy per AGENTS.md.
+- number: 3
+  title: Matrix, fragment, verification
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Run `uv run fr acceptance set-status --id verify-merge-survives-later-rewrites --status ci --notes "<why>" --level unit=super-fr:tests/unit/test_isolation.py` and commit the regenerated reports. Add .changes/feat-batch-verify-merge-rewrites.yaml (bump: patch, one-line summary). Never edit a version.
+  - id: P1.T3.S2
+    text: |-
+      Run `uv run pytest -q --no-cov -n auto` redirected to a log outside the repo; report only pass/fail and the log path.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
