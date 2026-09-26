@@ -119,13 +119,19 @@ steps:
           returned: '2026-09-26T07:15:50+00:00'
           outcome: done
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-26T07:15:51+00:00'
           agent: a1444f4272114db98
           harness: claude-code
           model: claude-opus-5-5
           session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T07:33:34+00:00'
+          outcome: done
+        evidence:
+          review: rp3-review
+          reviewer: a1444f4272114db98
+          findings: rp3-f1
   journal-check:
     state: pending
   deliver:

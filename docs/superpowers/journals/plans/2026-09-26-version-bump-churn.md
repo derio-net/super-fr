@@ -213,3 +213,31 @@ tests only; one World fixture (bare origin, release clone, a second clone for ot
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 the cleanup owed here is the one P3.T3.S2 names (push/retry loop and tag/release as separate functions); it was written that way in green and checked in P3.T3.S2, not done twice
+
+<!-- fr:journal kind=review scope=plan id=rp3-review created=2026-09-26T09:33:34 phase=3 -->
+### rp3-review · review · Independent code review of phase 3: 1 finding (in scope) (phase 3)
+
+Dispatched reviewer (separate context) over 88c7041b against spec §3.C/§3.D/§3.E/§5/§7 4-5, tracing
+the first real release by hand. Clean: the staged-diff purity check holds against the real uv.lock
+and manifests (members carry no version-pinned inter-member deps, so a lockstep bump touches only
+each member's own version line); .venv/ and __pycache__/ are gitignored, so `git add -A` after the
+no-clean reset cannot pick up runner noise; `uv lock --check` is a real flag and is checked before
+the bump; the notes lookup, previous-tag lookup, race recompute, env-var dispatch input, and
+permissions/concurrency/triggers are correct and tested non-tautologically; §7 item 4's list and
+item 5's release half are fully covered. One gap: ruleset refusals were not recognised.
+
+<!-- fr:journal kind=finding scope=plan id=rp3-f1 created=2026-09-26T09:33:34 phase=3 state=open review_scope=in -->
+### rp3-f1 · finding [open] (reviewer: in scope) · MEDIUM: protected-push detection only knew classic GH006 wording, not the GH013 ruleset wording this repo's `protect main` would send (phase 3)
+
+scripts/release.py `_PROTECTED_MARKERS = ("GH006", "protected branch")`. main is protected by a
+ruleset (classic protection 404s), whose refusal reads `GH013: Repository rule violations found`
+and reports `[remote rejected]`, which matched neither marker set; the promised "needs a bypass
+actor" message never fired and the only test simulated GH006.
+
+<!-- fr:journal kind=finding scope=plan id=rp3-f1-resolved created=2026-09-26T09:33:34 phase=3 state=fixed resolves=rp3-f1 -->
+### rp3-f1-resolved · finding [fixed] · resolves rp3-f1: MEDIUM: protected-push detection only knew classic GH006 wording, not the GH013 ruleset wording this repo's `protect main` would send (phase 3)
+
+`_PROTECTED_MARKERS` adds "GH013", "repository rule violations" and "[remote rejected]" (a lost
+race is always a client-side plain `[rejected]`, never a remote decline). The protection test is
+parametrized over classic GH006, a GH013 ruleset reply and a generic server-side decline; the two
+new cases were red first. The lost-race tests still classify as races.
