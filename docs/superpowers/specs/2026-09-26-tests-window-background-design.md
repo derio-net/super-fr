@@ -135,3 +135,9 @@ Business-level: a run that follows the brief's own long-command rule can deliver
   success (unit → `tests/unit/test_run_telemetry.py`).
 - `deliver-tests-log-shell-variable` — the gate accepts a log whose path the
   writing command held in a shell variable (same file).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-tests-window-background | `derio-net/super-fr` | `2026-09-26-tests-window-background` | — |
