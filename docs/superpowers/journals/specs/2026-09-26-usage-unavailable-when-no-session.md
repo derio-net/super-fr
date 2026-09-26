@@ -79,3 +79,8 @@ check: codebase. Implementation shifted capture.py/file.py lines; cite by symbol
 ### o3 · finding [open] (reviewer: in scope) · deliver/closeout/archive are two capture sites, not three
 
 check: codebase. fr archive's event IS closeout (archive.py); the deliver resolve is the other.
+
+<!-- fr:journal kind=finding scope=spec id=o4 created=2026-09-26T23:36:45 state=open review_scope=in -->
+### o4 · finding [open] (reviewer: in scope) · Older fr re-capture keeps the placeholder beside real sessions
+
+check: consistency. A released fr without the new _merge rule carries the placeholder forward; no dollar error. Needs a scoped risk line.
