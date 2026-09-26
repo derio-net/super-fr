@@ -1,0 +1,170 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Budget watcher — per-CI-file dedup'd ci-budget issue with auto-close
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - ci-budget-ticket-dedup
+  - ci-budget-watch-list-complete
+  tier: standard
+  files:
+  - scripts/ci_budget.py
+  - .github/ci-budget.yaml
+  - .github/workflows/ci-budget.yml
+  - tests/unit/test_ci_budget.py
+  - tests/fixtures/ci_budget/*
+  - AGENTS.md
+  - docs/acceptance/*
+  - docs/superpowers/**
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: Capture real fixtures
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      Capture, never construct: save the real `gh api repos/derio-net/super-fr/actions/runs/<id>`
+      and `.../runs/<id>/jobs` JSON for (a) one pre-sharding CI push run on
+      main (e.g. 36242091779, about 435s), (b) the branch's sharded CI run from
+      phase 1, and (c) one run with a skipped job (a CI push run, where
+      change-fragment is skipped), under tests/fixtures/ci_budget/. Trim to
+      the fields the script reads (id, name, path, event, head_branch, head_sha,
+      conclusion, html_url, jobs[].name/started_at/completed_at/conclusion)
+      and note the trimming in a README line in that directory. derio-net data,
+      so no redaction is needed.
+- number: 2
+  title: RED — core decisions
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests/unit/test_ci_budget.py, importing scripts/ci_budget.py the
+      same way existing tests import scripts/*.py (grep tests/unit for
+      `scripts` to find the pattern). Cover spec §7.2 (wall_clock over
+      fixtures; skipped jobs with null timestamps; all-skipped -> None), §7.4
+      (counted: `on: [push, pull_request]`, `push: branches: ["**"]`,
+      `push: branches: [main]` + dispatch as in release.yml,
+      `pull_request: types: [closed]`, schedule/dispatch/PR as in
+      pinned-clis.yml, and the `on` key parsed as True), §7.5 (every row of
+      the §3.B state table; regression links the closed issue; the table caps
+      at 10; 3 green successes close; a failure does not advance the streak; a
+      budget_seconds override applies to one invocation only; cancelled and
+      timed_out are ignored; the numeric per-file override 300s-vs-360s case;
+      an exclude file is never decided) and §7.7 (render(parse(body)) is
+      byte-identical). Confirm red.
+- number: 3
+  title: GREEN — scripts/ci_budget.py core
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      GREEN: implement the pure core per spec §3.B: wall_clock, counted
+      (load `on` under both the "on" and True keys), budget_for (reads
+      .github/ci-budget.yaml: default_seconds, workflows.<file>.budget_seconds
+      | exclude), a frozen dataclass Measurement, decide(open_issue_state,
+      measurement) -> Action (Create | Update | Close | Noop), parse_body and
+      render_body with the markers `<!-- ci-budget:<file> -->` and
+      `<!-- ci-budget-green:<n> -->`, a 10-row table (run link, short sha,
+      wall clock, slowest job and its time), and a `previously #N` line on
+      regression. A missing streak marker parses as 0, and unparseable rows are
+      dropped (§5). Stdlib + PyYAML only. Run tests, confirm green.
+- number: 4
+  title: RED/GREEN — gh adapter + dedup + CLI
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: §7.6 through a fake gh (an injected callable recording argv and
+      returning canned JSON): two sequential breaches of ci.yml make exactly
+      one `issue create` and then one `issue edit --body-file`; lookup uses
+      `issue list --label ci-budget --state open --json number,body` (never
+      `gh search`) and filters on the marker locally; the label is ensured
+      (created only if absent); a hand-edited body with no streak marker still
+      dedups. Confirm red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement the adapter (subprocess `gh`, repo from
+      $GITHUB_REPOSITORY) and a `main(argv)` taking `--run-id` and optional
+      `--budget-seconds`. It fetches the run and jobs, reads the workflow file
+      at head_sha via `gh api repos/{repo}/contents/{path}?ref={sha}` (a
+      missing file logs and exits 0, §5), skips conclusions other than
+      success/failure, and applies the Action with one body write. Confirm
+      green.
+- number: 5
+  title: Workflow, config, watch-list tripwire
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: §7.3 tripwire in test_ci_budget.py: every
+      .github/workflows/*.yml is either named (by its `name:`) in
+      ci-budget.yml's `on.workflow_run.workflows` or has `exclude: true` in
+      .github/ci-budget.yaml, with ci-budget.yml itself exempt; every config
+      key names an existing workflow file. Include negative cases on a tmp dir
+      (an unlisted file fails, a stale key fails). Confirm red.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: write .github/ci-budget.yaml (default_seconds 240; fr-spec-status.yml
+      exclude with its comment; a commented numeric-override example) and
+      .github/workflows/ci-budget.yml: `on.workflow_run` (workflows: CI,
+      acceptance-report, Release, Deploy explainers to Pages, PR spec status
+      (self), pinned-clis; types: [completed]) plus `workflow_dispatch`
+      inputs run_id (required) and budget_seconds (optional);
+      `permissions: {actions: read, issues: write, contents: read}`;
+      `concurrency: {group: "ci-budget-${{ github.event.workflow_run.path || 'dispatch' }}", cancel-in-progress: false}`;
+      one job: checkout, setup-uv, then
+      `uv run --no-project --with pyyaml python scripts/ci_budget.py --run-id "${{ github.event.workflow_run.id || inputs.run_id }}" ${{ inputs.budget_seconds && format('--budget-seconds {0}', inputs.budget_seconds) || '' }}`
+      with GH_TOKEN set to github.token. Confirm the tripwire is green. Run
+      `actionlint` if it is available, and otherwise say that it was not.
+- number: 6
+  title: REFACTOR + docs + acceptance + full gate
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      REFACTOR: dedupe the helpers the tests built up and keep the core free
+      of subprocess calls. In AGENTS.md (the CI paragraph under Dev commands),
+      add a short note: the ci-budget watcher, the 240s budget,
+      .github/ci-budget.yaml, and that a new workflow must be watched or
+      excluded (the tripwire). Move the acceptance rows:
+      `fr acceptance set-status --id ci-budget-ticket-dedup --status ci
+      --level unit=super-fr:tests/unit/test_ci_budget.py --notes "..."` and
+      the same for ci-budget-watch-list-complete. Run ruff format, ruff check,
+      the full `uv run pytest -q --no-cov -n auto`, and
+      `uv run fr acceptance check`, then commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

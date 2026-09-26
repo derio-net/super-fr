@@ -1,0 +1,138 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Shard the test job (pytest-split x4 + combined coverage gate) — walking skeleton
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ci-under-time-budget
+  skeleton: true
+  tier: standard
+  files:
+  - pyproject.toml
+  - uv.lock
+  - .test_durations
+  - .github/workflows/ci.yml
+  - tests/unit/test_ci_shards.py
+  - AGENTS.md
+  - docs/acceptance/*
+  - docs/superpowers/**
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: RED — pin the shard layout and the partition
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_ci_shards.py (spec §7.1 and §7.8). (a) Parse
+      .github/workflows/ci.yml with yaml.safe_load. Assert the `test` job has
+      `strategy.matrix.shard == [1, 2, 3, 4]` and `fail-fast: false`, and that its
+      pytest step contains `-o addopts="--strict-markers --cov"`, `--cov-report=`,
+      `--splits 4`, `--group ${{ matrix.shard }}` and
+      `--splitting-algorithm least_duration`. Assert every shard checks out with
+      `fetch-depth: 0`. Assert a `coverage` job exists with `needs: test` whose
+      steps run `coverage combine` and `coverage report --fail-under=75`.
+      (b) Partition: run `pytest --collect-only -q -p no:cacheprovider
+      -o addopts=` in a subprocess (cwd = repo root) once unsplit and once per
+      group 1..4 with `--splits 4 --group k --splitting-algorithm
+      least_duration`. Parse the node ids. Assert the four sets are pairwise
+      disjoint and their union equals the unsplit set. Skip (b) with a clear
+      reason when running inside a pytest-split shard (env PYTEST_SPLIT_INNER=1
+      set by the test itself on its subprocesses) so it never recurses. Run it
+      and confirm it fails: ci.yml is not sharded and pytest-split is not
+      installed.
+- number: 2
+  title: GREEN — pytest-split, coverage sources, durations file, sharded ci.yml
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: `uv add --dev pytest-split` (root workspace dev group, beside
+      pytest-xdist in pyproject.toml). In pyproject.toml move the `--cov=<pkg>`
+      flags out of addopts into `[tool.coverage.run] source = ["fr",
+      "fr_dispatch", "fr_vk", "fr_cncd", "fr_herdr"]` (keep the existing
+      `omit`). addopts becomes `--strict-markers --cov --cov-report=term-missing
+      --cov-fail-under=75`. Verify that local behaviour is unchanged: a full
+      `uv run pytest -n auto` still reports a TOTAL covering the same five
+      packages and still gates at 75. Record the TOTAL line in the step note.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: generate .test_durations at the repo root. Check whether
+      pytest-split's `--store-durations` works together with `-n auto` (the
+      pytest-split docs/changelog; try it). If it does, run
+      `uv run pytest -n auto --no-cov --store-durations`; otherwise run it
+      without `-n`. Journal which one worked as a `discovery` (spec §3.A asks
+      for it to be recorded). Commit the file.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: rewrite ci.yml's `test` job as the spec §3.A matrix:
+      `strategy: {fail-fast: false, matrix: {shard: [1, 2, 3, 4]}}`,
+      checkout with `fetch-depth: 0` (keep the existing comment), setup-uv,
+      `uv sync`, then
+      `uv run pytest -o addopts="--strict-markers --cov" --cov-report= -n auto --splits 4 --group ${{ matrix.shard }} --splitting-algorithm least_duration`
+      with env `COVERAGE_FILE: .coverage.shard${{ matrix.shard }}`, and
+      upload that file with actions/upload-artifact (name
+      `coverage-shard-${{ matrix.shard }}`, include-hidden-files: true,
+      retention-days: 1). Add a `coverage` job with `needs: test`:
+      checkout, setup-uv, `uv sync`, download artifacts with
+      pattern `coverage-shard-*` and merge-multiple: true, then
+      `uv run coverage combine .coverage.shard*` and
+      `uv run coverage report --fail-under=75`. Run test_ci_shards.py and
+      confirm it is green.
+  - id: P1.T2.S4
+    text: |-
+      GREEN (live skeleton): commit, then `git push -u origin feat/ci-time-budget`.
+      That triggers the `CI` push run on the branch. Wait for it with
+      `gh run watch <id> --exit-status` (find the id with
+      `gh run list --branch feat/ci-time-budget --workflow CI --limit 1`).
+      Require 4 green `test (k)` jobs and a green `coverage` job. Compute the
+      wall clock as max(completedAt) minus min(startedAt) over the jobs
+      (`gh run view <id> --json jobs`). Record it as a `discovery` with the run
+      id. If it is at or above 240s, journal a finding and rebalance (refresh
+      .test_durations, or raise to 5 shards and update test_ci_shards.py)
+      before ticking.
+- number: 3
+  title: REFACTOR + docs + acceptance
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      REFACTOR: tidy ci.yml comments (the old xdist/cov-fail-under comment
+      now belongs on the coverage job). In AGENTS.md "Dev commands", add the
+      refresh command `uv run pytest -n auto --no-cov --store-durations` (or
+      the variant S2 found) with one line on why a stale file only unbalances
+      shards. Update the ci.yml job list sentence to name `coverage`. Then
+      `fr acceptance set-status --id ci-under-time-budget --status skipped
+      --level unit=super-fr:tests/unit/test_ci_shards.py --notes "shard layout
+      + partition unit-pinned; branch CI run <id> took <N>s; post-merge main
+      observation owed"`. Run ruff format/check and the full suite
+      (`uv run pytest -q --no-cov -n auto`), then commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
