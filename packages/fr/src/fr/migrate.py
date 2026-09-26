@@ -755,12 +755,7 @@ def _ensure_spec_plan_row(
     if plan_ops._SPEC_TABLE_HEADER_RE.search(text):
         return None
 
-    sep = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
-    text += (
-        f"{sep}## Implementation Plans\n\n"
-        f"| Plan | Repo | File | Depends on |\n"
-        f"|------|------|------|------------|\n"
-    )
+    text = plan_ops._ensure_section_text(text)
     spec_path.write_text(text)
 
     try:

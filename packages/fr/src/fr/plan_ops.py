@@ -270,6 +270,9 @@ def create(
             written.append(journal_p)
 
     if spec_path is not None:
+        spec_text = spec_path.read_text()
+        if not _SPEC_TABLE_HEADER_RE.search(spec_text):
+            spec_path.write_text(_ensure_section_text(spec_text))
         _append_spec_row(
             spec_path,
             plan_name=slug,
@@ -435,19 +438,30 @@ def _check_table_header(spec_path: Path, text: str, m: re.Match[str]) -> None:
         )
 
 
-def _validate_spec_section(spec_path: Path) -> None:
-    """Pre-flight: confirm the spec has an appendable Implementation Plans table.
+def _ensure_section_text(text: str) -> str:
+    """Return `text` with the canonical `## Implementation Plans` header appended.
 
-    Read-only. Raises the same errors `_append_spec_row` would, but BEFORE any
-    folder is created so a failed `create` leaves no stranded state (#133).
+    Pure. Blank-line separated from any prose; the caller must only use it when
+    the section is absent. `fr.migrate._ensure_spec_plan_row` shares it.
+    """
+    sep = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+    return (
+        f"{text}{sep}## Implementation Plans\n\n"
+        f"{_CANONICAL_HEADER_LINE}\n{_CANONICAL_HEADER_SEPARATOR}\n"
+    )
+
+
+def _validate_spec_section(spec_path: Path) -> None:
+    """Pre-flight: confirm an existing Implementation Plans table is appendable.
+
+    Read-only. A missing section is accepted — `create` writes it right before
+    appending the row. A present-but-malformed table raises the same errors
+    `_append_spec_row` would, BEFORE any folder is created (#133).
     """
     text = spec_path.read_text()
     m = _SPEC_TABLE_HEADER_RE.search(text)
     if not m:
-        raise PlanEditError(
-            f"{spec_path}: no '## Implementation Plans' section found. "
-            f"Add the section with a table header; {_header_hint()}."
-        )
+        return
     _check_table_header(spec_path, text, m)
 
 

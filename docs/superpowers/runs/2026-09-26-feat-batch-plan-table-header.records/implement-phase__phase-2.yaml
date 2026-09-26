@@ -1,0 +1,12 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-plan-table-header
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T1.S3]
+refactor:
+  P2.T1: "the refactor step (S3) was the cleanup: migrate._ensure_spec_plan_row now reuses plan_ops._ensure_section_text, leaving one header literal; nothing further to clean"
+journal:
+  - {kind: discovery, id: p2-tests-red-then-green, title: "create appends missing section; existing #133 preflight test replaced", body: "test_create_preflight_validates_spec_before_creating_folder asserted the old missing-section refusal; replaced by tests for the new behaviour. _CANONICAL_HEADER_SEPARATOR now has a consumer (_ensure_section_text). migrate output byte-identical (test_v2_migrate unchanged, green)."}
+resolves: []
+evidence: {}

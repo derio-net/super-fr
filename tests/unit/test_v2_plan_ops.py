@@ -150,29 +150,61 @@ def test_append_spec_row_idempotent_within_table(tmp_path):
     assert table.count("| plan-x |") == 1, "second append must be a no-op, not a duplicate"
 
 
-def test_create_preflight_validates_spec_before_creating_folder(tmp_path):
-    """#133: a spec missing '## Implementation Plans' must fail BEFORE any
-    folder is created, so a re-run isn't blocked by a half-built folder."""
-    from fr.plan_ops import PhaseSpec, PlanEditError, create
+def _create_args(repo, spec_path, slug):
+    from fr.plan_ops import PhaseSpec
+
+    return dict(
+        repo_root=repo,
+        slug=slug,
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+
+
+@pytest.mark.parametrize("body", ["# Test spec\n\nSome prose.\n", "# Test spec\n\nSome prose."])
+def test_create_appends_missing_section_with_header_and_row(tmp_path, body):
+    from fr.plan_ops import _CANONICAL_HEADER_LINE, _CANONICAL_HEADER_SEPARATOR, create
 
     repo = _make_repo(tmp_path)
-    # Spec exists but has NO '## Implementation Plans' section.
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-section.md"
-    spec_path.write_text("# Test spec\n\nSome prose but no plans table.\n")
+    spec_path.write_text(body)
+    create(**_create_args(repo, spec_path, "2026-05-10-add-section"))
+    assert spec_path.read_text() == (
+        "# Test spec\n\nSome prose.\n\n## Implementation Plans\n\n"
+        f"{_CANONICAL_HEADER_LINE}\n{_CANONICAL_HEADER_SEPARATOR}\n"
+        "| 2026-05-10-add-section | `derio-net/test` | `2026-05-10-add-section` | \u2014 |\n"
+    )
 
-    slug = "2026-05-10-preflight"
-    with pytest.raises(PlanEditError, match="Implementation Plans"):
-        create(
-            repo_root=repo,
-            slug=slug,
-            spec=str(spec_path.relative_to(repo)),
-            target_repo="derio-net/test",
-            fr_version=">=1.0.0,<5.0.0",
-            phases=[PhaseSpec(number=1, title="t", tasks=())],
-            prose="# x\n",
-        )
-    # The crux of #133: no folder was created, so a fixed re-run is unblocked.
-    assert not (repo / "docs" / "superpowers" / "plans" / slug).exists()
+
+def test_validate_spec_section_is_read_only_on_missing_section(tmp_path):
+    from fr.plan_ops import _validate_spec_section
+
+    spec_path = tmp_path / "spec.md"
+    spec_path.write_text("# S\n\nprose\n")
+    before = spec_path.read_bytes()
+    _validate_spec_section(spec_path)
+    assert spec_path.read_bytes() == before
+
+
+def test_create_rerun_adds_missing_section_once(tmp_path):
+    from fr.plan_ops import create
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-section.md"
+    spec_path.write_text("# Test spec\n\nSome prose.\n")
+    args = _create_args(repo, spec_path, "2026-05-10-rerun")
+    create(**args)
+    # Partial-success state: folder exists, section and row are gone.
+    spec_path.write_text("# Test spec\n\nSome prose.\n")
+    create(**args)
+    once = spec_path.read_text()
+    assert once.count("## Implementation Plans") == 1
+    assert once.count("| 2026-05-10-rerun |") == 1
+    create(**args)
+    assert spec_path.read_text() == once
 
 
 def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
