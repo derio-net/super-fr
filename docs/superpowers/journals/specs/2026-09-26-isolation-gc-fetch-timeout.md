@@ -9,3 +9,18 @@ Route `_reap_hazard`'s default-branch fetch through `_run_network`, preserving t
 ### post-merge-test-plan · decision · Verify targeted and full suites after merge
 
 The operator accepts running the targeted isolation network-timeout tests and the full test suite after merge.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-09-26T11:49:34 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · Test Plan omits the acceptance-matrix update
+
+The Test Plan now requires linking the regression test in the acceptance matrix and moving its row to ci when the test lands.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-2026-09-26 created=2026-09-26T11:49:34 -->
+### spec-review-2026-09-26 · review · Independent spec review: one finding
+
+Reviewer ses_f22e295adffe6EvKDfQc0OLF4z verified `_reap_hazard`'s fetch and failure handling at local.py:1161-1175, `_run_network`'s timeout and cwd at local.py:2024-2031, and gc's fail-closed hazard handling at local.py:1540-1564. The in-scope Test Plan finding was fixed by adding the acceptance-matrix update.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-09-26T11:49:34 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: Test Plan omits the acceptance-matrix update
+
+Added the acceptance-matrix update to the spec Test Plan.

@@ -1,0 +1,42 @@
+schema_version: 1
+run: 2026-09-26-fix-659-isolation-gc-fetch
+captures:
+- host: h-afad7d01
+  harness: opencode
+  mode: devcontainer
+  captured_at: '2026-09-26T09:49:34+00:00'
+  at:
+  - resolve:spec-review
+  sessions:
+  - session: ses_f22e821b3ffeRpfBm6FVTW2wpx
+    role: main
+    models:
+      gpt-6-luna:
+        input: 114216
+        cache_write: 0
+        cache_read: 1796005
+        output: 11410
+        usd: 0.037939125
+        usd_source: estimated
+    activity:
+      implementation:
+        usd: 0.010352010732256788
+        turns: 16
+      other:
+        usd: 0.019616792349627647
+        turns: 16
+      paperwork:
+        usd: 0.007970321918115584
+        turns: 16
+    steps:
+      (outside run):
+        usd: 0.005465561385847611
+        turns: 3
+      brainstorm:
+        usd: 0.011786353810744265
+        turns: 15
+      spec-review:
+        usd: 0.020687209803408147
+        turns: 22
+    briefs:
+      ses_f22e295adffe6EvKDfQc0OLF4z: 628
