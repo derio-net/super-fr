@@ -59,3 +59,8 @@ Spec section 5 states the collision honestly and pins it with a two-host test.
 ### s4-resolved · finding [fixed] · resolves s4: needs_capture interaction and reason vocabulary unstated
 
 Spec 3.4 states needs_capture behaviour and structure validator round-trip.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus created=2026-09-26T23:36:28 -->
+### spec-review-opus · review · Opus fresh-context spec re-review: 4 findings
+
+Re-run on claude-opus-5-5 per operator correction (the earlier spec-review ran on claude-sonnet-5 and is kept as-is). Raised o1-o4, all in scope; operator decisions and constraints verified honoured; no shape change confirmed (one mixed-version caveat, o4).
