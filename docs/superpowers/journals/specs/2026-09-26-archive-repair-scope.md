@@ -84,3 +84,8 @@ Opus spec review. Reworded §3.C to the implemented rule (keep verbatim only whe
 ### s2-2 · finding [open] (reviewer: in scope) · Spec carried an empty duplicate Implementation Plans section
 
 Opus spec review. Deleted the empty numbered section.
+
+<!-- fr:journal kind=finding scope=spec id=s2-3 created=2026-09-26T23:36:23 state=open review_scope=in -->
+### s2-3 · finding [open] (reviewer: in scope) · Canonical create output breaks #133 idempotent re-run of an old half-built folder
+
+Opus spec review. Documented as an accepted edge in §3.C (operator deletes the stranded folder).
