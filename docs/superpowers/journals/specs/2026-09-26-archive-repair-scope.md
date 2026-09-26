@@ -114,3 +114,8 @@ spec edited in the Opus-review commit
 ### s2-4-resolved · finding [out-of-scope] · resolves s2-4: fr migrate dirs also runs repair_repo repo-wide
 
 pre-existing repo-level migration; not caused by this change
+
+<!-- fr:journal kind=finding scope=spec id=s2-4-resolved-2 created=2026-09-27T00:02:44 state=refuted resolves=s2-4 -->
+### s2-4-resolved-2 · finding [refuted] · resolves s2-4: fr migrate dirs also runs repair_repo repo-wide
+
+Closeout triage: the reviewer recorded fr migrate dirs running repair_repo repo-wide as a repo-level migration that is repo-wide by intent — not a defect, so no issue filed.
