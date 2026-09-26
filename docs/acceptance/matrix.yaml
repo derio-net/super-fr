@@ -4631,6 +4631,10 @@ rows:
       excludes fails CI
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-ci-time-budget-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_budget.py
+    status: ci
+    notes: check_watch_list's tripwire tests (real repo passes; negative cases on a
+      tmp dir for an unlisted workflow and a stale config key) exercise the exact check
+      CI runs on every push via test_ci_budget.py
