@@ -339,3 +339,8 @@ Pre-existing staleness from the observed-provenance change; this PR did not touc
 ### p2-r7-resolved-2 · finding [deferred → #690] · resolves p2-r7: Flag-path journal append not rolled back when a later resolve step refuses
 
 Filed at closeout as #690.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved-2 created=2026-09-26T14:31:55 state=open resolves=p3-r11 tracked_by=#691 -->
+### p3-r11-resolved-2 · finding [deferred → #691] · resolves p3-r11: Explainer :533-535 still describes gate provenance as a typed claim defaulting to agent
+
+Filed at closeout as #691.
