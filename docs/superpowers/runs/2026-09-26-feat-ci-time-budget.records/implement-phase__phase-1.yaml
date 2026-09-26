@@ -74,9 +74,4 @@ journal:
     review_scope: out
     phase: 1
 resolves: []
-evidence:
-  branch_ci_run_id: "36247922786"
-  branch_ci_wall_clock_seconds: "155"
-  full_suite_local: "6316 passed, 97 skipped (uv run pytest -q --no-cov -n auto)"
-  coverage_total_after: "92.98%"
-  coverage_total_before_main: "92.93%"
+evidence: {}
