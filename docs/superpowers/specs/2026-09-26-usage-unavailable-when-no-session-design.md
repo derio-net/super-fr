@@ -18,7 +18,7 @@ is the live example. Every reader then sees "a capture with nothing in it",
 which reads as a free run.
 
 Fix: in that case write **one explicit unavailable entry** with a reason, so
-every reader renders `—` with the reason and nothing mistakes an empty list for
+every reader renders `—` (the reason is in the committed file) and nothing mistakes an empty list for
 zero cost. Capture stays never-raising.
 
 ### Non-goals
