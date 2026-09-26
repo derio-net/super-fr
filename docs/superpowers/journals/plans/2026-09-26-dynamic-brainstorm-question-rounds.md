@@ -186,3 +186,36 @@ Existing behaviour of the flag path for gate-no-questions entries since r1-6; re
 ### p2-r8-resolved · finding [fixed] · resolves p2-r8: Bookkeeping tool calls between question batches split one round and can strand the gate (phase 2)
 
 ROUND_NEUTRAL_TOOLS (Claude Code progress trackers) do not close a round; TodoWrite-between = 1 round, Read-between = 2 rounds pinned; spec §3.C updated.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-explainer-byte-identity-confirmed created=2026-09-26T13:54:15 phase=3 -->
+### p3-explainer-byte-identity-confirmed · discovery · Unmodified 01-fr-goal.md re-render matched the committed .html byte-for-byte before any edit (phase 3)
+
+Followed .claude/rules/explainers-currency.md's verification step: rendered the
+UNMODIFIED docs/explainers/01-fr-goal.md from `/` with
+`uv run --isolated --no-project --with markdown --with pyyaml python
+~/.claude/plugins/marketplaces/derio-net--blog-craft/tools/render_explainer.py
+<md> --style broadsheet --embed-fonts -o <scratch>.html` and diffed it against the
+committed 01-fr-goal.html — identical. So the real render after the prose edit is
+known to reflect only what was written, not renderer or environment drift.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-verification-log created=2026-09-26T13:54:15 phase=3 -->
+### p3-verification-log · discovery · Phase 3 verification commands (executor-reported) (phase 3)
+
+tests_p3_t1: uv run pytest tests/unit/test_tripwire_fr_goal_question_rounds.py -q --no-cov -> 60 passed (with test_tripwire_explainers_fresh.py); guard sweep uv run pytest tests/unit/test_tripwire_*.py tests/unit/test_skill_*.py tests/unit/test_opencode_agent_mirror.py -q --no-cov -n auto -> 322 passed, 97 skipped
+tests_p3_t2: uv run pytest tests/unit/test_tripwire_fr_goal_question_rounds.py tests/unit/test_tripwire_explainers_fresh.py -q --no-cov -> 60 passed
+tests_p3_t3: uv run fr acceptance check -> 256 rows OK (ci:222, skipped:24, not-implemented:9, scheduled:1), only pre-existing archived-spec-path warnings unrelated to this change
+uv run --no-project python scripts/bump-version.py --check -> ok, versions agree
+uv run ruff check packages/ tests/ -> All checks passed!
+uv run ruff format --check packages/ tests/ -> 544 files already formatted
+uv run mypy packages/fr/src -> Success: no issues found in 167 source files
+uv run pytest -q --no-cov -n auto -> 6127 passed, 97 skipped in 335.83s
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-26T13:54:15 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+Guard suite (test_tripwire_*.py, test_skill_*.py, test_opencode_agent_mirror.py, 322 passed/97 skipped) came back clean against the new prose — nothing to fix.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-26T13:54:15 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+No refactor step in this task; the explainer/README edits are prose-only substitutions of the old contract's wording for the new one, verified byte-identical against the unmodified baseline render before editing and re-rendered afterward — nothing left to clean up.

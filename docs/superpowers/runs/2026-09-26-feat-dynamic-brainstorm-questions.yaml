@@ -106,7 +106,7 @@ steps:
           reviewer: a437952b41423dade
           findings: p2-member-resolve-dropped-gate-flags,p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6,p2-r7,p2-r8
       phase/3/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-26T11:37:34+00:00'
           agent: a3cfd791d92fe22d4
@@ -114,6 +114,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 06faf166-f1db-4ef3-9bab-d2a3c15e0e32
+          returned: '2026-09-26T11:54:15+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
