@@ -4630,3 +4630,15 @@ rows:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
     status: ci
     notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)
+  - id: usage-no-session-is-unavailable-not-free
+    capability: usage capture honesty
+    acceptance: A run whose capture found no session is reported as unavailable with
+      a reason, never as an empty or free run
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-usage-unavailable-when-no-session-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_capture.py
+    status: ci
+    notes: 'Capture writes a no-session-found placeholder (unit-proven). OpenCode live
+      proof stays owed until #537.'

@@ -27,6 +27,7 @@ from pathlib import Path
 
 from fr.run.model import RunState
 from fr.usage.file import (
+    NO_SESSION_FOUND,
     Capture,
     Mode,
     SessionEntry,
@@ -124,6 +125,8 @@ def _merge(previous: Capture | None, entries: list[SessionEntry]) -> list[Sessio
         return entries
     fresh = {e.session: e for e in entries}
     for old in previous.sessions:
+        if old.session == "" and old.unavailable == NO_SESSION_FOUND:
+            continue  # an earlier "found nothing" placeholder never outlives a later capture
         new = fresh.get(old.session)
         if new is None:
             entries.append(old)
@@ -183,13 +186,16 @@ def capture(
             harness_now = detect_harness(env) or (pairs[-1][0] if pairs else "unknown")
         except Exception:  # noqa: BLE001
             harness_now = "unknown"
+        merged = _merge(previous, entries)
+        if not merged:
+            merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, units)]
         new = Capture(
             host=label,
             harness=harness_now,
             mode=isolation_mode(repo_root, state),
             captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
             at=events,
-            sessions=tuple(_merge(previous, entries)),
+            sessions=tuple(merged),
         )
         from fr.artifacts.atomic import write_text_atomic
 

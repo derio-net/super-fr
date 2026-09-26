@@ -188,8 +188,13 @@ def archived_usage_path(repo_root: Path, run_id: str) -> Path:
 # absolute paths and usernames — so the projection keeps only these reasons
 # verbatim and maps everything else to `reader failed[: <what>]`. The live
 # `fr usage report` path reads the record, not this file, and keeps the detail.
+NO_SESSION_FOUND = "no session found"
+"""The reason on the placeholder entry a capture writes when it found no
+session at all — the file then says so instead of carrying `sessions: []`."""
+
 _KEPT_REASONS = frozenset(
     {
+        NO_SESSION_FOUND,
         "no reader for this harness",
         "no transcript found for this session on this host",
         "no session id given",
@@ -379,6 +384,7 @@ def load_usage(path: Path) -> UsageFile | None:
 
 
 __all__ = [
+    "NO_SESSION_FOUND",
     "committed_reason",
     "units_by_agent",
     "IMPLEMENTED_USAGE_REL",

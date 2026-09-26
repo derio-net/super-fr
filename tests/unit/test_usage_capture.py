@@ -308,3 +308,123 @@ def test_archive_captures_the_closeout_session_and_moves_the_file(
     assert "deliver-session" in by_id, "the delivering session is kept"
     staged = _git(repo, "diff", "--cached", "--name-only").split()
     assert f"docs/superpowers/implemented/usage/{RUN}.yaml" in staged
+
+
+# --- no session found: an explicit placeholder, never `sessions: []` ---------
+
+
+def _bare_env(**extra: str) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_SESSION_ID"}
+    env.update({"FR_HARNESS": "opencode", "FR_HOSTNAME": "laptop.corp.example", **extra})
+    return env
+
+
+def _direct_capture(repo: Path, at: str, env: dict[str, str], **kw):
+    from fr.run.model import load_run_state
+    from fr.usage.capture import capture
+
+    return capture(repo, load_run_state(repo, RUN), at, env, **kw)
+
+
+def _sessions(repo: Path):
+    usage = load_usage(usage_path(repo, RUN))
+    assert usage is not None
+    return usage, usage.captures[0].sessions
+
+
+@pytest.mark.usefixtures("complete_live_pr")
+def test_deliver_with_no_session_writes_one_no_session_found_placeholder(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    monkeypatch.setenv("FR_HARNESS", "opencode")
+    repo, shipped = _setup(tmp_path)
+    for step in ("brainstorm", "plan", "review"):
+        assert _step(repo, shipped, step).exit_code == 0
+    assert _step(repo, shipped, "deliver").exit_code == 0
+    _usage, sessions = _sessions(repo)
+    assert len(sessions) == 1
+    assert sessions[0].session == ""
+    assert sessions[0].unavailable == "no session found"
+
+
+def test_a_recapture_that_finds_real_sessions_replaces_the_placeholder(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    repo, _shipped = _setup(tmp_path)
+    assert _direct_capture(repo, "resolve:a", _bare_env()) is not None
+    assert [s.session for s in _sessions(repo)[1]] == [""]
+    env = _bare_env(CLAUDE_CODE_SESSION_ID=CC_SESSION, FR_HARNESS="claude-code")
+    assert _direct_capture(repo, "deliver", env) is not None
+    _usage, sessions = _sessions(repo)
+    assert [s.session for s in sessions] == [CC_SESSION]
+    assert all(s.session != "" for s in sessions)
+
+
+def test_a_recapture_finding_nothing_keeps_real_sessions_and_adds_no_placeholder(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    repo, _shipped = _setup(tmp_path)
+    env = _bare_env(CLAUDE_CODE_SESSION_ID=CC_SESSION, FR_HARNESS="claude-code")
+    assert _direct_capture(repo, "resolve:a", env) is not None
+    assert _direct_capture(repo, "deliver", _bare_env()) is not None
+    _usage, sessions = _sessions(repo)
+    assert [s.session for s in sessions] == [CC_SESSION]
+    assert sessions[0].unavailable is None
+
+
+def test_two_empty_captures_leave_exactly_one_placeholder(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    repo, _shipped = _setup(tmp_path)
+    assert _direct_capture(repo, "resolve:a", _bare_env()) is not None
+    assert _direct_capture(repo, "deliver", _bare_env()) is not None
+    usage, sessions = _sessions(repo)
+    assert [(s.session, s.unavailable) for s in sessions] == [("", "no session found")]
+    assert usage.captures[0].at == ("resolve:a", "deliver")
+
+
+def test_require_sessions_with_no_session_still_writes_nothing(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    repo, _shipped = _setup(tmp_path)
+    assert _direct_capture(repo, "resolve:a", _bare_env(), require_sessions=True) is None
+    assert not usage_path(repo, RUN).exists()
+
+
+def test_no_session_found_is_a_kept_reason() -> None:
+    from fr.usage.file import committed_reason
+
+    assert committed_reason("no session found") == "no session found"
+
+
+def test_a_placeholder_round_trips_and_costs_nothing(
+    tmp_path: Path, transcripts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts.structure import validate_usage
+    from fr.run.cost import effective_entries, summarize
+    from fr.usage.file import dump_usage, parse_usage
+
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    repo, _shipped = _setup(tmp_path)
+    assert _direct_capture(repo, "resolve:a", _bare_env()) is not None
+    usage, _ = _sessions(repo)
+    assert parse_usage(dump_usage(usage)) == usage
+    assert validate_usage(usage_path(repo, RUN)) == []
+
+    entries, _replayed, _ignored = effective_entries(usage)
+    summary = summarize(entries)
+    assert summary.total is None and summary.unavailable == 1 and summary.read == 0
+
+    # a second host with a real capture: only that one is summed
+    env = _bare_env(CLAUDE_CODE_SESSION_ID=CC_SESSION, FR_HARNESS="claude-code")
+    monkeypatch.setenv("FR_HOSTNAME", "pod-7.example")
+    assert _direct_capture(repo, "deliver", {**env, "FR_HOSTNAME": "pod-7.example"}) is not None
+    two = load_usage(usage_path(repo, RUN))
+    assert two is not None and len(two.captures) == 2
+    summary2 = summarize(effective_entries(two)[0])
+    assert summary2.read == 1 and summary2.unavailable == 1 and summary2.total is not None

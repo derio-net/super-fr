@@ -1,0 +1,100 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Explicit unavailable capture when no session is found (debugging-first)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - usage-no-session-is-unavailable-not-free
+  tier: standard
+  files:
+  - packages/fr/src/fr/usage/capture.py
+  - packages/fr/src/fr/usage/file.py
+  - tests/unit/test_usage_capture.py
+  - docs/acceptance/**
+  - .changes/*.yaml
+  estimate_lines: 150
+tasks:
+- number: 1
+  title: RED — reproduce the bug with failing tests
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_usage_capture.py add a test where no session is discoverable
+      (no CLAUDE_CODE_SESSION_ID, empty cursor/bindings, FR_HARNESS=opencode) and `deliver`
+      is resolved (reuse the file's _setup/_step helpers). Assert the written capture's
+      sessions is exactly one entry with session == "" and unavailable == "no session found",
+      never (). Run it; confirm it fails today with sessions == ().
+  - id: P1.T1.S2
+    text: |-
+      RED: add tests for (a) a re-capture on the same host that now finds real sessions
+      replaces an earlier placeholder (no session "" entry remains); (b) a re-capture that
+      finds no candidates while the earlier capture holds real sessions carries those forward
+      and writes NO placeholder; (c) two consecutive empty captures leave exactly one
+      placeholder; (d) `require_sessions=True` with no sessions still returns None and
+      writes nothing; (e) committed_reason("no session found") is kept verbatim; (f) the
+      file round-trips through parse_usage/validate and a placeholder-only run through
+      run.cost effective_entries yields total None with one unavailable, and a two-host file
+      (one placeholder, one real capture) sums only the real one.
+- number: 2
+  title: GREEN — write the placeholder after the merge
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/usage/file.py add the module constant NO_SESSION_FOUND =
+      "no session found", include it in _KEPT_REASONS, export it. In
+      packages/fr/src/fr/usage/capture.py make _merge drop a previous placeholder entry
+      (session == "" and unavailable == NO_SESSION_FOUND) and, after `_merge`, when the merged
+      list is empty build the placeholder via session_entry(unavailable("", harness_now,
+      NO_SESSION_FOUND), windows, units) so the capture never writes sessions=(). Keep the
+      whole function inside its never-raising try/except. Do not touch run/telemetry.py.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: run tests/unit/test_usage_capture.py, tests/unit/test_usage_kind.py,
+      tests/unit/test_usage_backfill.py and the run cost tests; confirm green.
+- number: 3
+  title: REFACTOR + quality gate and bookkeeping
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      REFACTOR: read the capture()/_merge diff for duplication and clarity; keep it minimal
+      (or record a `refactor:` reason for P1.T3). Run ruff format, ruff check, mypy on the
+      fr package, then the full pytest suite with -n auto into a log outside the repo.
+  - id: P1.T3.S2
+    text: |-
+      Bookkeeping: add .changes/feat-batch-usage-opencode-empty.yaml (bump: patch, summary:
+      fr usage records an explicit `no session found` entry instead of sessions: []). Move the
+      acceptance row usage-no-session-is-unavailable-not-free to ci with
+      `fr acceptance set-status ... --level unit=super-fr:tests/unit/test_usage_capture.py` and a
+      note that OpenCode live proof stays owed until #537. Regenerate the acceptance reports.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-26T13:46:43+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T13:46:43+00:00'
+    note: null
+    observed_prs: []

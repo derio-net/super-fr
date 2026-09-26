@@ -1,0 +1,2 @@
+bump: patch
+summary: fr usage records an explicit `no session found` entry instead of sessions: []
