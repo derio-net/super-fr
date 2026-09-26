@@ -165,3 +165,73 @@ captures:
         turns: null
     briefs:
       phase/4/review-phase: 14891
+- host: h-62103cf1
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-26T11:18:13+00:00'
+  at:
+  - closeout
+  sessions:
+  - session: 05f4a8ab-4430-46b9-a406-8a3d597abe68
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1536
+        cache_write: 5020628
+        cache_read: 137658220
+        output: 187540
+        usd: 59.33537019999991
+        usd_source: exact
+      claude-sonnet-5:
+        input: 146
+        cache_write: 256022
+        cache_read: 6667737
+        output: 2031
+        usd: 2.7203019000000013
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0009620000000000001
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 21.245654409038625
+        turns: 403
+      other:
+        usd: 20.984365318478645
+        turns: 182
+      paperwork:
+        usd: 19.82661437248268
+        turns: 250
+    steps:
+      (outside run):
+        usd: 16.419862176347106
+        turns: 83
+      brainstorm:
+        usd: 1.9225955183576107
+        turns: 35
+      spec-review:
+        usd: 2.145456672349308
+        turns: 53
+      plan:
+        usd: 1.4294713825824477
+        turns: 18
+      implement:
+        usd: 36.34072655363507
+        turns: 600
+      deliver:
+        usd: 3.7985217967284117
+        turns: 38
+    briefs:
+      a289e1c1b86dbd974: 3005
+      phase/1/implement-phase: 3481
+      phase/1/review-phase: 2782
+      phase/2/implement-phase: 3720
+      phase/2/review-phase: 2945
+      phase/3/implement-phase: 4422
+      phase/3/review-phase: 3691
+      phase/4/implement-phase: 6886
+      phase/4/review-phase: 4431
