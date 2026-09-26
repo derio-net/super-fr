@@ -33,7 +33,13 @@ steps:
           findings: s1
           unobserved: reviewer
   plan:
-    state: pending
+    state: running
+    at: '2026-09-26T09:49:38+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-26T09:49:38+00:00'
+          harness: opencode
   plan-review:
     state: pending
   implement:
