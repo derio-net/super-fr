@@ -1,2 +1,0 @@
-bump: patch
-summary: fr's record commits no longer fail with "dubious ownership" inside devcontainers, and scaffolded profiles trust their own workspace for git
