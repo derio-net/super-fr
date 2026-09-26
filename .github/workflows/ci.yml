@@ -98,5 +98,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
       - name: User-visible changes add a change fragment; no PR edits a version
-        run: python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"
+        run: uv run --no-project python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"

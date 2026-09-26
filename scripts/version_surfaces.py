@@ -36,6 +36,9 @@ UV_LOCK = "uv.lock"
 # JSON indent each manifest is written with (preserves the committed layout).
 _JSON_INDENT = {OPENCODE_PACKAGE_JSON: 2}
 _TOML_VERSION_RE = re.compile(r'^(version\s*=\s*")([^"]+)(")', re.M)
+_PROJECT_HEADER_RE = re.compile(r"^\[project\][ \t]*(#.*)?$", re.M)
+# The next real table header; a bare `[` line (an array continuation) is not one.
+_TABLE_HEADER_RE = re.compile(r"^\[\[?[A-Za-z0-9_\"'.\- ]+\]\]?[ \t]*(#.*)?$", re.M)
 _LOCK_BLOCK_RE = re.compile(r"^\[\[package\]\]\n", re.M)
 
 
@@ -140,19 +143,41 @@ def _write_lock_versions(repo: Path, new: str) -> None:
     path.write_text("".join(pieces))
 
 
+def _set_project_version(text: str, new: str, path: Path) -> str:
+    """`text` with `[project].version` set to `new`, touching no other table."""
+    header = _PROJECT_HEADER_RE.search(text)
+    if not header:
+        raise ValueError(f"no [project] table in {path}")
+    start = header.end()
+    boundary = _TABLE_HEADER_RE.search(text, start)
+    end = boundary.start() if boundary else len(text)
+    body, count = _TOML_VERSION_RE.subn(rf"\g<1>{new}\g<3>", text[start:end], count=1)
+    if not count:
+        raise ValueError(f"no double-quoted [project].version to rewrite in {path}")
+    return text[:start] + body + text[end:]
+
+
 def write_version(repo: Path, new: str) -> list[str]:
-    """Write `new` to every surface; return the repo-relative files touched."""
+    """Write `new` to every surface; return the repo-relative files touched.
+
+    Every pyproject rewrite is computed before any file is written, so a
+    refusal leaves the tree untouched.
+    """
     repo = Path(repo)
     files: list[str] = []
     for surface in version_surfaces(repo):
-        if surface.file in files:
-            continue
-        files.append(surface.file)
-        path = repo / surface.file
-        if surface.file == UV_LOCK:
+        if surface.file not in files:
+            files.append(surface.file)
+    tomls = {
+        f: _set_project_version((repo / f).read_text(), new, repo / f)
+        for f in files
+        if f != UV_LOCK and f.endswith(".toml")
+    }
+    for f in files:
+        if f == UV_LOCK:
             _write_lock_versions(repo, new)
-        elif path.suffix == ".toml":
-            path.write_text(_TOML_VERSION_RE.sub(rf"\g<1>{new}\g<3>", path.read_text(), count=1))
+        elif f in tomls:
+            (repo / f).write_text(tomls[f])
         else:
-            _write_json_version(repo, surface.file, new)
+            _write_json_version(repo, f, new)
     return files

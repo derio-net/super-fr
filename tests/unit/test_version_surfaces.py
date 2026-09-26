@@ -175,3 +175,65 @@ def test_bump_version_check_reports_uv_lock_members() -> None:
     assert out.returncode == 0, out.stdout + out.stderr
     assert "uv.lock" in out.stdout
     assert "ok — versions agree" in out.stdout
+
+
+# --- [project]-anchored TOML rewrite (gh#669) ---------------------------------
+
+
+def _member_repo(tmp_path: Path, member_toml: str) -> Path:
+    _write_tmp_repo(tmp_path)
+    (tmp_path / "packages" / "a" / "pyproject.toml").write_text(member_toml)
+    return tmp_path
+
+
+def _project_version(path: Path) -> str:
+    return tomllib.loads(path.read_text())["project"]["version"]
+
+
+def test_write_version_ignores_a_tool_table_ahead_of_project(tmp_path: Path) -> None:
+    tool = '[tool.x]\nversion = "0.0.1"\n\n'
+    member = tool + '[project]\nname = "a"\nversion = "1.2.3"\n'
+    repo = _member_repo(tmp_path, member)
+    vs.write_version(repo, "1.3.0")
+    text = (repo / "packages" / "a" / "pyproject.toml").read_text()
+    assert text.startswith(tool)
+    assert _project_version(repo / "packages" / "a" / "pyproject.toml") == "1.3.0"
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        '[project]\nname = "a"\nversion = "1.2.3"\n\n[project.urls]\nversion = "0.0.1"\n',
+        '[project]\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
+        '[project]  # the project\nname = "a"\nversion = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n',
+    ],
+    ids=["project-urls", "tool-after", "header-comment"],
+)
+def test_write_version_scopes_to_the_project_table(tmp_path: Path, member: str) -> None:
+    repo = _member_repo(tmp_path, member)
+    path = repo / "packages" / "a" / "pyproject.toml"
+    vs.write_version(repo, "1.3.0")
+    data = tomllib.loads(path.read_text())
+    assert data["project"]["version"] == "1.3.0"
+    assert "0.0.1" in path.read_text()  # the other table's version is untouched
+
+
+def test_write_version_survives_a_bracket_line_inside_a_project_array(tmp_path: Path) -> None:
+    member = (
+        '[project]\nname = "a"\nkeywords = [\n  "x",\n  ["nested"],\n]\n'
+        'version = "1.2.3"\n\n[tool.x]\nversion = "0.0.1"\n'
+    )
+    repo = _member_repo(tmp_path, member)
+    path = repo / "packages" / "a" / "pyproject.toml"
+    vs.write_version(repo, "1.3.0")
+    data = tomllib.loads(path.read_text())
+    assert data["project"]["version"] == "1.3.0"
+    assert data["tool"]["x"]["version"] == "0.0.1"
+
+
+def test_a_single_quoted_version_refuses_and_writes_nothing(tmp_path: Path) -> None:
+    repo = _member_repo(tmp_path, "[project]\nname = \"a\"\nversion = '1.2.3'\n")
+    before = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+    with pytest.raises(ValueError, match="pyproject.toml"):
+        vs.write_version(repo, "1.3.0")
+    assert {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()} == before
