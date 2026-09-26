@@ -4087,6 +4087,37 @@ rows:
     notes: 'gh#673: skeleton gate applies only with 2+ agentic phases. The 2+ side (unmarked-first
       error, override, misplaced marker) stays pinned by the existing goal-phase-one-skeleton-smoke
       row''s tests.'
+  - id: fr-goal-question-batch-sized-to-feature
+    capability: fr-goal-methodology
+    acceptance: fr-goal's brainstorm asks one question per operator-owned decision with
+      no fixed cap of 4; a round larger than the harness question tool's limit spans
+      consecutive calls and still clears the gate as one round.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-goal-second-round-announced-and-verified
+    capability: fr-goal-methodology
+    acceptance: 'A brainstorm may take a second question round only when the record
+      declares rounds: 2 with a trigger (design-risk announced as Round 1 of 2, or operator-request);
+      fr run resolve refuses a round count that differs from the declaration, a design-risk
+      round 2 that round 1 never announced, and any third round.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-goal-contract-prose-two-rounds
+    capability: fr-goal-methodology
+    acceptance: Every surface stating fr-goal's operator contract (skill, mirrors, explainer,
+      README) describes one gate with sized, at-most-two announced rounds; none still
+      promises a four-question single batch.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
