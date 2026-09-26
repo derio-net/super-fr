@@ -297,3 +297,65 @@ tests only; the one cleanup (a convoluted render-order test that diffed line set
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 the capability-boundary scan was written once as _row_blocks and shared with _row_span/replace_row in the green step itself, which is the whole of P4.T3.S2's refactor; nothing duplicated remained
+
+<!-- fr:journal kind=review scope=plan id=rp4-review created=2026-09-26T09:59:11 phase=4 -->
+### rp4-review · review · Independent code review of phase 4: 3 findings (2 in scope, 1 out) (phase 4)
+
+Dispatched reviewer (separate context) over acbe4b4b/7153f392/c944bdfa against spec §3.H/§3.I/§7 6-8.
+Clean: one shared `_row_blocks` scan for insert and replace (incl. #624's --drop-level path);
+boundary trimming handles blank lines, shallow/deep comments, non-contiguous capabilities,
+quoted-vs-plain capability values, EOF without newline, prefix-sharing names; freshness checks
+compare against render_committed_set (aggregates=False); matrix current_version stays 1; the
+concurrent-merge test is genuine (red against the old shape, real git merge); the row move went
+through set-status. Raised: stale "add appends" header comment (also scaffolded to consumers), and
+the broken "matrix order = age order" invariant behind `status --brief` and the digest.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f1 created=2026-09-26T09:59:11 phase=4 state=open review_scope=in -->
+### rp4-f1 · finding [open] (reviewer: in scope) · MEDIUM: matrix.yaml's header comment, and the one `fr acceptance init` scaffolds, still say `add` appends to the end of the file (phase 4)
+
+docs/acceptance/matrix.yaml:23-24 and packages/fr/src/fr/acceptance/scaffold.py:41-42.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f2 created=2026-09-26T09:59:11 phase=4 state=open review_scope=in -->
+### rp4-f2 · finding [open] (reviewer: in scope) · MEDIUM: insert-by-capability breaks 'matrix order = age order', which `status --brief` (3 oldest) and the weekly digest rely on (phase 4)
+
+packages/fr/src/fr/acceptance/check.py `open_rows` ("matrix (= age) order") and acceptance_cmd.py
+status_cmd ("matrix order = append order = oldest first"). A same-capability insert lands above
+older rows of later capabilities, so --brief could hide the real oldest debt. No test crossed
+capabilities.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f3 created=2026-09-26T09:59:11 phase=4 state=open review_scope=out -->
+### rp4-f3 · finding [open] (reviewer: out of scope) · LOW: committed reports no longer contain row ids (they only appeared in the dropped panels) (phase 4)
+
+Already disclosed in p4-row-ids-only-in-panels. Nothing greps committed reports for ids; the
+ad-hoc report.html keeps the panels (and so the ids).
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f1-resolved created=2026-09-26T09:59:11 phase=4 state=fixed resolves=rp4-f1 -->
+### rp4-f1-resolved · finding [fixed] · resolves rp4-f1: MEDIUM: matrix.yaml's header comment, and the one `fr acceptance init` scaffolds, still say `add` appends to the end of the file (phase 4)
+
+Both header comments now say `add` inserts after the last row of the same capability and appends
+only for a new capability, keeping "rows: stays the LAST top-level key" (still required for that
+append). test_acceptance_init passes on the scaffold.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f2-resolved created=2026-09-26T09:59:11 phase=4 state=fixed resolves=rp4-f2 -->
+### rp4-f2-resolved · finding [fixed] · resolves rp4-f2: MEDIUM: insert-by-capability breaks 'matrix order = age order', which `status --brief` (3 oldest) and the weekly digest rely on (phase 4)
+
+Structural fix rather than a docstring change: `open_rows` now sorts by the earliest `YYYY-MM-DD`
+an origin names (all 35 of this repo's open rows carry one), stable on matrix order; a row with no
+dated origin sorts first so unknown-age debt is surfaced, not buried. Age no longer depends on
+file position at all, so `--brief`'s "3 oldest" help text is now literally true. Two tests, red
+first: file order new/old/mid lists old<mid<new; undated rows lead in matrix order.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f3-resolved created=2026-09-26T09:59:11 phase=4 state=open resolves=rp4-f3 out_of_scope=true -->
+### rp4-f3-resolved · finding [out-of-scope] · resolves rp4-f3: LOW: committed reports no longer contain row ids (they only appeared in the dropped panels) (phase 4)
+
+A consequence the spec's §3.I accepted, not a defect: ids were only ever in the sharp-line panels,
+which §3.I drops from committed renders to remove the one-line conflict hotspot; they remain in the
+ad-hoc report and in matrix.yaml itself.
+
+<!-- fr:journal kind=finding scope=plan id=p4-unarchived-plans-tripwire-resolved created=2026-09-26T09:59:11 phase=4 state=open resolves=p4-unarchived-plans-tripwire out_of_scope=true -->
+### p4-unarchived-plans-tripwire-resolved · finding [out-of-scope] · resolves p4-unarchived-plans-tripwire: LOW: test_tripwire_unarchived_plans fails on the merged tree - two plans from origin/main are complete but unarchived (phase 4) (phase 4)
+
+Not caused by this change: main's own CI fails the same test_no_merged_but_unarchived_plans at
+677fa3b6 (the tip merged in f977eaab) for 2026-09-26-isolation-network-timeouts and
+2026-09-26-plan-table-header. Archiving them belongs to their own closeouts; it is flagged in the
+PR body and clears here once those archives land on main.
