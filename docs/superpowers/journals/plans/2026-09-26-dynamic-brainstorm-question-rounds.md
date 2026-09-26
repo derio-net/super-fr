@@ -219,3 +219,118 @@ Guard suite (test_tripwire_*.py, test_skill_*.py, test_opencode_agent_mirror.py,
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 No refactor step in this task; the explainer/README edits are prose-only substitutions of the old contract's wording for the new one, verified byte-identical against the unmodified baseline render before editing and re-rendered afterward — nothing left to clean up.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · Skill told the agent to cross-examine 'in prose, not a tool call', which merges both rounds and gets rounds: 2 refused (phase 3)
+
+answered_rounds_since closes a round only on a non-neutral tool call; following fr-goal SKILL.md:48/:50 made round 1 and round 2 one round on Claude Code.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · Tripwire 'questions:' marker vacuous: matched the Harness clause heading (phase 3)
+
+Deleting the record-declaration sentence left the test green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Tripwire phrase lists line-bound, case-sensitive, incomplete; published .html, index.html and the OpenCode command not swept (phase 3)
+
+Test Plan 6 was only partly asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · docs/explainers/index.html still promised one batched Q&A in a single short round (phase 3)
+
+Hand-authored published landing page missed by the §3.A.1 table.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · Residual old-contract wording in README and 01-fr-goal.md outside the §3.A.1 line numbers (phase 3)
+
+README:8,66,382; explainer :34, :81 mermaid, :531, :537.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r6 · finding [open] (reviewer: in scope) · Acceptance notes overclaimed what the tripwire asserts (phase 3)
+
+Sizing rule and 'every surface' claims were not backed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r7 · finding [open] (reviewer: in scope) · Announced round 2 with nothing opened: prose contradicted itself (phase 3)
+
+Resolve-after-last-announced-round vs round-2-only-what-round-1-opened.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r8 · finding [open] (reviewer: in scope) · Explainer gate paragraph described only the answered-question check (phase 3)
+
+No mention of the declared-round verification or the PR record.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r9 · finding [open] (reviewer: in scope) · Skill did not say rounds: 2 is journaled and reaches the PR body (phase 3)
+
+Operator-visible consequence undocumented.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10 created=2026-09-26T14:04:40 phase=3 state=open review_scope=in -->
+### p3-r10 · finding [open] (reviewer: in scope) · Change fragment summary omitted operator-request trigger, record v2 and the flags (phase 3)
+
+User-observable surface missing from release notes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11 created=2026-09-26T14:04:40 phase=3 state=open review_scope=out -->
+### p3-r11 · finding [open] (reviewer: out of scope) · Explainer :533-535 still describes gate provenance as a typed claim defaulting to agent (phase 3)
+
+Observed-provenance gate predates this change; lines untouched by it.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-09-26T14:04:40 phase=3 -->
+### review-phase-3 · review · Phase 3 prose review: 10 in-scope findings (1 critical), 1 out of scope (phase 3)
+
+Dispatched reviewer checked every §3.A.1 surface, prose-vs-code agreement (QuestionRounds, answered_rounds_since, ROUND_NEUTRAL_TOOLS, question_rounds_refusal), harness neutrality, tripwire quality, fragment and acceptance notes. Critical p3-r1 (prose contradicted the round-separation mechanism) and p3-r2..r10 fixed in 9e406808..2223ac1f; orchestrator verified 'in prose' gone and re-ran the tripwire, explainer-fresh and tool-neutrality tests (246 passed).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: Skill told the agent to cross-examine 'in prose, not a tool call', which merges both rounds and gets rounds: 2 refused (phase 3)
+
+§1: checking answers against the code is what separates rounds; harness clause: back-to-back calls within a round, real tool calls between rounds, progress trackers do not separate. Tripwire requires the new markers and forbids the 'in prose' phrasings on all three copies.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: Tripwire 'questions:' marker vacuous: matched the Harness clause heading (phase 3)
+
+Marker is now 'questions: {rounds' plus design-risk, operator-request, (round 2 of 2).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Tripwire phrase lists line-bound, case-sensitive, incomplete; published .html, index.html and the OpenCode command not swept (phase 3)
+
+Whitespace-collapsed, casefolded matching; extended phrase list; sweep covers 01-fr-goal.html, index.html, .opencode/commands/fr-goal.md; sizing and round markers asserted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: docs/explainers/index.html still promised one batched Q&A in a single short round (phase 3)
+
+index.html edited in place at the five places; swept by the tripwire.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: Residual old-contract wording in README and 01-fr-goal.md outside the §3.A.1 line numbers (phase 3)
+
+All listed lines reworded; .html regenerated after a byte-identical baseline render.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r6 -->
+### p3-r6-resolved · finding [fixed] · resolves p3-r6: Acceptance notes overclaimed what the tripwire asserts (phase 3)
+
+Both notes rewritten via fr acceptance set-status to state exactly what is asserted where.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r7-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r7 -->
+### p3-r7-resolved · finding [fixed] · resolves p3-r7: Announced round 2 with nothing opened: prose contradicted itself (phase 3)
+
+'An announced round 2 is a ceiling, not a promise' — resolve with rounds: 1 when round 1 opened nothing; pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r8-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r8 -->
+### p3-r8-resolved · finding [fixed] · resolves p3-r8: Explainer gate paragraph described only the answered-question check (phase 3)
+
+Two sentences added on declared-round verification and the PR record; page regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r9-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r9 -->
+### p3-r9-resolved · finding [fixed] · resolves p3-r9: Skill did not say rounds: 2 is journaled and reaches the PR body (phase 3)
+
+Skill names the gate-question-rounds-<step> spec-journal decision; pinned.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r10-resolved created=2026-09-26T14:04:40 phase=3 state=fixed resolves=p3-r10 -->
+### p3-r10-resolved · finding [fixed] · resolves p3-r10: Change fragment summary omitted operator-request trigger, record v2 and the flags (phase 3)
+
+Summary names both triggers, never a third, questions: field, record v2, --question-rounds.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved created=2026-09-26T14:04:40 phase=3 state=open resolves=p3-r11 out_of_scope=true -->
+### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: Explainer :533-535 still describes gate provenance as a typed claim defaulting to agent (phase 3)
+
+Pre-existing staleness from the observed-provenance change; this PR did not touch those lines. Candidate follow-up issue at the merge touchpoint.
