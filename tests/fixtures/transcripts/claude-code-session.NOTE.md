@@ -140,3 +140,18 @@ its output redirected into a log, line 1 the `user` record carrying its
 session scratchpad → `/tmp/scratchpad` (so the log is `/tmp/scratchpad/c1.log`,
 `transcript_sessions.CAPTURED_LOG`). Helpers vary only the timestamps and that
 one log path.
+
+## `claude-code-bash-background.jsonl` (added 2026-09-26)
+
+Four records captured live from a Claude Code 2.1.283 orchestrator session and
+redacted (`/Users/<name>` → `/home/user`; the project slug → `-home-user-repo`):
+a `Bash` tool_use with `run_in_background: true` that writes a full-suite log,
+its `tool_result`, the `queue-operation` enqueue and the `user` record carrying
+the `<task-notification>`.
+
+What it shows, and why the gate needs it: a backgrounded command's `tool_result`
+is only the LAUNCH ack (`toolUseResult.backgroundTaskId`, "Command running in
+background with ID: …", about a second after the call). Its completion arrives
+much later as a `user` record whose string content is a `<task-notification>`
+naming the same `<tool-use-id>` and a `<status>` (`completed` | `failed` |
+`killed`). The `queue-operation` record is the enqueue of that same notice.
