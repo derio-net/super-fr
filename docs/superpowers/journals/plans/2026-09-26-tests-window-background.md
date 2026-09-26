@@ -84,3 +84,8 @@ Reviewer a5d182fc33b6777d7 (opus). Re-run because phase1-review ran on Sonnet. C
 ### o2 · finding [open] (reviewer: in scope) · F2 timeout-moved foreground command not recognised as background (Opus) (phase 1)
 
 36 real cases; keyed on toolUseResult.backgroundTaskId (set on 187/187 real acks). Fixed; also closes F6.
+
+<!-- fr:journal kind=finding scope=plan id=o3 created=2026-09-26T23:50:57 phase=1 state=open review_scope=in -->
+### o3 · finding [open] (reviewer: in scope) · F3 assignment scan resolves variables the shell would not (Opus) (phase 1)
+
+Prefix assignment, quoted text, here-doc. Fixed: command-start only.
