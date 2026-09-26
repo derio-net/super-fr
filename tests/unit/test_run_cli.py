@@ -1930,8 +1930,8 @@ def _started_grouped_with_plan(
         slug = "2026-05-09-fixture-minimal"
         plan_dir = repo / "docs" / "superpowers" / "plans" / slug
         shutil.copytree(_FIXTURE_PLAN, plan_dir)
-        # One agentic phase, marked skeleton: a self-review error since debug
-        # journal C2 — recorded as the sanctioned override, see the helper.
+        # One agentic phase, marked skeleton: first-class since 2026-09-26, so
+        # the override is not needed; kept as harmless plumbing, see the helper.
         write_skeleton_override(repo)
     # SET, never append: the shared fixture carries its OWN `tier: standard`
     # (gh#506 added one), so inserting a second key leaves a duplicate that
@@ -5034,7 +5034,7 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
     slug = "2026-05-09-fixture-minimal"
     plan_rel = f"docs/superpowers/plans/{slug}"
     shutil.copytree(_FIXTURE_PLAN, repo / plan_rel)
-    write_skeleton_override(repo)  # sole-skeleton fixture, debug journal C2
+    write_skeleton_override(repo)  # harmless: a one-phase plan needs no override
 
     def step(argv: list[str]) -> None:
         result = _invoke(repo, shipped, argv)

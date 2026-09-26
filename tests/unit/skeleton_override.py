@@ -1,12 +1,11 @@
 """The sanctioned override for the shared one-phase fixture plan.
 
 `tests/unit/fixtures/v2_plan_minimal` is ONE agentic phase marked
-`skeleton: true`. Since 2026-09-21 (debug journal C2) that shape is a
-self-review ERROR — a skeleton with no work after it is the whole plan wearing
-the marker. The fixture is shared by ~40 test files that count its phases, so
-it keeps its shape; tests that push it through `plan-review` as plumbing record
-the same operator override a real tiny-change plan would, rather than the rule
-being weakened for them.
+`skeleton: true`. Since 2026-09-26 (one-phase-plans) that shape is first-class
+and self-review raises nothing for it, so the override is no longer required;
+the helper is kept because callers still write it and it is harmless (it
+silences the two-or-more-phase unmarked error, which this fixture cannot
+raise).
 """
 
 from __future__ import annotations
