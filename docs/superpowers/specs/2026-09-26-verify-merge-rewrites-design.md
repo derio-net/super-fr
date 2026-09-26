@@ -144,6 +144,7 @@ path does). Consequences, per the operator's answers:
 
 ### Non-goals
 
+- Known limit (accepted, same tradeoff as #387's containment): `fr archive` skips a journal/run/usage whose `implemented/` destination already exists, so on a slug-reused re-run the archived-path fallback may test containment against an older, unrelated copy; boilerplate-heavy files make a false match more plausible than for prose. Date-prefixed slugs make it rare; plan dirs refuse an occupied destination outright.
 - Known limit (accepted, same as the whole-file fast path): a byte-identical `.changes/<same-slug>.yaml` landed by another PR after this branch's merge-base would satisfy the fallback for that one file; every other changed file is still checked and `verified` still needs the PR `MERGED`. Line numbers cited in this spec describe `origin/main` before the fix.
 - Known limit (out of scope, fails safe): if a concurrent merge edited the file elsewhere BEFORE the branch landed and a later merge then rewrote the branch's lines, no base blob equals the branch's blob and the file still reads missing (STOP).
 - `isolation/scaffold.py` and `artifacts/commit.py` are being edited by another
