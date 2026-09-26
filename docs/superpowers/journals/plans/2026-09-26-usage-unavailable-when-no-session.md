@@ -44,3 +44,8 @@ Pre-existing harness_now fallback; not caused by this change.
 ### p1-r2-resolved · finding [out-of-scope] · resolves p1-r2: redundant FR_HOSTNAME monkeypatch in last new test (phase 1)
 
 Cosmetic redundancy in a test; not a defect in this change.
+
+<!-- fr:journal kind=finding scope=plan id=cr1 created=2026-09-26T23:37:02 phase=1 state=open review_scope=in -->
+### cr1 · finding [open] (reviewer: in scope) · backfill writes sessions: [] for a cursor naming no session (phase 1)
+
+backfill.py::_entries returned [] with no sessions and no cursor figures; same #636 defect by a second writer, and backfill never revisits a run.
