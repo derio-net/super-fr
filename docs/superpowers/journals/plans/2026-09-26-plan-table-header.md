@@ -134,3 +134,8 @@ Filed at closeout as #663.
 ### r1-1-resolved-3 · finding [out-of-scope] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
 
 Not a defect: the consumer landed in phase 2 (_ensure_section_text) as planned. Operator chose not to file.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved-3 created=2026-09-26T09:54:23 state=open resolves=r1-2 out_of_scope=true -->
+### r1-2-resolved-3 · finding [out-of-scope] · resolves r1-2: migrate.py:761 still hard-codes the header
+
+Not a defect: migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3). Operator chose not to file.
