@@ -99,3 +99,8 @@ Opus spec review. Pre-existing; a repo-level migration, repo-wide by intent; not
 ### s2-1-resolved · finding [fixed] · resolves s2-1: §3.C strict same-file rule would stop fr repair fixing stale full paths
 
 spec edited in the Opus-review commit
+
+<!-- fr:journal kind=finding scope=spec id=s2-2-resolved created=2026-09-26T23:36:25 state=fixed resolves=s2-2 -->
+### s2-2-resolved · finding [fixed] · resolves s2-2: Spec carried an empty duplicate Implementation Plans section
+
+spec edited in the Opus-review commit
