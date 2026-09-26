@@ -4394,9 +4394,16 @@ rows:
       without conflict in matrix.yaml or any of the three committed reports
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_concurrent_merge.py
+      - super-fr:tests/unit/test_acceptance_insert.py
+      - super-fr:tests/unit/test_acceptance_report.py
+    status: ci
+    notes: 'Spec §7 items 6-8, phase 4: add inserts by capability and committed reports
+      carry no cross-row aggregates; a temp-repo test merges two branches that each
+      add a not-implemented row to a different capability with no conflict in matrix.yaml
+      or the three reports.'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
