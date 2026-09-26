@@ -1,0 +1,47 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Report the considered OpenCode agent count and bump version
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-tier-binding-reaches-dispatch
+  tier: mechanical
+  files:
+  - packages/fr/src/fr/opencode_agents.py
+  - packages/fr/src/fr/commands/models_cmd.py
+  - tests/unit/test_opencode_agents_materialize.py
+  - tests/unit/test_models_cmd.py
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - plugins/*/.claude-plugin/plugin.json
+  - marketplace.json
+  - packages/fr-opencode-plugin/package.json
+  - uv.lock
+  estimate_lines: 140
+tasks:
+- number: 1
+  title: Implement the count and accurate no-op messages
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      GREEN: change materialize_agents to return a result containing the supported-tier files considered and the existing Change list. Count only matching agent files. Update both callers and the shared reporter: zero changes and zero considered prints the existing no-files message; zero changes with considered files prints "<n> agent files already up to date". Keep changed/problem reports unchanged. Run focused tests.
+  - id: P2.T1.S2
+    text: |-
+      REFACTOR: run the full pytest suite, ruff check, ruff format, mypy, artifact validation, acceptance check, and the version-sync check. Apply the required patch version bump with scripts/bump-version.py.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T23:04:46+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T23:04:46+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T23:04:46+00:00'
+    note: null
+    observed_prs: []
