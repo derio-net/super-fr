@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Describe a feature, get back a reviewed pull request.** Tell super-fr what you
-want, answer one short round of questions, and an agent designs it, writes it
+want, answer a question round sized to the feature (rarely two), and an agent designs it, writes it
 test-first, reviews its own work, and opens a single PR for you to merge — all
 inside an isolated workspace that never touches your checkout.
 
@@ -63,7 +63,8 @@ missing):
 /fr-goal add rate limiting to the webhook receiver
 ```
 
-The agent isolates, brainstorms, asks its questions once, then drives
+The agent isolates, brainstorms, asks one question round sized to the feature
+(a second only when announced up front or you ask for it), then drives
 spec → plan → test-driven implementation → review → a single PR for you to
 merge. That's the whole loop — everything below is detail you can reach for
 when you need it.
@@ -379,8 +380,8 @@ unit/api/int/ui verification levels and an honesty-scale status: `ci` /
 `scheduled` (automated, can't drift) → `skipped` (verified, but not in CI) →
 `not-implemented` (nothing yet) → `failing` (known red, fails CI by design).
 
-Rows are born at brainstorm time (presented with defenses in the batched
-Q&A), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan
+Rows are born at brainstorm time (presented with defenses in the brainstorm's
+question round), linked to plan phases via an `acceptance: [row-ids]` field (`fr plan
 self-review` errors on a Test-Plan spec with zero linked rows), and flipped
 up the ladder as `fr plan edit --complete-phase` lands evidence — the CLI
 warns on phases that complete without flipping their rows. Mid-flight

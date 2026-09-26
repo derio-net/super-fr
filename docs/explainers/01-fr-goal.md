@@ -31,8 +31,8 @@ standalone_style: broadsheet
 ## Overview
 
 Imagine handing a capable development team a short description of a feature.
-The team studies the existing product, asks one organized set of questions,
-then designs, builds, tests, and reviews the change. You return when a pull
+The team studies the existing product, asks a round of questions sized to the
+decisions it found (rarely a second, and never a third), then designs, builds, tests, and reviews the change. You return when a pull
 request is ready for your review. `fr-goal` gives an AI coding agent that shape
 of responsibility.
 
@@ -78,7 +78,7 @@ pull request: it returns after the merge and walks the operator through it.
 flowchart TD
     A[You describe the outcome] --> X[fr run start creates the workspace and the run record]
     X --> B[Agent studies the existing project inside it]
-    B --> C[You answer one set of questions]
+    B --> C[You answer a question round, rarely two]
     C --> D[Agent writes the design and acceptance tests]
     D --> E[Agent breaks the work into small pieces]
     E --> F[Build the next piece]
@@ -192,7 +192,11 @@ question round or rounds — the single operator touchpoint the pipeline
 promises, whether it takes one round or (rarely) two. An unanswered round is
 a stop, not a timeout with a default. On Claude Code the
 tool checks the stop really happened: clearing the gate needs an answered
-question in the session's transcript since the run paused there. An agent that
+question in the session's transcript since the run paused there. The run
+record also states how many rounds were asked and why, and the tool checks
+that against the transcript too: it refuses a second round nobody was told
+about, and it refuses a third one outright. When the gate did take two rounds,
+the pull request says so. An agent that
 decides the request already settled everything can still clear it without
 asking, but only by writing down why, and that reason lands in the pull
 request. Where the transcript cannot be read, the tool says the gate is only
@@ -496,9 +500,9 @@ documented escapes and fail-open cases, not a security boundary.
 
 The agent does not begin by asking questions it could answer from the project.
 It first studies how the current system works and compares possible approaches.
-Only then does it collect the decisions that genuinely belong to you into one
-round of questions, sized to those decisions, recommended choices first — a
-second round follows only when it was announced before the first round ended,
+Only then does it collect the decisions that genuinely belong to you into a single
+question round, sized to those decisions, recommended choices first — a
+second round follows only when it was announced before the first question,
 or you ask for one, and there is never a third. A deployed change may include
 a question about how you will verify it in the real environment
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
@@ -528,13 +532,13 @@ promise of one conversation turn.
 How the pause is enforced differs by harness. On a harness with a built-in
 structured question prompt, that prompt call is itself what pauses the run.
 Elsewhere `fr-goal` cannot force a pause the same way: it puts the numbered
-batch in its reply and ends the turn, and `fr run advance` says so loudly
+round in its reply and ends the turn, and `fr run advance` says so loudly
 there rather than behaving as though the gate had fired silently. Either way
 the record travels with the run: resolving the gate types who actually
 answered it — `agent` by default, `operator` only when typed deliberately
 once the operator genuinely answered — and `fr run gates <run-id>` prints
 that provenance, so a reviewer reading the delivered pull request can tell a
-human-answered batch from one the agent had to clear on its own, rather than
+human-answered round from one the agent had to clear on its own, rather than
 trust silence.
 
 ### 3. Define how success will be proved (`spec-review` and acceptance tests)
