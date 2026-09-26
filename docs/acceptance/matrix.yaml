@@ -4605,9 +4605,12 @@ rows:
       queue), with coverage still gated at 75% across the whole suite
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-ci-time-budget-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_shards.py
+    status: skipped
+    notes: shard layout + partition unit-pinned; branch CI run 36247922786 took 155s;
+      post-merge main observation owed
   - id: ci-budget-ticket-dedup
     capability: CI
     acceptance: A CI file that runs over its budget gets exactly one open ci-budget
