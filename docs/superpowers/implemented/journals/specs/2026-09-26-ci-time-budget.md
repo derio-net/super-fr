@@ -109,3 +109,8 @@ Dispatched fr-spec-reviewer (read-only, separate context). Verified ci.yml:2,22-
 ### sr-job-name-branch-protection-claim-resolved · finding [out-of-scope] · resolves sr-job-name-branch-protection-claim: The claim that keeping the job name `test` preserves branch protection is inaccurate once `test` is a matrix
 
 The lack of required status checks predates this change. The spec sentence was reworded to state the real contexts rather than claim branch-protection compatibility.
+
+<!-- fr:journal kind=finding scope=spec id=sr-job-name-branch-protection-claim-resolved-2 created=2026-09-27T00:00:32 state=open resolves=sr-job-name-branch-protection-claim tracked_by=#706 -->
+### sr-job-name-branch-protection-claim-resolved-2 · finding [deferred → #706] · resolves sr-job-name-branch-protection-claim: The claim that keeping the job name `test` preserves branch protection is inaccurate once `test` is a matrix
+
+Filed at closeout as #706.
