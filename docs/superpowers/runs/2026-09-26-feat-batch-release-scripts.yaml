@@ -3,11 +3,14 @@ run: 2026-09-26-feat-batch-release-scripts
 workflow: fr-goal@1
 branch: feat/batch-release-scripts
 started: '2026-09-26T10:06:38+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-26T10:06:45+00:00'
+    state: done
+    at: '2026-09-26T10:07:40+00:00'
+    answered_by: agent
+    emitted:
+      spec: docs/superpowers/specs/2026-09-26-release-scripts-hardening-design.md
   spec-review:
     state: pending
   plan:
