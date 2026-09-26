@@ -74,3 +74,8 @@ Also spec-review s2; OpenCode has no completion event and needs its own design.
 ### phase1-review-opus · review · independent code review on claude-opus-5-5 (fresh context): 8 findings (7 in, 1 out) (phase 1)
 
 Reviewer a5d182fc33b6777d7 (opus). Re-run because phase1-review ran on Sonnet. Checked against ~240 real notifications; F1/F2 were high severity.
+
+<!-- fr:journal kind=finding scope=plan id=o1 created=2026-09-26T23:50:56 phase=1 state=open review_scope=in -->
+### o1 · finding [open] (reviewer: in scope) · F1 queued-attachment task-notification shape never seen (Opus code review) (phase 1)
+
+45 of ~240 real notifications arrive as attachment/queued_command and got no window. Fixed.
