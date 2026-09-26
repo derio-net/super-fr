@@ -1,0 +1,90 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-plan-table-header
+captures:
+- host: h-d7e22520
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-26T07:57:24+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: ac39fe1a-dccb-4ef5-b5ae-9df6603ba842
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 270
+        cache_write: 656919
+        cache_read: 13804882
+        output: 42943
+        usd: 5.5758539
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001341
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 0.9227415012665363
+        turns: 29
+      other:
+        usd: 2.087356688669396
+        turns: 48
+      paperwork:
+        usd: 2.567096710064068
+        turns: 56
+    steps:
+      (outside run):
+        usd: 0.5612062618448206
+        turns: 7
+      brainstorm:
+        usd: 0.309615350506214
+        turns: 8
+      spec-review:
+        usd: 0.4043135752890142
+        turns: 11
+      plan:
+        usd: 0.23382163162096065
+        turns: 5
+      plan-review:
+        usd: 0.033922825374936266
+        turns: 1
+      implement:
+        usd: 2.855798493266761
+        turns: 69
+      deliver:
+        usd: 1.178516762097293
+        turns: 26
+    briefs:
+      a9fc3a850e1706d67: 654
+      phase/1/implement-phase: 1515
+      phase/1/review-phase: 1017
+      phase/2/implement-phase: 2344
+      phase/2/review-phase: 1235
+      phase/3/implement-phase: 2570
+      phase/3/review-phase: 1374
+  - session: 4421bb22-ef78-4e54-aea5-8c4fdd1be17b
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 32
+        cache_write: 64795
+        cache_read: 1331817
+        output: 4864
+        usd: null
+        usd_source: none
+    activity:
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 6
+    steps:
+      (outside run):
+        usd: null
+        turns: 16
