@@ -4636,9 +4636,12 @@ rows:
       worktree git considers foreign-owned
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-container-git-ownership-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_container_git_ownership.py
+    status: ci
+    notes: safe.directory override on git_answer, update-index restore and record/apply
+      git calls; proven in a foreign-owned linked worktree from root and subdirectory
   - id: scaffold-trusts-workspace
     capability: isolation-git-ownership
     acceptance: A scaffolded devcontainer profile trusts its own workspace path for
