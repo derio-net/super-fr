@@ -48,24 +48,33 @@ Fix two defects on one surface:
 `None` keeps today's repo-wide behaviour byte-for-byte. When given, the walk
 is restricted to the named plan slugs:
 
-- plan `_meta.yaml`: only folders whose name is in `only_plans` (looked up in
-  both `plans/` and `implemented/plans/`, since the archived plan has just
-  moved);
-- spec tables: only rows whose plan-name/File cell slug is in `only_plans`;
-  the header normalization (per spec, not per plan) is skipped;
+- plan `_meta.yaml`: the `d.glob("*/_meta.yaml")` walk (repair.py:255) is
+  filtered by `meta_path.parent.name in only_plans`, over both `plans/` and
+  `implemented/plans/` (the archived plan has just moved);
+- spec tables: every spec file is still walked (any spec may hold the archived
+  plan's row), but only rows whose **File cell** slug —
+  `refs.plan_slug(file_cell)` (repair.py:127), never the free-label Name cell —
+  is in `only_plans` are rewritten or warned on; out-of-scope rows emit no
+  warnings. Header normalization (per spec, not per plan) is skipped;
 - `plan-config.yaml` dead-key stripping: skipped (repo-level, not a plan row).
 
 ### 3.B Archive call sites
 
-Single-plan archive passes `only_plans` = the slugs of the plan(s) it moved.
+Single-plan archive passes `only_plans = frozenset(p.name for p in archived)` (`archived` holds the post-move paths, archive_cmd.py:203,210).
 `_report_sweep` gains an optional `only_plans` parameter, passed by the
 single-plan path and left `None` by `--all` / `--sweep-only`. The
-post-sweep call at `:227` uses the same scope.
+tail call at `:227` uses the same set; `--all` and `--sweep-only` stay `None`.
 
 ### 3.C Canonical `spec:` form
 
-`plan_ops.create` normalizes a same-repo `spec` ref to the bare filename when
-it resolves via `refs.resolve_spec_ref` (cross-repo notation is left as-is,
+A shared helper `canonical_spec_ref(value, repo_root) -> str` (in `fr.refs`)
+is called by both `plan_ops.create` and `repair._repair_meta`. `create`
+normalizes only the value written to `_meta.yaml` (plan_ops.py:226), keeping
+`spec_str` for the on-disk candidate and section validation (:215). It
+shortens a same-repo ref to the bare filename only when
+`refs.resolve_spec_ref` resolves to the very file named (`res.path.resolve()
+== candidate`), since resolution is by slug and could otherwise repoint the
+plan at a same-named spec elsewhere (cross-repo notation is left as-is,
 matching `_repair_meta`; an unresolvable ref — a spec not yet written — is
 stored verbatim, as today). The normalization function is shared with
 `repair._repair_meta` so there is one definition of canonical. Readers
@@ -82,9 +91,19 @@ Bug, debugging-first: each test is written red before the fix.
 2. `repair_repo(only_plans=...)` rewrites only the named plan; `None`
    rewrites all (regression pin).
 3. `fr archive --all` and `--sweep-only` still repair repo-wide.
+3b. A scoped run does not strip `plan-config.yaml` dead keys or normalize
+   spec table headers; `None` still does.
 4. `plan create --spec docs/superpowers/specs/x-design.md` writes
    `spec: x-design.md`; a following `repair_repo` reports zero rewrites.
-5. A plan carrying the full-path `spec:` still validates and resolves.
+   Also: an unresolvable spec is stored verbatim; cross-repo notation is left
+   as-is; a same-named file at a different path is not shortened.
+5. A plan carrying the full-path `spec:` still validates and resolves; a
+   bare-`spec:` plan parses to `spec_path` and still resolves after the spec
+   moves to `implemented/specs/`.
+6. Existing `create` tests asserting a full-path `spec:` are updated. Readers
+   falling back to raw `meta.spec` (plan_ops.py:911, render.py:333,
+   item_graph.py:132,151) are only reached for an unresolvable ref, which
+   normalization never rewrites, so they are unaffected.
 
 ## 5. Implementation Plans
 

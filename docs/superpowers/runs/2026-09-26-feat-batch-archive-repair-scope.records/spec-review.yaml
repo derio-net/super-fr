@@ -1,0 +1,18 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-archive-repair-scope
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "Scoped row match key ambiguous", body: "Pinned to refs.plan_slug(file_cell); out-of-scope rows emit no warnings (spec 3.A)."}
+  - {kind: finding, id: s2, review_scope: in, title: "Scoped meta lookup and slug source underspecified", body: "Spec 3.A/3.B now state the glob filter and only_plans = names of archived paths."}
+  - {kind: finding, id: s3, review_scope: in, title: "Create normalization guard", body: "Spec 3.C: shared helper, value-only, shortens only when resolved file equals named file."}
+  - {kind: finding, id: s4, review_scope: in, title: "Readers/tests inventory missing", body: "Test plan 5-6 cover readers and updated create tests."}
+  - {kind: finding, id: s5, review_scope: in, title: "Untested create cases", body: "Test plan 3b and 4 extended."}
+  - {kind: review, id: spec-review, title: "independent spec review: 5 findings", body: "5 in-scope findings, all fixed in the spec; verified file:line claims held."}
+resolves:
+  - {id: s1, state: fixed, body: "spec 3.A"}
+  - {id: s2, state: fixed, body: "spec 3.A/3.B"}
+  - {id: s3, state: fixed, body: "spec 3.C"}
+  - {id: s4, state: fixed, body: "spec 4 tests 5-6"}
+  - {id: s5, state: fixed, body: "spec 4 tests 3b/4"}
+evidence: {review: spec-review, reviewer: a481c3da0da6321d6}
