@@ -2,4 +2,5 @@ schema_version: 2
 run: 2026-09-26-feat-batch-tests-window
 step: deliver
 outcome: done
+emitted: {pr: https://github.com/derio-net/super-fr/pull/693}
 evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/7a118265-cd9c-4a47-a464-08497a2f3b87/scratchpad/full-suite9.log}
