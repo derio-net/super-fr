@@ -446,3 +446,24 @@ def test_canonical_spec_ref_shortens_only_the_same_file(repo: Path) -> None:
     # a spec that moved to implemented/ still canonicalizes a stale full path
     (repo / "docs/superpowers/implemented/specs/y-design.md").write_text("# y\n")
     assert canonical_spec_ref("docs/superpowers/specs/y-design.md", repo) == "y-design.md"
+
+
+def test_repair_leaves_a_same_named_spec_at_another_path_alone(repo: Path) -> None:
+    """`fr repair` shares `canonical_spec_ref`'s guard: it never repoints a plan."""
+    _bare_spec(repo)
+    (repo / "notes").mkdir()
+    (repo / "notes/x-design.md").write_text("# other\n")
+    meta = _plan_with_spec(repo, "2026-09-01-a", "notes/x-design.md")
+    before = meta.read_bytes()
+    result = repair_repo(repo, write=True)
+    assert meta.read_bytes() == before
+    assert not result.rewrites
+
+
+def test_full_path_spec_ref_still_resolves(repo: Path) -> None:
+    """Back-compat: the non-canonical full path stays readable until repaired."""
+    from fr.refs import resolve_spec_ref
+
+    spec = _bare_spec(repo)
+    res = resolve_spec_ref("docs/superpowers/specs/x-design.md", repo)
+    assert res.path is not None and res.path.resolve() == spec.resolve()
