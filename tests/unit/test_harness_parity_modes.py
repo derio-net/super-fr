@@ -16,7 +16,12 @@ from fr.harness import HarnessError, load_matrix, parse_matrix
 from typer.testing import CliRunner
 
 MODES = ("host-worktree", "devcontainer", "external")
-TRANSCRIPT_GATES = ("operator-gate", "out-of-scope-operator-guard", "spec-review-independence")
+TRANSCRIPT_GATES = (
+    "operator-gate",
+    "out-of-scope-operator-guard",
+    "spec-review-independence",
+    "deliver-tests-provenance",
+)
 
 
 def _row(claude: str) -> str:
@@ -91,6 +96,17 @@ def test_claude_codes_transcript_gates_are_restated_per_mode(surface_id: str) ->
     cell = _shipped(surface_id).harnesses["claude-code"]
     assert cell.modes is not None and set(cell.modes) == set(MODES)
     assert "host" in (cell.modes["devcontainer"].scope_note or "")
+
+
+def test_deliver_tests_provenance_is_enforced_on_claude_and_opencode_only() -> None:
+    """Operator decision 2026-09-26 (gh#638): verified on both, dropped on Hermes."""
+    row = _shipped("deliver-tests-provenance")
+    for harness in ("claude-code", "opencode"):
+        cell = row.harnesses[harness]
+        assert cell.modes is not None, harness
+        assert {cell.state_in(m) for m in MODES} == {"enforced"}, harness
+    assert row.harnesses["hermes"].state == "unsupported"
+    assert "operator decision" in (row.harnesses["hermes"].scope_note or "")
 
 
 def test_the_parity_check_passes() -> None:

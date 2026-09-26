@@ -242,6 +242,25 @@ def _why_unobservable() -> str:
     return "no readable transcript for this session"
 
 
+TESTS_PROVENANCE_SURFACE = "deliver-tests-provenance"
+"""The parity row declaring where `tests=<log>` provenance is verified."""
+
+
+def _why_tests_unobservable() -> str:
+    """Why `tests=<log>` could not be tied to a command. Hermes is declared
+    `unsupported` for this check (operator decision 2026-09-26, gh#638): say
+    so by name rather than implying a reader is merely missing."""
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        harness = None
+    if harness == "hermes":
+        return f"tests= provenance is unsupported on hermes (parity row {TESTS_PROVENANCE_SURFACE})"
+    if harness == "opencode":
+        return "the OpenCode session database could not be read"
+    return _why_unobservable()
+
+
 def _take_unobserved() -> dict[str, str]:
     """`{"unobserved": "<gate>,…"}` for every gate noted so far, and forget them."""
     from fr.run.telemetry import UNOBSERVED
@@ -1668,7 +1687,7 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             raise typer.Exit(2)
         _note_unobserved("tests")
         err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — {_why_unobservable()}; "
+            f"[yellow]{key}: could not verify who ran {log} — {_why_tests_unobservable()}; "
             "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )

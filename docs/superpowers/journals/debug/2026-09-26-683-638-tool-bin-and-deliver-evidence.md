@@ -44,3 +44,13 @@ telemetry._opencode_wrote_since reads opencode.db (top-level sessions, bash part
 ### 45e14c53bb45 · review · Independent review (feature-dev:code-reviewer, separate context)
 
 R1 (fixed): the OpenCode query filtered on session.time_updated, an unverified assumption that OpenCode bumps the session row per part; every fixture set it an hour ahead, so it was untested. Dropped; pinned by test_a_session_row_last_touched_before_the_unit_does_not_hide_its_parts. R2 (fixed): the tests= records refusal matched any dir named *.records and only the immediate parent, while validate checks docs/superpowers/runs/*.records; now the same scope at any depth, pinned by test_the_records_refusal_matches_exactly_the_runs_records_dirs. Cleared by the reviewer: HarnessError propagation (pre-existing module pattern), bool exit codes, ms units, xdist session guard. Accepted: the conftest guard would blame the suite for a concurrent operator install.sh relinking fr mid-run.
+
+<!-- fr:journal kind=finding scope=debug id=f-638-parity created=2026-09-26T12:20:38 state=fixed -->
+### f-638-parity · finding [fixed] · Operator decision: tests= provenance is Claude Code + OpenCode; Hermes dropped
+
+Operator: "drop support for Hermes for that feature, note it in the parity matrix. It is important that both bugs are fixed in opencode and in claude". New parity row deliver-tests-provenance: claude-code and opencode enforced in every isolation mode, hermes unsupported (scope_note records the decision). On Hermes the log is recorded unverified with a warning naming the row (run_cmd._why_tests_unobservable). The .records/ refusal and validator are harness-neutral. Pinned by test_harness_parity_modes.py::test_deliver_tests_provenance_is_enforced_on_claude_and_opencode_only and test_an_unverifiable_log_says_why_by_harness.
+
+<!-- fr:journal kind=finding scope=debug id=f-638-live created=2026-09-26T12:20:39 state=fixed -->
+### f-638-live · finding [fixed] · Live verification on both harnesses
+
+Claude Code (this session transcript): a Bash redirect log -> one window containing its mtime; a Write-tool log -> []. OpenCode 1.18.32 (`opencode run`, real ~/.local/share/opencode/opencode.db, 1.5 GB): a bash redirect log -> one window containing its mtime; a write-tool log -> []; 1.3 s. Two false starts on the Claude side were setup errors, not reader bugs: the `since` stamp was taken after the redirect tool_use was issued (a transcript stamps a tool_use when the assistant message is written, and parallel calls in one message share that moment).

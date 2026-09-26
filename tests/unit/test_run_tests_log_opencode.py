@@ -247,3 +247,29 @@ def test_this_repos_records_dirs_hold_only_records() -> None:
         if p.suffix != ".yaml" and p.name != "pr-body.md"
     ]
     assert stray == []
+
+
+@pytest.mark.parametrize(
+    ("harness", "said"),
+    [
+        pytest.param(
+            "hermes", "unsupported on hermes (parity row deliver-tests-provenance)", id="hermes"
+        ),
+        pytest.param("opencode", "OpenCode session database could not be read", id="opencode"),
+    ],
+)
+def test_an_unverifiable_log_says_why_by_harness(tmp_path: Path, harness: str, said: str) -> None:
+    """Hermes is declared `unsupported` for this check (operator decision
+    2026-09-26): the log is recorded unverified and the warning names the
+    parity row, not a missing reader."""
+    repo, shipped, _ = _at_deliver(tmp_path)
+    time.sleep(0.01)
+    (repo / "full-suite.log").write_text("ok\n")
+    argv = ["run", "resolve", "r1", "--step", "deliver", "--state", "done"]
+    env = {"FR_HARNESS": harness, "FR_OPENCODE_DB": str(tmp_path / "absent.db")}
+
+    result = _invoke_as_harness(repo, shipped, [*argv, "--evidence", "tests=full-suite.log"], env)
+
+    assert result.exit_code == 0, result.output
+    assert said in _squash(result.stderr)
+    assert "unverified" in _squash(result.stderr)
