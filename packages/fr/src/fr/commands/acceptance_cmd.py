@@ -251,7 +251,7 @@ def status_cmd(
         typer.echo("no acceptance debt.")
         return
     shown = opens[:3] if brief else opens
-    for r in shown:  # matrix order = append order = oldest first
+    for r in shown:  # open_rows: oldest origin date first
         typer.echo(f"  {r.id} [{r.status}] {r.acceptance} — {r.notes}")
     if brief and len(opens) > len(shown):
         typer.echo(f"  … +{len(opens) - len(shown)} more (fr acceptance status)")

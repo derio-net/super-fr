@@ -62,9 +62,28 @@ def resolve_identity(matrix: Matrix, root: Path) -> tuple[str, str]:
     )
 
 
+_ORIGIN_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _age_key(row: Row) -> str:
+    """The earliest date an origin names (`YYYY-MM-DD` in a spec path); "" when none.
+
+    File position stopped meaning age once `add` began inserting by capability
+    (spec 2026-09-26-version-bump-churn §3.H, review rp4-f2), so age comes from the
+    origin. A row with no dated origin sorts FIRST: a nag surfaces debt of unknown
+    age rather than burying it behind debt it can date.
+    """
+    dates = [m.group(0) for o in row.origin for m in _ORIGIN_DATE.finditer(o)]
+    return min(dates, default="")
+
+
 def open_rows(matrix: Matrix) -> list[Row]:
-    """The nag set: `skipped` / `not-implemented` rows in matrix (= age) order."""
-    return [r for r in matrix.rows if r.status in ("skipped", "not-implemented")]
+    """The nag set: `skipped` / `not-implemented` rows, oldest origin first.
+
+    The sort is stable, so rows of the same age keep their matrix order.
+    """
+    opens = [r for r in matrix.rows if r.status in ("skipped", "not-implemented")]
+    return sorted(opens, key=_age_key)
 
 
 @dataclass

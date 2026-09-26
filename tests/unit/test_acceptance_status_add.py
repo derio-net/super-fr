@@ -39,6 +39,39 @@ def test_status_counts_and_open_rows(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "backfill owed" in out or "n" in out  # notes surface
 
 
+def _dated(day: str) -> str:
+    return f'"own:docs/superpowers/specs/{day}-x-design.md"'
+
+
+def test_open_rows_are_oldest_first_by_origin_date_not_file_position(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Review rp4-f2: `add` now inserts by capability, so a NEW row can sit above an
+    # OLD one in the file. Age comes from the origin spec's date, not the position.
+    rows = (
+        row(id="new-debt", origin=_dated("2026-09-20"), status="not-implemented")
+        + row(id="old-debt", origin=_dated("2026-07-01"), status="skipped")
+        + row(id="mid-debt", origin=_dated("2026-08-15"), status="skipped")
+    )
+    result = _invoke(make_repo(tmp_path, rows), monkeypatch, "status")
+    assert result.exit_code == 0
+    out = result.output
+    assert out.index("old-debt") < out.index("mid-debt") < out.index("new-debt")
+
+
+def test_open_rows_of_unknown_age_come_first_in_matrix_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = (
+        row(id="dated-debt", origin=_dated("2026-07-01"), status="skipped")
+        + row(id="undated-b", status="skipped")
+        + row(id="undated-a", status="skipped")
+    )
+    result = _invoke(make_repo(tmp_path, rows), monkeypatch, "status")
+    out = result.output
+    assert out.index("undated-b") < out.index("undated-a") < out.index("dated-debt")
+
+
 def test_status_brief_caps_to_three(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = row(id="green") + "".join(row(id=f"debt-{i}", status="skipped") for i in range(5))
     root = make_repo(tmp_path, rows)
