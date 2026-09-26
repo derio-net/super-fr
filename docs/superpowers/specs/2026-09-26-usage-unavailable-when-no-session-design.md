@@ -129,7 +129,9 @@ This is a bug. Phase 1 opens with a failing test that reproduces it (empty
 
 ## Implementation Plans
 
-One phase (tier: standard) — `2026-09-26-usage-unavailable-when-no-session`.
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-usage-unavailable-when-no-session | `derio-net/super-fr` | `2026-09-26-usage-unavailable-when-no-session` | — |
 
 ## 7. Acceptance rows (born here; presented at spec review)
 
