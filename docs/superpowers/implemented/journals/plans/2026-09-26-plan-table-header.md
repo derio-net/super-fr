@@ -104,3 +104,38 @@ Reviewer confirmed 4.23.1 on every version surface, three rows at ci citing 8 ex
 ### r3-1-resolved · finding [out-of-scope] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there (phase 3)
 
 Accurate as regression coverage; not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved-2 created=2026-09-26T09:54:03 state=fixed resolves=r1-1 -->
+### r1-1-resolved-2 · finding [fixed] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
+
+Consumer landed in phase 2 (_ensure_section_text), as planned.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved-2 created=2026-09-26T09:54:04 state=fixed resolves=r1-2 -->
+### r1-2-resolved-2 · finding [fixed] · resolves r1-2: migrate.py:761 still hard-codes the header
+
+migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3).
+
+<!-- fr:journal kind=finding scope=plan id=r1-3-resolved-2 created=2026-09-26T09:54:04 state=open resolves=r1-3 tracked_by=#661 -->
+### r1-3-resolved-2 · finding [deferred → #661] · resolves r1-3: test _HEADER duplicates the literal
+
+Filed at closeout as #661.
+
+<!-- fr:journal kind=finding scope=plan id=r1-4-resolved-2 created=2026-09-26T09:54:05 state=open resolves=r1-4 tracked_by=#662 -->
+### r1-4-resolved-2 · finding [deferred → #662] · resolves r1-4: no spec no-mutation assertion in the no-table create test
+
+Filed at closeout as #662.
+
+<!-- fr:journal kind=finding scope=plan id=r3-1-resolved-2 created=2026-09-26T09:54:06 state=open resolves=r3-1 tracked_by=#663 -->
+### r3-1-resolved-2 · finding [deferred → #663] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there
+
+Filed at closeout as #663.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved-3 created=2026-09-26T09:54:21 state=open resolves=r1-1 out_of_scope=true -->
+### r1-1-resolved-3 · finding [out-of-scope] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet
+
+Not a defect: the consumer landed in phase 2 (_ensure_section_text) as planned. Operator chose not to file.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved-3 created=2026-09-26T09:54:23 state=open resolves=r1-2 out_of_scope=true -->
+### r1-2-resolved-3 · finding [out-of-scope] · resolves r1-2: migrate.py:761 still hard-codes the header
+
+Not a defect: migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3). Operator chose not to file.
