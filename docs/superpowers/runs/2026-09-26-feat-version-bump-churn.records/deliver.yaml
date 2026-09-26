@@ -1,0 +1,8 @@
+schema_version: 1
+run: 2026-09-26-feat-version-bump-churn
+step: deliver
+outcome: done
+acceptance: []
+emitted: {}
+evidence:
+  tests: "deliver-verify.log (orchestrator-run, effc6078): pytest 5976 passed 97 skipped 0 failed; ruff, mypy, version-sync, change-fragment gate, acceptance check+report sync, validate artifacts, both mirror checks, plan self-review all green"
