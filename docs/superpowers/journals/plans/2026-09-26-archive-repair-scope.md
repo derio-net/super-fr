@@ -134,3 +134,8 @@ fixed in the Opus-review commits
 ### r2-f5-resolved · finding [fixed] · resolves r2-f5: This plan's own _meta.yaml stored a non-canonical spec:
 
 fixed in the Opus-review commits
+
+<!-- fr:journal kind=finding scope=plan id=r2-f6-resolved created=2026-09-26T23:40:23 state=fixed resolves=r2-f6 -->
+### r2-f6-resolved · finding [fixed] · resolves r2-f6: _repair_meta resolved the spec ref twice
+
+fixed in the Opus-review commits
