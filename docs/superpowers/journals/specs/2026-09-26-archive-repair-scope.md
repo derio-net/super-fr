@@ -74,3 +74,8 @@ spec 4 tests 3b/4
 ### spec-review-opus · review · independent spec re-review on claude-opus-5-5: 4 findings
 
 Fresh-context Opus reviewer (agent a85d442d1deeaebef). 3 in scope, 1 out. The earlier Sonnet review 'spec-review' stays recorded. Prior s1-s5 fixes checked and correct, except the s3 wording, which produced s2-1.
+
+<!-- fr:journal kind=finding scope=spec id=s2-1 created=2026-09-26T23:36:21 state=open review_scope=in -->
+### s2-1 · finding [open] (reviewer: in scope) · §3.C strict same-file rule would stop fr repair fixing stale full paths
+
+Opus spec review. Reworded §3.C to the implemented rule (keep verbatim only when the value names an existing different file; a moved spec still canonicalizes) and added a repair-level test-plan case.
