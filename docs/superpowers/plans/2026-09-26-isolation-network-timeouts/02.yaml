@@ -1,0 +1,80 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Route the default-branch lookup and verify-merge fetches through _run_network
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-network-calls-bounded
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - tests/unit/test_isolation_network_timeouts.py
+  - docs/acceptance/**
+  - pyproject.toml
+  - packages/**/pyproject.toml
+  - plugins/**
+  - uv.lock
+  - packages/fr-opencode-plugin/package.json
+  - .claude-plugin/**
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: RED — bounded forge lookup and fetches (Test Plan 1-3)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_isolation_network_timeouts.py add tests, selecting calls by argv[0]/argv[1] and never by position or count (the ssh-probe `git config` call precedes every _run_network call): (1) with origin/HEAD unset, `_resolve_default_branch` issues the gh, glab and tea lookups (backend via detect_backend, monkeypatched) with a positive `timeout` and cwd == repo_root, and a lookup returning exit 124 yields "main"; (2) `verify_merge` and `verify_merge_reaped` issue both `git fetch` calls with a positive timeout, a default-branch fetch returning 124 gives fetched False and verified False even when content and PR state say merged, and a `_branch_refs` fetch returning 124 leaves the verdict unchanged (local refs used, or IsolationError when none resolves); (3) the `git symbolic-ref` call carries no timeout. Run the file; the new tests fail.
+- number: 2
+  title: GREEN — route the calls
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/isolation/local.py switch the three forge-CLI calls in `_resolve_default_branch` from `self.run(..., cwd=self.repo_root)` to `self._run_network(...)`; switch `_verdict`'s fetch to `self._run_network(["git","fetch",remote,default_branch], cwd=cwd)` and `_branch_refs`'s fetch to `self._run_network(["git","fetch",remote,branch])`. Leave `_reap_hazard`'s fetch alone (out of scope, spec d5). Run the new tests plus tests/unit/test_isolation*.py; fix any existing runner double that relied on call order or count by selecting on argv.
+  - id: P2.T2.S2
+    text: |-
+      REFACTOR: remove the now-stale "Deliberately a SEPARATE branch…" wording only if it is made false by the change; otherwise refactor reason: three call-site swaps, nothing to consolidate.
+- number: 3
+  title: Matrix, version, gate
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Move the row: `uv run fr acceptance set-status --id isolation-network-calls-bounded --status ci --notes "unit-pinned by tests/unit/test_isolation_network_timeouts.py" --level unit=super-fr:tests/unit/test_isolation_network_timeouts.py`.
+  - id: P2.T3.S2
+    text: |-
+      Bump the version: `uv run --no-project python scripts/bump-version.py 4.23.2`, then `uv run --no-project python scripts/bump-version.py --check`. Commit the changed manifests and uv.lock together.
+  - id: P2.T3.S3
+    text: |-
+      Gate: `uv run ruff format packages/ tests/ && uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src`, `uv run fr acceptance check`, then the full suite `uv run pytest -q --no-cov -n auto` into a log under the scratchpad; all green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

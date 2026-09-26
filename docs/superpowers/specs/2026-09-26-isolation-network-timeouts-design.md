@@ -96,3 +96,9 @@ Post-merge — operator-driven: none; the behaviour is unit-pinned per PR.
    is raised when none resolves.
 3. **Local steps stay unbounded.** The `symbolic-ref` call is not given a
    timeout (asserted by argv, not by call count), and `_run_network`'s existing callers behave as before.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-isolation-network-timeouts | `derio-net/super-fr` | `2026-09-26-isolation-network-timeouts` | — |
