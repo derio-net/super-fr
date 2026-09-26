@@ -79,3 +79,8 @@ Spec accepts the bounded cost; early exit already present.
 ### r6-resolved · finding [refuted] · resolves r6: No test for path with space/dash/glob or failed rev-list (phase 1)
 
 Path is only passed after `--` and inside <rev>:<path>, never parsed as an option; pathspec magic can only widen candidates and the blob compare uses the literal path, so no false pass.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1-fragment-addition created=2026-09-26T17:27:37 phase=1 -->
+### review-phase-1-fragment-addition · review · independent review of the release-bot fragment-deletion addition: no in-scope findings (phase 1)
+
+Reviewer aae94ddac742e9ad4 read commits 3780778c and 709b3ab7: tests reproduce the real shape (squash adds fragment+code, release: commit deletes fragment), red on the original code (proven by the executor by restoring origin/main's local.py), negative guards non-vacuous, no .changes special case needed. Out of scope: byte-identical same-slug fragment collision (noted in spec), stale line refs in spec (pre-fix numbers).
