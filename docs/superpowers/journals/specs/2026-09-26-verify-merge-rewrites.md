@@ -104,3 +104,8 @@ Add runs and usage; move the parenthetical.
 ### opus-s1-resolved · finding [fixed] · resolves opus-s1: §C claimed archive never rewrites moved bytes; usage is re-captured first
 
 Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s2-resolved created=2026-09-27T00:07:37 state=fixed resolves=opus-s2 -->
+### opus-s2-resolved · finding [fixed] · resolves opus-s2: §C test passed on §A alone
+
+Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
