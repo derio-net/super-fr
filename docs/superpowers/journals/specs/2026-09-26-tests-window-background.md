@@ -99,3 +99,8 @@ fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
 ### s6-resolved · finding [fixed] · resolves s6: Timeout-moved foreground Bash replies with different ack text (Opus)
 
 fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
+
+<!-- fr:journal kind=finding scope=spec id=s7-resolved created=2026-09-26T23:50:54 state=fixed resolves=s7 -->
+### s7-resolved · finding [fixed] · resolves s7: Notification timestamp is when recorded, not when finished; wait/retry undocumented (Opus)
+
+fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
