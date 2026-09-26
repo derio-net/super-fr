@@ -121,26 +121,33 @@ def resolve_spec_ref(ref: str, repo_root: Path) -> RefResolution:
     return _resolve(ref, repo_root, SPEC_ROOTS, is_dir=False, suffix=".md")
 
 
-def canonical_spec_ref(value: str, repo_root: Path) -> str:
+def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = None) -> str:
     """The one definition of the canonical `spec:` value: the bare filename.
 
     Lifecycle-independent (it still resolves once the spec moves to
-    `implemented/specs/`), unlike a full path. Shared by `plan_ops.create` and
-    `repair._repair_meta` so the two writers cannot drift (#686). A ref is left
-    verbatim when it is cross-repo notation, when it does not resolve, or when
-    it names an existing file other than the one slug resolution would pick
-    (shortening would silently repoint the plan at a same-named spec elsewhere).
-    A path that no longer exists (the spec moved) still canonicalizes by slug —
-    that is the repair doctrine.
+    `implemented/specs/`), unlike a full path. Every `spec:` writer —
+    `plan_ops.create`, `plan_ops.rework_create`, `repair._repair_meta` — calls
+    it, so they cannot drift (#686). A ref is left verbatim when it is
+    cross-repo notation, when it does not resolve, or when it names an
+    existing file OUTSIDE the spec lifecycle roots (`SPEC_ROOTS`): readers
+    resolve by slug either way, so shortening such a path would erase the
+    only visible sign that the operator pointed somewhere else. A path inside
+    a lifecycle root — including one whose spec has since moved, or one that
+    is ambiguous across roots — canonicalizes by slug, as repair always has.
+    `res` lets a caller that already resolved the ref skip a second lookup.
     """
     from fr._urls import is_cross_repo_spec
 
     if is_cross_repo_spec(value):
         return value
-    res = resolve_spec_ref(value, repo_root)
+    if res is None:
+        res = resolve_spec_ref(value, repo_root)
     if res.path is None:
         return value
     candidate = (repo_root / value).resolve()
     if candidate.is_file() and candidate != res.path.resolve():
-        return value
+        sp = (repo_root / "docs" / "superpowers").resolve()
+        roots = [(sp / r) for r in SPEC_ROOTS]
+        if not any(candidate.is_relative_to(r) for r in roots):
+            return value
     return res.path.name

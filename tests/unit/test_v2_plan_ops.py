@@ -1868,3 +1868,23 @@ def test_a_tiered_plan_parses_back_with_its_tier(tmp_path):
     plan = parse(_tiered(tmp_path, "mechanical"))
 
     assert plan.phases[0].phase.tier == "mechanical"
+
+
+def test_rework_create_writes_the_same_canonical_spec_as_repair(tmp_path):
+    """#686 r2-f2: rework create is a third `spec:` writer; a `.md`-less parent
+    ref must come out as repair would write it, so repair has nothing to do."""
+    import yaml as _yaml
+    from fr.plan_ops import rework_create
+    from fr.repair import repair_repo
+
+    repo = _make_repo(tmp_path)
+    spec = _make_spec(repo)
+    parent = _make_archived_parent_plan(repo, "2026-05-08-parent", spec)
+    meta = _yaml.safe_load((parent / "_meta.yaml").read_text())
+    meta["spec"] = spec.stem  # `.md`-less ref
+    (parent / "_meta.yaml").write_text(_yaml.safe_dump(meta, sort_keys=False))
+
+    rework = rework_create(parent)
+    assert rework.meta.spec == spec.name
+    rework_meta = rework.dir / "_meta.yaml"
+    assert not [r for r in repair_repo(repo, write=False).rewrites if r.file == rework_meta]

@@ -710,6 +710,20 @@ def test_single_plan_archive_leaves_other_live_plans_byte_identical(tmp_path, mo
     assert (other / "_meta.yaml").read_bytes() == before
 
 
+def test_single_plan_archive_canonicalizes_the_archived_plans_own_spec(tmp_path, monkeypatch):
+    """#686 r2-f3: the positive half of scoping — the archived plan's own
+    full-path `spec:` is still repaired to the bare form."""
+    repo = _repo(tmp_path)
+    spec = repo / "docs" / "superpowers" / "specs" / "done-design.md"
+    spec.write_text("# done\n")
+    done = _add_plan(repo, "2026-09-01-done", ticked=True, spec_name=spec.name)
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", str(done.relative_to(repo))])
+    assert result.exit_code == 0, result.output
+    archived = repo / "docs" / "superpowers" / "implemented" / "plans" / done.name
+    assert "spec: done-design.md\n" in (archived / "_meta.yaml").read_text()
+
+
 def test_archive_all_still_repairs_repo_wide(tmp_path, monkeypatch):
     repo = _repo(tmp_path)
     _add_plan(repo, "2026-09-01-done", ticked=True)

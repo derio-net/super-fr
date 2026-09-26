@@ -467,3 +467,22 @@ def test_full_path_spec_ref_still_resolves(repo: Path) -> None:
     spec = _bare_spec(repo)
     res = resolve_spec_ref("docs/superpowers/specs/x-design.md", repo)
     assert res.path is not None and res.path.resolve() == spec.resolve()
+
+
+def test_repair_still_rewrites_a_full_path_whose_spec_moved(repo: Path) -> None:
+    """#686 s2-1: the stale full path is exactly what `fr repair` exists for."""
+    (repo / "docs/superpowers/implemented/specs/x-design.md").write_text("# X\n")
+    meta = _plan_with_spec(repo, "2026-09-01-a", "docs/superpowers/specs/x-design.md")
+    repair_repo(repo, write=True)
+    assert meta.read_text() == "plan: 2026-09-01-a\nspec: x-design.md\n"
+
+
+def test_repair_still_shortens_an_ambiguous_lifecycle_path(repo: Path) -> None:
+    """#686 r2-f1: a full path into a lifecycle root is shortened, as before the
+    guard — readers resolve by slug, so keeping it would only keep a warning."""
+    _bare_spec(repo)
+    (repo / "docs/superpowers/implemented/specs/x-design.md").write_text("# X old\n")
+    meta = _plan_with_spec(repo, "2026-09-01-a", "docs/superpowers/implemented/specs/x-design.md")
+    result = repair_repo(repo, write=True)
+    assert meta.read_text() == "plan: 2026-09-01-a\nspec: x-design.md\n"
+    assert any("ambiguous" in w for w in result.warnings)

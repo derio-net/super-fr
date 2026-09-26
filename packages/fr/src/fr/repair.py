@@ -233,7 +233,9 @@ def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: 
             continue
         if len(res.matches) > 1:
             _warn_ambiguous(out, meta_path, f"{fname}:", res)
-        canonical = refs.canonical_spec_ref(value, repo_root) if fname == "spec" else res.path.name
+        canonical = (
+            refs.canonical_spec_ref(value, repo_root, res) if fname == "spec" else res.path.name
+        )
         if value == canonical:
             continue
         lines[i] = f"{fname}: {canonical}\n"

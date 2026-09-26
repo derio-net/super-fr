@@ -749,9 +749,11 @@ def rework_create(parent_plan_dir: Path) -> Plan:
             prior_rework_rel = prior_dir.name
 
     parent_spec = parent_plan.meta.spec
-    if parent_spec and not is_cross_repo_spec(parent_spec):
-        # Same-repo spec refs canonicalize to the bare filename.
-        parent_spec = refs.plan_slug(parent_spec)
+    if parent_spec:
+        # The one canonical `spec:` form, shared with create and repair (#686).
+        parent_spec = refs.canonical_spec_ref(
+            parent_spec, repo_root or superpowers_dir.parent.parent
+        )
 
     meta = {
         "schema_version": 2,
