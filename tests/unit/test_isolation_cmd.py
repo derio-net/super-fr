@@ -800,6 +800,35 @@ def test_verify_merge_cmd_not_verified_exits_1(
     assert "fix2.py" in res.output
 
 
+def test_verify_merge_cmd_not_verified_branch_fetch_failed_shows_reason(
+    repo: Path, fake_run: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: the printer must name a failed/unconfirmed branch fetch as its own
+    reason, not silently fold it into a generic NOT-verified line."""
+    runner.invoke(app, ["isolation", "up", "--repo", str(repo), "--branch", "feat/v"])
+    monkeypatch.setattr(
+        isolation_cmd,
+        "_target_for",
+        lambda root, state: _StubTarget(
+            {
+                "branch": "feat/v",
+                "verified": False,
+                "changes_present": True,
+                "missing": [],
+                "pr_state": "MERGED",
+                "fetched": True,
+                "branch_fetched": False,
+            }
+        ),
+    )
+    res = runner.invoke(
+        app, ["isolation", "verify-merge", "--repo", str(repo), "--branch", "feat/v"]
+    )
+    assert res.exit_code == 1
+    assert "NOT verified" in res.output
+    assert "feat/v" in res.output and "fetch" in res.output.lower()
+
+
 class _RecordingTarget:
     """Live-path stub that records the default_branch verify_merge receives
     (P1.T1.S1 a/b) — proves the CLI resolves via `_resolve_default_branch()`

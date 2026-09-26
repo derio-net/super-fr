@@ -944,6 +944,11 @@ def verify_merge(
     reasons = []
     if not res["fetched"]:
         reasons.append(f"could not fetch origin/{default_branch} (check may be stale)")
+    if not res.get("branch_fetched", True):
+        reasons.append(
+            f"could not confirm origin/{res['branch']} (branch fetch failed and the remote "
+            "may hold unpushed content; not confirmed deleted either)"
+        )
     if not res["changes_present"]:
         reasons.append(f"changes missing from origin/{default_branch}: {res['missing']}")
     if res["pr_state"] != "MERGED":

@@ -3163,6 +3163,44 @@ def test_branch_changes_present_survives_a_later_rewrite_of_its_lines(tmp_path: 
     assert res.missing == []
 
 
+def test_branch_blob_was_on_base_cost_is_constant_per_commit_count(tmp_path: Path) -> None:
+    """C1 perf: `_branch_blob_was_on_base` must answer with a CONSTANT number
+    of git subprocess calls regardless of how many later commits touched the
+    path — not one `git rev-parse` per commit in `merge_base..base_ref`. A
+    generated report/matrix file is touched by nearly every later PR, so an
+    O(N) scan multiplies across every workspace in a gc sweep."""
+    from fr.isolation.local import _branch_blob_was_on_base
+
+    def _build(parent: Path, n_rewrites: int) -> Path:
+        parent.mkdir()
+        repo = make_repo(parent)
+        _commit(repo, "report.md", "head\n", "report base")
+        _git(repo, "checkout", "-q", "-b", "feature")
+        _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+        _squash_merge(repo, "feature", "squash feature")
+        for i in range(n_rewrites):
+            _commit(repo, "report.md", f"head\nFOO2\nBAR2\nrev{i}\n", f"rewrite {i}")
+        return repo
+
+    def _count_calls(repo: Path) -> int:
+        calls: list[list[str]] = []
+
+        def counting_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            calls.append(argv)
+            return subprocess_runner(argv, **kwargs)
+
+        merge_base = _git_out(repo, "merge-base", "main", "feature")
+        found = _branch_blob_was_on_base(
+            counting_runner, repo, merge_base, "feature", "main", "report.md"
+        )
+        assert found
+        return len(calls)
+
+    few = _count_calls(_build(tmp_path / "few", 1))
+    many = _count_calls(_build(tmp_path / "many", 25))
+    assert few == many, f"expected O(1) git calls, got {few} for N=1 vs {many} for N=25"
+
+
 def test_branch_changes_present_orphan_after_merge_and_rewrite_still_missing(
     tmp_path: Path,
 ) -> None:
@@ -3221,6 +3259,98 @@ def test_verify_merge_checks_the_fetched_remote_branch_not_a_stale_local_one(
     monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
     res = target.verify_merge(_state(repo, "feature"), default_branch="main")
     assert res["verified"] is False and "late.py" in res["missing"]
+
+
+def test_verify_merge_single_branch_clone_detects_a_post_merge_remote_push(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: a `--single-branch` clone's configured fetch refspec only covers
+    `main`, so `_branch_refs`' fetch of `feature` must use an EXPLICIT refspec
+    (`+refs/heads/feature:refs/remotes/origin/feature`) — a bare
+    `git fetch origin feature` updates nothing there, leaving `origin/feature`
+    stale/absent and hiding a commit pushed to the remote branch (from a
+    different clone) after the merge."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    # Narrow the fetch refspec the way `git clone --single-branch` configures it.
+    _git(repo, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
+    _git(repo, "checkout", "-q", "feature")
+    # A commit lands on the REMOTE feature branch, from a different clone,
+    # after the merge — this worktree's own local `feature` never sees it.
+    other = tmp_path / "other-clone"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "origin.git"), str(other)], check=True)
+    _git(other, "checkout", "-q", "feature")
+    _commit(other, "late.py", "late\n", "pushed after the merge, from elsewhere")
+    _git(other, "push", "-q", "origin", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert "late.py" in res["missing"]
+
+
+def test_verify_merge_branch_fetch_failure_with_branch_present_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: a failed branch fetch is not automatically a fallback — if
+    `git ls-remote` says the branch still exists, the true remote state is
+    unknown (could hold a post-merge push), so the verdict must be NOT
+    verified, never a pass from stale/local refs alone."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+
+    def flaky_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", "fetch"] and any("feature" in a for a in argv):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="timed out\n")
+        if argv[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="deadbeef\trefs/heads/feature\n", stderr=""
+            )
+        return subprocess_runner(argv, **kwargs)
+
+    target = LocalWorktreeDevcontainerTarget(repo, runner=flaky_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert res["branch_fetched"] is False
+
+
+def test_verify_merge_branch_fetch_failure_unknown_branch_state_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: when even `git ls-remote` fails, the branch's remote state is
+    UNKNOWN (not confirmed gone) — still NOT verified."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+
+    def flaky_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", "fetch"] and any("feature" in a for a in argv):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="timed out\n")
+        if argv[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                argv, 1, stdout="", stderr="could not resolve host\n"
+            )
+        return subprocess_runner(argv, **kwargs)
+
+    target = LocalWorktreeDevcontainerTarget(repo, runner=flaky_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert res["branch_fetched"] is False
 
 
 def test_verify_merge_refuses_an_unpushed_local_commit(
