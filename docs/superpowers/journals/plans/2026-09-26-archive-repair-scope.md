@@ -154,3 +154,8 @@ pre-existing; not caused by this change
 ### r2-f9-resolved · finding [out-of-scope] · resolves r2-f9: v1-to-v2 migration writes spec: verbatim
 
 pre-existing; not caused by this change
+
+<!-- fr:journal kind=finding scope=plan id=r1-n1-resolved-2 created=2026-09-27T00:02:45 state=refuted resolves=r1-n1 -->
+### r1-n1-resolved-2 · finding [refuted] · resolves r1-n1: Some tests are regression pins, pass before the fix
+
+Closeout triage: regression pins that pass before the fix are intended by spec §4 (repo-wide paths must stay); not a defect, so no issue filed.
