@@ -4365,6 +4365,8 @@ rows:
       and non-interactive; a timeout reads as unknown, never as a verdict
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-isolation-network-timeouts-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_network_timeouts.py
+    status: ci
+    notes: unit-pinned by tests/unit/test_isolation_network_timeouts.py
