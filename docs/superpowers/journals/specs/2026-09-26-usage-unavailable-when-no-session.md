@@ -64,3 +64,8 @@ Spec 3.4 states needs_capture behaviour and structure validator round-trip.
 ### spec-review-opus · review · Opus fresh-context spec re-review: 4 findings
 
 Re-run on claude-opus-5-5 per operator correction (the earlier spec-review ran on claude-sonnet-5 and is kept as-is). Raised o1-o4, all in scope; operator decisions and constraints verified honoured; no shape change confirmed (one mixed-version caveat, o4).
+
+<!-- fr:journal kind=finding scope=spec id=o1 created=2026-09-26T23:36:43 state=open review_scope=in -->
+### o1 · finding [open] (reviewer: in scope) · Spec did not cover backfill, which the branch now changes
+
+check: consistency. backfill.py writes the placeholder; spec needed a design line, a Test Plan item and plan files.
