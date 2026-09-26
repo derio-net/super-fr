@@ -4359,3 +4359,41 @@ rows:
     status: ci
     notes: engine regenerates the audit page and the measured half of the architecture
       page; the future-state half is authored (spec §5.A.6)
+  - id: release-on-merge
+    capability: Release integrity
+    acceptance: Merging a PR that carries a change fragment releases it — main gets
+      one bot release commit, tag and GitHub Release listing the fragment summaries,
+      and no CI run starts for that commit
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: prs-never-conflict-on-version
+    capability: Release integrity
+    acceptance: Two PRs that both need a release never conflict over the version — the
+      PR gate demands an added change fragment and refuses any edit to a version surface
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: version-floor-guard
+    capability: Release integrity
+    acceptance: A hand-written fr_version floor can never silently admit an fr that
+      lacks its feature — it must name the predicted release at PR time and the actual
+      release at tag time, or a failure and issue say so
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: concurrent-acceptance-rows-merge-clean
+    capability: Acceptance matrix
+    acceptance: Two PRs adding acceptance rows to different existing capabilities merge
+      without conflict in matrix.yaml or any of the three committed reports
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
