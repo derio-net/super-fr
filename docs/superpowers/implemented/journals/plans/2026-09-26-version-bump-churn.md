@@ -445,3 +445,8 @@ Filed at closeout as #671.
 ### p4-unarchived-plans-tripwire-resolved-2 · finding [fixed] · resolves p4-unarchived-plans-tripwire: LOW: test_tripwire_unarchived_plans fails on the merged tree - two plans from origin/main are complete but unarchived (phase 4)
 
 Both plans (isolation-network-timeouts, plan-table-header) were archived on main by #660/#664.
+
+<!-- fr:journal kind=finding scope=plan id=rp4-f3-resolved-2 created=2026-09-26T08:45:44 state=refuted resolves=rp4-f3 -->
+### rp4-f3-resolved-2 · finding [refuted] · resolves rp4-f3: LOW: committed reports no longer contain row ids (they only appeared in the dropped panels)
+
+Accepted consequence of spec section 3.I, not a defect: ids remain in the ad-hoc report and matrix.yaml.
