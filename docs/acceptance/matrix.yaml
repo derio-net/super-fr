@@ -4380,9 +4380,13 @@ rows:
       its own fix.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
-    levels: {}
-    status: not-implemented
-    notes: gh#603; added at planning, flipped at phase 1.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py
+    status: ci
+    notes: gh#603; pinned by test_create_rejects_spec_with_mislabeled_table_header,
+      test_create_no_table_error_names_the_header_and_creates_nothing, test_append_spec_row_no_table_error_names_the_header,
+      test_append_spec_row_missing_section_error_names_the_header.
   - id: plan-rework-missing-table-stays-strict
     capability: Plan scaffolding
     acceptance: fr plan rework on a spec with no Implementation Plans section still
