@@ -216,7 +216,14 @@ uv run ruff check packages/ tests/                  # lint
 uv run ruff format packages/ tests/                 # format (no --check: writes)
 uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 uv run --no-project python scripts/bump-version.py --check   # version lockstep
+uv run pytest -n auto --no-cov --store-durations    # refresh .test_durations (pytest-split shard weights)
 ```
+
+The `test` job in CI is sharded 4 ways with pytest-split, balanced by the
+committed `.test_durations` file. Refresh it with the command above after a
+test file grows or shrinks a lot — a stale file only makes the shards less
+balanced, never wrong; the CI time-budget watcher is what notices when the
+imbalance starts to cost real wall clock.
 
 `-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
 A test that passes serially but fails under `-n auto` is order-dependent or
@@ -225,10 +232,11 @@ fixture in `tests/conftest.py` (see `_fresh_vk_repo_cache`) rather than
 pinning tests to one worker.
 
 No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`test`, `validate-artifacts`, `opencode-plugin-test`, `version-sync`,
-`change-fragment` jobs) is the single source of truth for the gate; if
-this file and `ci.yml` ever disagree, trust `ci.yml` and fix this file. Run
-`ruff format` then `pytest` yourself before pushing — CI is slow to fail-loud.
+`test` (sharded x4), `coverage`, `validate-artifacts`, `opencode-plugin-test`,
+`version-sync`, `change-fragment` jobs) is the single source of truth for the
+gate; if this file and `ci.yml` ever disagree, trust `ci.yml` and fix this
+file. Run `ruff format` then `pytest` yourself before pushing — CI is slow to
+fail-loud.
 
 Inside an fr-isolation worktree, always `uv run fr ...`, never bare `fr` —
 the PATH `fr` is whatever was last installed globally (the base clone's
