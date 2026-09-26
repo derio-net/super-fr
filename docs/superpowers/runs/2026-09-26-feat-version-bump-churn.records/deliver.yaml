@@ -5,4 +5,4 @@ outcome: done
 acceptance: []
 emitted: {}
 evidence:
-  tests: "deliver-verify.log (orchestrator-run, effc6078): pytest 5976 passed 97 skipped 0 failed; ruff, mypy, version-sync, change-fragment gate, acceptance check+report sync, validate artifacts, both mirror checks, plan self-review all green"
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d/scratchpad/deliver-verify.log
