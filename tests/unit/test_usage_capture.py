@@ -422,7 +422,6 @@ def test_a_placeholder_round_trips_and_costs_nothing(
 
     # a second host with a real capture: only that one is summed
     env = _bare_env(CLAUDE_CODE_SESSION_ID=CC_SESSION, FR_HARNESS="claude-code")
-    monkeypatch.setenv("FR_HOSTNAME", "pod-7.example")
     assert _direct_capture(repo, "deliver", {**env, "FR_HOSTNAME": "pod-7.example"}) is not None
     two = load_usage(usage_path(repo, RUN))
     assert two is not None and len(two.captures) == 2

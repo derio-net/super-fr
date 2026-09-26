@@ -101,6 +101,15 @@ already stops it reading as free). The placeholder validates under
 `validate_usage` (`structure.py:372`, a `UsageFile` round-trip) and, because a
 placeholder-only host capture is a capture, `needs_capture` returns False for it.
 
+### 3.5 Backfill writes the same entry
+
+`fr usage backfill` (`usage/backfill.py::_entries`) had the same defect by a
+second path: an archived cursor naming no session and keeping no figure became
+`sessions: []`. It now writes the same placeholder (harness from the cursor,
+else `unknown`). Found by the Opus whole-feature review. Existing archived
+`sessions: []` files are frozen history and are not rewritten; `fr run cost`
+already reads them as `—` with `0 read, 0 unavailable`, never `$0`.
+
 ## 4. Approach: debugging-first
 
 This is a bug. Phase 1 opens with a failing test that reproduces it (empty

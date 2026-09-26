@@ -145,3 +145,33 @@ def test_rerunning_is_a_no_op(repo: Path) -> None:
     assert "0 backfilled" in result.output
     for run, data in written.items():
         assert archived_usage_path(repo, run).read_bytes() == data
+
+
+NO_SESSIONS = """schema_version: 6
+run: 2026-09-22-feat-sessionless
+workflow: fr-goal@1
+branch: feat/sessionless
+started: '2026-09-22T11:00:00+00:00'
+cursor: deliver
+steps:
+  deliver:
+    state: done
+    at: '2026-09-22T12:00:00+00:00'
+"""
+
+
+def test_a_run_naming_no_session_is_recorded_unavailable_never_empty(repo: Path) -> None:
+    """#636's defect by the backfill path: a cursor that names no session and
+    kept no figures must not become `sessions: []`, which reads as a free run."""
+    from fr.usage.file import NO_SESSION_FOUND
+
+    runs = repo / "docs" / "superpowers" / "implemented" / "runs"
+    (runs / "2026-09-22-feat-sessionless.yaml").write_text(NO_SESSIONS)
+
+    result = _backfill(repo)
+
+    assert result.exit_code == 0, result.output
+    usage = load_usage(archived_usage_path(repo, "2026-09-22-feat-sessionless"))
+    assert usage is not None
+    (entry,) = usage.captures[0].sessions
+    assert (entry.session, entry.unavailable) == ("", NO_SESSION_FOUND)
