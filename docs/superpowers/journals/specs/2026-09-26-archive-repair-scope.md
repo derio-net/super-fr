@@ -69,3 +69,8 @@ spec 4 tests 5-6
 ### s5-resolved · finding [fixed] · resolves s5: Untested create cases
 
 spec 4 tests 3b/4
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus created=2026-09-26T23:36:02 -->
+### spec-review-opus · review · independent spec re-review on claude-opus-5-5: 4 findings
+
+Fresh-context Opus reviewer (agent a85d442d1deeaebef). 3 in scope, 1 out. The earlier Sonnet review 'spec-review' stays recorded. Prior s1-s5 fixes checked and correct, except the s3 wording, which produced s2-1.
