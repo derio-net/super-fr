@@ -79,3 +79,8 @@ Spec 2.B pins the regex and negative cases.
 ### s6-resolved · finding [out-of-scope] · resolves s6: check-change-fragment.py docstring advertises plain python
 
 Stale docstring line is not caused by this change's defect; spec 2.C touches it in passing anyway.
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved-2 created=2026-09-26T13:02:56 state=open resolves=s6 tracked_by=#681 -->
+### s6-resolved-2 · finding [deferred → #681] · resolves s6: check-change-fragment.py docstring advertises plain python
+
+Filed at closeout as #681.
