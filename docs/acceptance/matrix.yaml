@@ -4094,9 +4094,14 @@ rows:
       consecutive calls and still clears the gate as one round.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
     status: not-implemented
-    notes: ''
+    notes: 'Gate half landed (phase 2): answered_rounds_since counts consecutive AskUserQuestion
+      calls as ONE round, so a batch above the tool''s per-call limit clears the gate
+      as one round (unit-tested). Stays not-implemented until the sizing prose lands
+      in phase 3.'
   - id: fr-goal-second-round-announced-and-verified
     capability: fr-goal-methodology
     acceptance: 'A brainstorm may take a second question round only when the record
