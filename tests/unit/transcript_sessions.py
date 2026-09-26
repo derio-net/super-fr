@@ -269,3 +269,51 @@ def text_row(timestamp: str) -> dict[str, Any]:
 def conversation_at(root: Path, rows: list[dict[str, Any]], *, session_id: str) -> Path:
     """A session: the captured orchestrator prelude, then `rows` in order."""
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), *rows])
+
+
+def background_rows(
+    started: str,
+    *,
+    tool_use_id: str = "toolu_bg1",
+    command: str = "uv run pytest -q > /tmp/scratchpad/c1.log 2>&1",
+    notified: str | None = None,
+    notice_id: str | None = None,
+    status: str = "completed",
+    exit_code: int = 0,
+    text_blocks: bool = False,
+) -> list[dict[str, Any]]:
+    """A backgrounded `Bash` exchange in the shape captured from a live Claude
+    Code session (ids and paths redacted): the tool_use, the immediate
+    acknowledgement `tool_result`, and — when `notified` is given — the later
+    `user` record with `origin.kind: task-notification` whose timestamp is the
+    finish time. Built on the captured `Bash` rows; only the fields a test
+    varies are edited. `text_blocks` carries the ack and notification as lists
+    of `text` blocks rather than plain strings."""
+    call, result = bash_rows(started, tool_use_id=tool_use_id)
+    call["message"]["content"][0]["input"]["command"] = command
+    ack = (
+        "Command running in background with ID: bg1. "
+        f"Output is being written to: /tmp/x/{tool_use_id}.output"
+    )
+    result["message"]["content"][0]["content"] = (
+        [{"type": "text", "text": ack}] if text_blocks else ack
+    )
+    rows = [call, result]
+    if notified is not None:
+        body = (
+            f"<task-notification><task-id>bg1</task-id>"
+            f"<tool-use-id>{notice_id or tool_use_id}</tool-use-id>"
+            f"<status>{status}</status>"
+            f'<summary>Background command "suite" completed (exit code {exit_code})</summary>'
+            f"</task-notification>"
+        )
+        note = copy_of(result)
+        note["timestamp"] = notified
+        note["origin"] = {"kind": "task-notification"}
+        note["message"] = {
+            "role": "user",
+            "content": [{"type": "text", "text": body}] if text_blocks else body,
+        }
+        note.pop("toolUseResult", None)
+        rows.append(note)
+    return rows

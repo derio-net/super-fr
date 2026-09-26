@@ -657,3 +657,81 @@ def test_an_unknown_session_id_locates_nothing(tmp_path: Path) -> None:
     }
 
     assert claude_code_session(env) is None
+
+
+def _bg_windows(tmp_path: Path, rows: list[dict], log: str = "/tmp/scratchpad/c1.log"):  # type: ignore[type-arg]
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import ORCHESTRATOR, records, write_session
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-bg", rows=[*records(ORCHESTRATOR), *rows])
+    return orchestrator_wrote_since(
+        _question_env(root, "s-bg"), Path(log), "2026-09-21T16:00:00+00:00"
+    )
+
+
+@pytest.mark.parametrize("text_blocks", [False, True])
+def test_a_backgrounded_write_ends_at_its_task_notification(
+    tmp_path: Path, text_blocks: bool
+) -> None:
+    """Spec 5.1 (gh#594/#607): the ack returns at once; the window runs to the
+    notification's timestamp."""
+    from fr.run.telemetry import parse_timestamp
+
+    from tests.unit.transcript_sessions import background_rows
+
+    rows = background_rows(
+        "2026-09-21T16:05:00.000Z", notified="2026-09-21T16:09:00.000Z", text_blocks=text_blocks
+    )
+    assert _bg_windows(tmp_path, rows) == [
+        (parse_timestamp("2026-09-21T16:05:00.000Z"), parse_timestamp("2026-09-21T16:09:00.000Z"))
+    ]
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["running", "failed", "nonzero", "other-id", "non-writing"],
+)
+def test_a_backgrounded_write_without_a_successful_notification_has_no_window(
+    tmp_path: Path, variant: str
+) -> None:
+    """Spec 5.2: fail closed."""
+    from tests.unit.transcript_sessions import background_rows
+
+    kw: dict = {"notified": "2026-09-21T16:09:00.000Z"}  # type: ignore[type-arg]
+    if variant == "running":
+        kw = {}
+    elif variant == "failed":
+        kw["status"] = "failed"
+    elif variant == "nonzero":
+        kw["exit_code"] = 1
+    elif variant == "other-id":
+        kw["notice_id"] = "toolu_other"
+    else:
+        kw["command"] = "uv run pytest -q"
+    assert _bg_windows(tmp_path, background_rows("2026-09-21T16:05:00.000Z", **kw)) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("L=/x/t.log; pytest > $L", True),
+        ('L=/x/t.log; pytest > "${L}"', True),
+        ("export L=/x/t.log; pytest > $L", True),
+        ("L=/x/a.log; L=/x/t.log; pytest > $L", True),
+        ("A=/x; L=$A/t.log; pytest > $L", True),
+        ("L=$TMPDIR/t.log; pytest > $L", True),
+        ('L=/x/t.log; pytest > "$L" 2>&1', True),
+        ("pytest > $L", False),
+        ("L=/x/t.log; pytest > /y/$L", False),
+        ("pytest > $L; L=/x/t.log", False),
+        ("pytest > $(mktemp)", False),
+        ("L=/x/other.log; pytest > $L", False),
+    ],
+)
+def test_writes_resolves_shell_variable_targets(command: str, expected: bool) -> None:
+    """Spec 5.3."""
+    from fr.run.telemetry import _writes
+
+    assert _writes(command, Path("/x/t.log")) is expected
