@@ -99,3 +99,8 @@ local.py _branch_blob_was_on_base, multiplied by refs, archive alternate and gc 
 ### opus-c2-branch-fetch-ignored · finding [open] (reviewer: in scope) · branch fetch result discarded, no explicit refspec (phase 1)
 
 Single-branch clone or failed fetch left origin/<b> stale; verify_merge could pass over a post-merge push.
+
+<!-- fr:journal kind=finding scope=plan id=opus-c3-diff-failure-reads-as-pass created=2026-09-27T00:07:41 phase=1 state=open review_scope=out -->
+### opus-c3-diff-failure-reads-as-pass · finding [open] (reviewer: out of scope) · failed git diff reads as all changes present (phase 1)
+
+Pre-existing on main; filed as derio-net/super-fr#705.
