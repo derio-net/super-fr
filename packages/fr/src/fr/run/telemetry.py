@@ -635,8 +635,39 @@ transcript, so a parent hop cannot be resolved, and `../x.log` keeps matching
 `…/x.log` as it always has. A `..` mid-path is not collapsed and fails closed."""
 
 
+_ASSIGNMENT = re.compile(r"""(?<![\w$-])([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]*)""")
+"""A `NAME=value` (optionally after `export`) in the same command string."""
+_VARIABLE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
+_SUBSTITUTION_ROUNDS = 5
+
+
+def _resolve_target(target: str, assignments: list[tuple[int, str, str]], at: int) -> str | None:
+    """`target` with same-command variables substituted (spec §3.B). Only
+    assignments that END before `at` (the redirect) count. A variable still
+    unresolved is dropped when it LEADS the path — the environment root is as
+    unknowable from the transcript as the cwd — and anything else (mid-path,
+    the whole target, a command substitution) is `None`: fail closed."""
+    known = {name: value.strip("\"'") for end, name, value in assignments if end <= at}
+    for _ in range(_SUBSTITUTION_ROUNDS):
+        replaced = _VARIABLE.sub(lambda m: known.get(m.group(1) or m.group(2), m.group(0)), target)
+        if replaced == target:
+            break
+        target = replaced
+    lead = _VARIABLE.match(target)
+    if lead:
+        target = target[lead.end() :]
+        if not target.startswith("/") or target == "/":
+            return None
+        target = target.lstrip("/")
+    return None if "$" in target or "(" in target or "`" in target else target
+
+
 def _writes(command: str, log: Path) -> bool:
-    for _quote, target in _WRITE_TARGET.findall(command):
+    assignments = [(m.end(), m.group(1), m.group(2)) for m in _ASSIGNMENT.finditer(command)]
+    for match in _WRITE_TARGET.finditer(command):
+        target = _resolve_target(match.group(2), assignments, match.start())
+        if target is None:
+            continue
         if Path(target).is_absolute():
             if Path(target) == log:
                 return True
@@ -647,6 +678,42 @@ def _writes(command: str, log: Path) -> bool:
         if parts and log.parts[-len(parts) :] == parts:
             return True
     return False
+
+
+_BACKGROUND_ACK = "Command running in background"
+_NOTIFIED_ID = re.compile(r"<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>")
+_NOTIFIED_STATUS = re.compile(r"<status>\s*([^<]*?)\s*</status>")
+_NOTIFIED_EXIT = re.compile(r"exit code\s+(-?\d+)")
+
+
+def _text_of(content: object) -> str:
+    """A message/tool_result `content` as text: a plain string, or a list of
+    `text` blocks (both shapes occur)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            b["text"]
+            for b in content
+            if isinstance(b, Mapping) and b.get("type") == "text" and isinstance(b.get("text"), str)
+        )
+    return ""
+
+
+def _successful_notification(record: Mapping[str, Any]) -> str | None:
+    """The tool_use id a `task-notification` record reports as COMPLETED with no
+    non-zero exit code, else `None` (spec §3.A)."""
+    origin = record.get("origin")
+    if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
+        return None
+    message = record.get("message")
+    text = _text_of(message.get("content") if isinstance(message, Mapping) else None)
+    ident, status = _NOTIFIED_ID.search(text), _NOTIFIED_STATUS.search(text)
+    if not ident or not status or status.group(1) != "completed":
+        return None
+    if any(code != "0" for code in _NOTIFIED_EXIT.findall(text)):
+        return None
+    return ident.group(1)
 
 
 def orchestrator_wrote_since(
@@ -704,10 +771,15 @@ def orchestrator_wrote_since(
             ):
                 issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    background: set[str] = set()
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
         done = parse_timestamp(record.get("timestamp"))
+        finished = _successful_notification(record)
+        if finished in background and done is not None:
+            windows.append((issued[finished], done))
+            continue
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
@@ -718,7 +790,10 @@ def orchestrator_wrote_since(
                 and block.get("is_error") is not True
                 and done is not None
             ):
-                windows.append((issued[block["tool_use_id"]], done))
+                if _text_of(block.get("content")).startswith(_BACKGROUND_ACK):
+                    background.add(block["tool_use_id"])
+                else:
+                    windows.append((issued[block["tool_use_id"]], done))
     return windows
 
 
