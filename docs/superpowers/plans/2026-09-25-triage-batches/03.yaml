@@ -1,0 +1,183 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Verbs - dispatch, merge, skill, release
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - triage-batch-dispatch
+  - triage-batch-forge-visible
+  - triage-batch-version-reserve
+  - triage-batch-merge-queue
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/triage/**
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_import_direction.py
+  - tests/unit/test_triage_batch_dispatch.py
+  - tests/unit/test_triage_batch_version.py
+  - tests/unit/test_triage_batch_merge.py
+  - tests/integration/test_triage_batch_merge_git.py
+  - tests/unit/test_migration_trigger.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - AGENTS.md
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - plugins/*/.claude-plugin/plugin.json
+  - .claude-plugin/marketplace.json
+  - packages/fr-opencode-plugin/package.json
+  - uv.lock
+  - docs/acceptance/**
+  estimate_lines: 2000
+tasks:
+- number: 1
+  title: Dispatch core - soft point, checkout, brief, WorkItem (spec 3.C, 3.I, Test
+    Plan 5, 7, 16, 17)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Write failing tests: test_import_direction.py admits commands/triage_batch_cmd.py as a second find_spec-guarded soft point and still refuses any other fr to fr_dispatch import; in tests/unit/test_triage_batch_dispatch.py a checkout whose origin is another repo is refused, launch defaults resolve from Facts.config at dispatch, a config older than the checkout's last change to .fr/triage.yaml is refused, identical judgements render byte-identical briefs containing the closing ref for every member, the branch, the reserved version only when present, the model line and the no-tracking-issue line, the WorkItem carries repo, workflow fr-goal, tracking None and issues in payload, and dispatch without --yes writes nothing to the file, the adapter or the runner
+  - id: P3.T1.S2
+    text: |-
+      Generalise the import-direction soft point to a tuple and add triage_batch_cmd.py; implement checkout resolution, config staleness, brief rendering and WorkItem construction in triage_batch_cmd.py with the same missing-package message as apply_cmd.py; tests green
+  - id: P3.T1.S3
+    text: |-
+      Refactor or record no-refactor-because P3.T1
+- number: 2
+  title: Dispatch gates, forge writes, repair, reservation (spec 3.C, 3.D, 3.E, Test
+    Plan 8, 11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      Write failing tests with runner and adapter faked: the stage gate refuses dispatched and pr-open whether or not the runner reports the item live; the branch gate refuses a proposed batch whose branch is on origin; can_dispatch is consulted before preflight; label and marker comment go to every member only after runner.dispatch succeeds and the comment carries no handle; a failed dispatch writes nothing; --repair calls no runner, keeps the stored reserved version and posts no duplicate marker; in tests/unit/test_triage_batch_version.py the reservation reads the source version from origin/<default> by key and follows explicit order then dispatch sequence with the batch's bump
+  - id: P3.T2.S2
+    text: |-
+      Implement the step 6 order from spec 3.C, the dispatch event append, the idempotent forge writes through the adapter, --repair, and version reservation; tests green
+  - id: P3.T2.S3
+    text: |-
+      Refactor or record no-refactor-because P3.T2
+- number: 3
+  title: Merge planning, reconcile, refusals (spec 3.D, 3.F, Test Plan 11-13)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      Write failing tests in tests/unit/test_triage_batch_merge.py with the adapter faked: explicit order is a hard constraint, overlapping batches are not adjacent when avoidable, ties break deterministically; the printed plan names shared files per step; reconcile re-slots after a reorder, an up-to-date PR holding the wrong slot takes step 3b, and nothing merges at a version not above main's; a draft, a failing required check, a moved head, a protection refusal (reported verbatim) and an UnsupportedForgeOperation each stop the queue with their message
+  - id: P3.T3.S2
+    text: |-
+      Implement merge ordering, the plan printout, reconcile and the step 1-2 refusals over the adapter; tests green
+  - id: P3.T3.S3
+    text: |-
+      Refactor or record no-refactor-because P3.T3
+- number: 4
+  title: Merge execution against real git (spec 3.F, Test Plan 14)
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Write a failing integration test in tests/integration/test_triage_batch_merge_git.py: a local bare origin with real multi-file version manifests (TOML, JSON, a lockfile) and three PR branches, the forge faked; the first merges, the second (behind, version-only conflict) is resolved by checkout --theirs then set with the scratch worktree as cwd and merges, the third (conflict in a non-version file) stops with the path named and its scratch worktree kept; a re-run resumes at the first unmerged PR
+  - id: P3.T4.S2
+    text: |-
+      Implement the scratch worktree under the triage state directory, the version-file-only resolution, set and relock, commit, push, the foreground check wait, and cleanup after a successful merge; test green
+  - id: P3.T4.S3
+    text: |-
+      Refactor or record no-refactor-because P3.T4
+- number: 5
+  title: Docs, skill, mirrors, release (spec 3.H, 5, Test Plan 18)
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      Amend the triage paragraph of fr/artifacts/trigger.py's READ_ONLY_COMMANDS docstring for forge writes and scratch-worktree pushes, leaving the pinned tuple unchanged, and confirm test_migration_trigger.py's exemption test still passes
+  - id: P3.T5.S2
+    text: |-
+      Update plugins/super-fr/skills/fr-triage/SKILL.md per spec 3.H (loop step 5 batch, the --yes sentence, batches/events/schema 2 in the judgements section), then regenerate both mirrors with scripts/sync-opencode.py and scripts/sync-hermes.py, and update AGENTS.md's fr/triage paragraph for the batch verbs and schema 3 facts plus an fr-herdr bullet under packages/, the README.md package table and HERMES.md's package prose (phase 1 review, finding r1-docs)
+  - id: P3.T5.S3
+    text: |-
+      Bump the minor version with `uv run --no-project python scripts/bump-version.py minor` and commit the manifests with uv.lock
+- number: 6
+  title: REFACTOR and quality gate
+  steps:
+  - id: P3.T6.S1
+    text: |-
+      Run `uv run pytest -q --no-cov -n auto`, `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the AGENTS.md mypy line, `scripts/sync-opencode.py --check`, `scripts/sync-hermes.py --check`, `bump-version.py --check`, `fr harness parity --check` and `fr validate artifacts`; fix every failure at its cause
+  - id: P3.T6.S2
+    text: |-
+      Move triage-batch-dispatch, triage-batch-forge-visible, triage-batch-version-reserve and triage-batch-merge-queue to ci with their unit and integration refs via `fr acceptance set-status`, noting on merge-queue that the live walk (phase 4) is still owed; run `fr acceptance check`
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T22:17:03+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T22:17:04+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-25T22:17:05+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T22:19:41+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T22:19:42+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T22:19:43+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-25T22:24:48+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-25T22:24:49+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-09-25T22:24:50+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-09-25T22:27:52+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-09-25T22:27:52+00:00'
+      note: null
+    P3.T4.S3:
+      state: x
+      ticked_at: '2026-09-25T22:27:53+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-09-25T22:29:46+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-09-25T22:29:47+00:00'
+      note: null
+    P3.T5.S3:
+      state: x
+      ticked_at: '2026-09-25T22:29:48+00:00'
+      note: null
+    P3.T6.S1:
+      state: x
+      ticked_at: '2026-09-25T22:41:57+00:00'
+      note: null
+    P3.T6.S2:
+      state: x
+      ticked_at: '2026-09-25T22:41:57+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T22:41:58+00:00'
+    note: null
+    observed_prs: []

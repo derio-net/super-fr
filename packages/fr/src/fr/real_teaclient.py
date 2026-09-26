@@ -32,6 +32,7 @@ import re
 from typing import Any, cast
 
 from fr import tea as _tea
+from fr.ghclient import UnsupportedBatchOps
 from fr.labels import LabelDef
 
 # Gitea-specific PR URL shape (https://{host}/{owner}/{repo}/pulls/{n}).
@@ -42,8 +43,10 @@ from fr.labels import LabelDef
 _PR_URL_RE = re.compile(r"^https://[^/]+/([^/]+/[^/]+)/pulls/(\d+)/?$")
 
 
-class RealTeaClient:
+class RealTeaClient(UnsupportedBatchOps):
     """Wraps `fr.tea` to satisfy the `GhClient` Protocol for Gitea repos."""
+
+    backend = "gitea"  # §3.J batch operations: declared unsupported (gh#611)
 
     def view_issue(self, repo: str, number: int) -> dict[str, Any]:
         raw = cast("dict[str, Any]", _tea.view_issue(repo, number))

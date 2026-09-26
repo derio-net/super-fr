@@ -83,3 +83,23 @@ def test_the_tier_shape_the_example_teaches_survives_hostile_free_text(
     judgements = load_judgements(path)
 
     assert all(t.description == free_text for t in judgements.tiers)
+
+
+def test_the_skill_teaches_schema_2_and_batches(tmp_path: Path) -> None:
+    """Review r2p-f14: agents copy the skill, so it must never say `schema: 1`,
+    and its example must show a batch that loads through the real model."""
+    text = SKILL.read_text()
+    assert "schema: 1" not in text
+    assert re.search(r"^schema: 2$", _example(), re.M)
+    path = tmp_path / "judgements.yaml"
+    path.write_text(_example())
+    judgements = load_judgements(path)
+    assert judgements.batches, "the example should show a batch"
+    assert all(not b.events for b in judgements.batches), "events are engine-written"
+
+
+def test_the_skill_names_the_batch_verbs_and_the_yes_rule() -> None:
+    text = SKILL.read_text()
+    for verb in ("batch suggest", "batch create", "batch dispatch", "batch merge", "batch cancel"):
+        assert verb in text, verb
+    assert "--yes" in text

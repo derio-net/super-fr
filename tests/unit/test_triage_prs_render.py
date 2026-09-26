@@ -32,7 +32,7 @@ def _pr(number: int, **kw: Any) -> PullRequest:
 def _facts(prs: list[PullRequest]) -> Facts:
     return Facts.model_validate(
         {
-            "schema": 2,
+            "schema": 3,
             "scope": "derio-net--super-fr",
             "kind": "repo",
             "collected_at": "2026-09-22T12:00:00+00:00",

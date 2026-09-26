@@ -460,6 +460,7 @@ context file (it outranks `AGENTS.md`, so read both).
 | `fr-dispatch` | Runner protocol + tick framework (library, runner-agnostic) |
 | `fr-vk` | VibeKanban adapter: MCP client, card/workspace dispatch, bridge daemon |
 | `fr-cncd` | CNC daemon runner adapter |
+| `fr-herdr` | herdr runner: takes `fr triage batch dispatch` runs into a herdr tab (the first run-unit runner) |
 | `fr-opencode-plugin` | OpenCode `tool.execute.before` port of the isolation edit guard |
 | `plugins/super-fr/hooks/hermes/` | Hermes `pre_tool_call` ports of the isolation edit + bash/push guards |
 

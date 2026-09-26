@@ -60,7 +60,7 @@ def _pr(number: int, *, repo: str = REPO) -> PullRequest:
 def _facts(issues: list[Issue], **kw: Any) -> Facts:
     return Facts.model_validate(
         {
-            "schema": 2,
+            "schema": 3,
             "scope": "derio-net--super-fr",
             "kind": "repo",
             "collected_at": "2026-09-21T12:00:00+00:00",

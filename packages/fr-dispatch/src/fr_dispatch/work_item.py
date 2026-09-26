@@ -41,6 +41,22 @@ spec-level id can never collide with a run-level one.
 both key on `id` alone. `payload` is incidental cargo (it carries a `Plan`
 and a `PhaseDoc` on the phase path), so letting it participate in equality
 would make a set hold two copies of one graph position.
+
+**Run-unit payload** (spec 2026-09-25-triage-batches §3.C). A `unit="run"`
+item from `fr triage batch dispatch` has `workflow="fr-goal"`, `parent=None`,
+`inputs=()`, `tracking=None` (a multi-issue batch is not one tracker Issue to
+stamp), and a payload a run-capable runner must honour:
+
+- `brief` — the engine-rendered prompt that starts the run;
+- `harness` — which agent harness to launch (e.g. `claude`);
+- `model` — the model for every subagent and tier, passed to the harness;
+- `branch` — the branch the run works on (`feat/batch-<id>`);
+- `reserved_version` — the version the run bumps to, or None;
+- `issues` — the member issue keys, for the runner's bookkeeping.
+
+An optional `checkout` names the local clone to start the run in; a runner
+falls back to its own working directory. `RUN_PAYLOAD_KEYS` lists the six;
+`fr_dispatch.testing.check_run_unit_contract` is the reusable test.
 """
 
 from __future__ import annotations
@@ -50,6 +66,15 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Unit = Literal["run", "phase", "spec"]
+
+RUN_PAYLOAD_KEYS: tuple[str, ...] = (
+    "brief",
+    "harness",
+    "model",
+    "branch",
+    "reserved_version",
+    "issues",
+)
 
 # The fourth grammar level ("plan") is a parent only — no `unit` value pairs
 # with it. `_id_level` returns this in addition to `Unit`'s three members.

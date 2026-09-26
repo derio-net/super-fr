@@ -126,7 +126,7 @@ def test_open_pr_anchor_uses_spec_before_debug_and_reads_its_head_body() -> None
         "intent",
         None,
     )
-    assert forge.called("read_file_at_ref") == [
+    assert forge.anchor_reads() == [
         {
             "repo": "example.com/repo",
             "path": "docs/superpowers/specs/intent.md",
@@ -182,7 +182,7 @@ def test_open_pr_anchor_is_unanchored_without_a_matching_file_or_after_forge_err
         ("unanchored", "no matching intent file"),
         ("unanchored", "HTTP 502"),
     ]
-    assert forge.called("read_file_at_ref") == [
+    assert forge.anchor_reads() == [
         {"repo": "example.com/repo", "path": "docs/superpowers/specs/intent.md", "ref": "topic"}
     ]
 
@@ -217,4 +217,4 @@ def test_closing_issue_anchor_wins_before_file_anchors() -> None:
 
     assert facts.prs == []
     assert facts.issues[0].prs[0].anchor == "issue"
-    assert forge.called("read_file_at_ref") == []
+    assert forge.anchor_reads() == []

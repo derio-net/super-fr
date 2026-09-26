@@ -8,7 +8,33 @@ process spawning.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol
+
+FORGE_PARITY_ISSUE = "gh#611"
+"""Where the missing non-GitHub implementations are tracked (spec
+2026-09-25-triage-batches §3.J, decision d6)."""
+
+MERGE_METHODS = frozenset({"merge", "squash", "rebase"})
+
+
+class UnsupportedForgeOperation(Exception):  # noqa: N818 — the name the spec (§3.J) fixes
+    """A `GhClient` method this backend declares it does not implement.
+
+    Raised by the glab/tea adapters one method at a time (spec
+    2026-09-25-triage-batches §3.J), so the unsupported cells of the forge
+    parity table are readable in the adapters themselves rather than as a
+    `backend != "github"` check scattered through callers. Callers turn it
+    into exit 2 with its message; it is never a silent no-op.
+    """
+
+    def __init__(self, op: str, backend: str, tracked_by: str = FORGE_PARITY_ISSUE) -> None:
+        self.op = op
+        self.backend = backend
+        self.tracked_by = tracked_by
+        super().__init__(
+            f"`{op}` is not supported on the {backend} backend yet (tracked in {tracked_by})"
+        )
 
 
 class GhClient(Protocol):
@@ -109,3 +135,109 @@ class GhClient(Protocol):
         Used by `fr spec status` to read a cross-repo plan's phase files (#339).
         """
         ...
+
+    # ---- batch operations (spec 2026-09-25-triage-batches §3.J) ----
+    # Implemented for GitHub; the glab/tea adapters raise
+    # `UnsupportedForgeOperation` for each (gh#611).
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """Every comment on the issue, oldest first: `{author, body, created_at}`."""
+        ...
+
+    def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        """Every PR (any state) whose head branch is *branch*, as `gh pr list`
+        records with `fr.gh.PR_LIST_FIELDS` plus `headRefOid`."""
+        ...
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        """`{state, draft, head_oid, head_ref, mergeable, merge_state}` of one PR,
+        read fresh. `state` is OPEN | CLOSED | MERGED."""
+        ...
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        """The PR's REQUIRED checks: `{name, bucket, state}`, where `bucket` is
+        pass | fail | pending | skipping | cancel. Empty when none are required."""
+        ...
+
+    def wait_required_checks(
+        self,
+        repo: str,
+        number: int,
+        *,
+        interval: float = 30.0,
+        timeout: float = 3600.0,
+        grace: float = 120.0,
+        sleep: Callable[[float], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Poll `pr_required_checks` until none is pending, or *timeout* seconds of
+        waiting have passed; return the last answer either way (the caller reads
+        the buckets).
+
+        An empty answer is not trusted for the first *grace* seconds: right
+        after a push the forge has registered no check runs yet, so `[]` then
+        means "not started", not "none required" (review r2p-f10)."""
+        ...
+
+    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        """Merge the PR only if its head is still *head_sha*; *method* is one of
+        `MERGE_METHODS`. Never bypasses branch protection: a refusal raises
+        with the forge's own message."""
+        ...
+
+    def closing_ref(self, repo: str, number: int) -> str:
+        """The PR-body line that closes issue *number* of *repo* on merge."""
+        ...
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        """`{default, allowed}`: the viewer's default merge method for *repo*
+        (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
+        ...
+
+
+class UnsupportedBatchOps:
+    """The §3.J batch operations, each declared unsupported for `backend`.
+
+    Mixed into `RealGlabClient` and `RealTeaClient` (spec
+    2026-09-25-triage-batches §3.J): one method per operation, each raising
+    `UnsupportedForgeOperation` naming itself, so a backend that gains one
+    overrides exactly that method and the rest stay declared. This is the
+    surface gh#611's forge parity table reads.
+    """
+
+    backend: str = "unknown"
+
+    def _unsupported(self, op: str) -> UnsupportedForgeOperation:
+        return UnsupportedForgeOperation(op, self.backend)
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        raise self._unsupported("list_issue_comments")
+
+    def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
+        raise self._unsupported("list_prs_by_head")
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        raise self._unsupported("pr_view")
+
+    def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+        raise self._unsupported("pr_required_checks")
+
+    def wait_required_checks(
+        self,
+        repo: str,
+        number: int,
+        *,
+        interval: float = 30.0,
+        timeout: float = 3600.0,
+        grace: float = 120.0,
+        sleep: Callable[[float], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        raise self._unsupported("wait_required_checks")
+
+    def pr_merge(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
+        raise self._unsupported("pr_merge")
+
+    def closing_ref(self, repo: str, number: int) -> str:
+        raise self._unsupported("closing_ref")
+
+    def repo_merge_methods(self, repo: str) -> dict[str, Any]:
+        raise self._unsupported("repo_merge_methods")

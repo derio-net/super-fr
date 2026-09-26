@@ -16,17 +16,28 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
 from fr.triage.stage import Stage, derive_stage
 
-FACTS_SCHEMA: Literal[2] = 2
-JUDGEMENTS_SCHEMA: Literal[1] = 1
+FACTS_SCHEMA: Literal[3] = 3
+# The version this fr WRITES: every engine write of `batches:` stamps 2 (spec
+# 2026-09-25-triage-batches §3.A); the loader reads every version in JUDGEMENTS_READS.
+JUDGEMENTS_SCHEMA: Literal[2] = 2
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2)
 
 ScopeKind = Literal["repo", "org"]
 Cx = Literal["XS", "S", "S-M", "M", "L", "-"]
@@ -36,8 +47,31 @@ TruncatedList = Literal["repos", "issues", "prs"]
 AnchorKind = Literal["issue", "spec", "debug", "unanchored"]
 Delivery = Literal["delivers", "partial", "drift", "unanchored"]
 
+# The hidden first line of the comment a batch dispatch posts on each member
+# (spec 2026-09-25-triage-batches §3.E). `collect` dates a dispatch by it, so the
+# grammar lives here, beside the field it fills. A withdrawal uses a DIFFERENT
+# prefix: `<!-- fr-batch:` never matches `<!-- fr-batch-withdrawn:`.
+BATCH_MARKER_PREFIX = "<!-- fr-batch:"
+WITHDRAWN_MARKER_PREFIX = "<!-- fr-batch-withdrawn:"
+
+
+def batch_marker(item_id: str) -> str:
+    """The dispatch marker for the run item *item_id* (`<repo>/run/batch-<id>`)."""
+    return f"{BATCH_MARKER_PREFIX}{item_id} -->"
+
+
+def withdrawn_marker(item_id: str) -> str:
+    """The marker that opens a `batch cancel` comment for *item_id*."""
+    return f"{WITHDRAWN_MARKER_PREFIX}{item_id} -->"
+
+
 # "<repo-name>#<number>" in both scopes (spec §3.D): one code path.
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
+
+# A batch id is a slug (spec 2026-09-25-triage-batches §3.A): it becomes the
+# branch `feat/batch-<id>` and the item id `<repo>/run/batch-<id>`.
+BATCH_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
+Bump = Literal["patch", "minor", "major"]
 
 
 def normalize_key(key: str) -> str:
@@ -107,8 +141,13 @@ class PullRequest(_Strict):
     state: PrState
     is_draft: bool
     merged_at: str | None = None
+    # When the PR was opened (`createdAt`): dates it against a batch's last
+    # dispatch, so a PR from an earlier dispatch is not this one's (r2p-f1).
+    created_at: str | None = None
     url: str
     head_ref: str = ""
+    head_oid: str = ""  # open PRs only (the open-PR list carries headRefOid)
+    files: list[str] = []  # open PRs only: the paths the PR touches
     checks: dict[str, int] = {"pass": 0, "fail": 0, "pending": 0}
     mergeable: str = "UNKNOWN"
     merge_state: str = "UNKNOWN"
@@ -131,6 +170,9 @@ class Issue(_Strict):
     closed_at: str | None = None
     body: str = ""
     prs: list[PullRequest] = []  # most advanced first
+    # createdAt of the latest fr-batch dispatch marker comment; read only for
+    # issues labelled fr:in-progress (spec §3.E stale dispatch).
+    dispatch_marker_at: str | None = None
 
     @property
     def key(self) -> str:
@@ -184,6 +226,49 @@ class Truncation(_Strict):
 _LIST_WORDS: dict[str, str] = {"prs": "PR list", "issues": "issue list", "repos": "repo list"}
 
 
+class Launch(_Strict):
+    """How a batch is launched: runner, harness and model (spec §3.B).
+
+    Every field is optional: a batch stores only what was given explicitly,
+    and dispatch resolves the rest from `defaults.launch` (§3.I), never by
+    picking one itself.
+    """
+
+    runner: str | None = None
+    harness: str | None = None
+    model: str | None = None
+
+
+class VersionSource(_Strict):
+    file: str
+    key: str
+
+
+class VersionBlock(_Strict):
+    """`.fr/triage.yaml`'s `version:` — the opt-in to reservations (spec §3.D)."""
+
+    source: VersionSource
+    files: list[str]
+    set_: str = Field(alias="set")
+    relock: str | None = None
+
+
+class ConfigDefaults(_Strict):
+    launch: Launch = Launch()
+
+
+class TriageConfig(_Strict):
+    """`.fr/triage.yaml` of one repo, read at its default branch (spec §3.I).
+
+    An absent file is `TriageConfig()`: no launch defaults, no reservations,
+    a 3-day stale-dispatch threshold.
+    """
+
+    defaults: ConfigDefaults = ConfigDefaults()
+    version: VersionBlock | None = None
+    stale_dispatch_days: int = Field(default=3, ge=0)
+
+
 class Facts(_Strict):
     """What `collect` read from the forge for one scope.
 
@@ -192,7 +277,7 @@ class Facts(_Strict):
     "N repos" a reader presents, use `collected` (review r-p2-repos-doc).
     """
 
-    schema_: Literal[2] = Field(2, alias="schema")
+    schema_: Literal[3] = Field(3, alias="schema")
     scope: str
     kind: ScopeKind
     collected_at: str
@@ -202,6 +287,15 @@ class Facts(_Strict):
     skipped: list[Skipped] = []
     unviewed: list[Unviewed] = []
     warnings: list[Truncation] = []
+    # PRs found by head branch for batches at `dispatched` (spec §3.A): a merged
+    # PR that lost every Closes line is linked to no member, so only this finds it.
+    batch_prs: list[PullRequest] = []
+    # `.fr/triage.yaml` per OWNER/REPO; a repo without the file has no entry.
+    config: dict[str, TriageConfig] = {}
+
+    def config_for(self, repo: str) -> TriageConfig:
+        """*repo*'s collected config, or the defaults when it declares none."""
+        return self.config.get(repo, TriageConfig())
 
     @property
     def collected(self) -> list[str]:
@@ -249,12 +343,98 @@ class Pattern(_Strict):
         return [normalize_key(k) for k in v]
 
 
+class DispatchEvent(_Strict):
+    """A batch was handed to a runner (spec §3.A). Written by the engine only."""
+
+    kind: Literal["dispatch"]
+    at: AwareDatetime
+    runner: str
+    handle: str  # opaque to triage; never posted to the forge
+    branch: str
+    reserved_version: str | None = None  # absent when the repo declares no version block
+
+
+class CancelEvent(_Strict):
+    """A batch was withdrawn (spec §3.E cancel). Written by the engine only."""
+
+    kind: Literal["cancel"]
+    at: AwareDatetime
+    reason: str = ""
+
+
+BatchEvent = Annotated[DispatchEvent | CancelEvent, Field(discriminator="kind")]
+
+
+class Batch(_Strict):
+    """A group of judged issues delivered as one run (spec §3.A).
+
+    Structural rules hold here, from the file alone: the id is a slug, `ids` is
+    non-empty, each id is a key (normalised like `Pattern.ids`) and all name one
+    repo, and `events` is time-ordered. That every member is judged is the
+    enclosing `Judgements`' rule; the open-batch rule needs facts, so it is
+    `fr.triage.batch`'s.
+    """
+
+    id: str
+    title: str
+    ids: list[str] = Field(min_length=1)
+    rationale: str = ""
+    order: int | None = None
+    bump: Bump = "patch"
+    launch: Launch = Launch()
+    events: list[BatchEvent] = []
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _id_is_a_slug(cls, v: object) -> object:
+        """Lowercased first, so `Lifecycle` and `lifecycle` are one batch id."""
+        if not isinstance(v, str) or not BATCH_ID_RE.match(v.lower()):
+            raise ValueError(f"batch id must match {BATCH_ID_RE.pattern}, got {v!r}")
+        return v.lower()
+
+    @field_validator("ids")
+    @classmethod
+    def _ids_are_keys_of_one_repo(cls, v: list[str]) -> list[str]:
+        bad = _bad_keys(list(v))
+        if bad:
+            raise ValueError(f"batch ids must be '<repo-name>#<number>', got {bad!r}")
+        keys = [normalize_key(k) for k in v]
+        twice = sorted({k for k in keys if keys.count(k) > 1})
+        if twice:
+            # Review r2p-f5: caught here, or the open-batch rule later reports the
+            # batch clashing with itself ("is in x, x").
+            raise ValueError(f"a batch lists {', '.join(twice)} more than once")
+        repos = sorted({k.rpartition("#")[0] for k in keys})
+        if len(repos) > 1:
+            raise ValueError(f"a batch's members must be in one repo, got {repos}")
+        return keys
+
+    @field_validator("events")
+    @classmethod
+    def _events_are_time_ordered(cls, v: list[DispatchEvent | CancelEvent]) -> list[Any]:
+        for earlier, later in zip(v, v[1:], strict=False):
+            if later.at < earlier.at:
+                raise ValueError(
+                    f"batch events must be time-ordered: {later.kind} at {later.at} "
+                    f"follows {earlier.kind} at {earlier.at}"
+                )
+        return v
+
+    @property
+    def repo_name(self) -> str:
+        """The `<repo-name>` part every member key shares."""
+        return self.ids[0].rpartition("#")[0]
+
+
 class Judgements(_Strict):
-    schema_: Literal[1] = Field(1, alias="schema")
+    """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
+
+    schema_: Literal[1, 2] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
     patterns: list[Pattern] = []
+    batches: list[Batch] = []
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -286,20 +466,51 @@ class Judgements(_Strict):
             raise ValueError(f"judgements name undeclared tiers {undeclared}")
         return self
 
+    @model_validator(mode="after")
+    def _batch_members_are_judged_and_ids_unique(self) -> Judgements:
+        """Every member is judged, and batch ids are unique (ids are already
+        lowercased, so this is the case-insensitive check spec §3.A asks for)."""
+        seen: set[str] = set()
+        for batch in self.batches:
+            if batch.id in seen:
+                raise ValueError(
+                    f"batch ids must be unique (case-insensitively): {batch.id!r} appears twice"
+                )
+            seen.add(batch.id)
+            unjudged = [k for k in batch.ids if k not in self.issues]
+            if unjudged:
+                raise ValueError(f"batch {batch.id!r}: members {unjudged} are not judged")
+        return self
+
+    @model_validator(mode="after")
+    def _batches_need_schema_2(self) -> Judgements:
+        """Batches exist only under schema 2 (spec §3.A). A schema-1 stamp over a
+        `batches:` list is a writer that forgot to restamp, and a schema-1 reader
+        cannot hold it, so it is refused rather than loaded."""
+        if self.batches and self.schema_ != 2:
+            raise ValueError(
+                f"`batches:` needs schema 2, but this file is stamped schema {self.schema_}"
+            )
+        return self
+
 
 # ------------------------------------------------------------------- loaders
 
 
-def _check_schema(path: Path, data: object, expected: int, remedy: str = "") -> dict[str, Any]:
+def _check_schema(
+    path: Path, data: object, expected: int | tuple[int, ...], remedy: str = ""
+) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TriageError(f"{path}: expected a mapping at the top level")
+    accepted = (expected,) if isinstance(expected, int) else expected
     value = data.get("schema")
     # `type(...) is int`, not `==`: True == 1 == 1.0, and pydantic's Literal[1]
     # accepts all three, so `schema: true` would otherwise load (r-p2-schema-strict).
-    if type(value) is not int or value != expected:
+    if type(value) is not int or value not in accepted:
         suffix = f"; {remedy}" if remedy else ""
+        reads = " or ".join(str(v) for v in accepted)
         raise TriageError(
-            f"{path}: unsupported schema {value!r} (this fr reads schema {expected}){suffix}"
+            f"{path}: unsupported schema {value!r} (this fr reads schema {reads}){suffix}"
         )
     return data
 
@@ -323,6 +534,6 @@ def load_judgements(path: Path) -> Judgements:
     except (OSError, yaml.YAMLError) as exc:
         raise TriageError(f"{path}: cannot read judgements: {exc}") from exc
     try:
-        return Judgements.model_validate(_check_schema(path, data, JUDGEMENTS_SCHEMA))
+        return Judgements.model_validate(_check_schema(path, data, JUDGEMENTS_READS))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid judgements: {exc}") from exc

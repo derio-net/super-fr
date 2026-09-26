@@ -1,0 +1,185 @@
+schema_version: 1
+run: 2026-09-23-feat-triage-batches
+captures:
+- host: h-ccacaef8
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-25T22:42:45+00:00'
+  at:
+  - migrated
+  sessions:
+  - session: (main)
+    role: main
+    models:
+      unknown:
+        input: 144
+        cache_write: 677341
+        cache_read: 19522902
+        output: 87536
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      spec-review:
+        usd: null
+        turns: 26
+      plan:
+        usd: null
+        turns: 44
+      plan-review:
+        usd: null
+        turns: 0
+  - session: aafbc50c4914c1a73
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 68
+        cache_write: 94505
+        cache_read: 2701986
+        output: 528
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/implement-phase: 1425
+  - session: phase/1/review-phase#1
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 40
+        cache_write: 95448
+        cache_read: 1267830
+        output: 1674
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/1/review-phase: 3603
+  - session: a5bddba9f7040ce56
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 226
+        cache_write: 301694
+        cache_read: 22755808
+        output: 2307
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/implement-phase: 5798
+  - session: phase/2/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/2/review-phase: 13989
+  - session: a7e0a33450b6066e3
+    role: subagent:super-fr:fr-phase-executor
+    models:
+      claude-opus-5-5:
+        input: 234
+        cache_write: 293489
+        cache_read: 23956755
+        output: 1314
+        usd: null
+        usd_source: none
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/implement-phase: 18424
+  - session: phase/3/review-phase#1
+    role: main
+    models: {}
+    activity: {}
+    steps:
+      implement:
+        usd: null
+        turns: null
+    briefs:
+      phase/3/review-phase: 22794
+- host: h-8278cdf9
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-25T23:56:57+00:00'
+  at:
+  - resolve:review-phase
+  - deliver
+  sessions:
+  - session: dcff6006-440b-4a29-b738-f04b65457c17
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1686
+        cache_write: 4018974
+        cache_read: 156105580
+        output: 228029
+        usd: 17.428725199999967
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001004
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 7.374477126283053
+        turns: 438
+      other:
+        usd: 5.673861382234231
+        turns: 212
+      paperwork:
+        usd: 4.381390691482731
+        turns: 201
+    steps:
+      (outside run):
+        usd: 0.5583373229605995
+        turns: 32
+      brainstorm:
+        usd: 1.8288571141977807
+        turns: 66
+      spec-review:
+        usd: 1.2891185714213793
+        turns: 81
+      plan:
+        usd: 2.093450493582365
+        turns: 44
+      implement:
+        usd: 10.38384608906787
+        turns: 577
+      deliver:
+        usd: 1.276119608770008
+        turns: 31
+    briefs:
+      a7d2b3feca4fcf8ed: 2205
+      aa45425c178039a51: 2245
+      a9ae7849864d975a9: 1473
+      phase/1/implement-phase: 2455
+      a8b28fa83cb208e61: 2188
+      phase/2/implement-phase: 3485
+      acdf4d2daf28e4e44: 3214
+      a537103b33140548a: 4930
+      phase/3/implement-phase: 4581
+      a9bca9286ced70018: 3579
+      a2cf46966a3f1035b: 6123
