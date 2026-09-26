@@ -64,3 +64,8 @@ Fixed in 0f2352f4 with a red-first test in tests/unit/test_run_telemetry.py.
 ### opus-r4-completed-uncaptured-resolved · finding [refuted] · resolves opus-r4-completed-uncaptured: completed status never captured live
 
 Verified against the live transcript of this session: 3 genuine user notices carry <status>completed</status> and origin.kind task-notification (plus 2 failed); the literal the helper substitutes is the real one.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r5-unhashable-id-resolved created=2026-09-26T23:40:32 state=open resolves=opus-r5-unhashable-id out_of_scope=true -->
+### opus-r5-unhashable-id-resolved · finding [out-of-scope] · resolves opus-r5-unhashable-id: unhashable tool_use_id raises TypeError
+
+Pre-existing on origin/main, needs a malformed transcript; not caused by this change.
