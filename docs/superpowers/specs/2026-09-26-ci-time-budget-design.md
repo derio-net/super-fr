@@ -76,20 +76,33 @@ no single PR crossed a line that anyone could see.
   that one red shard still reports the other three:
 
   ```
-  uv run pytest -n auto --splits 4 --group ${{ matrix.shard }} \
-    --splitting-algorithm least_duration \
-    --cov-report= --cov-fail-under=0
+  uv run pytest -o addopts="--strict-markers --cov" --cov-report= \
+    -n auto --splits 4 --group ${{ matrix.shard }} \
+    --splitting-algorithm least_duration
   ```
 
-  with `COVERAGE_FILE=.coverage.shard${{ matrix.shard }}`. Each shard uploads
+  with `COVERAGE_FILE=.coverage.shard${{ matrix.shard }}`. **`addopts` is
+  cleared per shard, not patched.** pytest-cov accumulates `--cov-report`
+  values into a dict (`pytest_cov/plugin.py` `StoreReport`), so a CLI
+  `--cov-report=` cannot cancel `addopts`' `term-missing`. Each shard would
+  otherwise print a whole-codebase coverage table for a quarter of the tests.
+  To keep the override from restating the package list, the `--cov=<pkg>`
+  sources move from `addopts` into `[tool.coverage.run] source`. `addopts`
+  becomes `--strict-markers --cov --cov-report=term-missing --cov-fail-under=75`
+  (a bare `--cov` reads `source`), so local runs behave exactly as before. A
+  unit test (§7.8) pins that the shard override still carries
+  `--strict-markers` and `--cov`, so the two cannot drift apart silently. Each shard uploads
   its coverage data file as an artifact. `fetch-depth: 0` stays on every shard,
   because `test_tripwire_unarchived_plans` reads `origin/main`.
 - A new `coverage` job (`needs: test`) downloads the four data files, runs
   `coverage combine`, and then runs `coverage report --fail-under=75`. This job
   now holds the gate that `addopts` held. `addopts` itself is unchanged, so a
   local `uv run pytest` still gates at 75.
-- The job name `test` stays, so branch-protection or a reader's muscle memory
-  still finds it. GitHub reports the shards as `test (1)` … `test (4)`.
+- The job keeps the name `test`. GitHub reports the shards as `test (1)` …
+  `test (4)`, which are also their status-check contexts. `main`'s ruleset
+  requires no status checks today (AGENTS.md, "Release"). A future
+  required-check rule must name the four shard contexts and `coverage`, not a
+  bare `test`.
 - **Staleness is tolerated by design.** pytest-split gives a test that is
   missing from `.test_durations` the average duration. A stale file only makes
   the shards less balanced, never wrong, and the budget watcher (§3.B) is what
@@ -111,8 +124,15 @@ with the repo's own token, so a fork PR cannot alter it. There is also a
 `workflow_dispatch` with inputs `run_id` (required) and `budget_seconds`
 (optional override), which the Test Plan uses. Permissions:
 `actions: read`, `issues: write`. A concurrency group per watched workflow
-file, `ci-budget-<file>`, with `cancel-in-progress: false`, keeps two runs of
-one file from racing on one issue. GitHub keeps only the newest pending run,
+file, `ci-budget-${{ github.event.workflow_run.path || 'dispatch' }}`, with
+`cancel-in-progress: false`, keeps two runs of one file from racing on one
+issue. A manual dispatch carries only `run_id`, and a concurrency expression
+is evaluated before any step can look the run up, so every dispatch shares the
+single `ci-budget-dispatch` group. Dispatches are therefore serialized with
+each other but not with `workflow_run` invocations. That is acceptable only
+because dispatch exists for the post-merge Test Plan, which an operator runs
+while nothing else is being measured. The script runs identically under
+either trigger. GitHub keeps only the newest pending run,
 so a burst can drop an intermediate data point. That is acceptable, because
 the next run carries the same signal.
 
@@ -136,7 +156,15 @@ decisions can be unit-tested against captured fixtures:
   default_seconds: 240
   workflows:
     fr-spec-status.yml: {exclude: true}   # reusable (workflow_call); timed inside its caller
+    # a numeric override looks like:  some.yml: {budget_seconds: 360}
   ```
+
+  Watched at launch, all at the 240s default: `CI` (`ci.yml`),
+  `acceptance-report`, `Release` (`release.yml`), `Deploy explainers to Pages`
+  (`pages.yml`), `PR spec status (self)` (`_pr_spec_status.yml`) and
+  `pinned-clis`. Every one of these finishes in under 1 minute except `CI`, so
+  none should need an override. `release.yml` and `pages.yml` run only on a
+  push to `main` (plus a manual dispatch), so they are counted on `push@main`.
 
 - `decide(state, measurement) -> Action`: the state machine below, with the
   current open issue parsed from its body.
@@ -196,7 +224,14 @@ can linger.
 ## 4. Rollout (the PR that ships this)
 
 One PR. `workflow_run` workflows only fire from the default branch, so the
-watcher is inert until merge. The sharded `ci.yml` proves itself on the PR's
+watcher is inert until merge. Under the repo's acceptance-matrix rule, this
+spec's Test Plan gets three rows in `docs/acceptance/matrix.yaml`, added at
+brainstorm as `not-implemented`: `ci-under-time-budget`,
+`ci-budget-ticket-dedup` and `ci-budget-watch-list-complete`. The
+implementation moves each row to `ci` (the unit-tested claims) or leaves it
+`skipped` with the post-merge observation owed (the wall-clock claim, which
+only a real GitHub run can show), using `fr acceptance set-status` in the
+same PR. The sharded `ci.yml` proves itself on the PR's
 own CI run. `AGENTS.md` gains the `.test_durations` refresh command and a line
 about the watcher under "Dev commands" / CI.
 
@@ -247,13 +282,21 @@ Unit level (CI, `tests/unit/test_ci_budget.py`, fixtures captured from real
    closure links the prior issue; the table caps at 10 rows; 3 greens close
    the issue while a `failure` does not advance the streak; a
    `budget_seconds` override applies to one invocation only; a
-   `cancelled`/`timed_out` run is ignored.
+   `cancelled`/`timed_out` run is ignored. A per-file `budget_seconds`
+   override in the config changes which runs of THAT file count as over
+   budget: a 300s run of a file overridden to 360s is under budget, while the
+   same 300s run of a default file is over. An `exclude: true` file is never
+   decided at all.
 6. **Dedup:** two sequential breaches of one file make exactly one create
    call and then one edit call, driven through the adapter with a fake `gh`.
    A hand-edited body without a streak marker parses as streak 0 and still
    dedups.
 7. **Body idempotence:** rendering a parsed body with no new data is
    byte-identical.
+8. **Shard command pin:** parsed from `ci.yml`, the `test` matrix has 4
+   shards; its pytest command clears `addopts` and re-adds `--strict-markers`
+   and `--cov`. The `coverage` job needs `test` and runs
+   `coverage report --fail-under=75`.
 
 Walking skeleton (phase 1): the PR's own `CI` run shows 4 `test (k)` jobs and
 a green `coverage` job gating at 75, and the run's wall clock (first job
