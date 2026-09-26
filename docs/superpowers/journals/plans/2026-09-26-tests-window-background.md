@@ -109,3 +109,8 @@ Added attachment, timeout-ack, misresolution, duplicate, ordering, sidechain cas
 ### o7 · finding [open] (reviewer: in scope) · F8/F9 stale docstring; a background window can span the whole run (Opus) (phase 1)
 
 Docstring updated with the window-length limit.
+
+<!-- fr:journal kind=finding scope=plan id=o8 created=2026-09-26T23:51:01 phase=1 state=open review_scope=out -->
+### o8 · finding [open] (reviewer: out of scope) · F10 OpenCode & detach zero-length window (Opus) (phase 1)
+
+Spec non-goal; same as r6/s2. Follow-up to be filed at the merge touchpoint.
