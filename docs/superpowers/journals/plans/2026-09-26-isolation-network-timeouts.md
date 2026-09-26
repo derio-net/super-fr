@@ -9,3 +9,18 @@ self-review errors when the walking skeleton is the only agentic phase; phase 1 
 ### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
 
 single-line parameter addition, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-09-26T07:41:24 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Phase 1 tests depend on GIT_SSH* being set in the environment (phase 1)
+
+The recorder captured every runner call, and _network_env adds a git config probe when GIT_SSH_COMMAND/GIT_SSH are unset, so both tests failed in a clean env. Reproduced with env -u.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-09-26T07:41:24 phase=1 -->
+### p1-review · review · independent review of phase 1: 1 finding (phase 1)
+
+Independent reviewer confirmed the local.py change is correct and existing callers unchanged; raised p1-r1 (in scope), fixed by selecting recorded calls by argv.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-09-26T07:41:24 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Phase 1 tests depend on GIT_SSH* being set in the environment (phase 1)
+
+The recorder now records only the git status call; both tests pass with and without GIT_SSH* set.
