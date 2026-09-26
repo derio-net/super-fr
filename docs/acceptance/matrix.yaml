@@ -3422,6 +3422,19 @@ rows:
       file (run 2026-09-26-fix-models-opencode-noop-505 delivered on prose reporting
       a failed test). Fixture uses the real opencode.db bash-part shape; not yet proven
       on a live OpenCode deliver.
+  - id: run-records-dir-holds-only-records
+    capability: Run cursor
+    acceptance: 'A run''s .records/ dir holds step records and fr''s pr-body render
+      only: a tests= log inside it is refused at deliver, and fr validate artifacts
+      (CI) flags any other file there'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-683-638-tool-bin-and-deliver-evidence.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#638. Two runs committed suite logs under <run>.records/ and they reached
+      main; the record locator matched *.yaml only, so nothing saw them.
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
