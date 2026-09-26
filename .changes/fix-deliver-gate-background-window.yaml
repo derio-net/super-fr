@@ -1,0 +1,2 @@
+bump: patch
+summary: fr run resolve --step deliver now accepts a full-suite log written by a backgrounded command (its window ends at the completion notice, not the launch ack)

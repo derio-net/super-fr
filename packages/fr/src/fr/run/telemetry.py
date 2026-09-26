@@ -704,6 +704,7 @@ def orchestrator_wrote_since(
             ):
                 issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    backgrounded: set[str] = set()
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
@@ -718,8 +719,49 @@ def orchestrator_wrote_since(
                 and block.get("is_error") is not True
                 and done is not None
             ):
-                windows.append((issued[block["tool_use_id"]], done))
+                if _is_launch_ack(record):
+                    # A `run_in_background` command's result is only its launch
+                    # ack, a second after the call. Its real end is the
+                    # notification below; the ack must not stand in for it.
+                    backgrounded.add(block["tool_use_id"])
+                else:
+                    windows.append((issued[block["tool_use_id"]], done))
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        done = parse_timestamp(record.get("timestamp"))
+        message = record.get("message")
+        notice = message.get("content") if isinstance(message, Mapping) else None
+        parsed = _task_notice(notice)
+        if parsed is None or done is None:
+            continue
+        tool_use_id, status = parsed
+        if tool_use_id in backgrounded and status == "completed":
+            # Once: a later duplicate must not add a second, wider window.
+            backgrounded.discard(tool_use_id)
+            windows.append((issued[tool_use_id], done))
     return windows
+
+
+_NOTICE_FIELD = re.compile(r"<(tool-use-id|status)>\s*([^<]*?)\s*</\1>")
+
+
+def _is_launch_ack(record: Mapping[str, Any]) -> bool:
+    """Is this `tool_result` the ack of a backgrounded command (its
+    `toolUseResult.backgroundTaskId` is set), not the command's own result?"""
+    result = record.get("toolUseResult")
+    return isinstance(result, Mapping) and bool(result.get("backgroundTaskId"))
+
+
+def _task_notice(content: object) -> tuple[str, str] | None:
+    """`(tool_use_id, status)` of a `<task-notification>` — the `user` record the
+    harness writes when a backgrounded command ends (`status` is `completed`,
+    `failed` or `killed`) — else `None`."""
+    if not isinstance(content, str) or "<task-notification>" not in content:
+        return None
+    fields = dict(_NOTICE_FIELD.findall(content))
+    tool_use_id, status = fields.get("tool-use-id"), fields.get("status")
+    return (tool_use_id, status) if tool_use_id and status else None
 
 
 OPENCODE_DB_ENV = "FR_OPENCODE_DB"

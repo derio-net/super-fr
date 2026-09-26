@@ -528,6 +528,95 @@ def test_a_command_that_writes_the_log_yields_its_run_window(tmp_path: Path) -> 
     assert orchestrator_wrote_since(gone, Path(CAPTURED_LOG), "2026-01-01T00:00:00+00:00") is None
 
 
+# --- a backgrounded command ends at its notification, not its launch ack ----
+
+
+def _background_env(tmp_path: Path, **kw: object) -> dict[str, str]:
+    from tests.unit.transcript_sessions import ran_in_background
+
+    root = tmp_path / "projects"
+    ran_in_background(root, session_id="s-bg", **kw)  # type: ignore[arg-type]
+    return _question_env(root, "s-bg")
+
+
+def test_a_backgrounded_command_runs_until_its_completion_notice(tmp_path: Path) -> None:
+    """The gate's window for a `run_in_background` suite must span the suite,
+    not the ~1 s launch ack: the log's mtime is when the suite ENDS. Observed
+    live: ack at 14:12:38, suite done 15:05 — outside every (tool_use,
+    tool_result) window, so no suite over ~2 minutes could ever satisfy
+    `deliver` (a foreground call over ~120 s is auto-backgrounded too)."""
+    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
+
+    from tests.unit.transcript_sessions import BACKGROUND_LOG
+
+    env = _background_env(
+        tmp_path,
+        started="2026-09-26T14:12:37.183Z",
+        acked="2026-09-26T14:12:38.313Z",
+        finished="2026-09-26T14:44:02.029Z",
+    )
+    windows = orchestrator_wrote_since(env, Path(BACKGROUND_LOG), "2026-09-26T14:00:00+00:00")
+    assert windows == [
+        (parse_timestamp("2026-09-26T14:12:37.183Z"), parse_timestamp("2026-09-26T14:44:02.029Z"))
+    ]
+
+
+def test_a_still_running_background_command_has_no_window(tmp_path: Path) -> None:
+    """No notice yet: the suite has not finished, so its log proves nothing —
+    the ack must not stand in for completion."""
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import BACKGROUND_LOG
+
+    env = _background_env(
+        tmp_path, started="2026-09-26T14:12:37.183Z", acked="2026-09-26T14:12:38.313Z"
+    )
+    assert orchestrator_wrote_since(env, Path(BACKGROUND_LOG), "2026-09-26T14:00:00+00:00") == []
+
+
+@pytest.mark.parametrize("status", ["failed", "killed"])
+def test_a_background_command_that_did_not_complete_does_not_count(
+    tmp_path: Path, status: str
+) -> None:
+    """Same rule as a foreground command whose `tool_result` is an error: only
+    a command that ran to completion vouches for its log."""
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import BACKGROUND_LOG
+
+    env = _background_env(
+        tmp_path,
+        started="2026-09-26T14:12:37.183Z",
+        acked="2026-09-26T14:12:38.313Z",
+        finished="2026-09-26T14:44:02.029Z",
+        status=status,
+    )
+    assert orchestrator_wrote_since(env, Path(BACKGROUND_LOG), "2026-09-26T14:00:00+00:00") == []
+
+
+def test_another_commands_notice_does_not_close_this_window(tmp_path: Path) -> None:
+    """The notice is matched on `<tool-use-id>`, never on order or proximity."""
+    import json
+
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    from tests.unit.transcript_sessions import BACKGROUND_LOG
+
+    env = _background_env(
+        tmp_path,
+        started="2026-09-26T14:12:37.183Z",
+        acked="2026-09-26T14:12:38.313Z",
+        finished="2026-09-26T14:44:02.029Z",
+    )
+    session = next((tmp_path / "projects").glob("*/s-bg.jsonl"))
+    rows = [json.loads(line) for line in session.read_text().splitlines()]
+    rows[-1]["message"]["content"] = rows[-1]["message"]["content"].replace(
+        "toolu_01Mrd2hrH1LweXxwKyzPtWEs", "toolu_someone_else"
+    )
+    session.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    assert orchestrator_wrote_since(env, Path(BACKGROUND_LOG), "2026-09-26T14:00:00+00:00") == []
+
+
 def test_a_relative_dot_directory_log_is_matched(tmp_path: Path) -> None:
     """gh#606: `lstrip("./")` stripped the leading dot of `.fr-deliver`, so a
     suite logged to `.fr-deliver/tests.log` was never recognised as written."""
