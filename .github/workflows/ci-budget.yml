@@ -1,0 +1,59 @@
+name: ci-budget
+
+# The CI time-budget watcher (spec 2026-09-26-ci-time-budget-design.md §3.B).
+# Fires from a completed run of any watched workflow (workflow_run always
+# runs the DEFAULT BRANCH's copy of this file with the repo's own token, so a
+# fork PR cannot alter it), plus a manual workflow_dispatch for the Test Plan
+# (observe a real run, then force a breach with a low --budget-seconds).
+#
+# The watch-list here is a closed set on purpose: adding a workflow file that
+# is neither named here nor `exclude: true`'d in .github/ci-budget.yaml fails
+# the §7.3 tripwire in tests/unit/test_ci_budget.py. ci-budget.yml itself is
+# the one exception (it does not watch itself).
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - acceptance-report
+      - Release
+      - Deploy explainers to Pages
+      - PR spec status (self)
+      - Pinned CLIs
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "The run id to measure (gh run list / gh run view)"
+        required: true
+      budget_seconds:
+        description: "Override the configured budget for this one invocation"
+        required: false
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+# One group per watched workflow file, so two runs of the same file can never
+# race on the same issue. A manual dispatch carries only `run_id` — no
+# `.path` to key on — so every dispatch shares one group; that is fine
+# because dispatch is the operator-driven Test Plan, run while nothing else
+# is being measured.
+concurrency:
+  group: ci-budget-${{ github.event.workflow_run.path || 'dispatch' }}
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - name: Measure the run and update/create/close its ci-budget issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --no-project --with pyyaml python scripts/ci_budget.py
+          --run-id "${{ github.event.workflow_run.id || inputs.run_id }}"
+          ${{ inputs.budget_seconds && format('--budget-seconds {0}', inputs.budget_seconds) || '' }}
