@@ -26,3 +26,14 @@ def test_ignores_docs_tests_and_manifests() -> None:
     assert not guard.requires_bump("tests/unit/test_version.py")
     assert not guard.requires_bump(".github/workflows/ci.yml")
     assert not guard.requires_bump("packages/fr-opencode-plugin/package.json")
+
+
+def test_every_plugins_skills_require_a_bump() -> None:
+    assert guard.requires_bump("plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md")
+
+
+def test_only_super_frs_rules_and_real_skill_dirs_require_a_bump() -> None:
+    assert not guard.requires_bump("plugins/super-fr-dispatch/rules/x.md")
+    assert not guard.requires_bump("plugins/super-fr/.claude-plugin/plugin.json")
+    assert not guard.requires_bump("plugins/x/.claude-plugin/skills/y")
+    assert not guard.requires_bump("plugins/skills/y")

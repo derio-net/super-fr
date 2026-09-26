@@ -291,3 +291,26 @@ def test_the_gate_leaves_the_repo_untouched(repo: Path) -> None:
     before = (_git(repo, "rev-parse", "HEAD"), _git(repo, "status", "--porcelain"))
     gate.check(repo, "main")
     assert (_git(repo, "rev-parse", "HEAD"), _git(repo, "status", "--porcelain")) == before
+
+
+def test_ci_change_fragment_job_runs_under_uv_managed_python() -> None:
+    """gh#670: bare `python` needs the runner to alias 3.11+ (tomllib); uv makes it explicit."""
+    import yaml
+
+    ci = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
+    steps = ci["jobs"]["change-fragment"]["steps"]
+    setup = next(
+        (i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("astral-sh/setup-uv")),
+        None,
+    )
+    run = next(
+        (
+            i
+            for i, s in enumerate(steps)
+            if "uv run --no-project python scripts/check-change-fragment.py" in s.get("run", "")
+        ),
+        None,
+    )
+    assert setup is not None, "change-fragment job has no astral-sh/setup-uv step"
+    assert run is not None, "change-fragment job does not invoke the script via uv run"
+    assert setup < run

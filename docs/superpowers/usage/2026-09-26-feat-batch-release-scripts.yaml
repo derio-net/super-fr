@@ -1,0 +1,54 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-release-scripts
+captures:
+- host: h-b3dc1514
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-26T10:54:25+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: adff62ba-fe43-4680-a6fe-ab62c9883057
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 176
+        cache_write: 430690
+        cache_read: 9130071
+        output: 33439
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 27
+      other:
+        usd: null
+        turns: 23
+      paperwork:
+        usd: null
+        turns: 39
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+      brainstorm:
+        usd: null
+        turns: 6
+      spec-review:
+        usd: null
+        turns: 12
+      plan:
+        usd: null
+        turns: 7
+      implement:
+        usd: null
+        turns: 33
+      deliver:
+        usd: null
+        turns: 23
+    briefs:
+      ad2c6bee0d16b44ed: 787
+      phase/1/implement-phase: 1796
+      phase/1/review-phase: 1156

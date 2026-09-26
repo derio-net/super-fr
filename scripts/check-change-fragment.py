@@ -18,12 +18,13 @@ version edit):
    under `packages/*/src` whose lower bound is newer than the base version must
    equal `base + the highest bump of the added fragments`.
 
-Stdlib only, so it runs under `uv run --no-project` and plain `python`.
+Stdlib only, so it runs under `uv run --no-project` (CI's interpreter).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -59,7 +60,7 @@ _SURFACE_BASENAMES = {
 def requires_bump(path: str) -> bool:
     if path in VERSION_REQUIRED_EXACT:
         return True
-    if path.startswith("plugins/super-fr/skills/") or path.startswith("plugins/super-fr/rules/"):
+    if re.match(r"plugins/[^/]+/skills/", path) or path.startswith("plugins/super-fr/rules/"):
         return True
     return path.startswith("packages/") and "/src/" in path
 
