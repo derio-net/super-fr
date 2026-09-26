@@ -3,7 +3,7 @@ run: 2026-09-26-feat-version-bump-churn
 workflow: fr-goal@1
 branch: feat/version-bump-churn
 started: '2026-09-26T05:53:18+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
   spec-review:
-    state: running
-    at: '2026-09-26T06:04:51+00:00'
+    state: done
+    at: '2026-09-26T06:12:00+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
+          returned: '2026-09-26T06:12:00+00:00'
+          outcome: done
+        evidence:
+          review: sr1-review
+          reviewer: a15762a75cbbfc6da
+          findings: sr1-f1,sr1-f2,sr1-f3,sr1-f4,sr1-f5,sr1-f6,sr1-f7,sr1-f8,sr1-f9,sr1-f10,sr1-f11,sr1-f12
   plan:
     state: pending
   plan-review:
