@@ -4529,3 +4529,14 @@ rows:
       - super-fr:tests/unit/test_v2_plan_ops.py
     status: ci
     notes: gh#603; pinned by test_rework_on_sectionless_spec_names_the_header.
+  - id: isolation-gc-fetch-is-bounded
+    capability: Isolation GC
+    acceptance: An isolation gc candidate whose origin fetch hangs is bounded by the
+      configured network timeout and is not reaped on the resulting fetch failure.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-isolation-gc-fetch-timeout-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_network_timeouts.py
+    status: ci
+    notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)

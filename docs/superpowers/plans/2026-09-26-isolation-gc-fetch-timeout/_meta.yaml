@@ -1,0 +1,5 @@
+schema_version: 2
+plan: 2026-09-26-isolation-gc-fetch-timeout
+spec: docs/superpowers/specs/2026-09-26-isolation-gc-fetch-timeout-design.md
+target_repo: derio-net/super-fr
+created: 2026-09-26

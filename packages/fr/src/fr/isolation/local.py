@@ -1161,7 +1161,7 @@ class LocalWorktreeDevcontainerTarget:
         if self.run(["git", "remote", "get-url", "origin"], cwd=state.worktree).returncode != 0:
             return None
         default = self._resolve_default_branch()
-        fetch = self.run(["git", "fetch", "origin", default], cwd=state.worktree)
+        fetch = self._run_network(["git", "fetch", "origin", default], cwd=state.worktree)
         if fetch.returncode != 0:
             return ReapHazard(
                 kind="unverifiable",

@@ -196,3 +196,36 @@ def test_verify_merge_reaped_default_fetch_timeout_is_not_verified(
     rec = _Scripted(_merged_answers(_cp(124)))
     res = LocalWorktreeDevcontainerTarget(repo, runner=rec).verify_merge_reaped("feat/x", "main")
     assert res["fetched"] is False and res["verified"] is False
+
+
+def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_reap_hazard's fetch to origin/<default> uses _run_network (bounded by
+    network timeout) and returns an unverifiable hazard when it times out."""
+    import fr.isolation.local as local
+
+    monkeypatch.setattr(local, "detect_backend", lambda _p: "github")
+    repo = make_repo(tmp_path)
+    st = _state(repo, tmp_path)
+
+    # Simulate a fetch timeout (exit 124) at origin/<default>.
+    # The fetch is the ONLY call we care about here; ignore other cmds.
+    answers = {
+        ("git", "remote", "get-url"): _cp(0, "origin\n"),  # origin exists
+        ("git", "fetch", "origin", "main"): _cp(124),  # timeout
+    }
+    rec = _Scripted(answers)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=rec)
+    hazard = target._reap_hazard(st)
+
+    # Assert the fetch was called with _run_network: a timeout exit code.
+    (fetch,) = rec.select("git", "fetch", "origin", "main")
+    # _run_network always sets a timeout kwarg
+    assert fetch[2]["timeout"] > 0
+    # The cwd must be the worktree (where the branch exists)
+    assert fetch[1] == st.worktree
+    # Timeout -> unverifiable hazard
+    assert hazard is not None
+    assert hazard.kind == "unverifiable"
+    assert "could not be checked against origin/main" in hazard.detail
