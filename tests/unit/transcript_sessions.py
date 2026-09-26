@@ -271,6 +271,38 @@ def conversation_at(root: Path, rows: list[dict[str, Any]], *, session_id: str) 
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), *rows])
 
 
+BACKGROUND = FIXTURES / "claude-code-background.jsonl"
+"""Captured 2026-09-23/26 from live Claude Code 2.1.280 sessions (paths and
+session ids redacted, `serverClassifierContext` dropped — see `NOTE.md`), six
+records: 0 an `assistant` `Bash` tool_use with `run_in_background: true`, 1 its
+ack `tool_result` (`toolUseResult.backgroundTaskId` set), 2 the later
+`type: user` `task-notification` record, 3 a `type: attachment`
+`queued_command` task-notification (the other shape a finished background
+command arrives in), 4 a foreground `Bash` tool_use with a 600 s timeout, 5 its
+`tool_result` reading `Command did not complete within its 600s timeout and was
+moved to the background`."""
+
+_BG = {
+    "call": (0, "toolu_01Et1WhaFSFbmfw6fopvB5Uf", "b2z9y9ggq"),
+    "attachment": (3, "toolu_01A65mT8gCxQDeepZgCrzqBJ", "b2818z28g"),
+    "timeout": (4, "toolu_01Mvhz6gXQonQ4Uu7eQdn75m", "bw29jf8kk"),
+}
+_CAPTURED_LABELS = {
+    False: "Run full verification suite into a log",
+    True: "Strengthen the unresolvable-ref test",
+}
+
+
+def _map_strings(value: Any, fn: Any) -> Any:
+    if isinstance(value, str):
+        return fn(value)
+    if isinstance(value, list):
+        return [_map_strings(v, fn) for v in value]
+    if isinstance(value, dict):
+        return {k: _map_strings(v, fn) for k, v in value.items()}
+    return value
+
+
 def background_rows(
     started: str,
     *,
@@ -281,39 +313,64 @@ def background_rows(
     status: str = "completed",
     exit_code: int = 0,
     text_blocks: bool = False,
+    attachment: bool = False,
+    timeout: bool = False,
+    sidechain_notice: bool = False,
+    label: str | None = None,
 ) -> list[dict[str, Any]]:
-    """A backgrounded `Bash` exchange in the shape captured from a live Claude
-    Code session (ids and paths redacted): the tool_use, the immediate
-    acknowledgement `tool_result`, and — when `notified` is given — the later
-    `user` record with `origin.kind: task-notification` whose timestamp is the
-    finish time. Built on the captured `Bash` rows; only the fields a test
-    varies are edited. `text_blocks` carries the ack and notification as lists
-    of `text` blocks rather than plain strings."""
-    call, result = bash_rows(started, tool_use_id=tool_use_id)
-    call["message"]["content"][0]["input"]["command"] = command
-    ack = (
-        "Command running in background with ID: bg1. "
-        f"Output is being written to: /tmp/x/{tool_use_id}.output"
+    """A backgrounded `Bash` exchange built by COPYING the captured records in
+    `BACKGROUND` and re-keying ids, timestamps and the command: the tool_use,
+    its ack `tool_result`, and — when `notified` is given — the later
+    notification, whose timestamp is the finish time. `attachment` carries the
+    notification as the captured `queued_command` attachment instead of the
+    `type: user` record; `timeout` uses the captured foreground call that Claude
+    Code moved to the background at its timeout, instead of an explicit
+    `run_in_background`; `sidechain_notice` marks the notification a subagent's.
+    `text_blocks` carries the ack and a user notification as lists of `text`
+    blocks rather than plain strings.
+
+    `status`/`exit_code`/`label` edit the captured summary: a `failed` status
+    reads `failed with exit code N` (the wording seen live on real failures,
+    edited into the captured success record), a `completed` status with a
+    non-zero code `completed (exit code N)`."""
+    captured = records(BACKGROUND)
+    _, call_id, _ = _BG["timeout" if timeout else "call"]
+    call = copy_of(captured[4 if timeout else 0])
+    ack = copy_of(captured[5 if timeout else 1])
+    block = call["message"]["content"][0]
+    block["input"]["command"] = command
+    for row in (call, ack):
+        row["timestamp"] = started
+    if text_blocks:
+        ack["message"]["content"][0]["content"] = [
+            {"type": "text", "text": ack["message"]["content"][0]["content"]}
+        ]
+    call, ack = _map_strings([call, ack], lambda t: t.replace(call_id, tool_use_id))
+    rows = [call, ack]
+    if notified is None:
+        return rows
+    _, note_id, _ = _BG["attachment" if attachment else "call"]
+    note = copy_of(captured[3 if attachment else 2])
+    reported = notice_id or tool_use_id
+    tail = (
+        f"failed with exit code {exit_code}"
+        if status == "failed"
+        else f"completed (exit code {exit_code})"
     )
-    result["message"]["content"][0]["content"] = (
-        [{"type": "text", "text": ack}] if text_blocks else ack
-    )
-    rows = [call, result]
-    if notified is not None:
-        body = (
-            f"<task-notification><task-id>bg1</task-id>"
-            f"<tool-use-id>{notice_id or tool_use_id}</tool-use-id>"
-            f"<status>{status}</status>"
-            f'<summary>Background command "suite" completed (exit code {exit_code})</summary>'
-            f"</task-notification>"
-        )
-        note = copy_of(result)
-        note["timestamp"] = notified
-        note["origin"] = {"kind": "task-notification"}
-        note["message"] = {
-            "role": "user",
-            "content": [{"type": "text", "text": body}] if text_blocks else body,
-        }
-        note.pop("toolUseResult", None)
-        rows.append(note)
+
+    def edit(text: str) -> str:
+        text = text.replace(note_id, reported)
+        text = text.replace("<status>completed</status>", f"<status>{status}</status>")
+        text = text.replace("completed (exit code 0)", tail)
+        return text.replace(_CAPTURED_LABELS[attachment], label) if label else text
+
+    note = _map_strings(note, edit)
+    note["timestamp"] = notified
+    if attachment:
+        note["attachment"]["timestamp"] = notified
+    elif text_blocks:
+        note["message"]["content"] = [{"type": "text", "text": note["message"]["content"]}]
+    if sidechain_notice:
+        note["isSidechain"] = True
+    rows.append(note)
     return rows

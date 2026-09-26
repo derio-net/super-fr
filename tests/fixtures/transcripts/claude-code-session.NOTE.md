@@ -140,3 +140,38 @@ its output redirected into a log, line 1 the `user` record carrying its
 session scratchpad → `/tmp/scratchpad` (so the log is `/tmp/scratchpad/c1.log`,
 `transcript_sessions.CAPTURED_LOG`). Helpers vary only the timestamps and that
 one log path.
+
+## `claude-code-background.jsonl` (added 2026-09-26)
+
+Captured live from this operator's own `super-fr` orchestrator sessions
+(Claude Code 2.1.280, no third-party content), for `deliver`'s backgrounded
+`tests=<log>` window (spec `2026-09-26-tests-window-background-design.md`).
+Six whole records, in this order:
+
+0. an `assistant` record whose `Bash` tool_use has `run_in_background: true`;
+1. its ack `tool_result` (`Command running in background with ID: ...`;
+   `toolUseResult.backgroundTaskId` set);
+2. the later `type: user` record with `origin.kind: task-notification`;
+3. a `type: attachment` record, `attachment.type: queued_command`,
+   `commandMode: task-notification` — the OTHER shape a finished background
+   command arrives in (about 45 of ~240 real notifications had only this one);
+   taken from a different session than 0-2, so its ids do not pair with them;
+4. an `assistant` `Bash` tool_use with `timeout: 600000` and no
+   `run_in_background`;
+5. its `tool_result`: `Command did not complete within its 600s timeout and was
+   moved to the background (ID: ...)`, with `backgroundTaskId` and
+   `timedOutAfterMs` set. Across 187 real background acks of both kinds
+   `backgroundTaskId` was set on every one.
+
+Redactions: home paths -> `/home/user`, the worktree/repo -> `/home/user/repo`,
+the session scratchpad and task-output dir -> `/tmp/scratchpad[/tasks]`, session
+ids -> `00000000-0000-0000-0000-00000000000N`, a plan path -> `plan`. The
+`serverClassifierContext` key (harness classifier telemetry, carrying git
+remotes) is dropped from records 1 and 5; nothing reads it.
+
+`transcript_sessions.background_rows` COPIES these and re-keys ids, timestamps
+and the command. The variants are EDITED from the captured success record, not
+captured: `nonzero` (`completed (exit code 1)`), `failed`/`killed` status with
+`failed with exit code N` (the wording seen on real failures, put into the
+success record), a model-written label naming an exit code, a sidechain flag
+and text-block content. No real notification of those kinds was committed.
