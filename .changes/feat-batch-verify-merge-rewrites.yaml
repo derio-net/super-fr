@@ -1,2 +1,2 @@
 bump: patch
-summary: "fr isolation verify-merge accepts a merged branch whose lines a later merge rewrote, and checks the fetched remote branch too"
+summary: fr isolation verify-merge and down/gc now accept a merged branch whose lines a later merge rewrote, whose .changes fragment the release consumed, or whose fr artifacts fr archive moved to implemented/, and check the fetched remote branch too
