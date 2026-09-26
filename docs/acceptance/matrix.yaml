@@ -3369,11 +3369,9 @@ rows:
     - super-fr:docs/superpowers/journals/debug/2026-09-21-fr-goal-first-run-contracts.md
     levels:
       unit:
-      - super-fr:tests/unit/test_v2_plan_ops.py::test_a_sole_marked_agentic_phase_raises_no_skeleton_error
+      - super-fr:tests/unit/test_v2_plan_ops.py#L1639
     status: ci
-    notes: 'C2 inverted by the one-phase-plans spec (2026-09-26): the sole-skeleton
-      error was removed; a lone marked agentic phase now raises no error. Stale line
-      refs dropped.'
+    notes: Re-point refs to line anchors.
   - id: isolation-session-bound-without-flags
     capability: isolation-traceability
     acceptance: Starting a run or entering isolation binds the calling session to the
