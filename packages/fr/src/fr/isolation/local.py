@@ -298,18 +298,43 @@ def _branch_blob_was_on_base(
 
     `base_path` is where to look on the base side (default: `path` itself) — the
     `implemented/` path `fr archive` moved it to.
+
+    ONE git call answers the whole range question (C1 perf review, #665/#598):
+    `git log --raw` over `merge_base..base_ref` for `bpath` lists every
+    touching commit's raw diff line in a single process, and the blob is read
+    straight out of the "new blob" column — no per-commit `git rev-parse`. A
+    generated report/matrix file is touched by nearly every later PR, so the
+    old one-`rev-parse`-per-commit scan multiplied badly across every
+    workspace in a gc sweep.
     """
     bpath = base_path or path
     want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
     if want.returncode != 0 or not want.stdout.strip():
         return False
     blob = want.stdout.strip()
-    commits = run(["git", "rev-list", f"{merge_base}..{base_ref}", "--", bpath], cwd=repo_root)
-    if commits.returncode != 0:
+    log = run(
+        [
+            "git",
+            "log",
+            "--no-abbrev",
+            "--raw",
+            "--format=",
+            f"{merge_base}..{base_ref}",
+            "--",
+            bpath,
+        ],
+        cwd=repo_root,
+    )
+    if log.returncode != 0:
         return False
-    for commit in commits.stdout.split():
-        got = run(["git", "rev-parse", "--verify", "--quiet", f"{commit}:{bpath}"], cwd=repo_root)
-        if got.returncode == 0 and got.stdout.strip() == blob:
+    for line in log.stdout.splitlines():
+        if not line.startswith(":"):
+            continue
+        meta, _, _rest = line[1:].partition("\t")
+        fields = meta.split()
+        # `:oldmode newmode oldsha newsha status[score]` — the new blob is
+        # field 3, present on every raw line (add/modify/delete/rename alike).
+        if len(fields) >= 4 and fields[3] == blob:
             return True
     return False
 
@@ -1104,9 +1129,15 @@ class LocalWorktreeDevcontainerTarget:
         cannot decide alone and an unpushed local commit still refuses. Raises
         IsolationError naming the branch when neither resolves.
         """
-        refs = self._branch_refs(state.branch, remote)
+        refs, branch_fetched = self._branch_refs(state.branch, remote)
         return self._verdict(
-            state.worktree, state.branch, default_branch, remote, pr=self._pr(state), refs=refs
+            state.worktree,
+            state.branch,
+            default_branch,
+            remote,
+            pr=self._pr(state),
+            refs=refs,
+            branch_fetched=branch_fetched,
         )
 
     def verify_merge_reaped(
@@ -1125,17 +1156,48 @@ class LocalWorktreeDevcontainerTarget:
         ref, an unpushed commit only on the local one, and either is work that
         did not land (adversarial review M1). Raises IsolationError naming the
         ref when neither resolves. `verified` still needs all three signals."""
-        refs = self._branch_refs(branch, remote)
+        refs, branch_fetched = self._branch_refs(branch, remote)
         pr = self._pr_from(self.repo_root, branch)
-        res = self._verdict(self.repo_root, branch, default_branch, remote, pr=pr, refs=refs)
+        res = self._verdict(
+            self.repo_root,
+            branch,
+            default_branch,
+            remote,
+            pr=pr,
+            refs=refs,
+            branch_fetched=branch_fetched,
+        )
         res["reaped"] = True
         return res
 
-    def _branch_refs(self, branch: str, remote: str) -> list[str]:
-        # Fetch the branch FIRST: a remote-tracking ref that merely exists may be
-        # stale. A failed fetch is not a verdict — GitHub deletes a merged branch
-        # by default — so fall back to whatever refs this clone still has.
-        self._run_network(["git", "fetch", remote, branch])
+    def _branch_refs(self, branch: str, remote: str) -> tuple[list[str], bool]:
+        """Fetch `<branch>` from `<remote>`, and report whether that fetch is
+        trustworthy as `branch_fetched`.
+
+        The fetch uses an EXPLICIT refspec (`+refs/heads/<b>:refs/remotes/
+        <remote>/<b>`, like `_remote_view`), not a bare `git fetch <remote>
+        <branch>` (C2 review, #665/#598): in a `--single-branch` clone the
+        configured fetch refspec only covers the default branch, so a bare
+        fetch of another branch updates FETCH_HEAD only, never the
+        remote-tracking ref — leaving `<remote>/<branch>` stale or entirely
+        absent and hiding a commit pushed to the real remote branch (from a
+        different clone) after the merge.
+
+        A failed fetch is not automatically a fallback: GitHub deletes a
+        merged branch by default, and THAT case — `git ls-remote --heads`
+        confirms exit 2, no matching ref — is the one situation where the
+        refs this clone still has (typically the local branch) are still
+        trustworthy. Any other outcome (`ls-remote` finds the branch, or
+        `ls-remote` itself fails) means the branch's true remote state is
+        unknown, so `branch_fetched` is False and the caller must not verify
+        off a possibly-stale ref alone.
+        """
+        tracking = f"refs/remotes/{remote}/{branch}"
+        fetch = self._run_network(["git", "fetch", remote, f"+refs/heads/{branch}:{tracking}"])
+        branch_fetched = fetch.returncode == 0
+        if not branch_fetched:
+            ls = self._run_network(["git", "ls-remote", "--exit-code", "--heads", remote, branch])
+            branch_fetched = ls.returncode == 2
         refs = [
             cand
             for cand in (f"{remote}/{branch}", branch)
@@ -1149,7 +1211,7 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"cannot resolve branch ref {branch!r} (neither local nor {remote}/{branch})."
             )
-        return refs
+        return refs, branch_fetched
 
     def _verdict(
         self,
@@ -1159,6 +1221,7 @@ class LocalWorktreeDevcontainerTarget:
         remote: str,
         pr: dict[str, Any] | None,
         refs: list[str] | None = None,
+        branch_fetched: bool = True,
     ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
         fetch = self._run_network(["git", "fetch", remote, default_branch], cwd=cwd)
@@ -1167,7 +1230,10 @@ class LocalWorktreeDevcontainerTarget:
         missing = sorted({m for r in results for m in r.missing})
         changes_present = all(r.changes_present for r in results)
         pr_state = pr.get("state") if pr else None
-        verified = changes_present and pr_state == "MERGED" and fetched
+        # `branch_fetched` (C2 review, #665/#598): a failed branch fetch whose
+        # remote state is unknown (not confirmed gone via ls-remote) must not
+        # let a possibly-stale ref decide `verified`.
+        verified = changes_present and pr_state == "MERGED" and fetched and branch_fetched
         return {
             "branch": branch,
             "verified": verified,
@@ -1175,6 +1241,7 @@ class LocalWorktreeDevcontainerTarget:
             "missing": missing,
             "pr_state": pr_state,
             "fetched": fetched,
+            "branch_fetched": branch_fetched,
         }
 
     def _reap_hazard(self, state: IsolationState) -> ReapHazard | None:
