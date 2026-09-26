@@ -12,7 +12,16 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-26-version-bump-churn-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-26T06:04:51+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-26T06:04:51+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: d3acfed9-a3af-4ba0-8b42-21b76d1ffe3d
   plan:
     state: pending
   plan-review:
