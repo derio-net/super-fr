@@ -76,6 +76,7 @@ path does). Consequences, per the operator's answers:
 
 ### Non-goals
 
+- Known limit (accepted, same as the whole-file fast path): a byte-identical `.changes/<same-slug>.yaml` landed by another PR after this branch's merge-base would satisfy the fallback for that one file; every other changed file is still checked and `verified` still needs the PR `MERGED`. Line numbers cited in this spec describe `origin/main` before the fix.
 - Known limit (out of scope, fails safe): if a concurrent merge edited the file elsewhere BEFORE the branch landed and a later merge then rewrote the branch's lines, no base blob equals the branch's blob and the file still reads missing (STOP).
 - `isolation/scaffold.py` and `artifacts/commit.py` are being edited by another
   batch (container-git-ownership) and are not touched.
