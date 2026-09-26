@@ -1,0 +1,28 @@
+schema_version: 2
+run: 2026-09-26-feat-dynamic-brainstorm-questions
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "Round-3 refusal suggested --no-questions, which would record a false 'cleared without asking'", body: "question_rounds_refusal pointed at the bypass whose provenance (answered_by: agent) contradicts an operator who answered."}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "Unverified notice claimed a rounds: 1 declaration was recorded when nothing is written", body: "Only rounds: 2 journals."}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: "Round.answered is always True", body: "Constant field; its test only checked the code against itself."}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: in, title: "answered_rounds_since duplicated _this_session", body: "Third copy of the harness/session front half; plan P2.T1.S3 asked for sharing."}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: in, title: "Test Plan 3 only partly covered: declined gate, ungated step, no-spec round-two, member --no-questions untested", body: "The _clears_gate branch and two new refusals had no test."}
+  - {kind: finding, id: p2-r6, phase: 2, review_scope: in, title: "Retry idempotence keyed on id only kept a stale body; retry test hand-wrote the entry", body: "A retry with a changed reason silently kept the first body."}
+  - {kind: finding, id: p2-r7, phase: 2, review_scope: out, title: "Flag-path journal append not rolled back when a later resolve step refuses", body: "Pre-existing for gate-no-questions entries (guard=None on the flag path); the round-two entry inherits it."}
+  - {kind: finding, id: p2-r8, phase: 2, review_scope: in, title: "Bookkeeping tool calls between question batches split one round and can strand the gate", body: "Reviewer tagged this out of scope as a spec design risk; reclassified in scope by the orchestrator because this change introduces the round rule and the n>2 refusal that makes it strand a gate."}
+  - {kind: review, id: review-phase-2, phase: 2, title: "Phase 2 code review: 7 in-scope findings (1 reclassified), 1 out of scope", body: "Dispatched code reviewer over 37410263 and eb4da954 against spec §3.B/§3.C and plan 02.yaml. Grouping rule, operator_answered_since equivalence, verdict table, pre-write refusals and both threading paths verified correct. Raised p2-r1 (medium) and p2-r2..r6 (low) in scope, p2-r7/p2-r8 out of scope; p2-r8 reclassified in. Fixes in ab531445, each pinned by tests; 384 targeted tests re-run green by the orchestrator. Side effect accepted: a --no-questions retry with a changed reason is now refused rather than silently keeping the stale entry (same rule as p2-r6)."}
+resolves:
+  - {id: p2-r1, phase: 2, state: fixed, body: "Refusal now offers --state failed and re-running the step; tests assert --no-questions absent from every refusing verdict."}
+  - {id: p2-r2, phase: 2, state: fixed, body: "rounds: 1 reads 'accepted, unverified'; rounds: 2 keeps 'recorded as claimed too'; both pinned."}
+  - {id: p2-r3, phase: 2, state: fixed, body: "Field removed; tests updated."}
+  - {id: p2-r4, phase: 2, state: fixed, body: "answered_rounds_since uses _this_session; None semantics unchanged, existing tests green."}
+  - {id: p2-r5, phase: 2, state: fixed, body: "Four refusal tests over both paths asserting exit 2, byte-identical snapshot, unmoved HEAD."}
+  - {id: p2-r6, phase: 2, state: fixed, body: "_append_gate_decision refuses a differing body before any write; real first-resolve retry test and changed-reason test on both paths."}
+  - {id: p2-r7, phase: 2, state: out-of-scope, body: "Existing behaviour of the flag path for gate-no-questions entries since r1-6; retry idempotence is the existing mitigation. Not caused by this change."}
+  - {id: p2-r8, phase: 2, state: fixed, body: "ROUND_NEUTRAL_TOOLS (Claude Code progress trackers) do not close a round; TodoWrite-between = 1 round, Read-between = 2 rounds pinned; spec §3.C updated."}
+evidence:
+  review: review-phase-2
+  reviewer: a437952b41423dade
+  model: claude-opus-5-5
