@@ -3,6 +3,6 @@ run: 2026-09-26-feat-batch-isolation-timeouts
 step: plan
 outcome: done
 journal:
-  - {kind: decision, id: plan-two-phases, title: "Two phases, not one", body: "self-review errors when the walking skeleton is the only agentic phase; phase 1 is the cwd-param skeleton, phase 2 the real routing plus matrix and version bump."}
+  - {kind: decision, global: true, id: plan-two-phases, title: "Two phases, not one", body: "self-review errors when the walking skeleton is the only agentic phase; phase 1 is the cwd-param skeleton, phase 2 the real routing plus matrix and version bump."}
 emitted: {plan: docs/superpowers/plans/2026-09-26-isolation-network-timeouts}
 evidence: {}
