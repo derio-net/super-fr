@@ -7,6 +7,7 @@ global config, so `safe.directory` can only come from fr's own `-c` override.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -139,3 +140,30 @@ def test_git_answer_places_the_override_before_the_subcommand(
 
 def test_post_create_trusts_the_workspace() -> None:
     assert 'git config --global --add safe.directory "$PWD" || true' in POST_CREATE
+
+
+def test_committed_profiles_carry_the_scaffold_post_create() -> None:
+    root = Path(__file__).resolve().parents[2]
+    for profile in ("dev", "admin"):
+        cfg = json.loads((root / ".devcontainer" / profile / "devcontainer.json").read_text())
+        assert cfg["postCreateCommand"] == POST_CREATE, profile
+
+
+def test_index_restore_carries_the_override_before_the_subcommand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts import commit as commit_mod
+
+    (tmp_path / ".git").mkdir()
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(commit_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        commit_mod, "_git", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", "")
+    )
+    assert commit_mod._restore_index(tmp_path, ["x"], "100644 abc 0\tx") == ""
+    assert seen[0][:4] == ["git", "-c", f"safe.directory={tmp_path.resolve()}", "update-index"]
