@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: plan-phase-shape
+    global: true
     title: Six phases - skeleton surface list, PR gate, release workflow, acceptance, docs/config, manual live release
     body: |
       Acceptance (P4) depends only on the skeleton so it is independent of the release machinery.
