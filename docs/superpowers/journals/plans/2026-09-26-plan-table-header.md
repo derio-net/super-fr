@@ -114,3 +114,8 @@ Consumer landed in phase 2 (_ensure_section_text), as planned.
 ### r1-2-resolved-2 · finding [fixed] · resolves r1-2: migrate.py:761 still hard-codes the header
 
 migrate._ensure_spec_plan_row reuses plan_ops._ensure_section_text (phase 2 S3).
+
+<!-- fr:journal kind=finding scope=plan id=r1-3-resolved-2 created=2026-09-26T09:54:04 state=open resolves=r1-3 tracked_by=#661 -->
+### r1-3-resolved-2 · finding [deferred → #661] · resolves r1-3: test _HEADER duplicates the literal
+
+Filed at closeout as #661.
