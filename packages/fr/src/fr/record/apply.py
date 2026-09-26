@@ -34,7 +34,7 @@ import hashlib
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -85,6 +85,12 @@ class RecordTarget:
     phase: int | None = None
     message: str | None = None
     """The commit subject a verb record commits under."""
+    acceptance_drops: Mapping[str, Mapping[str, tuple[str, ...]]] = field(default_factory=dict)
+    """Refs to remove from existing rows before the record's `levels` are
+    merged in: row id → level → refs (gh#624). Verb-only — fed by
+    `fr acceptance set-status --drop-level`. The `record` kind's shape is
+    deliberately unchanged (spec d-carrier): an `AcceptanceItem` cannot drop
+    refs, so a step that needs a removal runs the verb."""
 
 
 @dataclass
@@ -547,14 +553,54 @@ def _check_plan_parses(plan_dir: Path, overlay: _Overlay) -> None:
 # --- acceptance ---------------------------------------------------------------
 
 
+def _check_drops(
+    record: StepRecord, drops: Mapping[str, Mapping[str, tuple[str, ...]]], run_id: str | None
+) -> None:
+    """Refuse every misalignment that would make a drop a silent no-op
+    (spec 2026-09-26 §2.C) — before anything is built or written."""
+    if not drops:
+        return
+    if run_id is not None:
+        raise RecordRefusedError(
+            "acceptance drops are verb-only (`set-status --drop-level`); "
+            f"a run record never reads them (run {run_id!r})"
+        )
+    for row_id, levels in drops.items():
+        named = [item for item in record.acceptance if item.id == row_id]
+        if not named:
+            raise RecordRefusedError(
+                f"acceptance {row_id}: a drop names a row the record does not move"
+            )
+        if len(named) > 1:
+            # Judged by position, a create-then-move would pass the create
+            # refusal below and drop from the row it had just created.
+            raise RecordRefusedError(
+                f"acceptance {row_id}: the record names this row more than once, so "
+                "which entry the drop belongs to is ambiguous"
+            )
+        if not any(levels.values()):
+            raise RecordRefusedError(
+                f"acceptance {row_id}: a drop entry that names no ref would remove nothing"
+            )
+        item = named[0]
+        if item.capability is not None or item.acceptance is not None:
+            raise RecordRefusedError(
+                f"acceptance {row_id}: a drop on a row the record creates — a new row "
+                "has nothing to drop"
+            )
+
+
 def _acceptance_writes(
-    record: StepRecord, overlay: _Overlay, repo_root: Path
+    record: StepRecord,
+    overlay: _Overlay,
+    repo_root: Path,
+    drops: Mapping[str, Mapping[str, tuple[str, ...]]],
 ) -> tuple[dict[str, int], list[str]]:
     if not record.acceptance:
         return {}, []
     from typing import get_args
 
-    from fr.acceptance.edit import append_row, merge_levels, replace_row
+    from fr.acceptance.edit import append_row, drop_levels, merge_levels, replace_row
     from fr.acceptance.model import AcceptanceError, Row, Status, parse_matrix, split_ref
     from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
 
@@ -613,7 +659,8 @@ def _acceptance_writes(
                     acceptance=existing.acceptance,
                     origin=existing.origin,
                     levels=merge_levels(
-                        existing.levels, {k: list(v) for k, v in item.levels.items()}
+                        drop_levels(existing.levels, drops.get(item.id, {})),
+                        {k: list(v) for k, v in item.levels.items()},
                     ),
                     status=item.status,  # type: ignore[arg-type]
                     notes=item.notes,
@@ -733,6 +780,7 @@ def apply_record(
     """
     target = target or RecordTarget()
     state: Any = None
+    _check_drops(record, target.acceptance_drops, run_id)
     if run_id is not None:
         if record.run is not None and record.run != run_id:
             raise RecordRefusedError(f"record is for run {record.run!r}, not {run_id!r}")
@@ -753,7 +801,7 @@ def apply_record(
     entries, journal_counts, journal_notices = _journal_writes(ctx, record, overlay, repo_root)
     counts.update(journal_counts)
     counts.update(_plan_writes(ctx, record, overlay))
-    row_counts, row_lines = _acceptance_writes(record, overlay, repo_root)
+    row_counts, row_lines = _acceptance_writes(record, overlay, repo_root, target.acceptance_drops)
     counts.update(row_counts)
     notices = (*journal_notices, *row_lines)
 

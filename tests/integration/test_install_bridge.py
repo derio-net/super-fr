@@ -17,8 +17,28 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
 def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
     wrapper_path = tmp_path / "wrapper" / "run.sh"
+    # Do not let this integration test depend on whichever `fr` uv tool happens
+    # to be installed in the host/container. Install a disposable one with the
+    # workspace's bridge adapter, matching the install.sh error's recovery path.
+    tool_dir = tmp_path / "uv-tools"
     env = os.environ.copy()
     env["VK_BRIDGE_WRAPPER_PATH"] = str(wrapper_path)
+    env["UV_TOOL_DIR"] = str(tool_dir)
+    subprocess.run(
+        [
+            "uv",
+            "tool",
+            "install",
+            "--force",
+            "--with",
+            str(REPO_ROOT / "packages" / "fr-vk"),
+            str(REPO_ROOT / "packages" / "fr"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     # PATH still needs python3 for the venv-resolve fallback.
     result = subprocess.run(
         ["bash", str(INSTALL_SH), "--install-bridge"],

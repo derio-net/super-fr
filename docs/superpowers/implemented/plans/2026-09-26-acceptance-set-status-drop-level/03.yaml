@@ -1,0 +1,102 @@
+schema_version: 2
+phase:
+  number: 3
+  title: CLI --drop-level, docs, matrix row, version
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - lifecycle-acceptance-drop-level
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - tests/unit/test_acceptance_set_status.py
+  - .claude/rules/acceptance-matrix.md
+  - .opencode/instructions/acceptance-matrix.md
+  - docs/acceptance/*
+  - pyproject.toml
+  - packages/*/pyproject.toml
+  - plugins/*/.claude-plugin/plugin.json
+  - .claude-plugin/marketplace.json
+  - packages/fr-opencode-plugin/package.json
+  - uv.lock
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: set-status --drop-level, red → green → refactor
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_set_status.py add CLI tests (spec Test Plan 1-7) using the file's _invoke/_row
+      helpers on a row seeded with two unit refs: (1) `--drop-level unit=<ref>` removes it, keeps the other, moves
+      status+notes, and the three reports exist and changed; (2) absent-ref drop exits 2, matrix.yaml and each
+      committed report byte-identical (read bytes before/after); (3) `--drop-level unit=<old> --level unit=<new>`
+      re-points the row in one call; (4) same ref in --level and --drop-level exits 2, nothing changed;
+      (5) unknown level key in --drop-level exits 2, nothing changed; (6) `--drop-level foo` (no `=`) exits 2 and
+      output mentions `--drop-level`; (7) dropping the only ref of a ci row succeeds (row levels empty, status ci).
+      Run — expect failures (no such option).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/acceptance_cmd.py give `_parse_levels(level, flag="--level")` a flag
+      parameter used in its error message. Add `drop_level: list[str] = typer.Option([], "--drop-level", help=...)`
+      to set_status_cmd ("'<level>=<ref>' evidence to REMOVE (repeatable); refused if the ref is not on the row").
+      Pre-flight: parse drops with flag="--drop-level"; refuse (exit 2) any (level, ref) present in both parsed
+      additions and drops; compute `merge_levels(drop_levels(target.levels, drops), additions)` inside the existing
+      AcceptanceError → exit 2 block. Thread drops through `_apply_rows` into
+      `RecordTarget(message=..., acceptance_drops={row_id: {k: tuple(v) for k, v in drops.items()}})` (only when
+      non-empty). Update the command docstring. Rerun the test file green, plus test_record_verbs.py.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: ruff check + format touched files; mypy packages/fr/src. Commit.
+- number: 2
+  title: Docs, mirror, matrix row, version bump
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      In .claude/rules/acceptance-matrix.md "How", extend the `set-status` bullet: `--drop-level <level>=<ref>`
+      (repeatable) removes a stale evidence ref in the same rewrite, and is refused (exit 2, nothing changed) when
+      the ref is not on the row or is also named in `--level`. Run `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`, then both with `--check`; commit the regenerated
+      .opencode/instructions/acceptance-matrix.md.
+  - id: P3.T2.S2
+    text: |-
+      Dogfood the verb: `uv run fr acceptance set-status --id lifecycle-acceptance-drop-level --status ci --level
+      unit=super-fr:tests/unit/test_acceptance_set_status.py --notes "gh#624. fr acceptance set-status --drop-level
+      removes a stale evidence ref in the same rewrite as the status move. Absent, contradictory and unknown-level
+      drops exit 2 with the matrix and reports byte-identical. Engine refusals are pinned in test_record_apply.py."`.
+      Then `uv run fr acceptance check` passes.
+  - id: P3.T2.S3
+    text: |-
+      `uv run --no-project python scripts/bump-version.py patch`, then `--check`; commit the manifests and uv.lock.
+      Run `uv run pytest tests/unit/test_acceptance_set_status.py tests/unit/test_record_apply.py tests/unit/test_record_verbs.py tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_tripwire_hermes_skills_sync.py -q --no-cov`, green. Commit.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-25T23:03:04+00:00'
+      note: null
+  completion:
+    at: '2026-09-25T23:03:04+00:00'
+    note: null
+    observed_prs: []

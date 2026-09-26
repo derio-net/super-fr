@@ -1,0 +1,46 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One header definition; every table error names it
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - plan-create-table-errors-name-header
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/plan_ops.py
+  - tests/unit/test_v2_plan_ops.py
+  estimate_lines: 90
+tasks:
+- number: 1
+  title: Red then green — hint in every table error
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_v2_plan_ops.py add tests that (a) a section with no table makes create raise PlanEditError containing '| Plan | Repo | File | Depends on |' and leaves no plan folder, (b) _append_spec_row on a no-table section (called directly) raises with the same header text, (c) _append_spec_row on a section-less spec still raises and names the header, (d) rework on a section-less spec raises naming the header. Run `uv run pytest tests/unit/test_v2_plan_ops.py -q --no-cov`; expect these fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in plan_ops.py add _CANONICAL_HEADER_LINE, derive _CANONICAL_HEADER_CELLS and _CANONICAL_HEADER_SEPARATOR from it, add _header_hint(), and route the mismatch error, both no-table raises and the missing-section raise through it. Tests from S1 pass; the existing mislabeled-header test still passes.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: confirm no second literal of the header remains in plan_ops.py (grep 'Depends on'); run the whole file's tests.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-26T05:40:08+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-26T05:40:08+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-26T05:40:08+00:00'
+      note: null
+  completion:
+    at: '2026-09-26T05:40:08+00:00'
+    note: null
+    observed_prs: []
