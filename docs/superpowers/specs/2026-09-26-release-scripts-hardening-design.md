@@ -109,3 +109,9 @@ with `fr acceptance set-status ... --level unit=super-fr:tests/unit/test_version
 One phase, one PR. No change fragment: the touched paths (`scripts/version_surfaces.py`,
 `scripts/check-change-fragment.py`, `ci.yml`, `tests/**`, docs) are none of the
 paths `requires_bump` lists, so the `change-fragment` job does not require one.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-26-release-scripts-hardening | `derio-net/super-fr` | `2026-09-26-release-scripts-hardening` | — |

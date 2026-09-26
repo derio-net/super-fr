@@ -1,0 +1,115 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Release scripts hardening (#669 TOML anchor,
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  files:
+  - scripts/version_surfaces.py
+  - scripts/check-change-fragment.py
+  - .github/workflows/ci.yml
+  - tests/unit/test_version_surfaces.py
+  - tests/unit/test_version_bump_guard.py
+  - tests/unit/test_change_fragment_gate.py
+  - docs/acceptance/**
+  estimate_lines: 200
+tasks:
+- number: 1
+  title: RED — tests for all three defects
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_version_surfaces.py add tests per spec §4: a member pyproject whose
+      first table is `[tool.x]` carrying `version = "0.0.1"` (write_version moves [project].version,
+      tool table byte-identical); `[project]` followed by `[project.urls]` and by a tool table;
+      a `[project]  # comment` header; a multi-line array with a nested `[` line inside [project];
+      a single-quoted version raises ValueError and write_version leaves every file (root
+      included) unwritten. Use tmp_path repos built like the existing write_version test.
+  - id: P1.T1.S2
+    text: |-
+      RED: in tests/unit/test_version_bump_guard.py assert requires_bump is True for
+      plugins/super-fr-dispatch/skills/fr-dispatch/SKILL.md and False for
+      plugins/super-fr-dispatch/rules/x.md, plugins/super-fr/.claude-plugin/plugin.json,
+      plugins/x/.claude-plugin/skills/y and plugins/skills/y.
+  - id: P1.T1.S3
+    text: |-
+      RED: in tests/unit/test_change_fragment_gate.py add a tripwire that parses
+      .github/workflows/ci.yml (yaml) and asserts the change-fragment job has an
+      astral-sh/setup-uv step before a run step invoking
+      `uv run --no-project python scripts/check-change-fragment.py`. Run
+      `uv run pytest tests/unit/test_version_surfaces.py tests/unit/test_version_bump_guard.py tests/unit/test_change_fragment_gate.py -q --no-cov`
+      and confirm the new tests fail for the right reason.
+- number: 2
+  title: GREEN — implement the three fixes
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: add _set_project_version(text, new, path) to scripts/version_surfaces.py per spec §2.A
+      (header/boundary regexes, slice-scoped substitution, ValueError on no match), and make
+      write_version compute every pyproject rewrite in memory before writing any file.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in scripts/check-change-fragment.py make requires_bump match
+      `re.match(r"plugins/[^/]+/skills/", path)` while keeping plugins/super-fr/rules/; refresh the
+      stale "plain python" docstring line.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: in .github/workflows/ci.yml add `- uses: astral-sh/setup-uv@v4` after checkout in the
+      change-fragment job and switch the run line to
+      `uv run --no-project python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"`.
+      Run the three test files and confirm green.
+- number: 3
+  title: REFACTOR + quality gate + acceptance
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      REFACTOR: tidy the new helper against its neighbours (naming, comments at surrounding density);
+      run `uv run ruff format packages/ tests/ scripts/`, `uv run ruff check packages/ tests/ scripts/`
+      and `uv run --no-project python scripts/bump-version.py --check`.
+  - id: P1.T3.S2
+    text: |-
+      Add test_version_surfaces.py as a unit evidence ref on the existing change-fragment-gate row
+      (the one citing test_change_fragment_gate.py) with `fr acceptance set-status --id <row>
+      --status ci --notes "..." --level unit=super-fr:tests/unit/test_version_surfaces.py`, and
+      commit the regenerated reports. Run the full suite into a log
+      (`uv run pytest -q --no-cov -n auto`) and confirm green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
