@@ -149,3 +149,8 @@ verify_merge, verify_merge_reaped.
 ### opus-f5-default-true · finding [open] (reviewer: in scope) · _verdict defaulted branch_fetched to True (phase 1)
 
 A future caller omitting it would pass without a branch fetch.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config created=2026-09-27T00:12:41 phase=1 state=open review_scope=out -->
+### opus-f6-user-log-config · finding [open] (reviewer: out of scope) · user git config (log.follow, color.ui) can change git log output (phase 1)
+
+Negligible; fails safe for colour.
