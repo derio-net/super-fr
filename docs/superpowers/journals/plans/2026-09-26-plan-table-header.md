@@ -89,3 +89,18 @@ Each set-status call made its own chore(fr) commit (three), so the matrix flips 
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 release/bookkeeping task (version bump, matrix rows, verification); no code written, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=r3-1 created=2026-09-26T07:53:09 phase=3 state=open review_scope=out -->
+### r3-1 · finding [open] (reviewer: out of scope) · matrix note cites test_v2_migrate as evidence but no test was added there (phase 3)
+
+It is regression coverage of unchanged migrate output; the citation is loose, not wrong.
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-26T07:53:09 phase=3 -->
+### review-p3 · review · phase 3 independent review: no in-scope findings (phase 3)
+
+Reviewer confirmed 4.23.1 on every version surface, three rows at ci citing 8 existing tests, reports in sync, fr validate artifacts clean, no unrelated files, privacy rule respected.
+
+<!-- fr:journal kind=finding scope=plan id=r3-1-resolved created=2026-09-26T07:53:09 phase=3 state=open resolves=r3-1 out_of_scope=true -->
+### r3-1-resolved · finding [out-of-scope] · resolves r3-1: matrix note cites test_v2_migrate as evidence but no test was added there (phase 3)
+
+Accurate as regression coverage; not caused by this change.
