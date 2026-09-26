@@ -149,3 +149,8 @@ fixed in 33d01601
 ### o7-resolved · finding [fixed] · resolves o7: F8/F9 stale docstring; a background window can span the whole run (Opus)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o8-resolved created=2026-09-26T23:51:06 state=open resolves=o8 out_of_scope=true -->
+### o8-resolved · finding [out-of-scope] · resolves o8: F10 OpenCode & detach zero-length window (Opus)
+
+OpenCode has no completion event; needs its own design; not caused by this change
