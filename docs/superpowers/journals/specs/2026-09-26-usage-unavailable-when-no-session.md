@@ -69,3 +69,8 @@ Re-run on claude-opus-5-5 per operator correction (the earlier spec-review ran o
 ### o1 · finding [open] (reviewer: in scope) · Spec did not cover backfill, which the branch now changes
 
 check: consistency. backfill.py writes the placeholder; spec needed a design line, a Test Plan item and plan files.
+
+<!-- fr:journal kind=finding scope=spec id=o2 created=2026-09-26T23:36:43 state=open review_scope=in -->
+### o2 · finding [open] (reviewer: in scope) · Several spec path:line citations went stale
+
+check: codebase. Implementation shifted capture.py/file.py lines; cite by symbol instead.
