@@ -4642,5 +4642,8 @@ rows:
       - super-fr:tests/unit/test_isolation.py
     status: ci
     notes: Also covers the release bot deleting the PR's .changes fragment after the
-      merge (blob-equality fallback, no special case); tests pin it, incl. never-landed
-      fragment and orphan stay missing
+      merge (blob-equality fallback, no special case), and fr archive git-mv-ing a merged
+      branch's plans/specs/journals/runs/usage to docs/superpowers/implemented/... (both
+      verify-merge and the down/reap-hazard path, per-line containment or blob equality
+      at the archived path); tests pin never-landed / content-differs / orphan-after-archive
+      as still missing, and dirty/unpushed as still hazarding.
