@@ -166,7 +166,7 @@ class QuestionRounds(_Strict):
         if self.rounds == 2:
             if self.trigger is None:
                 raise ValueError("questions.trigger is required when rounds: 2")
-            if not self.reason:
+            if not (self.reason or "").strip():
                 raise ValueError("questions.reason is required when rounds: 2")
         else:
             if self.trigger is not None:

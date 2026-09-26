@@ -154,6 +154,7 @@ def test_questions_counts_toward_the_outcome_section() -> None:
         ("outcome: done\nquestions: {rounds: 3}\n", "rounds"),
         ("outcome: done\nquestions: {rounds: 2, reason: x}\n", "trigger"),
         ("outcome: done\nquestions: {rounds: 2, trigger: design-risk}\n", "reason"),
+        ("outcome: done\nquestions: {rounds: 2, trigger: design-risk, reason: '  '}\n", "reason"),
         (
             "outcome: done\nquestions: {rounds: 1, trigger: design-risk, reason: x}\n",
             "trigger",

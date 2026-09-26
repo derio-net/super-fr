@@ -57,6 +57,8 @@ def _guard(path: Path) -> None:
             f"{path}: not valid YAML, so fr will not stamp it as record version "
             f"{RECORD_SCHEMA_VERSION} ({e})."
         ) from e
+    if data is None:
+        data = {}  # `parse_record` reads an empty file as `{}`; agree with it (p1-r4)
     if not isinstance(data, dict):
         raise UnreadableRecordError(
             f"{path}: top level must be a mapping, got {type(data).__name__}"

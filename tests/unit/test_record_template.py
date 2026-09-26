@@ -46,6 +46,23 @@ def test_the_dispatch_brief_carries_a_prefilled_record(tmp_path: Path) -> None:
     assert "P1.T1.S1, P1.T1.S2, P1.T2.S1" in text
     assert "P1.T1" in text.split("owed by tasks with no refactor step:")[1].splitlines()[0]
     assert record["in_progress"] is None
+    assert "questions" not in text  # implement-phase clears no operator gate
+
+
+def test_record_brief_hands_a_gated_step_the_questions_hint(tmp_path: Path) -> None:
+    """p1-r1: through `record_brief`, the one production caller, not a copy of
+    its `gated=` argument — deleting that wiring must fail this test."""
+    from fr.record.template import record_brief
+    from fr.run.model import load_run_state
+    from fr.workflow.model import parse_manifest
+
+    root = started_run(tmp_path)
+    state = load_run_state(root, RUN)
+    manifest = parse_manifest(_SHIPPED_MANIFEST.read_text())
+    brainstorm = next(s for s in manifest.steps if s.gate == "operator")
+    text = record_brief(root, state, brainstorm).template
+    assert any(line.strip().startswith("#") and "questions:" in line for line in text.splitlines())
+    parse_record(text)
 
 
 def test_pickup_carries_the_template_for_the_runs_unit(tmp_path: Path) -> None:
