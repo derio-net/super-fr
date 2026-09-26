@@ -99,3 +99,8 @@ Replaced with a linear pattern.
 ### o5 · finding [open] (reviewer: in scope) · F5 exit code taken from model-written summary text (Opus) (phase 1)
 
 Now the trailing (exit code N) only.
+
+<!-- fr:journal kind=finding scope=plan id=o6 created=2026-09-26T23:50:59 phase=1 state=open review_scope=in -->
+### o6 · finding [open] (reviewer: in scope) · F7 test gaps, weak assertion, fixtures not captured (Opus) (phase 1)
+
+Added attachment, timeout-ack, misresolution, duplicate, ordering, sidechain cases; strengthened assertion; 12 new tests confirmed red on the old code.
