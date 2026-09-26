@@ -89,3 +89,8 @@ The squash commit carries the branch blob at the original path; §C needed a tes
 ### opus-s3 · finding [open] (reviewer: in scope) · gc's PR-less _merged_by_content is the third caller, without a MERGED backstop
 
 Known limits were justified by 'verified needs PR MERGED', not true on reap/gc paths.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s4 created=2026-09-27T00:07:35 state=open review_scope=in -->
+### opus-s4 · finding [open] (reviewer: in scope) · wrong line cites; wrong reason unpushed work still hazards
+
+_reap_hazard :1082/:1196, _merged_by_content :1668 on origin/main; unpushed content is caught inside branch_changes_present.
