@@ -4,7 +4,7 @@ captures:
 - host: h-d7e22520
   harness: claude-code
   mode: host-worktree
-  captured_at: '2026-09-26T07:54:32+00:00'
+  captured_at: '2026-09-26T07:57:24+00:00'
   at:
   - resolve:brainstorm
   - deliver
@@ -67,24 +67,24 @@ captures:
       phase/2/review-phase: 1235
       phase/3/implement-phase: 2570
       phase/3/review-phase: 1374
-  - session: 928128b6-cbf1-45c7-a02c-557df8d8a06a
+  - session: 4421bb22-ef78-4e54-aea5-8c4fdd1be17b
     role: main
     models:
       claude-sonnet-5:
-        input: 22
-        cache_write: 65437
-        cache_read: 887967
-        output: 4402
+        input: 32
+        cache_write: 64795
+        cache_read: 1331817
+        output: 4864
         usd: null
         usd_source: none
     activity:
       other:
         usd: null
-        turns: 4
+        turns: 10
       paperwork:
         usd: null
-        turns: 7
+        turns: 6
     steps:
       (outside run):
         usd: null
-        turns: 11
+        turns: 16
