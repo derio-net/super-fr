@@ -74,3 +74,8 @@ Opus review. Routed through canonical_spec_ref; test_rework_create_writes_the_sa
 ### r2-f3 · finding [open] (reviewer: in scope) · No test that a scoped archive canonicalizes the archived plan's own spec (phase 1)
 
 Opus review. Added test_single_plan_archive_canonicalizes_the_archived_plans_own_spec.
+
+<!-- fr:journal kind=finding scope=plan id=r2-f4 created=2026-09-26T23:40:01 phase=1 state=open review_scope=in -->
+### r2-f4 · finding [open] (reviewer: in scope) · Spec had an empty duplicate Implementation Plans section (phase 1)
+
+Opus review. Same as spec finding s2-2; removed in the spec re-review commit.
