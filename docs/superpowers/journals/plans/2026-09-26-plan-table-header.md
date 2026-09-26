@@ -64,3 +64,18 @@ test_create_preflight_validates_spec_before_creating_folder asserted the old mis
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 the refactor step (S3) was the cleanup: migrate._ensure_spec_plan_row now reuses plan_ops._ensure_section_text, leaving one header literal; nothing further to clean
+
+<!-- fr:journal kind=finding scope=plan id=r2-1 created=2026-09-26T07:43:50 phase=2 state=open review_scope=in -->
+### r2-1 · finding [open] (reviewer: in scope) · stale pre-flight comment in create (plan_ops.py:200) (phase 2)
+
+Said a section-less spec must fail loud; it is now accepted and written.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-09-26T07:43:50 phase=2 -->
+### review-p2 · review · phase 2 independent review: 1 in-scope finding (phase 2)
+
+Reviewer confirmed section written only when absent right before the strict append, read-only pre-flight, rework strict, migrate output byte-identical, no other consumer of the old refusal text; 200 tests passed. One stale comment, fixed.
+
+<!-- fr:journal kind=finding scope=plan id=r2-1-resolved created=2026-09-26T07:43:50 phase=2 state=fixed resolves=r2-1 -->
+### r2-1-resolved · finding [fixed] · resolves r2-1: stale pre-flight comment in create (plan_ops.py:200) (phase 2)
+
+Comment rewritten to describe the malformed-table pre-flight and the create-writes-section behaviour.
