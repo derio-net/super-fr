@@ -84,10 +84,17 @@ steps:
     exit: 0
     stdout: ''
   deliver:
-    state: running
-    at: '2026-09-26T10:19:24+00:00'
+    state: failed
+    at: '2026-09-26T10:38:45+00:00'
+    emitted:
+      pr: pending
     units:
       step/deliver:
         attempts:
         - dispatched: '2026-09-26T10:19:24+00:00'
           harness: opencode
+          returned: '2026-09-26T10:38:45+00:00'
+          outcome: failed
+        evidence:
+          tests: docs/superpowers/runs/2026-09-26-fix-659-isolation-gc-fetch.records/full-suite.log@30580a1ade91
+          unobserved: tests
