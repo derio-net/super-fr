@@ -119,3 +119,8 @@ Spec non-goal; same as r6/s2. Follow-up to be filed at the merge touchpoint.
 ### o1-resolved · finding [fixed] · resolves o1: F1 queued-attachment task-notification shape never seen (Opus code review)
 
 fixed in 33d01601
+
+<!-- fr:journal kind=finding scope=plan id=o2-resolved created=2026-09-26T23:51:02 state=fixed resolves=o2 -->
+### o2-resolved · finding [fixed] · resolves o2: F2 timeout-moved foreground command not recognised as background (Opus)
+
+fixed in 33d01601
