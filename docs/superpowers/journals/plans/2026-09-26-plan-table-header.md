@@ -9,3 +9,48 @@ Added and derived from the header line per the plan, but nothing reads it until 
 ### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
 
 the header literal now lives once (_CANONICAL_HEADER_LINE) with cells and separator derived from it; grep 'Depends on' in plan_ops.py shows a single literal, nothing further to clean
+
+<!-- fr:journal kind=finding scope=plan id=r1-1 created=2026-09-26T07:40:50 phase=1 state=open review_scope=out -->
+### r1-1 · finding [open] (reviewer: out of scope) · _CANONICAL_HEADER_SEPARATOR has no consumer yet (phase 1)
+
+plan_ops.py:402; consumed by _ensure_section_text in phase 2 as planned.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2 created=2026-09-26T07:40:50 phase=1 state=open review_scope=out -->
+### r1-2 · finding [open] (reviewer: out of scope) · migrate.py:761 still hard-codes the header (phase 1)
+
+Spec d4 assigns it to phase 2 task S3.
+
+<!-- fr:journal kind=finding scope=plan id=r1-3 created=2026-09-26T07:40:50 phase=1 state=open review_scope=out -->
+### r1-3 · finding [open] (reviewer: out of scope) · test _HEADER duplicates the literal (phase 1)
+
+Deliberate pin so the tests are not tautological.
+
+<!-- fr:journal kind=finding scope=plan id=r1-4 created=2026-09-26T07:40:50 phase=1 state=open review_scope=out -->
+### r1-4 · finding [open] (reviewer: out of scope) · no spec no-mutation assertion in the no-table create test (phase 1)
+
+Pre-flight raises before any write; the mismatch test already asserts the spec is untouched. Low risk.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-09-26T07:40:50 phase=1 -->
+### review-p1 · review · phase 1 independent review: no in-scope defects (phase 1)
+
+Reviewer confirmed one builder, single-line derivation, strict _append_spec_row and meaningful tests; ran the plan_ops suite (114 passed). 4 out-of-scope observations, all filed.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved created=2026-09-26T07:40:50 phase=1 state=open resolves=r1-1 out_of_scope=true -->
+### r1-1-resolved · finding [out-of-scope] · resolves r1-1: _CANONICAL_HEADER_SEPARATOR has no consumer yet (phase 1)
+
+Phase 2 adds its consumer; not a defect of phase 1.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved created=2026-09-26T07:40:50 phase=1 state=open resolves=r1-2 out_of_scope=true -->
+### r1-2-resolved · finding [out-of-scope] · resolves r1-2: migrate.py:761 still hard-codes the header (phase 1)
+
+Planned for phase 2; phase 1's scope was plan_ops.py.
+
+<!-- fr:journal kind=finding scope=plan id=r1-3-resolved created=2026-09-26T07:40:50 phase=1 state=open resolves=r1-3 out_of_scope=true -->
+### r1-3-resolved · finding [out-of-scope] · resolves r1-3: test _HEADER duplicates the literal (phase 1)
+
+Intentional test pin, not a defect.
+
+<!-- fr:journal kind=finding scope=plan id=r1-4-resolved created=2026-09-26T07:40:50 phase=1 state=open resolves=r1-4 out_of_scope=true -->
+### r1-4-resolved · finding [out-of-scope] · resolves r1-4: no spec no-mutation assertion in the no-table create test (phase 1)
+
+Covered indirectly; not caused by this change.
