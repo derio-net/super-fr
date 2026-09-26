@@ -211,7 +211,7 @@ rows:
   - id: auto-archive-merged-plans
     capability: Lifecycle
     acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
-      enforced archived by a CI tripwire
+      named by a CI reminder that warns without failing unrelated PRs
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-07-03-auto-archive-merged-plans-design.md
     levels:
@@ -219,7 +219,12 @@ rows:
       - super-fr:tests/unit/test_completed_unarchived_plans.py
       - super-fr:tests/unit/test_tripwire_unarchived_plans.py
     status: ci
-    notes: Tripwire checks completeness on origin/main (#334).
+    notes: 'Tripwire checks completeness on origin/main (#334). Since 2026-09-26 it
+      warns instead of failing: a plan without a manual phase is complete the moment
+      it merges, so a failing check held every unrelated PR and main red until that
+      run''s closeout (fr pickup, which can finish a plan at any time) landed, and pushed
+      closeouts to fr archive --all (#660/#664). The warning names one fr archive <plan-dir>
+      per plan; fr status lists the same plans.'
   - id: isolation-down-verified
     capability: Isolation teardown
     acceptance: A teardown that cannot complete (transient docker/git failure) leaves

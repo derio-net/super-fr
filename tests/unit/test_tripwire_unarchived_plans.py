@@ -1,10 +1,17 @@
-"""CI tripwire: no merged-but-unarchived plan may linger in plans/ (#334).
+"""CI reminder: merged-but-unarchived plans lingering in plans/ (#334).
 
 The fr lifecycle moves a completed plan from docs/superpowers/plans/ to
 implemented/plans/. That archive step kept getting skipped (issue #334). This
-guard fails loud when a plan that merged COMPLETE to origin/main is still
-sitting in plans/ — so a forgotten post-merge archive turns CI red until it is
-done, while in-progress work is deliberately NOT flagged.
+check names every plan that merged COMPLETE to origin/main and is still sitting
+in plans/, while in-progress work is deliberately NOT flagged.
+
+It WARNS, it does not fail (2026-09-26). A plan with no manual phase is complete
+the moment its PR merges, so a failing check turned CI red for every unrelated
+PR (and main) from that merge until someone's closeout landed. That is a normal
+state, not a forgotten one: a closeout (`fr pickup --run <id>`) can finish a
+plan at any time, and a batch merge (#667) deliberately defers it. A red CI also
+pushed closeouts to `fr archive --all`, which archived another run's plan out
+from under its own closeout (#660/#664). `fr status` lists the same plans.
 
 Signal = "complete on the default ref" ∩ "still present in the working-tree
 plans/":
@@ -23,6 +30,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import warnings
 from pathlib import Path
 
 import pytest
@@ -136,11 +144,35 @@ def test_no_default_ref_means_skip_not_pass(tmp_path: Path) -> None:
     assert _offenders(tmp_path) is None
 
 
+def _reminder(offenders: list[str]) -> str | None:
+    """The reminder text for *offenders*, or None when there are none.
+
+    Names one `fr archive <plan-dir>` per plan, never `fr archive --all`: the
+    blanket form is how one closeout archived another run's plan (#660/#664)."""
+    if not offenders:
+        return None
+    commands = "; ".join(f"fr archive docs/superpowers/plans/{name}" for name in offenders)
+    return (
+        "merged-but-unarchived plan(s), complete on origin/main but still in "
+        f"docs/superpowers/plans/: {offenders}. Each run's closeout "
+        f"(`fr pickup --run <id>`) archives it; or, by hand: {commands}"
+    )
+
+
+def test_reminder_names_each_plan_and_never_archive_all() -> None:
+    assert _reminder([]) is None
+    text = _reminder(["2026-01-01-a", "2026-01-02-b"])
+    assert text is not None
+    assert "fr archive docs/superpowers/plans/2026-01-01-a" in text
+    assert "fr archive docs/superpowers/plans/2026-01-02-b" in text
+    assert "--all" not in text
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
 def test_no_merged_but_unarchived_plans() -> None:
-    """The backstop. A plan complete ON origin/main that is still sitting in
-    the working tree's plans/ was merged and never archived — run
-    `fr archive --all`.
+    """The reminder. A plan complete ON origin/main that is still sitting in
+    the working tree's plans/ has merged and is waiting for its closeout. It
+    WARNS rather than fails: see the module docstring.
 
     Signal = complete-on-origin-main ∩ still-present-in-working-tree-plans/.
     The origin/main arm fires only on plans that genuinely merged complete
@@ -153,8 +185,6 @@ def test_no_merged_but_unarchived_plans() -> None:
             "no remote-tracking default ref resolvable (shallow checkout? no remote?): "
             f"{merge_evidence(REPO_ROOT, fetch=False).ref_error}"
         )
-    assert offenders == [], (
-        "merged-but-unarchived plan(s) — complete on origin/main but still in "
-        f"docs/superpowers/plans/: {offenders}. Run `fr archive --all` to move "
-        "them to implemented/."
-    )
+    text = _reminder(offenders)
+    if text is not None:
+        warnings.warn(text, UserWarning, stacklevel=1)
