@@ -161,3 +161,55 @@ value plus comment unquotes (bump and summary), and trailing non-comment text is
 
 Not caused by this change: the replaced version-bump-required job invoked
 `python scripts/check-version-bump-needed.py` the same way; phase 2 only swapped the script name.
+
+<!-- fr:journal kind=decision scope=plan id=p3-release-computes-the-number created=2026-09-26T09:15:50 phase=3 -->
+### p3-release-computes-the-number · decision · release.py computes X.Y.Z itself and calls bump-version.py with the explicit number (phase 3) (phase 3)
+
+The bump is aggregated (or overridden) in release.py, then walked past any pre-existing
+`v` tag with the same bump kind, and only then handed to `bump-version.py X.Y.Z`. So the
+manual-tag rule (§5) and the override rule live in one place, and bump-version.py stays a
+dumb writer. An override whose tag exists is refused rather than walked.
+
+<!-- fr:journal kind=decision scope=plan id=p3-staged-diff-check created=2026-09-26T09:15:50 phase=3 -->
+### p3-staged-diff-check · decision · The staged-diff check is per file - line count equals that file's surface count, and every removed line with old->new substituted equals the added line (phase 3) (phase 3)
+
+`verify_staged` allows a consumed fragment only as a deletion and a surface file only as a
+modification whose -U0 hunks are exactly N version lines (N = that file's
+version_surfaces() entries) differing only by old->new. Anything else, including a stray
+untracked file swept in by `git add -A`, refuses naming the path. sync_to_tip therefore
+deliberately does NOT `git clean`: a stray file is refused, never deleted.
+
+<!-- fr:journal kind=decision scope=plan id=p3-notes-from-the-commit created=2026-09-26T09:15:50 phase=3 -->
+### p3-notes-from-the-commit · decision · Release notes always come from the release commit body, first run and rerun alike (phase 3) (phase 3)
+
+`release_notes` reads `git log -1 -S<version> -- pyproject.toml`; if that commit's subject
+is `release: vX.Y.Z` its body (summaries grouped Major/Minor/Patch) is `--notes`, else
+(hand-bumped history, or an override with no fragments) `--generate-notes` alone. One path
+serves the first run and a rerun after a crash between push and tag.
+
+<!-- fr:journal kind=decision scope=plan id=p3-exit-codes-and-tags created=2026-09-26T09:15:50 phase=3 -->
+### p3-exit-codes-and-tags · decision · Exit codes 1 refusal, 2 lost race x3, 3 floor mismatch after tagging; tags are read after fetch --prune-tags (phase 3) (phase 3)
+
+EXIT_FLOOR (3) is distinct so the job fails visibly after the tag and Release exist. Tag
+existence is checked on local refs after `fetch --prune --prune-tags --tags`, so a tag
+deleted on origin is gone locally too (a rerun after a deleted tag re-tags). The floor check
+compares `git describe --match v[0-9]*` (previous tag) with HEAD using floors.new_floors /
+lower_bound_ok, so historical floors and upper-bound moves never trip it. The dispatch
+`version` input reaches the script through env, never spliced into the shell.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-agents-md-auto-tag-mention created=2026-09-26T09:15:50 phase=3 -->
+### p3-agents-md-auto-tag-mention · discovery · AGENTS.md still names auto-tag.yml as the tagger; left for the docs phase (phase 3) (phase 3)
+
+AGENTS.md "Release / version bumping" says `.github/workflows/auto-tag.yml` tags on merge and
+that branch protection blocks direct commits. Both are phase-5 (§3.G) rewrites and outside
+this phase's file list, so they were not touched here; auto-tag.yml itself is deleted.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-26T09:15:50 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+tests only; one World fixture (bare origin, release clone, a second clone for other people's pushes, injected bump/lock/gh) was built first and every case reuses it, so nothing duplicated remained
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-26T09:15:50 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+the cleanup owed here is the one P3.T3.S2 names (push/retry loop and tag/release as separate functions); it was written that way in green and checked in P3.T3.S2, not done twice
