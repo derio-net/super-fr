@@ -250,6 +250,15 @@ def bash_rows(timestamp: str, *, tool_use_id: str) -> list[dict[str, Any]]:
     return [call, result]
 
 
+def tool_rows(timestamp: str, *, tool_use_id: str, name: str) -> list[dict[str, Any]]:
+    """The captured `Bash` exchange with the tool renamed to `name` — a stand-in
+    for any other main-thread tool_use (`TodoWrite`, `Read`, ...) between two
+    question calls. Only the tool name matters to round splitting."""
+    call, result = bash_rows(timestamp, tool_use_id=tool_use_id)
+    call["message"]["content"][0]["name"] = name
+    return [call, result]
+
+
 def text_row(timestamp: str) -> dict[str, Any]:
     """The captured text-only assistant turn, moved to `timestamp`."""
     row = copy_of(records(ORCHESTRATOR)[TEXT_LINE])

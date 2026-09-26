@@ -3047,8 +3047,13 @@ def test_no_questions_with_nowhere_to_record_the_reason_is_refused(tmp_path: Pat
     assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
 
 
-def test_the_no_questions_decision_is_logged_once(tmp_path: Path) -> None:
-    """Review r1-6: the entry id is stable, so a retry cannot log it twice."""
+@pytest.mark.parametrize(("reason", "exit_code"), [("again", 0), ("changed", 2)])
+def test_the_no_questions_decision_is_logged_once(
+    tmp_path: Path, reason: str, exit_code: int
+) -> None:
+    """Review r1-6: the entry id is stable, so a retry cannot log it twice.
+    Review p2-r6: a retry whose reason DIFFERS from the logged body is refused
+    rather than silently keeping the stale one."""
     from fr.journal.model import journal_path, parse_journal
 
     from tests.unit.transcript_sessions import write_session
@@ -3062,14 +3067,16 @@ def test_the_no_questions_decision_is_logged_once(tmp_path: Path) -> None:
         "# Journal: 2026-09-21-x\n\n"
         "<!-- fr:journal kind=decision scope=spec id=gate-no-questions-brainstorm "
         "created=2026-09-21T00:00:00 -->\n"
-        "### gate-no-questions-brainstorm · decision · an earlier attempt\n\nfirst\n"
+        "### gate-no-questions-brainstorm · decision · an earlier attempt\n\nagain\n"
     )
+    before = journal.read_text()
 
     result = _invoke_measurable(
-        repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", "again"], root, "s-g"
+        repo, shipped, [*_RESOLVE_BRAINSTORM, "--no-questions", "--reason", reason], root, "s-g"
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == exit_code, result.output
+    assert journal.read_text() == before
     ids = [e.id for e in parse_journal(journal.read_text())]
     assert ids == ["gate-no-questions-brainstorm"]
 

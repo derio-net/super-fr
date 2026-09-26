@@ -969,8 +969,8 @@ def question_rounds_refusal(
         return (
             f"the transcript shows {n} answered question rounds since the gate blocked — "
             "there is never a round 3. A gate asked in three rounds is not one fr records "
-            "as answered: clear it on the record instead "
-            '(`--no-questions --reason "…"`), or decline it (`--state failed`).'
+            "as answered: decline it (`--state failed`) and re-run the step, asking at "
+            "most two rounds."
         )
     if n != declared:
         plural = "round" if n == 1 else "rounds"
@@ -1004,19 +1004,42 @@ def _append_gate_decision(
     repo_root: Path, spec: str, entry_id: str, *, title: str, body: str
 ) -> None:
     """Append one spec-journal `decision` about a cleared operator gate — once:
-    a retry after a later refusal must not log it twice (review r1-6)."""
+    a retry after a later refusal must not log it twice (review r1-6).
+
+    A retry that would write a DIFFERENT body under the same id is refused
+    (exit 2) before any write (review p2-r6): keeping the first body silently
+    would leave the journal — and the PR body read from it — describing a
+    trigger or reason this resolve no longer declares."""
     from fr.journal.model import append_journal_entry, journal_path
 
     slug = spec_journal_slug(Path(spec).name[: -len(".md")])
     target = journal_path(repo_root, "spec", slug)
     try:
-        already = target.is_file() and any(
-            e.id == entry_id for e in parse_journal(target.read_text())
+        existing = (
+            next((e for e in parse_journal(target.read_text()) if e.id == entry_id), None)
+            if target.is_file()
+            else None
         )
     except JournalParseError:
-        already = False
-    if already:
-        return
+        existing = None
+    if existing is not None:
+        if existing.body.strip() == body.strip():
+            return
+        shown = (
+            target.relative_to(repo_root).as_posix()
+            if target.is_relative_to(repo_root)
+            else str(target)
+        )
+        err_console.print(
+            f"journal entry `{entry_id}` in {shown} already records a different body "
+            f"({existing.body.strip()!r}) than this resolve would write ({body.strip()!r}). "
+            "Resolve again with what that entry says, or correct the entry first if it is "
+            "the one that is wrong — nothing applied.",
+            style="red",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     _remember(target)
     append_journal_entry(
         target,
@@ -1143,11 +1166,16 @@ def _gate_provenance(
     # that the gate is not enforced there, which is no reason to be quiet now.
     _note_unobserved("operator-gate")
     _record_round_two(repo_root, step_id, questions, spec_for_reason)
-    declared = (
-        f" The declared `questions: {{rounds: {questions.rounds}}}` is recorded as claimed too."
-        if questions is not None
-        else ""
-    )
+    # p2-r2: only `rounds: 2` writes anything (`_record_round_two`); `rounds: 1`
+    # is the default and is merely accepted.
+    if questions is None:
+        declared = ""
+    elif questions.rounds == 2:
+        declared = " The declared `questions: {rounds: 2}` is recorded as claimed too."
+    else:
+        declared = (
+            f" The declared `questions: {{rounds: {questions.rounds}}}` is accepted, unverified."
+        )
     err_console.print(
         f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
         f"so `answered_by: {claimed}` is recorded as claimed, unverified "

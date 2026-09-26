@@ -331,7 +331,47 @@ def test_one_answered_call_is_one_round(tmp_path: Path) -> None:
 
     rounds = _rounds(tmp_path, question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"))
     assert rounds is not None and len(rounds) == 1
-    assert rounds[0].answered is True
+
+
+def test_a_round_carries_no_answered_flag() -> None:
+    """Only answered rounds are returned, so a per-round `answered` field could
+    only ever be True — review p2-r3 removed it."""
+    from fr.run.telemetry import Round
+
+    assert "answered" not in Round.__dataclass_fields__
+
+
+def test_a_progress_tracking_tool_between_calls_keeps_one_round(tmp_path: Path) -> None:
+    """Review p2-r8: `TodoWrite` and friends touch no project state, so they are
+    not the cross-examination that separates rounds."""
+    from tests.unit.transcript_sessions import question_rows, tool_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        *tool_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_t1", name="TodoWrite"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+
+
+def test_a_read_between_calls_makes_two_rounds(tmp_path: Path) -> None:
+    from tests.unit.transcript_sessions import question_rows, tool_rows
+
+    rows = [
+        *question_rows("2026-09-21T16:05:00.000Z", tool_use_id="toolu_q1"),
+        *tool_rows("2026-09-21T16:06:00.000Z", tool_use_id="toolu_r1", name="Read"),
+        *question_rows("2026-09-21T16:07:00.000Z", tool_use_id="toolu_q2"),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 2
+
+
+def test_the_round_neutral_tools_are_exactly_the_progress_trackers() -> None:
+    from fr.run.telemetry import ROUND_NEUTRAL_TOOLS
+
+    expected = {"TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"}
+    assert frozenset(expected) == ROUND_NEUTRAL_TOOLS
 
 
 def test_consecutive_question_calls_with_only_text_between_are_one_round(

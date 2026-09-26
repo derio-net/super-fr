@@ -469,17 +469,27 @@ def operator_answered_since(env: Mapping[str, str], since: str) -> bool | None:
     return None if rounds is None else bool(rounds)
 
 
+ROUND_NEUTRAL_TOOLS = frozenset({"TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"})
+"""Tools whose tool_use does NOT close a question round (review p2-r8).
+
+These are Claude Code's own progress-tracking tools; they read or write no
+project state, so they are not the cross-examination that separates rounds. Any
+other tool (Read, Bash, Grep, Agent and so on) still closes a round — without
+this exception, a bookkeeping call between two question batches would split one
+round into two and, under the never-a-round-3 refusal, could strand a gate."""
+
+
 @dataclass(frozen=True)
 class Round:
     """One operator question round (spec 2026-09-26 §3.C): a maximal run of
-    main-thread `QUESTION_TOOL` calls with no other tool_use between them.
+    main-thread `QUESTION_TOOL` calls with no other tool_use between them
+    (`ROUND_NEUTRAL_TOOLS` excepted). Only answered rounds are ever built.
 
     `question_texts` holds every `questions[].question` and `header` of its
     calls, in order — where a `Round 1 of 2` announcement is looked for.
     """
 
     question_texts: tuple[str, ...]
-    answered: bool
 
 
 def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
@@ -489,22 +499,15 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
 
     Only main-thread (non-sidechain) assistant records stamped at or after
     `since` are walked. Consecutive `QUESTION_TOOL` tool_uses form one round —
-    text-only turns and the calls' own tool_results do not break it, so a batch
-    larger than the tool's per-call limit stays ONE round; any other tool_use
-    closes it. A round is answered when any of its calls has a `tool_result`
-    whose `toolUseResult` carries a non-empty `answers` map; a round that was
-    only declined is not returned.
+    text-only turns, the calls' own tool_results and `ROUND_NEUTRAL_TOOLS` calls
+    do not break it, so a batch larger than the tool's per-call limit stays ONE
+    round; any other tool_use closes it. A round is answered when any of its
+    calls has a `tool_result` whose `toolUseResult` carries a non-empty
+    `answers` map; a round that was only declined is not returned.
     """
-    if detect_harness(env) != ClaudeCodeReader.harness:
-        return None
     start = parse_timestamp(since)
-    if start is None:
-        return None
-    try:
-        transcript = claude_code_session(env)
-    except (OSError, HarnessError):
-        return None
-    if transcript is None:
+    transcript = _this_session(env)
+    if start is None or transcript is None:
         return None
     records = _read_records(transcript)
     if records is None:
@@ -522,6 +525,8 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
         for block in content if isinstance(content, list) else ():
             if not isinstance(block, Mapping) or block.get("type") != "tool_use":
                 continue
+            if block.get("name") in ROUND_NEUTRAL_TOOLS:
+                continue
             if block.get("name") != QUESTION_TOOL or not isinstance(block.get("id"), str):
                 open_group = None
                 continue
@@ -534,7 +539,7 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
         return []
     answered = _answered_ids(records)
     return [
-        Round(question_texts=tuple(texts), answered=True)
+        Round(question_texts=tuple(texts))
         for ids, texts in groups
         if any(i in answered for i in ids)
     ]

@@ -179,7 +179,11 @@ no transcript).
 - **A round** is a maximal run of main-thread (non-sidechain) `QUESTION_TOOL`
   tool_uses stamped at or after `since`, with **no other tool_use between
   them**. Text-only assistant turns and the question calls' own tool_results do
-  not break a round. A round **counts** when at least one of its calls was
+  not break a round. The one exception among tool_uses is `ROUND_NEUTRAL_TOOLS`
+  (`TodoWrite`, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`): Claude
+  Code's own progress-tracking tools read or write no project state, so they do
+  not close a round, while any other tool (`Read`, `Bash`, `Grep`, `Agent`, …)
+  still does. A round **counts** when at least one of its calls was
   answered (`toolUseResult.answers` non-empty, the rule
   `operator_answered_since` already uses). A round that was only declined does
   not count.
