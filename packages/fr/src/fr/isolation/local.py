@@ -315,9 +315,18 @@ def _branch_blob_was_on_base(
     log = run(
         [
             "git",
+            # A user's `log.follow` would chase the path across a rename (a
+            # match under another name); colour would hide every `:` line.
+            "-c",
+            "log.follow=false",
             "log",
+            "--no-color",
             "--no-abbrev",
             "--raw",
+            # `-m`: a merge commit prints no raw lines without it, so a blob that
+            # exists on the base only as a merge result (a conflict resolution)
+            # would read as never landed (Opus fix review f2).
+            "-m",
             "--format=",
             f"{merge_base}..{base_ref}",
             "--",
@@ -1115,10 +1124,13 @@ class LocalWorktreeDevcontainerTarget:
         """Confirm the branch's changes reached `<remote>/<default_branch>`.
 
         Squash/rebase/merge-safe (content-based, not ancestry). `verified`
-        requires ALL THREE positive confirmations — content present AND the PR
+        requires ALL FOUR positive confirmations — content present AND the PR
         is `MERGED` AND the `<remote>/<default_branch>` ref is fresh (fetch
-        succeeded). The content check alone can be fooled by genuinely
-        convergent content (the same fix landing twice), so the MERGED PR is the
+        succeeded) AND the branch's own remote state is known
+        (`branch_fetched`: fetched, or confirmed deleted by `ls-remote`). Every
+        ref of the branch that resolves — the fetched `<remote>/<branch>` and
+        the local branch — must have its changes on the base. The content check
+        alone can be fooled by genuinely convergent content (the same fix landing twice), so the MERGED PR is the
         load-bearing tiebreak; an unknown PR state or a failed fetch is
         conservatively NOT verified, never a silent pass. The close-out (#320)
         STOPs (and the caller inspects which signal is missing) when not
@@ -1155,7 +1167,7 @@ class LocalWorktreeDevcontainerTarget:
         base: a post-merge push from another clone lives only on the remote
         ref, an unpushed commit only on the local one, and either is work that
         did not land (adversarial review M1). Raises IsolationError naming the
-        ref when neither resolves. `verified` still needs all three signals."""
+        ref when neither resolves. `verified` still needs all four signals."""
         refs, branch_fetched = self._branch_refs(branch, remote)
         pr = self._pr_from(self.repo_root, branch)
         res = self._verdict(
@@ -1185,7 +1197,8 @@ class LocalWorktreeDevcontainerTarget:
 
         A failed fetch is not automatically a fallback: GitHub deletes a
         merged branch by default, and THAT case — `git ls-remote --heads`
-        confirms exit 2, no matching ref — is the one situation where the
+        confirms exit 2 for the EXACT `refs/heads/<b>` (a bare name
+        pattern-matches `foo/<b>` too) — is the one situation where the
         refs this clone still has (typically the local branch) are still
         trustworthy. Any other outcome (`ls-remote` finds the branch, or
         `ls-remote` itself fails) means the branch's true remote state is
@@ -1196,7 +1209,9 @@ class LocalWorktreeDevcontainerTarget:
         fetch = self._run_network(["git", "fetch", remote, f"+refs/heads/{branch}:{tracking}"])
         branch_fetched = fetch.returncode == 0
         if not branch_fetched:
-            ls = self._run_network(["git", "ls-remote", "--exit-code", "--heads", remote, branch])
+            ls = self._run_network(
+                ["git", "ls-remote", "--exit-code", remote, f"refs/heads/{branch}"]
+            )
             branch_fetched = ls.returncode == 2
         refs = [
             cand
@@ -1221,7 +1236,8 @@ class LocalWorktreeDevcontainerTarget:
         remote: str,
         pr: dict[str, Any] | None,
         refs: list[str] | None = None,
-        branch_fetched: bool = True,
+        *,
+        branch_fetched: bool,
     ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
         fetch = self._run_network(["git", "fetch", remote, default_branch], cwd=cwd)

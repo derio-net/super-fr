@@ -69,9 +69,13 @@ non-reaped path does not.
 
 In `_branch_change_present_in_file`, when the per-line containment check fails,
 fall back to a blob-equality check (option 1 of #598). The fallback runs on EVERY path that would otherwise return False, including the two early returns (path absent on `base_ref`, i.e. deleted later; no added lines) provided the branch itself still has the file. A branch that DELETED the file has no blob to compare, so a pure-deletion file that differs stays a STOP, as today. The file counts as landed
-when `git rev-parse <branch>:<path>` equals `git rev-parse <c>:<path>` for some
-commit `c` in `merge_base..base_ref` (restricted to commits touching `<path>`,
-via `git rev-list <merge_base>..<base_ref> -- <path>`). That is: the branch's
+when the blob `git rev-parse <branch>:<path>` names appears in the new-blob
+column of `git -c log.follow=false log --no-color --no-abbrev --raw -m --format=
+<merge_base>..<base_ref> -- <path>` — ONE call per path, whatever the history
+length. `-m` makes a merge commit list its changes against each parent, so a
+blob that exists on the base only as a merge result counts too; `log.follow` is
+pinned off so a user's config cannot match the blob under a pre-rename name,
+and colour off so every raw line still starts with `:`. That is: the branch's
 exact content of the file existed on the base after the merge and was later
 rewritten by another change.
 
@@ -85,7 +89,7 @@ Properties, all kept:
   behave the same.
 - The existing whole-file fast path and per-line containment run first and are
   unchanged; the fallback only adds passes for files they reject.
-- Cost is bounded to commits touching the one differing path.
+- Cost is one `git log` per differing path (plus one for its archived path, §C), not one process per commit: generated reports are rewritten by nearly every PR, and gc runs this for every workspace.
 - **No `.changes/` special case.** The release-bot deletion needs none: the
   fragment is on the base in the squash commit (blob equal to the branch's) and
   is deleted by a later commit, so it takes the path-absent-on-base early return
@@ -178,10 +182,19 @@ path does). Consequences, per the operator's answers:
 - Unpushed local commits still refuse (the local ref is still checked), and dirty
   worktrees are unaffected (that is `_reap_hazard`, not touched here).
 - `_branch_refs` runs at `repo_root` (refs are shared across linked worktrees) and raises `IsolationError` naming the branch when neither ref resolves.
-- A failed fetch of the branch (e.g. GitHub deleted the merged branch) is not a
-  verdict: fall back to whichever refs still resolve, as `_branch_refs` does. The
-  overall `verified` still requires content present, PR `MERGED` and a successful
-  default-branch fetch.
+- The branch is fetched with an explicit refspec,
+  `+refs/heads/<b>:refs/remotes/<remote>/<b>`, so a `--single-branch` clone
+  updates `<remote>/<b>` too.
+- A failed branch fetch is a fallback ONLY when `git ls-remote --exit-code
+  <remote> refs/heads/<b>` exits 2: the exact ref is gone (GitHub deleted the
+  merged branch), so the refs that still resolve are what is left to check. The
+  exact ref, never the bare name, because `ls-remote` pattern-matches `foo/<b>`
+  too. Any other outcome (the branch exists, or `ls-remote` itself fails) leaves
+  its remote state unknown: `branch_fetched` is False and the verdict is not
+  verified.
+- `verified` therefore requires four signals: content present, PR `MERGED`, a
+  successful default-branch fetch, and `branch_fetched`. `_verdict` takes
+  `branch_fetched` as a required keyword, so no caller can omit it into a pass.
 
 ### Non-goals
 

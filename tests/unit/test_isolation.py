@@ -2472,6 +2472,29 @@ def test_branch_changes_present_concurrent_same_file(
     assert res.missing == []
 
 
+def test_branch_changes_present_blob_landed_only_as_a_merge_result(tmp_path: Path) -> None:
+    """Opus fix review f2: `git log --raw` prints nothing for a merge commit
+    without `-m`, so a blob that exists on the base ONLY as a merge result (a
+    conflict resolution) read as never landed. The old per-commit scan saw it."""
+    repo = make_repo(tmp_path)
+    _seed_two_line_file(repo)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gotchas.md", "line1\nline2\nRESOLVED\n", "branch content")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "gotchas.md", "line1\nSIDE\n", "side edit")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "gotchas.md", "MAIN\nline2\n", "main edit")
+    subprocess.run(["git", "-C", str(repo), "merge", "-q", "--no-commit", "side"], check=False)
+    (repo / "gotchas.md").write_text("line1\nline2\nRESOLVED\n")  # the merge's own result
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "merge side")
+    _commit(repo, "gotchas.md", "line1\nline2\nRESOLVED\nLATER\nREWRITE\n", "later")
+    _commit(repo, "gotchas.md", "rewritten\n", "rewrite the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present, res.missing
+
+
 def test_branch_changes_present_concurrent_but_branch_line_absent(tmp_path: Path) -> None:
     # The file exists and diverged on main (a concurrent edit), but one of the
     # branch's own added lines never landed — this MUST still report missing;
@@ -3385,6 +3408,28 @@ def test_verify_merge_falls_back_to_the_local_ref_when_the_remote_branch_is_dele
     target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
     monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
     res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+
+
+def test_verify_merge_deleted_branch_is_not_confused_with_a_suffix_sharing_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opus fix review f1: `ls-remote --heads origin feature` pattern-matches
+    `refs/heads/foo/feature` too, so a deleted merged branch read as present
+    (a false refusal). The probe must name `refs/heads/<b>` exactly."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature", "main:refs/heads/foo/feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "push", "-q", "origin", "--delete", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["branch_fetched"] is True
     assert res["verified"] is True
 
 
