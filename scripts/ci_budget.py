@@ -33,7 +33,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CI_BUDGET_CONFIG_PATH = REPO_ROOT / ".github" / "ci-budget.yaml"
-WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 CI_BUDGET_WORKFLOW_FILE = "ci-budget.yml"
 LABEL = "ci-budget"
 LABEL_COLOR = "d73a4a"

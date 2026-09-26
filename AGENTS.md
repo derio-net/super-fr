@@ -225,6 +225,16 @@ test file grows or shrinks a lot — a stale file only makes the shards less
 balanced, never wrong; the CI time-budget watcher is what notices when the
 imbalance starts to cost real wall clock.
 
+**The CI time-budget watcher** (`.github/workflows/ci-budget.yml` +
+`scripts/ci_budget.py`, spec `2026-09-26-ci-time-budget-design.md`) files (and
+auto-closes) one GitHub Issue per watched workflow file whenever it takes
+longer than its budget — 240s by default. `.github/ci-budget.yaml` holds the
+default and any per-file `budget_seconds`/`exclude` override. **Adding a new
+`.github/workflows/*.yml` file fails CI** (`tests/unit/test_ci_budget.py`'s
+watch-list tripwire) until it is either named in `ci-budget.yml`'s
+`on.workflow_run.workflows` (by its own `name:`, not its filename) or given
+`exclude: true` in `.github/ci-budget.yaml`.
+
 `-n auto` is ~6x faster than serial (~150 s vs ~870 s on a 12-core host).
 A test that passes serially but fails under `-n auto` is order-dependent or
 wall-clock-tight, not an xdist bug: reset process-global state in an autouse

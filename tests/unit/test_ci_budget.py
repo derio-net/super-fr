@@ -93,6 +93,18 @@ def test_slowest_job_ignores_skipped_jobs() -> None:
     assert seconds > 0
 
 
+def test_measure_reduces_a_captured_run_and_its_jobs_to_a_measurement() -> None:
+    run = _run("run_sharded.json")
+    jobs = _jobs("jobs_sharded.json")
+
+    measurement = ci_budget.measure("ci.yml", run, jobs, 240.0)
+
+    assert measurement.wall_clock_seconds == pytest.approx(155.0)
+    assert measurement.over_budget is False
+    assert measurement.sha == run["head_sha"][:7]
+    assert measurement.run_url == run["html_url"]
+
+
 # ── §7.3 watch-list tripwire ─────────────────────────────────────────────
 
 
