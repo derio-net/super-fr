@@ -104,3 +104,8 @@ Single-branch clone or failed fetch left origin/<b> stale; verify_merge could pa
 ### opus-c3-diff-failure-reads-as-pass · finding [open] (reviewer: out of scope) · failed git diff reads as all changes present (phase 1)
 
 Pre-existing on main; filed as derio-net/super-fr#705.
+
+<!-- fr:journal kind=finding scope=plan id=opus-c1-blob-scan-cost-resolved created=2026-09-27T00:07:42 state=fixed resolves=opus-c1-blob-scan-cost -->
+### opus-c1-blob-scan-cost-resolved · finding [fixed] · resolves opus-c1-blob-scan-cost: per-commit rev-parse scan is O(commits) per path
+
+8540388a: one git log --raw call per path; constant-call-count test red first (28 vs 4 calls at N=25).
