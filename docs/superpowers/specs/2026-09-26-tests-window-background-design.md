@@ -18,9 +18,13 @@ deliver.
 
 - Proving the command is a real test suite (the gate's documented limit,
   `orchestrator_wrote_since`'s docstring; `echo ok > log` still passes).
-- A new OpenCode background path. OpenCode has no background tool; its rule
-  detaches with `&` and polls, and that shape is unchanged. The `$VAR` fix
-  lives in the shared `_writes`, so it applies there too.
+- OpenCode's `&` detach. Its rule (`long_commands.py`) detaches the suite with
+  `(cmd; echo "exit=$?") > log 2>&1 &`; that command returns at once with exit 0,
+  so `_opencode_wrote_since` has the SAME zero-length-window defect, and this
+  change does NOT fix it: OpenCode has no completion event to end a window on,
+  so it needs its own design (e.g. a witness-line contract). It stays refused and
+  is filed as a follow-up. The `$VAR` fix lives in the shared `_writes`, so it
+  does apply there.
 - Resolving a variable set in an EARLIER tool call, or inherited from the
   environment (`$TMPDIR` as a target root is handled, §3.B; a bare unresolvable
   variable fails closed).
@@ -63,7 +67,10 @@ code. Failed, killed, or never-notified (still running) → no window (fails
 closed; the existing "no command of YOURS wrote it" refusal fires, and its text
 gains a hint that a backgrounded suite counts once its notification arrived).
 Notifications are matched by `tool-use-id` alone — never by task id or text
-position — the same keying `attribute_dispatches` uses.
+position — parsed out of the notification's `<tool-use-id>` tag (new code) and
+looked up in the same `issued` map the foreground path fills. Both content
+shapes are handled, for the acknowledgement's `tool_result.content` and for the
+notification's `message.content`: a plain string, or a list of `text` blocks.
 
 The acknowledgement is not `is_error`, so today it already yields a
 zero-length window; that window is replaced, not added to.
@@ -78,7 +85,10 @@ variable still unresolved is then dropped when it LEADS the path
 (`$TMPDIR/full-suite.log` → `full-suite.log`, matched by trailing segments like
 every other relative target — the environment root is unknowable from the
 transcript, exactly as the cwd is), and fails closed when it appears anywhere
-else or is the whole target (`> $L` with no assignment in the command).
+else, is the whole target (`> $L` with no assignment in the command), or is a
+command substitution (`> $(mktemp)`). An assignment must precede the redirect.
+Residual weakness, stated as part of the gate's existing limit: a dropped
+leading `$TMPDIR` makes `$TMPDIR/x.log` match any log ending in `x.log`.
 
 ### C. Docs
 
@@ -109,7 +119,10 @@ Business-level: a run that follows the brief's own long-command rule can deliver
    command each yield no window.
 3. **Variable targets (red→green).** `L=/x/t.log; pytest > $L`, `> "${L}"`,
    `export L=…`, chained reassignment, and `L=$TMPDIR/t.log` all match; a
-   variable assigned nowhere in the command, or mid-path, does not.
+   variable assigned nowhere in the command, mid-path, assigned only AFTER the
+   redirect, or a `$(mktemp)` substitution does not; `> "$L" 2>&1` matches.
+   The fixtures mirror the captured (redacted) records in §2, in both content
+   shapes (string and text-block list).
 4. **Non-regression.** Every existing `test_run_telemetry.py` window case and
    `test_run_tests_log_opencode.py` stays green.
 5. Post-merge: none (nothing deploys); the change's own `deliver` is the live
