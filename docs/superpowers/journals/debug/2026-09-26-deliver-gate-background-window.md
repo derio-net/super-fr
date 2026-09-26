@@ -54,3 +54,8 @@ Fixed in 4053f20d with a red-first test in tests/unit/test_run_telemetry.py.
 ### opus-r2-unmarked-notice-resolved · finding [fixed] · resolves opus-r2-unmarked-notice: any string-content user record with the tag was accepted as a notice
 
 Fixed in e0c74fa7 with a red-first test in tests/unit/test_run_telemetry.py.
+
+<!-- fr:journal kind=finding scope=debug id=opus-r3-late-window-end-resolved created=2026-09-26T23:40:29 state=fixed resolves=opus-r3-late-window-end -->
+### opus-r3-late-window-end-resolved · finding [fixed] · resolves opus-r3-late-window-end: window ended at notice delivery, not the command's end
+
+Fixed in 0f2352f4 with a red-first test in tests/unit/test_run_telemetry.py.
