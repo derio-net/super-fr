@@ -94,3 +94,8 @@ Opus review. canonical_spec_ref takes an optional pre-computed resolution.
 ### r2-f7 · finding [open] (reviewer: out of scope) · A ref escaping the repo is shortened to a local spec (phase 1)
 
 Opus review. Predates this change (repair already did it; readers resolve by slug).
+
+<!-- fr:journal kind=finding scope=plan id=r2-f8 created=2026-09-26T23:40:08 phase=1 state=open review_scope=out -->
+### r2-f8 · finding [open] (reviewer: out of scope) · Archive runs repair twice and can print warnings twice (phase 1)
+
+Opus review. Pre-existing _report_sweep + tail double call.
