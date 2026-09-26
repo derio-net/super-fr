@@ -119,3 +119,8 @@ Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_i
 ### opus-s4-resolved · finding [fixed] · resolves opus-s4: wrong line cites; wrong reason unpushed work still hazards
 
 Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
+
+<!-- fr:journal kind=finding scope=spec id=opus-s5-resolved created=2026-09-27T00:07:39 state=fixed resolves=opus-s5 -->
+### opus-s5-resolved · finding [fixed] · resolves opus-s5: tests covered 3 of 5 archived kinds; red-first note on the wrong assertion
+
+Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_isolation.py.
