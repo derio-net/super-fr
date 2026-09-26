@@ -1,0 +1,7 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-one-phase-plans
+step: deliver
+outcome: done
+acceptance: []
+emitted: {pr: https://github.com/derio-net/super-fr/pull/674}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/efc88d0a-6c63-4367-99de-454bafe7c54f/scratchpad/deliver-fg.log}
