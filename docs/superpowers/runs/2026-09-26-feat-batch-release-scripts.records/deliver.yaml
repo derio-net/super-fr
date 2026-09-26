@@ -1,0 +1,7 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-release-scripts
+step: deliver
+outcome: done
+acceptance: []
+emitted: {pr: https://github.com/derio-net/super-fr/pull/678}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/adff62ba-fe43-4680-a6fe-ab62c9883057/scratchpad/deliver-full3.log}

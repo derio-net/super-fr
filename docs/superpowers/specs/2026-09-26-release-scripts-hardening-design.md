@@ -102,7 +102,7 @@ Acceptance: the existing change-fragment-gate row cites the bump-guard and
 fragment-gate tests but not `test_version_surfaces.py`; the phase adds that ref
 with `fr acceptance set-status ... --level unit=super-fr:tests/unit/test_version_surfaces.py`
 (status unchanged, `--notes` saying why). No new row: this spec has no
-`## Test Plan` heading.
+dedicated test-plan section.
 
 ## 5. Delivery
 
