@@ -4079,9 +4079,13 @@ rows:
       phases
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-one-phase-plans-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py::test_a_sole_unmarked_agentic_phase_passes_with_no_override
+      - super-fr:tests/unit/test_v2_plan_ops.py::test_self_review_minimal_plan_has_no_issues
+    status: ci
+    notes: Skeleton rule gated on agentic >= 2; one-phase plans self-review clean with
+      no marker or override.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
