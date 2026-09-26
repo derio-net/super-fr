@@ -4365,9 +4365,14 @@ rows:
       the canonical section and the plan's row instead of refusing.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
-    levels: {}
-    status: not-implemented
-    notes: gh#603; added at planning, flipped at phase 2.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_v2_plan_ops.py
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: gh#603; pinned by test_create_appends_missing_section_with_header_and_row,
+      test_create_rerun_adds_missing_section_once, test_validate_spec_section_is_read_only_on_missing_section;
+      migrate output unchanged (test_v2_migrate).
   - id: plan-create-table-errors-name-header
     capability: Plan scaffolding
     acceptance: Every Implementation Plans table error from fr plan create names the
