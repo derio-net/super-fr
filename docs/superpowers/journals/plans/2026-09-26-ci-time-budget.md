@@ -29,3 +29,33 @@ During the first full-suite run today (26m24s wall clock — the host had 5+ oth
 ### no-refactor-p1-t2 · discovery · no-refactor-because P1.T2 (phase 1)
 
 Task 2 (GREEN) has no dedicated refactor step of its own; the cleanup (ci.yml comment tidy, AGENTS.md refresh-command doc, fr acceptance set-status) was done in P1.T3.S1, the phase's explicit REFACTOR task.
+
+<!-- fr:journal kind=finding scope=plan id=r1-partition-test-cost created=2026-09-26T16:58:25 phase=1 state=open review_scope=in -->
+### r1-partition-test-cost · finding [open] (reviewer: in scope) · The partition test ran five full-suite --collect-only subprocesses (30-90s) inside a CI-time PR (phase 1)
+
+tests/unit/test_ci_shards.py: .test_durations recorded the node at 31s, and it took about 90s locally, one lumpy indivisible unit that fights least_duration balancing. Fix: call pytest_split.algorithms.LeastDurationAlgorithm in-process over the .test_durations ids plus unknown ids.
+
+<!-- fr:journal kind=finding scope=plan id=r1-dead-recursion-guard created=2026-09-26T16:58:25 phase=1 state=open review_scope=in -->
+### r1-dead-recursion-guard · finding [open] (reviewer: in scope) · The PYTEST_SPLIT_INNER recursion guard was dead code (subprocesses were --collect-only) (phase 1)
+
+tests/unit/test_ci_shards.py:125-131.
+
+<!-- fr:journal kind=finding scope=plan id=r1-skipped-jobs-have-timestamps created=2026-09-26T16:58:25 phase=2 state=open review_scope=in -->
+### r1-skipped-jobs-have-timestamps · finding [open] (reviewer: in scope) · GitHub stamps skipped jobs, so wall_clock must drop jobs by conclusion == skipped, not by null timestamps (phase 2)
+
+Orchestrator observation on run 36247922786: change-fragment (skipped) has startedAt 14:16:03Z and completedAt 14:16:02Z. Spec §3.B and §7.2 assumed null timestamps; both are corrected. Phase 2's wall_clock and its fixture test must filter by conclusion.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-26T16:58:25 phase=1 -->
+### review-phase-1 · review · Code review of phase 1 (sharding + coverage combine) (phase 1)
+
+Dispatched reviewer (separate context). It verified the pytest-cov addopts accumulation fix, bare --cov with [tool.coverage.run] source being equivalent, include-hidden-files on upload, that a missing shard skips coverage rather than gating on 3 of 4 (needs semantics), and the live run 36247922786 (155s, TOTAL 93%). Findings: r1-partition-test-cost (in, fixed), r1-dead-recursion-guard (in, fixed). The orchestrator added r1-skipped-jobs-have-timestamps (in, filed against phase 2).
+
+<!-- fr:journal kind=finding scope=plan id=r1-partition-test-cost-resolved created=2026-09-26T16:58:25 phase=1 state=fixed resolves=r1-partition-test-cost -->
+### r1-partition-test-cost-resolved · finding [fixed] · resolves r1-partition-test-cost: The partition test ran five full-suite --collect-only subprocesses (30-90s) inside a CI-time PR (phase 1)
+
+The in-process LeastDurationAlgorithm check takes 0.36s (was 30-90s). The .test_durations entry was updated from 31.05s to 0.36s, and spec §7.1 was reworded to match.
+
+<!-- fr:journal kind=finding scope=plan id=r1-dead-recursion-guard-resolved created=2026-09-26T16:58:25 phase=1 state=fixed resolves=r1-dead-recursion-guard -->
+### r1-dead-recursion-guard-resolved · finding [fixed] · resolves r1-dead-recursion-guard: The PYTEST_SPLIT_INNER recursion guard was dead code (subprocesses were --collect-only) (phase 1)
+
+Removed together with the subprocesses; no nested pytest invocation remains.
