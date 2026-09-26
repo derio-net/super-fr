@@ -205,7 +205,7 @@ rows:
   - id: auto-archive-merged-plans
     capability: Lifecycle
     acceptance: Merged-but-unarchived plans are detected by the fr status sweep and
-      enforced archived by a CI tripwire
+      named by a CI reminder that warns without failing unrelated PRs
     origin:
     - super-fr:docs/superpowers/implemented/specs/2026-07-03-auto-archive-merged-plans-design.md
     levels:
