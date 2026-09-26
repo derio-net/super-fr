@@ -74,3 +74,8 @@ check: consistency. backfill.py writes the placeholder; spec needed a design lin
 ### o2 · finding [open] (reviewer: in scope) · Several spec path:line citations went stale
 
 check: codebase. Implementation shifted capture.py/file.py lines; cite by symbol instead.
+
+<!-- fr:journal kind=finding scope=spec id=o3 created=2026-09-26T23:36:44 state=open review_scope=in -->
+### o3 · finding [open] (reviewer: in scope) · deliver/closeout/archive are two capture sites, not three
+
+check: codebase. fr archive's event IS closeout (archive.py); the deliver resolve is the other.
