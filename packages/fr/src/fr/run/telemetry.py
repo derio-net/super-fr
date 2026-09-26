@@ -710,8 +710,8 @@ def _opencode_wrote_since(
         with closing(open_ro(OpenCodeReader().database(env))) as con:
             rows = con.execute(
                 "SELECT p.data FROM part p JOIN session s ON s.id = p.session_id "
-                "WHERE s.parent_id IS NULL AND s.time_updated >= ? AND p.time_updated >= ?",
-                (since_ms, since_ms),
+                "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
+                (since_ms,),
             ).fetchall()
     except sqlite3.Error:
         return None

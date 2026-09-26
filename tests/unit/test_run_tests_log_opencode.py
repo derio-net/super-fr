@@ -53,7 +53,7 @@ def _bash(command: str, start: int, *, status: str = "completed", exit_code: int
     )
 
 
-def _db(path: Path, parts: list[tuple[str, str]]) -> Path:
+def _db(path: Path, parts: list[tuple[str, str]], *, session_updated: int | None = None) -> Path:
     """`parts` is `(session id, part data)`; `s-top` is top-level, `s-child`
     a `task` subagent of it (`parent_id` set)."""
     con = sqlite3.connect(path)
@@ -65,7 +65,7 @@ def _db(path: Path, parts: list[tuple[str, str]]) -> Path:
         "session_id TEXT NOT NULL, time_created INTEGER NOT NULL, "
         "time_updated INTEGER NOT NULL, data TEXT NOT NULL)"
     )
-    now = int(time.time() * 1000) + 3_600_000
+    now = session_updated if session_updated is not None else int(time.time() * 1000) + 3_600_000
     con.executemany(
         "INSERT INTO session VALUES (?, ?, ?)",
         [("s-top", None, now), ("s-child", "s-top", now)],
@@ -117,6 +117,23 @@ def test_nothing_else_counts_as_the_orchestrator_writing_the_log(
     db = _db(tmp_path / "o.db", [(sid, data)])
 
     assert orchestrator_wrote_since(_env(db), LOG, SINCE) == []
+
+
+def test_a_session_row_last_touched_before_the_unit_does_not_hide_its_parts(
+    tmp_path: Path,
+) -> None:
+    """Review: nothing shows OpenCode bumps `session.time_updated` on every
+    part, so the reader must not filter on it — a stale session row next to a
+    fresh bash part is still the orchestrator writing the log."""
+    db = _db(
+        tmp_path / "o.db",
+        [("s-top", _bash(f"pytest > {LOG}", AFTER))],
+        session_updated=_ms(SINCE) - 3_600_000,
+    )
+
+    windows = orchestrator_wrote_since(_env(db), LOG, SINCE)
+
+    assert windows is not None and len(windows) == 1
 
 
 def test_an_unreadable_opencode_database_is_unobservable(tmp_path: Path) -> None:
@@ -180,6 +197,29 @@ def test_a_tests_log_inside_the_runs_records_dir_is_refused(tmp_path: Path) -> N
     assert result.exit_code == 2, result.output
     assert "records" in _squash(result.output)
     assert "outside the repo" in _squash(result.output)
+
+
+@pytest.mark.parametrize(
+    ("rel", "refused"),
+    [
+        pytest.param("docs/superpowers/runs/r1.records/out/full-suite.log", True, id="nested"),
+        pytest.param("build/coverage.records/full-suite.log", False, id="unrelated-dir"),
+    ],
+)
+def test_the_records_refusal_matches_exactly_the_runs_records_dirs(
+    tmp_path: Path, rel: str, refused: bool
+) -> None:
+    """Review: the same scope `fr validate artifacts` checks — any depth under
+    `docs/superpowers/runs/*.records/`, and nothing else named `.records`."""
+    repo, shipped, _ = _at_deliver(tmp_path)
+    log = repo / rel
+    log.parent.mkdir(parents=True, exist_ok=True)
+    time.sleep(0.01)
+    log.write_text("ok\n")
+
+    result = _opencode_deliver(repo, shipped, tmp_path / "absent.db", f"tests={rel}")
+
+    assert ("records dir" in _squash(result.output)) is refused, result.output
 
 
 def test_validate_flags_a_file_in_a_records_dir_that_is_not_a_record(tmp_path: Path) -> None:

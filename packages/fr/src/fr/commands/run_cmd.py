@@ -1611,7 +1611,13 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
     path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
-    if path.parent.name.endswith(RECORDS_SUFFIX):
+    try:
+        rel_parts = path.relative_to(repo_root.resolve()).parts
+    except ValueError:
+        rel_parts = ()
+    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
+        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
+    ):
         # gh#638: `<run>.records/` holds step records and fr's pr-body render,
         # and fr empties it; a log written there got committed and reached
         # `main` with nothing to remove it.
