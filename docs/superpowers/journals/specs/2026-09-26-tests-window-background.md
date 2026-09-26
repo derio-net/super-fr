@@ -104,3 +104,8 @@ fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
 ### s7-resolved · finding [fixed] · resolves s7: Notification timestamp is when recorded, not when finished; wait/retry undocumented (Opus)
 
 fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved created=2026-09-26T23:50:55 state=fixed resolves=s8 -->
+### s8-resolved · finding [fixed] · resolves s8: §3.B assignment grammar differs from the implemented one (Opus)
+
+fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
