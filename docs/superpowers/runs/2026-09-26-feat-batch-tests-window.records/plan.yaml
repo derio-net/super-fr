@@ -1,0 +1,5 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-tests-window
+step: plan
+outcome: done
+emitted: {plan: docs/superpowers/plans/2026-09-26-tests-window-background}
