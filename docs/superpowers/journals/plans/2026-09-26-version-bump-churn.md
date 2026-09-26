@@ -430,3 +430,8 @@ is"). Widening it changes which PRs must release; that is its own decision, to b
 ### rp1-f3-resolved-2 · finding [deferred → #669] · resolves rp1-f3: LOW: write_version's TOML rewrite uses a table-unaware first-match regex
 
 Filed at closeout as #669.
+
+<!-- fr:journal kind=finding scope=plan id=rp2-f2-resolved-2 created=2026-09-26T08:45:42 state=open resolves=rp2-f2 tracked_by=#670 -->
+### rp2-f2-resolved-2 · finding [deferred → #670] · resolves rp2-f2: LOW: the change-fragment CI step runs bare `python`, not uv-managed Python
+
+Filed at closeout as #670.
