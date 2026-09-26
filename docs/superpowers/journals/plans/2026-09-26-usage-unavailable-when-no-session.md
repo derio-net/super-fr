@@ -49,3 +49,8 @@ Cosmetic redundancy in a test; not a defect in this change.
 ### cr1 · finding [open] (reviewer: in scope) · backfill writes sessions: [] for a cursor naming no session (phase 1)
 
 backfill.py::_entries returned [] with no sessions and no cursor figures; same #636 defect by a second writer, and backfill never revisits a run.
+
+<!-- fr:journal kind=finding scope=plan id=cr2 created=2026-09-26T23:37:03 phase=1 state=open review_scope=in -->
+### cr2 · finding [open] (reviewer: in scope) · change fragment summary is not valid YAML (phase 1)
+
+Unquoted plain scalar containing ': ' made yaml.safe_load raise; scripts/changes.py accepted it, other tools would not.
