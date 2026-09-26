@@ -334,3 +334,13 @@ Summary names both triggers, never a third, questions: field, record v2, --quest
 ### p3-r11-resolved · finding [out-of-scope] · resolves p3-r11: Explainer :533-535 still describes gate provenance as a typed claim defaulting to agent (phase 3)
 
 Pre-existing staleness from the observed-provenance change; this PR did not touch those lines. Candidate follow-up issue at the merge touchpoint.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved-2 created=2026-09-26T14:31:54 state=open resolves=p2-r7 tracked_by=#690 -->
+### p2-r7-resolved-2 · finding [deferred → #690] · resolves p2-r7: Flag-path journal append not rolled back when a later resolve step refuses
+
+Filed at closeout as #690.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r11-resolved-2 created=2026-09-26T14:31:55 state=open resolves=p3-r11 tracked_by=#691 -->
+### p3-r11-resolved-2 · finding [deferred → #691] · resolves p3-r11: Explainer :533-535 still describes gate provenance as a typed claim defaulting to agent
+
+Filed at closeout as #691.
