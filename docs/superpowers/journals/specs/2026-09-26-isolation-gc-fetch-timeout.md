@@ -24,3 +24,8 @@ Reviewer ses_f22e295adffe6EvKDfQc0OLF4z verified `_reap_hazard`'s fetch and fail
 ### s1-resolved · finding [fixed] · resolves s1: Test Plan omits the acceptance-matrix update
 
 Added the acceptance-matrix update to the spec Test Plan.
+
+<!-- fr:journal kind=decision scope=spec id=skeleton-override-2026-09-26-isolation-gc-fetch-timeout created=2026-09-26T12:02:11 -->
+### skeleton-override-2026-09-26-isolation-gc-fetch-timeout · decision · No separate walking-skeleton phase
+
+This narrowly scoped change is a single fetch call and a regression test proving bounded execution and fail-closed handling. A separate trivial CI-smoke phase would not reduce delivery risk; the regression and implementation are an inseparable unit.
