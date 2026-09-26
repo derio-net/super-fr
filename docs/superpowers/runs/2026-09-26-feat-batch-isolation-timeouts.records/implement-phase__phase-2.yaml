@@ -1,0 +1,12 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-isolation-timeouts
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3]
+refactor:
+  P2.T2: "the 'Deliberately a SEPARATE branch' docstring wording is still true after the swap; three call-site swaps, nothing to consolidate"
+  P2.T3: "matrix move, version bump and gate only; no code to clean"
+journal: []
+resolves: []
+evidence: {}

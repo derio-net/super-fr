@@ -1037,7 +1037,7 @@ class LocalWorktreeDevcontainerTarget:
         # Fetch the branch FIRST: a remote-tracking ref that merely exists may be
         # stale. A failed fetch is not a verdict — GitHub deletes a merged branch
         # by default — so fall back to whatever refs this clone still has.
-        self.run(["git", "fetch", remote, branch], cwd=self.repo_root)
+        self._run_network(["git", "fetch", remote, branch])
         refs = [
             cand
             for cand in (f"{remote}/{branch}", branch)
@@ -1063,7 +1063,7 @@ class LocalWorktreeDevcontainerTarget:
         refs: list[str] | None = None,
     ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
-        fetch = self.run(["git", "fetch", remote, default_branch], cwd=cwd)
+        fetch = self._run_network(["git", "fetch", remote, default_branch], cwd=cwd)
         fetched = fetch.returncode == 0
         results = [branch_changes_present(self.run, cwd, r, base_ref) for r in refs or [branch]]
         missing = sorted({m for r in results for m in r.missing})
@@ -2208,17 +2208,15 @@ class LocalWorktreeDevcontainerTarget:
 
         backend = detect_backend(self.repo_root)
         if backend == "gitlab":
-            result = self.run(
-                ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"],
-                cwd=self.repo_root,
+            result = self._run_network(
+                ["glab", "repo", "view", "-F", "json", "--jq", ".default_branch"]
             )
         elif backend == "gitea":
-            result = self.run(
-                ["tea", "repos", "--fields", "default_branch", "--output", "json"],
-                cwd=self.repo_root,
+            result = self._run_network(
+                ["tea", "repos", "--fields", "default_branch", "--output", "json"]
             )
         else:
-            result = self.run(
+            result = self._run_network(
                 [
                     "gh",
                     "repo",
@@ -2227,8 +2225,7 @@ class LocalWorktreeDevcontainerTarget:
                     "defaultBranchRef",
                     "--jq",
                     ".defaultBranchRef.name",
-                ],
-                cwd=self.repo_root,
+                ]
             )
         out = (result.stdout or "").strip()
         if result.returncode == 0 and out:
