@@ -89,3 +89,8 @@ Summary quoted; yaml.safe_load and scripts/changes.py both parse it (9746ee60).
 ### cr3-resolved · finding [fixed] · resolves cr3: matrix row at ci covers fr run cost only via summarize(), not the CLI
 
 Added test_a_no_session_placeholder_prints_a_dash_and_counts_unavailable (CLI). OpenCode live proof stays the post-merge Test Plan, as the row notes say.
+
+<!-- fr:journal kind=finding scope=plan id=cr4-resolved created=2026-09-26T23:37:09 state=open resolves=cr4 out_of_scope=true -->
+### cr4-resolved · finding [out-of-scope] · resolves cr4: existing sessions: [] usage files stay as they are
+
+Not caused by this change: archived files are frozen by artifact-versioning; spec 3.5 and the PR body say so.
