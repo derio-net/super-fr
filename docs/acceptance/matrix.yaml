@@ -3371,7 +3371,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_v2_plan_ops.py#L1639
     status: ci
-    notes: Re-point refs to line anchors.
+    notes: 'Inverted 2026-09-26 (gh#673): the C2 rule (sole-skeleton is an error) is
+      retired; a one-agentic-phase plan now passes self-review. Kept as the pin for
+      the sole-marked-phase case.'
   - id: isolation-session-bound-without-flags
     capability: isolation-traceability
     acceptance: Starting a run or entering isolation binds the calling session to the
