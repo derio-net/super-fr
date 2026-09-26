@@ -87,8 +87,10 @@ steps:
     stdout: |
       1 out-of-scope finding(s): r4
   deliver:
-    state: running
-    at: '2026-09-26T10:34:04+00:00'
+    state: done
+    at: '2026-09-26T10:54:25+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/678
     units:
       step/deliver:
         attempts:
@@ -96,3 +98,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: adff62ba-fe43-4680-a6fe-ab62c9883057
+          returned: '2026-09-26T10:54:24+00:00'
+          outcome: done
+        evidence:
+          tests: deliver-full3.log@e7a762d4a7f2
+          proportionality: 6342e66381081afcfc01417bc07331858b4f21bf:a43ffdb7afbd54ccd972e7552dbd52f679ad35c665982efac561f88799036759
