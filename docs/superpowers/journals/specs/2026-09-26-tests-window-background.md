@@ -94,3 +94,8 @@ Same #594 symptom via the auto-background path. Fixed: covered in spec §2/§3.A
 ### s5-resolved · finding [fixed] · resolves s5: §2 'captured' shapes were hand-built, not captured (Opus re-review)
 
 fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved created=2026-09-26T23:50:54 state=fixed resolves=s6 -->
+### s6-resolved · finding [fixed] · resolves s6: Timeout-moved foreground Bash replies with different ack text (Opus)
+
+fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
