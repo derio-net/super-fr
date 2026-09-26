@@ -3,7 +3,7 @@ run: 2026-09-26-feat-version-bump-churn
 step: implement-phase
 item: phase/4
 outcome: done
-ticks: [P4.T1.S1, P4.T1.S2, P4.T1.S3]
+ticks: [P4.T1.S1, P4.T1.S2, P4.T1.S3, P4.T2.S1, P4.T2.S2]
 refactor: {}
 journal: []
 resolves: []

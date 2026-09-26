@@ -126,7 +126,9 @@ def test_add_regenerates_report_set(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = _invoke(root, monkeypatch, *ADD_ARGS)
     assert result.exit_code == 0, result.output
     assert all(f.exists() for f in files), "add must generate the report set"
-    assert "new-row" in (d / "report_local.html").read_text()
+    # The row renders in its capability's table (by its acceptance text; the
+    # id appeared only in the sharp-line panel the committed set dropped, §3.I).
+    assert "Operator can add rows" in (d / "report_local.html").read_text()
     assert "blob/main/" in (d / "report_linked.md").read_text()
     check = _invoke(root, monkeypatch, "report", "--check")
     assert check.exit_code == 0, check.output

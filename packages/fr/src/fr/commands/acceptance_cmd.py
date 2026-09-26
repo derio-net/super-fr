@@ -485,7 +485,8 @@ def add_cmd(
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
 ) -> None:
-    """Append a schema-validated row (agents never hand-edit YAML shapes).
+    """Insert a schema-validated row after its capability's last row (agents
+    never hand-edit YAML shapes); a new capability appends at the end.
 
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).
@@ -518,7 +519,7 @@ def add_cmd(
 
     from fr.record.model import AcceptanceItem
 
-    # The engine appends textually: a load→dump cycle would destroy the
+    # The engine inserts textually: a load→dump cycle would destroy the
     # header comments.
     _apply_rows(
         root,

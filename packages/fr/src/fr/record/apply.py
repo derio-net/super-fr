@@ -600,7 +600,7 @@ def _acceptance_writes(
         return {}, []
     from typing import get_args
 
-    from fr.acceptance.edit import append_row, drop_levels, merge_levels, replace_row
+    from fr.acceptance.edit import drop_levels, insert_row, merge_levels, replace_row
     from fr.acceptance.model import AcceptanceError, Row, Status, parse_matrix, split_ref
     from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
 
@@ -679,7 +679,7 @@ def _acceptance_writes(
                 "create a row; drop them to move its status"
             )
         if existing is None:
-            text = append_row(text, row)
+            text = insert_row(text, row)
             lines.append(f"added row {row.id} ({row.status})")
             counts["row added"] = counts.get("row added", 0) + 1
         else:

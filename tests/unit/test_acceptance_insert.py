@@ -143,3 +143,24 @@ def test_add_cli_inserts_by_capability(tmp_path: Path, monkeypatch: pytest.Monke
     )
     assert result.exit_code == 0, result.output
     assert [r.id for r in load_matrix(matrix_path).rows] == ["a1", "b1", "a2", "a3", "b2"]
+
+
+def test_scalar_continuation_starting_with_hash_stays_in_its_row() -> None:
+    """A wrapped quoted scalar can put `#` first on a line (the real matrix has
+    `      #352, not automated.'`). That is row content, not a comment between
+    rows, so the new row must go after it, not before it."""
+    wrapped = (
+        "  - id: a9\n"
+        '    capability: "Alpha"\n'
+        '    acceptance: "Operator can do X"\n'
+        '    origin: ["own:docs/superpowers/specs/s.md"]\n'
+        "    levels: {}\n"
+        "    status: skipped\n"
+        "    notes: 'proven live in\n"
+        "      #352, not automated.'\n"
+    )
+    text = MATRIX_HEADER + wrapped + _row_text("b1", "Beta")
+    out = insert_row(text, _new("a10", "Alpha"))
+    m = parse_matrix(out)
+    assert [r.id for r in m.rows] == ["a9", "a10", "b1"]
+    assert m.rows[0].notes == "proven live in #352, not automated."
