@@ -126,3 +126,38 @@ tests only; written table-driven from the start (one CASES list and shared edit 
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 the cleanup owed here is the one P2.T3.S2 names (a single diff reader shared by the three rules) and was done there, not twice
+
+<!-- fr:journal kind=review scope=plan id=rp2-review created=2026-09-26T09:03:31 phase=2 -->
+### rp2-review · review · Independent code review of phase 2: 0 findings at the reviewer's bar; 2 sub-bar observations, verified here into 1 in-scope and 1 out-of-scope finding (phase 2)
+
+Dispatched reviewer (separate context) over 88ab970c against spec §3.A/§3.B/§3.E/§5/§7 2,3,5.
+Traced merge-base vs base tip against pull_request checkout semantics (refs/pull/N/merge, append-only
+main): no evasion of rule 1 or 2. Floor scan, fragment subset parser, hand-bump refusal on every
+surface type, fix lines, PR-only job, and the purge of the old script name all checked clean.
+Two observations under its confidence bar were verified by the orchestrator: the quoted-summary
+comment case reproduced (rp2-f1); the bare `python` CI call predates this change (rp2-f2).
+
+<!-- fr:journal kind=finding scope=plan id=rp2-f1 created=2026-09-26T09:03:31 phase=2 state=open review_scope=in -->
+### rp2-f1 · finding [open] (reviewer: in scope) · MEDIUM: a quoted fragment value followed by a ` #` comment keeps its literal quotes (phase 2)
+
+scripts/changes.py `_scalar` only unquoted when the WHOLE value started and ended with a quote, so
+`summary: "quoted text" # note` parsed to '"quoted text"' (reproduced) and would reach the release
+notes verbatim; `bump: 'minor' # why` errored as an unknown bump.
+
+<!-- fr:journal kind=finding scope=plan id=rp2-f2 created=2026-09-26T09:03:31 phase=2 state=open review_scope=out -->
+### rp2-f2 · finding [open] (reviewer: out of scope) · LOW: the change-fragment CI step runs bare `python`, not uv-managed Python (phase 2)
+
+.github/workflows/ci.yml:102. Works on ubuntu-latest (python-is-python3, 3.12 has tomllib).
+
+<!-- fr:journal kind=finding scope=plan id=rp2-f1-resolved created=2026-09-26T09:03:31 phase=2 state=fixed resolves=rp2-f1 -->
+### rp2-f1-resolved · finding [fixed] · resolves rp2-f1: MEDIUM: a quoted fragment value followed by a ` #` comment keeps its literal quotes (phase 2)
+
+`_quoted()` scans to the real closing quote (honouring '' and \" escapes), allows only a ` #` comment
+after it, and refuses any other trailing text with the field named. Two tests, red first: a quoted
+value plus comment unquotes (bump and summary), and trailing non-comment text is refused.
+
+<!-- fr:journal kind=finding scope=plan id=rp2-f2-resolved created=2026-09-26T09:03:31 phase=2 state=open resolves=rp2-f2 out_of_scope=true -->
+### rp2-f2-resolved · finding [out-of-scope] · resolves rp2-f2: LOW: the change-fragment CI step runs bare `python`, not uv-managed Python (phase 2)
+
+Not caused by this change: the replaced version-bump-required job invoked
+`python scripts/check-version-bump-needed.py` the same way; phase 2 only swapped the script name.
