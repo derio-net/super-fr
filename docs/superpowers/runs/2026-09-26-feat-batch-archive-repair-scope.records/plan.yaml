@@ -1,6 +1,0 @@
-schema_version: 2
-run: 2026-09-26-feat-batch-archive-repair-scope
-step: plan
-outcome: done
-emitted: {plan: docs/superpowers/plans/2026-09-26-archive-repair-scope}
-evidence: {}
