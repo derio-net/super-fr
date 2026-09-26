@@ -1,0 +1,21 @@
+schema_version: 2
+run: 2026-09-26-feat-batch-tests-window
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: r1, review_scope: in, title: "No end-to-end test through _verify_tests_log for the background case", body: "Reviewer af94f054d5c0bb13d: tests stopped at orchestrator_wrote_since."}
+  - {kind: finding, id: r2, review_scope: in, title: "Vacuous variable case '/y/$L' expected False for the wrong reason", body: "L is assigned, path just differs."}
+  - {kind: finding, id: r3, review_scope: in, title: "Refusal variants covered only for string content; is_error ack untested", body: "Text-block shape only covered for success."}
+  - {kind: finding, id: r4, review_scope: in, title: "Exit-code regex scanned the whole notification, spec says the summary", body: "Closed-direction only, but off-spec."}
+  - {kind: finding, id: r5, review_scope: out, title: "_ASSIGNMENT is purely syntactic (echo L=..., env-prefix, subshell can resolve)", body: "Same forgery class as `echo ok > log`, already the gate's stated limit."}
+  - {kind: finding, id: r6, review_scope: out, title: "OpenCode & detach still has a zero-length window", body: "Spec non-goal; no completion event; follow-up."}
+  - {kind: review, id: phase1-review, title: "independent review of phase 1: 6 findings (4 in, 2 out)", body: "Reviewer af94f054d5c0bb13d verified §3.A and §3.B behaviour, tripwire and forgery surface; raised r1-r6."}
+resolves:
+  - {id: r1, state: fixed, body: "test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end drives _verify_tests_log: accepted inside the window, refused after."}
+  - {id: r2, state: fixed, body: "Replaced with '/y/$UNSET/t.log'."}
+  - {id: r3, state: fixed, body: "Refusal variants now parametrized over text blocks too. The is_error ack stays covered only by code reading; foreground is_error tests already pin that a failed command yields no window."}
+  - {id: r4, state: fixed, body: "Scoped to <summary>; test_exit_code_text_outside_the_summary_does_not_reject_a_success."}
+  - {id: r5, state: out-of-scope, body: "The gate's documented forgery limit; this change adds no new class."}
+  - {id: r6, state: out-of-scope, body: "Also spec-review s2; OpenCode has no completion event and needs its own design."}
+evidence: {review: phase1-review, reviewer: af94f054d5c0bb13d, model: claude-sonnet-5}
