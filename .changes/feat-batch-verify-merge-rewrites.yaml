@@ -1,0 +1,2 @@
+bump: patch
+summary: "fr isolation verify-merge accepts a merged branch whose lines a later merge rewrote, and checks the fetched remote branch too"
