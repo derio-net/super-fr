@@ -51,21 +51,36 @@ does today.
 `_network_env` sets git variables only (`GIT_TERMINAL_PROMPT`,
 `GIT_SSH_COMMAND`), which `gh`/`glab`/`tea` ignore; what protects the forge CLIs
 is the timeout and stdin from `/dev/null`, which `run` applies whenever a
-timeout is given.
+timeout is given. `_network_env` also issues one local, cheap `git config --get
+core.sshCommand` before the real call (skipped when `GIT_SSH_COMMAND` or
+`GIT_SSH` is set). That extra call now precedes the forge lookups and the
+verify-merge fetches too; it is accepted rather than special-cased, and tests
+that script the runner must select calls by argv, not by position or count.
 
 ### 3.C `verify-merge`
 
 `_verdict` calls `self._run_network(["git", "fetch", remote, default_branch],
 cwd=cwd)`; `_branch_refs` calls `self._run_network(["git", "fetch", remote,
-branch])`. The `fetched` field of the result is unchanged.
+branch])`. Only the `_verdict` fetch feeds `fetched` (and so `verified`); the
+`_branch_refs` fetch's result is discarded today, and stays so: when it times
+out, the reaped path falls back to whatever refs the clone still has, or raises
+`IsolationError` when none resolves.
 
-## 4. Non-goals
+## 4. Obligations
+
+- **Acceptance matrix:** this spec's Test Plan is cited by the new row
+  `isolation-network-calls-bounded` (added at brainstorm as `not-implemented`),
+  which the implementing phase moves to `ci` with `fr acceptance set-status`.
+- **Version:** patch bump to `4.23.2` (reserved for this batch) via
+  `scripts/bump-version.py`, since `packages/fr/src/**` changes.
+
+## 5. Non-goals
 
 - The `_reap_hazard` fetch (d5).
 - Changing the timeout value, or making it configurable.
 - Caching the resolved default branch.
 
-## 5. Test Plan
+## 6. Test Plan
 
 Post-merge — operator-driven: none; the behaviour is unit-pinned per PR.
 
@@ -74,8 +89,10 @@ Post-merge — operator-driven: none; the behaviour is unit-pinned per PR.
    and the workspace's repo root as `cwd`. A lookup that returns exit 124 yields
    `main`.
 2. **verify-merge fetches are bounded.** `verify_merge` and
-   `verify_merge_reaped` issue their `git fetch` with a timeout; a fetch that
-   times out gives `fetched: false` and `verified: false` even when content and
-   PR state say merged.
+   `verify_merge_reaped` issue both their fetches with a timeout. A default-branch
+   fetch (`_verdict`) that times out gives `fetched: false` and `verified: false`
+   even when content and PR state say merged. A branch fetch (`_branch_refs`)
+   that times out changes no verdict: the local refs are used, or `IsolationError`
+   is raised when none resolves.
 3. **Local steps stay unbounded.** The `symbolic-ref` call is not given a
-   timeout, and `_run_network`'s existing callers behave as before.
+   timeout (asserted by argv, not by call count), and `_run_network`'s existing callers behave as before.
