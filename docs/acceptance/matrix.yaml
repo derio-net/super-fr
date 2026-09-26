@@ -4359,3 +4359,12 @@ rows:
     status: ci
     notes: engine regenerates the audit page and the measured half of the architecture
       page; the future-state half is authored (spec §5.A.6)
+  - id: plan-create-creates-missing-table
+    capability: Plan scaffolding
+    acceptance: fr plan create against a spec with no Implementation Plans section appends
+      the canonical section and the plan's row instead of refusing.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-plan-table-header-design.md
+    levels: {}
+    status: not-implemented
+    notes: gh#603; added at planning, flipped at phase 2.
