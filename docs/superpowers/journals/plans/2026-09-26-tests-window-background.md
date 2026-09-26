@@ -94,3 +94,8 @@ Prefix assignment, quoted text, here-doc. Fixed: command-start only.
 ### o4 · finding [open] (reviewer: in scope) · F4 quadratic _NOTIFIED_STATUS regex (Opus) (phase 1)
 
 Replaced with a linear pattern.
+
+<!-- fr:journal kind=finding scope=plan id=o5 created=2026-09-26T23:50:58 phase=1 state=open review_scope=in -->
+### o5 · finding [open] (reviewer: in scope) · F5 exit code taken from model-written summary text (Opus) (phase 1)
+
+Now the trailing (exit code N) only.
