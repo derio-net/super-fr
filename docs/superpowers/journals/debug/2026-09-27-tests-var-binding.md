@@ -16,3 +16,8 @@ Already fail closed today: `echo L=…` on one line, `(L=…)` with no inner sep
 ### 1c20d9f3fa1f · hypothesis · Single cause: _ASSIGNMENT judges command position by its adjacent separators only
 
 The regex accepts a NAME=value when it is preceded by start/`;`/newline/`&&`/`||` and followed by a separator or the end. It has no notion of nesting (`( )`, `$( )`, backticks, `{ }` and compound commands), of comments, of line continuation, or of the lone `&` / `|` that runs the assignment in a subshell. Every false binding above is one of those. Verdict: confirmed by the probe table; one cause, not several.
+
+<!-- fr:journal kind=root-cause scope=debug id=caa6a2d4ef42 created=2026-09-27T09:31:18+00:00 -->
+### caa6a2d4ef42 · root-cause · _assignments masks only quotes and here-docs, so any separator-adjacent NAME=value binds regardless of shell structure
+
+`packages/fr/src/fr/run/telemetry.py` `_ASSIGNMENT` + `_assignments`: masking covered quotes and here-doc bodies (review F3) but not comments or continuations, and nothing tracked nesting depth or the terminator after the assignment. Fix direction (the issue's own): bind only an assignment at nesting depth 0, terminated by `;`, newline, `&&`, `||` or the end, on a mask that also blanks comments and joins continuations; fail closed on everything else.
