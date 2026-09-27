@@ -14,3 +14,13 @@ _branch_blob_was_on_base scans `git log --raw -m merge_base..base_ref -- path` a
 ### fix · finding [fixed] · Blob fallback un-lands a path the base later wrote back to a pre-landing blob
 
 packages/fr/src/fr/isolation/local.py _branch_blob_was_on_base: same single git log, now --topo-order --reverse; tracks every non-null blob the path held before/at the landing; a later write of one of them un-lands, a later write of the branch blob re-lands. Pinned red-first by six tests in tests/unit/test_isolation.py (reverted squash; revert then later edit; revert after the branch synced with another PR's change; rebase merge reverted; revert after the release consumed the fragment; verify_merge not verified) plus a green guard (revert of the revert re-lands). Full suite: 6561 passed, 115 skipped. Also: _squash_merge test helper now passes a committer identity to git merge --squash (a real 3-way squash needs one in the container).
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-27T10:01:56+00:00 -->
+### review-1 · review · Independent Opus review: 3 findings + test notes
+
+f1 MAJOR in: --topo-order puts a later-merged side branch (merge-commit PR forked before the landing) after the landing; a side commit writing a pre-landing blob falsely un-lands (proven in scratch repos). Fixed: --first-parent, guard test side_branch_merged_later_does_not_unland (red on the pre-fix code). f2 MAJOR: a three-way revert (another PR edits the path between landing and revert) still reads as landed — needs patch-level detection, a different design; filed super-fr#739, pinned as strict xfail. f3 MINOR: a later PR removing exactly the branch lines reads as reverted — safe refusal, documented. Test note: revert_of_the_revert is a guard, not red-first (by design).
+
+<!-- fr:journal kind=hypothesis scope=debug id=second-root-cause created=2026-09-27T10:04:26+00:00 -->
+### second-root-cause · hypothesis · Second root cause: a reverted --no-ff merge never reaches the blob fallback
+
+Found writing a --no-ff + revert -m 1 test for the review. After a merge-commit landing the branch tip is an ancestor of the base, so merge-base == branch, _diff_names(merge_base, branch) is empty, and branch_changes_present returns changes_present=True before any per-file check. Independent of _branch_blob_was_on_base. Per the batch rules (one root cause per batch), NOT fixed here: pinned as strict xfail, pending the operator.
