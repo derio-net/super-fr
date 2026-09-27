@@ -1,0 +1,17 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-ci-hardening
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - {kind: decision, id: pin-scope-all-remote, title: "Pin every remote action, actions/* included; only ./ local refs exempt", body: "Operator, round 1: a tag on actions/* is as mutable as any other."}
+  - {kind: decision, id: aggregate-ci-ok, title: "Aggregating job gates every ci.yml job and is named ci-ok", body: "Operator, round 1: needs lists every other ci.yml job (pinned as an equality by a test); if: always(); fails on failure/cancelled. Supersedes #706's suggested name test-all."}
+  - {kind: decision, id: dependabot-weekly-grouped, title: "Dependabot github-actions: weekly, one grouped PR", body: "Operator, round 1."}
+  - {kind: decision, id: tripwire-sha-plus-comment, title: "Tripwire requires 40-hex SHA + '# vX.Y.Z' comment; pin today's commit of each current tag, no upgrades", body: "Operator, round 1. SHAs resolved via the GitHub API with annotated tags dereferenced; table in spec 3.A."}
+  - {kind: discovery, id: scaffold-tag-pins, title: "fr acceptance scaffold emits tag-pinned actions into consumer repos", body: "packages/fr/src/fr/acceptance/scaffold.py:133-147,236-250. packages/ source is owned by other batches; out of scope, follow-up issue at deliver."}
+acceptance:
+  - {id: ci-actions-sha-pinned, capability: CI, acceptance: "A workflow that references a remote GitHub Action by anything but a full commit SHA with a version comment fails CI", origin: ["super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md"], status: not-implemented}
+  - {id: ci-actions-dependabot-updates, capability: CI, acceptance: "Dependabot proposes updates to the SHA-pinned actions weekly, as one grouped PR", origin: ["super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md"], status: not-implemented}
+  - {id: ci-ok-single-required-check, capability: CI, acceptance: "One stable ci-ok check fails whenever any ci.yml job fails or is cancelled, so a required-check rule can name exactly one context", origin: ["super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md"], status: not-implemented}
+emitted: {spec: docs/superpowers/specs/2026-09-27-ci-hardening-design.md}
+evidence: {}
