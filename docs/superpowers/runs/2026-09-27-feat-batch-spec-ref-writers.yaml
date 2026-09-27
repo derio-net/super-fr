@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-spec-ref-writers
 workflow: fr-goal@1
 branch: feat/batch-spec-ref-writers
 started: '2026-09-27T08:58:40+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
   spec-review:
-    state: running
-    at: '2026-09-27T09:43:42+00:00'
+    state: done
+    at: '2026-09-27T09:50:48+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: ff433f0c-f9aa-45fa-8525-37e6c98e1cd7
+          returned: '2026-09-27T09:50:48+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a35d42fe2590a0b84
+          findings: none
   plan:
     state: pending
   plan-review:
