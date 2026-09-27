@@ -4798,3 +4798,20 @@ rows:
       the run+usage archived kinds, a §C-only archive test, a usage re-capture test,
       and gc''s _merged_by_content not classifying unlanded content as merged. Still
       unit-only in tests/unit/test_isolation.py.'
+  - id: installed-fr-carries-every-runner
+    capability: fr install (host install.sh + devcontainer POST_CREATE)
+    acceptance: An installed fr loads every runner the workspace declares (fr.runners
+      entry points), so dispatch --to herdr/cncd/vk and install.sh --install-bridge
+      work outside uv run
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-batch-package-lists.md
+    levels:
+      int:
+      - super-fr:tests/integration/test_runner_package_lists.py
+      - super-fr:tests/integration/test_install_bridge.py
+    status: ci
+    notes: 'gh#650, gh#645: both installers pass --with for every package runner_packages()
+      derives from packages/*/pyproject.toml, executed against an argv-recording uv
+      stub; test_install_bridge does a real uv tool install of the same set. The git-URL
+      POST_CREATE install was also run live 2026-09-27 into a disposable UV_TOOL_DIR:
+      fr.runners = [cncd, herdr, vk]; fr_vk.bridge imports.'
