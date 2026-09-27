@@ -63,10 +63,14 @@ as today; when the model alone is missing and the harness is known, the
 message adds `or bind one: fr models set --harness <fr-harness> --tier
 orchestrator --model <model>`.
 
-The returned `Launch` stays a plain `Launch`; the command layer prints where
-the model came from (`model: claude-opus-5-5 (orchestrator binding)`, `(batch)`,
-`(defaults.launch)`) so the dry-run shows why that model was picked.
-`resolve_launch` stays pure: it never reads a file; the callable does.
+`resolve_launch` returns a `ResolvedLaunch` — the `Launch` plus
+`model_source: Literal["batch", "defaults.launch", "orchestrator binding"]` —
+so the one function that knows the precedence also reports which rung won. The
+command layer prints it verbatim (`model: claude-opus-5-5 (orchestrator
+binding)`) and never re-derives the order: two implementations of one
+precedence is the bug class `fr.models.resolved_config`'s docstring records
+(review r-p2-f2). `resolve_launch` stays pure: it never reads a file; the
+callable does.
 
 **Where the binding is read.** The command layer builds the callable over
 `fr.models.resolved_config(repo_cfg=…, user_cfg=…)`: the user config
@@ -104,14 +108,18 @@ every other field but `--order`).
 **Branch.** `batch_branch(batch_id)` becomes `batch_branch(batch)`: 
 `feat/batch-<id>` for goal, `fix/batch-<id>` for debug. Callers: the brief,
 the member comment, the work item payload, dispatch's already-on-origin check
-and record-missing's event. Everything downstream (collect's PR lookup,
+and record-missing's event — plus the pinned test
+`tests/unit/test_triage_batch_model.py:486` (`batch_branch("lifecycle")`),
+which moves to a `Batch` argument and gains the debug case. Everything downstream (collect's PR lookup,
 stage derivation, merge) already reads `DispatchEvent.branch`, so a debug
 batch's PR is found by the branch it was actually dispatched on.
 
 **The work item.** `WorkItem.workflow` is the skill's name: `fr-goal` or
-`fr-debugging`. No runner reads it today (herdr submits the brief), so this is
-labelling, not behaviour; the `fr_dispatch.work_item` docstring is updated to
-say so.
+`fr-debugging`, at BOTH construction sites: `_work_item` and the `--repair`
+liveness probe `_probe` (`triage_batch_cmd.py:587`), which today hardcodes
+`fr-goal` independently. One helper, `batch_workflow(batch)` in
+`fr.triage.batch`, spells the mapping for both. No runner reads the field
+today (herdr submits the brief), so this is labelling, not behaviour.
 
 **The debug brief.** Same renderer, same member sections and closing refs;
 differences:
@@ -142,6 +150,13 @@ A warning is stdout, exit 0.
   gains `skill`; the `batch dispatch` sentence says `/fr-goal` or
   `/fr-debugging` by skill, and that the session model falls back to the
   orchestrator binding. Mirrors regenerated (`sync-opencode.py`, `sync-hermes.py`).
+- `packages/fr-dispatch/src/fr_dispatch/work_item.py`'s run-unit payload
+  docstring: `workflow` is `fr-goal` or `fr-debugging` by the batch's skill,
+  and `model` is the SESSION model (the run's orchestrator), not "the model
+  for every subagent and tier" — the line #704 makes false.
+- `packages/fr-herdr/src/fr_herdr/__init__.py:3` and `runner.py:3`: a batch
+  launches as one `/fr-goal` or `/fr-debugging` session (herdr submits the
+  brief it is given; no code change).
 - A `minor` change fragment (new option, changed default behaviour).
 - No explainer describes batch dispatch (`docs/explainers/` grep: none), so
   the explainers-currency rule is not triggered.
@@ -157,7 +172,8 @@ A warning is stdout, exit 0.
 Unit (CI):
 
 1. `resolve_launch` takes the model from batch, then `defaults.launch`, then
-   the orchestrator callable, in that order; refuses when all three are unset,
+   the orchestrator callable, in that order, and reports that rung as
+   `model_source`; refuses when all three are unset,
    and the refusal names the `fr models set` line with the fr harness id.
 2. `fr_harness("claude") == "claude-code"`; other names pass through.
 3. A goal brief no longer contains "every subagent" or any model id; a
@@ -173,7 +189,11 @@ Unit (CI):
    that model and `(orchestrator binding)`; the repo's
    `docs/superpowers/models.yaml` in the checkout overrides the user binding.
 8. A dispatched debug batch's event records `fix/batch-<id>` and the work
-   item's workflow is `fr-debugging`.
+   item's workflow is `fr-debugging`; `dispatch --repair`'s probe item carries
+   the same workflow.
+9. `batch_branch` of a goal batch is `feat/batch-<id>`, of a debug batch
+   `fix/batch-<id>` (replacing the bare-string pin at
+   `test_triage_batch_model.py:486`).
 
 No live verification is owed beyond CI: herdr's contract (`payload.model`,
 `payload.brief`) is unchanged, and it is pinned by `fr_dispatch.testing`.
