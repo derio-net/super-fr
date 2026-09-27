@@ -99,3 +99,23 @@ Not caused by this change: archived files are frozen by artifact-versioning; spe
 ### cr5-resolved · finding [fixed] · resolves cr5: redundant FR_HOSTNAME monkeypatch in a new capture test
 
 Removed the redundant setenv (9746ee60).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved-2 created=2026-09-27T07:11:33 state=refuted resolves=p1-r1 -->
+### p1-r1-resolved-2 · finding [refuted] · resolves p1-r1: placeholder harness falls back to 'unknown' when detection fails
+
+Closed at closeout, no issue (operator decision): pre-existing harness_now fallback, not caused by this change; cosmetic.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved-2 created=2026-09-27T07:11:34 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved-2 · finding [fixed] · resolves p1-r2: redundant FR_HOSTNAME monkeypatch in last new test
+
+Same nit as cr5; the redundant setenv was removed in 9746ee60, part of squash d67a9d4b.
+
+<!-- fr:journal kind=finding scope=plan id=cr4-resolved-2 created=2026-09-27T07:11:35 state=refuted resolves=cr4 -->
+### cr4-resolved-2 · finding [refuted] · resolves cr4: existing sessions: [] usage files stay as they are
+
+Closed at closeout, no issue (operator decision): archived usage files are frozen history by the artifact-versioning rule; they already render as a dash, never 0.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved-3 created=2026-09-27T07:11:42 state=fixed resolves=p1-r2 answered_by=operator -->
+### p1-r2-resolved-3 · finding [fixed] · resolves p1-r2: redundant FR_HOSTNAME monkeypatch in last new test
+
+Operator approved at closeout: same nit as cr5, removed in 9746ee60 (squash d67a9d4b).
