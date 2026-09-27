@@ -33,11 +33,4 @@ refactor:
     time. Nothing to refactor.
 journal: []
 resolves: []
-evidence:
-  test_command: uv run pytest -q --no-cov -n auto
-  test_result: "6556 passed, 97 skipped in 358.21s"
-  ruff_format: "550 files left unchanged"
-  ruff_check: "All checks passed!"
-  mypy: "Success: no issues found in 196 source files"
-  fr_validate_artifacts: "41 artifact(s) checked — all structurally valid."
-  fr_acceptance_check: "acceptance matrix check: 274 rows OK ({'ci': 239, 'skipped': 25, 'not-implemented': 9, 'scheduled': 1})"
+evidence: {}
