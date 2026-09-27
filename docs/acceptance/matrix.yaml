@@ -4410,9 +4410,15 @@ rows:
       stated, warning at create/edit when the members do not share one theme
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#b-a-batch-declares-its-skill-687
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_model.py
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+      - super-fr:tests/unit/test_triage_batch_verbs.py
+    status: ci
+    notes: Batch.skill (goal|debug), batch_branch/batch_workflow, the debug brief's
+      fix/batch-<id> branch and Debugging rules block, --skill on create/edit, and mixed_themes'
+      create/edit warning are exercised by the model, dispatch and verbs test files.
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
