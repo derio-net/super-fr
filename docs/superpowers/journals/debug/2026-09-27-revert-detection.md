@@ -29,3 +29,8 @@ Passing the marker as a raw \x01 byte in argv made _parse_log see no commits, so
 ### a75dfa546a81 · finding [fixed] · Revert detection: landing-merge fork point + inverse-patch rule
 
 packages/fr/src/fr/isolation/local.py: _fork_point (#741); _branch_blob_was_on_base reads -p -U0 in the same log call and un-lands on a non-deleting commit whose patch is the branch's inverted (_is_inverse_patch) (#739). Failing tests first: the two strict xfails un-xfailed in the red commit; guards added for no-ff+rewrite (stays landed), fast-forward/empty branch (stay present), failed rev-list (raises), three-way revert restoring a removed line (missing). Full suite 6675 passed; ruff + mypy clean.
+
+<!-- fr:journal kind=finding scope=debug id=review-f1 created=2026-09-27T19:59:41+00:00 state=open review_scope=in -->
+### review-f1 · finding [open] (reviewer: in scope) · Review f1: three-way revert of a pure-deletion branch still reads landed
+
+_is_inverse_patch returned False whenever the branch added no line, so a revert restoring a line the branch only removed (after an unrelated edit) was never recognised. Reproduced: test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing fails (changes_present=True).
