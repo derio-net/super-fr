@@ -24,3 +24,8 @@ f1 MAJOR in: --topo-order puts a later-merged side branch (merge-commit PR forke
 ### second-root-cause · hypothesis · Second root cause: a reverted --no-ff merge never reaches the blob fallback
 
 Found writing a --no-ff + revert -m 1 test for the review. After a merge-commit landing the branch tip is an ancestor of the base, so merge-base == branch, _diff_names(merge_base, branch) is empty, and branch_changes_present returns changes_present=True before any per-file check. Independent of _branch_blob_was_on_base. Per the batch rules (one root cause per batch), NOT fixed here: pinned as strict xfail, pending the operator.
+
+<!-- fr:journal kind=ruled-out scope=debug id=second-root-cause-split created=2026-09-27T14:21:25+00:00 -->
+### second-root-cause-split · ruled-out · Second root cause out of this batch: operator chose to track it separately (super-fr#741)
+
+The --no-ff ancestor short-circuit is not fixed in #735; filed as super-fr#741 with the strict xfail as its repro.
