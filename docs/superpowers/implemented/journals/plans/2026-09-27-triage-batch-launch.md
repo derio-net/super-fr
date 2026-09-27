@@ -79,3 +79,8 @@ Found by the deliver-time full suite (test_skill_validation.py::test_under_120_l
 ### r2-2-resolved-2 · finding [deferred → #725] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation
 
 Filed at closeout as #725.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2-resolved-3 created=2026-09-27T10:15:59 state=open resolves=r2-2 tracked_by=#724 -->
+### r2-2-resolved-3 · finding [deferred → #724] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation
+
+Already filed as #724 before closeout; #725 was a duplicate and is closed.
