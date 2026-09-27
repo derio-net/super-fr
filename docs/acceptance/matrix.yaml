@@ -330,9 +330,13 @@ rows:
       the operator exactly once.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_cmd.py
+    status: ci
+    notes: Unit tests assert fr archive calls repair_repo exactly once and prints each
+      warning exactly once, for both the plan-move path and --sweep-only, when the sweep
+      moves a spec (#710).
   - id: opencode-skills-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can git clone super-fr and use its fr-* skills directly
