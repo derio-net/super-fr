@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-ci-hardening
 workflow: fr-goal@1
 branch: feat/batch-ci-hardening
 started: '2026-09-27T08:58:42+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -81,6 +81,9 @@ steps:
           reviewer: a6eb18a92c190769c
           findings: tripwire-ignores-yaml-extension,flow-style-negative-not-routed-through-the-check,version-comment-accepts-four-components,run-block-uses-line-false-positive,comment-only-evasion-via-block-scalar
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-27T14:55:36+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
