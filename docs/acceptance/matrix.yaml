@@ -4776,9 +4776,14 @@ rows:
       grouped PR
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_actions_pinned.py
+    status: skipped
+    notes: test_tripwire_actions_pinned.py pins .github/dependabot.yml's shape (github-actions
+      ecosystem, weekly, one *-group), so config is pinned; the first weekly Dependabot
+      run is a post-merge observation not exercised in CI (spec 2026-09-27-ci-hardening
+      §3.B).
   - id: ci-ok-single-required-check
     capability: CI
     acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
