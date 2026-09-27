@@ -144,7 +144,7 @@ one log path.
 ## `claude-code-bash-background.jsonl` (added 2026-09-26)
 
 Four records captured live from a Claude Code 2.1.283 orchestrator session and
-redacted (`/Users/<name>` → `/home/user`; the project slug → `-home-user-repo`):
+redacted (the local home directory → `/home/user`; the project slug → `-home-user-repo`):
 a `Bash` tool_use with `run_in_background: true` that writes a full-suite log,
 its `tool_result`, the `queue-operation` enqueue and the `user` record carrying
 the `<task-notification>`.
