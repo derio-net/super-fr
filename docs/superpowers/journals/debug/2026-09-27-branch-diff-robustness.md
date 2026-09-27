@@ -9,3 +9,8 @@ Two defects in one function (fr/isolation/local.py). (1) #705: neither `git diff
 ### 5aedb662179a · root-cause · Both git diff --name-only calls ignore returncode and parse newline-quoted output
 
 One cause, one function: branch_changes_present reads names.stdout / diff.stdout with splitlines() and never checks returncode (merge-base alone is checked). A failing diff has empty stdout, which the function's own logic reads as 'nothing changed' / 'nothing differs' -> changes_present=True, the unsafe direction, in the guard behind verify-merge, the down/gc reap hazard, and gc's _merged_by_content. Separately, without -z git C-quotes paths, so the parsed names do not name real files. Fix: raise IsolationError on non-zero exit (every caller already maps it to not-verified: verify-merge exit 2, down's hazard 'unverifiable', gc's _merged_by_content False) and read both lists with -z split on NUL. Single hypothesis, confirmed by reading every caller.
+
+<!-- fr:journal kind=ruled-out scope=debug id=3297ca9c43ad created=2026-09-27T08:26:00 -->
+### 3297ca9c43ad · ruled-out · #717's 'fails safe (false not-verified)' is wrong: a quoted path is a false PASS
+
+Probed live on the unfixed code: a branch adding café.py that was NEVER merged returns MergeVerification(changed=['"caf\\303\\251.py"'], missing=[], changes_present=True). The quoted name is fed back as a pathspec to the second diff, matches no file, so differing=[] and nothing is checked. So #717 is the same unsafe direction as #705, not a fail-safe. Same root cause and same fix (-z both calls); the red test pins the orphan case, not only the squash one.
