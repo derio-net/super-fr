@@ -1996,10 +1996,13 @@ rows:
       - super-fr:tests/unit/test_run_cli.py
       - super-fr:tests/unit/test_run_provenance.py
       - super-fr:tests/unit/test_migration_run_provenance.py
+      - super-fr:tests/unit/test_run_resolve_gate_side_effects.py
     status: ci
-    notes: Spec 3.D.2/3.D.3. Default answered_by=agent so the stronger claim must be
-      typed deliberately; fr run gates never renders blank. Incurred a run-kind
-      stamp bump (schema_version 2) + migration.
+    notes: 'Spec 3.D.2/3.D.3. Default answered_by=agent so the stronger claim must be
+      typed deliberately; fr run gates never renders blank. Incurred a run-kind stamp
+      bump (schema_version 2) + migration. gh#632/#690 (2026-09-27): a cleared kind:
+      cli gate records unobserved=operator-gate on its flat unit, and a gate''s spec-journal
+      decision is written only after every resolve refusal point — pinned in test_run_resolve_gate_side_effects.py.'
   - id: lifecycle-journal-resolve
     capability: Artifact lifecycles
     acceptance: A journal finding can be resolved, and the freshness gate that requires
