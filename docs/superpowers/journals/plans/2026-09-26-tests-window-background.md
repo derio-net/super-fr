@@ -164,3 +164,8 @@ Filed at closeout as derio-net/super-fr#720.
 ### r6-resolved-2 · finding [deferred → derio-net/super-fr#719] · resolves r6: OpenCode & detach still has a zero-length window
 
 Filed at closeout as derio-net/super-fr#719 (same gap as spec s2).
+
+<!-- fr:journal kind=finding scope=plan id=o8-resolved-2 created=2026-09-27T08:06:29 state=open resolves=o8 tracked_by=derio-net/super-fr#719 -->
+### o8-resolved-2 · finding [deferred → derio-net/super-fr#719] · resolves o8: F10 OpenCode & detach zero-length window (Opus)
+
+Filed at closeout as derio-net/super-fr#719 (same gap as spec s2).
