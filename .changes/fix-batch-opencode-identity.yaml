@@ -1,2 +1,0 @@
-bump: minor
-summary: fr names the right holder of an OpenCode dispatch — harness detection picks the nearest harness in a mixed environment instead of trusting inherited CLAUDE_* markers, and the OpenCode plugin claims a unit from inside the child via the new `fr run claim --open-unit`, recording the tier agent that ran (gh#537, gh#530)
