@@ -4394,9 +4394,15 @@ rows:
       fr models tier'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#a-the-session-model-704
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_verbs.py
+      - super-fr:tests/unit/test_triage_batch_dispatch.py
+    status: ci
+    notes: resolve_launch now consults the orchestrator binding (fr models, repo-over-user)
+      as its third rung, and the two triage-batch test files exercise batch/defaults/orchestrator
+      precedence, the harness alias, the refusal message, and the dispatch command's
+      repo-checkout override.
   - id: triage-batch-debug-skill
     capability: Backlog triage
     acceptance: An operator can declare a batch of bugs as skill debug, and its dispatch
