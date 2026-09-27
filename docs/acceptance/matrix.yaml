@@ -4934,9 +4934,13 @@ rows:
       gc''s _merged_by_content not classifying unlanded content as merged. super-fr#716:
       a merge later REVERTED no longer reads as landed — the blob fallback reads the
       path history oldest-first and a return to a pre-landing blob un-lands it (squash,
-      rebase, synced-branch, revert-then-edit and revert-of-revert pinned). Known limit:
-      a revert of a branch that only ADDED files stays indistinguishable from a later
-      deletion or a consumed fragment. Still unit-only in tests/unit/test_isolation.py.'
+      rebase, synced-branch, revert-then-edit and revert-of-revert pinned). super-fr#741:
+      a --no-ff merge-commit landing reverted with revert -m 1 reads missing (fork point
+      = merge-base with the landing merge''s first parent). super-fr#739: a three-way
+      revert reads missing (the same log call reads each commit''s patch; the branch''s
+      patch inverted un-lands). Known limit: a revert of a branch that only ADDED files
+      stays indistinguishable from a later deletion or a consumed fragment. Still unit-only
+      in tests/unit/test_isolation.py.'
   - id: installed-fr-carries-every-runner
     capability: fr install (host install.sh + devcontainer POST_CREATE)
     acceptance: An installed fr loads every runner the workspace declares (fr.runners
