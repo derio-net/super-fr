@@ -1,2 +1,0 @@
-bump: patch
-summary: "`deliver`'s live-PR check reads the PR body through the forge adapter, so runs on GitLab and Gitea repos can deliver; its refusals, the closeout brief and fr-goal name the forge's own CLI instead of `gh` (#742)."
