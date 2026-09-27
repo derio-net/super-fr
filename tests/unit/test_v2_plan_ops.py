@@ -336,7 +336,6 @@ def test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes(tmp_pa
     the re-run must take the #133 finish-the-job path — append the row and
     leave `spec:` canonical — not report a slug collision."""
     import yaml
-
     from fr.plan_ops import PhaseSpec, create
 
     repo = _make_repo(tmp_path)
