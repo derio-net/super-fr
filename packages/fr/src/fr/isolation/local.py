@@ -15,8 +15,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, ClassVar, cast
@@ -262,20 +263,84 @@ def _archived_path(path: str) -> str | None:
 def _branch_added_lines(
     run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
 ) -> list[str]:
-    """The non-blank lines the branch ADDED to `path` since `merge_base`.
+    """The non-blank lines the branch ADDED to `path` since `merge_base`."""
+    return _branch_patch_lines(run, repo_root, merge_base, branch, path)[0]
 
-    Parsed from the branch's own diff (`+` lines, minus the `+++` header).
-    Blank / whitespace-only additions are dropped — they carry no identity and
-    would trivially "match" almost any base content, weakening containment.
+
+def _branch_patch_lines(
+    run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
+) -> tuple[list[str], list[str]]:
+    """The non-blank lines the branch (added, removed) in `path` since `merge_base`.
+
+    Parsed from the branch's own diff (`+`/`-` lines, minus the `+++`/`---`
+    headers). Blank / whitespace-only lines are dropped — they carry no
+    identity and would trivially "match" almost any base content, weakening
+    containment.
     """
     diff = run(["git", "diff", merge_base, branch, "--", path], cwd=repo_root)
     added: list[str] = []
+    removed: list[str] = []
     for ln in diff.stdout.splitlines():
-        if ln.startswith("+") and not ln.startswith("+++"):
-            content = ln[1:]
-            if content.strip():
-                added.append(content)
-    return added
+        if ln.startswith(("+++", "---")):
+            continue
+        if ln[:1] in ("+", "-") and ln[1:].strip():
+            (added if ln[0] == "+" else removed).append(ln[1:])
+    return added, removed
+
+
+@dataclass
+class _LogCommit:
+    """One commit of `_branch_blob_was_on_base`'s log: its raw diff lines for
+    the path, and the non-blank lines its patch added and removed there."""
+
+    raw: list[list[str]] = field(default_factory=list)
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+
+
+_COMMIT_MARK = "\x01"
+
+
+def _parse_log(stdout: str) -> list[_LogCommit]:
+    """Split `git log --format=%x01 --raw -p -U0` output into commits.
+
+    A hunk line is `+`/`-` only between an `@@` header and the next
+    `diff --git`, so a removed line whose text starts `-- ` (shown as `--- …`)
+    is still content, not a file header.
+    """
+    commits: list[_LogCommit] = []
+    in_hunk = False
+    for line in stdout.splitlines():
+        if line == _COMMIT_MARK:
+            commits.append(_LogCommit())
+            in_hunk = False
+        elif not commits:
+            continue
+        elif line.startswith("diff --git "):
+            in_hunk = False
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif in_hunk and line[:1] in ("+", "-"):
+            if line[1:].strip():
+                (commits[-1].added if line[0] == "+" else commits[-1].removed).append(line[1:])
+        elif not in_hunk and line.startswith(":"):
+            meta, _, _rest = line[1:].partition("\t")
+            commits[-1].raw.append(meta.split())
+    return commits
+
+
+def _is_inverse_patch(
+    commit: _LogCommit, branch_added: list[str], branch_removed: list[str]
+) -> bool:
+    """Does `commit`'s patch undo the branch's: it removes every non-blank line
+    the branch added, and adds nothing but lines the branch removed? That is a
+    revert however the surrounding lines moved in between (#739). A rewrite of
+    the branch's lines adds new ones, so it is not one."""
+    if not branch_added:
+        return False
+    return not (Counter(branch_added) - Counter(commit.removed)) and not (
+        Counter(commit.added) - Counter(branch_removed)
+    )
 
 
 def _branch_blob_was_on_base(
@@ -319,11 +384,17 @@ def _branch_blob_was_on_base(
     counts as landed — so a revert of a branch that ONLY added files stays
     indistinguishable by content, as it always was.
 
-    Two more limits, both of content-only evidence. A revert applied after
-    ANOTHER change to the path (a three-way revert) writes a blob the path
-    never held, so it still reads as landed (#739) — the branch's other,
-    untouched files usually still read as missing. And a later PR that
-    removes exactly the branch's lines reads as a revert: a safe refusal.
+    A revert applied after ANOTHER change to the path (a three-way revert)
+    writes a blob the path never held, so the held-state test alone misses it
+    (#739). The same call therefore also reads each commit's patch (`-p -U0`):
+    a later commit that removes every non-blank line the branch added, and adds
+    nothing but lines the branch removed, is the branch's patch inverted — a
+    revert, whatever else moved around it (`_is_inverse_patch`). A rewrite adds
+    lines of its own, so it is not one (#665 stays landed); a deletion is never
+    one (absence again — the consumed fragment); and a later PR that only
+    removes exactly the branch's lines reads as a revert: a safe refusal. A
+    three-way re-land (a revert of such a revert) is not recognised by its
+    patch, so it stays missing — the safe direction.
     Only the base's first-parent line is read, so content that reached the
     base solely through a side branch's own commits reads as missing (safe).
     """
@@ -343,6 +414,13 @@ def _branch_blob_was_on_base(
             "--no-color",
             "--no-abbrev",
             "--raw",
+            # The patch rides the same call (#739): zero context, and never a
+            # user's external diff driver or textconv filter, whose output
+            # would not be the committed lines.
+            "-p",
+            "--unified=0",
+            "--no-ext-diff",
+            "--no-textconv",
             # `-m`: a merge commit prints no raw lines without it, so a blob that
             # exists on the base only as a merge result (a conflict resolution)
             # would read as never landed (Opus fix review f2).
@@ -356,7 +434,7 @@ def _branch_blob_was_on_base(
             "--first-parent",
             "--topo-order",
             "--reverse",
-            "--format=",
+            "--format=%x01",  # prints _COMMIT_MARK, one line per commit
             f"{merge_base}..{base_ref}",
             "--",
             bpath,
@@ -367,28 +445,31 @@ def _branch_blob_was_on_base(
         return False
     held: set[str] = set()  # every blob the path held before (and at) the landing
     landed = False
-    for line in log.stdout.splitlines():
-        if not line.startswith(":"):
-            continue
-        meta, _, _rest = line[1:].partition("\t")
-        fields = meta.split()
+    branch_patch: tuple[list[str], list[str]] | None = None  # read once, only if needed
+    for commit in _parse_log(log.stdout):
         # `:oldmode newmode oldsha newsha status[score]` — the new blob is
         # field 3, present on every raw line (add/modify/delete/rename alike).
-        if len(fields) < 4:
-            continue
-        old, new = fields[2], fields[3]
-        if new == blob:
-            landed = True
-            seen: tuple[str, ...] = (old,)
-        elif landed:
-            if new in held:
-                landed = False  # reverted: the path went back to a pre-landing state
-            continue
-        else:
-            seen = (old, new)
-        # Absence (the all-zero id of an add's old side or a delete's new side,
-        # 40 or 64 digits) is not a held state — see the docstring.
-        held.update(b for b in seen if b.strip("0"))
+        for fields in commit.raw:
+            if len(fields) < 4:
+                continue
+            old, new = fields[2], fields[3]
+            if new == blob:
+                landed = True
+                seen: tuple[str, ...] = (old,)
+            elif landed:
+                if new in held:
+                    landed = False  # reverted: the path went back to a pre-landing state
+                elif new.strip("0"):
+                    if branch_patch is None:
+                        branch_patch = _branch_patch_lines(run, repo_root, merge_base, branch, path)
+                    if _is_inverse_patch(commit, *branch_patch):
+                        landed = False  # reverted three-way: the branch's patch undone
+                continue
+            else:
+                seen = (old, new)
+            # Absence (the all-zero id of an add's old side or a delete's new side,
+            # 40 or 64 digits) is not a held state — see the docstring.
+            held.update(b for b in seen if b.strip("0"))
     return landed
 
 
@@ -469,6 +550,56 @@ def _diff_names(run: Runner, repo_root: Path, args: list[str]) -> list[str]:
     return [p for p in res.stdout.split("\0") if p]
 
 
+def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str) -> str:
+    """Where the branch's own changes start, for `merge_base..branch`.
+
+    `git merge-base` answers that directly — except when the branch is an
+    ANCESTOR of the base, which is what a --no-ff merge-commit landing leaves
+    behind (#741): the merge-base is then the branch tip itself, the branch's
+    diff is empty, and every change reads as present before a single path is
+    judged, so a `git revert -m 1` of the landing still reads landed.
+
+    For an ancestor branch the fork point is the merge-base of the branch with
+    the landing merge's FIRST parent — the base as it was just before the
+    landing. The landing merge is the oldest commit on the base's first-parent
+    line that descends from the tip. A fast-forward (or a branch with no commits
+    of its own) puts the tip itself on that line, so the landing's first parent
+    IS the tip and the answer stays the tip: nothing changes for those.
+
+    A failed git call raises rather than returning `merge_base`, which here
+    would read as ALL CHANGES PRESENT (the #705 shape).
+    """
+    tip = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}"], cwd=repo_root)
+    if tip.returncode != 0 or tip.stdout.strip() != merge_base:
+        return merge_base
+    line = run(
+        [
+            "git",
+            "rev-list",
+            "--first-parent",
+            "--ancestry-path",
+            "--reverse",
+            f"{branch}..{base_ref}",
+        ],
+        cwd=repo_root,
+    )
+    if line.returncode != 0:
+        raise IsolationError(
+            f"git rev-list {branch}..{base_ref} failed (exit {line.returncode}): "
+            f"{(line.stderr or '').strip()}"
+        )
+    landing = next(iter(line.stdout.split()), None)
+    if landing is None:  # the base IS the branch tip: nothing landed after it
+        return merge_base
+    fork = run(["git", "merge-base", f"{landing}^1", branch], cwd=repo_root)
+    if fork.returncode != 0 or not fork.stdout.strip():
+        raise IsolationError(
+            f"git merge-base {landing[:12]}^1 {branch} failed (exit {fork.returncode}): "
+            f"{(fork.stderr or '').strip()}"
+        )
+    return fork.stdout.strip()
+
+
 def branch_changes_present(
     run: Runner, repo_root: Path, branch: str, base_ref: str
 ) -> MergeVerification:
@@ -501,7 +632,7 @@ def branch_changes_present(
             f"no merge-base for {base_ref} and {branch} — unrelated histories? "
             f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
         )
-    merge_base = mb.stdout.strip()
+    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
     changed = _diff_names(run, repo_root, [merge_base, branch])
     if not changed:
         return MergeVerification(changed=[], missing=[], changes_present=True)

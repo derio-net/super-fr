@@ -3736,9 +3736,80 @@ def test_branch_changes_present_reverted_no_ff_merge_is_missing(tmp_path: Path) 
     assert res.missing == ["report.md"]
 
 
+def test_branch_changes_present_no_ff_merge_then_rewrite_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    """#741's fork point exposes a --no-ff landing to the blob fallback; a later
+    rewrite of its lines must not read as a revert (#665)."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "main moved on")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "feature")
+    _commit(repo, "report.md", "head\nFOO2\nBAR2\n", "later merge rewrites the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_fast_forward_and_empty_branch_stay_present(
+    tmp_path: Path,
+) -> None:
+    """An ancestor branch with no landing merge — fast-forwarded, or never
+    committed to — has nothing of its own to judge: present, as before #741."""
+    repo = make_repo(tmp_path)
+    _git(repo, "branch", "empty")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--ff-only", "feature")
+    _commit(repo, "other.py", "x\n", "main moved on")
+    for branch in ("feature", "empty"):
+        res = branch_changes_present(subprocess_runner, repo, branch, "main")
+        assert res.changes_present, branch
+        assert res.missing == [], branch
+
+
+def test_branch_changes_present_failed_landing_lookup_raises(tmp_path: Path) -> None:
+    """A failed `git rev-list` for the landing merge must not fall back to the
+    tip as the fork point — that reads as ALL CHANGES PRESENT (#705 shape)."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "feature")
+
+    def runner(argv: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", "rev-list"]:
+            return subprocess.CompletedProcess(argv, 128, stdout="", stderr="fatal: boom\n")
+        return subprocess_runner(argv, **kw)
+
+    with pytest.raises(IsolationError, match="boom"):
+        branch_changes_present(runner, repo, "feature", "main")
+
+
+def test_branch_changes_present_three_way_revert_restoring_a_removed_line_is_missing(
+    tmp_path: Path,
+) -> None:
+    """The branch replaced a line; the three-way revert puts the old one back —
+    it adds only what the branch removed, so it is still the inverse patch."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "a\nold\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nnew\nc\nd\ne\n", "feature replaces a line")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "a\nnew\nc\nd\nE\n", "another PR edits the report")
+    _git(repo, *_ID, "revert", "--no-edit", "HEAD~1")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
 def test_branch_changes_present_three_way_revert_is_missing(tmp_path: Path) -> None:
     """Another PR edits the path BETWEEN the landing and the revert, so the
-    revert's result is new content. Known limit of content-only evidence."""
+    revert's result is a blob the path never held: caught by its patch (#739)."""
     repo = make_repo(tmp_path)
     _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
     _git(repo, "checkout", "-q", "-b", "feature")
