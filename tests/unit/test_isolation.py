@@ -3722,9 +3722,9 @@ def test_branch_changes_present_side_branch_merged_later_does_not_unland(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="a SEPARATE root cause from #716: after a --no-ff landing the branch "
-    "is an ancestor of the base, so merge-base == branch and branch_changes_present "
-    "sees no changed path before the blob fallback runs — pending an operator decision",
+    reason="super-fr#741: after a --no-ff landing the branch is an ancestor of the "
+    "base, so merge-base == branch and branch_changes_present sees no changed path "
+    "before the blob fallback runs",
 )
 def test_branch_changes_present_reverted_no_ff_merge_is_missing(tmp_path: Path) -> None:
     """A merge-commit landing reverted with `git revert -m 1`."""
