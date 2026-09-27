@@ -4831,6 +4831,10 @@ rows:
       that leaves the repo.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_repair.py
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'Unit tests cover all four spec: writers agreeing on canonical_spec_ref,
+      incl. the repo-escape guard (#709) and the v1->v2 migration writer (#711).'
