@@ -4968,3 +4968,25 @@ rows:
     status: ci
     notes: 'Unit tests cover all four spec: writers agreeing on canonical_spec_ref,
       incl. the repo-escape guard (#709) and the v1->v2 migration writer (#711).'
+  - id: harness-detect-nearest-in-mixed-env
+    capability: Harness detection
+    acceptance: An fr process whose environment carries more than one harness's markers
+      (an OpenCode started from a Claude Code shell) names the harness nearest it in
+      its process ancestry, and records a session only when that harness owns the session
+      key
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-holder-identity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_detect.py
+      - super-fr:tests/unit/test_run_holder_identity.py
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    status: ci
+    notes: 'gh#537. Unit-pinned: mixed env resolved by CLAUDE_PID/OPENCODE_PID nearness,
+      inconclusive when neither is an ancestor, single-harness env never reads the process
+      tree; advance under OpenCode-inside-Claude records harness opencode and no session.
+      Observed live 2026-09-27 inside a real OpenCode 1.18.32 shell with Claude Code
+      markers exported (int ref): the old fr recorded claude-code plus a borrowed session
+      (the defect), the branch fr detected opencode and advance recorded harness opencode,
+      session None and the OpenCode tier model.'
