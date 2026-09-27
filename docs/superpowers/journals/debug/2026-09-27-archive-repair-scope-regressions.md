@@ -19,3 +19,8 @@ plan_ops._folder_matches strips spec: from the byte compare and checks _same_spe
 ### e922dcbd3800 · repro · single-plan archive leaves stale refs to a spec its own sweep moved
 
 Plan B stranded in implemented/plans with spec: docs/superpowers/specs/y-design.md; y's row File cell docs/superpowers/plans/2026-09-03-b/. fr archive <plan A> moves y to implemented/specs but B's spec: stays the full active path (pre-#697 repaired it). Pinned by tests/unit/test_archive_cmd.py::test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved (red).
+
+<!-- fr:journal kind=root-cause scope=debug id=66db879b0aa6 created=2026-09-27T05:10:57 -->
+### 66db879b0aa6 · root-cause · repair scope is the archived slugs, but the sweep's moves are repo-wide
+
+archive_cmd passes only_plans={archived slugs} to both _report_sweep and the post-move repair_repo. spec_archive_sweep evaluates every spec under specs/, so it can move a spec whose plans are all other, earlier-archived plans; the refs that move made stale belong to those plans and fall outside only_plans.
