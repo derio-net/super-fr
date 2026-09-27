@@ -3,6 +3,6 @@ run: 2026-09-27-feat-batch-ci-hardening
 step: plan
 outcome: done
 journal:
-  - {kind: decision, id: one-agentic-phase, title: "One agentic phase, tier standard", body: "Change is .github/** + two test files + matrix; no second phase to smoke. No tracking_issue set (brief: members stay batch-owned)."}
+  - {kind: decision, id: one-agentic-phase, title: "One agentic phase, tier standard", global: true, body: "Change is .github/** + two test files + matrix; no second phase to smoke. No tracking_issue set (brief: members stay batch-owned)."}
 emitted: {plan: docs/superpowers/plans/2026-09-27-ci-hardening}
 evidence: {}
