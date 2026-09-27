@@ -352,9 +352,13 @@ def _folder_matches(
     on_disk = meta_p.read_text()
     if _strip_meta_line(on_disk, "spec") != _strip_meta_line(meta_text, "spec"):
         return False
-    if not _same_spec(
-        yaml.safe_load(on_disk).get("spec"), yaml.safe_load(meta_text).get("spec"), repo_root
-    ):
+    try:
+        on_disk_doc = yaml.safe_load(on_disk)
+    except yaml.YAMLError:
+        return False  # a hand-corrupted meta is a mismatch, as the byte compare was
+    if not isinstance(on_disk_doc, dict):
+        return False
+    if not _same_spec(on_disk_doc.get("spec"), yaml.safe_load(meta_text).get("spec"), repo_root):
         return False
     prose_p = folder / "_prose.md"
     if not prose_p.exists() or prose_p.read_text() != prose_text:
@@ -383,11 +387,11 @@ def _strip_meta_line(meta_text: str, key: str) -> str:
     )
 
 
-def _same_spec(a: str | None, b: str | None, repo_root: Path) -> bool:
+def _same_spec(a: object, b: object, repo_root: Path) -> bool:
     """True iff two `spec:` values name the same spec (#697 regression)."""
     if a == b:
         return True
-    if a is None or b is None:
+    if not isinstance(a, str) or not isinstance(b, str):
         return False
     return refs.canonical_spec_ref(a, repo_root) == refs.canonical_spec_ref(b, repo_root)
 

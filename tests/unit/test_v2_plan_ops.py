@@ -361,6 +361,76 @@ def test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes(tmp_pa
     assert yaml.safe_load(meta_p.read_text())["spec"] == "2026-05-10-later-spec.md"
 
 
+def test_create_rerun_canonicalization_keeps_created_and_stages_meta(tmp_path):
+    """The converged `_meta.yaml` keeps the original scaffold date and lands in
+    the index with the appended row, like every other `create` write."""
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    args = dict(
+        repo_root=repo,
+        slug="2026-05-10-dated",
+        spec="docs/superpowers/specs/2026-05-10-dated-spec.md",
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    create(**args)
+    meta_p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-dated" / "_meta.yaml"
+    meta_p.write_text(
+        "".join(
+            "created: '2020-01-01'\n" if ln.startswith("created:") else ln
+            for ln in meta_p.read_text().splitlines(keepends=True)
+        )
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "first run"], check=True)
+
+    _make_spec(repo, slug="dated-spec")
+    create(**args)
+
+    text = meta_p.read_text()
+    assert "created: '2020-01-01'\n" in text
+    assert "spec: 2026-05-10-dated-spec.md\n" in text
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--name-only"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "docs/superpowers/plans/2026-05-10-dated/_meta.yaml" in staged
+
+
+@pytest.mark.parametrize("corrupt", ["spec: 2026\n", "spec: [unclosed\n"])
+def test_create_rerun_over_a_corrupted_spec_line_is_a_collision(tmp_path, corrupt):
+    """A hand-corrupted `spec:` is a mismatch — the clean 'already exists'
+    the byte compare gave — never a crash in the identity check."""
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    spec_path = _make_spec(repo, slug="c")
+    args = dict(
+        repo_root=repo,
+        slug="2026-05-10-corrupt",
+        spec=str(spec_path.relative_to(repo)),
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    create(**args)
+    meta_p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-corrupt" / "_meta.yaml"
+    meta_p.write_text(
+        "".join(
+            corrupt if ln.startswith("spec:") else ln
+            for ln in meta_p.read_text().splitlines(keepends=True)
+        )
+    )
+    with pytest.raises(PlanEditError, match="already exists"):
+        create(**args)
+
+
 def test_create_rerun_with_a_different_spec_is_still_a_collision(tmp_path):
     """The spec-identity comparison above must not loosen #133's collision
     rule: the same slug pointed at a different spec is a different plan."""

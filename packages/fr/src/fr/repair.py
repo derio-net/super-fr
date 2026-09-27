@@ -113,9 +113,10 @@ def plans_referencing_specs(repo_root: Path, spec_paths: list[Path]) -> frozense
     for d in (sp / "plans", sp / "implemented" / "plans"):
         for meta_path in sorted(d.glob("*/_meta.yaml")) if d.is_dir() else ():
             try:
-                spec = (yaml.safe_load(meta_path.read_text()) or {}).get("spec")
+                doc = yaml.safe_load(meta_path.read_text())
             except (OSError, yaml.YAMLError):
                 continue  # repair reports a broken meta; scoping only skips it
+            spec = doc.get("spec") if isinstance(doc, dict) else None
             if isinstance(spec, str) and not is_cross_repo_spec(spec):
                 if refs.plan_slug(spec) in names:
                     slugs.add(meta_path.parent.name)
