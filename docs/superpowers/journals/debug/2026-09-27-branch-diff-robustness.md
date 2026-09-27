@@ -14,3 +14,8 @@ One cause, one function: branch_changes_present reads names.stdout / diff.stdout
 ### 3297ca9c43ad · ruled-out · #717's 'fails safe (false not-verified)' is wrong: a quoted path is a false PASS
 
 Probed live on the unfixed code: a branch adding café.py that was NEVER merged returns MergeVerification(changed=['"caf\\303\\251.py"'], missing=[], changes_present=True). The quoted name is fed back as a pathspec to the second diff, matches no file, so differing=[] and nothing is checked. So #717 is the same unsafe direction as #705, not a fail-safe. Same root cause and same fix (-z both calls); the red test pins the orphan case, not only the squash one.
+
+<!-- fr:journal kind=finding scope=debug id=1a151ec36a0d created=2026-09-27T08:37:37 state=fixed -->
+### 1a151ec36a0d · finding [fixed] · _diff_names: both diffs now -z and raise IsolationError on non-zero exit
+
+New helper _diff_names in fr/isolation/local.py runs git diff --name-only -z, raises IsolationError (naming exit + stderr) on failure, and splits on NUL. branch_changes_present uses it for both calls. Pinned red-first by test_branch_changes_present_failed_diff_raises[1,2] (a runner whose 1st/2nd diff exits 128), test_branch_changes_present_non_ascii_path_unmerged_is_missing (the false PASS) and ..._non_ascii_path_squash (non-ASCII + tab paths land). Callers unchanged: verify-merge exits 2, down's hazard reads unverifiable, gc's _merged_by_content returns False. #716 (reverted merges) untouched.
