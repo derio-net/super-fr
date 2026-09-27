@@ -9,3 +9,8 @@ gh#740. With XDG_DATA_HOME set and FR_OPENCODE_DB unset, OpenCode writes session
 ### 03d72098df81 · root-cause · Reader ignores XDG_DATA_HOME, and a readable-but-irrelevant db is read as 'no writer'
 
 One root, two faces. (1) telemetry.py OpenCodeReader.database knows only FR_OPENCODE_DB and $HOME/.local/share — OpenCode (xdg-basedir) uses $XDG_DATA_HOME when set and non-empty. (2) _opencode_wrote_since collapses 'this db never saw the run' into [] (observed: nobody wrote the log). A db recording no part at all since the unit opened cannot hold the calling orchestrator (its own resolve call is a part), so the honest answer is None (unobservable -> freshness fallback). Activity is measured on part.time_updated, not session.time_updated, per the earlier review that forbade trusting the session row.
+
+<!-- fr:journal kind=finding scope=debug id=f-xdg created=2026-09-27T19:40:24+00:00 state=fixed -->
+### f-xdg · finding [fixed] · Reader follows XDG_DATA_HOME; a db with no part since the unit opened is None
+
+telemetry.py: OpenCodeReader.database = FR_OPENCODE_DB > XDG_DATA_HOME/opencode/opencode.db (set, non-empty) > ~/.local/share. _opencode_wrote_since checks EXISTS(part.time_updated >= since) before reading windows; none -> None. Pinned first-failing by test_run_opencode_reader.py::test_the_database_path_follows_xdg_data_home_as_opencode_does, test_run_tests_log_opencode.py::test_a_database_that_saw_nothing_since_the_unit_opened_is_unobservable, ::test_on_opencode_the_suite_log_is_found_under_xdg_data_home, ::test_on_opencode_a_database_without_the_run_does_not_refuse_the_log. Full suite: 6694 passed. Not done here: naming the database in run_cmd.py's warnings (issue part 3) — the batch fenced run_cmd.py off.
