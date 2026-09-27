@@ -31,3 +31,8 @@ Source: `packages/fr/src/fr/run/telemetry.py` — new `_code` mask (quotes/here-
 ### review-case-paren · finding [fixed] (reviewer: in scope) · Review: a depth COUNT lets a stray closer cancel a real grouping
 
 Independent review (separate context) traced `case $x in a) true;; esac<NL>(cd /x; L=/x/t.log;); pytest > $L`: the case arm `)` drove depth to -1 so the later `(` read as 0, binding a subshell assignment. Extending the trace: `(echo done; L=…;)` and `do echo done; L=…; done | cat` do the same through an argument keyword. Fixed with a typed stack in `_top_level` (closer must meet its own opener, mismatch → fail closed; `)` directly under `case` ends a pattern) and reserved words counted only in command position. 4 new red-first negatives + 2 positives; full suite 6577 passed.
+
+<!-- fr:journal kind=review scope=debug id=91161448f47d created=2026-09-27T10:16:54+00:00 -->
+### 91161448f47d · review · Milestone review: 1 in-scope finding (fixed), no others
+
+feature-dev:code-reviewer, adversarial, separate context, over the diff vs origin/main. Raised one in-scope finding (case-arm `)` unbalancing the depth count) — fixed, see review-case-paren. Reported the `&`/`|` terminator change, mask offset alignment and quote/here-doc masking order as holding under trace. No out-of-scope findings.
