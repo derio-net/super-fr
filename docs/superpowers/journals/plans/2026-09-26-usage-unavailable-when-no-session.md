@@ -99,3 +99,8 @@ Not caused by this change: archived files are frozen by artifact-versioning; spe
 ### cr5-resolved · finding [fixed] · resolves cr5: redundant FR_HOSTNAME monkeypatch in a new capture test
 
 Removed the redundant setenv (9746ee60).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved-2 created=2026-09-27T07:11:33 state=refuted resolves=p1-r1 -->
+### p1-r1-resolved-2 · finding [refuted] · resolves p1-r1: placeholder harness falls back to 'unknown' when detection fails
+
+Closed at closeout, no issue (operator decision): pre-existing harness_now fallback, not caused by this change; cosmetic.
