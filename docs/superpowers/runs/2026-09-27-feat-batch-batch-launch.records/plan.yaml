@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: p-two-phases
+    global: true
     title: Two agentic phases, one per issue, #704 first as the walking skeleton
     body: >-
       Both issues edit render_brief; #687's debug brief is written against the brief #704 leaves
