@@ -1,0 +1,23 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-batch-launch
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: review-phase-1
+    phase: 1
+    title: "phase 1 code review (#704): no findings"
+    body: >-
+      Independent reviewer (standard tier, claude-sonnet-5) read every file in phase 1's files
+      list against spec §A/§D and 01.yaml. Verified: resolve_launch precedence and model_source
+      agree in every combination incl. empty-string model; orchestrator never consulted without a
+      harness; refusal hint only when model alone is missing; _orchestrator builds over
+      fr.models.resolved_config with no second precedence; REPO_MODELS_REL has one home; tests are
+      behavioural and config-isolated (HOME/XDG_CONFIG_HOME sandboxed); no missed callers. No
+      findings raised, so receiving-code-review had nothing to verify or refute.
+resolves: []
+evidence:
+  review: review-phase-1
+  reviewer: a2fbf16a848e873c3
+  model: claude-opus-5-5
