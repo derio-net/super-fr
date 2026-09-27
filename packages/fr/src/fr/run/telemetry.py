@@ -652,14 +652,14 @@ _HEREDOC = re.compile(
 )
 _COMMENT = re.compile(r"(?:(?<=[\s;&|()])|\A)#[^\n]*")
 _NESTING = re.compile(
-    r"""(?P<open>\(|(?<![^\s;&|()])(?:\{|if|case|do)(?=[\s;&|()]|\Z))"""
-    r"""|(?P<close>\)|(?<![^\s;&|()])(?:\}|fi|esac|done)(?=[\s;&|()]|\Z))"""
-    r"""|`"""
+    r"""[()`]|(?:\A|(?<=[;&|()\n])|(?<=\bthen)|(?<=\bdo)|(?<=\belse)|(?<=\{))[ \t]*"""
+    r"""(?P<word>\{|\}|if|fi|case|esac|do|done)(?=[\s;&|()]|\Z)"""
 )
 """What opens and closes a grouping: parentheses (a subshell, `$( )`, `<( )`),
-backticks, and — as whole words — `{ }`, `if … fi`, `case … esac` and the
-`do … done` of every loop. A keyword used as a plain argument (`echo do`)
-unbalances the count, which only ever fails closed."""
+backticks, and the reserved words `{ }`, `if … fi`, `case … esac` and the
+`do … done` of every loop — a reserved word only in command position, since
+`echo done` is an argument, not a keyword."""
+_OPENER = {")": "(", "}": "{", "fi": "if", "esac": "case", "done": "do"}
 
 
 def _code(command: str) -> str:
@@ -676,18 +676,27 @@ def _code(command: str) -> str:
 
 def _top_level(code: str, at: int) -> bool:
     """Is offset `at` of `_code`'s mask outside every grouping? Only there does
-    an assignment run in the shell that later expands the variable."""
-    depth, tick = 0, False
+    an assignment run in the shell that later expands the variable.
+
+    A stack, not a count: each closer must meet its own opener, so a stray one
+    can never cancel a real grouping into looking closed (review of gh#720). A
+    `)` directly inside `case` ends a pattern. Any mismatch fails closed."""
+    stack: list[str] = []
     for m in _NESTING.finditer(code):
         if m.start() >= at:
             break
-        if m.group("open"):
-            depth += 1
-        elif m.group("close"):
-            depth -= 1
+        token = m.group("word") or m.group(0)
+        if token == "`" and stack[-1:] == ["`"]:
+            stack.pop()
+        elif token == ")" and stack[-1:] == ["case"]:
+            continue
+        elif token in _OPENER:
+            if stack[-1:] != [_OPENER[token]]:
+                return False
+            stack.pop()
         else:
-            tick = not tick
-    return depth == 0 and not tick
+            stack.append(token)
+    return not stack
 
 
 def _assignments(command: str) -> list[tuple[int, str, str]]:

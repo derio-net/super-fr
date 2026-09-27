@@ -967,6 +967,10 @@ def test_writes_resolves_shell_variable_targets(command: str, expected: bool) ->
         "true # note; L=/x/t.log\npytest > $L",
         "L=/x/t.log & pytest > $L",
         "L=/x/t.log | cat; pytest > $L",
+        "case $x in a) true;; esac\n(cd /x; L=/x/t.log;); pytest > $L",
+        "(echo done; L=/x/t.log;); pytest > $L",
+        "while false; do echo done; L=/x/t.log; done | cat; pytest > $L",
+        "{ echo }; L=/x/t.log; } | cat; pytest > $L",
     ],
 )
 def test_only_a_top_level_assignment_binds_a_variable(command: str) -> None:
@@ -987,6 +991,8 @@ def test_only_a_top_level_assignment_binds_a_variable(command: str) -> None:
         "(cd /x); L=/x/t.log; pytest > $L",
         "D=$(pwd); L=/x/t.log; pytest > $L",
         "L=/x/t.log && pytest > ${L}",
+        "case $x in a) true;; (b) :;; esac; L=/x/t.log; pytest > $L",
+        "echo if done esac }; L=/x/t.log; pytest > $L",
     ],
 )
 def test_a_top_level_assignment_still_binds(command: str) -> None:
