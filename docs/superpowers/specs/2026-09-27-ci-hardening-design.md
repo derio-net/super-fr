@@ -221,3 +221,9 @@ evidence: every pinned action resolves, and `ci-ok` reports as one check.
    → Dependabot tab lists `.github/dependabot.yml` with the `github-actions`
    ecosystem, and the first weekly run either opens one grouped PR or
    reports that everything is up to date.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-27-ci-hardening | `derio-net/super-fr` | `2026-09-27-ci-hardening` | — |

@@ -1,0 +1,148 @@
+schema_version: 2
+phase:
+  number: 1
+  title: SHA-pinned actions + Dependabot + tripwire, and the ci-ok aggregate job
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ci-actions-sha-pinned
+  - ci-actions-dependabot-updates
+  - ci-ok-single-required-check
+  tier: standard
+  files:
+  - .github/workflows/*.yml
+  - .github/dependabot.yml
+  - tests/unit/test_tripwire_actions_pinned.py
+  - tests/unit/test_ci_shards.py
+  - docs/acceptance/*
+  - docs/superpowers/*
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: Tripwire — every remote uses is SHA + vX.Y.Z comment (spec §3.C)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_tripwire_actions_pinned.py. A pure
+      function `check_pins(workflows_dir: Path) -> list[str]` (violations as
+      "<file>:<line>: <ref> — <reason>") scans every *.yml as TEXT with a
+      regex over `uses:` lines (step `- uses:` and job-level `uses:`, quoted or
+      not); a ref is OK iff it starts with `./`, or matches
+      `^[\w.-]+/[\w.-]+(/[\w./-]+)?@[0-9a-f]{40}$` AND the same line carries a
+      `#\s*v\d+\.\d+\.\d+\b` comment. A second function parses each file with
+      yaml.safe_load and collects `jobs.<id>.uses` AND `jobs.<id>.steps[].uses`;
+      a test asserts the parsed multiset equals the scanned multiset per file
+      (so flow-style / oddly-quoted refs cannot slip past the regex). Tests:
+      the real `.github/workflows` has no violations; tmp-dir negatives — a tag
+      (`actions/checkout@v4`), a short SHA, a 40-hex SHA with no comment, a
+      `# v4` comment (not X.Y.Z), a `docker://` ref — each yields exactly one
+      violation naming file:line; a `./.github/workflows/x.yml` job-level ref
+      passes; a flow-style `{uses: a/b@v1}` step makes the multiset check fail.
+      Also a test pinning `.github/dependabot.yml`: version 2, one update with
+      package-ecosystem github-actions, directory "/", schedule.interval weekly,
+      and a group whose patterns == ["*"]. Run
+      `uv run pytest tests/unit/test_tripwire_actions_pinned.py -q --no-cov`;
+      expect the real-repo test and the dependabot test to FAIL (tag pins, no
+      file) and the negatives to pass.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: re-resolve every row of spec §3.A via the GitHub API before
+      writing it (`gh api repos/<o>/<r>/git/ref/tags/<tag>`, dereferencing
+      `type: tag` objects via `git/tags/<sha>` until a commit; and confirm the
+      exact vX.Y.Z tag dereferences to the same commit). If any SHA differs from
+      the spec table, STOP and record a finding — do not pin an unreviewed
+      commit. Otherwise rewrite every remote `uses:` in all 8
+      .github/workflows/*.yml to `<owner/repo>@<sha> # vX.Y.Z` (keep the local
+      `./.github/workflows/fr-spec-status.yml` ref untouched), and create
+      .github/dependabot.yml exactly as spec §3.B. Re-run the tripwire file:
+      all green. Also run tests/unit/test_ci_shards.py,
+      tests/unit/test_release_workflow.py, tests/unit/test_workflow_pinned_clis.py,
+      tests/unit/test_ci_budget.py — still green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: tidy the tripwire (module docstring citing spec §3.C and
+      #707; failure message telling the author the fix: "pin by full commit SHA
+      with the version tag in a trailing comment, e.g. `actions/checkout@<sha> # v4.4.0`").
+      Re-run it green.
+- number: 2
+  title: ci-ok aggregate job (spec §3.D)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_ci_shards.py add tests for jobs["ci-ok"]:
+      `if` == "always()"; set(needs) == every OTHER job id in ci.yml (derived
+      from the file, not a hard-coded list); exactly one step, its `env.RESULTS`
+      contains `join(needs.*.result` and its `run` contains no `${{` (results
+      reach the shell via env) and names both `failure` and `cancelled`; and a
+      behavioral test that extracts the step's `run` script and executes it with
+      bash under RESULTS="success skipped success" (exit 0), "success failure"
+      (exit 1), "cancelled success" (exit 1). Run; expect failure (no ci-ok job).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add the `ci-ok` job to .github/workflows/ci.yml exactly as spec
+      §3.D (comment citing #706; no actions used). Re-run
+      tests/unit/test_ci_shards.py and the tripwire file: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: reuse `_load_ci_workflow` for the "every other job id" helper
+      rather than a second loader; if nothing needs tidying, record a refactor
+      reason in the step record. Re-run green.
+- number: 3
+  title: Acceptance rows + full verification
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Move the three rows with evidence: ci-actions-sha-pinned → ci
+      (unit=super-fr:tests/unit/test_tripwire_actions_pinned.py);
+      ci-ok-single-required-check → ci (unit=super-fr:tests/unit/test_ci_shards.py;
+      note that the live single-context observation is the PR's own CI run);
+      ci-actions-dependabot-updates → skipped
+      (unit=super-fr:tests/unit/test_tripwire_actions_pinned.py; note: config
+      pinned, the first weekly Dependabot run is a post-merge observation). Use
+      the step record's acceptance section or `uv run fr acceptance set-status`,
+      never a hand-edit, so the three reports regenerate. `uv run fr acceptance check` passes.
+  - id: P1.T3.S2
+    text: |-
+      Verify: `uv run ruff check packages/ tests/` and
+      `uv run ruff format --check packages/ tests/` clean; the full suite
+      `uv run pytest -q --no-cov -n auto` green (per the long_commands rule);
+      every `.github/**/*.yml` parses with yaml.safe_load. Commit the phase.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
