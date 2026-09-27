@@ -469,6 +469,22 @@ def test_canonical_spec_ref_keeps_an_absolute_out_of_repo_ref_verbatim(
     assert canonical_spec_ref(outside, repo) == outside
 
 
+def test_canonical_spec_ref_tolerates_a_relative_repo_root(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review cr-1: a relative `repo_root` beside an absolute ref must not make
+    `os.path.commonpath` raise (it refuses to mix the two) — the escape test
+    judges both as absolute paths."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    monkeypatch.chdir(repo.parent)
+    rel_root = Path(repo.name)
+    outside = str(tmp_path.parent / "elsewhere" / "x-design.md")
+    assert canonical_spec_ref(outside, rel_root) == outside
+    assert canonical_spec_ref("docs/superpowers/specs/x-design.md", rel_root) == "x-design.md"
+
+
 def test_canonical_spec_ref_still_canonicalizes_an_in_repo_dotdot(repo: Path) -> None:
     """#709: the lexical escape test must not over-fire on an in-repo `..`."""
     from fr.refs import canonical_spec_ref

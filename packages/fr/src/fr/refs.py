@@ -145,8 +145,10 @@ def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = 
 
     if is_cross_repo_spec(value):
         return value
-    root = os.path.normpath(str(repo_root))
-    target = os.path.normpath(os.path.join(root, value))
+    # abspath, not bare normpath: commonpath refuses to mix a relative root
+    # with an absolute ref.
+    root = os.path.abspath(repo_root)
+    target = os.path.abspath(os.path.join(root, value))
     if os.path.commonpath([root, target]) != root:
         return value
     if res is None:
