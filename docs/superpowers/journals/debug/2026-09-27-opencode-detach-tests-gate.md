@@ -9,3 +9,8 @@ OpenCode long-command rule (fr/harness/long_commands.py): `(cmd; echo "exit=$?")
 ### 67097efe5339 · hypothesis · The gate has no end-of-run signal for a detached OpenCode command
 
 Unlike Claude Code (#693/#702: run_in_background launch ack -> task-notification closes the window), OpenCode records no event when a detached child ends. But it DOES record every later bash part's `state.output` (verified on a live DB: keys input/metadata/output/status/time/title). The rule already makes the log end with `exit=N`, so the orchestrator's own later command that names the log and prints `exit=0` is a harness-recorded completion signal: window = (launch start, that observation's end). Bounded above by what the orchestrator saw, so a later overwrite still refuses.
+
+<!-- fr:journal kind=root-cause scope=debug id=28a3f48e4ef4 created=2026-09-27T10:41:28 -->
+### 28a3f48e4ef4 · root-cause · A detached launch's own end was the only end the OpenCode reader knew
+
+Confirmed by the red test built from the rule text itself: `_opencode_wrote_since` windowed every writer at (part start, part end), and the rule's `&` makes the part end at launch. Single root cause; #720 ($VAR binding) is a separate root in `_resolve_target` and is left alone.
