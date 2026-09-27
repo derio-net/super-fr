@@ -335,11 +335,20 @@ def _is_inverse_patch(
     """Does `commit`'s patch undo the branch's: it removes every non-blank line
     the branch added, and adds nothing but lines the branch removed? That is a
     revert however the surrounding lines moved in between (#739). A rewrite of
-    the branch's lines adds new ones, so it is not one."""
-    if not branch_added:
+    the branch's lines adds new ones, so it is not one.
+
+    A branch that only REMOVED lines has nothing to take away, so there the
+    revert is the commit that puts every one of them back (#753 review f1);
+    without that, any later removal-only commit would vacuously qualify. A
+    branch with no non-blank line either way (blank-only, binary) has no patch
+    to invert."""
+    if not branch_added and not branch_removed:
         return False
-    return not (Counter(branch_added) - Counter(commit.removed)) and not (
-        Counter(commit.added) - Counter(branch_removed)
+    restores = not branch_added and not (Counter(branch_removed) - Counter(commit.added))
+    return (
+        (bool(branch_added) or restores)
+        and not (Counter(branch_added) - Counter(commit.removed))
+        and not (Counter(commit.added) - Counter(branch_removed))
     )
 
 
@@ -566,38 +575,50 @@ def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base
     of its own) puts the tip itself on that line, so the landing's first parent
     IS the tip and the answer stays the tip: nothing changes for those.
 
+    A branch landed MORE than once (merged, then extended and merged again)
+    repeats the step from each fork it finds, against the base as it was before
+    that landing, until a landing's first parent already holds the fork: the
+    answer is where the branch left the base before its FIRST landing, so a file
+    only the earlier, since-reverted landing touched is still judged (#753
+    review f2). `upper` moves to a strict ancestor every step, so it ends.
+
     A failed git call raises rather than returning `merge_base`, which here
     would read as ALL CHANGES PRESENT (the #705 shape).
     """
     tip = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}"], cwd=repo_root)
     if tip.returncode != 0 or tip.stdout.strip() != merge_base:
         return merge_base
-    line = run(
-        [
-            "git",
-            "rev-list",
-            "--first-parent",
-            "--ancestry-path",
-            "--reverse",
-            f"{branch}..{base_ref}",
-        ],
-        cwd=repo_root,
-    )
-    if line.returncode != 0:
-        raise IsolationError(
-            f"git rev-list {branch}..{base_ref} failed (exit {line.returncode}): "
-            f"{(line.stderr or '').strip()}"
+    fork, upper = merge_base, base_ref
+    while True:
+        line = run(
+            [
+                "git",
+                "rev-list",
+                "--first-parent",
+                "--ancestry-path",
+                "--reverse",
+                f"{fork}..{upper}",
+            ],
+            cwd=repo_root,
         )
-    landing = next(iter(line.stdout.split()), None)
-    if landing is None:  # the base IS the branch tip: nothing landed after it
-        return merge_base
-    fork = run(["git", "merge-base", f"{landing}^1", branch], cwd=repo_root)
-    if fork.returncode != 0 or not fork.stdout.strip():
-        raise IsolationError(
-            f"git merge-base {landing[:12]}^1 {branch} failed (exit {fork.returncode}): "
-            f"{(fork.stderr or '').strip()}"
-        )
-    return fork.stdout.strip()
+        if line.returncode != 0:
+            raise IsolationError(
+                f"git rev-list {fork[:12]}..{upper} failed (exit {line.returncode}): "
+                f"{(line.stderr or '').strip()}"
+            )
+        landing = next(iter(line.stdout.split()), None)
+        if landing is None:  # nothing on the base's line descends from `fork`
+            return fork
+        res = run(["git", "merge-base", f"{landing}^1", branch], cwd=repo_root)
+        if res.returncode != 0 or not res.stdout.strip():
+            raise IsolationError(
+                f"git merge-base {landing[:12]}^1 {branch} failed (exit {res.returncode}): "
+                f"{(res.stderr or '').strip()}"
+            )
+        earlier = res.stdout.strip()
+        if earlier == fork:  # fast-forward: the line already held the fork
+            return fork
+        fork, upper = earlier, f"{landing}^1"
 
 
 def branch_changes_present(

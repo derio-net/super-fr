@@ -4078,3 +4078,43 @@ def test_merged_by_content_does_not_classify_unlanded_content_as_merged(
     st = load_state(repo, "feat/wip")
     assert st is not None
     assert target._merged_by_content(st) is False
+
+
+def test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing(
+    tmp_path: Path,
+) -> None:
+    """#753 review f1: the branch only REMOVED a line; the three-way revert
+    restores it. No added line to look for — the restored line is the patch."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nc\nd\ne\n", "feature removes b")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "a\nc\nd\nE\n", "another PR edits the report")
+    _git(repo, *_ID, "revert", "--no-edit", "HEAD~1")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_second_landing_does_not_hide_a_reverted_first(
+    tmp_path: Path,
+) -> None:
+    """#753 review f2: the branch is --no-ff merged, that merge reverted, and the
+    same branch merged again with an unrelated file. The fork point must reach
+    back past BOTH landings, or the reverted file never enters `changed`."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "a.txt", "orig\n", "base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "a.txt", "orig\nfoo\n", "feature: a")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "main moved on")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "feature")
+    _git(repo, *_ID, "revert", "--no-edit", "-m", "1", "HEAD")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "b.txt", "bar\n", "feature: b")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "feature")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["a.txt"]
