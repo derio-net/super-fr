@@ -199,3 +199,8 @@ Reclassified back: the reviewer tagged it out of scope, and moving an out-of-sco
 ### r3-resolved-2 · finding [deferred → derio-net/super-fr#716] · resolves r3: A reverted merge still passes the blob fallback
 
 Filed at closeout as derio-net/super-fr#716.
+
+<!-- fr:journal kind=finding scope=plan id=r4-resolved-2 created=2026-09-27T07:51:52 state=open resolves=r4 tracked_by=derio-net/super-fr#717 -->
+### r4-resolved-2 · finding [deferred → derio-net/super-fr#717] · resolves r4: diff --name-only without -z quotes special paths
+
+Filed at closeout as derio-net/super-fr#717.
