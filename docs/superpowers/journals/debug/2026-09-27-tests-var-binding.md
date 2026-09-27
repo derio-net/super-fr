@@ -21,3 +21,8 @@ The regex accepts a NAME=value when it is preceded by start/`;`/newline/`&&`/`||
 ### caa6a2d4ef42 · root-cause · _assignments masks only quotes and here-docs, so any separator-adjacent NAME=value binds regardless of shell structure
 
 `packages/fr/src/fr/run/telemetry.py` `_ASSIGNMENT` + `_assignments`: masking covered quotes and here-doc bodies (review F3) but not comments or continuations, and nothing tracked nesting depth or the terminator after the assignment. Fix direction (the issue's own): bind only an assignment at nesting depth 0, terminated by `;`, newline, `&&`, `||` or the end, on a mask that also blanks comments and joins continuations; fail closed on everything else.
+
+<!-- fr:journal kind=finding scope=debug id=ce59d41b60a2 created=2026-09-27T09:40:18+00:00 state=fixed -->
+### ce59d41b60a2 · finding [fixed] · Assignments bind only at top level (depth 0, ended by ; NL && || or end)
+
+Source: `packages/fr/src/fr/run/telemetry.py` — new `_code` mask (quotes/here-doc bodies filled with `_`, comments blanked, `\<NL>` joined), `_NESTING` + `_top_level` depth scan over `( )`, backticks, `{ }`, `if/fi`, `case/esac`, `do/done`; `_ASSIGNMENT` terminator no longer accepts a lone `&` or `|`. Pinned red-first by `test_only_a_top_level_assignment_binds_a_variable` (12 shapes, `_writes` and `_names`) and `test_a_top_level_assignment_still_binds` (5 shapes). Deliberate tightening: an assignment inside a `{ …; }` group or an unpiped loop body is in the current shell but now fails closed too — the depth scan cannot see whether the group is later piped or backgrounded. Side effect: a trailing comment (`L=x # c`) now binds, as it does in the shell. Full suite 6571 passed.
