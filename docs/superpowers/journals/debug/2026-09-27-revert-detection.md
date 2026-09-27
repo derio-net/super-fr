@@ -34,3 +34,8 @@ packages/fr/src/fr/isolation/local.py: _fork_point (#741); _branch_blob_was_on_b
 ### review-f1 · finding [open] (reviewer: in scope) · Review f1: three-way revert of a pure-deletion branch still reads landed
 
 _is_inverse_patch returned False whenever the branch added no line, so a revert restoring a line the branch only removed (after an unrelated edit) was never recognised. Reproduced: test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing fails (changes_present=True).
+
+<!-- fr:journal kind=finding scope=debug id=review-f2 created=2026-09-27T19:59:43+00:00 state=open review_scope=in -->
+### review-f2 · finding [open] (reviewer: in scope) · Review f2: a second landing of the same branch hides a reverted first one
+
+_fork_point stepped back past only the newest landing merge: branch --no-ff merged, reverted, extended with an unrelated file and merged again gives fork = the first landing's tip, so the reverted file never enters `changed`. Reproduced: test_branch_changes_present_second_landing_does_not_hide_a_reverted_first fails (changed=['b.txt']). Before this PR the same shape also read present (changed=[]) — not a regression, but the same #741 cause.
