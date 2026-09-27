@@ -28,8 +28,9 @@ LONG_COMMAND_RULES: dict[str, str] = {
         "the bash tool KILLS a call at its timeout (default 2 minutes), so pass "
         "an explicit timeout of up to 600000 (10 minutes) on that call. For "
         'anything longer, detach it yourself — (cmd; echo "exit=$?") > log '
-        "2>&1 & echo $! > log.pid — poll the log with a bounded loop, and kill "
-        '"$(cat log.pid)" before you hand back.'
+        "2>&1 & echo $! > log.pid — poll the log with a bounded loop until its "
+        "last line is exit=N and print that line (fr's deliver tests= gate reads "
+        'it as the suite\'s end), and kill "$(cat log.pid)" before you hand back.'
     ),
     "hermes": (
         "A command that may run past ~2 minutes (the full test suite, a build): "

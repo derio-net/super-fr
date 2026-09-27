@@ -140,7 +140,8 @@ milliseconds (default 2 minutes, maximum 10 minutes) and **kills** the command
 when it expires, and it has no background argument at all: pass an explicit
 `timeout` of up to `600000` for a long suite, and for anything longer detach it
 yourself so the exit code survives — `(cmd; echo "exit=$?") > log 2>&1 & echo $! > log.pid`
-— poll the log with a bounded loop, and before you hand back stop anything still
+— poll the log with a bounded loop until its last line is `exit=N` and print that
+line (fr's `deliver` `tests=` gate reads it as the suite's end), and before you hand back stop anything still
 running with `kill "$(cat log.pid)"` (each bash call is a fresh shell, so `$!` does
 not survive to the next one). On
 **Hermes**, start it with `terminal(command, background=true,

@@ -11,7 +11,8 @@ The fixture database uses the REAL column names and `part.data` shape of a
 `bash` tool part, read on 2026-09-26 from a live
 `~/.local/share/opencode/opencode.db` with `sqlite3 -readonly` (`.schema
 session`, `.schema part`, and one bash part's keys: `type`, `tool`,
-`state.{status,input.command,metadata.exit,time.{start,end}}`, epoch ms). Only
+`state.{status,input.command,output,metadata.exit,time.{start,end}}`, epoch ms;
+`state.output` confirmed on 2026-09-27 for gh#719). Only
 the columns the reader queries are created.
 """
 
@@ -19,13 +20,16 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
+import re
 import sqlite3
 import time
 from pathlib import Path
 
 import pytest
 from fr.artifacts.validate import validate_repo
-from fr.run.telemetry import orchestrator_wrote_since
+from fr.harness.long_commands import LONG_COMMAND_RULES
+from fr.run.telemetry import _detaches, orchestrator_wrote_since
 
 from tests.unit.test_run_cli import _invoke_as_harness, _squash
 from tests.unit.test_run_evidence_separate_context import _at_deliver
@@ -37,7 +41,15 @@ def _ms(iso: str) -> int:
     return int(_dt.datetime.fromisoformat(iso).timestamp() * 1000)
 
 
-def _bash(command: str, start: int, *, status: str = "completed", exit_code: int = 0) -> str:
+def _bash(
+    command: str,
+    start: int,
+    *,
+    status: str = "completed",
+    exit_code: int = 0,
+    output: str = "",
+    duration: int = 5_000,
+) -> str:
     return json.dumps(
         {
             "type": "tool",
@@ -46,8 +58,9 @@ def _bash(command: str, start: int, *, status: str = "completed", exit_code: int
             "state": {
                 "status": status,
                 "input": {"command": command},
-                "metadata": {"exit": exit_code},
-                "time": {"start": start, "end": start + 5_000},
+                "output": output,
+                "metadata": {"exit": exit_code, "output": output, "truncated": False},
+                "time": {"start": start, "end": start + duration},
             },
         }
     )
@@ -138,6 +151,146 @@ def test_a_session_row_last_touched_before_the_unit_does_not_hide_its_parts(
 
 def test_an_unreadable_opencode_database_is_unobservable(tmp_path: Path) -> None:
     assert orchestrator_wrote_since(_env(tmp_path / "absent.db"), LOG, SINCE) is None
+
+
+def _detached(log: Path, cmd: str = "uv run pytest -n auto") -> str:
+    """OpenCode's long-command rule, VERBATIM from the brief it rides
+    (`fr.harness.long_commands`), with its `cmd` and `log` filled in — so a
+    rewording of the rule that the gate cannot window turns this red."""
+    shape = re.search(r"\(cmd;.*?log\.pid", LONG_COMMAND_RULES["opencode"])
+    assert shape is not None, "the OpenCode rule no longer carries its detach form"
+    return shape.group(0).replace("cmd", cmd).replace("log", str(log))
+
+
+MINUTE = 60_000
+
+
+def _dt_ms(ms: int) -> _dt.datetime:
+    return _dt.datetime.fromtimestamp(ms / 1000, tz=_dt.UTC)
+
+
+def _covers(windows: list[tuple[_dt.datetime, _dt.datetime]] | None, ms: int) -> bool:
+    return windows is not None and any(s <= _dt_ms(ms) <= e for s, e in windows)
+
+
+def test_a_detached_suite_is_windowed_until_the_orchestrator_sees_its_exit_line(
+    tmp_path: Path,
+) -> None:
+    """gh#719: the rule's `&` returns at once, so the launch part alone is a
+    zero-length window and the suite's real write (minutes later) fell outside
+    it. OpenCode has no completion event; its record of a LATER bash part of
+    the orchestrator's that names the log and printed `exit=0` is one."""
+    db = _db(
+        tmp_path / "o.db",
+        [
+            ("s-top", _bash(_detached(LOG), AFTER, duration=40)),
+            ("s-top", _bash(f"tail -3 {LOG}", AFTER + 5 * MINUTE, output="12 passed\n")),
+            ("s-top", _bash(f"tail -3 {LOG}", AFTER + 12 * MINUTE, output="5458 passed\nexit=0\n")),
+        ],
+    )
+
+    windows = orchestrator_wrote_since(_env(db), LOG, SINCE)
+
+    assert _covers(windows, AFTER + 11 * MINUTE), windows
+    assert not _covers(windows, AFTER + 13 * MINUTE), "the window outlived what it saw"
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        pytest.param(None, id="never-observed"),
+        pytest.param(("s-top", f"tail -3 {LOG}", "1 failed\nexit=1\n"), id="the-suite-failed"),
+        pytest.param(("s-child", f"tail -3 {LOG}", "exit=0\n"), id="a-subagent-saw-it"),
+        pytest.param(("s-top", "tail -3 other.log", "exit=0\n"), id="another-log"),
+        pytest.param(("s-top", f"tail -3 {LOG}", "still running\n"), id="no-exit-line"),
+    ],
+)
+def test_a_detached_suite_without_a_seen_exit_0_is_not_windowed_past_its_launch(
+    tmp_path: Path, observation: tuple[str, str, str] | None
+) -> None:
+    parts = [("s-top", _bash(_detached(LOG), AFTER, duration=40))]
+    if observation is not None:
+        sid, command, output = observation
+        parts.append((sid, _bash(command, AFTER + 12 * MINUTE, output=output)))
+    db = _db(tmp_path / "o.db", parts)
+
+    windows = orchestrator_wrote_since(_env(db), LOG, SINCE)
+
+    assert windows is not None
+    assert not _covers(windows, AFTER + 11 * MINUTE), windows
+
+
+def test_the_first_exit_line_the_orchestrator_saw_is_final(tmp_path: Path) -> None:
+    """A later `exit=0` (a rerun's, or forged into the log) can neither revive
+    a suite the orchestrator saw fail nor stretch a window it already closed —
+    the same rule the Claude Code reader applies to task notices."""
+    db = _db(
+        tmp_path / "o.db",
+        [
+            ("s-top", _bash(_detached(LOG), AFTER, duration=40)),
+            ("s-top", _bash(f"tail -1 {LOG}", AFTER + 12 * MINUTE, output="exit=1\n")),
+            ("s-top", _bash(f"tail -1 {LOG}", AFTER + 20 * MINUTE, output="exit=0\n")),
+        ],
+    )
+
+    windows = orchestrator_wrote_since(_env(db), LOG, SINCE)
+
+    assert not _covers(windows, AFTER + 11 * MINUTE), windows
+    assert not _covers(windows, AFTER + 19 * MINUTE), windows
+
+
+def test_a_foreground_write_is_not_stretched_by_a_later_exit_line(tmp_path: Path) -> None:
+    """Only a DETACHED writer waits for an exit line; a foreground one's own
+    end is its end, so a later `cat` cannot reopen its window."""
+    db = _db(
+        tmp_path / "o.db",
+        [
+            ("s-top", _bash(f"pytest > {LOG} 2>&1", AFTER)),
+            ("s-top", _bash(f"cat {LOG}", AFTER + 12 * MINUTE, output="exit=0\n")),
+        ],
+    )
+
+    windows = orchestrator_wrote_since(_env(db), LOG, SINCE)
+
+    assert not _covers(windows, AFTER + 11 * MINUTE), windows
+
+
+def test_on_opencode_a_detached_suite_the_orchestrator_saw_finish_is_accepted(
+    tmp_path: Path,
+) -> None:
+    """End to end, the #719 shape: launched as the unit opens, finished a
+    minute later, its `exit=0` read back a minute after that."""
+    repo, shipped, opened = _at_deliver(tmp_path)
+    log = repo / "full-suite.log"
+    log.write_text("5458 passed\nexit=0\n")
+    start = _ms(opened)
+    os.utime(log, (start / 1000 + 60, start / 1000 + 60))
+    db = _db(
+        tmp_path / "o.db",
+        [
+            ("s-top", _bash(_detached(log), start, duration=40)),
+            ("s-top", _bash(f"tail -2 {log}", start + 2 * MINUTE, output="5458 passed\nexit=0\n")),
+        ],
+    )
+
+    result = _opencode_deliver(repo, shipped, db, "tests=full-suite.log")
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify" not in _squash(result.stderr)
+
+
+def test_on_opencode_an_unobserved_detached_suite_says_how_to_close_it(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_deliver(tmp_path)
+    log = repo / "full-suite.log"
+    log.write_text("5458 passed\nexit=0\n")
+    start = _ms(opened)
+    os.utime(log, (start / 1000 + 60, start / 1000 + 60))
+    db = _db(tmp_path / "o.db", [("s-top", _bash(_detached(log), start, duration=40))])
+
+    result = _opencode_deliver(repo, shipped, db, "tests=full-suite.log")
+
+    assert result.exit_code == 2, result.output
+    assert "exit=0" in _squash(result.output)
 
 
 def _opencode_deliver(repo: Path, shipped: Path, db: Path, *evidence: str):
@@ -273,3 +426,18 @@ def test_an_unverifiable_log_says_why_by_harness(tmp_path: Path, harness: str, s
     assert result.exit_code == 0, result.output
     assert said in _squash(result.stderr)
     assert "unverified" in _squash(result.stderr)
+
+
+@pytest.mark.parametrize(
+    ("command", "detached"),
+    [
+        pytest.param(_detached(LOG), True, id="the-rule"),
+        pytest.param(f"pytest > {LOG} 2>&1", False, id="stderr-dup"),
+        pytest.param(f"pytest &> {LOG}", False, id="amp-redirect"),
+        pytest.param(f"cd x && pytest > {LOG}", False, id="and-chain"),
+        pytest.param(f"pytest |& tee {LOG}", False, id="pipe-both"),
+        pytest.param(f"echo 'a & b' > {LOG}", False, id="quoted"),
+    ],
+)
+def test_only_a_lone_ampersand_detaches(command: str, detached: bool) -> None:
+    assert _detaches(command) is detached

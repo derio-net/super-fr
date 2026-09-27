@@ -3452,6 +3452,23 @@ rows:
     notes: 'Live: a full suite run with run_in_background (32 min) was refused because
       the tool_result window closed at the ~1 s launch ack; captured fixture claude-code-bash-background.jsonl
       pins the ack/notice shape.'
+  - id: run-deliver-tests-log-opencode-detached
+    capability: Run cursor
+    acceptance: 'On OpenCode, deliver''s tests=<log> is accepted for a suite the long-command
+      rule detached with &: the window runs from the launch to the first later orchestrator
+      command that names the log and prints its exit=0 line; an unobserved, failed,
+      subagent-observed or already-closed detached suite yields no window past its launch'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-detach-tests-gate.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_tests_log_opencode.py
+    status: ci
+    notes: gh#719. The launch bash part ends at the &, so the gate saw a zero-length
+      window and refused the log the detached suite wrote. The red test builds its command
+      from the rule text itself, so a rewording the gate cannot window turns it red.
+      Not yet live-verified on OpenCode (the output-carrying part shape was read from
+      a live opencode.db, keys only).
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
