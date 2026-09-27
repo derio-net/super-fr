@@ -120,19 +120,26 @@ def _proportionality(repo_root: Path, state: RunState) -> str:
 
 
 def _cost(repo_root: Path, state: RunState) -> str:
-    from fr.run.cost import effective_entries, load_run_usage, recompute_entries, summarize
+    from fr.run.cost import effective_entries, load_run_usage, summarize
+    from fr.usage.capture import live_usage
 
-    note = ""
     try:
         usage = load_run_usage(repo_root, state.run)
     except Exception:  # noqa: BLE001 — a bad usage file does not stop a delivery
         usage = None
-    if usage is not None:
-        entries, _replayed, _ignored = effective_entries(usage)
-    else:
-        entries = recompute_entries(repo_root, state, os.environ)
-        note = "\n\n_Read from this host's transcripts; the usage file is written by this resolve._"
+    # gh#680: `deliver` renders this before its own capture, so the file holds
+    # only what the last capture on this host saw — fold a live reading over it.
+    entries, _replayed, _ignored = effective_entries(
+        live_usage(repo_root, state, "deliver", os.environ, usage)
+    )
     summary = summarize(entries, list(state.steps))
+    note = ""
+    if summary.total is None and any(r.turns for r in summary.steps):
+        note = (
+            "\n\n_Dollars are `—`: no cost recorded yet. A harness may write a "
+            "session's cost only when the session ends (Claude Code does). "
+            f"`fr run cost {state.run}` reads it afterwards._"
+        )
 
     def usd(value: float | None) -> str:
         return "—" if value is None else f"${value:,.2f}"

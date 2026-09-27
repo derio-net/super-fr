@@ -89,7 +89,11 @@ def test_dollars_present_carry_no_missing_dollars_note(
     assert _step(repo, shipped, "brainstorm").exit_code == 0
     _live(
         monkeypatch,
-        SessionEntry(session=CC_SESSION, steps={"brainstorm": Figure(turns=6, usd=1.5)}),
+        SessionEntry(
+            session=CC_SESSION,
+            steps={"brainstorm": Figure(turns=6, usd=1.5)},
+            models={"m": ModelFigures(output=1, usd=1.5, usd_source="exact")},
+        ),
     )
 
     cost = _cost(render_pr_body(repo, load_run_state(repo, RUN)))
