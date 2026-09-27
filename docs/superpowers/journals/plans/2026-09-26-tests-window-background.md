@@ -159,3 +159,8 @@ OpenCode has no completion event; needs its own design; not caused by this chang
 ### r5-resolved-2 · finding [deferred → derio-net/super-fr#720] · resolves r5: _ASSIGNMENT is purely syntactic (echo L=..., env-prefix, subshell can resolve)
 
 Filed at closeout as derio-net/super-fr#720.
+
+<!-- fr:journal kind=finding scope=plan id=r6-resolved-2 created=2026-09-27T08:06:28 state=open resolves=r6 tracked_by=derio-net/super-fr#719 -->
+### r6-resolved-2 · finding [deferred → derio-net/super-fr#719] · resolves r6: OpenCode & detach still has a zero-length window
+
+Filed at closeout as derio-net/super-fr#719 (same gap as spec s2).
