@@ -16,7 +16,15 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.ghclient import UnsupportedForgeOperation
-from fr.triage.batch import ResolvedLaunch, fr_harness, mixed_themes, resolve_launch
+from fr.triage.batch import (
+    ResolvedLaunch,
+    Suggestion,
+    fr_harness,
+    mixed_themes,
+    resolve_launch,
+    suggest,
+    theme_key,
+)
 from fr.triage.check import classify
 from fr.triage.errors import TriageError
 from fr.triage.model import (
@@ -275,6 +283,46 @@ def test_mixed_themes_ignores_empty_themes() -> None:
     )
     batch = Batch.model_validate({"id": "x", "title": "t", "ids": ["a#1", "a#2"], "skill": "debug"})
     assert mixed_themes(batch, judgements) == []
+
+
+_NS = (577, 575, 471, 438, 420)
+
+
+def _themed(*themes: str) -> Judgements:
+    """Judgements for the default facts' issues, one theme each, in `_NS` order."""
+    return Judgements.model_validate(
+        {
+            "schema": 2,
+            "tiers": [{"n": 1, "title": "t"}],
+            "issues": {f"super-fr#{n}": {"tier": 1, "theme": t} for n, t in zip(_NS, themes)},
+        }
+    )
+
+
+def test_theme_key_ignores_case_and_surrounding_space() -> None:
+    assert theme_key("Docs") == theme_key("docs ") == theme_key(" DOCS\t") == "docs"
+    assert theme_key("   ") == ""
+    # Inner spacing is part of the theme; only the ends are trimmed.
+    assert theme_key("fr isolation") != theme_key("fr  isolation")
+
+
+def test_mixed_themes_treats_one_theme_spelled_two_ways_as_one() -> None:
+    judgements = _themed("Docs", "docs ", " DOCS")
+    batch = Batch.model_validate(
+        {"id": "x", "title": "t", "ids": ["super-fr#577", "super-fr#575", "super-fr#471"],
+         "skill": "debug"}
+    )  # fmt: skip
+    assert mixed_themes(batch, judgements) == []
+
+
+def test_mixed_themes_keeps_the_stored_spelling_and_ignores_blank_themes() -> None:
+    judgements = _themed("Docs", "docs", "Agents", "  ")
+    batch = Batch.model_validate(
+        {"id": "x", "title": "t", "skill": "debug",
+         "ids": ["super-fr#577", "super-fr#575", "super-fr#471", "super-fr#438"]}
+    )  # fmt: skip
+    # The first member's spelling represents its theme; order is by the normalised key.
+    assert mixed_themes(batch, judgements) == ["Agents", "Docs"]
 
 
 # -------------------------------------------------------------------- edit
@@ -598,6 +646,17 @@ def test_suggest_leaves_out_members_of_open_batches(tmp_path: Path) -> None:
     code, out = _run(tmp_path, "suggest")
     assert code == 0, out
     assert "super-fr#577" not in out
+
+
+def test_suggest_groups_one_theme_spelled_several_ways() -> None:
+    judgements = _themed("Docs", "docs ", "docs", "  ", "  ")
+
+    themes = [s for s in suggest(judgements, _facts()) if s.signal == "theme"]
+
+    # One group, under the first member's stored spelling; blank themes form no group.
+    assert themes == [Suggestion("theme", "Docs", ["super-fr#577", "super-fr#575", "super-fr#471"])]
+    # Nothing is rewritten: the stored spellings survive.
+    assert [judgements.issues[f"super-fr#{n}"].theme for n in (577, 575)] == ["Docs", "docs "]
 
 
 # ---------------------------------------------------------- launch resolution

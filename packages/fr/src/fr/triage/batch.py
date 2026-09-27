@@ -378,9 +378,33 @@ def resolve_launch(
     return ResolvedLaunch(launch=resolved, model_source=model_source)
 
 
+def theme_key(theme: str) -> str:
+    """The one point where two `Judgement.theme` values are compared (gh#724).
+
+    A theme is free text an agent types, so `Docs`, `docs` and `docs ` name one
+    theme: compare casefolded, with the ends trimmed. Only the comparison
+    normalises; the stored spelling is what a caller shows, and judgements.yaml
+    is never rewritten. A blank theme keys to `""`, which means no theme.
+    """
+    return theme.strip().casefold()
+
+
+def _by_theme(keys: Iterable[str], judgements: Judgements) -> list[tuple[str, list[str]]]:
+    """*keys* grouped by `theme_key`, sorted by it, blank themes left out.
+
+    Each group is shown as its first member's stored spelling.
+    """
+    groups: dict[str, tuple[str, list[str]]] = {}
+    for k in keys:
+        theme = judgements.issues[k].theme
+        if key := theme_key(theme):
+            groups.setdefault(key, (theme, []))[1].append(k)
+    return [groups[key] for key in sorted(groups)]
+
+
 def mixed_themes(batch: Batch, judgements: Judgements) -> list[str]:
-    """The sorted distinct non-empty themes of *batch*'s members (spec
-    2026-09-27-triage-batch-launch §C, decision d3).
+    """The distinct non-blank themes of *batch*'s members, compared by `theme_key`
+    and sorted by it (spec 2026-09-27-triage-batch-launch §C, decision d3).
 
     Only a `debug` batch names a single root cause, so this is meaningful for
     one: it returns fewer than two entries — nothing to warn about — for a
@@ -389,10 +413,8 @@ def mixed_themes(batch: Batch, judgements: Judgements) -> list[str]:
     """
     if batch.skill != "debug":
         return []
-    themes = sorted(
-        {judgements.issues[k].theme for k in batch.ids if k in judgements.issues} - {""}
-    )
-    return themes if len(themes) >= 2 else []
+    groups = _by_theme((k for k in batch.ids if k in judgements.issues), judgements)
+    return [theme for theme, _ in groups] if len(groups) >= 2 else []
 
 
 # ----------------------------------------------------------------- markers
@@ -478,11 +500,7 @@ def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
         for members, label in sorted(groups.items(), key=lambda kv: kv[1])
     ]
 
-    themes: dict[str, list[str]] = {}
-    for k in free:
-        if theme := judgements.issues[k].theme:
-            themes.setdefault(theme, []).append(k)
-    out += [Suggestion("theme", t, ks) for t, ks in sorted(themes.items()) if len(ks) > 1]
+    out += [Suggestion("theme", t, ks) for t, ks in _by_theme(free, judgements) if len(ks) > 1]
 
     for p in judgements.patterns:
         ks = [k for k in p.ids if k in free]
