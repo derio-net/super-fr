@@ -4813,6 +4813,47 @@ rows:
     notes: check_watch_list's tripwire tests (real repo passes; negative cases on a
       tmp dir for an unlisted workflow and a stale config key) exercise the exact check
       CI runs on every push via test_ci_budget.py
+  - id: ci-actions-sha-pinned
+    capability: CI
+    acceptance: A workflow that references a remote GitHub Action by anything but a
+      full commit SHA with a version comment fails CI
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_actions_pinned.py
+    status: ci
+    notes: 'Tripwire test_tripwire_actions_pinned.py passes over the real repo''s workflows;
+      every remote uses: is SHA-pinned with a version comment (spec 2026-09-27-ci-hardening
+      §3.A/§3.C).'
+  - id: ci-actions-dependabot-updates
+    capability: CI
+    acceptance: Dependabot proposes updates to the SHA-pinned actions weekly, as one
+      grouped PR
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_actions_pinned.py
+    status: skipped
+    notes: test_tripwire_actions_pinned.py pins .github/dependabot.yml's shape (github-actions
+      ecosystem, weekly, one *-group), so config is pinned; the first weekly Dependabot
+      run is a post-merge observation not exercised in CI (spec 2026-09-27-ci-hardening
+      §3.B).
+  - id: ci-ok-single-required-check
+    capability: CI
+    acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
+      so a required-check rule can name exactly one context
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_shards.py
+    status: ci
+    notes: 'test_ci_shards.py pins ci-ok''s shape (if: always(), needs == every other
+      job id, env-only RESULTS, exits nonzero on failure/cancelled) and behaviorally
+      executes the run: script; the live single-context observation is this PR''s own
+      CI run (spec 2026-09-27-ci-hardening §3.D).'
   - id: container-record-commits
     capability: isolation-git-ownership
     acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted

@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
       - name: Install fr (from this checkout — super-fr self-hosts)
         # Deviation from the scaffolded template on purpose: installing from
         # @main would gate every PR that changes `fr acceptance` behavior
@@ -46,7 +46,7 @@ jobs:
           REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: fr acceptance report --link-mode github --ref "$REF"
       - name: Upload report artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: acceptance-report
           path: docs/acceptance/report.html

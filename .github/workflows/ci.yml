@@ -5,8 +5,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: uv sync
       - run: uv run ruff check packages/ tests/
       - run: uv run ruff format --check packages/ tests/
@@ -14,8 +14,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: uv sync
       - run: uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src
 
@@ -26,13 +26,13 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # test_tripwire_unarchived_plans reads origin/main to scope the
           # merged-but-unarchived check (#334); full history makes the ref
           # available. Kept on every shard, not just one.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: uv sync
       # Sharded with pytest-split (CI time budget, spec 2026-09-26 §3.A).
       # addopts is CLEARED, not patched, and --strict-markers/--cov are
@@ -47,7 +47,7 @@ jobs:
           --splitting-algorithm least_duration
         env:
           COVERAGE_FILE: .coverage.shard${{ matrix.shard }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: .coverage.shard${{ matrix.shard }}
@@ -60,10 +60,10 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - run: uv sync
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: coverage-shard-*
           merge-multiple: true
@@ -73,8 +73,8 @@ jobs:
   validate-artifacts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       # A CLEAN install, like `acceptance-report.yml` — not `uv sync` + `uv run`
       # (review r5-d4). The validator's own resolution depends on packaging: the
       # shipped workflow manifests now travel INSIDE the `fr` wheel, so a
@@ -99,8 +99,8 @@ jobs:
   opencode-plugin-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - name: Install dependencies
         working-directory: packages/fr-opencode-plugin
         run: bun install --frozen-lockfile
@@ -113,7 +113,7 @@ jobs:
       # so the probe cannot silently skip here.
       - name: Install OpenCode
         run: npm install -g opencode-ai@1.18.32
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - name: Live delivery probe (real opencode binary)
         env:
           FR_REQUIRE_OPENCODE: "1"
@@ -122,8 +122,8 @@ jobs:
   version-sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - name: pyproject.toml / plugin.json / marketplace.json agree
         run: uv run --no-project python scripts/bump-version.py --check
 
@@ -131,9 +131,25 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
       - name: User-visible changes add a change fragment; no PR edits a version
         run: uv run --no-project python scripts/check-change-fragment.py "origin/${{ github.base_ref }}"
+
+  # One stable check name for a future required-check rule (#706).
+  ci-ok:
+    if: always()
+    needs: [lint, typecheck, test, coverage, validate-artifacts,
+            opencode-plugin-test, version-sync, change-fragment]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every CI job succeeded or was skipped by its own condition
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "*|*" cancelled "*) exit 1 ;;
+          esac
