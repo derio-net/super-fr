@@ -24,3 +24,8 @@ Plan B stranded in implemented/plans with spec: docs/superpowers/specs/y-design.
 ### 66db879b0aa6 · root-cause · repair scope is the archived slugs, but the sweep's moves are repo-wide
 
 archive_cmd passes only_plans={archived slugs} to both _report_sweep and the post-move repair_repo. spec_archive_sweep evaluates every spec under specs/, so it can move a spec whose plans are all other, earlier-archived plans; the refs that move made stale belong to those plans and fall outside only_plans.
+
+<!-- fr:journal kind=finding scope=debug id=f2-archive-sweep-scope created=2026-09-27T05:18:55 state=fixed -->
+### f2-archive-sweep-scope · finding [fixed] · scoped archive widens repair by plans referencing moved specs
+
+repair.plans_referencing_specs (moved specs' table rows + plans whose spec: names a moved spec) unioned into only_plans in archive_cmd before _report_sweep and the post-move repair. Test: test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved (red→green; also asserts an unrelated live plan stays byte-identical). Full suite 6397 passed.
