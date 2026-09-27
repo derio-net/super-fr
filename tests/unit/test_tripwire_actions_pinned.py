@@ -8,10 +8,13 @@ Pinning by SHA makes the executed code immutable; the trailing version
 comment is what Dependabot (and a human diffing a bump) reads to know what
 actually runs.
 
-The scan is TEXT-based (`check_pins`), because a YAML comment does not
-survive `yaml.safe_load` — but a regex scan can be evaded by an unusual
-formatting of the `uses:` line (flow-style, odd quoting), so a second check
-(`scanned_uses` vs `parsed_uses`) asserts the two views agree per file.
+The check walks the COMPOSED YAML node graph (`yaml.compose`), not the text:
+only `jobs.<id>.uses` and `jobs.<id>.steps[].uses` — the two places GitHub
+reads a `uses` — are found, whatever their formatting (flow style, quoted
+key, `uses :`), and a `uses:` line inside a `run: |` block is never mistaken
+for one. A YAML comment does not survive parsing, so the version comment is
+read from the source text AFTER the value node's end mark, on the line where
+the value ends. One code path serves the real repo and every fixture.
 """
 
 from __future__ import annotations
@@ -25,46 +28,52 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 DEPENDABOT_PATH = REPO_ROOT / ".github" / "dependabot.yml"
 
-# Matches a `uses:` key at the start of a line (job-level, or a step's
-# `- uses:`) — deliberately anchored so a flow-style `{uses: ...}` mapping,
-# which never has `uses:` right after the dash, does NOT match. That's the
-# gap `scanned_uses` vs `parsed_uses` exists to catch.
-_USES_LINE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<rest>.+?)\s*$")
-
 # Exactly a full 40-hex commit SHA, per spec §3.C.
 _SHA_PIN = re.compile(r"^[\w.-]+/[\w.-]+(?:/[\w./-]+)?@[0-9a-f]{40}$")
 
-# A trailing `# vX.Y.Z` comment — exactly three dot-separated components.
-_VERSION_COMMENT = re.compile(r"#\s*v\d+\.\d+\.\d+\b")
+# A trailing `# vX.Y.Z` comment — exactly three dot-separated components, and
+# nothing glued on (`v1.2.3.4`, `v1.2.3-rc1` are refused).
+_VERSION_COMMENT = re.compile(r"#\s*v\d+\.\d+\.\d+(?=\s|$)")
 
 
-def _extract_ref(rest: str) -> str:
-    """Pull the ref value out of a `uses:` line's remainder, stripping an
-    optional quote and any trailing inline comment."""
-    if rest and rest[0] in ("'", '"'):
-        quote = rest[0]
-        end = rest.find(quote, 1)
-        if end != -1:
-            return rest[1:end]
-        return rest[1:]
-    match = re.match(r"[^\s#]+", rest)
-    return match.group(0) if match else rest
+def _workflow_files(workflows_dir: Path) -> list[Path]:
+    """GitHub runs both extensions."""
+    return sorted([*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")])
 
 
-def scanned_uses(path: Path) -> list[str]:
-    """Every `uses:` ref found by the text regex scan, in file order."""
-    refs: list[str] = []
-    for line in path.read_text().splitlines():
-        match = _USES_LINE.match(line)
-        if match:
-            refs.append(_extract_ref(match.group("rest")))
-    return refs
+def _get(node: yaml.Node, key: str) -> yaml.Node | None:
+    if not isinstance(node, yaml.MappingNode):
+        return None
+    for k, v in node.value:
+        if isinstance(k, yaml.ScalarNode) and k.value == key:
+            return v
+    return None
+
+
+def uses_nodes(path: Path) -> list[yaml.ScalarNode]:
+    """Every `uses` value node — job-level (a reusable-workflow call, no
+    `steps:`) and step-level — in file order."""
+    root = yaml.compose(path.read_text())
+    jobs = _get(root, "jobs") if root is not None else None
+    found: list[yaml.ScalarNode] = []
+    if not isinstance(jobs, yaml.MappingNode):
+        return found
+    for _, job in jobs.value:
+        uses = _get(job, "uses")
+        if isinstance(uses, yaml.ScalarNode):
+            found.append(uses)
+        steps = _get(job, "steps")
+        if isinstance(steps, yaml.SequenceNode):
+            for step in steps.value:
+                uses = _get(step, "uses")
+                if isinstance(uses, yaml.ScalarNode):
+                    found.append(uses)
+    return found
 
 
 def parsed_uses(path: Path) -> list[str]:
-    """Every `uses:` ref found by parsing the file as YAML — both the
-    job-level shape (a reusable-workflow call, no `steps:`) and the
-    step-level shape."""
+    """The same refs by plain `yaml.safe_load` — an independent view that
+    `uses_nodes` must agree with, so the node walk cannot silently miss one."""
     doc = yaml.safe_load(path.read_text()) or {}
     refs: list[str] = []
     for job in (doc.get("jobs") or {}).values():
@@ -80,19 +89,19 @@ def check_pins(workflows_dir: Path) -> list[str]:
     """Violations as `<file>:<line>: <ref> — <reason>` strings. Empty means
     the tripwire passes."""
     violations: list[str] = []
-    for path in sorted(workflows_dir.glob("*.yml")):
-        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            match = _USES_LINE.match(line)
-            if not match:
-                continue
-            ref = _extract_ref(match.group("rest"))
+    for path in _workflow_files(workflows_dir):
+        lines = path.read_text().splitlines()
+        for node in uses_nodes(path):
+            ref = node.value
             if ref.startswith("./"):
                 continue
-            if _SHA_PIN.match(ref) and _VERSION_COMMENT.search(line):
+            end = node.end_mark
+            after_value = lines[end.line][end.column :] if end.line < len(lines) else ""
+            if _SHA_PIN.match(ref) and _VERSION_COMMENT.search(after_value):
                 continue
             violations.append(
-                f"{path.name}:{lineno}: {ref} — pin by full commit SHA with the "
-                "version tag in a trailing comment, e.g. "
+                f"{path.name}:{node.start_mark.line + 1}: {ref} — pin by full commit SHA "
+                "with the version tag in a trailing comment, e.g. "
                 "`actions/checkout@<sha> # v4.4.0`"
             )
     return violations
@@ -105,9 +114,11 @@ def test_the_real_repos_workflows_have_no_violations() -> None:
     assert check_pins(WORKFLOWS_DIR) == []
 
 
-def test_scanned_and_parsed_uses_agree_for_every_real_workflow_file() -> None:
-    for path in sorted(WORKFLOWS_DIR.glob("*.yml")):
-        assert sorted(scanned_uses(path)) == sorted(parsed_uses(path)), path.name
+def test_the_node_walk_and_safe_load_agree_for_every_real_workflow_file() -> None:
+    files = _workflow_files(WORKFLOWS_DIR)
+    assert files
+    for path in files:
+        assert [n.value for n in uses_nodes(path)] == parsed_uses(path), path.name
 
 
 # ── negative fixtures (tmp dir) ────────────────────────────────────────────
@@ -171,20 +182,69 @@ def test_a_local_job_level_ref_passes(tmp_path: Path) -> None:
     assert check_pins(tmp_path) == []
 
 
-def test_flow_style_uses_evades_the_regex_scan_but_the_multiset_check_catches_it(
+def _write_steps(tmp_path: Path, steps: str, name: str = "x.yml") -> Path:
+    workflow = tmp_path / name
+    workflow.write_text(
+        "name: X\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n" + steps
+    )
+    return workflow
+
+
+_SHA = "11d5960a326750d5838078e36cf38b85af677262"
+
+
+def test_a_yaml_extension_workflow_is_checked_too(tmp_path: Path) -> None:
+    workflow = _write_steps(tmp_path, "      - uses: actions/checkout@v4\n", name="x.yaml")
+    violations = check_pins(tmp_path)
+    assert len(violations) == 1
+    assert violations[0].startswith(f"{workflow.name}:7:")
+
+
+def test_a_four_component_version_comment_is_a_violation(tmp_path: Path) -> None:
+    _write(tmp_path, f"- uses: actions/checkout@{_SHA} # v4.4.0.1")
+    assert len(check_pins(tmp_path)) == 1
+
+
+def test_a_prerelease_version_comment_is_a_violation(tmp_path: Path) -> None:
+    _write(tmp_path, f"- uses: actions/checkout@{_SHA} # v4.4.0-rc1")
+    assert len(check_pins(tmp_path)) == 1
+
+
+def test_flow_style_uses_is_a_violation(tmp_path: Path) -> None:
+    _write(tmp_path, "- {uses: a/b@v1}")
+    assert len(check_pins(tmp_path)) == 1
+
+
+def test_a_quoted_uses_key_is_a_violation(tmp_path: Path) -> None:
+    _write(tmp_path, '- "uses": a/b@v1')
+    assert len(check_pins(tmp_path)) == 1
+
+
+def test_a_space_before_the_colon_is_a_violation(tmp_path: Path) -> None:
+    _write(tmp_path, "- uses : a/b@v1")
+    assert len(check_pins(tmp_path)) == 1
+
+
+def test_a_uses_line_inside_a_run_block_is_not_a_uses(tmp_path: Path) -> None:
+    _write_steps(
+        tmp_path,
+        f"      - uses: actions/checkout@{_SHA} # v4.4.0\n"
+        "      - run: |\n"
+        "          uses: not-an-action\n",
+    )
+    assert check_pins(tmp_path) == []
+
+
+def test_a_commented_decoy_in_a_run_block_does_not_vouch_for_an_uncommented_pin(
     tmp_path: Path,
 ) -> None:
-    workflow = tmp_path / "x.yml"
-    workflow.write_text(
-        "name: X\non: [push]\njobs:\n"
-        "  build:\n    runs-on: ubuntu-latest\n    steps:\n"
-        "      - {uses: a/b@v1}\n"
+    _write_steps(
+        tmp_path,
+        f"      - run: |\n          uses: a/b@{_SHA} # v1.2.3\n      - {{uses: a/b@{_SHA}}}\n",
     )
-    # The regex scan misses the flow-style mapping entirely...
-    assert scanned_uses(workflow) == []
-    # ...which is exactly why the multiset equality is a separate assertion
-    # over the real files, not a redundant one: it would fail here.
-    assert sorted(scanned_uses(workflow)) != sorted(parsed_uses(workflow))
+    violations = check_pins(tmp_path)
+    assert len(violations) == 1
+    assert violations[0].startswith("x.yml:9:")
 
 
 # ── dependabot.yml (spec §3.B) ──────────────────────────────────────────────
