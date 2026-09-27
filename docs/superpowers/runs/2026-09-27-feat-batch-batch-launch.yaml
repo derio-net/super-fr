@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-batch-launch
 workflow: fr-goal@1
 branch: feat/batch-batch-launch
 started: '2026-09-27T06:53:20+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md
   spec-review:
-    state: running
-    at: '2026-09-27T07:03:20+00:00'
+    state: done
+    at: '2026-09-27T07:11:43+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 64c35493-36dd-40b9-af4c-6c611145fa2f
+          returned: '2026-09-27T07:11:43+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: ab26ddced0a2bf962
+          findings: s1,s2,s3,s4,s5
   plan:
     state: pending
   plan-review:
