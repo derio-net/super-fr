@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-spec-ref-writers
 workflow: fr-goal@1
 branch: feat/batch-spec-ref-writers
 started: '2026-09-27T08:58:40+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -80,6 +80,10 @@ steps:
           reviewer: afc85560f5ac135a7
           findings: cr-1,cr-2,cr-3
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-27T10:19:08+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): cr-2, cr-3
   deliver:
     state: pending
