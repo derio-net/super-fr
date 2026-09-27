@@ -14,3 +14,8 @@ canonical_spec_ref decides verbatim-vs-rewrite inline, so (a) repair._repair_met
 ### fix-verbatim-predicate · finding [fixed] · Name the verbatim decision as refs.keeps_spec_ref_verbatim, over the path token
 
 refs.keeps_spec_ref_verbatim holds the four verbatim tests (cross-repo, lexical escape, unresolved, existing file outside SPEC_ROOTS), each reading refs._token(value) — the same token resolution reads. canonical_spec_ref delegates to it; repair._repair_meta asks it before _warn_ambiguous and skips a verbatim spec: ref. Pinned by test_repair_does_not_warn_ambiguous_about_a_ref_it_keeps_verbatim (#749) and test_canonical_spec_ref_escape_test_reads_the_path_token (#750). archive.py untouched.
+
+<!-- fr:journal kind=review scope=debug id=bbad4aa575a8 created=2026-09-27T19:46:23+00:00 -->
+### bbad4aa575a8 · review · Independent review: no findings
+
+Read-only adversarial review of refs.keeps_spec_ref_verbatim, canonical_spec_ref, repair._repair_meta and all canonical_spec_ref callers raised no defects. Traced: the new assert cannot fire; the ambiguous-lifecycle-path rewrite+warning still happens; token extraction matches resolution's. Noted, not a defect: repair's own early is_cross_repo_spec(value) short-circuit reads the raw value (pre-existing, contrived shape only).
