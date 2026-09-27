@@ -14,3 +14,8 @@ super-fr#724. A debug batch whose members' judgements carry theme 'Docs' and 'do
 ### theme-key · finding [fixed] · theme_key is the one theme comparison point; mixed_themes and suggest group through it
 
 packages/fr/src/fr/triage/batch.py: `theme_key` (strip + casefold) and `_by_theme` (groups keys by it, sorted by key, blank themes dropped, first member's stored spelling shown). Red first: test_mixed_themes_treats_one_theme_spelled_two_ways_as_one, test_mixed_themes_keeps_the_stored_spelling_and_ignores_blank_themes, test_suggest_groups_one_theme_spelled_several_ways failed on assertions with theme_key present but unwired; all pass now, full suite 6569 passed. Side effect caught by the red test: a whitespace-only theme used to form its own suggestion group.
+
+<!-- fr:journal kind=review scope=debug id=03fcb85883dd created=2026-09-27T09:08:04+00:00 -->
+### 03fcb85883dd · review · Self-review of the source diff: no findings
+
+Checked: every theme comparison in fr/triage goes through theme_key (render.py only displays a theme, never compares); the mixed-themes warning in triage_batch_cmd prints the returned stored spellings unchanged; judgements.yaml is never written by either caller; out-of-scope files (fr/isolation, install.sh, apply_cmd.py, run/telemetry.py, run/long_commands.py) untouched. No findings raised.
