@@ -194,3 +194,8 @@ Reviewer a9c7c97d8ebf515d7 on claude-opus-5-5. None let a failure pass; all were
 ### opus-f6-user-log-config-resolved-2 · finding [out-of-scope] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
 
 Reclassified back: the reviewer tagged it out of scope, and moving an out-of-scope finding to fixed is the operator's call. The one-line hardening (-c log.follow=false, --no-color) did ship in aa1bc209 with f2's change to the same git log call.
+
+<!-- fr:journal kind=finding scope=plan id=r3-resolved-2 created=2026-09-27T07:51:51 state=open resolves=r3 tracked_by=derio-net/super-fr#716 -->
+### r3-resolved-2 · finding [deferred → derio-net/super-fr#716] · resolves r3: A reverted merge still passes the blob fallback
+
+Filed at closeout as derio-net/super-fr#716.
