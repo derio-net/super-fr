@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr repair` no longer warns a `spec:` ref is ambiguous when it keeps that ref verbatim, and the repo-escape test reads a backtick-annotated ref's path token"

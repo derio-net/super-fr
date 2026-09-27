@@ -261,6 +261,10 @@ def _repair_meta(meta_path: Path, repo_root: Path, out: RepairResult, *, write: 
         if res.path is None:
             _warn_unresolved(out, meta_path, f"{fname}:", value, res)
             continue
+        # Decide verbatim-vs-rewrite first: an ambiguity warning describes a
+        # resolution, so it is noise about a ref that is kept as written (#749).
+        if fname == "spec" and refs.keeps_spec_ref_verbatim(value, repo_root, res):
+            continue
         if len(res.matches) > 1:
             _warn_ambiguous(out, meta_path, f"{fname}:", res)
         canonical = (

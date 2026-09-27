@@ -122,6 +122,50 @@ def resolve_spec_ref(ref: str, repo_root: Path) -> RefResolution:
     return _resolve(ref, repo_root, SPEC_ROOTS, is_dir=False, suffix=".md")
 
 
+def keeps_spec_ref_verbatim(value: str, repo_root: Path, res: RefResolution | None = None) -> bool:
+    """True when `canonical_spec_ref` leaves `value` as written.
+
+    The one verbatim-vs-rewrite decision, named so a caller can ask it BEFORE
+    reporting on the resolution — `repair._repair_meta` warns about ambiguity
+    only when a rewrite is on the table (#749). A ref is kept verbatim when it
+    is cross-repo notation, when it lexically escapes the repo
+    (`os.path.normpath(repo_root / token)` is not under `repo_root` — this
+    judges what the operator *wrote*, so a symlinked `docs/` inside the repo
+    still canonicalizes), when it does not resolve, or when it names an
+    existing file OUTSIDE the spec lifecycle roots (`SPEC_ROOTS`): readers
+    resolve by slug either way, so shortening such a path would erase the only
+    visible sign that the operator pointed somewhere else.
+
+    Every test reads the path token (`_token`), the same one resolution reads:
+    a backtick-annotated value would otherwise keep its backtick through
+    `normpath` — `` `.. `` is a directory name, not a parent step — and pass the
+    escape test while resolution strips it and finds a same-slug local spec
+    (#750). `res` lets a caller that already resolved the ref skip a lookup.
+    """
+    from fr._urls import is_cross_repo_spec
+
+    token = _token(value)
+    if is_cross_repo_spec(token):
+        return True
+    # abspath, not bare normpath: commonpath refuses to mix a relative root
+    # with an absolute ref.
+    root = os.path.abspath(repo_root)
+    target = os.path.abspath(os.path.join(root, token))
+    if os.path.commonpath([root, target]) != root:
+        return True
+    if res is None:
+        res = resolve_spec_ref(value, repo_root)
+    if res.path is None:
+        return True
+    candidate = (repo_root / token).resolve()
+    if candidate.is_file() and candidate != res.path.resolve():
+        sp = (repo_root / "docs" / "superpowers").resolve()
+        roots = [(sp / r) for r in SPEC_ROOTS]
+        if not any(candidate.is_relative_to(r) for r in roots):
+            return True
+    return False
+
+
 def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = None) -> str:
     """The one definition of the canonical `spec:` value: the bare filename.
 
@@ -129,36 +173,15 @@ def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = 
     `implemented/specs/`), unlike a full path. Every `spec:` writer —
     `plan_ops.create`, `plan_ops.rework_create`, `repair._repair_meta`, the
     v1->v2 migration (`migrate._migrate_one`) — calls it, so they cannot
-    drift (#686, #711). A ref is left verbatim when it is cross-repo
-    notation, when it lexically escapes the repo (`os.path.normpath(repo_root
-    / value)` is not under `repo_root` — this judges what the operator
-    *wrote*, so a symlinked `docs/` inside the repo still canonicalizes),
-    when it does not resolve, or when it names an existing file OUTSIDE the
-    spec lifecycle roots (`SPEC_ROOTS`): readers resolve by slug either way,
-    so shortening such a path would erase the only visible sign that the
-    operator pointed somewhere else. A path inside a lifecycle root —
+    drift (#686, #711). A ref is left verbatim exactly when
+    `keeps_spec_ref_verbatim` says so. A path inside a lifecycle root —
     including one whose spec has since moved, or one that is ambiguous
     across roots — canonicalizes by slug, as repair always has. `res` lets a
     caller that already resolved the ref skip a second lookup.
     """
-    from fr._urls import is_cross_repo_spec
-
-    if is_cross_repo_spec(value):
-        return value
-    # abspath, not bare normpath: commonpath refuses to mix a relative root
-    # with an absolute ref.
-    root = os.path.abspath(repo_root)
-    target = os.path.abspath(os.path.join(root, value))
-    if os.path.commonpath([root, target]) != root:
-        return value
     if res is None:
         res = resolve_spec_ref(value, repo_root)
-    if res.path is None:
+    if keeps_spec_ref_verbatim(value, repo_root, res):
         return value
-    candidate = (repo_root / value).resolve()
-    if candidate.is_file() and candidate != res.path.resolve():
-        sp = (repo_root / "docs" / "superpowers").resolve()
-        roots = [(sp / r) for r in SPEC_ROOTS]
-        if not any(candidate.is_relative_to(r) for r in roots):
-            return value
+    assert res.path is not None  # keeps_spec_ref_verbatim is True for an unresolved ref
     return res.path.name
