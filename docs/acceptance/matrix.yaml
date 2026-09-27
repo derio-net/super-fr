@@ -4386,6 +4386,27 @@ rows:
       pushed, waited for checks and merged. The verb resolved no conflict in the four
       generated acceptance files: every super-fr batch pair conflicts there (structural
       fix in flight on feat/version-bump-churn).'
+  - id: triage-batch-session-model
+    capability: Backlog triage
+    acceptance: 'An operator can dispatch a batch without giving a model: the run''s
+      session starts on the orchestrator binding of the target harness, and the brief
+      never pins subagent models, so every phase executor and reviewer runs on its configured
+      fr models tier'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#a-the-session-model-704
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: triage-batch-debug-skill
+    capability: Backlog triage
+    acceptance: An operator can declare a batch of bugs as skill debug, and its dispatch
+      starts /fr-debugging on a fix/batch-<id> branch with fr-debugging's two hard stops
+      stated, warning at create/edit when the members do not share one theme
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#b-a-batch-declares-its-skill-687
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: usage-reconstruct-cross-harness
     capability: Lean cost-aware pipeline
     acceptance: The operator can reconstruct a run's cost per model, step and activity
