@@ -29,6 +29,22 @@ deliver.
   environment (`$TMPDIR` as a target root is handled, §3.B; a bare unresolvable
   variable fails closed).
 
+### Reconciliation with gh#702 (2026-09-27)
+
+While this change was in review, #702 merged to `main` and independently
+implemented the core of §3.A (ack recognised by `toolUseResult.backgroundTaskId`,
+window ends at the `<task-notification>` for the same tool-use id, header-only
+field parsing, first notice final, narrowing by the queued enqueue time). It
+closed no issue. This change was rebased onto that implementation, and #702's
+code is the base for everything §3.A describes. What remains of this change on
+top of it: (1) the **queued-attachment carrier** — a notice delivered only as an
+`attachment`/`queued_command` record with `commandMode: task-notification`, about
+a fifth of real notices, which #702 does not read; (2) **§3.B shell-variable
+targets**; (3) the refusal hint. Where this spec's §3.A wording differs from
+#702's behaviour (e.g. an exit code in a `completed` summary is not consulted;
+text-block content is not read — 201 of 201 real notices are string content),
+#702's behaviour is the specification.
+
 ## 2. Background — verified against the code
 
 `_verify_tests_log` (`run_cmd.py`) requires, where the transcript is readable,

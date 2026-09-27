@@ -713,86 +713,6 @@ def _writes(command: str, log: Path) -> bool:
     return False
 
 
-_BACKGROUND_ACKS = ("Command running in background", "Command did not complete within its")
-_NOTIFIED_ID = re.compile(r"<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>")
-_NOTIFIED_STATUS = re.compile(r"<status>([^<]*)</status>")
-_NOTIFIED_SUMMARY = re.compile(r"<summary>(.*?)</summary>", re.DOTALL)
-_NOTIFIED_EXIT = re.compile(r"\bexit code (-?\d+)\)?\s*$")
-
-
-def _text_of(content: object) -> str:
-    """A message/tool_result `content` as text: a plain string, or a list of
-    `text` blocks (both shapes occur)."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            b["text"]
-            for b in content
-            if isinstance(b, Mapping) and b.get("type") == "text" and isinstance(b.get("text"), str)
-        )
-    return ""
-
-
-def _notification_text(record: Mapping[str, Any]) -> str | None:
-    """The `<task-notification>` text of a main-thread record, in either shape
-    Claude Code writes it (both observed live): a `type: user` record with
-    `origin.kind: task-notification`, or a `type: attachment` record carrying a
-    `queued_command` in `commandMode: task-notification` whose `prompt` is the
-    text. Sidechain records are never the orchestrator's."""
-    if record.get("isSidechain") is True:
-        return None
-    if record.get("type") == "user":
-        origin = record.get("origin")
-        if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
-            return None
-        message = record.get("message")
-        return _text_of(message.get("content") if isinstance(message, Mapping) else None)
-    if record.get("type") == "attachment":
-        attachment = record.get("attachment")
-        if (
-            isinstance(attachment, Mapping)
-            and attachment.get("type") == "queued_command"
-            and attachment.get("commandMode") == "task-notification"
-        ):
-            return _text_of(attachment.get("prompt"))
-    return None
-
-
-def _successful_notification(record: Mapping[str, Any]) -> str | None:
-    """The tool_use id a `task-notification` record reports as COMPLETED with no
-    non-zero exit code, else `None` (spec §3.A). The exit code is the one that
-    ENDS the `<summary>` (`... completed (exit code 0)`), so a description the
-    model wrote cannot fake or hide it."""
-    text = _notification_text(record)
-    if text is None:
-        return None
-    ident, status = _NOTIFIED_ID.search(text), _NOTIFIED_STATUS.search(text)
-    if not ident or not status or status.group(1).strip() != "completed":
-        return None
-    summary = _NOTIFIED_SUMMARY.search(text)
-    code = _NOTIFIED_EXIT.search(summary.group(1).strip()) if summary else None
-    if code and code.group(1) != "0":
-        return None
-    return ident.group(1)
-
-
-def _is_background_ack(record: Mapping[str, Any], text: str) -> bool:
-    """Whether a `Bash` tool_result says the command was moved to the background,
-    either because it asked for `run_in_background` or because a foreground call
-    hit its timeout (spec §3.A). Claude Code sets `toolUseResult.backgroundTaskId`
-    on BOTH acks (187 of 187 in real transcripts, none without), so it decides
-    when `toolUseResult` is an object — and its id must appear in the text, which
-    keeps a record carrying several results honest. A foreground command that
-    merely echoes the phrase has an object without the key: not background. Only
-    when there is no object at all (an older harness) is the text prefix used."""
-    result = record.get("toolUseResult")
-    if isinstance(result, Mapping):
-        task = result.get("backgroundTaskId")
-        return isinstance(task, str) and bool(task) and task in text
-    return text.startswith(_BACKGROUND_ACKS) and "background" in text[:120]
-
-
 def orchestrator_wrote_since(
     env: Mapping[str, str], log: Path, since: str
 ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
@@ -815,13 +735,6 @@ def orchestrator_wrote_since(
     command was a real test suite — `echo ok > log` passes. That is forgery,
     not the drift this gate closes (relaying someone else's green), and
     closing it needs a per-repo test-runner declaration fr does not have.
-
-    A window may END at a `task-notification` (a backgrounded command: an
-    explicit `run_in_background`, or a foreground call moved to the background
-    by its timeout), stamped when the harness RECORDED the notification — at or
-    after the command finished. A background window can therefore span most of
-    the run, so any process that writes the log during it satisfies the mtime
-    check: the same documented `echo ok > log` limit, not a new hole.
     """
     start = parse_timestamp(since)
     if start is not None and detect_harness(env) == OpenCodeReader.harness:
@@ -855,18 +768,11 @@ def orchestrator_wrote_since(
             ):
                 issued[block["id"]] = stamp
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
-    background: set[str] = set()
-    closed: set[str] = set()
+    backgrounded: set[str] = set()
     for record in records:
-        done = parse_timestamp(record.get("timestamp"))
-        finished = _successful_notification(record)
-        if finished is not None:
-            if finished in background and finished not in closed and done is not None:
-                closed.add(finished)
-                windows.append((issued[finished], done))
-            continue
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
+        done = parse_timestamp(record.get("timestamp"))
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
@@ -877,11 +783,101 @@ def orchestrator_wrote_since(
                 and block.get("is_error") is not True
                 and done is not None
             ):
-                if _is_background_ack(record, _text_of(block.get("content"))):
-                    background.add(block["tool_use_id"])
+                if _is_launch_ack(record):
+                    # A `run_in_background` command's result is only its launch
+                    # ack, a second after the call. Its real end is the
+                    # notification below; the ack must not stand in for it.
+                    backgrounded.add(block["tool_use_id"])
                 else:
                     windows.append((issued[block["tool_use_id"]], done))
+    # When the harness QUEUED a notice (the command's end), which can precede
+    # its delivery by a whole turn. Used only to NARROW a window, never to open
+    # one, so a queued prompt that merely looks like a notice can only refuse.
+    queued: dict[str, _dt.datetime] = {}
+    for record in records:
+        if record.get("type") != "queue-operation" or record.get("operation") != "enqueue":
+            continue
+        stamp = parse_timestamp(record.get("timestamp"))
+        parsed = _task_notice(record.get("content"))
+        if parsed is not None and stamp is not None and parsed[0] not in queued:
+            queued[parsed[0]] = stamp
+    for record in records:
+        if record.get("isSidechain") is True:
+            continue
+        # Only the harness's own notice counts: an operator prompt or `!cmd`
+        # output is also a string-content `user` record (Opus review r2).
+        text = _notice_carrier(record)
+        if text is None:
+            continue
+        done = parse_timestamp(record.get("timestamp"))
+        parsed = _task_notice(text)
+        if parsed is None or done is None:
+            continue
+        tool_use_id, status = parsed
+        if tool_use_id not in backgrounded:
+            continue
+        # The first notice is final, whatever it says: a later one — duplicate
+        # or forged — can neither widen a window nor revive a failed command.
+        backgrounded.discard(tool_use_id)
+        if status == "completed":
+            start = issued[tool_use_id]
+            end = min(done, queued.get(tool_use_id, done))
+            windows.append((start, end if end >= start else done))
     return windows
+
+
+def _notice_carrier(record: Mapping[str, Any]) -> object:
+    """The text of a record that carries the harness's own task notice, else
+    `None`. Two carriers exist in real transcripts: a `user` record with
+    `origin.kind: task-notification`, and — when the orchestrator was busy as the
+    command ended — an `attachment` record of type `queued_command` and
+    `commandMode: task-notification` whose `prompt` is the notice. About a
+    fifth of real notices arrive ONLY as the attachment, so reading just the
+    first left those runs with no window and refused (gh#594)."""
+    if record.get("type") == "user":
+        origin = record.get("origin")
+        if isinstance(origin, Mapping) and origin.get("kind") == "task-notification":
+            message = record.get("message")
+            return message.get("content") if isinstance(message, Mapping) else None
+        return None
+    if record.get("type") == "attachment":
+        attachment = record.get("attachment")
+        if (
+            isinstance(attachment, Mapping)
+            and attachment.get("type") == "queued_command"
+            and attachment.get("commandMode") == "task-notification"
+        ):
+            return attachment.get("prompt")
+    return None
+
+
+_NOTICE_FIELD = re.compile(r"<(tool-use-id|status)>\s*([^<]*?)\s*</\1>")
+
+
+def _is_launch_ack(record: Mapping[str, Any]) -> bool:
+    """Is this `tool_result` the ack of a backgrounded command (its
+    `toolUseResult.backgroundTaskId` is set), not the command's own result?"""
+    result = record.get("toolUseResult")
+    return isinstance(result, Mapping) and bool(result.get("backgroundTaskId"))
+
+
+def _task_notice(content: object) -> tuple[str, str] | None:
+    """`(tool_use_id, status)` of a `<task-notification>` — the text the
+    harness writes when a backgrounded command ends (`status` is `completed`,
+    `failed` or `killed`) — else `None`.
+
+    Read from the notice's HEADER only, first occurrence of each field: its
+    `<summary>` quotes the command's own `description`, which the agent wrote
+    and could carry a `<status>completed</status>` of its own (Opus review r1).
+    """
+    if not isinstance(content, str) or not content.lstrip().startswith("<task-notification>"):
+        return None
+    header = content.split("<summary>", 1)[0]
+    fields: dict[str, str] = {}
+    for name, value in _NOTICE_FIELD.findall(header):
+        fields.setdefault(name, value)
+    tool_use_id, status = fields.get("tool-use-id"), fields.get("status")
+    return (tool_use_id, status) if tool_use_id and status else None
 
 
 OPENCODE_DB_ENV = "FR_OPENCODE_DB"

@@ -175,3 +175,18 @@ captured: `nonzero` (`completed (exit code 1)`), `failed`/`killed` status with
 `failed with exit code N` (the wording seen on real failures, put into the
 success record), a model-written label naming an exit code, a sidechain flag
 and text-block content. No real notification of those kinds was committed.
+
+## `claude-code-bash-background.jsonl` (added 2026-09-26)
+
+Four records captured live from a Claude Code 2.1.283 orchestrator session and
+redacted (the local home directory → `/home/user`; the project slug → `-home-user-repo`):
+a `Bash` tool_use with `run_in_background: true` that writes a full-suite log,
+its `tool_result`, the `queue-operation` enqueue and the `user` record carrying
+the `<task-notification>`.
+
+What it shows, and why the gate needs it: a backgrounded command's `tool_result`
+is only the LAUNCH ack (`toolUseResult.backgroundTaskId`, "Command running in
+background with ID: …", about a second after the call). Its completion arrives
+much later as a `user` record whose string content is a `<task-notification>`
+naming the same `<tool-use-id>` and a `<status>` (`completed` | `failed` |
+`killed`). The `queue-operation` record is the enqueue of that same notice.

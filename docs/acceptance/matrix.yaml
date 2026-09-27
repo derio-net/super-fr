@@ -3437,6 +3437,21 @@ rows:
     status: ci
     notes: gh#638. Two runs committed suite logs under <run>.records/ and they reached
       main; the record locator matched *.yaml only, so nothing saw them.
+  - id: run-deliver-tests-log-background-command
+    capability: Run cursor
+    acceptance: 'On Claude Code, deliver''s tests=<log> is accepted when the orchestrator
+      wrote it from a backgrounded command that completed: the window runs from the
+      call to its task-notification, not to the launch ack; a still-running, failed
+      or killed background command yields no window'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-26-deliver-gate-background-window.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_telemetry.py
+    status: ci
+    notes: 'Live: a full suite run with run_in_background (32 min) was refused because
+      the tool_result window closed at the ~1 s launch ack; captured fixture claude-code-bash-background.jsonl
+      pins the ack/notice shape.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
@@ -4183,8 +4198,9 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_telemetry.py
     status: ci
-    notes: A backgrounded writing Bash now yields a window ending at its successful
-      task-notification (gh#594/#607/#631)
+    notes: 'gh#594/#607/#631. Window core landed in #702 (run-deliver-tests-log-background-command);
+      this row now pins what this change adds on top: the queued-attachment notice carrier
+      and the timeout-moved ack, in test_run_telemetry.py.'
   - id: deliver-tests-log-shell-variable
     capability: fr-goal-methodology
     acceptance: deliver's tests=<log> gate accepts a log whose path the writing command
@@ -4653,6 +4669,18 @@ rows:
       - super-fr:tests/unit/test_isolation_network_timeouts.py
     status: ci
     notes: Regression test implemented for _reap_hazard fetch timeout handling (P1.T1.S1-S2)
+  - id: usage-no-session-is-unavailable-not-free
+    capability: usage capture honesty
+    acceptance: A run whose capture found no session is reported as unavailable with
+      a reason, never as an empty or free run
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-usage-unavailable-when-no-session-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_usage_capture.py
+    status: ci
+    notes: 'Capture writes a no-session-found placeholder (unit-proven). OpenCode live
+      proof stays owed until #537.'
   - id: ci-under-time-budget
     capability: CI
     acceptance: A CI run of ci.yml completes in under 4 minutes of wall clock (excluding
