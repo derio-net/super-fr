@@ -19,3 +19,8 @@ Squash-land +foo into a..e; a later PR edits e->E (report now has foo); `git rev
 ### c49167c4d134 · hypothesis · #741: fork from the landing merge's first parent
 
 Confirmed: _fork_point (rev-list --first-parent --ancestry-path --reverse tip..base, first line; merge-base with its ^1) turned the no-ff test green with every other branch_changes_present test untouched. Fast-forward / empty branches keep the tip as the fork (new guard test).
+
+<!-- fr:journal kind=ruled-out scope=debug id=501487bd5d75 created=2026-09-27T19:45:05+00:00 -->
+### 501487bd5d75 · ruled-out · Attempt 1 of #739: literal \x01 byte as the log --format marker
+
+Passing the marker as a raw \x01 byte in argv made _parse_log see no commits, so 12 isolation tests (every blob-fallback landing) went red. Not the hypothesis — the parser input: switched to git's documented %x01 escape and all 219 passed. Counted as one failed fix.
