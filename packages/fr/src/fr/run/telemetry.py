@@ -637,37 +637,78 @@ transcript, so a parent hop cannot be resolved, and `../x.log` keeps matching
 
 _ASSIGNMENT = re.compile(
     r"""(?:\A|[;\n]|&&|\|\|)[ \t]*(?:(?:export|declare(?:[ \t]+-\w+)*)[ \t]+)?"""
-    r"""([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]*)(?=[ \t]*(?:\Z|[;&|\n]))"""
+    r"""([A-Za-z_]\w*)=([^\s;&|]*)(?=[ \t]*(?:\Z|[;\n]|&&|\|\|))"""
 )
 """A `NAME=value` that is a whole command of its own: at the start of the string
 or after `;`, `&&`, `||` or a newline, optionally behind `export`/`declare`,
-and followed by a command separator or the end. NOT recognised (fail closed,
-review F3): a prefix assignment that scopes to the next word (`L=x pytest >
-$L` leaves `$L` unset), and anything inside quotes or a here-doc body."""
+and followed by `;`, `&&`, `||`, a newline or the end. Matched against
+`_code`'s mask, never the raw command. NOT recognised (fail closed, review F3
+and gh#720): a prefix assignment that scopes to the next word (`L=x pytest >
+$L` leaves `$L` unset); one ended by a lone `&` or `|`, which runs it in a
+subshell; and — via `_top_level` — one nested in any grouping."""
 _QUOTED = re.compile(r"""\"(?:\\.|[^"\\])*\"|'[^']*'""", re.DOTALL)
 _HEREDOC = re.compile(
     r"""<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?:\n|\Z)""", re.DOTALL
 )
+_COMMENT = re.compile(r"(?:(?<=[\s;&|()])|\A)#[^\n]*")
+_NESTING = re.compile(
+    r"""[()`]|(?:\A|(?<=[;&|()\n])|(?<=\bthen)|(?<=\bdo)|(?<=\belse)|(?<=\{))[ \t]*"""
+    r"""(?P<word>\{|\}|if|fi|case|esac|do|done)(?=[\s;&|()]|\Z)"""
+)
+"""What opens and closes a grouping: parentheses (a subshell, `$( )`, `<( )`),
+backticks, and the reserved words `{ }`, `if … fi`, `case … esac` and the
+`do … done` of every loop — a reserved word only in command position, since
+`echo done` is an argument, not a keyword."""
+_OPENER = {")": "(", "}": "{", "fi": "if", "esac": "case", "done": "do"}
+
+
+def _code(command: str) -> str:
+    """`command`, same length, with quoted strings and here-doc bodies filled with
+    `_` (still one word, no longer syntax), comments blanked, and each
+    backslash-newline joined — the text a shell actually parses as structure."""
+    for doc in _HEREDOC.finditer(command):
+        command = command[: doc.start(3)] + "_" * len(doc.group(3)) + command[doc.end(3) :]
+    for m in _QUOTED.finditer(command):
+        command = command[: m.start()] + "_" * len(m.group(0)) + command[m.end() :]
+    command = _COMMENT.sub(lambda m: " " * len(m.group(0)), command)
+    return command.replace("\\\n", "  ")
+
+
+def _top_level(code: str, at: int) -> bool:
+    """Is offset `at` of `_code`'s mask outside every grouping? Only there does
+    an assignment run in the shell that later expands the variable.
+
+    A stack, not a count: each closer must meet its own opener, so a stray one
+    can never cancel a real grouping into looking closed (review of gh#720). A
+    `)` directly inside `case` ends a pattern. Any mismatch fails closed."""
+    stack: list[str] = []
+    for m in _NESTING.finditer(code):
+        if m.start() >= at:
+            break
+        token = m.group("word") or m.group(0)
+        if token == "`" and stack[-1:] == ["`"]:
+            stack.pop()
+        elif token == ")" and stack[-1:] == ["case"]:
+            continue
+        elif token in _OPENER:
+            if stack[-1:] != [_OPENER[token]]:
+                return False
+            stack.pop()
+        else:
+            stack.append(token)
+    return not stack
 
 
 def _assignments(command: str) -> list[tuple[int, str, str]]:
-    """`(end, name, value)` of each command-start assignment in `command` that
-    does not sit inside a quoted string or a here-doc body."""
-    scratch = command
-    protected: list[tuple[int, int]] = []
-    for doc in _HEREDOC.finditer(command):
-        protected.append(doc.span(3))
-        scratch = (
-            scratch[: doc.start(3)] + " " * (doc.end(3) - doc.start(3)) + scratch[doc.end(3) :]
-        )
-    protected += [m.span() for m in _QUOTED.finditer(scratch)]
-    found = []
-    for m in _ASSIGNMENT.finditer(command):
-        at = m.start(1)
-        if any(start <= at < end for start, end in protected):
-            continue
-        found.append((m.end(), m.group(1), m.group(2)))
-    return found
+    """`(end, name, value)` of each assignment in `command` that the shell makes
+    at top level — the only ones still in force where a later word expands the
+    variable (gh#720). The value is read from the raw command, quotes intact."""
+    code = _code(command)
+    return [
+        (m.end(), m.group(1), command[m.start(2) : m.end(2)])
+        for m in _ASSIGNMENT.finditer(code)
+        if _top_level(code, m.start(1))
+    ]
 
 
 _VARIABLE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")

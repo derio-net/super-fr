@@ -952,6 +952,57 @@ def test_writes_resolves_shell_variable_targets(command: str, expected: bool) ->
     assert _writes(command, Path("/x/t.log")) is expected
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "(cd /x; L=/x/t.log;); pytest > $L",
+        "(cd /x\nL=/x/t.log\n)\npytest > $L",
+        "(cd /x && L=/x/t.log;) && pytest > $L",
+        "D=$(cd /y; L=/x/t.log;); pytest > $L",
+        "D=`cd /y; L=/x/t.log;`; pytest > $L",
+        "{ cd /x; L=/x/t.log; } | cat; pytest > $L",
+        "{ cd /x; L=/x/t.log; } & pytest > $L",
+        "while false; do cd /x; L=/x/t.log; done | cat; pytest > $L",
+        "echo \\\nL=/x/t.log; pytest > $L",
+        "true # note; L=/x/t.log\npytest > $L",
+        "L=/x/t.log & pytest > $L",
+        "L=/x/t.log | cat; pytest > $L",
+        "case $x in a) true;; esac\n(cd /x; L=/x/t.log;); pytest > $L",
+        "(echo done; L=/x/t.log;); pytest > $L",
+        "while false; do echo done; L=/x/t.log; done | cat; pytest > $L",
+        "{ echo }; L=/x/t.log; } | cat; pytest > $L",
+    ],
+)
+def test_only_a_top_level_assignment_binds_a_variable(command: str) -> None:
+    """gh#720: an assignment inside a subshell, a command substitution, a
+    compound command, a comment, a continued argument list, a background job or
+    a pipeline never sets `$L` where the redirect runs — fail closed."""
+    from fr.run.telemetry import _names, _writes
+
+    assert _writes(command, Path("/x/t.log")) is False
+    assert _names(command, Path("/x/t.log")) is False
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "false || L=/x/t.log; pytest > $L",
+        "L=/x/t.log # the log\npytest > $L",
+        "(cd /x); L=/x/t.log; pytest > $L",
+        "D=$(pwd); L=/x/t.log; pytest > $L",
+        "L=/x/t.log && pytest > ${L}",
+        "case $x in a) true;; (b) :;; esac; L=/x/t.log; pytest > $L",
+        "echo if done esac }; L=/x/t.log; pytest > $L",
+    ],
+)
+def test_a_top_level_assignment_still_binds(command: str) -> None:
+    """gh#720's other half: nesting that has CLOSED before the assignment, and a
+    comment after it, leave it top-level."""
+    from fr.run.telemetry import _writes
+
+    assert _writes(command, Path("/x/t.log")) is True
+
+
 def test_exit_code_text_outside_the_summary_does_not_reject_a_success(tmp_path: Path) -> None:
     """Review: only the notification's `<summary>` reports the exit code; suite
     output echoed elsewhere in it must not. The window still ends at the
