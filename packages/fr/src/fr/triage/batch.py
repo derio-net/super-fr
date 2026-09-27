@@ -378,6 +378,17 @@ def resolve_launch(
     return ResolvedLaunch(launch=resolved, model_source=model_source)
 
 
+def theme_key(theme: str) -> str:
+    """The one point where two `Judgement.theme` values are compared (gh#724).
+
+    A theme is free text an agent types, so `Docs`, `docs` and `docs ` name one
+    theme: compare casefolded, with the ends trimmed. Only the comparison
+    normalises; the stored spelling is what a caller shows, and judgements.yaml
+    is never rewritten. A blank theme keys to `""`, which means no theme.
+    """
+    return theme.strip().casefold()
+
+
 def mixed_themes(batch: Batch, judgements: Judgements) -> list[str]:
     """The sorted distinct non-empty themes of *batch*'s members (spec
     2026-09-27-triage-batch-launch §C, decision d3).
