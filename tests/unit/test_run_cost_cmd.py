@@ -210,6 +210,20 @@ def test_an_unobserved_figure_prints_a_dash(tmp_path: Path) -> None:
     assert "$0.00" not in result.output
 
 
+def test_a_no_session_placeholder_prints_a_dash_and_counts_unavailable(tmp_path: Path) -> None:
+    """#636: a capture that found no session reads as unavailable, never as free."""
+    from fr.usage.file import NO_SESSION_FOUND
+
+    placeholder = SessionEntry(session="", unavailable=NO_SESSION_FOUND)
+    _write(usage_path(tmp_path, RUN), _file(_capture("a", "deliver", placeholder)))
+    result = _invoke(tmp_path, RUN)
+    assert result.exit_code == 0, result.output
+    out = " ".join(result.output.split())
+    assert "—" in out
+    assert "0 read, 1 unavailable" in out
+    assert "$0.00" not in out
+
+
 def test_no_usage_recorded_exits_two_and_names_recompute(tmp_path: Path) -> None:
     result = _invoke(tmp_path, "nope")
     assert result.exit_code == 2

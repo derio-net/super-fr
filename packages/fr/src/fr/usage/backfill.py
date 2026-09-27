@@ -26,6 +26,7 @@ from typing import Any
 import yaml
 
 from fr.usage.file import (
+    NO_SESSION_FOUND,
     Capture,
     SessionEntry,
     UsageFile,
@@ -74,7 +75,11 @@ def _entries(raw: dict[str, Any], env: Mapping[str, str]) -> list[SessionEntry]:
         read.append(session_entry(record, windows, units))
     if any(e.unavailable is None for e in read):
         return read
-    return _cursor_figures(raw) + read
+    entries = _cursor_figures(raw) + read
+    if not entries:
+        # a cursor naming no session and keeping no figure: say so, never `[]` (#636)
+        entries = [session_entry(unavailable("", _harness(raw), NO_SESSION_FOUND))]
+    return entries
 
 
 def _harness(raw: dict[str, Any]) -> str:
