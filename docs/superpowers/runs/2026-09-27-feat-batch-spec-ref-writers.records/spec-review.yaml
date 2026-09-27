@@ -1,0 +1,23 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-spec-ref-writers
+step: spec-review
+outcome: done
+journal:
+  - kind: review
+    id: spec-review
+    title: "independent spec review: 0 findings | clean"
+    body: >-
+      fr-spec-reviewer (separate context, sonnet) traced canonical_spec_ref's four branches
+      (refs.py:139-153) against the new lexical escape check; confirmed the double repair
+      (archive_cmd.py:64 and :238) and that --sweep-only returns before the tail (:107-122);
+      confirmed migrate.py:278 stores v1plan.spec verbatim while :357 resolves the table row
+      from v1plan.spec directly; confirmed repair._repair_meta and plan_ops :226/:396/:803
+      inherit the fix with no edit; confirmed the only_plans widening (:224-232) is independent
+      of _report_sweep's signature; no test in test_archive_cmd.py calls _report_sweep or
+      counts repaired:/warning: lines; every production repo_root is resolved and absolute,
+      and os.path.commonpath is component-wise (rejects /tmp/repo2 vs /tmp/repo). No in-scope
+      or out-of-scope findings.
+resolves: []
+evidence:
+  review: spec-review
+  reviewer: a35d42fe2590a0b84
