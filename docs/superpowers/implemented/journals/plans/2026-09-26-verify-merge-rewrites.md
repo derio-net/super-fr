@@ -194,3 +194,33 @@ Reviewer a9c7c97d8ebf515d7 on claude-opus-5-5. None let a failure pass; all were
 ### opus-f6-user-log-config-resolved-2 · finding [out-of-scope] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
 
 Reclassified back: the reviewer tagged it out of scope, and moving an out-of-scope finding to fixed is the operator's call. The one-line hardening (-c log.follow=false, --no-color) did ship in aa1bc209 with f2's change to the same git log call.
+
+<!-- fr:journal kind=finding scope=plan id=r3-resolved-2 created=2026-09-27T07:51:51 state=open resolves=r3 tracked_by=derio-net/super-fr#716 -->
+### r3-resolved-2 · finding [deferred → derio-net/super-fr#716] · resolves r3: A reverted merge still passes the blob fallback
+
+Filed at closeout as derio-net/super-fr#716.
+
+<!-- fr:journal kind=finding scope=plan id=r4-resolved-2 created=2026-09-27T07:51:52 state=open resolves=r4 tracked_by=derio-net/super-fr#717 -->
+### r4-resolved-2 · finding [deferred → derio-net/super-fr#717] · resolves r4: diff --name-only without -z quotes special paths
+
+Filed at closeout as derio-net/super-fr#717.
+
+<!-- fr:journal kind=finding scope=plan id=r5-resolved-2 created=2026-09-27T07:51:52 state=fixed resolves=r5 -->
+### r5-resolved-2 · finding [fixed] · resolves r5: One rev-parse per commit touching the path
+
+Operator decision at closeout: already fixed by 8540388a (opus-c1: one git log --raw per path; test_branch_blob_was_on_base_cost_is_constant_per_commit_count). No issue filed.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config-resolved-3 created=2026-09-27T07:51:53 state=fixed resolves=opus-f6-user-log-config -->
+### opus-f6-user-log-config-resolved-3 · finding [fixed] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
+
+Operator decision at closeout: the hardening shipped in f02dcc37 (-c log.follow=false, --no-color on the git log call). No issue filed.
+
+<!-- fr:journal kind=finding scope=plan id=r5-resolved-3 created=2026-09-27T07:52:03 state=fixed resolves=r5 answered_by=operator -->
+### r5-resolved-3 · finding [fixed] · resolves r5: One rev-parse per commit touching the path
+
+Operator confirmed at closeout: fixed by 8540388a (opus-c1; test_branch_blob_was_on_base_cost_is_constant_per_commit_count). No issue filed.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config-resolved-4 created=2026-09-27T07:52:03 state=fixed resolves=opus-f6-user-log-config answered_by=operator -->
+### opus-f6-user-log-config-resolved-4 · finding [fixed] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
+
+Operator confirmed at closeout: hardening shipped in f02dcc37 (-c log.follow=false, --no-color). No issue filed.
