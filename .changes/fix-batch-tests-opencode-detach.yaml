@@ -1,2 +1,0 @@
-bump: patch
-summary: "deliver's tests= gate accepts a suite OpenCode's long-command rule detached, once a later command of the orchestrator's prints the log's exit=0 line (gh#719)"
