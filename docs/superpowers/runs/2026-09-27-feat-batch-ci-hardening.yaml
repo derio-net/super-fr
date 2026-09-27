@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-ci-hardening
 workflow: fr-goal@1
 branch: feat/batch-ci-hardening
 started: '2026-09-27T08:58:42+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,8 +12,8 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-27-ci-hardening-design.md
   spec-review:
-    state: running
-    at: '2026-09-27T14:28:14+00:00'
+    state: done
+    at: '2026-09-27T14:37:03+00:00'
     units:
       step/spec-review:
         attempts:
@@ -22,6 +22,12 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 0e72b170-33ae-4ae8-b736-a8b2f84dc9b1
+          returned: '2026-09-27T14:37:03+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a178979bb08f82fdb
+          findings: s1,s2,s3
   plan:
     state: pending
   plan-review:
