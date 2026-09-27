@@ -422,11 +422,23 @@ def render_host_cli_post_create(pin: HostCliPin) -> str:
     )
 
 
-# Baseline: vk itself, installed from the repo's main branch at create time.
+_SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
+
+# Every super-fr package that registers an `fr.runners` entry point. This module
+# ships in the `fr` wheel, where the workspace's `packages/` does not exist, so
+# the set is a literal here; install.sh derives it from the workspace, and
+# tests/integration/test_runner_package_lists.py pins both to the entry points
+# (#650, #645: a runner missing here is invisible to `uv run fr`).
+RUNNER_PACKAGES = ("fr-cncd", "fr-herdr", "fr-vk")
+
+# Baseline: fr itself plus every runner adapter, installed from the repo's main
+# branch at create time.
 POST_CREATE = (
     'git config --global --add safe.directory "$PWD" || true; '
     "pipx install uv 2>/dev/null || true; "
-    "uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true"
+    "uv tool install "
+    + "".join(f"--with '{_SUPER_FR_GIT}#subdirectory=packages/{p}' " for p in RUNNER_PACKAGES)
+    + f"'{_SUPER_FR_GIT}#subdirectory=packages/fr' || true"
 )
 
 

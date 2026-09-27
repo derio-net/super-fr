@@ -19,6 +19,18 @@ trap cleanup_tmps EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# `--with` for every workspace package that registers an `fr.runners` entry
+# point, derived rather than listed: a hand-kept list silently missed fr-cncd
+# and fr-herdr, and `uv run fr` (what the tests use) sees the whole workspace,
+# so nothing noticed the installed `fr` could not load them (#650). The
+# scaffold's POST_CREATE keeps the same set as a literal, pinned by
+# tests/integration/test_runner_package_lists.py.
+FR_RUNNER_WITH=()
+for pyproject in "$PLUGIN_ROOT"/packages/*/pyproject.toml; do
+  if grep -q '^\[project\.entry-points\."fr\.runners"\]' "$pyproject"; then
+    FR_RUNNER_WITH+=(--with "$(dirname "$pyproject")")
+  fi
+done
 CLAUDE_DIR="$HOME/.claude"
 RULES_DIR="$CLAUDE_DIR/rules"
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -109,7 +121,7 @@ if [[ "${1:-}" == "--install-bridge" ]]; then
   # adapter — verify before writing (review finding, 2026-06-06).
   if ! "$vk_python" -c "import fr_vk.bridge" >/dev/null 2>&1; then
     echo "  ERROR: $vk_python cannot import fr_vk.bridge — bridge wrapper not installed" >&2
-    echo "  (re-run after: uv tool install --force --with $PLUGIN_ROOT/packages/fr-vk $PLUGIN_ROOT/packages/fr)" >&2
+    echo "  (re-run after: uv tool install --force ${FR_RUNNER_WITH[*]} $PLUGIN_ROOT/packages/fr)" >&2
     exit 1
   fi
   cat > "$wrapper_path" <<EOF
@@ -653,7 +665,7 @@ fi
 # 10. fr CLI
 if command -v uv &>/dev/null; then
   echo ""
-  echo "Installing fr CLI globally (workspace member fr + the VK adapter)..."
+  echo "Installing fr CLI globally (workspace member fr + every runner adapter)..."
   # `uv tool install --force` removes the tool env in place; on macOS that
   # rmdir intermittently fails with "Directory not empty" (ENOTEMPTY), and a
   # freshly built env can fail a one-shot `fr --version` before it quiesces.
@@ -667,7 +679,7 @@ if command -v uv &>/dev/null; then
     # Pipeline lives in the `if` condition so a `uv` failure (propagated by
     # `pipefail` through `sed`) is caught here instead of tripping `set -e`.
     if uv tool install --force \
-      --with "$PLUGIN_ROOT/packages/fr-vk" \
+      "${FR_RUNNER_WITH[@]}" \
       "$PLUGIN_ROOT/packages/fr" 2>&1 | sed 's/^/  /'; then
       fr_installed=1
       break

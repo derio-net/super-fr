@@ -1,0 +1,2 @@
+bump: patch
+summary: "The installed fr carries every runner: install.sh and the devcontainer POST_CREATE now install fr-cncd and fr-herdr alongside fr-vk, so fr triage batch dispatch --to herdr and install.sh --install-bridge work outside uv run (#650, #645)."
