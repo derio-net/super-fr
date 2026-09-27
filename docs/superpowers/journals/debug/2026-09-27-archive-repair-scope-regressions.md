@@ -9,3 +9,8 @@ create(spec='docs/superpowers/specs/<x>.md') with no spec file, write the spec, 
 ### a647d4feec27 · root-cause · canonical_spec_ref is resolution-dependent, _folder_matches compares bytes
 
 plan_ops.create stores refs.canonical_spec_ref(spec) in _meta.yaml (#697). canonical_spec_ref returns the value verbatim when it does not resolve (spec not written yet) and the bare filename once it does, so the same inputs yield different _meta.yaml bytes across the spec's creation, and _folder_matches' byte compare (minus created:) classifies the #133 finish-the-job re-run as a slug collision.
+
+<!-- fr:journal kind=finding scope=debug id=f1-create-rerun created=2026-09-27T05:09:58 state=fixed -->
+### f1-create-rerun · finding [fixed] · create re-run compares spec: by identity
+
+plan_ops._folder_matches strips spec: from the byte compare and checks _same_spec (canonical_spec_ref of both); a matched re-run rewrites spec: canonically keeping the created: line. Tests: test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes (red→green), test_create_rerun_with_a_different_spec_is_still_a_collision (guards #133).
