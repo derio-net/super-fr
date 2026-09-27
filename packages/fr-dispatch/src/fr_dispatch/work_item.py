@@ -52,7 +52,8 @@ tracker Issue to stamp), and a payload a run-capable runner must honour:
 - `harness` — which agent harness to launch (e.g. `claude`);
 - `model` — the SESSION model (the run's orchestrator), passed to the harness;
   subagents resolve their own tiers through `fr models`, never this field;
-- `branch` — the branch the run works on (`feat/batch-<id>`);
+- `branch` — the branch the run works on (`feat/batch-<id>`, or
+  `fix/batch-<id>` for a debug batch);
 - `reserved_version` — the version the run bumps to, or None;
 - `issues` — the member issue keys, for the runner's bookkeeping.
 
