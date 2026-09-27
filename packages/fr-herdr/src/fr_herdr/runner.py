@@ -1,9 +1,11 @@
 """`HerdrRunner` — run-unit work in a herdr tab (spec 2026-09-25-triage-batches §3.C).
 
-A batch is launched as one interactive `/fr-goal` session: a new tab labelled
-with the item id, the harness started in its root pane with the batch's model,
-and the engine-rendered brief submitted as the first prompt. fr makes no model
-call and does not wait on the run; `dispatch` returns once the prompt is in.
+A batch is launched as one interactive `/fr-goal` or `/fr-debugging` session,
+by the batch's skill (spec 2026-09-27-triage-batch-launch §B): a new tab
+labelled with the item id, the harness started in its root pane with the
+batch's model, and the engine-rendered brief submitted as the first prompt. fr
+makes no model call and does not wait on the run; `dispatch` returns once the
+prompt is in.
 
 - **One subprocess seam.** Every herdr call goes through `_run_herdr`, which
   parses herdr's JSON envelope and raises `HerdrError` on failure; tests

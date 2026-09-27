@@ -17,6 +17,7 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
     batch_pr,
+    batch_workflow,
     check_open_membership,
     derive_batch_stage,
     is_open,
@@ -483,8 +484,50 @@ def test_a_pr_created_exactly_at_the_dispatch_belongs_to_it() -> None:
 def test_identity_is_repo_plus_batch_id() -> None:
     from fr_dispatch.work_item import run_item_id
 
-    assert batch_branch("lifecycle") == BRANCH
+    assert batch_branch(Batch.model_validate(_batch())) == BRANCH
+    assert batch_branch(Batch.model_validate(_batch(skill="debug"))) == "fix/batch-lifecycle"
     assert batch_item_id(REPO, "lifecycle") == run_item_id(REPO, "batch-lifecycle")
+
+
+# --------------------------------------------------------------------- skill
+
+
+def test_a_batch_without_skill_loads_as_goal() -> None:
+    assert Batch.model_validate(_batch()).skill == "goal"
+
+
+def test_skill_debug_loads() -> None:
+    assert Batch.model_validate(_batch(skill="debug")).skill == "debug"
+
+
+def test_skill_other_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        Batch.model_validate(_batch(skill="other"))
+
+
+def test_batch_workflow_is_fr_goal_or_fr_debugging_by_skill() -> None:
+    assert batch_workflow(Batch.model_validate(_batch())) == "fr-goal"
+    assert batch_workflow(Batch.model_validate(_batch(skill="debug"))) == "fr-debugging"
+
+
+def test_save_batches_of_a_goal_batch_writes_no_skill_key(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    path.write_text(yaml.safe_dump(_BASE), encoding="utf-8")
+
+    save_batches(path, [Batch.model_validate(_batch())], read=[])
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert "skill" not in raw["batches"][0]
+
+
+def test_save_batches_of_a_debug_batch_writes_skill_debug(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    path.write_text(yaml.safe_dump(_BASE), encoding="utf-8")
+
+    save_batches(path, [Batch.model_validate(_batch(skill="debug"))], read=[])
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert raw["batches"][0]["skill"] == "debug"
 
 
 # ------------------------------------------------------- open-batch rule

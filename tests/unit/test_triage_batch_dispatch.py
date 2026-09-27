@@ -53,6 +53,8 @@ batches:
     launch: {runner: fake, harness: claude, model: claude-opus-5-5}
 """
 
+JUDGEMENTS_DEBUG = JUDGEMENTS.replace("    bump: minor\n", "    bump: minor\n    skill: debug\n")
+
 PYPROJECT = '[project]\nname = "super-fr"\nversion = "4.21.1"\n'
 VERSION_CONFIG = {
     "version": {
@@ -107,9 +109,11 @@ class FakeRunner:
         self.live: set[str] = set()
         self.fail: Exception | None = None
         self.handle: str | None = "w2:p1K"
+        self.preflighted: list[Sequence[WorkItem]] = []
 
     def preflight(self, items: Sequence[WorkItem]) -> str | None:
         self.calls.append("preflight")
+        self.preflighted.append(items)
         return self.refusal
 
     def refresh(self) -> None:
@@ -435,6 +439,30 @@ def test_the_brief_is_printed_with_the_reserved_version(
     assert f"Closes {REPO}#577" in out
 
 
+def test_a_goal_brief_is_unchanged() -> None:
+    brief = _brief()
+    assert brief.startswith("/fr-goal Separate container lifecycle\n")
+    assert "as soon as the spec is committed" in brief
+    assert "## Debugging rules" not in brief
+
+
+def test_a_debug_brief_starts_with_fr_debugging_and_the_fix_branch() -> None:
+    brief = _brief(judgements=JUDGEMENTS_DEBUG)
+    assert brief.startswith("/fr-debugging Separate container lifecycle\n")
+    assert "fix/batch-lifecycle" in brief
+    assert "as soon as the failing test is committed" in brief
+
+
+def test_a_debug_brief_states_the_debugging_rules() -> None:
+    brief = _brief(judgements=JUDGEMENTS_DEBUG)
+    assert "## Debugging rules" in brief
+    assert "confident single hypothesis" in brief
+    assert "stop and ask" in brief
+    assert "fourth" in brief
+    assert "ONE root cause" in brief
+    assert "stop and ask before fixing any" in brief
+
+
 # ------------------------------------------------------------ WorkItem (§3.C.4)
 
 
@@ -461,6 +489,33 @@ def test_the_work_item_is_a_run_of_fr_goal_with_the_issues_in_its_payload(
     assert payload["reserved_version"] == "4.22.0"
     assert payload["checkout"] == str(checkout.path)
     assert payload["brief"].startswith("/fr-goal ")
+
+
+def test_a_dispatched_debug_batch_uses_the_fix_branch_and_fr_debugging(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, _facts(config=VERSION_CONFIG), JUDGEMENTS_DEBUG)
+    checkout.serve(VERSION_CONFIG)
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    (item,) = runner.dispatched
+    assert item.workflow == "fr-debugging"
+    assert dict(item.payload)["branch"] == "fix/batch-lifecycle"
+    (batch,) = load_judgements(tmp_path / "judgements.yaml").batches
+    (event,) = batch.events
+    assert isinstance(event, DispatchEvent)
+    assert event.branch == "fix/batch-lifecycle"
+
+
+def test_repairs_missing_dispatch_probe_carries_the_batch_workflow(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=JUDGEMENTS_DEBUG)
+    runner.live = {ITEM}
+    code, out = _dispatch(tmp_path, "lifecycle", "--repair", "--yes", "--handle", "w2:p1K")
+    assert code == 0, out
+    (probe,) = runner.preflighted[-1]
+    assert probe.workflow == "fr-debugging"
 
 
 # ---------------------------------------------------- without --yes (§3.C.5)

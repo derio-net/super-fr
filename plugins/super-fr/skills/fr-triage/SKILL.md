@@ -79,7 +79,7 @@ patterns:
 batches:                    # written by the `batch` verbs; judged keys, one repo, one open batch
   - id: merged-trust        # a slug: [a-z][a-z0-9-]{0,39}
     title: "Stop trusting MERGED for local teardown"
-    ids: ["super-fr#435"]   # optional: rationale, order, bump (patch|minor|major), launch
+    ids: ["super-fr#435"]   # optional: rationale, order, bump (patch|minor|major), skill (goal|debug), launch
 ```
 
 Keep this block style and quote every title, description, detail, note and body: a `: ` inside unquoted text, or
@@ -88,7 +88,9 @@ it. Keys are case-insensitive, so two keys differing only by case are refused as
 and pattern `body` interpret exactly two inline forms, `` `code` `` and `**bold**`; everything else is shown as
 literal text. **Schema 2:** schema 1 still loads (as zero batches); the first batch write upgrades it. The engine
 appends each batch's `events:` (`dispatch`, `cancel`): never write them; its stage is derived like an issue's.
-`batch dispatch` runs one batch as `/fr-goal` and marks its issues taken; `batch merge` merges open batch PRs in a
+`batch dispatch` runs one batch as `/fr-goal` or `/fr-debugging`, by the batch's `skill` (default `goal`), and
+marks its issues taken; the session runs on the launch model, falling back to the orchestrator binding for the
+harness when neither the batch nor the repo's launch defaults give one. `batch merge` merges open batch PRs in a
 computed order; `batch cancel` withdraws one.
 
 ## The shape of a judgement

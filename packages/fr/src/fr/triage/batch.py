@@ -57,6 +57,10 @@ BATCH_STAGES: tuple[BatchStage, ...] = (
 CLOSED_OUT: frozenset[BatchStage] = frozenset({"cancelled", "merged", "partial", "abandoned"})
 
 BRANCH_PREFIX = "feat/batch-"
+FIX_BRANCH_PREFIX = "fix/batch-"
+
+# The workflow each skill dispatches (spec 2026-09-27-triage-batch-launch §B).
+_WORKFLOW_BY_SKILL: dict[str, str] = {"goal": "fr-goal", "debug": "fr-debugging"}
 
 
 class BatchConflictError(TriageError):
@@ -66,9 +70,17 @@ class BatchConflictError(TriageError):
 # ---------------------------------------------------------------- identity
 
 
-def batch_branch(batch_id: str) -> str:
-    """The branch a batch's run works on: `feat/batch-<id>`."""
-    return f"{BRANCH_PREFIX}{batch_id}"
+def batch_branch(batch: Batch) -> str:
+    """The branch a batch's run works on: `feat/batch-<id>`, or `fix/batch-<id>`
+    for a debug batch (spec 2026-09-27-triage-batch-launch §B)."""
+    prefix = FIX_BRANCH_PREFIX if batch.skill == "debug" else BRANCH_PREFIX
+    return f"{prefix}{batch.id}"
+
+
+def batch_workflow(batch: Batch) -> str:
+    """The workflow *batch*'s run dispatches: `fr-goal` or `fr-debugging`, by
+    its skill (spec 2026-09-27-triage-batch-launch §B)."""
+    return _WORKFLOW_BY_SKILL[batch.skill]
 
 
 def batch_item_id(repo: str, batch_id: str) -> str:
@@ -364,6 +376,23 @@ def resolve_launch(
             )
         raise TriageError(message)
     return ResolvedLaunch(launch=resolved, model_source=model_source)
+
+
+def mixed_themes(batch: Batch, judgements: Judgements) -> list[str]:
+    """The sorted distinct non-empty themes of *batch*'s members (spec
+    2026-09-27-triage-batch-launch §C, decision d3).
+
+    Only a `debug` batch names a single root cause, so this is meaningful for
+    one: it returns fewer than two entries — nothing to warn about — for a
+    `goal` batch, a batch whose members share one theme, or members with no
+    theme at all.
+    """
+    if batch.skill != "debug":
+        return []
+    themes = sorted(
+        {judgements.issues[k].theme for k in batch.ids if k in judgements.issues} - {""}
+    )
+    return themes if len(themes) >= 2 else []
 
 
 # ----------------------------------------------------------------- markers

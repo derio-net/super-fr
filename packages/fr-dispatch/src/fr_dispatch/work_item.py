@@ -43,9 +43,10 @@ and a `PhaseDoc` on the phase path), so letting it participate in equality
 would make a set hold two copies of one graph position.
 
 **Run-unit payload** (spec 2026-09-25-triage-batches §3.C). A `unit="run"`
-item from `fr triage batch dispatch` has `workflow="fr-goal"`, `parent=None`,
-`inputs=()`, `tracking=None` (a multi-issue batch is not one tracker Issue to
-stamp), and a payload a run-capable runner must honour:
+item from `fr triage batch dispatch` has `workflow` set to `fr-goal` or
+`fr-debugging` by the batch's skill (spec 2026-09-27-triage-batch-launch §B),
+`parent=None`, `inputs=()`, `tracking=None` (a multi-issue batch is not one
+tracker Issue to stamp), and a payload a run-capable runner must honour:
 
 - `brief` — the engine-rendered prompt that starts the run;
 - `harness` — which agent harness to launch (e.g. `claude`);

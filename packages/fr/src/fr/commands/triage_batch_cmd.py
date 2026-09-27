@@ -61,9 +61,11 @@ from fr.triage.batch import (
     batch_branch,
     batch_item_id,
     batch_repo,
+    batch_workflow,
     check_open_membership,
     derive_batch_stage,
     last_dispatch,
+    mixed_themes,
     pr_open_queue,
     resolve_launch,
     save_batches,
@@ -174,6 +176,10 @@ OrderOpt = Annotated[
     int | None, typer.Option("--order", help="Hard constraint on merge order (lower first).")
 ]
 BumpOpt = Annotated[str | None, typer.Option("--bump", help="patch | minor | major.")]
+SkillOpt = Annotated[
+    str | None,
+    typer.Option("--skill", help="goal | debug; goal dispatches /fr-goal, debug /fr-debugging."),
+]
 RunnerOpt = Annotated[str | None, typer.Option("--runner", help="Runner to launch with.")]
 HarnessOpt = Annotated[str | None, typer.Option("--harness", help="Harness to launch.")]
 ModelOpt = Annotated[
@@ -214,6 +220,16 @@ def _write(
         _fail(str(exc))
 
 
+def _warn_mixed_themes(batch: Batch, judgements: Judgements) -> None:
+    """Print the §C d3 warning after a create/edit write; never a refusal."""
+    if themes := mixed_themes(batch, judgements):
+        console.print(
+            f"warning: debug batch {batch.id} mixes themes ({', '.join(themes)}): a debug "
+            "batch should be one root cause",
+            markup=False,
+        )
+
+
 @batch_app.command("list")
 def batch_list_command(
     repo: RepoOpt = None,
@@ -243,6 +259,7 @@ def batch_create_command(
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
     bump: BumpOpt = None,
+    skill: SkillOpt = None,
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
@@ -258,6 +275,7 @@ def batch_create_command(
     doc |= {"rationale": rationale} if rationale is not None else {}
     doc |= {"order": order} if order is not None else {}
     doc |= {"bump": bump} if bump is not None else {}
+    doc |= {"skill": skill} if skill is not None else {}
     doc |= {"launch": _launch(runner, harness, model)}
     try:
         new = Batch.model_validate(doc)
@@ -267,6 +285,7 @@ def batch_create_command(
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
+    _warn_mixed_themes(new, judgements)
 
 
 @batch_app.command("edit")
@@ -282,6 +301,7 @@ def batch_edit_command(
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
     bump: BumpOpt = None,
+    skill: SkillOpt = None,
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
@@ -293,7 +313,12 @@ def batch_edit_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
-    for name, value in (("title", title), ("rationale", rationale), ("bump", bump)):
+    for name, value in (
+        ("title", title),
+        ("rationale", rationale),
+        ("bump", bump),
+        ("skill", skill),
+    ):
         if value is not None:
             changes[name] = value
     if launch := _launch(runner, harness, model):
@@ -317,6 +342,7 @@ def batch_edit_command(
         _fail(f"invalid batch: {exc}")
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
+    _warn_mixed_themes(new, judgements)
 
 
 @batch_app.command("cancel")
@@ -496,7 +522,7 @@ def _work_item(
         "brief": brief,
         "harness": launch.harness,
         "model": launch.model,
-        "branch": batch_branch(batch.id),
+        "branch": batch_branch(batch),
         "reserved_version": reserved,
         "issues": list(batch.ids),
         "checkout": str(cwd),  # herdr's --cwd (decision p2-dispatch-handle)
@@ -504,7 +530,7 @@ def _work_item(
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
-        workflow="fr-goal",
+        workflow=batch_workflow(batch),
         repo=owner_repo,
         parent=None,
         inputs=(),
@@ -614,7 +640,7 @@ def _probe(owner_repo: str, batch: Batch, launch: Launch) -> WorkItem:
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
-        workflow="fr-goal",
+        workflow=batch_workflow(batch),
         repo=owner_repo,
         parent=None,
         inputs=(),
@@ -670,7 +696,7 @@ def _record_missing(
             "this repo reserves versions: give --reserved-version, the version the failed "
             "dispatch printed (the run was briefed with it)"
         )
-    branch = batch_branch(batch.id)
+    branch = batch_branch(batch)
     console.print(f"record the missing dispatch of batch {batch.id} ({probe.id})", markup=False)
     console.print(f"  runner: {runner_name} (reports it live)", markup=False)
     console.print(f"  handle: {handle or probe.id}", markup=False)
@@ -797,7 +823,7 @@ def batch_dispatch_command(
         reserved_version=reserved,
     )
     item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)  # step 4
-    branch = batch_branch(batch.id)
+    branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
     console.print(f"  harness: {launch.harness}", markup=False)
