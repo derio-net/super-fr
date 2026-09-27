@@ -1,0 +1,7 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-ci-hardening
+step: deliver
+outcome: done
+acceptance: []
+emitted: {pr: "https://github.com/derio-net/super-fr/pull/743"}
+evidence: {tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/0e72b170-33ae-4ae8-b736-a8b2f84dc9b1/scratchpad/full-suite.log}
