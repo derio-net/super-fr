@@ -54,3 +54,8 @@ No spec: writer receives a decorated value: stored spec: fields are YAML scalars
 ### cr-2-resolved-2 · finding [deferred → #749] · resolves cr-2: repair._repair_meta warns 'ambiguous' before canonical_spec_ref decides to keep a ref verbatim
 
 Filed at closeout as #749.
+
+<!-- fr:journal kind=finding scope=plan id=cr-3-resolved-2 created=2026-09-27T18:26:03+00:00 state=open resolves=cr-3 tracked_by=#750 -->
+### cr-3-resolved-2 · finding [deferred → #750] · resolves cr-3: the lexical escape check reads the raw value, so a backtick-annotated escaping ref is not caught
+
+Filed at closeout as #750.
