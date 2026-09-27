@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 
 import os
+import tomllib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
@@ -104,6 +105,18 @@ def link_state(path: Path) -> str:
         st = path.stat()
         return f"file {st.st_size} {st.st_mtime_ns}"
     return "absent"
+
+
+def runner_packages() -> list[str]:
+    """Every workspace package that registers an `fr.runners` entry point, read
+    from `packages/*/pyproject.toml` — what an installed `fr` must carry to see
+    the runners `uv run fr` sees (#650, #645)."""
+    found = []
+    for pyproject in sorted((REPO_ROOT / "packages").glob("*/pyproject.toml")):
+        project = tomllib.loads(pyproject.read_text()).get("project", {})
+        if "fr.runners" in project.get("entry-points", {}):
+            found.append(pyproject.parent.name)
+    return found
 
 
 @pytest.fixture(scope="session", autouse=True)
