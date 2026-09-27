@@ -99,3 +99,29 @@ def _env(db: Path) -> dict[str, str]:
 def test_the_database_path_honours_the_override(db: Path) -> None:
     assert OpenCodeReader().database(_env(db)) == db
     assert OpenCodeReader().database({}).name == "opencode.db"
+
+
+def test_the_database_path_follows_xdg_data_home_as_opencode_does(tmp_path: Path) -> None:
+    """gh#740: OpenCode keeps its sessions under `$XDG_DATA_HOME/opencode/`
+    when that is set (xdg-basedir: set and non-empty wins over `~/.local/share`).
+    Reading `~/.local/share` instead opened the operator's global database,
+    which does not hold the run's session."""
+    data = tmp_path / "xdg-data"
+
+    assert OpenCodeReader().database({"XDG_DATA_HOME": str(data)}) == (
+        data / "opencode" / "opencode.db"
+    )
+
+
+def test_the_override_beats_xdg_data_home(tmp_path: Path) -> None:
+    db = tmp_path / "pinned.db"
+
+    env = {"FR_OPENCODE_DB": str(db), "XDG_DATA_HOME": str(tmp_path / "xdg")}
+
+    assert OpenCodeReader().database(env) == db
+
+
+def test_an_empty_xdg_data_home_falls_back_to_the_home_default() -> None:
+    assert OpenCodeReader().database({"XDG_DATA_HOME": ""}) == (
+        Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+    )
