@@ -4785,9 +4785,14 @@ rows:
       so a required-check rule can name exactly one context
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_shards.py
+    status: ci
+    notes: 'test_ci_shards.py pins ci-ok''s shape (if: always(), needs == every other
+      job id, env-only RESULTS, exits nonzero on failure/cancelled) and behaviorally
+      executes the run: script; the live single-context observation is this PR''s own
+      CI run (spec 2026-09-27-ci-hardening §3.D).'
   - id: container-record-commits
     capability: isolation-git-ownership
     acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted
