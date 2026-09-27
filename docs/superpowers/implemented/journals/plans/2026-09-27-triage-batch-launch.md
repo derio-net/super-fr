@@ -74,3 +74,13 @@ Found by the deliver-time full suite (test_change_fragments.py) and scripts/chec
 ### d-2 · finding [fixed] (reviewer: in scope) · fr-triage SKILL.md grew past the 120-line cap (phase 2)
 
 Found by the deliver-time full suite (test_skill_validation.py::test_under_120_lines[fr-triage]): phase 2 took the skill to 122 lines; its gate ran the mirror tripwires but not skill validation. Fixed: paragraph tightened to two lines, both mirrors regenerated, skill tripwires green.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2-resolved-2 created=2026-09-27T10:15:12 state=open resolves=r2-2 tracked_by=#725 -->
+### r2-2-resolved-2 · finding [deferred → #725] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation
+
+Filed at closeout as #725.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2-resolved-3 created=2026-09-27T10:15:59 state=open resolves=r2-2 tracked_by=#724 -->
+### r2-2-resolved-3 · finding [deferred → #724] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation
+
+Already filed as #724 before closeout; #725 was a duplicate and is closed.
