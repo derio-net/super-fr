@@ -1,0 +1,50 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-batch-launch
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: decision
+    id: d1-no-subagent-override
+    title: No subagent-model override of any kind; the brief is silent on subagent models
+    body: >-
+      Operator chose "No override" over an opt-in --subagent-model or a per-tier map.
+      fr-goal/fr-debugging resolve each subagent's tier through `fr models` (repo override >
+      user); a repo wanting other tier models sets docs/superpowers/models.yaml, not the batch.
+  - kind: decision
+    id: d2-harness-alias
+    title: Map the runner's harness name to fr's harness id; refuse only when no model resolves
+    body: >-
+      Operator chose a fixed alias table (claude -> claude-code, others as-is) over accepting
+      both spellings or making batches spell fr ids. Session model = batch --model, else
+      defaults.launch.model, else the orchestrator binding; all unset -> dispatch refuses and
+      names the `fr models set ... --tier orchestrator` line.
+  - kind: decision
+    id: d3-theme-warning
+    title: One-root-cause warning on create and edit, never a refusal
+    body: >-
+      Operator chose create + edit over create-only or also-at-dispatch. Fires when the
+      resulting batch is skill debug and its members carry two or more distinct non-empty themes.
+resolves: []
+acceptance:
+  - id: triage-batch-session-model
+    capability: Backlog triage
+    acceptance: >-
+      An operator can dispatch a batch without giving a model: the run's session starts on the
+      orchestrator binding of the target harness, and the brief never pins subagent models, so
+      every phase executor and reviewer runs on its configured fr models tier
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#a-the-session-model-704
+    status: not-implemented
+  - id: triage-batch-debug-skill
+    capability: Backlog triage
+    acceptance: >-
+      An operator can declare a batch of bugs as skill debug, and its dispatch starts
+      /fr-debugging on a fix/batch-<id> branch with fr-debugging's two hard stops stated, warning
+      at create/edit when the members do not share one theme
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md#b-a-batch-declares-its-skill-687
+    status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-09-27-triage-batch-launch-design.md
+evidence: {}
