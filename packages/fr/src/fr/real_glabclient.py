@@ -165,7 +165,15 @@ class RealGlabClient(UnsupportedBatchOps):
         else:
             args = ["mr", "view", ref, "--output", "json"]
             out = _glab._run_glab(args, host=self._host, cwd=cwd)
-        return str(json.loads(out).get("description") or "")
+        # Exit 0 with output fr cannot read is still the forge's failure: the
+        # deliver gate refuses on a GlabError and would crash on anything else.
+        try:
+            raw = json.loads(out)
+        except json.JSONDecodeError as exc:
+            raise _glab.GlabError(f"unreadable `glab mr view` output: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise _glab.GlabError("unreadable `glab mr view` output: not a JSON object")
+        return str(raw.get("description") or "")
 
     def edit_issue_labels(
         self,

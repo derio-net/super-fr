@@ -159,3 +159,27 @@ def test_every_backend_declares_every_pr_operation() -> None:
     ops = {frozenset(table) for table in PR_COMMANDS.values()}
     assert ops == {frozenset({"create", "edit", "ready", "fill"})}
     assert set(PR_COMMANDS) == {"github", "gitlab", "gitea"}
+
+
+@pytest.mark.parametrize("out", ["not json", "[]", '"a string"'])
+def test_gitlab_unreadable_output_is_a_glab_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, out: str
+) -> None:
+    """A CLI that exits 0 with output fr cannot read must still be a forge
+    error — the gate refuses on those, and anything else crashes it."""
+    import fr.glab
+
+    monkeypatch.setattr(fr.glab, "_run_glab", lambda args, *, host=None, cwd=None: out)
+    with pytest.raises(fr.glab.GlabError, match="unreadable"):
+        RealGlabClient().pr_body("3", cwd=tmp_path)
+
+
+@pytest.mark.parametrize("out", ["not json", '{"a": 1}'])
+def test_gitea_unreadable_output_is_a_tea_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, out: str
+) -> None:
+    import fr.tea
+
+    monkeypatch.setattr(fr.tea, "_run_tea", lambda args, *, cwd=None: out)
+    with pytest.raises(fr.tea.TeaError, match="unreadable"):
+        RealTeaClient().pr_body("3", cwd=tmp_path)

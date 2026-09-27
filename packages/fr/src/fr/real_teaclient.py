@@ -130,8 +130,15 @@ class RealTeaClient(UnsupportedBatchOps):
         args += ["--fields", "index,url,head,body", "--output", "json"]
         if m:
             args += ["--repo", m.group(1)]
-        entries = json.loads(_tea._run_tea(args, cwd=cwd) or "[]")
-        for entry in entries if isinstance(entries, list) else []:
+        # Exit 0 with output fr cannot read is still the forge's failure: the
+        # deliver gate refuses on a TeaError and would crash on anything else.
+        try:
+            entries = json.loads(_tea._run_tea(args, cwd=cwd) or "[]")
+        except json.JSONDecodeError as exc:
+            raise _tea.TeaError(f"unreadable `tea pulls list` output: {exc}") from exc
+        if not isinstance(entries, list):
+            raise _tea.TeaError("unreadable `tea pulls list` output: not a JSON list")
+        for entry in entries:
             if not isinstance(entry, dict):
                 continue
             head = entry.get("head")
