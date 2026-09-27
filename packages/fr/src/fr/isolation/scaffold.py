@@ -424,6 +424,7 @@ def render_host_cli_post_create(pin: HostCliPin) -> str:
 
 # Baseline: vk itself, installed from the repo's main branch at create time.
 POST_CREATE = (
+    'git config --global --add safe.directory "$PWD" || true; '
     "pipx install uv 2>/dev/null || true; "
     "uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true"
 )

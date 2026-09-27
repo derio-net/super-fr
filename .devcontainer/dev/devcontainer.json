@@ -5,7 +5,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}
   },
-  "postCreateCommand": "pipx install uv 2>/dev/null || true; uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true",
+  "postCreateCommand": "git config --global --add safe.directory \"$PWD\" || true; pipx install uv 2>/dev/null || true; uv tool install 'git+https://github.com/derio-net/super-fr#subdirectory=packages/fr' || true",
   "runArgs": [
     "--env-file",
     "${localEnv:HOME}/.config/fr/secrets/super-fr/dev.env"

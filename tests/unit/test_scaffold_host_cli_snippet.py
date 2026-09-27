@@ -62,7 +62,9 @@ def _run(
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     log = tmp_path / "log"
     log.write_text("")
-    env = {"PATH": f"{stubdir}:/usr/bin:/bin", "LOG": str(log), **stub_env}
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)  # POST_CREATE runs a real `git config --global`; never the real ~
+    env = {"PATH": f"{stubdir}:/usr/bin:/bin", "LOG": str(log), "HOME": str(home), **stub_env}
     res = subprocess.run(["sh", "-c", snippet], env=env, capture_output=True, text=True, timeout=30)
     return res, log.read_text().splitlines()
 

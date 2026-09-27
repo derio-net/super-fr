@@ -1,0 +1,70 @@
+{
+  "jobs": [
+    {
+      "name": "lint",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:16:15Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "test (2)",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:18:24Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "test (1)",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:17:52Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "test (4)",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:17:29Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "version-sync",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:16:13Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "test (3)",
+      "started_at": "2026-09-26T14:16:06Z",
+      "completed_at": "2026-09-26T14:18:03Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "validate-artifacts",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:16:15Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "typecheck",
+      "started_at": "2026-09-26T14:16:05Z",
+      "completed_at": "2026-09-26T14:16:19Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "opencode-plugin-test",
+      "started_at": "2026-09-26T14:16:06Z",
+      "completed_at": "2026-09-26T14:16:34Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "change-fragment",
+      "started_at": "2026-09-26T14:16:03Z",
+      "completed_at": "2026-09-26T14:16:02Z",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "coverage",
+      "started_at": "2026-09-26T14:18:27Z",
+      "completed_at": "2026-09-26T14:18:40Z",
+      "conclusion": "success"
+    }
+  ]
+}

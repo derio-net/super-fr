@@ -1,0 +1,10 @@
+# The CI time budget watcher's per-file config (spec 2026-09-26-ci-time-budget
+# §3.B). scripts/ci_budget.py reads this; the tripwire in
+# tests/unit/test_ci_budget.py (§7.3) fails CI if a workflow file is neither
+# watched (ci-budget.yml's `on.workflow_run.workflows`) nor listed here with
+# `exclude: true`, or if a key here names a workflow file that no longer
+# exists.
+default_seconds: 240
+workflows:
+  fr-spec-status.yml: { exclude: true } # reusable (workflow_call); timed inside its caller
+  # a numeric override looks like:  some.yml: {budget_seconds: 360}

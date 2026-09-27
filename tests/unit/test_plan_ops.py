@@ -497,3 +497,79 @@ def test_create_with_existing_super_fr_wrapper_leaves_it_unchanged(tmp_path):
     assert wrapper.read_bytes() == before
     staged = _staged_files(repo)
     assert "scripts/validate-plans.sh" not in staged
+
+
+# --- canonical spec: form (2026-09-26 archive-repair-scope) ---
+
+
+def _create_with_spec(repo: Path, spec: str | None) -> Path:
+    from fr.plan_ops import PhaseSpec, create
+
+    create(
+        repo_root=repo,
+        slug="2026-09-26-canon",
+        spec=spec,
+        target_repo="derio-net/test",
+        fr_version=">=3.0.0,<5.0.0",
+        phases=[
+            PhaseSpec(
+                number=1,
+                title="P",
+                tag="agentic",  # type: ignore[arg-type]
+                depends_on=(),
+                tasks=({"number": 1, "title": "t", "steps": [{"id": "P1.T1.S1", "text": "x"}]},),
+            )
+        ],
+        prose="p",
+    )
+    return repo / "docs/superpowers/plans/2026-09-26-canon/_meta.yaml"
+
+
+def _spec_file(repo: Path, name: str = "x-design.md") -> Path:
+    p = repo / "docs" / "superpowers" / "specs" / name
+    p.write_text(
+        "# X\n\n## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+    )
+    return p
+
+
+def test_create_with_full_spec_path_writes_bare_filename_and_repair_is_a_no_op(tmp_path):
+    from fr.repair import repair_repo
+
+    repo = _review_repo(tmp_path)
+    _spec_file(repo)
+    meta = _create_with_spec(repo, "docs/superpowers/specs/x-design.md")
+    assert "spec: x-design.md\n" in meta.read_text()
+    assert repair_repo(repo, write=False).rewrites == []
+
+
+def test_create_stores_unresolvable_spec_verbatim(tmp_path):
+    repo = _review_repo(tmp_path)
+    meta = _create_with_spec(repo, "docs/superpowers/specs/not-yet-design.md")
+    assert "spec: docs/superpowers/specs/not-yet-design.md\n" in meta.read_text()
+
+
+def test_create_does_not_shorten_a_same_named_file_elsewhere(tmp_path):
+    repo = _review_repo(tmp_path)
+    _spec_file(repo)
+    (repo / "notes").mkdir()
+    (repo / "notes" / "x-design.md").write_text(
+        "# X\n\n## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
+    )
+    meta = _create_with_spec(repo, "notes/x-design.md")
+    assert "spec: notes/x-design.md\n" in meta.read_text()
+
+
+def test_bare_spec_plan_parses_to_spec_path_before_and_after_archive(tmp_path):
+    import shutil
+
+    from fr.parser import parse
+
+    repo = _review_repo(tmp_path)
+    spec = _spec_file(repo)
+    meta = _create_with_spec(repo, "docs/superpowers/specs/x-design.md")
+    plan_dir = meta.parent
+    assert parse(plan_dir).spec_path == "docs/superpowers/specs/x-design.md"
+    (repo / "docs/superpowers/implemented/specs").mkdir(parents=True)
+    shutil.move(str(spec), str(repo / "docs/superpowers/implemented/specs/x-design.md"))
+    assert parse(plan_dir).spec_path == "docs/superpowers/implemented/specs/x-design.md"

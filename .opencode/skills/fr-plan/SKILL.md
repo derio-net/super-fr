@@ -18,9 +18,9 @@ A plan is a directory under `docs/superpowers/plans/<slug>/` containing:
 - `_meta.yaml` — schema_version, plan slug, spec ref, target_repo, vk_version,
   created date, optional rework metadata (`parent_plan`, `prior_rework`,
   `origin_items`).
-  - **`spec` ref notation:** a same-repo spec is a plain repo-relative path
-    (`docs/superpowers/specs/<file>.md`); a spec in **another repo** MUST use
-    the cross-repo form `<owner>/<repo>:<path-in-that-repo>` (e.g.
+  - **`spec` ref notation:** a same-repo spec is the bare filename (`<file>.md`;
+    `fr plan create --spec` shortens a full path, as `fr repair` does); a spec
+    in **another repo** MUST use the cross-repo form `<owner>/<repo>:<path-in-that-repo>` (e.g.
     `derio-net/frank:docs/superpowers/specs/<file>.md`). Without the
     `owner/repo:` prefix, `fr apply`'s reachability gate reads it as a missing
     same-repo file and refuses to dispatch. `fr plan self-review` warns when a

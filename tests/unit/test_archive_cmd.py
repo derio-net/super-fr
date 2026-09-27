@@ -688,3 +688,61 @@ def test_archive_single_plan_fetches_once(tmp_path, monkeypatch, _hermetic):
     )
     assert result.exit_code == 0, result.output
     assert _hermetic == ["origin"]
+
+
+# --- scoped repair (2026-09-26 archive-repair-scope) ---
+
+
+def _live_plan_with_full_spec(repo: Path, slug: str) -> Path:
+    spec = repo / "docs" / "superpowers" / "specs" / "other-design.md"
+    spec.write_text("# other\n")
+    return _add_plan(repo, slug, ticked=False, spec_name=spec.name)
+
+
+def test_single_plan_archive_leaves_other_live_plans_byte_identical(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    done = _add_plan(repo, "2026-09-01-done", ticked=True)
+    other = _live_plan_with_full_spec(repo, "2026-09-02-other")
+    _seed(repo)
+    before = (other / "_meta.yaml").read_bytes()
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", str(done.relative_to(repo))])
+    assert result.exit_code == 0, result.output
+    assert (other / "_meta.yaml").read_bytes() == before
+
+
+def test_single_plan_archive_canonicalizes_the_archived_plans_own_spec(tmp_path, monkeypatch):
+    """#686 r2-f3: the positive half of scoping — the archived plan's own
+    full-path `spec:` is still repaired to the bare form."""
+    repo = _repo(tmp_path)
+    spec = repo / "docs" / "superpowers" / "specs" / "done-design.md"
+    spec.write_text("# done\n")
+    done = _add_plan(repo, "2026-09-01-done", ticked=True, spec_name=spec.name)
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", str(done.relative_to(repo))])
+    assert result.exit_code == 0, result.output
+    archived = repo / "docs" / "superpowers" / "implemented" / "plans" / done.name
+    assert "spec: done-design.md\n" in (archived / "_meta.yaml").read_text()
+
+
+def test_archive_all_still_repairs_repo_wide(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    _add_plan(repo, "2026-09-01-done", ticked=True)
+    other = _live_plan_with_full_spec(repo, "2026-09-02-other")
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert "spec: other-design.md" in (other / "_meta.yaml").read_text()
+
+
+def test_sweep_only_still_repairs_repo_wide(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    spec = _add_spec(
+        repo, "2026-09-fixture.md", [("Plan X", "`derio-net/test`", "2026-09-03-gone")]
+    )
+    (repo / "docs/superpowers/implemented/plans/2026-09-03-gone").mkdir()
+    other = _live_plan_with_full_spec(repo, "2026-09-02-other")
+    _seed(repo)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
+    assert result.exit_code == 0, result.output
+    assert (repo / "docs/superpowers/implemented/specs" / spec.name).exists()
+    assert "spec: other-design.md" in (other / "_meta.yaml").read_text()

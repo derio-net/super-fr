@@ -47,7 +47,9 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
-def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
+def _report_sweep(
+    repo_root: Path, sweep: SpecSweepResult, only_plans: frozenset[str] | None = None
+) -> bool:
     """Print a sweep result, repair refs in passing, report moves.
 
     Shared by the post-move sweep and `--sweep-only`: the move and the ref
@@ -60,7 +62,7 @@ def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
     for n in sweep.notes:
         typer.echo(f"  note: {n}")
     if moved:
-        repair = repair_repo(repo_root, write=True)
+        repair = repair_repo(repo_root, write=True, only_plans=only_plans)
         for r in repair.rewrites:
             typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
         for w in repair.warnings:
@@ -215,16 +217,19 @@ def archive_command(
     # run (cross-repo row unresolved then, resolved now) must still get
     # swept — `fr migrate dirs` evaluates specs unconditionally and the two
     # archive paths must agree (review finding, 2026-06-06).
+    # Single-plan archive repairs only that plan's own refs (#686); --all is
+    # repo-wide by intent.
+    only_plans = None if all_plans else frozenset(p.name for p in archived)
     specs_moved = False
     if (archived or all_plans) and not no_spec_sweep:
-        specs_moved = _report_sweep(repo_root, spec_archive_sweep(repo_root, gh))
+        specs_moved = _report_sweep(repo_root, spec_archive_sweep(repo_root, gh), only_plans)
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 
     # Repair in passing (2026-06-06 spec-path-repair): the move and the
     # ref normalization land in the same operator commit.
     if archived or specs_moved:
-        repair = repair_repo(repo_root, write=True)
+        repair = repair_repo(repo_root, write=True, only_plans=only_plans)
         for r in repair.rewrites:
             typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
         for w in repair.warnings:

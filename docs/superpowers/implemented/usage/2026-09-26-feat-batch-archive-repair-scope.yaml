@@ -1,0 +1,88 @@
+schema_version: 1
+run: 2026-09-26-feat-batch-archive-repair-scope
+captures:
+- host: h-23b9705a
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-26T22:02:55+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: c74e20a5-0593-4e63-ae4a-679f32f32eaf
+    role: main
+    models:
+      claude-sonnet-5:
+        input: 258
+        cache_write: 564165
+        cache_read: 13065073
+        output: 33322
+        usd: null
+        usd_source: none
+      claude-opus-5-5:
+        input: 162
+        cache_write: 371370
+        cache_read: 12356020
+        output: 30089
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 71
+      other:
+        usd: null
+        turns: 82
+      paperwork:
+        usd: null
+        turns: 55
+    steps:
+      (outside run):
+        usd: null
+        turns: 27
+      brainstorm:
+        usd: null
+        turns: 9
+      spec-review:
+        usd: null
+        turns: 11
+      plan:
+        usd: null
+        turns: 4
+      implement:
+        usd: null
+        turns: 60
+      deliver:
+        usd: null
+        turns: 86
+    briefs:
+      a481c3da0da6321d6: 770
+      phase/1/implement-phase: 1755
+      ab766a67e7c502ebf: 1509
+      a85d442d1deeaebef: 944
+      a154d6fb3340dc945: 1645
+  - session: 641cd0a7-bb5f-4733-8370-5a76966d0c07
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 34
+        cache_write: 75306
+        cache_read: 1477489
+        output: 7076
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 4
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 17
