@@ -14,3 +14,8 @@ _gate_provenance both DECIDES provenance and WRITES its consequences (journal ap
 ### fix · finding [fixed] · Gate writes deferred to each branch's save point; declared emits required at done; cli gate persists unobserved
 
 run_cmd.py: _queue_gate_decision (eager check, deferred write) + _flush_gate_decisions right before _save_run_state in the cli-gate and agent branches (#690); _refuse_missing_emits via fr.workflow.artifacts.emitted_artifacts, after deliver's PR gate and in _resolve_member before any write (#587); cli branch folds _take_unobserved() onto the step/<id> unit (#632). Failing-test-first: tests/unit/test_run_resolve_gate_side_effects.py (3 red before, 4 green after). Ten test_run_cli fixtures that resolved done without their declared emits now name them.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-09-27T10:25:11+00:00 -->
+### review · review · Independent adversarial review: no confirmed findings
+
+Separate-context reviewer traced write-before-refusal on the flag and --record paths, decision loss at every save, ContextVar reset, and emits-check false positives (failed, amend, finished-run amend, cli gate, members, the two-call deliver flow). No defect at >=80 confidence. Noted, not raised: a grouped member declaring NO emits inherits the group's (member.emits or group.emits) — untested, but no shipped manifest exercises it.
