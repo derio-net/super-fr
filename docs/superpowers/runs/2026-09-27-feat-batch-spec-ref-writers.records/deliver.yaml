@@ -1,0 +1,9 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-spec-ref-writers
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/737
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T/full-suite.log
