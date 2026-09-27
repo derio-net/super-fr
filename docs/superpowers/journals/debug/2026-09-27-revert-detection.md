@@ -49,3 +49,8 @@ ae6d1920: _is_inverse_patch treats a commit restoring every line a removal-only 
 ### review-f2-resolved · finding [fixed] · resolves review-f2: Review f2: a second landing of the same branch hides a reverted first one
 
 ae6d1920: _fork_point iterates landing by landing to where the branch left the base before its first landing; test_branch_changes_present_second_landing_does_not_hide_a_reverted_first now passes.
+
+<!-- fr:journal kind=review scope=debug id=03feb173c34f created=2026-09-27T20:05:09+00:00 -->
+### 03feb173c34f · review · Independent adversarial review of the fix (feature-dev:code-reviewer)
+
+Two in-scope findings, both reproduced as failing tests before fixing and both fixed (review-f1, review-f2). Out of scope, pre-existing: a fast-forward landing later reverted still reads landed (no landing merge marks the branch's start) — filed derio-net/super-fr#757. Noted, not acted on: _is_inverse_patch only requires branch_added ⊆ commit.removed, so a commit deleting a larger block containing the branch's lines reads as a revert — false-missing, the safe direction. Reviewer verified: constant git-call count holds, parser robust to content lines starting with diff/@@/---/+++, failed git calls raise. Full suite after fixes: 6677 passed.
