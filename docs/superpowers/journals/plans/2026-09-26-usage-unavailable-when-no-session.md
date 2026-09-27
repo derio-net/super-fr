@@ -104,3 +104,8 @@ Removed the redundant setenv (9746ee60).
 ### p1-r1-resolved-2 · finding [refuted] · resolves p1-r1: placeholder harness falls back to 'unknown' when detection fails
 
 Closed at closeout, no issue (operator decision): pre-existing harness_now fallback, not caused by this change; cosmetic.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved-2 created=2026-09-27T07:11:34 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved-2 · finding [fixed] · resolves p1-r2: redundant FR_HOSTNAME monkeypatch in last new test
+
+Same nit as cr5; the redundant setenv was removed in 9746ee60, part of squash d67a9d4b.
