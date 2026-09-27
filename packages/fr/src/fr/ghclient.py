@@ -9,6 +9,7 @@ process spawning.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Protocol
 
 FORGE_PARITY_ISSUE = "gh#611"
@@ -65,6 +66,18 @@ class GhClient(Protocol):
         2026-07-09-multi-backend-git-host-adapters-design.md §6 — added
         specifically to let fr-vk's `pr_observe.py` stop shelling out to a
         literal `gh pr view` subprocess.
+        """
+        ...
+
+    def pr_body(self, ref: str, *, cwd: Path) -> str:
+        """The live body (GitLab: description) of one PR/MR, read fresh.
+
+        `ref` is the PR's URL, number or head branch; a number or branch is
+        resolved against the repository checked out at `cwd`. Raises the
+        backend's own CLI error (`fr.hostclient.FORGE_ERRORS`) when the PR
+        cannot be read. Implemented on every backend: `deliver`'s live-PR
+        check (spec 2026-09-25 §5.C.4) reads through here, so a backend that
+        lacked it could never deliver a run (gh#742).
         """
         ...
 

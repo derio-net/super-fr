@@ -28,6 +28,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
@@ -152,6 +153,19 @@ class RealGlabClient(UnsupportedBatchOps):
         else:
             state = "OPEN"
         return {"state": state, "draft": bool(raw.get("draft", False))}
+
+    def pr_body(self, ref: str, *, cwd: Path) -> str:
+        """The MR's `description`. A URL is parsed into (repo, iid), as in
+        `pr_status_by_url` — `glab mr view` takes no URL; an iid or branch
+        is resolved by glab from the checkout at `cwd`. Raises GlabError."""
+        m = _MR_URL_RE.match(ref)
+        if m:
+            args = ["mr", "view", m.group(2), "--repo", m.group(1), "--output", "json"]
+            out = _glab._run_glab(args, host=self._host)
+        else:
+            args = ["mr", "view", ref, "--output", "json"]
+            out = _glab._run_glab(args, host=self._host, cwd=cwd)
+        return str(json.loads(out).get("description") or "")
 
     def edit_issue_labels(
         self,

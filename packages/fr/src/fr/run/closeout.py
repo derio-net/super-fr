@@ -209,7 +209,9 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
             )
         else:
             lines.append(f"  git push -u origin {housekeeping_branch}")
-        lines.append("  open the housekeeping PR (e.g. `gh pr create --fill`)")
+        from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
+
+        lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
     lines.append(f"  fr isolation down --branch {state.branch}")
 
     return "\n".join(lines)
