@@ -129,3 +129,8 @@ Fixed in ee9b4268 (spec) / 8540388a (tests), with new tests in tests/unit/test_i
 ### spec-review-opus · review · Opus fresh-context spec review: 5 in-scope findings, all fixed
 
 Reviewer accc6bb7ff1d8d049 on claude-opus-5-5, re-run per operator (reviewers run on Opus). The earlier Sonnet spec-review stays as recorded.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved-2 created=2026-09-27T07:51:50 state=open resolves=s5 tracked_by=derio-net/super-fr#715 -->
+### s5-resolved-2 · finding [deferred → derio-net/super-fr#715] · resolves s5: Blob equality misses concurrent-edit-then-rewrite
+
+Filed at closeout as derio-net/super-fr#715.
