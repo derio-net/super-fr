@@ -144,3 +144,8 @@ gh api --paginate --slurp, flattened across pages; test_fetch_jobs_follows_every
 ### r2-actions-pinned-by-tag-resolved · finding [out-of-scope] · resolves r2-actions-pinned-by-tag: Third-party actions pinned by tag rather than SHA (flagged by a background security scan) (phase 2)
 
 Repo-wide convention across all 7 workflows, including two with issues:write that predate this change. SHA-pinning belongs to a repo-wide change, not this PR.
+
+<!-- fr:journal kind=finding scope=plan id=r2-actions-pinned-by-tag-resolved-2 created=2026-09-27T00:00:33 state=open resolves=r2-actions-pinned-by-tag tracked_by=#707 -->
+### r2-actions-pinned-by-tag-resolved-2 · finding [deferred → #707] · resolves r2-actions-pinned-by-tag: Third-party actions pinned by tag rather than SHA (flagged by a background security scan)
+
+Filed at closeout as #707.
