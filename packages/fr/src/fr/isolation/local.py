@@ -318,6 +318,14 @@ def _branch_blob_was_on_base(
     later disappears is the consumed `.changes` fragment, and a later deletion
     counts as landed — so a revert of a branch that ONLY added files stays
     indistinguishable by content, as it always was.
+
+    Two more limits, both of content-only evidence. A revert applied after
+    ANOTHER change to the path (a three-way revert) writes a blob the path
+    never held, so it still reads as landed (#739) — the branch's other,
+    untouched files usually still read as missing. And a later PR that
+    removes exactly the branch's lines reads as a revert: a safe refusal.
+    Only the base's first-parent line is read, so content that reached the
+    base solely through a side branch's own commits reads as missing (safe).
     """
     bpath = base_path or path
     want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
@@ -339,8 +347,13 @@ def _branch_blob_was_on_base(
             # exists on the base only as a merge result (a conflict resolution)
             # would read as never landed (Opus fix review f2).
             "-m",
-            # Parents before children, oldest first: the revert check below
-            # needs "before the landing" and "after it" to mean something.
+            # The base's own line, oldest first: the revert check below needs
+            # "before the landing" and "after it" to mean something. Without
+            # `--first-parent`, a side branch merged LATER (a merge-commit PR
+            # forked before the landing) lists its commits after the landing,
+            # and one writing an old blob would un-land it (#716 review f1).
+            # With it, `-m` diffs each merge against its first parent only.
+            "--first-parent",
             "--topo-order",
             "--reverse",
             "--format=",

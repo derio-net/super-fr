@@ -3691,6 +3691,75 @@ def test_branch_changes_present_reverted_after_fragment_consumed_is_missing(
     assert res.missing == ["fix.py"]
 
 
+_ID = ("-c", "user.email=t@t", "-c", "user.name=t")
+
+
+def test_branch_changes_present_side_branch_merged_later_does_not_unland(
+    tmp_path: Path,
+) -> None:
+    """Review f1: a merge-commit PR forked BEFORE the landing, which synced main
+    (so its own history writes a pre-landing blob of the path), is merged after
+    the landing and a later rewrite. Its side-branch commits must not read as a
+    revert — only the base's first-parent line is history here."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "h\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "p.txt", "p\n", "side PR work")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "report.md", "h\nq\n", "another PR")
+    _git(repo, "checkout", "-q", "side")
+    _git(repo, *_ID, "merge", "-q", "--no-edit", "main")  # sync: side now writes h,q
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "h\nq\nfoo\n", "feature adds a line")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "h\nq\nFOO2\n", "later merge rewrites the line")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "side")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a SEPARATE root cause from #716: after a --no-ff landing the branch "
+    "is an ancestor of the base, so merge-base == branch and branch_changes_present "
+    "sees no changed path before the blob fallback runs — pending an operator decision",
+)
+def test_branch_changes_present_reverted_no_ff_merge_is_missing(tmp_path: Path) -> None:
+    """A merge-commit landing reverted with `git revert -m 1`."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\n", "feature step 1")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature step 2")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "main moved on")
+    _git(repo, *_ID, "merge", "-q", "--no-ff", "--no-edit", "feature")
+    _git(repo, *_ID, "revert", "--no-edit", "-m", "1", "HEAD")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="super-fr#739: a three-way revert writes a blob the path never held",
+)
+def test_branch_changes_present_three_way_revert_is_missing(tmp_path: Path) -> None:
+    """Another PR edits the path BETWEEN the landing and the revert, so the
+    revert's result is new content. Known limit of content-only evidence."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nfoo\nb\nc\nd\ne\n", "feature adds a line")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "a\nfoo\nb\nc\nd\nE\n", "another PR edits the report")
+    _git(repo, *_ID, "revert", "--no-edit", "HEAD~1")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+
+
 def test_verify_merge_reverted_merge_is_not_verified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
