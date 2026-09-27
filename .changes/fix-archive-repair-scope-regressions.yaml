@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr plan create re-run no longer reports a false collision once its spec exists, and a single-plan fr archive repairs the refs to specs its own sweep moved (#697 regressions)"
