@@ -4599,6 +4599,25 @@ rows:
     status: ci
     notes: engine regenerates the audit page and the measured half of the architecture
       page; the future-state half is authored (spec §5.A.6)
+  - id: deliver-pr-body-every-forge
+    capability: Lean cost-aware pipeline
+    acceptance: deliver's live-PR check reads the PR body on GitHub, GitLab and Gitea
+      alike, and its refusals name that forge's own CLI
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-25-lean-cost-aware-process-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_body_adapters.py
+      - super-fr:tests/unit/test_tripwire_forge_adapter.py
+      int:
+      - super-fr:tests/unit/test_deliver_pr_body_forges.py
+    status: ci
+    notes: 'gh#742: the gate called fr.gh directly, so deliver refused forever on GitLab/Gitea.
+      Now read through client_for(repo_root).pr_body; the int test drives the real gate
+      on a gitlab- and a gitea-declared checkout with only the glab/tea subprocess boundary
+      mocked and gh refusing. The tripwire fails CI on a new direct fr.gh import or
+      ["gh", ...] argv. Not yet walked against a live GitLab/Gitea instance; the glab/tea
+      argv shapes were checked against each CLI''s --help.'
   - id: release-on-merge
     capability: Release integrity
     acceptance: Merging a PR that carries a change fragment releases it — main gets
