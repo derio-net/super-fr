@@ -245,9 +245,28 @@ def create(
         # dead-ending at "already exists". Mismatched content — a slug reused
         # for a different plan — is a real collision and still rejected.
         if not _folder_matches(
-            folder, meta_text=meta_text, prose_text=prose_text, phase_files=phase_files
+            folder,
+            meta_text=meta_text,
+            prose_text=prose_text,
+            phase_files=phase_files,
+            repo_root=repo_root,
         ):
             raise PlanEditError(f"plan folder already exists: {folder}")
+        # A match may still differ in how `spec:` is spelled: a first run
+        # before the spec existed stored it verbatim, and it canonicalizes
+        # now that it resolves. Converge on the canonical form, keeping the
+        # original scaffold date.
+        meta_p = folder / "_meta.yaml"
+        on_disk_meta = meta_p.read_text()
+        if _strip_created(on_disk_meta) != _strip_created(meta_text):
+            created = [ln for ln in on_disk_meta.splitlines() if ln.startswith("created:")]
+            meta_p.write_text(
+                "".join(
+                    created[0] + "\n" if ln.startswith("created:") and created else ln
+                    for ln in meta_text.splitlines(keepends=True)
+                )
+            )
+            written.append(meta_p)
     else:
         plans_dir.mkdir(parents=True, exist_ok=True)
         folder.mkdir()
@@ -317,15 +336,25 @@ def _folder_matches(
     meta_text: str,
     prose_text: str,
     phase_files: dict[str, str],
+    repo_root: Path,
 ) -> bool:
     """True iff `folder` already holds exactly the content `create()` would write.
 
     Used to distinguish a repairable partial-success state (re-run with the same
     inputs) from a genuine slug collision. `_meta.yaml`'s `created:` date is
-    ignored so a repair the next day still matches.
+    ignored so a repair the next day still matches, and `spec:` is compared by
+    the spec it names rather than by spelling: its canonical form depends on
+    whether the spec resolves yet, so the same inputs can spell it two ways.
     """
     meta_p = folder / "_meta.yaml"
-    if not meta_p.exists() or _strip_created(meta_p.read_text()) != _strip_created(meta_text):
+    if not meta_p.exists():
+        return False
+    on_disk = meta_p.read_text()
+    if _strip_meta_line(on_disk, "spec") != _strip_meta_line(meta_text, "spec"):
+        return False
+    if not _same_spec(
+        yaml.safe_load(on_disk).get("spec"), yaml.safe_load(meta_text).get("spec"), repo_root
+    ):
         return False
     prose_p = folder / "_prose.md"
     if not prose_p.exists() or prose_p.read_text() != prose_text:
@@ -345,6 +374,22 @@ def _folder_matches(
 def _strip_created(meta_text: str) -> str:
     """Drop the `created:` line so meta comparison ignores the scaffold date."""
     return "\n".join(line for line in meta_text.splitlines() if not line.startswith("created:"))
+
+
+def _strip_meta_line(meta_text: str, key: str) -> str:
+    """`_strip_created`, also dropping the top-level `key:` line."""
+    return "\n".join(
+        line for line in _strip_created(meta_text).splitlines() if not line.startswith(f"{key}:")
+    )
+
+
+def _same_spec(a: str | None, b: str | None, repo_root: Path) -> bool:
+    """True iff two `spec:` values name the same spec (#697 regression)."""
+    if a == b:
+        return True
+    if a is None or b is None:
+        return False
+    return refs.canonical_spec_ref(a, repo_root) == refs.canonical_spec_ref(b, repo_root)
 
 
 def _build_phase_doc(ps: PhaseSpec) -> dict[str, Any]:

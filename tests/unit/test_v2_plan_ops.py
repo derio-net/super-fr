@@ -329,6 +329,60 @@ def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
     assert spec_path.read_text().count("| 2026-05-10-repair |") == 1
 
 
+def test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes(tmp_path):
+    """#697 regression: a first run with the spec not yet written stores the
+    `spec:` path verbatim (it cannot resolve); once the spec exists the same
+    command's canonical form is the bare filename. That is the same spec, so
+    the re-run must take the #133 finish-the-job path — append the row and
+    leave `spec:` canonical — not report a slug collision."""
+    import yaml
+
+    from fr.plan_ops import PhaseSpec, create
+
+    repo = _make_repo(tmp_path)
+    spec_rel = "docs/superpowers/specs/2026-05-10-later-spec.md"
+    args = dict(
+        repo_root=repo,
+        slug="2026-05-10-later",
+        spec=spec_rel,
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    create(**args)
+    meta_p = repo / "docs" / "superpowers" / "plans" / "2026-05-10-later" / "_meta.yaml"
+    assert yaml.safe_load(meta_p.read_text())["spec"] == spec_rel
+
+    spec_path = _make_spec(repo, slug="later-spec")
+    plan = create(**args)
+
+    assert plan.meta.plan == "2026-05-10-later"
+    assert spec_path.read_text().count("| 2026-05-10-later |") == 1
+    assert yaml.safe_load(meta_p.read_text())["spec"] == "2026-05-10-later-spec.md"
+
+
+def test_create_rerun_with_a_different_spec_is_still_a_collision(tmp_path):
+    """The spec-identity comparison above must not loosen #133's collision
+    rule: the same slug pointed at a different spec is a different plan."""
+    from fr.plan_ops import PhaseSpec, PlanEditError, create
+
+    repo = _make_repo(tmp_path)
+    first = _make_spec(repo, slug="first")
+    second = _make_spec(repo, slug="second")
+    args = dict(
+        repo_root=repo,
+        slug="2026-05-10-two",
+        target_repo="derio-net/test",
+        fr_version=">=1.0.0,<5.0.0",
+        phases=[PhaseSpec(number=1, title="t", tasks=())],
+        prose="# x\n",
+    )
+    create(spec=str(first.relative_to(repo)), **args)
+    with pytest.raises(PlanEditError, match="already exists"):
+        create(spec=str(second.relative_to(repo)), **args)
+
+
 def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
     """#133 review: a re-run that DROPS a phase must not silently 'repair' and
     leave the orphaned phase file behind — that's a real content mismatch, so
