@@ -204,3 +204,8 @@ Filed at closeout as derio-net/super-fr#716.
 ### r4-resolved-2 · finding [deferred → derio-net/super-fr#717] · resolves r4: diff --name-only without -z quotes special paths
 
 Filed at closeout as derio-net/super-fr#717.
+
+<!-- fr:journal kind=finding scope=plan id=r5-resolved-2 created=2026-09-27T07:51:52 state=fixed resolves=r5 -->
+### r5-resolved-2 · finding [fixed] · resolves r5: One rev-parse per commit touching the path
+
+Operator decision at closeout: already fixed by 8540388a (opus-c1: one git log --raw per path; test_branch_blob_was_on_base_cost_is_constant_per_commit_count). No issue filed.
