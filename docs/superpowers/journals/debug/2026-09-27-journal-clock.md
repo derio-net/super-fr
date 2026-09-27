@@ -14,3 +14,8 @@ A naive stamp carries no zone. The reader can only guess its own zone, which is 
 ### fix · finding [fixed] · all three writers stamp aware UTC via journal_now()
 
 New `fr.journal.model.journal_now()` (UTC, second precision, `+00:00`). `journal_cmd._timestamp`, `record.apply._stamp` and the inline decision stamp in `run_cmd` call it. `journal_stamp_as_utc` is unchanged, so legacy naive stamps still read in the reader zone. The gate refusal message no longer calls the stamp "(local)". Pinned by `tests/unit/test_journal_stamp_offset.py`, committed red first (8 failures): UTC writer read in Tokyo/LA for both callable writers, a source tripwire against naive `datetime.now()` in all three writer modules, and end-to-end, a UTC-written review accepted by the spec-review gate under Asia/Tokyo. No artifact stamp bump (see rc).
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-09-27T08:37:08+00:00 -->
+### review · review · independent review: no findings
+
+A separate-context reviewer checked four things and raised no findings at confidence >= 80: (1) no other naive `created` writer exists in packages/*/src or plugins/; (2) mixing naive and aware stamps breaks nothing, because `_same_entry` excludes `created`, entries are never sorted by it, and both readers go through `journal_stamp_as_utc`; (3) this is not an artifact shape change (`created: str`, the space-split tokenizer is unaffected); (4) the tests pin writer and reader TZ separately and restore it.
