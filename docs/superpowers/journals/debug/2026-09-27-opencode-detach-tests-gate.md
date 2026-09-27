@@ -14,3 +14,8 @@ Unlike Claude Code (#693/#702: run_in_background launch ack -> task-notification
 ### 28a3f48e4ef4 · root-cause · A detached launch's own end was the only end the OpenCode reader knew
 
 Confirmed by the red test built from the rule text itself: `_opencode_wrote_since` windowed every writer at (part start, part end), and the rule's `&` makes the part end at launch. Single root cause; #720 ($VAR binding) is a separate root in `_resolve_target` and is left alone.
+
+<!-- fr:journal kind=finding scope=debug id=6114f2adcc31 created=2026-09-27T10:41:29 state=fixed -->
+### 6114f2adcc31 · finding [fixed] · Detached writer windowed to the first later exit=N it printed (N=0 only)
+
+telemetry.py: `_detaches` (a lone `&`, outside quotes/heredocs; not `&&`, `|&`, `&>`, `2>&1`), `_names` (any word of a command resolving to the log), `_seen_exit` (first later completed top-level bash part naming the log with an `exit=N` line in its output — first is final, N must be 0). The launch window is still recorded, so nothing narrows. Refusal message and the OpenCode rule (brief + phase-executor clause, mirrors synced) now say the exit= line must be printed. Pinned by tests/unit/test_run_tests_log_opencode.py (detached/unobserved/failed/subagent/other-log/no-exit-line/first-is-final/foreground/e2e accept+refuse/detach-syntax).
