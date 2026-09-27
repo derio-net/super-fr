@@ -24,3 +24,8 @@ Confirmed: _fork_point (rev-list --first-parent --ancestry-path --reverse tip..b
 ### 501487bd5d75 · ruled-out · Attempt 1 of #739: literal \x01 byte as the log --format marker
 
 Passing the marker as a raw \x01 byte in argv made _parse_log see no commits, so 12 isolation tests (every blob-fallback landing) went red. Not the hypothesis — the parser input: switched to git's documented %x01 escape and all 219 passed. Counted as one failed fix.
+
+<!-- fr:journal kind=finding scope=debug id=a75dfa546a81 created=2026-09-27T19:45:07+00:00 state=fixed -->
+### a75dfa546a81 · finding [fixed] · Revert detection: landing-merge fork point + inverse-patch rule
+
+packages/fr/src/fr/isolation/local.py: _fork_point (#741); _branch_blob_was_on_base reads -p -U0 in the same log call and un-lands on a non-deleting commit whose patch is the branch's inverted (_is_inverse_patch) (#739). Failing tests first: the two strict xfails un-xfailed in the red commit; guards added for no-ff+rewrite (stays landed), fast-forward/empty branch (stay present), failed rev-list (raises), three-way revert restoring a removed line (missing). Full suite 6675 passed; ruff + mypy clean.
