@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr isolation verify-merge, down and gc no longer read a failed `git diff` as \"all changes present\", and read changed paths with -z so non-ASCII or special filenames are compared correctly"
