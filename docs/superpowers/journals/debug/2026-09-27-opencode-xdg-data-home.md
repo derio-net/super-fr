@@ -14,3 +14,8 @@ One root, two faces. (1) telemetry.py OpenCodeReader.database knows only FR_OPEN
 ### f-xdg · finding [fixed] · Reader follows XDG_DATA_HOME; a db with no part since the unit opened is None
 
 telemetry.py: OpenCodeReader.database = FR_OPENCODE_DB > XDG_DATA_HOME/opencode/opencode.db (set, non-empty) > ~/.local/share. _opencode_wrote_since checks EXISTS(part.time_updated >= since) before reading windows; none -> None. Pinned first-failing by test_run_opencode_reader.py::test_the_database_path_follows_xdg_data_home_as_opencode_does, test_run_tests_log_opencode.py::test_a_database_that_saw_nothing_since_the_unit_opened_is_unobservable, ::test_on_opencode_the_suite_log_is_found_under_xdg_data_home, ::test_on_opencode_a_database_without_the_run_does_not_refuse_the_log. Full suite: 6694 passed. Not done here: naming the database in run_cmd.py's warnings (issue part 3) — the batch fenced run_cmd.py off.
+
+<!-- fr:journal kind=review scope=debug id=ddd5dd9dc9b2 created=2026-09-27T19:47:00+00:00 -->
+### ddd5dd9dc9b2 · review · Independent adversarial review: no findings above threshold
+
+Separate-context reviewer traced the #638 bypass question (the active gate counts any part, so an edit-tool-composed log still yields [] via the unchanged top-level bash filter), child-session activity, the #638 fixture correction (was passing by accident on a stale fixed stamp), and source_of. Two sub-threshold notes, both left as-is: (a) relative XDG_DATA_HOME is not rejected — deliberately, OpenCode's xdg-basedir does not reject it either, so matching it keeps fr on the db OpenCode writes; (b) the None gate assumes OpenCode persists an in-flight bash part — if not, the effect is the existing unobserved+warning fallback, never a silent accept.
