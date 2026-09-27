@@ -27,6 +27,14 @@ BASH = FIXTURES / "claude-code-bash.jsonl"
 redacted): line 0 a main-thread `assistant` record whose `Bash` tool_use runs
 a test suite into a log file (`.../c1.log`), line 1 its `tool_result`
 (`is_error: false`)."""
+BASH_BACKGROUND = FIXTURES / "claude-code-bash-background.jsonl"
+"""Captured 2026-09-26 from a live Claude Code 2.1.283 session (local paths and
+identity redacted): a `Bash` call run with `run_in_background` that writes a
+full-suite log. Line 0 the `assistant` tool_use, line 1 its `tool_result` — only
+the LAUNCH ack (`toolUseResult.backgroundTaskId` set), ~1 s after the call —
+line 2 the `queue-operation` enqueue of the completion, line 3 the `user`
+record carrying the `<task-notification>` (`<tool-use-id>`, `<status>`) ~32
+minutes later. The command's real end is line 3, not line 1."""
 """Captured 2026-09-21 from a live Claude Code 2.1.278 session (local paths
 redacted to `/home/user`): line 0 is the `assistant` record carrying an
 `AskUserQuestion` tool_use, line 1 the `user` record carrying its tool_result,
@@ -201,6 +209,40 @@ def ran_at(
         block = call["message"]["content"][0]
         block["input"]["command"] = block["input"]["command"].replace(CAPTURED_LOG, str(log))
     return write_session(root, session_id=session_id, rows=[*records(ORCHESTRATOR), call, result])
+
+
+BACKGROUND_TOOL_USE_ID = "toolu_01Mrd2hrH1LweXxwKyzPtWEs"
+BACKGROUND_LOG = (
+    "/private/tmp/claude-502/-home-user-repo/7c5ad7bb-e470-4cd0-b76d-c2448b14e467"
+    "/scratchpad/full-suite.log"
+)
+"""The log the captured background command writes."""
+
+
+def ran_in_background(
+    root: Path,
+    started: str,
+    acked: str,
+    *,
+    session_id: str,
+    finished: str | None = None,
+    status: str = "completed",
+) -> Path:
+    """A session whose captured background `Bash` command was issued at
+    `started`, acknowledged as launched at `acked`, and — unless `finished` is
+    None (still running) — reported done at `finished` with `status`. Only the
+    timestamps and the notification's `<status>` are varied."""
+    call, ack, enqueued, notice = copy_of(records(BASH_BACKGROUND))
+    call["timestamp"] = started
+    ack["timestamp"] = acked
+    enqueued["timestamp"] = finished or acked
+    notice["timestamp"] = finished or acked
+    for record, key in ((enqueued, "content"), (notice["message"], "content")):
+        record[key] = record[key].replace("<status>failed</status>", f"<status>{status}</status>")
+    rows = [*records(ORCHESTRATOR), call, ack]
+    if finished is not None:
+        rows += [enqueued, notice]
+    return write_session(root, session_id=session_id, rows=rows)
 
 
 TEXT_LINE = 6
