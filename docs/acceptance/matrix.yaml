@@ -4763,9 +4763,13 @@ rows:
       full commit SHA with a version comment fails CI
     origin:
     - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_actions_pinned.py
+    status: ci
+    notes: 'Tripwire test_tripwire_actions_pinned.py passes over the real repo''s workflows;
+      every remote uses: is SHA-pinned with a version comment (spec 2026-09-27-ci-hardening
+      §3.A/§3.C).'
   - id: ci-actions-dependabot-updates
     capability: CI
     acceptance: Dependabot proposes updates to the SHA-pinned actions weekly, as one
