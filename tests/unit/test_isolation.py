@@ -2436,6 +2436,52 @@ def test_branch_changes_present_multi_commit_rebase(tmp_path: Path) -> None:
     assert res.missing == []
 
 
+@pytest.mark.parametrize("failing_call", [1, 2])
+def test_branch_changes_present_failed_diff_raises(tmp_path: Path, failing_call: int) -> None:
+    # #705: a failed `git diff --name-only` has empty stdout, which read as
+    # "nothing changed" (1st call) or "nothing differs" (2nd) — i.e. ALL
+    # CHANGES PRESENT. It must raise, which every caller maps to not-verified.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    diff_calls = 0
+
+    def runner(argv: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        nonlocal diff_calls
+        if argv[:2] == ["git", "diff"]:
+            diff_calls += 1
+            if diff_calls == failing_call:
+                return subprocess.CompletedProcess(argv, 128, stdout="", stderr="fatal: boom\n")
+        return subprocess_runner(argv, **kw)
+
+    with pytest.raises(IsolationError, match="boom"):
+        branch_changes_present(runner, repo, "feature", "main")
+
+
+def test_branch_changes_present_non_ascii_path_unmerged_is_missing(tmp_path: Path) -> None:
+    # #717: without -z git C-quotes the name ("caf\303\251.py"); fed back as a
+    # pathspec it matched nothing, so an UNMERGED file read as present.
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "café.py", "one\n", "non-ascii")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changed == ["café.py"]
+    assert res.missing == ["café.py"]
+    assert not res.changes_present
+
+
+def test_branch_changes_present_non_ascii_path_squash(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "café.py", "one\n", "non-ascii")
+    _commit(repo, "tab\there.py", "two\n", "special")
+    _squash_merge(repo, "feature", "squash")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert sorted(res.changed) == ["café.py", "tab\there.py"]
+    assert res.missing == []
+    assert res.changes_present
+
+
 # ---------- concurrent same-file merge (#387) ----------
 # A branch's changes land, then a SECOND PR touches the SAME file (a different
 # section) right after. The branch's own added lines are all verbatim on main,
