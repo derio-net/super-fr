@@ -546,3 +546,29 @@ def test_repair_still_shortens_an_ambiguous_lifecycle_path(repo: Path) -> None:
     result = repair_repo(repo, write=True)
     assert meta.read_text() == "plan: 2026-09-01-a\nspec: x-design.md\n"
     assert any("ambiguous" in w for w in result.warnings)
+
+
+def test_repair_does_not_warn_ambiguous_about_a_ref_it_keeps_verbatim(repo: Path) -> None:
+    """#749: the verbatim-vs-rewrite decision comes first. A repo-escaping ref
+    whose slug happens to match specs in two lifecycle roots is kept verbatim,
+    so an "ambiguous — resolved to the active one" warning describes a
+    resolution that never happens."""
+    _bare_spec(repo)
+    (repo / "docs/superpowers/implemented/specs/x-design.md").write_text("# X old\n")
+    escaping = "../sibling/docs/superpowers/specs/x-design.md"
+    meta = _plan_with_spec(repo, "2026-09-01-a", escaping)
+    before = meta.read_bytes()
+    result = repair_repo(repo, write=True)
+    assert meta.read_bytes() == before
+    assert not any("ambiguous" in w for w in result.warnings), result.warnings
+
+
+def test_canonical_spec_ref_escape_test_reads_the_path_token(repo: Path) -> None:
+    """#750: a backtick-annotated escaping ref is judged on its path token, not
+    the decorated value — the leading backtick must not turn `../` into an
+    in-repo directory name and let the ref fall through to a same-slug spec."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    decorated = "`../sibling/docs/superpowers/specs/x-design.md` (sibling's copy)"
+    assert canonical_spec_ref(decorated, repo) == decorated
