@@ -39,3 +39,28 @@ render_brief's debug branch is three local substitutions inline with the existin
 ### p2-no-refactor-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 mixed_themes and --skill each do one thing already; the shared warning print is its own helper, which is the refactor this task would otherwise ask for.
+
+<!-- fr:journal kind=finding scope=plan id=r2-1 created=2026-09-27T09:49:16 phase=2 state=open review_scope=in -->
+### r2-1 · finding [open] (reviewer: in scope) · work_item.py run-unit docstring still says branch is always feat/batch-<id> (phase 2)
+
+packages/fr-dispatch/src/fr_dispatch/work_item.py:55 — this phase made fix/batch-<id> a possible branch and updated the adjacent `workflow` bullet, but left `branch` stating the goal-only shape.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2 created=2026-09-27T09:49:16 phase=2 state=open review_scope=out -->
+### r2-2 · finding [open] (reviewer: out of scope) · mixed_themes compares themes without case/whitespace normalisation (phase 2)
+
+packages/fr/src/fr/triage/batch.py mixed_themes uses raw set equality on Judgement.theme, so "Docs" and "docs" count as two themes. Themes are unnormalised free text everywhere; the pre-existing suggest() (unchanged here) compares them the same way.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-09-27T09:49:16 phase=2 -->
+### review-phase-2 · review · phase 2 code review (#687): 2 low findings (1 in scope, fixed; 1 out of scope) (phase 2)
+
+Independent reviewer (standard tier, claude-sonnet-5) read `git show` of 25ad08cf and 54e544ca against spec §B/§C/§D and 02.yaml, ran the targeted tests, mirror tripwires, neutrality scan, ruff and mypy (all green). Verified: every batch_branch/batch_workflow call site takes the Batch; no feat/batch- or fr-goal hardcode reachable for a debug batch; --skill edit gated past proposed; the warning fires only after a successful write; goal batches stay byte-identical; the debug brief matches fr-debugging §2. Raised r2-1 (in, verified against the file and fixed) and r2-2 (out, verified: suggest() uses the same raw comparison, so this change did not introduce it).
+
+<!-- fr:journal kind=finding scope=plan id=r2-1-resolved created=2026-09-27T09:49:16 phase=2 state=fixed resolves=r2-1 -->
+### r2-1-resolved · finding [fixed] · resolves r2-1: work_item.py run-unit docstring still says branch is always feat/batch-<id> (phase 2)
+
+work_item.py `branch` bullet now names fix/batch-<id> for a debug batch.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2-resolved created=2026-09-27T09:49:16 phase=2 state=open resolves=r2-2 out_of_scope=true -->
+### r2-2-resolved · finding [out-of-scope] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation (phase 2)
+
+Theme normalisation is absent codebase-wide (suggest() compares raw strings too); mixed_themes follows that convention. A normalisation change belongs to both, in its own change.
