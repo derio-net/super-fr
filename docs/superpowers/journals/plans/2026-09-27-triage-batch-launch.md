@@ -24,3 +24,18 @@ the checkout-before-resolve reorder and the new _orchestrator helper are the sma
 ### review-phase-1 · review · phase 1 code review (#704): no findings (phase 1)
 
 Independent reviewer (standard tier, claude-sonnet-5) read every file in phase 1's files list against spec §A/§D and 01.yaml. Verified: resolve_launch precedence and model_source agree in every combination incl. empty-string model; orchestrator never consulted without a harness; refusal hint only when model alone is missing; _orchestrator builds over fr.models.resolved_config with no second precedence; REPO_MODELS_REL has one home; tests are behavioural and config-isolated (HOME/XDG_CONFIG_HOME sandboxed); no missed callers. No findings raised, so receiving-code-review had nothing to verify or refute.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-no-refactor-t1 created=2026-09-27T09:44:56 phase=2 -->
+### p2-no-refactor-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+batch_branch and batch_workflow are one-line lookups keyed by batch.skill; the call-site updates are already the smallest form.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-no-refactor-t2 created=2026-09-27T09:44:56 phase=2 -->
+### p2-no-refactor-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+render_brief's debug branch is three local substitutions inline with the existing structure; nothing to extract for a block used once.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-no-refactor-t3 created=2026-09-27T09:44:56 phase=2 -->
+### p2-no-refactor-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+mixed_themes and --skill each do one thing already; the shared warning print is its own helper, which is the refactor this task would otherwise ask for.
