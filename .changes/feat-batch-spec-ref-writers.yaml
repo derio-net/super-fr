@@ -1,0 +1,2 @@
+bump: patch
+summary: canonical_spec_ref now leaves a repo-escaping spec ref verbatim, fr archive repairs refs once per invocation, and the v1-to-v2 migration writes the canonical spec form

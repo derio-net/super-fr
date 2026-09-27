@@ -1,0 +1,43 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-spec-ref-writers
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T1.S2
+  - P1.T1.S3
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T2.S3
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T3.S3
+  - P1.T4.S1
+  - P1.T4.S2
+refactor:
+  P1.T1: >-
+    The escape check is a 3-line os.path.normpath/commonpath guard placed
+    inline in canonical_spec_ref, right beside the existing cross-repo-notation
+    check it mirrors in shape and size — extracting it into a private helper
+    would add a name and a call site without making either branch clearer.
+  P1.T3: >-
+    The fix is the one-line change the spec itself calls for (store
+    refs.canonical_spec_ref(v1plan.spec, repo_root) instead of the verbatim
+    v1 value); refs is already imported and repo_root already in scope, so
+    there was nothing else nearby to clean up.
+  P1.T4: >-
+    Task 4 has no code steps of its own — it is the change fragment,
+    acceptance-row moves, and quality gates (ruff/mypy/pytest/fr validate
+    artifacts) that close out the phase, all of which ran clean the first
+    time. Nothing to refactor.
+journal: []
+resolves: []
+evidence:
+  test_command: uv run pytest -q --no-cov -n auto
+  test_result: "6556 passed, 97 skipped in 358.21s"
+  ruff_format: "550 files left unchanged"
+  ruff_check: "All checks passed!"
+  mypy: "Success: no issues found in 196 source files"
+  fr_validate_artifacts: "41 artifact(s) checked — all structurally valid."
+  fr_acceptance_check: "acceptance matrix check: 274 rows OK ({'ci': 239, 'skipped': 25, 'not-implemented': 9, 'scheduled': 1})"
