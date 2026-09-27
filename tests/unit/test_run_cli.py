@@ -199,6 +199,17 @@ A `unit: spec` shape is seeded with `spec`, so the SAME step graph — the one
 every assertion below is about — is valid. `unit` is not read by `fr run`
 at all; it only decides dispatch granularity."""
 
+
+def _resolve_plan_done(repo: Path, shipped: Path, *extra: str):
+    """Resolve `_AGENT_SHAPE`'s `plan` step `done`, naming the plan it declares
+    it emits — gh#587 refuses a `done` that names none."""
+    (repo / "docs" / "superpowers" / "plans" / "p").mkdir(parents=True, exist_ok=True)
+    argv = [*_PLAN_DONE, "--emitted", "plan=docs/superpowers/plans/p", *extra]
+    return _invoke(repo, shipped, argv)
+
+
+_PLAN_DONE = ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
+
 _AGENT_TWO_STEP_SHAPE = """
 workflow: agentic-two-step
 schema: 1
@@ -622,8 +633,9 @@ def test_resolve_never_invokes_a_model_either(tmp_path: Path, monkeypatch) -> No
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
+    (repo / "docs" / "superpowers" / "plans" / "p").mkdir(parents=True)
     monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the advance tests
-    result = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "plan", "--state", "done"])
+    result = _invoke(repo, shipped, [*_PLAN_DONE, "--emitted", "plan=docs/superpowers/plans/p"])
     assert result.exit_code == 0, result.output
 
 
@@ -1210,12 +1222,14 @@ def test_an_absolute_emitted_plan_path_is_stored_repo_relative(tmp_path: Path) -
             "done",
             "--emitted",
             f"plan={plan_dir}",
+            "--emitted",
+            "pr=https://github.com/acme/demo/pull/7",
         ],
     )
 
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
-    assert state.steps["plan"].emitted == {"plan": "docs/superpowers/plans/2026-08-31-demo"}
+    assert (state.steps["plan"].emitted or {})["plan"] == "docs/superpowers/plans/2026-08-31-demo"
     assert find_run_for_plan(repo, Path("docs/superpowers/plans/2026-08-31-demo")) == "r1"
 
 
@@ -1248,6 +1262,7 @@ def test_a_non_repo_tracked_artifact_is_stored_verbatim(tmp_path: Path) -> None:
     """`pr` is a URL and `report`/`journal:*` have no repo path — rewriting
     them as repo-relative would be nonsense."""
     repo, shipped = _started_emitter(tmp_path)
+    (repo / "docs" / "superpowers" / "plans" / "p").mkdir(parents=True)
 
     result = _invoke(
         repo,
@@ -1262,13 +1277,15 @@ def test_a_non_repo_tracked_artifact_is_stored_verbatim(tmp_path: Path) -> None:
             "done",
             "--emitted",
             "pr=https://github.com/acme/demo/pull/7",
+            "--emitted",
+            "plan=docs/superpowers/plans/p",
         ],
     )
 
     assert result.exit_code == 0, result.output
-    assert load_run_state(repo, "r1").steps["plan"].emitted == {
-        "pr": "https://github.com/acme/demo/pull/7"
-    }
+    assert (load_run_state(repo, "r1").steps["plan"].emitted or {})[
+        "pr"
+    ] == "https://github.com/acme/demo/pull/7"
 
 
 # ── review r5-b3: `advance` must not re-open a finished run ────────────
@@ -1312,12 +1329,7 @@ def test_a_finished_agent_run_is_not_re_dispatched(tmp_path: Path) -> None:
         == 0
     )
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
-    assert (
-        _invoke(
-            repo, shipped, ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
-        ).exit_code
-        == 0
-    )
+    assert _resolve_plan_done(repo, shipped).exit_code == 0
 
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -1559,6 +1571,10 @@ def _emitting_repo(tmp_path: Path):
     return repo, shipped
 
 
+_PR = "pr=https://github.com/acme/demo/pull/7"
+"""`_EMIT_SHAPE` declares `pr` too, and gh#587 refuses a `done` that omits it."""
+
+
 def _resolve(repo: Path, shipped: Path, *emitted: str):
     argv = ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
     for pair in emitted:
@@ -1573,12 +1589,11 @@ def test_an_emitted_path_containing_an_equals_sign_is_not_truncated(tmp_path: Pa
     odd = repo / "docs" / "superpowers" / "plans" / "a=b"
     odd.mkdir(parents=True)
 
-    result = _resolve(repo, shipped, "plan=docs/superpowers/plans/a=b")
+    result = _resolve(repo, shipped, "plan=docs/superpowers/plans/a=b", _PR)
 
     assert result.exit_code == 0, result.output
-    assert load_run_state(repo, "r1").steps["plan"].emitted == {
-        "plan": "docs/superpowers/plans/a=b"
-    }
+    emitted = load_run_state(repo, "r1").steps["plan"].emitted or {}
+    assert emitted["plan"] == "docs/superpowers/plans/a=b"
 
 
 @pytest.mark.parametrize("pair", ["plan=", "=x", "   =x", "plan=   "])
@@ -1651,10 +1666,11 @@ def test_symlinked_roots_on_both_sides_still_resolve_relative(tmp_path: Path) ->
     through_real = repo.resolve() / "docs" / "superpowers" / "plans" / "p"
     assert str(through_real).startswith(str(real))
 
-    result = _resolve(repo, shipped, f"plan={through_real}")
+    result = _resolve(repo, shipped, f"plan={through_real}", _PR)
 
     assert result.exit_code == 0, result.output
-    assert load_run_state(repo, "r1").steps["plan"].emitted == {"plan": "docs/superpowers/plans/p"}
+    emitted = load_run_state(repo, "r1").steps["plan"].emitted or {}
+    assert emitted["plan"] == "docs/superpowers/plans/p"
 
 
 # =========================================================================
@@ -1673,12 +1689,7 @@ def test_resolve_on_a_completed_run_is_refused_like_advance(tmp_path: Path) -> N
         == 0
     )
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
-    assert (
-        _invoke(
-            repo, shipped, ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
-        ).exit_code
-        == 0
-    )
+    assert _resolve_plan_done(repo, shipped).exit_code == 0
 
     result = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "plan", "--state", "done"])
 
@@ -1693,6 +1704,7 @@ def test_amending_emitted_on_a_completed_run_is_still_allowed(tmp_path: Path) ->
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     (repo / "docs" / "superpowers" / "plans" / "right").mkdir(parents=True)
+    # `_resolve_plan_done` records `plans/p` — the wrong one this amends.
     assert (
         _invoke(
             repo, shipped, ["run", "start", "agentic", "--branch", "feat/x", "--run-id", "r1"]
@@ -1700,12 +1712,7 @@ def test_amending_emitted_on_a_completed_run_is_still_allowed(tmp_path: Path) ->
         == 0
     )
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
-    assert (
-        _invoke(
-            repo, shipped, ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
-        ).exit_code
-        == 0
-    )
+    assert _resolve_plan_done(repo, shipped).exit_code == 0
     before_cursor = load_run_state(repo, "r1").cursor
 
     result = _invoke(
@@ -3111,11 +3118,7 @@ def test_a_resolve_that_clears_no_gate_records_no_provenance(tmp_path: Path) -> 
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
-    result = _invoke(
-        repo,
-        shipped,
-        ["run", "resolve", "r1", "--step", "plan", "--state", "done", "--answered-by", "operator"],
-    )
+    result = _resolve_plan_done(repo, shipped, "--answered-by", "operator")
 
     assert result.exit_code == 0, result.output
     assert load_run_state(repo, "r1").steps["plan"].answered_by is None
@@ -6065,7 +6068,9 @@ def test_start_advance_and_resolve_each_commit_the_cursor(tmp_path: Path) -> Non
     _assert_fr_commit(repo, "r1", "advance")
 
     step = load_run_state(repo, "r1").cursor
-    res = _invoke(repo, shipped, ["run", "resolve", "r1", "--step", step, "--state", "done"])
+    (repo / "s.md").write_text("# spec\n")
+    resolve = ["run", "resolve", "r1", "--step", step, "--state", "done", "--emitted", "spec=s.md"]
+    res = _invoke(repo, shipped, resolve)
     assert res.exit_code == 0, res.output
     _assert_fr_commit(repo, "r1", "resolve")
     subject = _subject(repo)

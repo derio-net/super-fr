@@ -27,6 +27,7 @@ __all__ = [
     "IMPLIED_INPUTS_BY_UNIT",
     "RECORD_EMIT_TOKENS",
     "REPO_TRACKED_ARTIFACTS",
+    "emitted_artifacts",
     "journal_scope",
     "record_sections",
     "required_inputs",
@@ -108,6 +109,18 @@ def record_sections(emits: tuple[str, ...] | list[str]) -> frozenset[str]:
         elif token == "acceptance":
             out.add("acceptance")
     return frozenset(out)
+
+
+def emitted_artifacts(emits: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """The emits a `done` step must NAME — `--emitted <name>=<value>`, or
+    `emitted:` in its record — in declared order (gh#587).
+
+    Everything but the tokens fr can see for itself: a `journal:<scope>` is
+    derived from the journal, and `RECORD_EMIT_TOKENS` are record sections,
+    not artifacts."""
+    return tuple(
+        t for t in emits if not t.startswith(_JOURNAL_PREFIX) and t not in RECORD_EMIT_TOKENS
+    )
 
 
 def journal_scope(emits: tuple[str, ...] | list[str]) -> str | None:
