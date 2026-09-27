@@ -1,2 +1,0 @@
-bump: patch
-summary: journal entries are stamped in UTC with an explicit offset, so a review written in a UTC container is no longer read hours early (or a stale one accepted) by `fr run resolve` on a host in another zone
