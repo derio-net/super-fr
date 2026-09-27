@@ -328,6 +328,20 @@ dispatch is still refused; but while the phase is running the honest answer to
 only arrives afterwards. The tool now says which harness is which, rather than
 describing the better case as if it were the only one.
 
+On OpenCode, one party does know the name while the phase is running: the
+agent doing the work. Its session has an identifier from the start, and so
+does the agent it runs as, which is where the tier lives
+(`fr-phase-executor-mechanical`). So the super-fr plugin, on that session's
+first tool call, runs `fr run claim --open-unit` with both. It names no step,
+because the child does not know one. `fr` claims the single open, unclaimed
+unit that was dispatched to that agent, and refuses when none fits or more
+than one does. That refusal is what stops an unrelated helper agent from
+claiming a phase it never held. The same run also stopped trusting inherited
+environment variables. An OpenCode started from a Claude Code shell carries
+Claude Code's markers, and `fr` used to believe them. It now names the
+harness nearest to it in its own process tree, and records a session only
+when that harness owns the session variable it read.
+
 One more limit on what the record may say: a model is written down only when
 the tool has *seen* it. A tier binding says which model a dispatched phase
 *should* get, and that is a promise, not an observation. For a while the tool

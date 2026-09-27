@@ -3505,6 +3505,28 @@ rows:
       from the rule text itself, so a rewording the gate cannot window turns it red.
       Not yet live-verified on OpenCode (the output-carrying part shape was read from
       a live opencode.db, keys only).
+  - id: opencode-child-claims-open-unit
+    capability: Run cursor
+    acceptance: 'A dispatched OpenCode child names itself as the holder of its unit
+      while it holds it: fr-opencode-plugin runs fr run claim --open-unit on the child''s
+      first tool call, which claims the one open unclaimed unit dispatched to that agent
+      (recording the tier agent that ran) and refuses zero or several'
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-holder-identity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_holder_identity.py
+      - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    status: ci
+    notes: 'gh#530. CLI half unit-pinned (claims, idempotent, refuses unrelated agents,
+      orchestrator-run work, a unit another child holds, and a non-matching --agent-type);
+      plugin half bun-tested (opencode-plugin-test job). Observed live 2026-09-27 on
+      OpenCode 1.18.32 (int ref): the child''s claim landed 3-6 s after dispatch and
+      its own first fr run status read HELD BY agent ses_... with the tier agent recorded,
+      matching opencode.db. The live run is evidence, not CI; the claim is fail-open,
+      so parity dispatch-holder-identity stays partial.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
@@ -4946,3 +4968,25 @@ rows:
     status: ci
     notes: 'Unit tests cover all four spec: writers agreeing on canonical_spec_ref,
       incl. the repo-escape guard (#709) and the v1->v2 migration writer (#711).'
+  - id: harness-detect-nearest-in-mixed-env
+    capability: Harness detection
+    acceptance: An fr process whose environment carries more than one harness's markers
+      (an OpenCode started from a Claude Code shell) names the harness nearest it in
+      its process ancestry, and records a session only when that harness owns the session
+      key
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-opencode-holder-identity.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_harness_detect.py
+      - super-fr:tests/unit/test_run_holder_identity.py
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
+    status: ci
+    notes: 'gh#537. Unit-pinned: mixed env resolved by CLAUDE_PID/OPENCODE_PID nearness,
+      inconclusive when neither is an ancestor, single-harness env never reads the process
+      tree; advance under OpenCode-inside-Claude records harness opencode and no session.
+      Observed live 2026-09-27 inside a real OpenCode 1.18.32 shell with Claude Code
+      markers exported (int ref): the old fr recorded claude-code plus a borrowed session
+      (the defect), the branch fr detected opencode and advance recorded harness opencode,
+      session None and the OpenCode tier model.'
