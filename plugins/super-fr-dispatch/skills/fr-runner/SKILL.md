@@ -24,7 +24,11 @@ library on its pod.
    (`willikins_heartbeat_last_success_timestamp`) must be recent.
    Sync/failure counters: `willikins_vk_bridge_sync_total`,
    `willikins_vk_bridge_failure_total{reason=…}` — reasons:
-   `project_id_missing`, `unknown_repo`, `mcp_error`, `gh_error`.
+   `project_id_missing`, `unknown_repo`, `unit_mismatch`, `mcp_error`,
+   `gh_error`. `unit_mismatch` means the Issue is labelled for a runner that
+   never takes that unit (e.g. phases labelled `runner:herdr`); `fr apply
+   --to` now refuses that up front, so it points at labels set by hand or
+   by an older `fr`.
 2. **Is a phase eligible?** `fr status <plan-dir>` on the plan: a phase
    dispatches only when its RENDERED labels say ready-but-not-synced,
    it has a `tracking_issue`, and the plan + spec are on origin/HEAD

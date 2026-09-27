@@ -488,12 +488,29 @@ def tick(
             try:
                 routable = runner.can_dispatch(item)
             except Exception as e:  # noqa: BLE001
-                failures.append(f"{item.id}: repo gate failed: {e}")
+                failures.append(f"{item.id}: routing gate (can_dispatch) failed: {e}")
                 m.push_failure_total(reason="repo_gate")
                 continue
             if not routable:
-                failures.append(f"{item.id}: unknown repo {item.repo!r}")
-                m.push_failure_total(reason="unknown_repo")
+                # Name the reason tick can KNOW (super-fr#644): a unit the
+                # runner never declared is a unit mismatch, not a repo problem.
+                # Any other refusal is the runner's own judgement — the repo is
+                # the usual cause, a payload the runner can't serve another —
+                # so it is reported as a refusal, not as a verdict on the repo.
+                # The `unknown_repo` metric reason is kept for dashboards.
+                units = getattr(runner, "units", None)
+                if units is not None and item.unit not in units:
+                    failures.append(
+                        f"{item.id}: runner {runner.name!r} does not take {item.unit!r} "
+                        f"items (it takes: {', '.join(sorted(units))})"
+                    )
+                    m.push_failure_total(reason="unit_mismatch")
+                else:
+                    failures.append(
+                        f"{item.id}: runner {runner.name!r} refused the item "
+                        f"(unit {item.unit!r}, repo {item.repo!r})"
+                    )
+                    m.push_failure_total(reason="unknown_repo")
                 continue
 
             already_dispatched = item.id in existing

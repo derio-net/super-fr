@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr apply --to <runner>` refuses a runner that takes no phase work (e.g. herdr) before touching the forge, and the bridge tick names a unit mismatch instead of blaming the repo."

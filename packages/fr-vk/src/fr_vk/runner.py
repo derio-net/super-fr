@@ -77,6 +77,8 @@ class VkRunner:
 
     capabilities = frozenset({"git", "tests", "scm"})
 
+    units = frozenset({"phase"})
+
     def __init__(self, mcp: MCPDispatch, *, project_id: str | None = None) -> None:
         self.mcp = mcp
         self.project_id = project_id if project_id is not None else _env_project_id()
@@ -111,7 +113,7 @@ class VkRunner:
         `"<id>: 'plan'"` under `reason=backend_error`: a KeyError repr
         standing in for "this backend does not do run-unit work".
         """
-        return item.unit == "phase" and _config.is_known_repo(item.repo, self.mcp)
+        return item.unit in self.units and _config.is_known_repo(item.repo, self.mcp)
 
     def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees project_id is set before tick dispatches.

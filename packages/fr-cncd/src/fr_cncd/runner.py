@@ -107,6 +107,8 @@ class CncdRunner:
 
     capabilities = frozenset({"git", "tests", "scm"})
 
+    units = frozenset({"phase"})
+
     def __init__(
         self, base_url: str | None = None, *, timeout: float = DEFAULT_TIMEOUT_SECONDS
     ) -> None:
@@ -148,7 +150,7 @@ class CncdRunner:
         `item.payload["plan"]` and failed as `"<id>: 'plan'"` under
         `reason=backend_error`.
         """
-        return item.unit == "phase"
+        return item.unit in self.units
 
     def dispatch(self, item: WorkItem) -> None:
         # preflight() guarantees base_url is set before tick dispatches.

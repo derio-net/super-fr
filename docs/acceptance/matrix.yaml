@@ -1295,6 +1295,26 @@ rows:
       transitions" half is unimplemented -- fr.tracker.model.check_tracker_mapping_shape
       validates config SHAPE only (an unresolvable instance, an unknown state key) and
       its own docstring says so.
+  - id: runner-unit-refusal
+    capability: Runner and tracker negotiation
+    acceptance: fr apply --to <runner> refuses, before any forge call, a runner that
+      takes no phase work; and a tick that refuses an item for its unit says so instead
+      of blaming the repo.
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-27-apply-runner-units.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_apply_runner_units.py
+    status: ci
+    notes: 'super-fr#644. Runner.units is a class attribute read off the registered
+      entry point (fr_dispatch.registry.runner_units) without building the runner, since
+      vk and cncd have no from_env. apply refuses a runner whose units lack phase (herdr:
+      run only) or that declares none, with exit 2 and _make_gh_client never called.
+      vk, cncd and herdr each gate can_dispatch on their own units, so the declaration
+      and the per-item gate cannot drift. tick reports a unit refusal as unit_mismatch
+      naming the units the runner does take; any other can_dispatch refusal is reported
+      as a refusal naming the runner, unit and repo, with the historical unknown_repo
+      metric reason kept.'
   - id: vk-dispatch-unchanged-after-cutover
     capability: Dispatch granularity
     acceptance: 'After the WorkItem cutover the live VK bridge dispatches an unchanged
