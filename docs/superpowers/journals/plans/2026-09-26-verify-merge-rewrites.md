@@ -219,3 +219,8 @@ Operator decision at closeout: the hardening shipped in f02dcc37 (-c log.follow=
 ### r5-resolved-3 · finding [fixed] · resolves r5: One rev-parse per commit touching the path
 
 Operator confirmed at closeout: fixed by 8540388a (opus-c1; test_branch_blob_was_on_base_cost_is_constant_per_commit_count). No issue filed.
+
+<!-- fr:journal kind=finding scope=plan id=opus-f6-user-log-config-resolved-4 created=2026-09-27T07:52:03 state=fixed resolves=opus-f6-user-log-config answered_by=operator -->
+### opus-f6-user-log-config-resolved-4 · finding [fixed] · resolves opus-f6-user-log-config: user git config (log.follow, color.ui) can change git log output
+
+Operator confirmed at closeout: hardening shipped in f02dcc37 (-c log.follow=false, --no-color). No issue filed.
