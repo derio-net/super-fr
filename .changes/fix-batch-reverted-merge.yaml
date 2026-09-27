@@ -1,2 +1,0 @@
-bump: patch
-summary: "verify-merge, down and gc no longer treat a merge that was later reverted as landed, so a reverted branch's workspace is not reaped as merged"
