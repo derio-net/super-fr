@@ -197,3 +197,9 @@ Unit (CI):
 
 No live verification is owed beyond CI: herdr's contract (`payload.model`,
 `payload.brief`) is unchanged, and it is pinned by `fr_dispatch.testing`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-27-triage-batch-launch | `derio-net/super-fr` | `2026-09-27-triage-batch-launch` | — |

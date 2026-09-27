@@ -1,0 +1,152 @@
+schema_version: 2
+phase:
+  number: 1
+  title: '#704 — session model from the orchestrator binding; the brief stops pinning
+    subagent models'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-batch-session-model
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/models.py
+  - packages/fr/src/fr/commands/models_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/work_item.py
+  - tests/unit/test_triage_batch_dispatch.py
+  - tests/unit/test_triage_batch_verbs.py
+  - .changes/feat-batch-batch-launch.yaml
+  - docs/acceptance/*
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: RED — resolve_launch precedence, provenance, harness alias, refusal
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_verbs.py (beside the existing resolve_launch
+      test near :488) add: (a) batch model wins over defaults and orchestrator,
+      model_source == "batch"; (b) defaults.launch.model wins over orchestrator,
+      model_source == "defaults.launch"; (c) neither set -> the orchestrator callable is
+      asked with the FR harness id (batch harness "claude" -> callable receives
+      "claude-code"), its answer is the model, model_source == "orchestrator binding";
+      (d) all unset (callable returns None, or no callable) -> TriageError whose message
+      contains "fr models set --harness claude-code --tier orchestrator --model";
+      (e) harness unset -> the callable is never called and the existing missing-field
+      refusal still names --harness; (f) fr_harness("claude") == "claude-code",
+      fr_harness("opencode") == "opencode". Keep the existing 2-positional-arg test
+      passing unchanged. Run `uv run pytest tests/unit/test_triage_batch_verbs.py -q
+      --no-cov`: the new tests fail.
+- number: 2
+  title: GREEN — ResolvedLaunch, fr_harness, orchestrator rung
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/batch.py add `HARNESS_ALIASES = {"claude":
+      "claude-code"}` and `fr_harness(name) -> str`; a frozen dataclass `ResolvedLaunch`
+      (`launch: Launch`, `model_source: Literal["batch", "defaults.launch",
+      "orchestrator binding"]`). `resolve_launch(batch, config, *, orchestrator:
+      Callable[[str], str | None] | None = None) -> ResolvedLaunch`: model rungs batch ->
+      defaults -> orchestrator(fr_harness(harness)), the last only when harness is known;
+      refusal unchanged for runner/harness, and when the model alone is missing with a
+      known harness append "or bind one: fr models set --harness <fr-harness> --tier
+      orchestrator --model <model>". Existing callers read `.launch`. Tests green.
+- number: 3
+  title: RED/GREEN — the brief no longer pins subagent models
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: update the golden-brief test in tests/unit/test_triage_batch_dispatch.py
+      (~:333) so the expected text has NO "Use `…` for every subagent and every model
+      tier." line, and assert no brief contains "every subagent" or the model id. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/batch_dispatch.py delete that line and the
+      `model` parameter of render_brief; update its caller in
+      packages/fr/src/fr/commands/triage_batch_cmd.py. Tests green.
+- number: 4
+  title: RED/GREEN — dispatch resolves the orchestrator from the target checkout
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_dispatch.py, with the checkout faked as the
+      existing tests do and HOME/XDG_CONFIG_HOME pointed at tmp_path: (a) no model on the
+      batch or defaults, a user models.yaml binding claude-code/orchestrator -> the dry
+      run prints "model: <that> (orchestrator binding)" and the work item payload model
+      is it; (b) the checkout's docs/superpowers/models.yaml binding a different
+      orchestrator overrides the user one; (c) nothing bound anywhere -> exit 2 naming
+      the `fr models set` line. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: move REPO_MODELS_REL to packages/fr/src/fr/models.py (import it from there
+      in commands/models_cmd.py and commands/run_cmd.py). In triage_batch_cmd.py add
+      `_orchestrator(repo_root: Path | None) -> Callable[[str], str | None]` over
+      fr.models.resolved_config(repo_cfg=load_models(repo_root / REPO_MODELS_REL) if
+      repo_root else {}, user_cfg=load_models(default_models_path())), looking up tier
+      "orchestrator". In batch_dispatch_command open the checkout BEFORE resolve_launch
+      and pass orchestrator=_orchestrator(checkout.path); print `model: <m>
+      (<model_source>)`. In _record_missing pass _orchestrator(checkout_path) (None
+      unless --checkout was given). Change --model's help to "Session model (the run's
+      orchestrator); subagents use their `fr models` tiers." Tests green.
+- number: 5
+  title: Docs, fragment, matrix, gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      In packages/fr-dispatch/src/fr_dispatch/work_item.py's run-unit payload docstring,
+      change the `model` bullet: it is the SESSION model (the run's orchestrator);
+      subagents resolve their own tiers through `fr models`. Add
+      .changes/feat-batch-batch-launch.yaml with `bump: minor` and a summary covering
+      both issues ("triage batches: the session starts on the orchestrator binding and
+      subagents keep their fr models tiers; a batch declares skill goal|debug, and a
+      debug batch dispatches /fr-debugging"). Move triage-batch-session-model to `ci`
+      with tests/unit/test_triage_batch_verbs.py and test_triage_batch_dispatch.py as
+      unit levels, through the phase's step record `acceptance`.
+  - id: P1.T5.S2
+    text: |-
+      REFACTOR + gate: `uv run ruff format packages/ tests/`, `uv run ruff check
+      packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src`, and the
+      two triage batch test files green. Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
