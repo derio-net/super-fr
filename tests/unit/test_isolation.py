@@ -2310,7 +2310,7 @@ def _commit(repo: Path, path: str, content: str, msg: str) -> None:
 
 def _squash_merge(repo: Path, branch: str, msg: str) -> None:
     _git(repo, "checkout", "-q", "main")
-    _git(repo, "merge", "--squash", branch)
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "merge", "--squash", branch)
     _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", msg)
 
 
@@ -3583,6 +3583,127 @@ def test_branch_changes_present_orphan_code_file_still_missing_after_fragment_co
     res = branch_changes_present(subprocess_runner, repo, "feature", "main")
     assert not res.changes_present
     assert res.missing == ["orphan.py"]
+
+
+# ---------- a merge that was later REVERTED no longer reads as landed (#716) ----------
+# The blob fallback is positive evidence from base history: the branch's blob was
+# written to the base at some commit. A revert leaves that commit in history, so
+# the fallback must also ask whether the path was later put back to a state it
+# held before the branch landed.
+
+
+def _revert_head(repo: Path) -> None:
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "revert", "--no-edit", "HEAD")
+
+
+def _squash_report_feature(repo: Path) -> None:
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+    _squash_merge(repo, "feature", "squash feature")
+
+
+def test_branch_changes_present_reverted_squash_is_missing(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _squash_report_feature(repo)
+    _revert_head(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_reverted_then_edited_is_missing(tmp_path: Path) -> None:
+    """A hot file (a generated report) is edited again after the revert: the
+    base's CURRENT blob is new content, but the revert still happened."""
+    repo = make_repo(tmp_path)
+    _squash_report_feature(repo)
+    _revert_head(repo)
+    _commit(repo, "report.md", "head\nunrelated\n", "a later PR edits the report")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_revert_after_other_prs_touched_the_file_is_missing(
+    tmp_path: Path,
+) -> None:
+    """Another PR changed the file after the fork and the branch synced with
+    main before landing, so the revert restores THAT state, not the
+    merge-base's."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "a\nb\nc\nd\ne\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "a\nfoo\nb\nc\nd\ne\n", "feature adds a line")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "report.md", "a\nb\nc\nd\nE\n", "another PR lands first")
+    _git(repo, "checkout", "-q", "feature")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "merge", "-q", "--no-edit", "main")
+    _squash_merge(repo, "feature", "squash feature")
+    _revert_head(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_revert_of_the_revert_counts_as_landed(tmp_path: Path) -> None:
+    """Re-landed (the revert reverted), then its lines rewritten: landed again."""
+    repo = make_repo(tmp_path)
+    _squash_report_feature(repo)
+    _revert_head(repo)
+    _revert_head(repo)
+    _commit(repo, "report.md", "head\nFOO2\nBAR2\n", "later merge rewrites the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_reverted_rebase_merge_is_missing(tmp_path: Path) -> None:
+    """A rebase merge lands the branch as several commits; the revert restores
+    the state before the FIRST of them, not before the one that wrote the blob."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\n", "feature step 1")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature step 2")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "main moved on, so the rebase rewrites the commits")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "cherry-pick", "main..feature")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "revert", "--no-edit", "HEAD~2..HEAD")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_reverted_after_fragment_consumed_is_missing(
+    tmp_path: Path,
+) -> None:
+    """The release bot consumed the fragment, then the code change was reverted:
+    the consumed fragment still reads as landed, the reverted file does not."""
+    repo = make_repo(tmp_path)
+    _commit(repo, "fix.py", "broken\n", "base")
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "revert", "--no-edit", "HEAD~1")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["fix.py"]
+
+
+def test_verify_merge_reverted_merge_is_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _squash_report_feature(repo)
+    _revert_head(repo)
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert res["missing"] == ["report.md"]
 
 
 # ---------- `fr archive` moves the branch's fr artifacts after merge (#598 / #665) ----------
