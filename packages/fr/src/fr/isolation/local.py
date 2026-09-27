@@ -408,6 +408,23 @@ def _branch_change_present_in_file(
     )
 
 
+def _diff_names(run: Runner, repo_root: Path, args: list[str]) -> list[str]:
+    """`git diff --name-only -z <args>` as real paths, raising on failure.
+
+    A failed diff has empty stdout, which `branch_changes_present` would read
+    as "nothing changed" / "nothing differs" — i.e. ALL CHANGES PRESENT (#705).
+    `-z` because the default output C-quotes non-ASCII and special paths, and a
+    quoted name, fed back as a pathspec, matches nothing — so an unmerged file
+    also read as present (#717)."""
+    res = run(["git", "diff", "--name-only", "-z", *args], cwd=repo_root)
+    if res.returncode != 0:
+        raise IsolationError(
+            f"git diff --name-only {' '.join(args[:2])} failed "
+            f"(exit {res.returncode}): {(res.stderr or '').strip()}"
+        )
+    return [p for p in res.stdout.split("\0") if p]
+
+
 def branch_changes_present(
     run: Runner, repo_root: Path, branch: str, base_ref: str
 ) -> MergeVerification:
@@ -441,15 +458,10 @@ def branch_changes_present(
             f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
         )
     merge_base = mb.stdout.strip()
-    names = run(["git", "diff", "--name-only", merge_base, branch], cwd=repo_root)
-    changed = [ln for ln in names.stdout.splitlines() if ln]
+    changed = _diff_names(run, repo_root, [merge_base, branch])
     if not changed:
         return MergeVerification(changed=[], missing=[], changes_present=True)
-    diff = run(
-        ["git", "diff", "--name-only", branch, base_ref, "--", *changed],
-        cwd=repo_root,
-    )
-    differing = [ln for ln in diff.stdout.splitlines() if ln]
+    differing = _diff_names(run, repo_root, [branch, base_ref, "--", *changed])
     missing = [
         path
         for path in differing
