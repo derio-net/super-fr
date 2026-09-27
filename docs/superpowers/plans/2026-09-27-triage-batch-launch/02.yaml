@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 2
+  title: '#687 — a batch declares its skill; debug batches dispatch /fr-debugging
+    on fix/batch-<id>'
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-batch-debug-skill
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/batch_dispatch.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/work_item.py
+  - packages/fr-herdr/src/fr_herdr/__init__.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - tests/unit/test_triage_batch_model.py
+  - tests/unit/test_triage_batch_dispatch.py
+  - tests/unit/test_triage_batch_verbs.py
+  - docs/acceptance/*
+  estimate_lines: 320
+tasks:
+- number: 1
+  title: RED/GREEN — Batch.skill, batch_branch(batch), batch_workflow
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_model.py: a Batch without `skill` loads as
+      "goal"; `skill: debug` loads; `skill: other` is refused; replace the bare-string
+      pin at :486 with batch_branch(<goal batch>) == "feat/batch-<id>" and
+      batch_branch(<debug batch>) == "fix/batch-<id>"; batch_workflow(goal) ==
+      "fr-goal", batch_workflow(debug) == "fr-debugging"; save_batches of a goal batch
+      writes no `skill` key (byte-identical to today's output for the same batch), a
+      debug batch writes `skill: debug`. Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: packages/fr/src/fr/triage/model.py: `BatchSkill = Literal["goal", "debug"]`,
+      `Batch.skill: BatchSkill = "goal"` (after `bump`). packages/fr/src/fr/triage/
+      batch.py: `batch_branch(batch: Batch)` -> "fix/batch-<id>" for debug, else
+      BRANCH_PREFIX; add `batch_workflow(batch)`. Update every caller (batch_dispatch.py
+      brief and member comment; triage_batch_cmd.py _work_item, dispatch's
+      already-on-origin check, _record_missing) to pass the batch. Tests green.
+- number: 2
+  title: RED/GREEN — the debug brief and both WorkItem sites
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_dispatch.py: a debug batch's brief starts
+      "/fr-debugging <title>", names `fix/batch-<id>`, says to open the draft PR once
+      the failing test is committed, and has a "## Debugging rules" block stating both
+      fr-debugging hard stops (no confident single hypothesis -> stop and ask; three
+      failed fixes -> stop and ask before a fourth) and the one-root-cause rule (more
+      than one root cause found -> stop and ask before fixing any); a goal brief is
+      unchanged from phase 1's golden text. A dispatched debug batch's DispatchEvent
+      branch is fix/batch-<id> and its WorkItem.workflow is "fr-debugging"; the
+      --repair probe item (_probe) carries the same workflow. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: render_brief branches on batch.skill for the first line, the draft-PR rule
+      and the debugging-rules block; _work_item and _probe in triage_batch_cmd.py use
+      batch_workflow(batch). Tests green.
+- number: 3
+  title: RED/GREEN — --skill on create/edit, mixed-theme warning
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_verbs.py: `create --skill debug` stores
+      skill debug; `edit --skill debug` on a proposed batch changes it and is refused
+      past proposed like other fields; members with two distinct non-empty themes in a
+      debug batch print "warning: debug batch <id> mixes themes (a, b): a debug batch
+      should be one root cause" on create and on edit (add-issue or --skill flip), exit
+      0; same themes, empty themes, or a goal batch print nothing. mixed_themes unit
+      cases too. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: `mixed_themes(batch, judgements) -> list[str]` in fr/triage/batch.py
+      (sorted distinct non-empty themes, only for debug batches with 2+); a `--skill`
+      option (goal|debug) on batch create/edit in triage_batch_cmd.py; print the warning
+      after the write. Tests green.
+- number: 4
+  title: Docs, mirrors, matrix, gate
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Docs: fr_dispatch/work_item.py run-unit docstring — `workflow` is fr-goal or
+      fr-debugging by the batch's skill; fr_herdr/__init__.py:3 and runner.py:3 — a
+      batch launches as one /fr-goal or /fr-debugging session; plugins/super-fr/skills/
+      fr-triage/SKILL.md — the batch schema comment lists `skill` (goal|debug) among the
+      optional fields, and the dispatch sentence says it runs /fr-goal or /fr-debugging
+      by skill, with the session on the orchestrator binding unless --model is given.
+      Regenerate mirrors: `uv run --no-project python scripts/sync-opencode.py` AND
+      `uv run --no-project python scripts/sync-hermes.py`. Move triage-batch-debug-skill
+      to `ci` with the model/dispatch/verbs test files, through the step record.
+  - id: P2.T4.S2
+    text: |-
+      REFACTOR + gate: ruff format + check, mypy over fr/fr-dispatch/fr-herdr src, the
+      triage batch tests plus the mirror tripwires (test_tripwire_opencode_skills_sync.py,
+      test_tripwire_hermes_skills_sync.py, test_tripwire_skill_tool_neutrality.py) green.
+      Commit.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-27T07:44:56+00:00'
+      note: null
+  completion:
+    at: '2026-09-27T07:44:56+00:00'
+    note: null
+    observed_prs: []

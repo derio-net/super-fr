@@ -16,13 +16,14 @@ import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
 from fr.ghclient import UnsupportedForgeOperation
-from fr.triage.batch import resolve_launch
+from fr.triage.batch import ResolvedLaunch, fr_harness, mixed_themes, resolve_launch
 from fr.triage.check import classify
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     Batch,
     Facts,
     Issue,
+    Judgements,
     Launch,
     PullRequest,
     TriageConfig,
@@ -196,6 +197,86 @@ def test_create_needs_facts(tmp_path: Path) -> None:
     assert "collect" in out
 
 
+def test_create_with_skill_debug_stores_it(tmp_path: Path) -> None:
+    _state(tmp_path)
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t", "--issue", "super-fr#577", "--skill", "debug",
+    )  # fmt: skip
+    assert code == 0, out
+    assert _batches(tmp_path)[0].skill == "debug"
+
+
+def test_create_without_skill_defaults_to_goal(tmp_path: Path) -> None:
+    _state(tmp_path)
+    code, out = _run(tmp_path, "create", "x", "--title", "t", "--issue", "super-fr#577")
+    assert code == 0, out
+    assert _batches(tmp_path)[0].skill == "goal"
+
+
+# --------------------------------------------------------- mixed-theme warning
+
+
+def test_create_warns_when_a_debug_batch_mixes_themes(tmp_path: Path) -> None:
+    _state(tmp_path)
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t",
+        "--issue", "super-fr#471", "--issue", "super-fr#420",  # themes docs, agents
+        "--skill", "debug",
+    )  # fmt: skip
+    assert code == 0, out
+    assert "warning: debug batch x mixes themes (agents, docs): a debug batch should be " in out
+    assert "one root cause" in out
+
+
+def test_create_prints_nothing_for_a_goal_batch_with_mixed_themes(tmp_path: Path) -> None:
+    _state(tmp_path)
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t",
+        "--issue", "super-fr#471", "--issue", "super-fr#420",
+    )  # fmt: skip
+    assert code == 0, out
+    assert "warning" not in out
+
+
+def test_create_prints_nothing_for_a_debug_batch_with_one_theme(tmp_path: Path) -> None:
+    _state(tmp_path)
+    code, out = _run(
+        tmp_path, "create", "x", "--title", "t",
+        "--issue", "super-fr#577", "--issue", "super-fr#575",  # both theme isolation
+        "--skill", "debug",
+    )  # fmt: skip
+    assert code == 0, out
+    assert "warning" not in out
+
+
+def test_mixed_themes_unit_cases() -> None:
+    judgements = Judgements.model_validate({**yaml.safe_load(JUDGEMENTS), "schema": 2})
+    mixed = Batch.model_validate(
+        {"id": "x", "title": "t", "ids": ["super-fr#471", "super-fr#420"], "skill": "debug"}
+    )
+    assert mixed_themes(mixed, judgements) == ["agents", "docs"]
+
+    same = Batch.model_validate(
+        {"id": "y", "title": "t", "ids": ["super-fr#577", "super-fr#575"], "skill": "debug"}
+    )
+    assert mixed_themes(same, judgements) == []
+
+    goal = Batch.model_validate({"id": "z", "title": "t", "ids": ["super-fr#471", "super-fr#420"]})
+    assert mixed_themes(goal, judgements) == []
+
+
+def test_mixed_themes_ignores_empty_themes() -> None:
+    judgements = Judgements.model_validate(
+        {
+            "schema": 2,
+            "tiers": [{"n": 1, "title": "t"}],
+            "issues": {"a#1": {"tier": 1}, "a#2": {"tier": 1, "theme": "x"}},
+        }
+    )
+    batch = Batch.model_validate({"id": "x", "title": "t", "ids": ["a#1", "a#2"], "skill": "debug"})
+    assert mixed_themes(batch, judgements) == []
+
+
 # -------------------------------------------------------------------- edit
 
 
@@ -274,6 +355,43 @@ def test_edit_applies_the_open_batch_rule(tmp_path: Path) -> None:
     code, out = _run(tmp_path, "edit", "b", "--add-issue", "super-fr#577")
     assert code == 2
     assert "only one open batch" in " ".join(out.split())
+
+
+def test_edit_skill_while_proposed(tmp_path: Path) -> None:
+    _with(tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"]})
+    code, out = _run(tmp_path, "edit", "lifecycle", "--skill", "debug")
+    assert code == 0, out
+    assert _batches(tmp_path)[0].skill == "debug"
+
+
+def test_edit_skill_past_proposed_is_refused(tmp_path: Path) -> None:
+    _with(
+        tmp_path, {"id": "lifecycle", "title": "t", "ids": ["super-fr#577"], "events": [_DISPATCH]}
+    )
+    code, out = _run(tmp_path, "edit", "lifecycle", "--skill", "debug")
+    assert code == 2
+    assert "dispatched" in out
+
+
+def test_edit_add_issue_triggers_the_mixed_theme_warning(tmp_path: Path) -> None:
+    _with(tmp_path, {"id": "x", "title": "t", "ids": ["super-fr#471"], "skill": "debug"})
+    code, out = _run(tmp_path, "edit", "x", "--add-issue", "super-fr#420")
+    assert code == 0, out
+    assert "warning: debug batch x mixes themes (agents, docs)" in out
+
+
+def test_edit_skill_flip_to_debug_triggers_the_mixed_theme_warning(tmp_path: Path) -> None:
+    _with(tmp_path, {"id": "x", "title": "t", "ids": ["super-fr#471", "super-fr#420"]})
+    code, out = _run(tmp_path, "edit", "x", "--skill", "debug")
+    assert code == 0, out
+    assert "warning: debug batch x mixes themes (agents, docs)" in out
+
+
+def test_edit_prints_nothing_when_themes_stay_uniform(tmp_path: Path) -> None:
+    _with(tmp_path, {"id": "x", "title": "t", "ids": ["super-fr#577"], "skill": "debug"})
+    code, out = _run(tmp_path, "edit", "x", "--add-issue", "super-fr#575")
+    assert code == 0, out
+    assert "warning" not in out
 
 
 def test_a_member_of_a_cancelled_batch_may_join_a_new_one(tmp_path: Path) -> None:
@@ -490,9 +608,80 @@ def test_launch_resolves_batch_then_defaults_then_refuses() -> None:
     defaults = TriageConfig.model_validate(
         {"defaults": {"launch": {"runner": "herdr", "harness": "claude", "model": "other"}}}
     )
-    assert resolve_launch(batch, defaults) == Launch(runner="herdr", harness="claude", model="m")
+    assert resolve_launch(batch, defaults).launch == Launch(
+        runner="herdr", harness="claude", model="m"
+    )
     with pytest.raises(TriageError, match=r"runner.*harness"):
         resolve_launch(batch, TriageConfig())
+
+
+def test_launch_model_wins_from_the_batch() -> None:
+    batch = Batch(
+        id="x", title="t", ids=["a#1"], launch=Launch(runner="herdr", harness="claude", model="m")
+    )
+    defaults = TriageConfig.model_validate(
+        {"defaults": {"launch": {"runner": "herdr", "harness": "claude", "model": "other"}}}
+    )
+    resolved = resolve_launch(batch, defaults, orchestrator=lambda h: "never-asked")
+    assert resolved == ResolvedLaunch(
+        launch=Launch(runner="herdr", harness="claude", model="m"), model_source="batch"
+    )
+
+
+def test_launch_model_falls_back_to_defaults_over_the_orchestrator() -> None:
+    batch = Batch(id="x", title="t", ids=["a#1"], launch=Launch(runner="herdr", harness="claude"))
+    defaults = TriageConfig.model_validate(
+        {"defaults": {"launch": {"runner": "herdr", "harness": "claude", "model": "other"}}}
+    )
+    resolved = resolve_launch(batch, defaults, orchestrator=lambda h: "never-asked")
+    assert resolved.launch.model == "other"
+    assert resolved.model_source == "defaults.launch"
+
+
+def test_launch_model_falls_back_to_the_orchestrator_binding_with_the_fr_harness_id() -> None:
+    batch = Batch(id="x", title="t", ids=["a#1"], launch=Launch(runner="herdr", harness="claude"))
+    defaults = TriageConfig.model_validate(
+        {"defaults": {"launch": {"runner": "herdr", "harness": "claude"}}}
+    )
+    seen: list[str] = []
+
+    def orchestrator(harness: str) -> str | None:
+        seen.append(harness)
+        return "claude-opus-5-5"
+
+    resolved = resolve_launch(batch, defaults, orchestrator=orchestrator)
+    assert seen == ["claude-code"]
+    assert resolved.launch.model == "claude-opus-5-5"
+    assert resolved.model_source == "orchestrator binding"
+
+
+@pytest.mark.parametrize("orchestrator", [None, lambda h: None])
+def test_launch_refuses_naming_fr_models_set_when_nothing_binds_a_model(
+    orchestrator: object,
+) -> None:
+    batch = Batch(id="x", title="t", ids=["a#1"], launch=Launch(runner="herdr", harness="claude"))
+    defaults = TriageConfig.model_validate(
+        {"defaults": {"launch": {"runner": "herdr", "harness": "claude"}}}
+    )
+    with pytest.raises(
+        TriageError, match=r"fr models set --harness claude-code --tier orchestrator --model"
+    ):
+        resolve_launch(batch, defaults, orchestrator=orchestrator)  # type: ignore[arg-type]
+
+
+def test_launch_never_calls_the_orchestrator_when_harness_is_unset() -> None:
+    batch = Batch(id="x", title="t", ids=["a#1"], launch=Launch(runner="herdr", model="m"))
+
+    def orchestrator(harness: str) -> str | None:
+        raise AssertionError("orchestrator must not be called: harness is unset")
+
+    with pytest.raises(TriageError, match=r"harness"):
+        resolve_launch(batch, TriageConfig(), orchestrator=orchestrator)
+
+
+def test_fr_harness_maps_claude_and_passes_through_others() -> None:
+    assert fr_harness("claude") == "claude-code"
+    assert fr_harness("opencode") == "opencode"
 
 
 # ---------------------------------------------------------- stale dispatch

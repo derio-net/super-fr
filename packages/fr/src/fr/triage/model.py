@@ -72,6 +72,10 @@ KEY_RE = re.compile(r"^[A-Za-z0-9._-]+#[0-9]+$")
 # branch `feat/batch-<id>` and the item id `<repo>/run/batch-<id>`.
 BATCH_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
 Bump = Literal["patch", "minor", "major"]
+# What a batch's run is (spec 2026-09-27-triage-batch-launch §B): `goal` dispatches
+# `/fr-goal`, `debug` dispatches `/fr-debugging`. `goal` is the default so every
+# schema-2 file written before this field existed still loads unchanged.
+BatchSkill = Literal["goal", "debug"]
 
 
 def normalize_key(key: str) -> str:
@@ -381,6 +385,7 @@ class Batch(_Strict):
     rationale: str = ""
     order: int | None = None
     bump: Bump = "patch"
+    skill: BatchSkill = "goal"
     launch: Launch = Launch()
     events: list[BatchEvent] = []
 

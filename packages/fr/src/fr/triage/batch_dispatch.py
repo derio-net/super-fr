@@ -47,7 +47,6 @@ def render_brief(
     repo: str,
     closing_refs: Sequence[str],
     reserved_version: str | None,
-    model: str,
 ) -> str:
     """The launch brief (§3.C step 3): engine-owned, deterministic text.
 
@@ -55,9 +54,11 @@ def render_brief(
     come from the adapter (`GhClient.closing_ref`), one per member in member
     order, so the brief never hardcodes one forge's closing syntax.
     """
+    debug = batch.skill == "debug"
+    slash = "/fr-debugging" if debug else "/fr-goal"
     titles = {i.key: i.title for i in facts.issues}
     lines = [
-        f"/fr-goal {batch.title}",
+        f"{slash} {batch.title}",
         "",
         f"Batch `{batch.id}` of {repo}: {len(batch.ids)} issues, delivered as ONE pull request.",
     ]
@@ -70,11 +71,12 @@ def render_brief(
             lines.append(f"Note: {j.note}")
     if batch.rationale:
         lines += ["", "## Why these belong together", batch.rationale]
+    committed = "the failing test is committed" if debug else "the spec is committed"
     lines += [
         "",
         "## Delivery rules",
-        f"- Work on branch `{batch_branch(batch.id)}`.",
-        "- Open a draft PR as soon as the spec is committed. Its body contains these "
+        f"- Work on branch `{batch_branch(batch)}`.",
+        f"- Open a draft PR as soon as {committed}. Its body contains these "
         "lines, one per member, so every member closes when it merges:",
         *(f"  {ref}" for ref in closing_refs),
     ]
@@ -84,10 +86,19 @@ def render_brief(
             "do not pick another number)."
         )
     lines += [
-        f"- Use `{model}` for every subagent and every model tier.",
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "
         "bridge would then own that issue's `fr:` labels.",
     ]
+    if debug:
+        lines += [
+            "",
+            "## Debugging rules",
+            "- If investigation cannot form a confident single hypothesis, stop and ask; "
+            "don't guess.",
+            "- After three failed fixes, stop and ask before a fourth attempt.",
+            "- These members were batched as ONE root cause; if investigation finds more "
+            "than one, stop and ask before fixing any.",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -99,7 +110,7 @@ def dispatch_comment(batch: Batch, item_id: str, key: str) -> str:
     return (
         f"{batch_marker(item_id)}\n"
         f"Dispatched as batch `{batch.id}` ({batch.title}){company}. "
-        f"Branch `{batch_branch(batch.id)}`."
+        f"Branch `{batch_branch(batch)}`."
     )
 
 

@@ -31,6 +31,7 @@ backend declares unsupported).
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
@@ -54,14 +55,17 @@ from fr.commands.triage_cmd import (
 from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
+from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
 from fr.triage.batch import (
     CLOSED_OUT,
     batch_branch,
     batch_item_id,
     batch_repo,
+    batch_workflow,
     check_open_membership,
     derive_batch_stage,
     last_dispatch,
+    mixed_themes,
     pr_open_queue,
     resolve_launch,
     save_batches,
@@ -172,9 +176,19 @@ OrderOpt = Annotated[
     int | None, typer.Option("--order", help="Hard constraint on merge order (lower first).")
 ]
 BumpOpt = Annotated[str | None, typer.Option("--bump", help="patch | minor | major.")]
+SkillOpt = Annotated[
+    str | None,
+    typer.Option("--skill", help="goal | debug; goal dispatches /fr-goal, debug /fr-debugging."),
+]
 RunnerOpt = Annotated[str | None, typer.Option("--runner", help="Runner to launch with.")]
 HarnessOpt = Annotated[str | None, typer.Option("--harness", help="Harness to launch.")]
-ModelOpt = Annotated[str | None, typer.Option("--model", help="Model for every tier.")]
+ModelOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--model",
+        help="Session model (the run's orchestrator); subagents use their `fr models` tiers.",
+    ),
+]
 
 
 def _launch(runner: str | None, harness: str | None, model: str | None) -> dict[str, str]:
@@ -206,6 +220,16 @@ def _write(
         _fail(str(exc))
 
 
+def _warn_mixed_themes(batch: Batch, judgements: Judgements) -> None:
+    """Print the §C d3 warning after a create/edit write; never a refusal."""
+    if themes := mixed_themes(batch, judgements):
+        console.print(
+            f"warning: debug batch {batch.id} mixes themes ({', '.join(themes)}): a debug "
+            "batch should be one root cause",
+            markup=False,
+        )
+
+
 @batch_app.command("list")
 def batch_list_command(
     repo: RepoOpt = None,
@@ -235,6 +259,7 @@ def batch_create_command(
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
     bump: BumpOpt = None,
+    skill: SkillOpt = None,
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
@@ -250,6 +275,7 @@ def batch_create_command(
     doc |= {"rationale": rationale} if rationale is not None else {}
     doc |= {"order": order} if order is not None else {}
     doc |= {"bump": bump} if bump is not None else {}
+    doc |= {"skill": skill} if skill is not None else {}
     doc |= {"launch": _launch(runner, harness, model)}
     try:
         new = Batch.model_validate(doc)
@@ -259,6 +285,7 @@ def batch_create_command(
         _fail(f"batch {new.id!r} already exists; use `fr triage batch edit`")
     _write(target, [*judgements.batches, new], facts, read=judgements.batches)
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
+    _warn_mixed_themes(new, judgements)
 
 
 @batch_app.command("edit")
@@ -274,6 +301,7 @@ def batch_edit_command(
     rationale: RationaleOpt = None,
     order: OrderOpt = None,
     bump: BumpOpt = None,
+    skill: SkillOpt = None,
     runner: RunnerOpt = None,
     harness: HarnessOpt = None,
     model: ModelOpt = None,
@@ -285,7 +313,12 @@ def batch_edit_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override)
     batch = _find(judgements.batches, batch_id)
     changes: dict[str, object] = {}
-    for name, value in (("title", title), ("rationale", rationale), ("bump", bump)):
+    for name, value in (
+        ("title", title),
+        ("rationale", rationale),
+        ("bump", bump),
+        ("skill", skill),
+    ):
         if value is not None:
             changes[name] = value
     if launch := _launch(runner, harness, model):
@@ -309,6 +342,7 @@ def batch_edit_command(
         _fail(f"invalid batch: {exc}")
     _write(target, _replace(judgements.batches, new), facts, read=judgements.batches)
     console.print(f"edited batch {new.id}", markup=False)
+    _warn_mixed_themes(new, judgements)
 
 
 @batch_app.command("cancel")
@@ -435,6 +469,21 @@ def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
     return checkout
 
 
+def _orchestrator(repo_root: Path | None) -> Callable[[str], str | None]:
+    """The `resolve_launch` orchestrator rung (spec 2026-09-27-triage-batch-launch
+    §A): the ORCHESTRATOR tier binding for a harness, repo-over-user, read from
+    *repo_root*'s own `docs/superpowers/models.yaml` (the checkout the run will
+    work in, not the dispatcher's cwd) when one is known."""
+    repo_cfg = load_models(repo_root / REPO_MODELS_REL) if repo_root else {}
+    user_cfg = load_models(default_models_path())
+    config = resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg)
+
+    def resolve(harness: str) -> str | None:
+        return config.get(harness, {}).get("orchestrator")
+
+    return resolve
+
+
 def _reservation(
     checkout: Checkout, facts: Facts, judgements: Judgements, batch: Batch, owner_repo: str
 ) -> str | None:
@@ -473,7 +522,7 @@ def _work_item(
         "brief": brief,
         "harness": launch.harness,
         "model": launch.model,
-        "branch": batch_branch(batch.id),
+        "branch": batch_branch(batch),
         "reserved_version": reserved,
         "issues": list(batch.ids),
         "checkout": str(cwd),  # herdr's --cwd (decision p2-dispatch-handle)
@@ -481,7 +530,7 @@ def _work_item(
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
-        workflow="fr-goal",
+        workflow=batch_workflow(batch),
         repo=owner_repo,
         parent=None,
         inputs=(),
@@ -591,7 +640,7 @@ def _probe(owner_repo: str, batch: Batch, launch: Launch) -> WorkItem:
     return WorkItem(
         id=run_item_id(owner_repo, f"batch-{batch.id}"),
         unit="run",
-        workflow="fr-goal",
+        workflow=batch_workflow(batch),
         repo=owner_repo,
         parent=None,
         inputs=(),
@@ -612,6 +661,7 @@ def _record_missing(
     handle: str | None,
     reserved: str | None,
     yes: bool,
+    checkout_path: Path | None,
 ) -> None:
     """`dispatch --repair` for a launch whose event was never written (r3-f1).
 
@@ -620,9 +670,14 @@ def _record_missing(
     version the failed dispatch printed; nothing is launched or re-reserved.
     """
     try:
-        launch = resolve_launch(_with_runner(batch, to), facts.config_for(owner_repo))
+        resolved = resolve_launch(
+            _with_runner(batch, to),
+            facts.config_for(owner_repo),
+            orchestrator=_orchestrator(checkout_path),
+        )
     except TriageError as exc:
         _fail(str(exc))
+    launch = resolved.launch
     runner_name = str(launch.runner)
     runner = load_runner(runner_name)
     probe = _probe(owner_repo, batch, launch)
@@ -641,7 +696,7 @@ def _record_missing(
             "this repo reserves versions: give --reserved-version, the version the failed "
             "dispatch printed (the run was briefed with it)"
         )
-    branch = batch_branch(batch.id)
+    branch = batch_branch(batch)
     console.print(f"record the missing dispatch of batch {batch.id} ({probe.id})", markup=False)
     console.print(f"  runner: {runner_name} (reports it live)", markup=False)
     console.print(f"  handle: {handle or probe.id}", markup=False)
@@ -739,15 +794,21 @@ def batch_dispatch_command(
                 handle=handle,
                 reserved=reserved_version,
                 yes=yes,
+                checkout_path=checkout_path,
             )
         return
+    checkout = _open_checkout(checkout_path, owner_repo)
     try:
-        launch = resolve_launch(_with_runner(batch, to), facts.config_for(owner_repo))
+        resolved = resolve_launch(
+            _with_runner(batch, to),
+            facts.config_for(owner_repo),
+            orchestrator=_orchestrator(checkout.path),
+        )
     except TriageError as exc:
         _fail(str(exc))
+    launch = resolved.launch
     runner_name, model = str(launch.runner), str(launch.model)
     runner = load_runner(runner_name)  # step 1
-    checkout = _open_checkout(checkout_path, owner_repo)
     reserved = _reservation(checkout, facts, judgements, batch, owner_repo)  # step 2
     try:
         refs = [client.closing_ref(owner_repo, int(k.rpartition("#")[2])) for k in batch.ids]
@@ -760,14 +821,13 @@ def batch_dispatch_command(
         repo=owner_repo,
         closing_refs=refs,
         reserved_version=reserved,
-        model=model,
     )
     item = _work_item(owner_repo, batch, launch, brief, reserved, checkout.path)  # step 4
-    branch = batch_branch(batch.id)
+    branch = batch_branch(batch)
     console.print(f"dispatch batch {batch.id} as {item.id}", markup=False)
     console.print(f"  runner: {runner_name}", markup=False)
     console.print(f"  harness: {launch.harness}", markup=False)
-    console.print(f"  model: {model}", markup=False)
+    console.print(f"  model: {model} ({resolved.model_source})", markup=False)
     console.print(f"  branch: {branch}", markup=False)
     console.print(f"  reserved version: {reserved or '(none: no version block)'}", markup=False)
     console.print("  brief:", markup=False)

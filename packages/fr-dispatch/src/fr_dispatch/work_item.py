@@ -43,14 +43,17 @@ and a `PhaseDoc` on the phase path), so letting it participate in equality
 would make a set hold two copies of one graph position.
 
 **Run-unit payload** (spec 2026-09-25-triage-batches §3.C). A `unit="run"`
-item from `fr triage batch dispatch` has `workflow="fr-goal"`, `parent=None`,
-`inputs=()`, `tracking=None` (a multi-issue batch is not one tracker Issue to
-stamp), and a payload a run-capable runner must honour:
+item from `fr triage batch dispatch` has `workflow` set to `fr-goal` or
+`fr-debugging` by the batch's skill (spec 2026-09-27-triage-batch-launch §B),
+`parent=None`, `inputs=()`, `tracking=None` (a multi-issue batch is not one
+tracker Issue to stamp), and a payload a run-capable runner must honour:
 
 - `brief` — the engine-rendered prompt that starts the run;
 - `harness` — which agent harness to launch (e.g. `claude`);
-- `model` — the model for every subagent and tier, passed to the harness;
-- `branch` — the branch the run works on (`feat/batch-<id>`);
+- `model` — the SESSION model (the run's orchestrator), passed to the harness;
+  subagents resolve their own tiers through `fr models`, never this field;
+- `branch` — the branch the run works on (`feat/batch-<id>`, or
+  `fix/batch-<id>` for a debug batch);
 - `reserved_version` — the version the run bumps to, or None;
 - `issues` — the member issue keys, for the runner's bookkeeping.
 
