@@ -3517,13 +3517,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_run_holder_identity.py
       - super-fr:packages/fr-opencode-plugin/test/claim.test.ts
+      int:
+      - super-fr:docs/acceptance/evidence/2026-09-27-opencode-holder-identity-live.md
     status: ci
-    notes: gh#530. CLI half unit-pinned (claims, idempotent, refuses unrelated agents,
+    notes: 'gh#530. CLI half unit-pinned (claims, idempotent, refuses unrelated agents,
       orchestrator-run work, a unit another child holds, and a non-matching --agent-type);
-      plugin half bun-tested against a fake client (opencode-plugin-test job). The session
-      shape (parentID, agent, model on GET /session) was read off a live OpenCode 1.18
-      server, but the claim landing in a live session is not yet observed, so parity
-      dispatch-holder-identity stays partial on opencode.
+      plugin half bun-tested (opencode-plugin-test job). Observed live 2026-09-27 on
+      OpenCode 1.18.32 (int ref): the child''s claim landed 3-6 s after dispatch and
+      its own first fr run status read HELD BY agent ses_... with the tier agent recorded,
+      matching opencode.db. The live run is evidence, not CI; the claim is fail-open,
+      so parity dispatch-holder-identity stays partial.'
   - id: agent-skill-instructions-are-executable
     capability: Conventions
     acceptance: An agent whose body tells it to use a skill is granted the tool to load
