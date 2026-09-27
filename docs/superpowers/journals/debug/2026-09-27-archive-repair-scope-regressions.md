@@ -29,3 +29,8 @@ archive_cmd passes only_plans={archived slugs} to both _report_sweep and the pos
 ### f2-archive-sweep-scope · finding [fixed] · scoped archive widens repair by plans referencing moved specs
 
 repair.plans_referencing_specs (moved specs' table rows + plans whose spec: names a moved spec) unioned into only_plans in archive_cmd before _report_sweep and the post-move repair. Test: test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved (red→green; also asserts an unrelated live plan stays byte-identical). Full suite 6397 passed.
+
+<!-- fr:journal kind=review scope=debug id=8b9f9709e4a5 created=2026-09-27T05:30:49 -->
+### 8b9f9709e4a5 · review · independent review of the fix diff
+
+Findings: none Critical/Important. Minor 1 (corrupted spec: crashes the identity check: TypeError/YAMLError) fixed + parametrized test, red without the guard. Minor 3 (non-mapping meta AttributeError in plans_referencing_specs) fixed. Minor 4 (created:/staging unpinned) fixed with test_create_rerun_canonicalization_keeps_created_and_stages_meta. Minor 2 (scope widening ignores the Repo column / basename-only meta match) accepted: over-widening only re-runs idempotent repair on an extra plan; noted in PR body. Full suite 6400 passed, 115 skipped; mypy clean.
