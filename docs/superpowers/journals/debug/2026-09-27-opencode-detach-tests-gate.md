@@ -19,3 +19,8 @@ Confirmed by the red test built from the rule text itself: `_opencode_wrote_sinc
 ### 6114f2adcc31 · finding [fixed] · Detached writer windowed to the first later exit=N it printed (N=0 only)
 
 telemetry.py: `_detaches` (a lone `&`, outside quotes/heredocs; not `&&`, `|&`, `&>`, `2>&1`), `_names` (any word of a command resolving to the log), `_seen_exit` (first later completed top-level bash part naming the log with an `exit=N` line in its output — first is final, N must be 0). The launch window is still recorded, so nothing narrows. Refusal message and the OpenCode rule (brief + phase-executor clause, mirrors synced) now say the exit= line must be printed. Pinned by tests/unit/test_run_tests_log_opencode.py (detached/unobserved/failed/subagent/other-log/no-exit-line/first-is-final/foreground/e2e accept+refuse/detach-syntax).
+
+<!-- fr:journal kind=review scope=debug id=adc0f691e0d8 created=2026-09-27T10:49:12 -->
+### adc0f691e0d8 · review · Independent adversarial review: 1 finding, refuted as out of the gate's stated scope, residual documented
+
+Reviewer (separate context) found no regex/ordering/test-shape defects. One finding: the detached window closes on log CONTENT the orchestrator read back, so a co-resident writer of `exit=0` into the exact log path before that read is accepted, weaker than Claude Code's harness-emitted notice. Verdict: real but deliberate forgery, which the gate explicitly does not claim to stop; the foreground path shares the co-resident-write-inside-window residual. Pid-tying rejected (log.pid is equally readable). Residual now stated in `_seen_exit`'s docstring and the PR body.
