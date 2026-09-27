@@ -64,3 +64,8 @@ work_item.py `branch` bullet now names fix/batch-<id> for a debug batch.
 ### r2-2-resolved · finding [out-of-scope] · resolves r2-2: mixed_themes compares themes without case/whitespace normalisation (phase 2)
 
 Theme normalisation is absent codebase-wide (suggest() compares raw strings too); mixed_themes follows that convention. A normalisation change belongs to both, in its own change.
+
+<!-- fr:journal kind=finding scope=plan id=d-1 created=2026-09-27T10:01:01 phase=1 state=fixed review_scope=in -->
+### d-1 · finding [fixed] (reviewer: in scope) · Change fragment summary was a block scalar; the fragment gate refused it (phase 1)
+
+Found by the deliver-time full suite (test_change_fragments.py) and scripts/check-change-fragment.py: .changes/feat-batch-batch-launch.yaml used a folded block for summary; the schema needs one line. Phase 1 reported the gate as passing. Fixed: summary is one quoted line; check-change-fragment.py origin/main passes.
