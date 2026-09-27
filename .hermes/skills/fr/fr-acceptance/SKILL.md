@@ -5,7 +5,8 @@ description: >
   acceptance tests into docs/acceptance/matrix.yaml, flip row statuses as
   evidence lands, and keep the CI gate honest. Use when: "backfill the
   acceptance matrix", "acceptance debt", "add acceptance rows", a session
-  starts with an acceptance-debt nag, or `fr acceptance check` fails.
+  starts with an acceptance-debt nag, `fr acceptance check` fails, or a
+  claim is owed a live run on a harness other than the one you are on.
 ---
 
 # fr-acceptance
@@ -51,6 +52,51 @@ the row in place, adds the test refs that justify the move, and regenerates the
 three committed reports. `--notes` is required, and an unknown id is refused
 rather than created (that is `add`'s job). `fr plan edit --complete-phase`
 warns on unflipped rows — fix or record why in the completion note.
+
+## Live verification on another harness
+
+Some claims are owed a **live** run: a real binary with a real model, not a
+unit test that sets the harness by hand. You can pay that debt without being on
+the harness in question. The session doing the work (the **driver**) steers
+a second agent session (the **target**) in a neighbouring terminal. Driver
+and target can be any two harnesses. Nothing below depends on which one you
+are.
+
+This needs a terminal multiplexer that lets one session start, prompt and
+read another. herdr does this today when the driver runs inside it
+(`HERDR_ENV=1`). Learn its current CLI from `herdr --skill` rather than from
+memory. Any multiplexer with the same abilities works.
+
+1. **Build a scratch fixture from real artifacts.** Make a throwaway git repo
+   with an fr-isolation linked worktree and its marker, and a run parked just
+   before the step under test. Copy artifacts from a real (archived) plan. A
+   hand-made `_meta.yaml` is refused by the migration gate, as it should be.
+2. **Open a sibling terminal in the fixture.** With herdr:
+   `herdr pane split --current --direction down --cwd <fixture> --no-focus`.
+3. **Clean the target's env before starting it.** fr detects the harness from
+   environment keys in a fixed order, so a key leaked from the driver makes fr
+   record the **driver** as the harness, and the test goes green on the
+   wrong thing. Check the new terminal's env for every harness's detection
+   keys and for `FR_HARNESS`, and set neither. Export only fixture plumbing
+   (`FR_SHIPPED_WORKFLOWS_DIR`, `VK_REPO_ROOT`, a redacted `FR_HOSTNAME`).
+4. **Start the target and give it a closed command list** ("run exactly
+   these, one at a time; edit nothing"). With herdr:
+   `herdr agent start <name> --kind <kind> --pane <id> -- <args>`, then
+   `herdr agent prompt <name> "<commands>" --wait`.
+5. **Judge from disk, never from the target's summary.** Read the artifact and
+   `git show --name-only HEAD` yourself.
+6. **For gates that read the forge**, e.g. `deliver`'s live PR-body check,
+   point at an already-merged fr PR whose body has the required sections.
+   This only reads the PR. Nothing is written to it.
+7. **Record, then tear down.** Move the row with `fr acceptance set-status`.
+   The notes name the target harness and its version, and state that detection
+   came from the target's own env. Then close the target's terminal and delete
+   the fixture.
+
+A closed command list proves fr behaves correctly under the target harness. It
+does not prove the target follows a skill's prose over a long run. For that,
+prompt the skill itself and wait longer. Everything else stays the same, and
+the notes must say which of the two was proven.
 
 ## Mid-flight additions (encouraged, then defended)
 
