@@ -109,3 +109,8 @@ fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
 ### s8-resolved · finding [fixed] · resolves s8: §3.B assignment grammar differs from the implemented one (Opus)
 
 fixed in 33d01601/716b3ca4 (spec edits + captured fixture + code)
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved-2 created=2026-09-27T08:06:27 state=open resolves=s2 tracked_by=derio-net/super-fr#719 -->
+### s2-resolved-2 · finding [deferred → derio-net/super-fr#719] · resolves s2: OpenCode & detach has the same zero-length-window bug; spec said unchanged
+
+Filed at closeout as derio-net/super-fr#719.
