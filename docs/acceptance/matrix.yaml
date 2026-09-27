@@ -4655,8 +4655,12 @@ rows:
       unit:
       - super-fr:tests/unit/test_usage_capture.py
     status: ci
-    notes: 'Capture writes a no-session-found placeholder (unit-proven). OpenCode live
-      proof stays owed until #537.'
+    notes: 'Capture writes a no-session-found placeholder (unit-proven). Live-verified
+      2026-09-27 on OpenCode 1.18.32 in a scratch run: fr run resolve --step deliver,
+      run by OpenCode with harness detected from its own env (no FR_HARNESS), wrote
+      session '''' / unavailable: no session found in the cursor commit; fr run cost
+      showed 0 read, 1 unavailable. Replacing the placeholder with real sessions stays
+      owed until #537.'
   - id: ci-under-time-budget
     capability: CI
     acceptance: A CI run of ci.yml completes in under 4 minutes of wall clock (excluding
