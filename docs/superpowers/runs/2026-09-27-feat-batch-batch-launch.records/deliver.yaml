@@ -6,4 +6,4 @@ acceptance: []
 emitted:
   pr: https://github.com/derio-net/super-fr/pull/723
 evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/64c35493-36dd-40b9-af4c-6c611145fa2f/scratchpad/full-suite.log
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/64c35493-36dd-40b9-af4c-6c611145fa2f/scratchpad/deliver-suite.log
