@@ -3,11 +3,14 @@ run: 2026-09-27-feat-batch-ci-hardening
 workflow: fr-goal@1
 branch: feat/batch-ci-hardening
 started: '2026-09-27T08:58:42+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-27T08:58:54+00:00'
+    state: done
+    at: '2026-09-27T14:28:00+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-27-ci-hardening-design.md
   spec-review:
     state: pending
   plan:

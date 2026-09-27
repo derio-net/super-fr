@@ -4757,6 +4757,33 @@ rows:
     notes: check_watch_list's tripwire tests (real repo passes; negative cases on a
       tmp dir for an unlisted workflow and a stale config key) exercise the exact check
       CI runs on every push via test_ci_budget.py
+  - id: ci-actions-sha-pinned
+    capability: CI
+    acceptance: A workflow that references a remote GitHub Action by anything but a
+      full commit SHA with a version comment fails CI
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ci-actions-dependabot-updates
+    capability: CI
+    acceptance: Dependabot proposes updates to the SHA-pinned actions weekly, as one
+      grouped PR
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ci-ok-single-required-check
+    capability: CI
+    acceptance: One stable ci-ok check fails whenever any ci.yml job fails or is cancelled,
+      so a required-check rule can name exactly one context
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-ci-hardening-design.md
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: container-record-commits
     capability: isolation-git-ownership
     acceptance: An fr record commit succeeds inside a devcontainer whose bind-mounted
