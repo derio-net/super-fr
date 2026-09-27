@@ -1,0 +1,43 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-spec-ref-writers
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: decision
+    id: escape-test-lexical
+    title: "#709: a spec: ref escapes the repo by a lexical normpath test"
+    body: >-
+      Operator chose os.path.normpath(repo_root / value) not under repo_root over
+      Path.resolve(): it judges what the operator wrote, and a symlinked docs/ inside
+      the repo still canonicalizes.
+  - kind: decision
+    id: archive-repair-single-owner
+    title: "#710: fr archive repairs through one helper, once"
+    body: >-
+      Operator chose to strip repair out of _report_sweep and route both the archive
+      tail and --sweep-only (when something moved) through one _repair_in_passing
+      helper, over returning a RepairResult from _report_sweep.
+  - kind: decision
+    id: acceptance-two-rows
+    title: Two acceptance rows, ci-pinned by this change's tests
+    body: >-
+      spec-writers-one-canonical-form and archive-repair-warns-once.
+resolves: []
+acceptance:
+  - id: spec-writers-one-canonical-form
+    capability: Spec ref canonical form
+    acceptance: Every spec writer (fr plan create, rework create, fr repair, the v1-to-v2
+      migration) stores the same canonical spec form, and none of them shortens a ref that
+      leaves the repo.
+    origin: [super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md]
+    status: not-implemented
+  - id: archive-repair-warns-once
+    capability: Archive spec-sweep
+    acceptance: fr archive runs repair once per invocation, so each repair warning reaches
+      the operator exactly once.
+    origin: [super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md]
+    status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
+evidence: {}
