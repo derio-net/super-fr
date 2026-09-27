@@ -30,6 +30,7 @@ import os
 import subprocess
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import TypeVar
 
 from fr.labels import LabelDef
@@ -51,7 +52,7 @@ class GlabError(Exception):
         self.returncode = returncode
 
 
-def _run_glab(args: list[str], *, host: str | None = None) -> str:
+def _run_glab(args: list[str], *, host: str | None = None, cwd: Path | None = None) -> str:
     """Run a glab command and return stdout. Raises GlabError on failure.
 
     `host` targets a self-hosted instance by putting GITLAB_HOST in the
@@ -65,7 +66,8 @@ def _run_glab(args: list[str], *, host: str | None = None) -> str:
     against a self-hosted instance — spec §2.D). `host=None` passes
     `env=None`, so the child inherits this process's environment unchanged
     and glab's own resolution from the current git directory still
-    applies."""
+    applies. `cwd` picks that git directory for a call that names no
+    `--repo` (gh#742); `None` keeps this process's."""
     env = {**os.environ, "GITLAB_HOST": host} if host else None
     try:
         result = subprocess.run(
@@ -74,6 +76,7 @@ def _run_glab(args: list[str], *, host: str | None = None) -> str:
             text=True,
             check=True,
             env=env,
+            cwd=cwd,
         )
     except subprocess.CalledProcessError as exc:
         # glab splits an error across both streams: its own summary on

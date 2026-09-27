@@ -4055,8 +4055,8 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     the one file a refusal leaves behind: it is what the agent opens the PR
     with. On success the render is removed — it goes with the delivered step.
     """
-    from fr import gh
     from fr.artifacts.atomic import write_text_atomic
+    from fr.hostclient import FORGE_ERRORS, client_for, pr_command
     from fr.record.model import records_dir
     from fr.record.pr_body import PR_BODY_NAME, missing_sections, render_pr_body
 
@@ -4065,12 +4065,15 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     write_text_atomic(body_path, render_pr_body(repo_root, state))
     rel = body_path.relative_to(repo_root).as_posix()
     ref = pr or state.branch
+    # Through the forge adapter, never `fr.gh`: on GitLab/Gitea `gh` cannot
+    # read the PR, and a gate that cannot read it never passes (gh#742).
     try:
-        live = gh.view_pr_body(ref, cwd=repo_root)
-    except gh.GhError as e:
+        live = client_for(repo_root).pr_body(ref, cwd=repo_root)
+    except FORGE_ERRORS as e:
+        create = pr_command(repo_root, "create", body=rel)
         err_console.print(
             f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
-            f"the PR with `gh pr create --body-file {rel}`, record its url (`emitted: "
+            f"the PR with `{create}`, record its url (`emitted: "
             "{pr: <url>}` in the record, or `--emitted pr=<url>`), and resolve again",
             markup=False,
             soft_wrap=True,
@@ -4078,9 +4081,10 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         raise typer.Exit(2) from e
     missing = missing_sections(live)
     if missing:
+        edit = pr_command(repo_root, "edit", ref=ref, body=rel)
         err_console.print(
             f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
-            f"it from fr's render — `gh pr edit {ref} --body-file {rel}` — and resolve again",
+            f"it from fr's render — `{edit}` — and resolve again",
             markup=False,
             soft_wrap=True,
         )

@@ -29,6 +29,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from pathlib import Path
 from typing import Any, cast
 
 from fr import tea as _tea
@@ -116,6 +117,38 @@ class RealTeaClient(UnsupportedBatchOps):
         merged = bool(raw.get("merged", False))
         state = "MERGED" if merged else ("CLOSED" if raw.get("state") == "closed" else "OPEN")
         return {"state": state, "draft": bool(raw.get("draft", False))}
+
+    def pr_body(self, ref: str, *, cwd: Path) -> str:
+        """The PR's `body`, found in `tea pulls list` by URL, index or head
+        branch — tea has no single-shot body read by branch (the same bounded
+        listing `isolation.local._pr_from_gitea` uses), and `list`'s
+        `--fields` is the documented way to ask for `body`. A URL names its
+        repo; otherwise tea resolves it from the checkout at `cwd`. Raises
+        TeaError, including when no listed PR matches."""
+        m = _PR_URL_RE.match(ref)
+        args = ["pulls", "list", "--state", "all", "--limit", "50"]
+        args += ["--fields", "index,url,head,body", "--output", "json"]
+        if m:
+            args += ["--repo", m.group(1)]
+        # Exit 0 with output fr cannot read is still the forge's failure: the
+        # deliver gate refuses on a TeaError and would crash on anything else.
+        try:
+            entries = json.loads(_tea._run_tea(args, cwd=cwd) or "[]")
+        except json.JSONDecodeError as exc:
+            raise _tea.TeaError(f"unreadable `tea pulls list` output: {exc}") from exc
+        if not isinstance(entries, list):
+            raise _tea.TeaError("unreadable `tea pulls list` output: not a JSON list")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            head = entry.get("head")
+            if isinstance(head, dict):
+                head = head.get("label") or head.get("ref")
+            if ref in (str(entry.get("url", "")), str(entry.get("index", "")), head) or (
+                m and str(entry.get("index", "")) == m.group(2)
+            ):
+                return str(entry.get("body") or "")
+        raise _tea.TeaError(f"no pull request matches {ref!r} in tea's listing")
 
     def edit_issue_labels(
         self,

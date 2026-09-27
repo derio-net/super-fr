@@ -28,6 +28,7 @@ from __future__ import annotations
 import subprocess
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import TypeVar
 
 from fr.labels import LabelDef
@@ -44,14 +45,18 @@ class TeaError(Exception):
         self.returncode = returncode
 
 
-def _run_tea(args: list[str]) -> str:
-    """Run a tea command and return stdout. Raises TeaError on failure."""
+def _run_tea(args: list[str], *, cwd: Path | None = None) -> str:
+    """Run a tea command and return stdout. Raises TeaError on failure.
+
+    `cwd` is the checkout tea resolves its repository and login from when
+    the call names no `--repo` (gh#742); `None` keeps this process's."""
     try:
         result = subprocess.run(
             ["tea", *args],
             capture_output=True,
             text=True,
             check=True,
+            cwd=cwd,
         )
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.strip() if exc.stderr else f"tea exited with code {exc.returncode}"

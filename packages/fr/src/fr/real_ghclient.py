@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from fr import gh as _gh
@@ -268,6 +269,9 @@ class RealGhClient:
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return _gh.list_prs_by_head(repo=repo, branch=branch)
+
+    def pr_body(self, ref: str, *, cwd: Path) -> str:
+        return _gh.view_pr_body(ref, cwd=cwd)
 
     def pr_view(self, repo: str, number: int) -> dict[str, Any]:
         out = _gh._run_gh(

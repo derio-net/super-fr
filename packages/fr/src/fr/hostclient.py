@@ -9,6 +9,7 @@ each one re-deriving backend detection itself. See docs/superpowers/specs/
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,49 @@ from fr.tea import TeaError
 # class per backend CLI. A caller that collects per-item forge failures catches
 # exactly these, so a programming error is never reported as a forge failure.
 FORGE_ERRORS: tuple[type[Exception], ...] = (GhError, GlabError, TeaError)
+
+# The command fr names when it tells an agent to open, edit or ready a PR,
+# per backend (gh#742: a refusal that says `gh pr create` on a GitLab
+# checkout sends the agent to a CLI that cannot help). `{body}` is a file
+# holding the body and `{ref}` the PR. Each template was checked against its
+# CLI's own `--help`: glab and tea take the description as a value, not a
+# file, and tea's `--draft`/`--ready` are its WIP-title-prefix toggles.
+PR_COMMANDS: dict[_hosts.HostBackend, dict[str, str]] = {
+    "github": {
+        "create": "gh pr create --draft --body-file {body}",
+        "edit": "gh pr edit {ref} --body-file {body}",
+        "ready": "gh pr ready {ref}",
+        "fill": "gh pr create --fill",
+    },
+    "gitlab": {
+        "create": 'glab mr create --draft --description "$(cat {body})"',
+        "edit": 'glab mr update {ref} --description "$(cat {body})"',
+        "ready": "glab mr update {ref} --ready",
+        "fill": "glab mr create --fill --yes",
+    },
+    "gitea": {
+        "create": 'tea pulls create --draft --description "$(cat {body})"',
+        "edit": 'tea pulls edit {ref} --description "$(cat {body})"',
+        "ready": "tea pulls edit {ref} --ready",
+        "fill": 'tea pulls create --title "<title>"',
+    },
+}
+
+
+_TRAILING_NUMBER = re.compile(r"^https?://.*/(\d+)/?$")  # a URL only: `fix/742` is a branch
+
+
+def pr_command(repo_root: Path, op: str, **fields: str) -> str:
+    """The `op` (create | edit | ready | fill) command for `repo_root`'s forge,
+    with `fields` filled in — see `PR_COMMANDS`. `glab mr update` and
+    `tea pulls edit` take no URL, so there a PR URL `ref` is reduced to its
+    number, which both resolve against the checkout they run in."""
+    backend = _hosts.detect_backend(repo_root)
+    ref = fields.get("ref")
+    if backend != "github" and ref and (m := _TRAILING_NUMBER.search(ref)):
+        fields = {**fields, "ref": m.group(1)}
+    return PR_COMMANDS[backend][op].format(**fields)
+
 
 # Warn-once guard for a DECLARED host fr cannot thread to the resolved
 # backend (gh-486, spec §4.D) — keyed on (host, backend) so a repo that
