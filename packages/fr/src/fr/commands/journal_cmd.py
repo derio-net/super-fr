@@ -28,6 +28,7 @@ from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     effective_finding_states,
+    journal_now,
     journal_path,
     open_finding_ids,
     parse_journal,
@@ -48,10 +49,8 @@ journal_app = typer.Typer(
 
 
 def _timestamp() -> str:
-    """Wall-clock ISO stamp. Isolated so tests could monkeypatch if needed."""
-    import datetime as _dt
-
-    return _dt.datetime.now().replace(microsecond=0).isoformat()
+    """UTC ISO stamp with its offset. Isolated so tests could monkeypatch if needed."""
+    return journal_now()
 
 
 def _load(path: Path) -> list[JournalEntry]:

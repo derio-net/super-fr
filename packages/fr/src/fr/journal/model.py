@@ -357,14 +357,31 @@ def _answered_by_token(value: str | None) -> AnsweredBy | None:
     return "operator" if value == "operator" else "agent" if value == "agent" else None
 
 
+def journal_now() -> str:
+    """The `created` stamp for a new entry: UTC, second precision, WITH its
+    offset (`...+00:00`).
+
+    Every journal writer calls this. A naive stamp loses the writer's zone, and
+    the reader can only assume its own: a review written in a UTC container
+    and read on a UTC+9 host lands nine hours early (super-fr#625). The offset
+    is not a shape change, because `created` is a string and every released
+    reader already parses an aware value.
+    """
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
+
+
 def journal_stamp_as_utc(created: str) -> str:
     """A journal `created` stamp as an aware UTC ISO string.
 
-    `fr journal` stamps LOCAL wall-clock time with no offset, but
-    `fr.run.telemetry.parse_timestamp` reads a naive stamp as UTC (every run
-    producer writes UTC). Handed over raw, a record written at 21:00 in UTC+3
-    opens a question window three hours late. An unparseable stamp is returned
-    unchanged, so the reader reports it as unreadable rather than guessing.
+    Stamps from `journal_now` carry their offset and convert exactly. Older
+    stamps are naive LOCAL wall-clock time. Those are read in THIS process's
+    zone, which is the best guess left and is correct only when the writer
+    shared it. `fr.run.telemetry.parse_timestamp` would read them as UTC
+    instead, so a record written at 21:00 in UTC+3 would open a question
+    window three hours late. An unparseable stamp is returned unchanged, so
+    the reader reports it as unreadable rather than guessing.
     """
     import datetime as _dt
 
