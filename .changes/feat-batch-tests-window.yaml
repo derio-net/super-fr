@@ -1,2 +1,0 @@
-bump: patch
-summary: deliver's tests=<log> gate accepts a suite run in the background (once its task-notification reports success) and a log path held in a shell variable
