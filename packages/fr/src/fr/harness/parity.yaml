@@ -346,10 +346,13 @@ surfaces:
           the child read "HELD BY an unclaimed agent (opencode, <model>)". The
           unclaimed record still refuses a second dispatch, and harness and
           model are recorded at dispatch. fr-opencode-plugin now claims from
-          the child on its first tool call (`fr run claim --open-unit`, gh#530),
-          naming the child's session id and the tier agent it runs as — built
-          and bun-tested against a fake client, not yet observed landing in a
-          live OpenCode session, so still partial.
+          the child on its first tool call (`fr run claim --open-unit`, gh#530):
+          observed live 2026-09-27 on OpenCode 1.18.32, the claim landed about
+          3-6 s after dispatch, and the child's own first `fr run status` read
+          "HELD BY agent ses_… (opencode, <model>)" with the tier agent
+          recorded. Still partial, not enforced: the claim is fail-open, so an
+          `fr` on OpenCode's PATH too old to know `--open-unit` leaves the unit
+          unclaimed until the call returns, and nothing refuses that.
       hermes:
         state: partial
         scope_note: >-
