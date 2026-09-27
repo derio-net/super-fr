@@ -9,3 +9,8 @@ apply_cmd.py checks only `to in runner_names()`, then labels phase Issues runner
 ### 6d30756ffe9e · root-cause · The Runner protocol declares no units, so apply cannot ask; tick's refusal message hardcodes 'unknown repo'
 
 A runner's unit limit lives only inside can_dispatch(item), which needs a built runner and a built item. apply cannot build a runner (vk/cncd have no from_env — they are constructed only in their bridge), so its only possible check is name registration. Separately, tick maps every can_dispatch False to 'unknown repo', even when the unit is the refusal. Fix: a declared `units` class attribute on Runner (like `capabilities`), read off the entry-point class in apply before any forge call; tick names the unit when it is the reason.
+
+<!-- fr:journal kind=finding scope=debug id=apply-runner-units-fix created=2026-09-27T08:53:40 state=fixed -->
+### apply-runner-units-fix · finding [fixed] · Runner.units declared; apply refuses a non-phase runner before the forge; tick names the unit
+
+Source: Runner.units (protocols.py), registry.runner_units, apply_cmd refusal after the name check and before _make_gh_client; vk/cncd {phase}, herdr {run}, each can_dispatch gated on self.units; tick unit_mismatch vs generic refusal message. Pinned first by tests/unit/test_apply_runner_units.py (committed red in d27f7f12: 5 failed — apply reached the forge client, no runner declared units, tick said 'unknown repo'); green after. Full suite: 6519 passed, 2 failed under heavy host load (test_run_idle_guard, test_record_review_fixes), both pass when rerun alone — unrelated to this change.
