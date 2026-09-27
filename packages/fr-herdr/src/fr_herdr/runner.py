@@ -93,6 +93,7 @@ class HerdrRunner:
 
     name = "herdr"
     capabilities: frozenset[str] = frozenset({"git", "tests", "scm", "devcontainer"})
+    units: frozenset[str] = frozenset({"run"})
 
     def __init__(self, workspace_id: str | None = None) -> None:
         self.workspace_id = workspace_id
@@ -128,7 +129,7 @@ class HerdrRunner:
         return {item.id for item in items if item.id in labels}
 
     def can_dispatch(self, item: WorkItem) -> bool:
-        return item.unit == "run" and item.payload.get("harness") in HARNESSES
+        return item.unit in self.units and item.payload.get("harness") in HARNESSES
 
     def dispatch(self, item: WorkItem) -> str:
         """Open the tab, start the harness with the model, submit the brief.

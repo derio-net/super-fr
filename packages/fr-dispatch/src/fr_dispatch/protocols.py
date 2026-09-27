@@ -48,6 +48,17 @@ class Runner(Protocol):
     the attribute is.
     """
 
+    units: frozenset[str]
+    """The decomposition units this backend takes (`run` | `phase` | `spec`).
+
+    A CLASS attribute, readable without building the runner: `fr apply --to`
+    reads it off the registered class (`registry.runner_units`) and refuses a
+    runner that takes no phases before it touches the forge (super-fr#644),
+    because vk and cncd cannot be built outside their bridge. `can_dispatch`
+    still makes the per-item decision and must refuse any unit not named
+    here; `tick` reports that refusal as the unit, not as a repo problem.
+    """
+
     def preflight(self, items: Sequence[WorkItem]) -> str | None:
         """Config/capability check before any dispatch this tick.
 

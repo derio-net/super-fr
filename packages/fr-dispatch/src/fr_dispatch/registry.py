@@ -37,6 +37,26 @@ class RunnerLoadError(Exception):
     """A runner name that cannot be turned into a runner here."""
 
 
+def runner_units(name: str) -> frozenset[str] | None:
+    """The units the runner registered as *name* declares, read off its class.
+
+    Loads the entry point but never builds the runner, so it works for vk and
+    cncd, which have no `from_env`. `None` means the class declares no
+    `units` (a runner written before the attribute existed) — the caller
+    decides what that means; `fr apply --to` refuses it. Raises
+    `RunnerLoadError` for a name nobody registers or a class that won't load.
+    """
+    runners = available_runners()
+    if name not in runners:
+        raise RunnerLoadError(f"runner `{name}` is not installed")
+    try:
+        cls = runners[name].load()  # type: ignore[attr-defined]
+    except Exception as e:  # noqa: BLE001 — a broken adapter is reported, not raised raw
+        raise RunnerLoadError(f"runner `{name}` failed to load: {e}") from e
+    units = getattr(cls, "units", None)
+    return frozenset(units) if units is not None else None
+
+
 def load_runner(name: str) -> Runner:
     """Build the runner registered as *name* through its `from_env()` classmethod.
 

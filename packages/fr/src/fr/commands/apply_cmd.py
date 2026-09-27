@@ -489,13 +489,34 @@ def apply_command(
                 "(e.g. `uv tool install --with fr-dispatch fr`) and re-run."
             )
             raise typer.Exit(2)
-        from fr_dispatch.registry import runner_names
+        from fr_dispatch.registry import RunnerLoadError, runner_names, runner_units
 
         names = runner_names()
         if to not in names:
             err_console.print(
                 f"unknown runner {to!r} — registered runners: "
                 + (", ".join(names) if names else "(none)")
+            )
+            raise typer.Exit(2)
+        # `--to` queues PHASE Issues, so a runner that takes no phases would
+        # leave them labelled `runner:<name>` and waiting forever (super-fr#644).
+        # Refused here, before any forge call, off the class's declaration —
+        # the runner itself cannot be built outside its bridge.
+        try:
+            units = runner_units(to)
+        except RunnerLoadError as e:
+            err_console.print(str(e))
+            raise typer.Exit(2) from e
+        if units is None:
+            err_console.print(
+                f"runner {to!r} declares no units, so fr cannot tell whether it takes "
+                "phase work — refusing to queue phases to it"
+            )
+            raise typer.Exit(2)
+        if "phase" not in units:
+            err_console.print(
+                f"runner {to!r} takes {', '.join(sorted(units))}-unit work only; "
+                "`fr apply --to` queues phases, which it would never pick up"
             )
             raise typer.Exit(2)
 
