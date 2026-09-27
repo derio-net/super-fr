@@ -1,2 +1,0 @@
-bump: patch
-summary: "deliver tests= gate: only a top-level assignment binds a $VAR log path — one inside a subshell, $( ), backticks, a compound command, a comment, a continued line, a background job or a pipeline no longer does (#720)"
