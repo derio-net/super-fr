@@ -654,9 +654,7 @@ def test_suggest_groups_one_theme_spelled_several_ways() -> None:
     themes = [s for s in suggest(judgements, _facts()) if s.signal == "theme"]
 
     # One group, under the first member's stored spelling; blank themes form no group.
-    assert themes == [
-        Suggestion("theme", "Docs", ["super-fr#577", "super-fr#575", "super-fr#471"])
-    ]
+    assert themes == [Suggestion("theme", "Docs", ["super-fr#577", "super-fr#575", "super-fr#471"])]
     # Nothing is rewritten: the stored spellings survive.
     assert [judgements.issues[f"super-fr#{n}"].theme for n in (577, 575)] == ["Docs", "docs "]
 
