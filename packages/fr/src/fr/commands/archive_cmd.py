@@ -31,7 +31,7 @@ from fr.archive import (
 )
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError
-from fr.repair import repair_repo
+from fr.repair import plans_referencing_specs, repair_repo
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -218,11 +218,18 @@ def archive_command(
     # swept — `fr migrate dirs` evaluates specs unconditionally and the two
     # archive paths must agree (review finding, 2026-06-06).
     # Single-plan archive repairs only that plan's own refs (#686); --all is
-    # repo-wide by intent.
+    # repo-wide by intent. The sweep is repo-wide, though, and may move a
+    # spec that belongs to other plans; their refs to it are widened in, so
+    # the move and its repair still land together.
     only_plans = None if all_plans else frozenset(p.name for p in archived)
     specs_moved = False
     if (archived or all_plans) and not no_spec_sweep:
-        specs_moved = _report_sweep(repo_root, spec_archive_sweep(repo_root, gh), only_plans)
+        sweep = spec_archive_sweep(repo_root, gh)
+        if only_plans is not None:
+            only_plans |= plans_referencing_specs(
+                repo_root, [repo_root / m.dst for m in sweep.moves]
+            )
+        specs_moved = _report_sweep(repo_root, sweep, only_plans)
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 

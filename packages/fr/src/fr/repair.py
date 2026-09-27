@@ -93,6 +93,36 @@ def _in_scope(slug: str, only_plans: frozenset[str] | None) -> bool:
     return only_plans is None or slug in only_plans
 
 
+def plans_referencing_specs(repo_root: Path, spec_paths: list[Path]) -> frozenset[str]:
+    """Slugs of the plans whose refs a move of `spec_paths` made stale.
+
+    That is every plan a moved spec's table row names, plus every plan whose
+    `spec:` names a moved spec. A scoped archive widens its repair by these,
+    so a spec its own sweep moved is never left half-referenced (#697
+    regression) — without falling back to the repo-wide walk.
+    """
+    import yaml
+
+    from fr.spec import parse_spec
+
+    names = {p.name for p in spec_paths}
+    slugs: set[str] = set()
+    for p in spec_paths:
+        slugs.update(s for ref in parse_spec(p).plans if (s := refs.plan_slug(ref.file)))
+    sp = repo_root / "docs" / "superpowers"
+    for d in (sp / "plans", sp / "implemented" / "plans"):
+        for meta_path in sorted(d.glob("*/_meta.yaml")) if d.is_dir() else ():
+            try:
+                doc = yaml.safe_load(meta_path.read_text())
+            except (OSError, yaml.YAMLError):
+                continue  # repair reports a broken meta; scoping only skips it
+            spec = doc.get("spec") if isinstance(doc, dict) else None
+            if isinstance(spec, str) and not is_cross_repo_spec(spec):
+                if refs.plan_slug(spec) in names:
+                    slugs.add(meta_path.parent.name)
+    return frozenset(slugs)
+
+
 def _repair_spec_table(
     spec_path: Path,
     repo_root: Path,

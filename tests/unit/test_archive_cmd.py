@@ -746,3 +746,34 @@ def test_sweep_only_still_repairs_repo_wide(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert (repo / "docs/superpowers/implemented/specs" / spec.name).exists()
     assert "spec: other-design.md" in (other / "_meta.yaml").read_text()
+
+
+def test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved(tmp_path, monkeypatch):
+    """#697 regression: the sweep a single-plan archive runs may move a spec
+    unrelated to the archived plan (one stranded by an earlier run). The refs
+    that move just made stale — the other plan's `spec:` and that spec's own
+    row — are repaired in the same command, as they were before scoping; the
+    scope still never reaches a plan untouched by the move."""
+    repo = _repo(tmp_path)
+    done = _add_plan(repo, "2026-09-01-done", ticked=True)
+    stranded = _add_plan(repo, "2026-09-03-b", ticked=True, spec_name="y-design.md")
+    spec = _add_spec(
+        repo,
+        "y-design.md",
+        [("Plan B", "`derio-net/test`", "docs/superpowers/plans/2026-09-03-b/")],
+    )
+    other = _live_plan_with_full_spec(repo, "2026-09-02-other")
+    _seed(repo)
+    _strand_plan(repo, stranded.name)
+    before = (other / "_meta.yaml").read_bytes()
+
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", str(done.relative_to(repo))])
+
+    assert result.exit_code == 0, result.output
+    moved = repo / "docs/superpowers/implemented/specs" / spec.name
+    assert moved.exists()
+    b_meta = repo / "docs/superpowers/implemented/plans" / stranded.name / "_meta.yaml"
+    assert "spec: y-design.md\n" in b_meta.read_text()
+    assert "`2026-09-03-b`" in moved.read_text()
+    assert "docs/superpowers/plans/2026-09-03-b/" not in moved.read_text()
+    assert (other / "_meta.yaml").read_bytes() == before
