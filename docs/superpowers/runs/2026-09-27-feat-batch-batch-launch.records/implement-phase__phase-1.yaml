@@ -1,0 +1,39 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-batch-launch
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T2.S1
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T4.S1
+  - P1.T4.S2
+  - P1.T5.S1
+  - P1.T5.S2
+refactor:
+  P1.T3: "render_brief lost only the one subagent-model line and its param; the
+    function was already minimal and needed no further cleanup."
+  P1.T4: "the checkout-before-resolve reorder and the new _orchestrator helper
+    are the smallest shape that carries the precedence; nothing else in
+    triage_batch_cmd.py touches launch resolution."
+journal:
+  - kind: discovery
+    id: p1-acceptance-record-refused
+    title: "implement-phase's emits don't allow an `acceptance` record section"
+    body: >-
+      The shipped fr-goal manifest's `implement-phase` step emits only
+      `[journal:plan, plan:ticks]`, so `allowed_sections` (fr.record.model)
+      never includes `acceptance` for it — a record naming that section
+      would be refused by `fr run resolve --record` (RecordRefusedError,
+      "section(s) acceptance not allowed"). The step-record template's own
+      comment names the fallback ("or use `fr acceptance set-status` ...
+      and commit the matrix + reports"), so triage-batch-session-model was
+      moved to `ci` that way instead, in its own commit
+      (cc6cacb9a6903e2c5d856c0d6cc46b98a00bedef), rather than through this
+      record's `acceptance:` field.
+    phase: 1
+resolves: []
+acceptance: []
+evidence: {}

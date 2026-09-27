@@ -2232,8 +2232,7 @@ def _resolved_model(repo_root: Path, harness: str | None, tier: str | None) -> s
     turning a sentinel into a model name by coincidence."""
     if tier is None or tier == PHASE_TIER_SENTINEL or harness is None:
         return None
-    from fr.commands.models_cmd import REPO_MODELS_REL
-    from fr.models import default_models_path, load_models
+    from fr.models import REPO_MODELS_REL, default_models_path, load_models
     from fr.models import resolve as resolve_model
 
     repo_cfg = load_models(repo_root / REPO_MODELS_REL)

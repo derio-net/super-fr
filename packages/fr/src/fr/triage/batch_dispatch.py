@@ -47,7 +47,6 @@ def render_brief(
     repo: str,
     closing_refs: Sequence[str],
     reserved_version: str | None,
-    model: str,
 ) -> str:
     """The launch brief (§3.C step 3): engine-owned, deterministic text.
 
@@ -84,7 +83,6 @@ def render_brief(
             "do not pick another number)."
         )
     lines += [
-        f"- Use `{model}` for every subagent and every model tier.",
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "
         "bridge would then own that issue's `fr:` labels.",
     ]

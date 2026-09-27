@@ -49,7 +49,8 @@ stamp), and a payload a run-capable runner must honour:
 
 - `brief` — the engine-rendered prompt that starts the run;
 - `harness` — which agent harness to launch (e.g. `claude`);
-- `model` — the model for every subagent and tier, passed to the harness;
+- `model` — the SESSION model (the run's orchestrator), passed to the harness;
+  subagents resolve their own tiers through `fr models`, never this field;
 - `branch` — the branch the run works on (`feat/batch-<id>`);
 - `reserved_version` — the version the run bumps to, or None;
 - `issues` — the member issue keys, for the runner's bookkeeping.

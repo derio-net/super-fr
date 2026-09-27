@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import permutations
@@ -302,27 +302,68 @@ def save_batches(
 
 # ------------------------------------------------------------------ launch
 
+HARNESS_ALIASES: dict[str, str] = {"claude": "claude-code"}
+"""A runner's name for a harness -> fr's harness id (d2-harness-alias). herdr
+calls Claude Code's launcher `claude`; `fr models` keys everything by
+`claude-code`. Every other name (`opencode`, `hermes`, ...) passes through."""
 
-def resolve_launch(batch: Batch, config: TriageConfig) -> Launch:
+
+def fr_harness(name: str) -> str:
+    """The fr harness id for *name*, the runner's own vocabulary."""
+    return HARNESS_ALIASES.get(name, name)
+
+
+ModelSource = Literal["batch", "defaults.launch", "orchestrator binding"]
+
+
+@dataclass(frozen=True)
+class ResolvedLaunch:
+    """A resolved `Launch` plus which rung of the precedence supplied its model
+    (spec 2026-09-27-triage-batch-launch §A) — the one function that knows the
+    order is also the one that reports which rung won."""
+
+    launch: Launch
+    model_source: ModelSource
+
+
+def resolve_launch(
+    batch: Batch,
+    config: TriageConfig,
+    *,
+    orchestrator: Callable[[str], str | None] | None = None,
+) -> ResolvedLaunch:
     """The batch's launch, each unset field taken from `defaults.launch` (§3.B).
 
     Resolved at dispatch, never at create: fr never picks a runner, harness or
-    model itself, so a field set in neither place is refused.
+    model itself, so a field set in neither place is refused. `model` has a
+    third rung: the ORCHESTRATOR binding for the batch's harness (mapped
+    through `fr_harness`), consulted only once the harness is known and only
+    when neither the batch nor `defaults.launch` gave a model. `resolve_launch`
+    stays pure otherwise: it never reads a file itself, the callable does.
     """
     defaults = config.defaults.launch
-    resolved = Launch(
-        runner=batch.launch.runner or defaults.runner,
-        harness=batch.launch.harness or defaults.harness,
-        model=batch.launch.model or defaults.model,
-    )
+    runner = batch.launch.runner or defaults.runner
+    harness = batch.launch.harness or defaults.harness
+    model = batch.launch.model or defaults.model
+    model_source: ModelSource = "batch" if batch.launch.model else "defaults.launch"
+    if model is None and harness is not None and orchestrator is not None:
+        model = orchestrator(fr_harness(harness))
+        model_source = "orchestrator binding"
+    resolved = Launch(runner=runner, harness=harness, model=model)
     missing = [f for f in ("runner", "harness", "model") if getattr(resolved, f) is None]
     if missing:
-        raise TriageError(
+        message = (
             f"batch {batch.id!r} has no {', '.join(missing)} to launch with: give "
             f"{' '.join('--' + f for f in missing)} on the batch, or set defaults.launch "
             "in the repo's .fr/triage.yaml"
         )
-    return resolved
+        if missing == ["model"] and harness is not None:
+            message += (
+                f", or bind one: fr models set --harness {fr_harness(harness)} "
+                "--tier orchestrator --model <model>"
+            )
+        raise TriageError(message)
+    return ResolvedLaunch(launch=resolved, model_source=model_source)
 
 
 # ----------------------------------------------------------------- markers

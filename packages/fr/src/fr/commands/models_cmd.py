@@ -17,13 +17,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
 from fr.commands.common import resolve_repo_root
 from fr.models import (
+    REPO_MODELS_REL,
     ModelsConfig,
     default_models_path,
     load_models,
@@ -40,7 +39,7 @@ models_app = typer.Typer(
     no_args_is_help=True,
 )
 
-REPO_MODELS_REL = Path("docs/superpowers/models.yaml")
+__all__ = ["REPO_MODELS_REL", "models_app"]
 
 # Harnesses `fr models apply` knows how to materialize. Checked up front so a
 # typo'd --harness is refused rather than silently doing nothing — the exact

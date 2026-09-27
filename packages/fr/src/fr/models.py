@@ -23,6 +23,13 @@ import yaml
 
 ModelsConfig = dict[str, dict[str, str]]
 
+REPO_MODELS_REL = Path("docs/superpowers/models.yaml")
+"""A repo's own tier→model bindings, relative to its root — read wherever a
+command needs the repo-over-user rule: `fr models`'s own commands, `fr run`'s
+tier resolution, and triage batch dispatch's orchestrator fallback (spec
+2026-09-27-triage-batch-launch §A). One constant so all three read the same
+path."""
+
 
 class ModelsError(Exception):
     """Raised when a models config file is structurally invalid."""

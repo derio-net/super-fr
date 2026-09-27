@@ -169,6 +169,15 @@ class FakeCheckout:
         return branch in self.remote_branches
 
 
+@pytest.fixture(autouse=True)
+def _isolate_models_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The orchestrator fallback reads real config files; point both at a
+    per-test sandbox so no test can see (or pollute) the operator's real
+    ~/.config/fr/models.yaml (same discipline as test_models_cmd.py)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
+
+
 @pytest.fixture
 def gh(monkeypatch: pytest.MonkeyPatch) -> FakeGhClient:
     client = FakeGhClient()
@@ -261,6 +270,56 @@ def test_no_launch_anywhere_is_refused(
     assert "defaults.launch" in out
 
 
+# ------------------------------------------------------- session model (#704)
+
+
+def _no_model_judgements() -> str:
+    return JUDGEMENTS.replace(
+        "    launch: {runner: fake, harness: claude, model: claude-opus-5-5}\n",
+        "    launch: {runner: fake, harness: claude}\n",
+    )
+
+
+def test_dispatch_falls_back_to_the_user_orchestrator_binding(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    from fr.models import default_models_path, set_binding
+
+    _state(tmp_path, judgements=_no_model_judgements())
+    set_binding(default_models_path(), "claude-code", "orchestrator", "claude-opus-5-5")
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert "model: claude-opus-5-5 (orchestrator binding)" in out
+    (item,) = runner.dispatched
+    assert item.payload["model"] == "claude-opus-5-5"
+
+
+def test_the_checkouts_repo_models_yaml_overrides_the_user_orchestrator_binding(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    from fr.models import default_models_path, set_binding
+
+    _state(tmp_path, judgements=_no_model_judgements())
+    set_binding(default_models_path(), "claude-code", "orchestrator", "user-model")
+    repo_models = checkout.path / "docs" / "superpowers" / "models.yaml"
+    repo_models.parent.mkdir(parents=True, exist_ok=True)
+    repo_models.write_text("claude-code:\n  orchestrator: repo-model\n")
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    assert "model: repo-model (orchestrator binding)" in out
+    (item,) = runner.dispatched
+    assert item.payload["model"] == "repo-model"
+
+
+def test_dispatch_refuses_naming_fr_models_set_when_nothing_binds_a_model(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=_no_model_judgements())
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 2
+    assert "fr models set --harness claude-code --tier orchestrator --model" in out
+
+
 def test_a_collected_config_that_differs_from_origin_is_refused(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
@@ -337,7 +396,6 @@ def _brief(reserved: str | None = "4.22.0", judgements: str = JUDGEMENTS) -> str
         repo=REPO,
         closing_refs=[f"Closes {REPO}#{n}" for n in MEMBERS],
         reserved_version=reserved,
-        model="claude-opus-5-5",
     )
 
 
@@ -355,7 +413,8 @@ def test_the_brief_carries_every_rule_the_run_depends_on() -> None:
     assert "Rebuild and stop both route through down." in brief
     assert "feat/batch-lifecycle" in brief
     assert "Bump the version to `4.22.0`" in brief
-    assert "Use `claude-opus-5-5` for every subagent and every model tier" in brief
+    assert "every subagent" not in brief
+    assert "claude-opus-5-5" not in brief
     assert "Do not name any member issue as a phase `tracking_issue`" in brief
     assert "draft PR" in brief
 

@@ -1,0 +1,5 @@
+bump: minor
+summary: >-
+  triage batches: the session starts on the orchestrator binding and
+  subagents keep their fr models tiers; a batch declares skill goal|debug,
+  and a debug batch dispatches /fr-debugging
