@@ -306,6 +306,26 @@ def _branch_blob_was_on_base(
     generated report/matrix file is touched by nearly every later PR, so the
     old one-`rev-parse`-per-commit scan multiplied badly across every
     workspace in a gc sweep.
+
+    A merge later REVERTED does not count (#716). The landing commit stays in
+    history, so "the blob was written" alone would still pass; the same log,
+    read oldest-first, also shows the revert — after the landing, the path is
+    written back to a blob it held BEFORE the landing (at the merge-base, an
+    intermediate PR's state, or a rebase merge's earlier commit). That holds
+    even when later commits edit the path again, which the base's current blob
+    alone would miss. Writing the branch's blob again (the revert reverted)
+    re-lands it. Absence is not a "held" state: a file the branch added that
+    later disappears is the consumed `.changes` fragment, and a later deletion
+    counts as landed — so a revert of a branch that ONLY added files stays
+    indistinguishable by content, as it always was.
+
+    Two more limits, both of content-only evidence. A revert applied after
+    ANOTHER change to the path (a three-way revert) writes a blob the path
+    never held, so it still reads as landed (#739) — the branch's other,
+    untouched files usually still read as missing. And a later PR that
+    removes exactly the branch's lines reads as a revert: a safe refusal.
+    Only the base's first-parent line is read, so content that reached the
+    base solely through a side branch's own commits reads as missing (safe).
     """
     bpath = base_path or path
     want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
@@ -327,6 +347,15 @@ def _branch_blob_was_on_base(
             # exists on the base only as a merge result (a conflict resolution)
             # would read as never landed (Opus fix review f2).
             "-m",
+            # The base's own line, oldest first: the revert check below needs
+            # "before the landing" and "after it" to mean something. Without
+            # `--first-parent`, a side branch merged LATER (a merge-commit PR
+            # forked before the landing) lists its commits after the landing,
+            # and one writing an old blob would un-land it (#716 review f1).
+            # With it, `-m` diffs each merge against its first parent only.
+            "--first-parent",
+            "--topo-order",
+            "--reverse",
             "--format=",
             f"{merge_base}..{base_ref}",
             "--",
@@ -336,6 +365,8 @@ def _branch_blob_was_on_base(
     )
     if log.returncode != 0:
         return False
+    held: set[str] = set()  # every blob the path held before (and at) the landing
+    landed = False
     for line in log.stdout.splitlines():
         if not line.startswith(":"):
             continue
@@ -343,9 +374,22 @@ def _branch_blob_was_on_base(
         fields = meta.split()
         # `:oldmode newmode oldsha newsha status[score]` — the new blob is
         # field 3, present on every raw line (add/modify/delete/rename alike).
-        if len(fields) >= 4 and fields[3] == blob:
-            return True
-    return False
+        if len(fields) < 4:
+            continue
+        old, new = fields[2], fields[3]
+        if new == blob:
+            landed = True
+            seen: tuple[str, ...] = (old,)
+        elif landed:
+            if new in held:
+                landed = False  # reverted: the path went back to a pre-landing state
+            continue
+        else:
+            seen = (old, new)
+        # Absence (the all-zero id of an add's old side or a delete's new side,
+        # 40 or 64 digits) is not a held state — see the docstring.
+        held.update(b for b in seen if b.strip("0"))
+    return landed
 
 
 def _landed_at(
