@@ -635,8 +635,72 @@ transcript, so a parent hop cannot be resolved, and `../x.log` keeps matching
 `…/x.log` as it always has. A `..` mid-path is not collapsed and fails closed."""
 
 
+_ASSIGNMENT = re.compile(
+    r"""(?:\A|[;\n]|&&|\|\|)[ \t]*(?:(?:export|declare(?:[ \t]+-\w+)*)[ \t]+)?"""
+    r"""([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&|]*)(?=[ \t]*(?:\Z|[;&|\n]))"""
+)
+"""A `NAME=value` that is a whole command of its own: at the start of the string
+or after `;`, `&&`, `||` or a newline, optionally behind `export`/`declare`,
+and followed by a command separator or the end. NOT recognised (fail closed,
+review F3): a prefix assignment that scopes to the next word (`L=x pytest >
+$L` leaves `$L` unset), and anything inside quotes or a here-doc body."""
+_QUOTED = re.compile(r"""\"(?:\\.|[^"\\])*\"|'[^']*'""", re.DOTALL)
+_HEREDOC = re.compile(
+    r"""<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?:\n|\Z)""", re.DOTALL
+)
+
+
+def _assignments(command: str) -> list[tuple[int, str, str]]:
+    """`(end, name, value)` of each command-start assignment in `command` that
+    does not sit inside a quoted string or a here-doc body."""
+    scratch = command
+    protected: list[tuple[int, int]] = []
+    for doc in _HEREDOC.finditer(command):
+        protected.append(doc.span(3))
+        scratch = (
+            scratch[: doc.start(3)] + " " * (doc.end(3) - doc.start(3)) + scratch[doc.end(3) :]
+        )
+    protected += [m.span() for m in _QUOTED.finditer(scratch)]
+    found = []
+    for m in _ASSIGNMENT.finditer(command):
+        at = m.start(1)
+        if any(start <= at < end for start, end in protected):
+            continue
+        found.append((m.end(), m.group(1), m.group(2)))
+    return found
+
+
+_VARIABLE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
+_SUBSTITUTION_ROUNDS = 5
+
+
+def _resolve_target(target: str, assignments: list[tuple[int, str, str]], at: int) -> str | None:
+    """`target` with same-command variables substituted (spec §3.B). Only
+    assignments that END before `at` (the redirect) count. A variable still
+    unresolved is dropped when it LEADS the path — the environment root is as
+    unknowable from the transcript as the cwd — and anything else (mid-path,
+    the whole target, a command substitution) is `None`: fail closed."""
+    known = {name: value.strip("\"'") for end, name, value in assignments if end <= at}
+    for _ in range(_SUBSTITUTION_ROUNDS):
+        replaced = _VARIABLE.sub(lambda m: known.get(m.group(1) or m.group(2), m.group(0)), target)
+        if replaced == target:
+            break
+        target = replaced
+    lead = _VARIABLE.match(target)
+    if lead:
+        target = target[lead.end() :]
+        if not target.startswith("/") or target == "/":
+            return None
+        target = target.lstrip("/")
+    return None if "$" in target or "(" in target or "`" in target else target
+
+
 def _writes(command: str, log: Path) -> bool:
-    for _quote, target in _WRITE_TARGET.findall(command):
+    assignments = _assignments(command)
+    for match in _WRITE_TARGET.finditer(command):
+        target = _resolve_target(match.group(2), assignments, match.start())
+        if target is None:
+            continue
         if Path(target).is_absolute():
             if Path(target) == log:
                 return True
@@ -738,16 +802,15 @@ def orchestrator_wrote_since(
         if parsed is not None and stamp is not None and parsed[0] not in queued:
             queued[parsed[0]] = stamp
     for record in records:
-        if record.get("type") != "user" or record.get("isSidechain") is True:
+        if record.get("isSidechain") is True:
             continue
-        origin = record.get("origin")
-        if not isinstance(origin, Mapping) or origin.get("kind") != "task-notification":
-            # Only the harness's own notice counts: an operator prompt or `!cmd`
-            # output is also a string-content `user` record (Opus review r2).
+        # Only the harness's own notice counts: an operator prompt or `!cmd`
+        # output is also a string-content `user` record (Opus review r2).
+        text = _notice_carrier(record)
+        if text is None:
             continue
         done = parse_timestamp(record.get("timestamp"))
-        message = record.get("message")
-        parsed = _task_notice(message.get("content") if isinstance(message, Mapping) else None)
+        parsed = _task_notice(text)
         if parsed is None or done is None:
             continue
         tool_use_id, status = parsed
@@ -761,6 +824,31 @@ def orchestrator_wrote_since(
             end = min(done, queued.get(tool_use_id, done))
             windows.append((start, end if end >= start else done))
     return windows
+
+
+def _notice_carrier(record: Mapping[str, Any]) -> object:
+    """The text of a record that carries the harness's own task notice, else
+    `None`. Two carriers exist in real transcripts: a `user` record with
+    `origin.kind: task-notification`, and — when the orchestrator was busy as the
+    command ended — an `attachment` record of type `queued_command` and
+    `commandMode: task-notification` whose `prompt` is the notice. About a
+    fifth of real notices arrive ONLY as the attachment, so reading just the
+    first left those runs with no window and refused (gh#594)."""
+    if record.get("type") == "user":
+        origin = record.get("origin")
+        if isinstance(origin, Mapping) and origin.get("kind") == "task-notification":
+            message = record.get("message")
+            return message.get("content") if isinstance(message, Mapping) else None
+        return None
+    if record.get("type") == "attachment":
+        attachment = record.get("attachment")
+        if (
+            isinstance(attachment, Mapping)
+            and attachment.get("type") == "queued_command"
+            and attachment.get("commandMode") == "task-notification"
+        ):
+            return attachment.get("prompt")
+    return None
 
 
 _NOTICE_FIELD = re.compile(r"<(tool-use-id|status)>\s*([^<]*?)\s*</\1>")
