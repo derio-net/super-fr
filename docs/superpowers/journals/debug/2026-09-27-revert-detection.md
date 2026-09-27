@@ -14,3 +14,8 @@ Squash-land +foo into a..e; a later PR edits e->E (report now has foo); `git rev
 ### 9e52c689b768 · root-cause · Both: branch_changes_present infers 'reverted' only from whole-state evidence
 
 #741: the fork point comes from `git merge-base base branch`, which for an ancestor branch is the branch tip itself — the diff of the branch's own changes is empty and every path check is skipped. The true fork point is merge-base(M^1, branch) where M is the landing merge: the oldest commit on base's first-parent line that descends from the tip (`git rev-list --first-parent --ancestry-path --reverse branch..base`, first line). For a fast-forward or an empty branch M^1 IS the tip, so this degenerates to today's behaviour. #739: _branch_blob_was_on_base recognises a revert only by the path returning to a whole blob it held before; a revert is also recognisable by its PATCH — it removes every non-blank line the branch added and adds nothing but lines the branch removed. The raw log already walks those commits, so adding -p to the same git call yields the patch. One mechanism, two evidence gaps in the same function — a single root cause as batched.
+
+<!-- fr:journal kind=hypothesis scope=debug id=c49167c4d134 created=2026-09-27T19:45:03+00:00 -->
+### c49167c4d134 · hypothesis · #741: fork from the landing merge's first parent
+
+Confirmed: _fork_point (rev-list --first-parent --ancestry-path --reverse tip..base, first line; merge-base with its ^1) turned the no-ff test green with every other branch_changes_present test untouched. Fast-forward / empty branches keep the tip as the fork (new guard test).
