@@ -9,3 +9,8 @@ super-fr#625. Writers `commands/journal_cmd.py:_timestamp`, `record/apply.py:_st
 ### rc · root-cause · writers omit the offset, so the writer's zone is lost
 
 A naive stamp carries no zone. The reader can only guess its own zone, which is right only when writer and reader share a TZ. Fix at the source: every writer stamps aware UTC (`+00:00`), matching the run cursor's `_now`. The reader keeps its current fallback for legacy naive stamps. Not an artifact shape change: `created` is a `str`, the header tokeniser splits on spaces (no space in `+00:00`), and every released reader parses it with `fromisoformat` and then `astimezone(UTC)`/`parse_timestamp`, which already handle an aware value (see the existing `journal_stamp_as_utc("...+00:00")` assertion in test_journal_model). The structure validator does not check the format. No stamp bump.
+
+<!-- fr:journal kind=finding scope=debug id=fix created=2026-09-27T08:34:13+00:00 state=fixed -->
+### fix · finding [fixed] · all three writers stamp aware UTC via journal_now()
+
+New `fr.journal.model.journal_now()` (UTC, second precision, `+00:00`). `journal_cmd._timestamp`, `record.apply._stamp` and the inline decision stamp in `run_cmd` call it. `journal_stamp_as_utc` is unchanged, so legacy naive stamps still read in the reader zone. The gate refusal message no longer calls the stamp "(local)". Pinned by `tests/unit/test_journal_stamp_offset.py`, committed red first (8 failures): UTC writer read in Tokyo/LA for both callable writers, a source tripwire against naive `datetime.now()` in all three writer modules, and end-to-end, a UTC-written review accepted by the spec-review gate under Asia/Tokyo. No artifact stamp bump (see rc).
