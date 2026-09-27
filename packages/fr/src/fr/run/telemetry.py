@@ -695,22 +695,61 @@ def _resolve_target(target: str, assignments: list[tuple[int, str, str]], at: in
     return None if "$" in target or "(" in target or "`" in target else target
 
 
+def _is_log(target: str | None, log: Path) -> bool:
+    """Does the resolved path `target` name `log` (see `_WRITE_TARGET` for how a
+    relative one is compared)?"""
+    if target is None:
+        return False
+    if Path(target).is_absolute():
+        return Path(target) == log
+    parts = PurePosixPath(target).parts
+    while parts and parts[0] == "..":
+        parts = parts[1:]
+    return bool(parts) and log.parts[-len(parts) :] == parts
+
+
 def _writes(command: str, log: Path) -> bool:
     assignments = _assignments(command)
-    for match in _WRITE_TARGET.finditer(command):
-        target = _resolve_target(match.group(2), assignments, match.start())
-        if target is None:
-            continue
-        if Path(target).is_absolute():
-            if Path(target) == log:
-                return True
-            continue
-        parts = PurePosixPath(target).parts
-        while parts and parts[0] == "..":
-            parts = parts[1:]
-        if parts and log.parts[-len(parts) :] == parts:
-            return True
-    return False
+    return any(
+        _is_log(_resolve_target(match.group(2), assignments, match.start()), log)
+        for match in _WRITE_TARGET.finditer(command)
+    )
+
+
+_WORD = re.compile(r"""[^\s;&|<>()`'"]+""")
+_DETACH = re.compile(r"(?<![&>|<])&(?![&>])")
+"""A lone `&` — the control operator that backgrounds a command — as opposed
+to `&&`, `|&`, `&>` and the `&` of `2>&1`."""
+_EXIT_LINE = re.compile(r"^exit=(\d+)[ \t]*$", re.MULTILINE)
+"""The marker OpenCode's long-command rule makes a detached suite write last:
+`(cmd; echo "exit=$?") > log` (`fr.harness.long_commands`)."""
+
+
+def _unquoted(command: str) -> str:
+    """`command` with every quoted string and here-doc body blanked out, so an
+    operator character inside one is not read as syntax."""
+    for span in [d.span(3) for d in _HEREDOC.finditer(command)] + [
+        m.span() for m in _QUOTED.finditer(command)
+    ]:
+        command = command[: span[0]] + " " * (span[1] - span[0]) + command[span[1] :]
+    return command
+
+
+def _detaches(command: str) -> bool:
+    """Does `command` background something with a lone `&`? The writer then
+    outlives the tool call, and the call's own end says nothing about its end."""
+    return _DETACH.search(_unquoted(command)) is not None
+
+
+def _names(command: str, log: Path) -> bool:
+    """Does any word of `command` name `log` — a read (`tail`, `cat`, `grep`)
+    as much as a write? Quotes are stripped, same-command variables resolved."""
+    assignments = _assignments(command)
+    bare = command.replace('"', " ").replace("'", " ")
+    return any(
+        _is_log(_resolve_target(m.group(0), assignments, m.start()), log)
+        for m in _WORD.finditer(bare)
+    )
 
 
 def orchestrator_wrote_since(
@@ -940,7 +979,7 @@ def _opencode_wrote_since(
             ).fetchall()
     except sqlite3.Error:
         return None
-    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    calls: list[_BashCall] = []
     for (raw,) in rows:
         try:
             part = json.loads(raw) if isinstance(raw, str | bytes) else None
@@ -953,22 +992,82 @@ def _opencode_wrote_since(
         tool_input = state.get("input")
         command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
         meta = state.get("metadata")
-        exit_code = meta.get("exit") if isinstance(meta, Mapping) else None
+        meta = meta if isinstance(meta, Mapping) else {}
+        output = state.get("output")
+        output = output if isinstance(output, str) else meta.get("output")
         times = state.get("time")
         times = times if isinstance(times, Mapping) else {}
         began, ended = _ms_to_dt(times.get("start")), _ms_to_dt(times.get("end"))
         if (
             state.get("status") == "completed"
-            and type(exit_code) is int
-            and exit_code == 0
             and isinstance(command, str)
             and began is not None
             and ended is not None
             and began >= start
-            and _writes(command, log)
         ):
-            windows.append((began, ended))
+            exit_code = meta.get("exit")
+            calls.append(
+                _BashCall(
+                    began,
+                    ended,
+                    command,
+                    exit_code if type(exit_code) is int else None,
+                    output if isinstance(output, str) else "",
+                )
+            )
+    calls.sort(key=lambda c: (c.began, c.ended))
+    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    for call in calls:
+        if call.exit_code != 0 or not _writes(call.command, log):
+            continue
+        windows.append((call.began, call.ended))
+        if _detaches(call.command):
+            seen = _seen_exit(call, calls, log)
+            if seen is not None:
+                windows.append((call.began, seen))
     return windows
+
+
+@dataclass(frozen=True)
+class _BashCall:
+    """One completed, top-level OpenCode `bash` part, as the gate reads it."""
+
+    began: _dt.datetime
+    ended: _dt.datetime
+    command: str
+    exit_code: int | None
+    output: str
+
+
+def _seen_exit(launch: _BashCall, calls: list[_BashCall], log: Path) -> _dt.datetime | None:
+    """The end of the orchestrator's first command, after `launch`, that named
+    `log` and printed its `exit=N` line — when N is 0 — else `None` (gh#719).
+
+    OpenCode records no event when a detached command ends; Claude Code's
+    reader closes the window at the harness's task notice. The stand-in here is
+    what OpenCode DOES record: the output of the orchestrator's own later
+    command. The rule makes `exit=$?` the log's last write, so a command that
+    showed it ran after the suite finished, and the window it closes is bounded
+    by what the orchestrator saw — a later overwrite of the log still refuses.
+    The first `exit=` seen is final, as the first notice is there: a later
+    `exit=0` can neither revive a failure nor stretch a window already closed.
+
+    WEAKER THAN THE NOTICE, AND SAYS SO (review of gh#719): a Claude Code notice
+    is the harness reporting the process's own exit; this is file CONTENT the
+    orchestrator read back. A co-resident process (a phase executor shares the
+    worktree) that writes `exit=0` into this exact log before that read closes
+    the window on its bytes. That takes deliberately writing the rule's marker
+    into the orchestrator's log — forgery, which this gate does not claim to
+    stop (`orchestrator_wrote_since`), not the relayed green it closes. Tying
+    the marker to the pid would not change that: `log.pid` is as readable.
+    """
+    for call in calls:
+        if call is launch or call.began < launch.ended or not _names(call.command, log):
+            continue
+        marks = _EXIT_LINE.findall(call.output)
+        if marks:
+            return call.ended if marks[-1] == "0" else None
+    return None
 
 
 __all__ = [

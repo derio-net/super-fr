@@ -291,7 +291,11 @@ surfaces:
           top-level session (a `task` subagent is a child session). No session
           id reaches fr, so ANY top-level session active since the unit opened
           counts, not only this one. Live-verified 2026-09-26 on 1.18.32 (a
-          bash-redirect log matched, a write-tool log did not)
+          bash-redirect log matched, a write-tool log did not). A suite the
+          long-command rule detached with `&` is windowed until the first later
+          command of the orchestrator's that names the log prints its `exit=N`
+          line, and only when N is 0 (gh#719): OpenCode records no completion
+          event, but it records that command's output
       hermes:
         state: unsupported
         scope_note: >-

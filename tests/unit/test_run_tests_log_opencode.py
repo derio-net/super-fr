@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 from fr.artifacts.validate import validate_repo
 from fr.harness.long_commands import LONG_COMMAND_RULES
-from fr.run.telemetry import orchestrator_wrote_since
+from fr.run.telemetry import _detaches, orchestrator_wrote_since
 
 from tests.unit.test_run_cli import _invoke_as_harness, _squash
 from tests.unit.test_run_evidence_separate_context import _at_deliver
@@ -426,3 +426,18 @@ def test_an_unverifiable_log_says_why_by_harness(tmp_path: Path, harness: str, s
     assert result.exit_code == 0, result.output
     assert said in _squash(result.stderr)
     assert "unverified" in _squash(result.stderr)
+
+
+@pytest.mark.parametrize(
+    ("command", "detached"),
+    [
+        pytest.param(_detached(LOG), True, id="the-rule"),
+        pytest.param(f"pytest > {LOG} 2>&1", False, id="stderr-dup"),
+        pytest.param(f"pytest &> {LOG}", False, id="amp-redirect"),
+        pytest.param(f"cd x && pytest > {LOG}", False, id="and-chain"),
+        pytest.param(f"pytest |& tee {LOG}", False, id="pipe-both"),
+        pytest.param(f"echo 'a & b' > {LOG}", False, id="quoted"),
+    ],
+)
+def test_only_a_lone_ampersand_detaches(command: str, detached: bool) -> None:
+    assert _detaches(command) is detached

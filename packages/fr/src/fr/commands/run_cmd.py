@@ -1823,15 +1823,17 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     slack = _dt.timedelta(seconds=1)
     if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
         why = (
-            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it; a "
-            "backgrounded suite counts once its task-notification reports it completed)"
+            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it)"
             if not windows
             else "its bytes were not written by the command of yours that names it"
         )
         err_console.print(
             f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
             f"{opened}. A subagent's report is not verification — run the suite in this "
-            "session, writing its output to the log you name.[/red]",
+            "session, writing its output to the log you name. A backgrounded suite "
+            "counts once its task-notification reports it completed (Claude Code), or "
+            "once a later command of yours prints the log's exit=0 line (OpenCode's "
+            "detached form, gh#719).[/red]",
             soft_wrap=True,
         )
         raise typer.Exit(2)
