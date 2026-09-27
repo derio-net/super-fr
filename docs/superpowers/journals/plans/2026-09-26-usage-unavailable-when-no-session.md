@@ -114,3 +114,8 @@ Same nit as cr5; the redundant setenv was removed in 9746ee60, part of squash d6
 ### cr4-resolved-2 · finding [refuted] · resolves cr4: existing sessions: [] usage files stay as they are
 
 Closed at closeout, no issue (operator decision): archived usage files are frozen history by the artifact-versioning rule; they already render as a dash, never 0.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved-3 created=2026-09-27T07:11:42 state=fixed resolves=p1-r2 answered_by=operator -->
+### p1-r2-resolved-3 · finding [fixed] · resolves p1-r2: redundant FR_HOSTNAME monkeypatch in last new test
+
+Operator approved at closeout: same nit as cr5, removed in 9746ee60 (squash d67a9d4b).
