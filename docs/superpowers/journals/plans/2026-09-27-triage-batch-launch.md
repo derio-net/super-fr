@@ -19,3 +19,8 @@ render_brief lost only the one subagent-model line and its param; the function w
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 the checkout-before-resolve reorder and the new _orchestrator helper are the smallest shape that carries the precedence; nothing else in triage_batch_cmd.py touches launch resolution.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-27T09:32:25 phase=1 -->
+### review-phase-1 · review · phase 1 code review (#704): no findings (phase 1)
+
+Independent reviewer (standard tier, claude-sonnet-5) read every file in phase 1's files list against spec §A/§D and 01.yaml. Verified: resolve_launch precedence and model_source agree in every combination incl. empty-string model; orchestrator never consulted without a harness; refusal hint only when model alone is missing; _orchestrator builds over fr.models.resolved_config with no second precedence; REPO_MODELS_REL has one home; tests are behavioural and config-isolated (HOME/XDG_CONFIG_HOME sandboxed); no missed callers. No findings raised, so receiving-code-review had nothing to verify or refute.
