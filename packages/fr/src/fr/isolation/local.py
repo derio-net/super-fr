@@ -237,6 +237,28 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
     return "\n".join(lines)
 
 
+# `fr archive` (fr/archive.py) `git mv`s a finished run's fr artifacts from
+# docs/superpowers/<kind>/<rest> to docs/superpowers/implemented/<kind>/<rest>
+# (plans/<dir>, specs/<file>, journals/<scope-dir>/<file>, runs/<id>.yaml,
+# usage/<id>.yaml — every destination is the source path with `implemented/`
+# spliced in after `docs/superpowers/`). Kept as a local constant, not imported
+# from fr.archive: this module must not depend on the archive command.
+_ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
+_SUPERPOWERS = "docs/superpowers/"
+
+
+def _archived_path(path: str) -> str | None:
+    """Where `fr archive` moves `path` to, or None when it never moves it.
+
+    Only the five archived kinds under docs/superpowers/ map; anything else
+    (including a path already under `implemented/`) has no alternate.
+    """
+    for kind in _ARCHIVED_KINDS:
+        if path.startswith(f"{_SUPERPOWERS}{kind}/"):
+            return f"{_SUPERPOWERS}implemented/{path[len(_SUPERPOWERS) :]}"
+    return None
+
+
 def _branch_added_lines(
     run: Runner, repo_root: Path, merge_base: str, branch: str, path: str
 ) -> list[str]:
@@ -256,6 +278,97 @@ def _branch_added_lines(
     return added
 
 
+def _branch_blob_was_on_base(
+    run: Runner,
+    repo_root: Path,
+    merge_base: str,
+    branch: str,
+    base_ref: str,
+    path: str,
+    base_path: str | None = None,
+) -> bool:
+    """Did the branch's exact content of `path` ever appear on the base?
+
+    True when `<branch>:<path>` resolves to the same blob as `<c>:<path>` for
+    some commit `c` in `merge_base..base_ref` that touched `path`. A later merge
+    that rewrote the branch's lines leaves the branch's blob in the base's own
+    history; an orphan (content that never landed) matches nothing. Every
+    failure — the branch lacks the file (a deletion has no blob), an
+    unresolvable rev, a failed git call — reads as no match, never as a pass.
+
+    `base_path` is where to look on the base side (default: `path` itself) — the
+    `implemented/` path `fr archive` moved it to.
+
+    ONE git call answers the whole range question (C1 perf review, #665/#598):
+    `git log --raw` over `merge_base..base_ref` for `bpath` lists every
+    touching commit's raw diff line in a single process, and the blob is read
+    straight out of the "new blob" column — no per-commit `git rev-parse`. A
+    generated report/matrix file is touched by nearly every later PR, so the
+    old one-`rev-parse`-per-commit scan multiplied badly across every
+    workspace in a gc sweep.
+    """
+    bpath = base_path or path
+    want = run(["git", "rev-parse", "--verify", "--quiet", f"{branch}:{path}"], cwd=repo_root)
+    if want.returncode != 0 or not want.stdout.strip():
+        return False
+    blob = want.stdout.strip()
+    log = run(
+        [
+            "git",
+            # A user's `log.follow` would chase the path across a rename (a
+            # match under another name); colour would hide every `:` line.
+            "-c",
+            "log.follow=false",
+            "log",
+            "--no-color",
+            "--no-abbrev",
+            "--raw",
+            # `-m`: a merge commit prints no raw lines without it, so a blob that
+            # exists on the base only as a merge result (a conflict resolution)
+            # would read as never landed (Opus fix review f2).
+            "-m",
+            "--format=",
+            f"{merge_base}..{base_ref}",
+            "--",
+            bpath,
+        ],
+        cwd=repo_root,
+    )
+    if log.returncode != 0:
+        return False
+    for line in log.stdout.splitlines():
+        if not line.startswith(":"):
+            continue
+        meta, _, _rest = line[1:].partition("\t")
+        fields = meta.split()
+        # `:oldmode newmode oldsha newsha status[score]` — the new blob is
+        # field 3, present on every raw line (add/modify/delete/rename alike).
+        if len(fields) >= 4 and fields[3] == blob:
+            return True
+    return False
+
+
+def _landed_at(
+    run: Runner,
+    repo_root: Path,
+    merge_base: str,
+    branch: str,
+    base_ref: str,
+    path: str,
+    base_path: str,
+) -> bool:
+    """The branch's contribution to `path` (per-line containment, then blob
+    equality) against `base_ref:base_path`."""
+    added = _branch_added_lines(run, repo_root, merge_base, branch, path)
+    if added:
+        show = run(["git", "show", f"{base_ref}:{base_path}"], cwd=repo_root)
+        if show.returncode == 0:
+            base_lines = set(show.stdout.splitlines())
+            if all(line in base_lines for line in added):
+                return True
+    return _branch_blob_was_on_base(run, repo_root, merge_base, branch, base_ref, path, base_path)
+
+
 def _branch_change_present_in_file(
     run: Runner, repo_root: Path, merge_base: str, branch: str, base_ref: str, path: str
 ) -> bool:
@@ -268,20 +381,31 @@ def _branch_change_present_in_file(
     lines intact, so whole-file equality false-negatives while containment does
     not.
 
+    When containment fails (including a file with no added line, or one absent
+    from `base_ref`), fall back to blob equality (`_branch_blob_was_on_base`): a
+    LATER merge that rewrote the branch's lines does not un-land them if the
+    branch's exact file content was on the base after the merge.
+
+    An fr artifact that `fr archive` later moved to `implemented/` is judged the
+    same way at its archived path (`_archived_path`): the branch's added lines
+    contained in `<base_ref>:<implemented path>`, or the branch's blob on that
+    path in the base's history. Same soundness as the same-path check, and no
+    looser than it: a missing archived file, or unrelated content, stays missing.
+    Containment (not only exact blob equality) because the archive commit can carry
+    the closeout's appended lines (usage capture, cursor advance) on top of the
+    branch's content.
+
     Conservative in the missing direction: a file whose branch-side change added
-    no identifiable line (a pure deletion / pure line-removal that did NOT land
-    byte-identically — it only reaches here because whole-file content already
-    differs) reports *not present*, i.e. a safe "STOP and check", never a false
-    "verified".
+    no identifiable line and whose blob never appeared on the base (a pure
+    deletion that did NOT land byte-identically) reports *not present*, i.e. a
+    safe "STOP and check", never a false "verified".
     """
-    added = _branch_added_lines(run, repo_root, merge_base, branch, path)
-    if not added:
-        return False
-    show = run(["git", "show", f"{base_ref}:{path}"], cwd=repo_root)
-    if show.returncode != 0:
-        return False  # path absent on base_ref — the branch's additions cannot be present
-    base_lines = set(show.stdout.splitlines())
-    return all(line in base_lines for line in added)
+    if _landed_at(run, repo_root, merge_base, branch, base_ref, path, path):
+        return True
+    archived = _archived_path(path)
+    return archived is not None and _landed_at(
+        run, repo_root, merge_base, branch, base_ref, path, archived
+    )
 
 
 def branch_changes_present(
@@ -303,7 +427,9 @@ def branch_changes_present(
        the merge shows up as a path whose added lines are absent → missing) from
        a CONCURRENT merge that later edits the same file elsewhere (#387 — the
        branch's added lines are still there, so it is NOT missing even though
-       whole-file content diverged).
+       whole-file content diverged). If containment fails, the branch's exact
+       blob having appeared on the base after the merge also counts as landed
+       (a later merge rewrote those lines).
 
     Conservative: anything it cannot positively confirm reads as missing (a safe
     "STOP and check", never a false "verified").
@@ -998,17 +1124,33 @@ class LocalWorktreeDevcontainerTarget:
         """Confirm the branch's changes reached `<remote>/<default_branch>`.
 
         Squash/rebase/merge-safe (content-based, not ancestry). `verified`
-        requires ALL THREE positive confirmations — content present AND the PR
+        requires ALL FOUR positive confirmations — content present AND the PR
         is `MERGED` AND the `<remote>/<default_branch>` ref is fresh (fetch
-        succeeded). The content check alone can be fooled by genuinely
-        convergent content (the same fix landing twice), so the MERGED PR is the
-        load-bearing tiebreak; an unknown PR state or a failed fetch is
+        succeeded) AND the branch's own remote state is known
+        (`branch_fetched`: fetched, or confirmed deleted by `ls-remote`). Every
+        ref of the branch that resolves — the fetched `<remote>/<branch>` and
+        the local branch — must have its changes on the base. The content check
+        alone can be fooled by genuinely convergent content (the same fix
+        landing twice), so the MERGED PR is the load-bearing tiebreak; an
+        unknown PR state or a failed fetch is
         conservatively NOT verified, never a silent pass. The close-out (#320)
         STOPs (and the caller inspects which signal is missing) when not
         verified.
+
+        The branch is checked at EVERY ref that resolves — `<remote>/<branch>`
+        after a fresh fetch of it, and the local branch — so a stale local ref
+        cannot decide alone and an unpushed local commit still refuses. Raises
+        IsolationError naming the branch when neither resolves.
         """
+        refs, branch_fetched = self._branch_refs(state.branch, remote)
         return self._verdict(
-            state.worktree, state.branch, default_branch, remote, pr=self._pr(state)
+            state.worktree,
+            state.branch,
+            default_branch,
+            remote,
+            pr=self._pr(state),
+            refs=refs,
+            branch_fetched=branch_fetched,
         )
 
     def verify_merge_reaped(
@@ -1026,18 +1168,52 @@ class LocalWorktreeDevcontainerTarget:
         base: a post-merge push from another clone lives only on the remote
         ref, an unpushed commit only on the local one, and either is work that
         did not land (adversarial review M1). Raises IsolationError naming the
-        ref when neither resolves. `verified` still needs all three signals."""
-        refs = self._branch_refs(branch, remote)
+        ref when neither resolves. `verified` still needs all four signals."""
+        refs, branch_fetched = self._branch_refs(branch, remote)
         pr = self._pr_from(self.repo_root, branch)
-        res = self._verdict(self.repo_root, branch, default_branch, remote, pr=pr, refs=refs)
+        res = self._verdict(
+            self.repo_root,
+            branch,
+            default_branch,
+            remote,
+            pr=pr,
+            refs=refs,
+            branch_fetched=branch_fetched,
+        )
         res["reaped"] = True
         return res
 
-    def _branch_refs(self, branch: str, remote: str) -> list[str]:
-        # Fetch the branch FIRST: a remote-tracking ref that merely exists may be
-        # stale. A failed fetch is not a verdict — GitHub deletes a merged branch
-        # by default — so fall back to whatever refs this clone still has.
-        self._run_network(["git", "fetch", remote, branch])
+    def _branch_refs(self, branch: str, remote: str) -> tuple[list[str], bool]:
+        """Fetch `<branch>` from `<remote>`, and report whether that fetch is
+        trustworthy as `branch_fetched`.
+
+        The fetch uses an EXPLICIT refspec (`+refs/heads/<b>:refs/remotes/
+        <remote>/<b>`, like `_remote_view`), not a bare `git fetch <remote>
+        <branch>` (C2 review, #665/#598): in a `--single-branch` clone the
+        configured fetch refspec only covers the default branch, so a bare
+        fetch of another branch updates FETCH_HEAD only, never the
+        remote-tracking ref — leaving `<remote>/<branch>` stale or entirely
+        absent and hiding a commit pushed to the real remote branch (from a
+        different clone) after the merge.
+
+        A failed fetch is not automatically a fallback: GitHub deletes a
+        merged branch by default, and THAT case — `git ls-remote --heads`
+        confirms exit 2 for the EXACT `refs/heads/<b>` (a bare name
+        pattern-matches `foo/<b>` too) — is the one situation where the
+        refs this clone still has (typically the local branch) are still
+        trustworthy. Any other outcome (`ls-remote` finds the branch, or
+        `ls-remote` itself fails) means the branch's true remote state is
+        unknown, so `branch_fetched` is False and the caller must not verify
+        off a possibly-stale ref alone.
+        """
+        tracking = f"refs/remotes/{remote}/{branch}"
+        fetch = self._run_network(["git", "fetch", remote, f"+refs/heads/{branch}:{tracking}"])
+        branch_fetched = fetch.returncode == 0
+        if not branch_fetched:
+            ls = self._run_network(
+                ["git", "ls-remote", "--exit-code", remote, f"refs/heads/{branch}"]
+            )
+            branch_fetched = ls.returncode == 2
         refs = [
             cand
             for cand in (f"{remote}/{branch}", branch)
@@ -1051,7 +1227,7 @@ class LocalWorktreeDevcontainerTarget:
             raise IsolationError(
                 f"cannot resolve branch ref {branch!r} (neither local nor {remote}/{branch})."
             )
-        return refs
+        return refs, branch_fetched
 
     def _verdict(
         self,
@@ -1061,6 +1237,8 @@ class LocalWorktreeDevcontainerTarget:
         remote: str,
         pr: dict[str, Any] | None,
         refs: list[str] | None = None,
+        *,
+        branch_fetched: bool,
     ) -> dict[str, Any]:
         base_ref = f"{remote}/{default_branch}"
         fetch = self._run_network(["git", "fetch", remote, default_branch], cwd=cwd)
@@ -1069,7 +1247,10 @@ class LocalWorktreeDevcontainerTarget:
         missing = sorted({m for r in results for m in r.missing})
         changes_present = all(r.changes_present for r in results)
         pr_state = pr.get("state") if pr else None
-        verified = changes_present and pr_state == "MERGED" and fetched
+        # `branch_fetched` (C2 review, #665/#598): a failed branch fetch whose
+        # remote state is unknown (not confirmed gone via ls-remote) must not
+        # let a possibly-stale ref decide `verified`.
+        verified = changes_present and pr_state == "MERGED" and fetched and branch_fetched
         return {
             "branch": branch,
             "verified": verified,
@@ -1077,6 +1258,7 @@ class LocalWorktreeDevcontainerTarget:
             "missing": missing,
             "pr_state": pr_state,
             "fetched": fetched,
+            "branch_fetched": branch_fetched,
         }
 
     def _reap_hazard(self, state: IsolationState) -> ReapHazard | None:

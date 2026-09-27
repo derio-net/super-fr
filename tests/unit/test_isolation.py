@@ -2472,6 +2472,29 @@ def test_branch_changes_present_concurrent_same_file(
     assert res.missing == []
 
 
+def test_branch_changes_present_blob_landed_only_as_a_merge_result(tmp_path: Path) -> None:
+    """Opus fix review f2: `git log --raw` prints nothing for a merge commit
+    without `-m`, so a blob that exists on the base ONLY as a merge result (a
+    conflict resolution) read as never landed. The old per-commit scan saw it."""
+    repo = make_repo(tmp_path)
+    _seed_two_line_file(repo)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gotchas.md", "line1\nline2\nRESOLVED\n", "branch content")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "checkout", "-q", "-b", "side")
+    _commit(repo, "gotchas.md", "line1\nSIDE\n", "side edit")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "gotchas.md", "MAIN\nline2\n", "main edit")
+    subprocess.run(["git", "-C", str(repo), "merge", "-q", "--no-commit", "side"], check=False)
+    (repo / "gotchas.md").write_text("line1\nline2\nRESOLVED\n")  # the merge's own result
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "merge side")
+    _commit(repo, "gotchas.md", "line1\nline2\nRESOLVED\nLATER\nREWRITE\n", "later")
+    _commit(repo, "gotchas.md", "rewritten\n", "rewrite the lines")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present, res.missing
+
+
 def test_branch_changes_present_concurrent_but_branch_line_absent(tmp_path: Path) -> None:
     # The file exists and diverged on main (a concurrent edit), but one of the
     # branch's own added lines never landed — this MUST still report missing;
@@ -3140,3 +3163,621 @@ class TestPushCheck:
         # sub-payload (the worktree path legitimately appears elsewhere, in
         # `guidance`'s `cd <worktree>` — that's not the socket).
         assert "/tmp" not in str(result["ssh_agent_in_container"])
+
+
+# ---------- verify-merge survives later rewrites (2026-09-26 spec) ----------
+
+
+def _squash_then_rewrite(repo: Path) -> None:
+    """`report.md` gains lines on `feature`, which is squash-merged; a LATER
+    commit on main then rewrites those very lines (a generated report)."""
+    _commit(repo, "report.md", "head\n", "report base")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+    _squash_merge(repo, "feature", "squash feature")
+    _commit(repo, "report.md", "head\nFOO2\nBAR2\n", "later merge rewrites the lines")
+
+
+def test_branch_changes_present_survives_a_later_rewrite_of_its_lines(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _squash_then_rewrite(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_blob_was_on_base_cost_is_constant_per_commit_count(tmp_path: Path) -> None:
+    """C1 perf: `_branch_blob_was_on_base` must answer with a CONSTANT number
+    of git subprocess calls regardless of how many later commits touched the
+    path — not one `git rev-parse` per commit in `merge_base..base_ref`. A
+    generated report/matrix file is touched by nearly every later PR, so an
+    O(N) scan multiplies across every workspace in a gc sweep."""
+    from fr.isolation.local import _branch_blob_was_on_base
+
+    def _build(parent: Path, n_rewrites: int) -> Path:
+        parent.mkdir()
+        repo = make_repo(parent)
+        _commit(repo, "report.md", "head\n", "report base")
+        _git(repo, "checkout", "-q", "-b", "feature")
+        _commit(repo, "report.md", "head\nfoo\nbar\n", "feature adds lines")
+        _squash_merge(repo, "feature", "squash feature")
+        for i in range(n_rewrites):
+            _commit(repo, "report.md", f"head\nFOO2\nBAR2\nrev{i}\n", f"rewrite {i}")
+        return repo
+
+    def _count_calls(repo: Path) -> int:
+        calls: list[list[str]] = []
+
+        def counting_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            calls.append(argv)
+            return subprocess_runner(argv, **kwargs)
+
+        merge_base = _git_out(repo, "merge-base", "main", "feature")
+        found = _branch_blob_was_on_base(
+            counting_runner, repo, merge_base, "feature", "main", "report.md"
+        )
+        assert found
+        return len(calls)
+
+    few = _count_calls(_build(tmp_path / "few", 1))
+    many = _count_calls(_build(tmp_path / "many", 25))
+    assert few == many, f"expected O(1) git calls, got {few} for N=1 vs {many} for N=25"
+
+
+def test_branch_changes_present_orphan_after_merge_and_rewrite_still_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _squash_then_rewrite(repo)
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "report.md", "head\nfoo\nbar\nbaz\n", "orphan pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["report.md"]
+
+
+def test_branch_changes_present_file_deleted_from_base_later_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "gone.txt", "one\ntwo\n", "add gone")
+    _squash_merge(repo, "feature", "squash gone")
+    _git(repo, "rm", "-q", "gone.txt")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "delete gone")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_branch_side_deletion_that_differs_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _commit(repo, "d.txt", "1\n2\n", "add d")
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _git(repo, "rm", "-q", "d.txt")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "branch deletes d")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "d.txt", "1\n3\n", "main edits d instead")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["d.txt"]
+
+
+def test_verify_merge_checks_the_fetched_remote_branch_not_a_stale_local_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "late.py", "late\n", "pushed after the merge")
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "reset", "-q", "--hard", "HEAD~1")  # local feature is now stale
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False and "late.py" in res["missing"]
+
+
+def test_verify_merge_single_branch_clone_detects_a_post_merge_remote_push(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: a `--single-branch` clone's configured fetch refspec only covers
+    `main`, so `_branch_refs`' fetch of `feature` must use an EXPLICIT refspec
+    (`+refs/heads/feature:refs/remotes/origin/feature`) — a bare
+    `git fetch origin feature` updates nothing there, leaving `origin/feature`
+    stale/absent and hiding a commit pushed to the remote branch (from a
+    different clone) after the merge."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    # Narrow the fetch refspec the way `git clone --single-branch` configures it.
+    _git(repo, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main")
+    _git(repo, "checkout", "-q", "feature")
+    # A commit lands on the REMOTE feature branch, from a different clone,
+    # after the merge — this worktree's own local `feature` never sees it.
+    other = tmp_path / "other-clone"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "origin.git"), str(other)], check=True)
+    _git(other, "checkout", "-q", "feature")
+    _commit(other, "late.py", "late\n", "pushed after the merge, from elsewhere")
+    _git(other, "push", "-q", "origin", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert "late.py" in res["missing"]
+
+
+def test_verify_merge_branch_fetch_failure_with_branch_present_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: a failed branch fetch is not automatically a fallback — if
+    `git ls-remote` says the branch still exists, the true remote state is
+    unknown (could hold a post-merge push), so the verdict must be NOT
+    verified, never a pass from stale/local refs alone."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+
+    def flaky_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", "fetch"] and any("feature" in a for a in argv):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="timed out\n")
+        if argv[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="deadbeef\trefs/heads/feature\n", stderr=""
+            )
+        return subprocess_runner(argv, **kwargs)
+
+    target = LocalWorktreeDevcontainerTarget(repo, runner=flaky_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert res["branch_fetched"] is False
+
+
+def test_verify_merge_branch_fetch_failure_unknown_branch_state_not_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C2: when even `git ls-remote` fails, the branch's remote state is
+    UNKNOWN (not confirmed gone) — still NOT verified."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+
+    def flaky_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:2] == ["git", "fetch"] and any("feature" in a for a in argv):
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="timed out\n")
+        if argv[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                argv, 1, stdout="", stderr="could not resolve host\n"
+            )
+        return subprocess_runner(argv, **kwargs)
+
+    target = LocalWorktreeDevcontainerTarget(repo, runner=flaky_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False
+    assert res["branch_fetched"] is False
+
+
+def test_verify_merge_refuses_an_unpushed_local_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "local_only.py", "x\n", "never pushed")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is False and "local_only.py" in res["missing"]
+
+
+def test_verify_merge_falls_back_to_the_local_ref_when_the_remote_branch_is_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "push", "-q", "origin", "--delete", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+
+
+def test_verify_merge_deleted_branch_is_not_confused_with_a_suffix_sharing_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opus fix review f1: `ls-remote --heads origin feature` pattern-matches
+    `refs/heads/foo/feature` too, so a deleted merged branch read as present
+    (a false refusal). The probe must name `refs/heads/<b>` exactly."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+    _squash_merge(repo, "feature", "squash")
+    _with_origin(repo)
+    _git(repo, "push", "-q", "origin", "feature", "main:refs/heads/foo/feature")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "push", "-q", "origin", "--delete", "feature")
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["branch_fetched"] is True
+    assert res["verified"] is True
+
+
+def test_verify_merge_unresolvable_ref_raises_naming_the_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _with_origin(repo)
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    # "cannot resolve branch ref" is _branch_refs' own message; the old
+    # refs=None path failed later, at merge-base, with different wording.
+    with pytest.raises(IsolationError, match="cannot resolve branch ref 'ghost-branch'"):
+        target.verify_merge(_state(repo, "ghost-branch"), default_branch="main")
+
+
+def test_reap_hazard_ignores_lines_a_later_merge_rewrote_but_flags_unlanded_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/rewrite")
+    _commit_in_worktree(wt, "report.md", "head\nfoo\nbar\n")
+    _land_on_origin_main(repo, "report.md", "head\nfoo\nbar\n")  # squash-equivalent
+    _land_on_origin_main(repo, "report.md", "head\nFOO2\nBAR2\n")  # later rewrite
+    st = load_state(repo, "feat/rewrite")
+    assert st is not None
+    assert target._reap_hazard(st) is None
+
+    _commit_in_worktree(wt, "report.md", "head\nfoo\nbar\nbaz\n")  # never landed
+    hazard = target._reap_hazard(st)
+    assert hazard is not None and hazard.kind == "unlanded-content"
+
+
+# ---------- the release bot consumes the change fragment (#666 / #665) ----------
+# Every PR ADDS `.changes/<slug>.yaml`; the next `release: vX.Y.Z` commit on the
+# default branch DELETES it. The branch's fragment is then absent from base.
+
+_FRAGMENT = "bump: patch\nsummary: fix a thing\n"
+
+
+def _release_consumes_fragment(repo: Path, fragment: str) -> None:
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "rm", "-q", fragment)
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "release: v1.2.3")
+
+
+def _fragment_branch(repo: Path) -> None:
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / ".changes").mkdir(exist_ok=True)
+    _commit(repo, ".changes/feat-x.yaml", _FRAGMENT, "add fragment")
+    _commit(repo, "fix.py", "fixed\n", "fix")
+
+
+def test_branch_changes_present_fragment_consumed_by_release_counts_as_landed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_verify_merge_fragment_consumed_by_release_is_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+    assert res["missing"] == []
+
+
+def test_branch_changes_present_fragment_that_never_landed_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / ".changes").mkdir(exist_ok=True)
+    _commit(repo, ".changes/feat-x.yaml", _FRAGMENT, "add fragment")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "unrelated main commit")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == [".changes/feat-x.yaml"]
+
+
+def test_branch_changes_present_orphan_code_file_still_missing_after_fragment_consumed(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _fragment_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _release_consumes_fragment(repo, ".changes/feat-x.yaml")
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "orphan.py", "late\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["orphan.py"]
+
+
+# ---------- `fr archive` moves the branch's fr artifacts after merge (#598 / #665) ----------
+# The closeout's `fr archive` `git mv`s docs/superpowers/{plans,specs,journals,runs,usage}/…
+# to docs/superpowers/implemented/… on the default branch, so the branch's added
+# paths are absent from base under their ORIGINAL name.
+
+_SP = "docs/superpowers"
+_ARCHIVED_DOCS = {
+    # S5: all FIVE archived kinds, not just three — a run cursor and a usage
+    # capture behave the same as plans/specs/journals for this generic
+    # git-mv+rewrite fixture (the usage-specific RE-CAPTURE case, where the
+    # archive step doesn't just append but REPLACES bytes, gets its own test
+    # below per review S1).
+    f"{_SP}/plans/p1/01.yaml": "phase: 1\nsteps: [a, b]\n",
+    f"{_SP}/specs/s1.md": "# spec\nbody line\n",
+    f"{_SP}/journals/specs/s1.md": "# journal\nfinding one\n",
+    f"{_SP}/runs/r1.yaml": "run: r1\ncursor: deliver\n",
+    f"{_SP}/usage/r1.yaml": "run: r1\ncaptures: []\n",
+}
+
+
+def _archive_branch(repo: Path, docs: dict[str, str] | None = None) -> None:
+    _git(repo, "checkout", "-q", "-b", "feature")
+    for rel, body in (docs or _ARCHIVED_DOCS).items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body)
+    (repo / "code.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work")
+
+
+def _archive_on_main(repo: Path, rels: list[str], *, rewrite: dict[str, str] | None = None) -> None:
+    _git(repo, "checkout", "-q", "main")
+    for rel in rels:
+        dst = rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+        (repo / dst).parent.mkdir(parents=True, exist_ok=True)
+        _git(repo, "mv", rel, dst)
+        if rewrite and rel in rewrite:
+            (repo / dst).write_text(rewrite[rel])
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "archive")
+
+
+def _final(rel: str) -> str:
+    """The branch's FINAL content of an archived doc: the squash carried v1; the
+    closeout then appended a line (journal entry / cursor advance) that reaches
+    the default branch only inside the archive commit, under the implemented path."""
+    return _ARCHIVED_DOCS[rel] + "closeout line\n"
+
+
+def _merged_then_archived(repo: Path, **kw: Any) -> None:
+    _archive_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _git(repo, "checkout", "-q", "feature")
+    for rel in _ARCHIVED_DOCS:
+        (repo / rel).write_text(_final(rel))
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "closeout")
+    rewrite = {rel: _final(rel) for rel in _ARCHIVED_DOCS}
+    _archive_on_main(repo, list(_ARCHIVED_DOCS), rewrite=rewrite, **kw)
+
+
+def test_branch_changes_present_archive_moved_docs_count_as_landed(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_verify_merge_archive_moved_docs_are_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    _with_origin(repo)
+    _git(repo, "checkout", "-q", "feature")
+    target = LocalWorktreeDevcontainerTarget(repo, runner=subprocess_runner)
+    monkeypatch.setattr(target, "_pr", lambda state: {"state": "MERGED", "url": "u"})
+    res = target.verify_merge(_state(repo, "feature"), default_branch="main")
+    assert res["verified"] is True
+    assert res["missing"] == []
+
+
+def test_reap_hazard_archive_moved_docs_are_not_an_unlanded_content_hazard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/archived")
+    for rel, body in _ARCHIVED_DOCS.items():
+        (wt / rel).parent.mkdir(parents=True, exist_ok=True)
+        (wt / rel).write_text(body)
+    _commit_in_worktree(wt, "code.py", "x = 1\n")
+    _land_on_origin_main(repo, "code.py", "x = 1\n")
+    for rel in _ARCHIVED_DOCS:
+        (wt / rel).write_text(_final(rel))
+    _commit_in_worktree(wt, "closeout.txt", "closeout\n")
+    _land_on_origin_main(repo, "closeout.txt", "closeout\n")
+    for rel in _ARCHIVED_DOCS:
+        dst = repo / rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(_final(rel))
+    _land_on_origin_main(repo, "note.txt", "archive\n")
+    st = load_state(repo, "feat/archived")
+    assert st is not None
+    assert target._reap_hazard(st) is None
+    # a dirty worktree still hazards
+    (wt / "dirty.txt").write_text("wip\n")
+    assert target._reap_hazard(st) is not None
+
+
+def test_branch_changes_present_docs_never_on_main_under_either_path_stay_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _archive_branch(repo)
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "other.py", "x\n", "unrelated main commit")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert f"{_SP}/plans/p1/01.yaml" in res.missing
+
+
+def test_branch_changes_present_archived_copy_with_different_content_stays_missing(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _archive_branch(repo)
+    _squash_merge(repo, "feature", "squash feature")
+    _git(repo, "checkout", "-q", "feature")
+    spec = f"{_SP}/specs/s1.md"
+    _commit(repo, spec, _final(spec), "closeout")
+    _archive_on_main(repo, [spec], rewrite={spec: "# something else entirely\n"})
+    _git(repo, "checkout", "-q", "main")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert spec in res.missing
+
+
+def test_branch_changes_present_orphan_code_file_still_missing_after_docs_archived(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    _merged_then_archived(repo)
+    _git(repo, "checkout", "-q", "feature")
+    _commit(repo, "orphan.py", "late\n", "pushed after the merge")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert not res.changes_present
+    assert res.missing == ["orphan.py"]
+
+
+def test_branch_changes_present_non_fr_docs_get_no_archive_alternate(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / "docs").mkdir()
+    _commit(repo, "docs/guide.md", "guide\n", "add guide")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "docs/implemented").mkdir(parents=True)
+    _commit(repo, "docs/implemented/guide.md", "guide\n", "elsewhere")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.missing == ["docs/guide.md"]
+
+
+def test_branch_changes_present_path_only_ever_reachable_via_the_archive_commit(
+    tmp_path: Path,
+) -> None:
+    """S2: isolates what ONLY §C (`_archived_path`) catches, distinct from what
+    §A's own multi-commit blob-equality history scan already covers for free.
+
+    Here the file's ORIGINAL path never appears ANYWHERE in the base's history
+    — not even in the squash commit — because the branch renamed it away
+    BEFORE the squash (it never landed at the original path at all, only ever
+    reaching main via a later archive-shaped commit at the implemented path
+    with DIFFERENT content). §A's same-path scan has nothing to find; only
+    checking the archived path lands it."""
+    repo = make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _commit(repo, "code.py", "x = 1\n", "code")
+    _squash_merge(repo, "feature", "squash feature")
+    rel = f"{_SP}/plans/p2/01.yaml"
+    _git(repo, "checkout", "-q", "feature")
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text("phase: 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "closeout: add plan")
+    # main NEVER holds `rel` at its original path — the archive commit lands it
+    # DIRECTLY under implemented/, with content that also differs from the
+    # branch's own bytes (a closeout line the branch itself never wrote).
+    dst = rel.replace(f"{_SP}/", f"{_SP}/implemented/", 1)
+    _git(repo, "checkout", "-q", "main")
+    (repo / dst).parent.mkdir(parents=True, exist_ok=True)
+    (repo / dst).write_text("phase: 1\nclosed: true\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "archive")
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_branch_changes_present_usage_recaptured_before_archive_still_lands_via_squash_blob(
+    tmp_path: Path,
+) -> None:
+    """S1: unlike plan/spec/journal (a pure `git mv`, no rewrite), `fr archive`
+    RE-CAPTURES the usage file (`upsert_capture` can REPLACE a host's entry,
+    not just append) before moving it — so the archived path's final content
+    can differ entirely from the branch's own blob. It still lands via §A: the
+    squash commit preserves the branch's ORIGINAL blob at the original path,
+    in history, independent of what a later commit does to a different path."""
+    repo = make_repo(tmp_path)
+    rel = f"{_SP}/usage/run-1.yaml"
+    _git(repo, "checkout", "-q", "-b", "feature")
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text("run: run-1\ncaptures:\n- host: h-aaa\n  dollars: 1.0\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "usage capture")
+    _squash_merge(repo, "feature", "squash feature")
+    # A SEPARATE main-side archive commit re-captures — REPLACING the host's
+    # entry outright, not appending — then moves it.
+    _archive_on_main(
+        repo,
+        [rel],
+        rewrite={rel: "run: run-1\ncaptures:\n- host: h-aaa\n  dollars: 9.9\n"},
+    )
+    res = branch_changes_present(subprocess_runner, repo, "feature", "main")
+    assert res.changes_present
+    assert res.missing == []
+
+
+def test_merged_by_content_does_not_classify_unlanded_content_as_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S3: `_merged_by_content` (gc's PR-less classifier, the third caller of
+    `branch_changes_present`) must not read genuinely unlanded content as
+    merged just because §A/§C now recognize MORE content as landed elsewhere —
+    an unrelated later commit on main must not paper over a file the branch
+    itself never got onto main."""
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/wip")
+    _commit_in_worktree(wt, "wip.txt", "not on main yet\n")
+    _land_on_origin_main(repo, "unrelated.txt", "unrelated\n")  # main moves on, unrelated
+
+    st = load_state(repo, "feat/wip")
+    assert st is not None
+    assert target._merged_by_content(st) is False

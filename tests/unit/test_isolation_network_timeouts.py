@@ -167,18 +167,28 @@ def test_verify_merge_reaped_fetches_are_bounded(
     res = target.verify_merge_reaped("feat/x", "main")
     assert res["verified"] is True
     (dflt,) = rec.select("git", "fetch", "origin", "main")
-    (br,) = rec.select("git", "fetch", "origin", "feat/x")
+    refspec = "+refs/heads/feat/x:refs/remotes/origin/feat/x"
+    (br,) = rec.select("git", "fetch", "origin", refspec)
     assert dflt[2]["timeout"] > 0 and br[2]["timeout"] > 0
     assert dflt[1] == target.repo_root and br[1] == target.repo_root
 
-    slow = _Scripted({**_merged_answers(_cp(0)), ("git", "fetch", "origin", "feat/x"): _cp(124)})
-    res = LocalWorktreeDevcontainerTarget(repo, runner=slow).verify_merge_reaped("feat/x", "main")
-    assert res["verified"] is True  # a timed-out branch fetch changes nothing
+    # A timed-out branch fetch leaves the branch's remote state unknown: the
+    # verdict is NOT verified unless `ls-remote` (itself bounded) confirms the
+    # exact ref is gone (#665 Opus review C2 — this used to "change nothing").
+    slow_fetch = {**_merged_answers(_cp(0)), ("git", "fetch", "origin", refspec): _cp(124)}
+    for ls_rc, verified in ((124, False), (0, False), (2, True)):
+        slow = _Scripted({**slow_fetch, ("git", "ls-remote"): _cp(ls_rc)})
+        res = LocalWorktreeDevcontainerTarget(repo, runner=slow).verify_merge_reaped(
+            "feat/x", "main"
+        )
+        assert res["verified"] is verified, ls_rc
+        (ls,) = slow.select("git", "ls-remote")
+        assert ls[0][-1] == "refs/heads/feat/x" and ls[2]["timeout"] > 0
 
     dead = _Scripted(
         {
             **_merged_answers(_cp(0)),
-            ("git", "fetch", "origin", "feat/x"): _cp(124),
+            ("git", "fetch", "origin", "+refs/heads/feat/x:refs/remotes/origin/feat/x"): _cp(124),
             ("git", "rev-parse"): _cp(1),
         }
     )

@@ -4744,3 +4744,20 @@ rows:
     status: ci
     notes: POST_CREATE adds git config --global --add safe.directory "$PWD" || true;
       committed profiles regenerated
+  - id: verify-merge-survives-later-rewrites
+    capability: isolation verify-merge
+    acceptance: verify-merge accepts a merged branch whose added lines a later merge
+      rewrote (its exact file content was on the base after the merge) and checks the
+      fetched remote branch as well as the local one; unlanded content still refuses
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-26-verify-merge-rewrites-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py
+    status: ci
+    notes: 'Review fixes (super-fr#665 review): C1 perf (constant-cost archived-path
+      blob scan), C2 correctness (verify_merge fetches the branch with an explicit refspec
+      and requires branch_fetched), and S1-S5 spec/test corrections — now also covers
+      the run+usage archived kinds, a §C-only archive test, a usage re-capture test,
+      and gc''s _merged_by_content not classifying unlanded content as merged. Still
+      unit-only in tests/unit/test_isolation.py.'
