@@ -11,7 +11,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from tests.conftest import link_state, uv_tool_bin_dir
+from tests.conftest import link_state, runner_packages, uv_tool_bin_dir
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
@@ -21,7 +21,8 @@ def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
     wrapper_path = tmp_path / "wrapper" / "run.sh"
     # Do not let this integration test depend on whichever `fr` uv tool happens
     # to be installed in the host/container. Install a disposable one with the
-    # workspace's bridge adapter, matching the install.sh error's recovery path.
+    # workspace's runner adapters — the same set install.sh installs and its
+    # error's recovery path names (#645).
     tool_dir = tmp_path / "uv-tools"
     env = os.environ.copy()
     env["VK_BRIDGE_WRAPPER_PATH"] = str(wrapper_path)
@@ -39,8 +40,7 @@ def test_install_bridge_flag_writes_wrapper(tmp_path: Path) -> None:
             "tool",
             "install",
             "--force",
-            "--with",
-            str(REPO_ROOT / "packages" / "fr-vk"),
+            *(a for p in runner_packages() for a in ("--with", str(REPO_ROOT / "packages" / p))),
             str(REPO_ROOT / "packages" / "fr"),
         ],
         check=True,
