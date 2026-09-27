@@ -39,3 +39,8 @@ _is_inverse_patch returned False whenever the branch added no line, so a revert 
 ### review-f2 · finding [open] (reviewer: in scope) · Review f2: a second landing of the same branch hides a reverted first one
 
 _fork_point stepped back past only the newest landing merge: branch --no-ff merged, reverted, extended with an unrelated file and merged again gives fork = the first landing's tip, so the reverted file never enters `changed`. Reproduced: test_branch_changes_present_second_landing_does_not_hide_a_reverted_first fails (changed=['b.txt']). Before this PR the same shape also read present (changed=[]) — not a regression, but the same #741 cause.
+
+<!-- fr:journal kind=finding scope=debug id=review-f1-resolved created=2026-09-27T20:05:05+00:00 state=fixed resolves=review-f1 answered_by=agent -->
+### review-f1-resolved · finding [fixed] · resolves review-f1: Review f1: three-way revert of a pure-deletion branch still reads landed
+
+ae6d1920: _is_inverse_patch treats a commit restoring every line a removal-only branch removed (and adding nothing else) as its revert; test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing now passes.
