@@ -17,10 +17,17 @@
 // stop, which is why parity.yaml declares it `partial`, not `enforced`.
 // super-fr-parity: fr-run-idle-guard.sh
 //
+// `tool.execute.before` also carries the child-session claim (gh#530) — see
+// ./claim.ts. It ports no hook script (a Claude Code dispatch returns its id at
+// once), so it has no marker; parity.yaml's `dispatch-holder-identity` row
+// describes it.
+//
 // EXPORT DISCIPLINE: OpenCode calls every export of a plugin module as a
-// plugin. Helpers live in ./marker and ./idle; this file exports plugins only.
+// plugin. Helpers live in ./marker, ./idle and ./claim; this file exports
+// plugins only.
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { createClaimHandler, sharedClaimed } from "./claim";
 import { createIdleHandler, sharedActedOn } from "./idle";
 import { matchesAllowlist, resolveMarker } from "./marker";
 
@@ -117,13 +124,22 @@ export async function FrIsolationRequired(ctx: {
   directory: string;
   worktree: string;
 }) {
+  const claimChild = createClaimHandler({
+    client: ctx.client,
+    directory: ctx.worktree || ctx.directory,
+    claimed: sharedClaimed(),
+  });
   return {
     event: createIdleHandler({
       client: ctx.client,
       directory: ctx.worktree || ctx.directory,
       actedOn: sharedActedOn(),
     }),
-    "tool.execute.before": async (input: { tool: string }, output: unknown) => {
+    "tool.execute.before": async (input: { tool: string; sessionID?: string }, output: unknown) => {
+      // Before the gate, and whatever the tool: a child's first call of ANY
+      // kind is the earliest moment it can be named. Never throws.
+      await claimChild(input);
+
       // OpenCode cannot intercept filesystem effects of Bash. Other known
       // read-only tools are excluded; every remaining tool is inspected.
       if (NON_WRITING_TOOLS.has(input.tool)) return;

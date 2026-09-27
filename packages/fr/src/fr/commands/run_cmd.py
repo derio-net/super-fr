@@ -89,6 +89,7 @@ if TYPE_CHECKING:
 from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
+from fr.types import PHASE_TIERS
 from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS, emitted_artifacts
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
@@ -2357,7 +2358,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import current_session, orchestrator_model
+    from fr.run.telemetry import ClaudeCodeReader, current_session, orchestrator_model
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -2394,7 +2395,12 @@ def _open_dispatch(
             # no session concept, which reads as "not observable from here"
             # and never as zero. No hostname beside it: a missing session
             # directory already says "elsewhere".
-            session=current_session(os.environ),
+            #
+            # Only when the harness fr runs under OWNS the session key
+            # (gh#537): the one key read is Claude Code's, and an OpenCode
+            # started from a Claude Code shell inherits it — recording it
+            # there named a session that never held this unit.
+            session=(current_session(os.environ) if harness == ClaudeCodeReader.harness else None),
         ),
     )
     return _with_step(state, step_id, new_record)
@@ -4706,6 +4712,7 @@ def _claim_identity(
     agent: str,
     harness: str | None,
     model: str | None,
+    agent_type: str | None = None,
 ) -> None:
     """Fill `key`'s open dispatch record with the orchestrator's reported
     `agent`/`harness`/`model` (spec §3, §4.C).
@@ -4714,23 +4721,107 @@ def _claim_identity(
     `harness`/`model` when given again); refuses a DIFFERENT one while the
     first is still open, naming both — the two-writers hazard this whole
     feature exists to make visible.
+
+    `agent_type` is the agent that actually RAN (gh#537): on OpenCode the tier
+    rides in the agent's name (`fr-phase-executor-<tier>`), so the manifest id
+    `advance` recorded never says which tier did the work. It replaces the
+    recorded one only when it is that agent or one of its tier variants
+    (`_ran_as`); anything else is a different agent, and is refused.
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
-    new_record = units.with_last_attempt_replaced(
-        record,
-        key,
-        _claimed_identity(open_record, key, agent=agent, harness=harness, model=model),
-    )
+    if agent_type is not None and not _ran_as(open_record.agent_type, agent_type):
+        err_console.print(
+            f"[red]{key}: was dispatched to {open_record.agent_type or 'the orchestrator'}, "
+            f"not {agent_type!r} — --agent-type names the agent that ran this unit, which "
+            "is the dispatched agent or one of its -<tier> variants.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    claimed = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
+    if agent_type is not None:
+        claimed = claimed.model_copy(update={"agent_type": agent_type})
+    new_record = units.with_last_attempt_replaced(record, key, claimed)
     _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(f"{key}: claimed by {agent}", soft_wrap=True)
+
+
+def _ran_as(dispatched: str | None, ran: str) -> bool:
+    """Is `ran` the agent `dispatched` names — in its plugin-qualified or bare
+    spelling, or as one of its `-<tier>` variants (`fr.types.PHASE_TIERS`, the
+    names `scripts/sync-opencode.py` generates)? Work the orchestrator runs
+    itself (`dispatched is None`) ran as no agent."""
+    if dispatched is None:
+        return False
+    bare = dispatched.split(":", 1)[-1]
+    return ran in (dispatched, bare) or ran in {f"{bare}-{tier}" for tier in PHASE_TIERS}
+
+
+def _claim_open_unit(
+    repo_root: Path,
+    run_id: str | None,
+    *,
+    agent: str,
+    agent_type: str,
+    harness: str | None,
+    model: str | None,
+) -> None:
+    """`fr run claim --open-unit` (gh#530): claim THE open unit dispatched to
+    `agent_type` that nobody else holds, without naming it.
+
+    The caller is the child session itself (fr-opencode-plugin, on its first
+    tool call): it knows its own id and the agent it runs as, never a step or
+    item. Phase executors run serially in one workspace, so at most one unit
+    fits; zero or several is refused naming what was found, because a claim
+    that guessed would name the wrong holder — the defect gh#537 is. Work
+    with no `agent_type` is the orchestrator's own and is never a candidate.
+    """
+    runs = (
+        [_load_or_exit(repo_root, run_id)]
+        if run_id is not None
+        else _runs_on_this_branch(repo_root)
+    )
+    fits = [
+        (state, owner_id, key)
+        for state in runs
+        for owner_id, key, attempt in _liveness.open_attempts(state)
+        if attempt.agent in (None, agent) and _ran_as(attempt.agent_type, agent_type)
+    ]
+    if len(fits) != 1:
+        found = ", ".join(f"{state.run}:{key}" for state, _, key in fits)
+        err_console.print(
+            f"[red]--open-unit: {'no open' if not fits else 'more than one open'} unit "
+            f"dispatched to {agent_type!r} that {agent} could hold"
+            + (f" ({found})" if fits else "")
+            + " — name it with --step/--item.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    state, owner_id, key = fits[0]
+    writes = _RUN_WRITES.get()
+    if writes is not None:
+        writes.step = owner_id
+    _claim_identity(
+        repo_root,
+        state,
+        owner_id,
+        key,
+        agent=agent,
+        harness=harness,
+        model=model,
+        agent_type=agent_type,
+    )
 
 
 @run_app.command("claim")
 @_commits_run_writes("claim", lambda kw: "abandoned" if kw.get("abandoned") else "claimed")
 def claim_cmd(
-    run_id: str = typer.Argument(..., help="Run id."),
-    step_id: str = typer.Option(..., "--step", help="Step id (or member id) to claim."),
+    run_id: str | None = typer.Argument(
+        None, help="Run id. Optional with --open-unit: the runs of the checked-out branch."
+    ),
+    step_id: str | None = typer.Option(
+        None, "--step", help="Step id (or member id) to claim. Required without --open-unit."
+    ),
     item: str | None = typer.Option(
         None,
         "--item",
@@ -4756,6 +4847,20 @@ def claim_cmd(
         "sanctioned recovery when an executor is never coming back (spec §1.C), since "
         "nothing can retire it from the orchestrator side; the step stays `running` so "
         "the next `fr run advance` briefs the unit again.",
+    ),
+    agent_type: str | None = typer.Option(
+        None,
+        "--agent-type",
+        help="The agent that actually ran the unit — the dispatched agent or one of its "
+        "-<tier> variants (on OpenCode the tier rides in the agent's name). Recorded in "
+        "place of the manifest's agent id.",
+    ),
+    open_unit: bool = typer.Option(
+        False,
+        "--open-unit",
+        help="Claim THE open, unclaimed unit dispatched to --agent-type, without naming "
+        "it — for a child session that knows its own id and agent but not its step "
+        "(gh#530). Refuses when zero or several units fit.",
     ),
 ) -> None:
     """Put the orchestrator's reported identity onto the dispatch `fr run
@@ -4785,8 +4890,44 @@ def claim_cmd(
     if harness is not None and harness not in HARNESSES:
         err_console.print(f"[red]--harness must be one of {list(HARNESSES)}, got {harness!r}[/red]")
         raise typer.Exit(2)
+    if open_unit and (step_id is not None or item is not None or abandoned):
+        err_console.print(
+            "[red]--open-unit finds the unit itself — it does not combine with "
+            "--step, --item or --abandoned[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if open_unit and agent_type is None:
+        err_console.print(
+            "[red]--open-unit needs --agent-type: the agent a unit was dispatched to is "
+            "what ties it to the child claiming it[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not open_unit and (run_id is None or step_id is None):
+        err_console.print("[red]fr run claim needs a run id and --step (or --open-unit)[/red]")
+        raise typer.Exit(2)
 
     repo_root = resolve_repo_root()
+    resolved_harness = harness
+    if resolved_harness is None and not abandoned:
+        try:
+            resolved_harness = detect_harness(os.environ)
+        except HarnessError as e:
+            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+    if open_unit:
+        assert agent is not None and agent_type is not None  # guarded above
+        _claim_open_unit(
+            repo_root,
+            run_id,
+            agent=agent,
+            agent_type=agent_type,
+            harness=resolved_harness,
+            model=model,
+        )
+        return
+    assert run_id is not None and step_id is not None  # guarded above
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -4801,16 +4942,16 @@ def claim_cmd(
         _claim_abandon(repo_root, state, owner_id, key)
         return
 
-    resolved_harness = harness
-    if resolved_harness is None:
-        try:
-            resolved_harness = detect_harness(os.environ)
-        except HarnessError as e:
-            err_console.print(f"[red]{e}[/red]", soft_wrap=True)
-            raise typer.Exit(2) from e
     assert agent is not None  # guarded above: not abandoned => agent is required
     _claim_identity(
-        repo_root, state, owner_id, key, agent=agent, harness=resolved_harness, model=model
+        repo_root,
+        state,
+        owner_id,
+        key,
+        agent=agent,
+        harness=resolved_harness,
+        model=model,
+        agent_type=agent_type,
     )
 
 

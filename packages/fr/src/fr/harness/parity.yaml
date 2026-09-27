@@ -345,8 +345,11 @@ surfaces:
           nameable while the unit is held — live 2026-09-21, status from inside
           the child read "HELD BY an unclaimed agent (opencode, <model>)". The
           unclaimed record still refuses a second dispatch, and harness and
-          model are recorded at dispatch. A plugin-side claim on the child's
-          first tool call would close this; not built.
+          model are recorded at dispatch. fr-opencode-plugin now claims from
+          the child on its first tool call (`fr run claim --open-unit`, gh#530),
+          naming the child's session id and the tier agent it runs as — built
+          and bun-tested against a fake client, not yet observed landing in a
+          live OpenCode session, so still partial.
       hermes:
         state: partial
         scope_note: >-

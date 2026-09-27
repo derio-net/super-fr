@@ -13,8 +13,10 @@ isolation gate's fail-closed posture.
 
 from __future__ import annotations
 
+import os
+
 import pytest
-from fr.harness.detect import detect_harness
+from fr.harness.detect import detect_harness, process_ancestry
 from fr.harness.model import HarnessError
 
 
@@ -119,3 +121,8 @@ def test_a_single_harness_environment_never_reads_the_process_tree() -> None:
 def test_fr_harness_still_beats_a_mixed_environment() -> None:
     env = {**_CLAUDE_OUTER_OPENCODE_INNER, "FR_HARNESS": "claude-code"}
     assert detect_harness(env, ancestors=lambda: [300, 200, 100]) == "claude-code"
+
+
+def test_process_ancestry_starts_at_this_process_and_climbs_through_its_parent() -> None:
+    chain = process_ancestry()
+    assert chain[:2] == [os.getpid(), os.getppid()]

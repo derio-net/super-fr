@@ -146,6 +146,7 @@ def test_open_unit_claim_refuses_a_child_of_an_unrelated_agent(tmp_path: Path) -
     result = _open_unit_claim(repo, shipped, agent_type="explore")
 
     assert result.exit_code == 2, result.output
+    assert "no open unit dispatched to 'explore'" in result.output
     assert _attempt(repo).agent is None
 
 
@@ -164,9 +165,10 @@ def test_open_unit_claim_never_claims_work_the_orchestrator_runs_itself(tmp_path
     repo, shipped = _started(tmp_path, _AGENT_TWO_STEP_SHAPE)
     _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], {"FR_HARNESS": "opencode"})
 
-    result = _open_unit_claim(repo, shipped)
+    result = _open_unit_claim(repo, shipped, agent_type="fr-phase-executor")
 
     assert result.exit_code == 2, result.output
+    assert "no open unit" in result.output
     assert _attempt(repo, "brainstorm", "step/brainstorm").agent is None
 
 
@@ -183,6 +185,7 @@ def test_open_unit_claim_refuses_a_unit_another_child_already_holds(tmp_path: Pa
     result = _open_unit_claim(repo, shipped, agent_type="fr-phase-executor-standard")
 
     assert result.exit_code == 2, result.output
+    assert "no open unit" in result.output
     assert _attempt(repo).agent == "ses_first"
 
 
@@ -193,6 +196,7 @@ def test_open_unit_does_not_combine_with_a_named_unit(tmp_path: Path) -> None:
     result = _open_unit_claim(repo, shipped, "--step", "phase/1/implement-phase")
 
     assert result.exit_code == 2, result.output
+    assert "does not combine" in result.output
     assert _attempt(repo).agent is None
 
 
@@ -220,6 +224,7 @@ def test_a_claim_refuses_an_agent_type_that_is_not_the_dispatched_agent(tmp_path
     )
 
     assert result.exit_code == 2, result.output
+    assert "was dispatched to" in result.output
     assert _attempt(repo).agent is None
 
 
