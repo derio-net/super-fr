@@ -13,6 +13,7 @@ ticks:
   - P1.T3.S1
   - P1.T3.S2
 refactor:
+  P1.T3: acceptance status moves and verification runs only, no code written, so nothing to clean.
   P1.T2: >-
     _ci_ok_step's "every other job id" check already reuses _load_ci_workflow
     directly (other_job_ids = set(jobs) - {"ci-ok"}) rather than a second
