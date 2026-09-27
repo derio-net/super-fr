@@ -49,3 +49,8 @@ Not caused by this change: the same warn-then-verbatim ordering already applied 
 ### cr-3-resolved · finding [out-of-scope] · resolves cr-3: the lexical escape check reads the raw value, so a backtick-annotated escaping ref is not caught (phase 1)
 
 No spec: writer receives a decorated value: stored spec: fields are YAML scalars (repair), CLI arguments (plan create), a parsed _meta (rework) or the v1 **Spec:** value (migration); backticked annotations exist only in spec-table File cells, handled by a different path. The operator chose a lexical test of the written value (§2); extending it to token extraction is a separate change.
+
+<!-- fr:journal kind=finding scope=plan id=cr-2-resolved-2 created=2026-09-27T18:26:02+00:00 state=open resolves=cr-2 tracked_by=#749 -->
+### cr-2-resolved-2 · finding [deferred → #749] · resolves cr-2: repair._repair_meta warns 'ambiguous' before canonical_spec_ref decides to keep a ref verbatim
+
+Filed at closeout as #749.
