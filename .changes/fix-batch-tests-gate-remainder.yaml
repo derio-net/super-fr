@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr run resolve refuses `done` without a step's declared artifacts (`--emitted`), records `unobserved` for a cleared `kind: cli` gate, and writes an operator gate's journal decision only once nothing can still refuse"

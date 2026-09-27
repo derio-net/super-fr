@@ -89,7 +89,7 @@ if TYPE_CHECKING:
 from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
-from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS
+from fr.workflow.artifacts import REPO_TRACKED_ARTIFACTS, emitted_artifacts
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
@@ -1020,17 +1020,29 @@ def question_rounds_refusal(
     return None
 
 
-def _append_gate_decision(
+# gh#690: a gate DECIDES in `_gate_provenance` but its spec-journal decision
+# is only QUEUED there, and written by `_flush_gate_decisions` immediately
+# before the resolve saves the cursor — after every refusal point. Written at
+# decision time, a later refusal left the entry behind, and the command's
+# closing commit (which keeps every noted write, on every exit path) recorded a
+# decision the cursor never did.
+
+_GATE_DECISIONS: ContextVar[list[tuple[Path, str, JournalEntry]] | None] = ContextVar(
+    "fr_gate_decisions", default=None
+)
+
+
+def _queue_gate_decision(
     repo_root: Path, spec: str, entry_id: str, *, title: str, body: str
 ) -> None:
-    """Append one spec-journal `decision` about a cleared operator gate — once:
+    """Queue one spec-journal `decision` about a cleared operator gate — once:
     a retry after a later refusal must not log it twice (review r1-6).
 
     A retry that would write a DIFFERENT body under the same id is refused
-    (exit 2) before any write (review p2-r6): keeping the first body silently
-    would leave the journal — and the PR body read from it — describing a
-    trigger or reason this resolve no longer declares."""
-    from fr.journal.model import append_journal_entry, journal_path
+    (exit 2) here, at decision time (review p2-r6): keeping the first body
+    silently would leave the journal — and the PR body read from it —
+    describing a trigger or reason this resolve no longer declares."""
+    from fr.journal.model import journal_path
 
     slug = spec_journal_slug(Path(spec).name[: -len(".md")])
     target = journal_path(repo_root, "spec", slug)
@@ -1060,21 +1072,33 @@ def _append_gate_decision(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    _remember(target)
-    append_journal_entry(
-        target,
-        slug,
-        JournalEntry(
-            kind="decision",
-            scope="spec",
-            id=entry_id,
-            # `fr journal add`'s own stamp (UTC with its offset, second precision).
-            created=journal_now(),
-            title=title,
-            body=body,
-        ),
+    queued = _GATE_DECISIONS.get()
+    if queued is None:
+        queued = []
+        _GATE_DECISIONS.set(queued)
+    entry = JournalEntry(
+        kind="decision",
+        scope="spec",
+        id=entry_id,
+        # `fr journal add`'s own stamp (UTC with its offset, second precision).
+        created=journal_now(),
+        title=title,
+        body=body,
     )
-    _note_record_write(repo_root, target)
+    queued.append((target, slug, entry))
+
+
+def _flush_gate_decisions(repo_root: Path) -> None:
+    """Write every queued gate decision — called by each `resolve` branch
+    immediately before it saves the cursor, so nothing after it can refuse."""
+    from fr.journal.model import append_journal_entry
+
+    queued = _GATE_DECISIONS.get() or []
+    _GATE_DECISIONS.set(None)
+    for target, slug, entry in queued:
+        _remember(target)
+        append_journal_entry(target, slug, entry)
+        _note_record_write(repo_root, target)
 
 
 def _gate_provenance(
@@ -1167,7 +1191,7 @@ def _gate_provenance(
         raise typer.Exit(2)
     if no_questions:
         assert spec_for_reason is not None  # refused above otherwise
-        _append_gate_decision(
+        _queue_gate_decision(
             repo_root,
             spec_for_reason,
             f"gate-no-questions-{step_id}",
@@ -1214,13 +1238,41 @@ def _record_round_two(
     if questions is None or questions.rounds != 2:
         return
     assert spec is not None  # refused before observation otherwise
-    _append_gate_decision(
+    _queue_gate_decision(
         repo_root,
         spec,
         f"gate-question-rounds-{step_id}",
         title=f"Operator gate `{step_id}` took two question rounds",
         body=f"Trigger: {questions.trigger}. {questions.reason}",
     )
+
+
+def _refuse_missing_emits(
+    label: str,
+    emits: tuple[str, ...] | list[str],
+    supplied: Mapping[str, str],
+    recorded: Mapping[str, str] | None,
+) -> None:
+    """Refuse `done` for a unit that names none of an artifact it declares
+    (gh#587). `_parse_emitted` checks every name GIVEN is declared; this is the
+    converse — every declared artifact is given now or already on the record.
+    Before it, `brainstorm` reached `done` with `emitted: None` and the run went
+    on to review a spec the cursor could not locate."""
+    missing = [
+        n for n in emitted_artifacts(emits) if n not in supplied and n not in (recorded or {})
+    ]
+    if not missing:
+        return
+    flags = " ".join(f"--emitted {n}=<…>" for n in missing)
+    err_console.print(
+        f"{label}: done without the artifact(s) it declares: {', '.join(missing)}. "
+        f"Name them — `{flags}`, or `emitted:` in the record — and resolve again; "
+        "nothing applied.",
+        style="red",
+        markup=False,
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
@@ -3806,6 +3858,8 @@ def _resolve_member(
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
     # review this gate exists to make impossible.
+    if state_value == "done":
+        _refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
     if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
         _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
     verified = _verified_evidence(
@@ -4129,6 +4183,7 @@ def _resolve_body(
 
     repo_root = resolve_repo_root()
     _UNOBSERVED.set(None)
+    _GATE_DECISIONS.set(None)
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -4253,6 +4308,14 @@ def _resolve_body(
             )
             raise typer.Exit(2)
         if state_value == "done":
+            unobserved = _take_unobserved()
+            if unobserved:
+                # gh#632: the note `_gate_provenance` just made reaches the
+                # cursor on this branch too — on the step's flat unit, which
+                # `_complete_step` carries through the `advance` that runs it.
+                record = units.with_evidence(
+                    record, _unit_key(repo_root, state, step, None, None), unobserved
+                )
             new_record = record.model_copy(
                 update={
                     "state": "pending",
@@ -4269,6 +4332,7 @@ def _resolve_body(
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
             )
+            _flush_gate_decisions(repo_root)
             _save_run_state(repo_root, _with_step(state, step_id, new_record))
             console.print(
                 f"{step_id}: operator gate cleared — `fr run advance {run_id}` now executes it",
@@ -4346,6 +4410,11 @@ def _resolve_body(
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
         _deliver_pr_gate(repo_root, state, pr)
+    if state_value == "done":
+        # gh#587: after `deliver`'s PR gate, which renders the body a first
+        # `pr`-less resolve exists to fetch, and before the gate's queued
+        # journal decision is written — the last refusal before any write.
+        _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
     new_state = _complete_step(
         state,
         manifest,
@@ -4358,6 +4427,7 @@ def _resolve_body(
         # cleared at all.
         answered_by=gate_by,
     )
+    _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
     if step_id == "deliver" and state_value == "done":
