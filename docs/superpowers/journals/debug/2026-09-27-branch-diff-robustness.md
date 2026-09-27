@@ -19,3 +19,8 @@ Probed live on the unfixed code: a branch adding café.py that was NEVER merged 
 ### 1a151ec36a0d · finding [fixed] · _diff_names: both diffs now -z and raise IsolationError on non-zero exit
 
 New helper _diff_names in fr/isolation/local.py runs git diff --name-only -z, raises IsolationError (naming exit + stderr) on failure, and splits on NUL. branch_changes_present uses it for both calls. Pinned red-first by test_branch_changes_present_failed_diff_raises[1,2] (a runner whose 1st/2nd diff exits 128), test_branch_changes_present_non_ascii_path_unmerged_is_missing (the false PASS) and ..._non_ascii_path_squash (non-ASCII + tab paths land). Callers unchanged: verify-merge exits 2, down's hazard reads unverifiable, gc's _merged_by_content returns False. #716 (reverted merges) untouched.
+
+<!-- fr:journal kind=review scope=debug id=09f43438484d created=2026-09-27T08:50:35 -->
+### 09f43438484d · review · Self-review of the 20-line diff: no in-scope findings
+
+Checked: both call sites go through _diff_names; stderr surfaced in the IsolationError; all three callers already convert IsolationError to not-verified (verify-merge exit 2, _reap_hazard unverifiable, _merged_by_content False). Noted, out of scope and pre-existing: glob metacharacters in a changed path used as a pathspec can over-match in the 2nd diff, which only ADDS files to the per-file check (conservative direction). Full suite: 6516 passed; 2 failures (test_run_cli advance ordering, test_sentinel_liveness dead-holder lock) pass in isolation and touch no isolation code: load flakes on a 21-min contended run.
