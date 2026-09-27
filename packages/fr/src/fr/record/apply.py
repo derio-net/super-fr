@@ -228,9 +228,9 @@ def _load_entries(text: str | None, where: Path) -> list[JournalEntry]:
 
 
 def _stamp() -> str:
-    import datetime as _dt
+    from fr.journal.model import journal_now
 
-    return _dt.datetime.now().replace(microsecond=0).isoformat()
+    return journal_now()
 
 
 def _same_entry(a: JournalEntry, b: JournalEntry, *, ignore: frozenset[str]) -> bool:

@@ -48,6 +48,7 @@ from fr.journal.model import (
     JournalEntry,
     JournalParseError,
     effective_finding_states,
+    journal_now,
     journal_stamp_as_utc,
     parse_journal,
     phase_finding_states,
@@ -1067,8 +1068,8 @@ def _append_gate_decision(
             kind="decision",
             scope="spec",
             id=entry_id,
-            # `fr journal add`'s own stamp shape (local, second precision).
-            created=_dt.datetime.now().replace(microsecond=0).isoformat(),
+            # `fr journal add`'s own stamp (UTC with its offset, second precision).
+            created=journal_now(),
             title=title,
             body=body,
         ),
@@ -1916,7 +1917,7 @@ def _verify_review_entry(
     opened = parse_timestamp(since) if since else None
     if created is None or opened is None or created < opened.replace(microsecond=0):
         err_console.print(
-            f"[red]{key}: --evidence review={entry_id} was created {found.created} (local), "
+            f"[red]{key}: --evidence review={entry_id} was created {found.created}, "
             f"before this step opened at {since} — a review recorded before spec-review "
             "began is not a review of it. Record the reviewer's findings, then a new "
             "`kind=review` entry.[/red]",
