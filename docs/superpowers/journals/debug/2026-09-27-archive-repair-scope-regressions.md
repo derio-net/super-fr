@@ -14,3 +14,8 @@ plan_ops.create stores refs.canonical_spec_ref(spec) in _meta.yaml (#697). canon
 ### f1-create-rerun · finding [fixed] · create re-run compares spec: by identity
 
 plan_ops._folder_matches strips spec: from the byte compare and checks _same_spec (canonical_spec_ref of both); a matched re-run rewrites spec: canonically keeping the created: line. Tests: test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes (red→green), test_create_rerun_with_a_different_spec_is_still_a_collision (guards #133).
+
+<!-- fr:journal kind=repro scope=debug id=e922dcbd3800 created=2026-09-27T05:10:56 -->
+### e922dcbd3800 · repro · single-plan archive leaves stale refs to a spec its own sweep moved
+
+Plan B stranded in implemented/plans with spec: docs/superpowers/specs/y-design.md; y's row File cell docs/superpowers/plans/2026-09-03-b/. fr archive <plan A> moves y to implemented/specs but B's spec: stays the full active path (pre-#697 repaired it). Pinned by tests/unit/test_archive_cmd.py::test_single_plan_archive_repairs_refs_to_specs_its_own_sweep_moved (red).
