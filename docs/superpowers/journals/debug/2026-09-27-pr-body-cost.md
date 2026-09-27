@@ -14,3 +14,8 @@ _deliver_pr_gate (run_cmd.py) renders pr-body.md via pr_body._cost BEFORE resolv
 ### f-live-cost · finding [fixed] · PR body Cost table folds a live reading of this host's sessions over the usage file
 
 fr.usage.capture: capture() split into build_capture (pure, in memory) + writer; new live_usage() upserts this host's fresh capture into the loaded file without writing. pr_body._cost uses it, so steps completed after the last capture show their turns; the old no-file-only fallback to recompute_entries is gone from the render. When turns exist but no dollars, the table notes that a harness may write session cost only at session end. Pinned by tests/unit/test_pr_body_cost.py (failing first, committed before the fix). Not changed: deliver's capture still runs after the gate, so a refused deliver writes only pr-body.md.
+
+<!-- fr:journal kind=review scope=debug id=ef3234ae9ed2 created=2026-09-27T19:46:48+00:00 -->
+### ef3234ae9ed2 · review · independent review: no findings
+
+feature-dev:code-reviewer read capture.py, pr_body.py, cost.py, file.py and the tests against five checks: capture() still behaves the same, the no-file and no-session cases, other hosts' and migrated captures, the dropped note, and harness-neutrality scope. No high-confidence issues. Caveat: the reviewer had no shell; the full suite was run separately (6689 passed; one OpenCode live-plugin timeout that passes when run alone). Out of scope and filed: #756 (the closeout capture did not refresh usd).
