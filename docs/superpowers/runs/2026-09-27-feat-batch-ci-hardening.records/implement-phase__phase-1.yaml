@@ -1,0 +1,32 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-ci-hardening
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T1.S2
+  - P1.T1.S3
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T2.S3
+  - P1.T3.S1
+  - P1.T3.S2
+refactor:
+  P1.T2: >-
+    _ci_ok_step's "every other job id" check already reuses _load_ci_workflow
+    directly (other_job_ids = set(jobs) - {"ci-ok"}) rather than a second
+    loader, so there was nothing to consolidate.
+journal:
+  - kind: discovery
+    id: sha-pins-reresolved-no-drift
+    title: Every spec §3.A row re-resolved identically via gh api on 2026-09-27
+    body: >-
+      Re-resolved all 12 rows of spec §3.A through `gh api
+      repos/<o>/<r>/git/ref/tags/<tag>` (dereferencing annotated tag objects
+      via `git/tags/<sha>` to their commit) and confirmed the exact vX.Y.Z
+      version tag dereferences to the same commit. Every commit SHA matched
+      the spec table exactly — no tag had moved, so no unreviewed commit was
+      pinned and no finding was needed.
+resolves: []
+evidence: {}
