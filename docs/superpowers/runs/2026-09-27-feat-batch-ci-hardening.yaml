@@ -12,7 +12,16 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-27-ci-hardening-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-27T14:28:14+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-27T14:28:14+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 0e72b170-33ae-4ae8-b736-a8b2f84dc9b1
   plan:
     state: pending
   plan-review:
