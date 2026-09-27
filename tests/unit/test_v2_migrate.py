@@ -77,6 +77,34 @@ def test_migrate_apply_creates_v2_folder_and_archives_md(tmp_path):
     assert plan.phases[0].state.steps["P1.T1.S2"].state == " "
 
 
+def test_migrate_stores_canonical_spec_ref(tmp_path):
+    """#711: the v1->v2 migration is a `spec:` writer too — it must store the
+    same canonical form `canonical_spec_ref` produces, not the v1 full path
+    verbatim."""
+    from fr.migrate import migrate_repo
+
+    repo = _make_repo(tmp_path)
+    spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-test-design.md"
+    spec_path.write_text("# test\n")
+    md = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fixture-v1.md"
+    md.write_text(
+        "# 2026 05 10 Fixture V1\n\n"
+        "**Spec:** `docs/superpowers/specs/2026-05-10-test-design.md`\n"
+        "**Status:** Complete\n\n"
+        "## Phase 1: Setup [agentic]\n"
+        "**Depends on:** —\n\n"
+        "### Task 1: Initial setup\n\n"
+        "- [x] **Step 1: Do the first thing** Some details here.\n"
+    )
+
+    migrate_repo(repo, dry_run=False, target_repo="derio-net/test")
+
+    new = repo / "docs" / "superpowers" / "plans" / "2026-05-10-fixture-v1"
+    meta_text = (new / "_meta.yaml").read_text()
+    assert "spec: 2026-05-10-test-design.md\n" in meta_text
+    assert "docs/superpowers/specs" not in meta_text
+
+
 def test_migrate_skips_in_progress_by_default(tmp_path):
     from fr.migrate import migrate_repo
 

@@ -448,6 +448,66 @@ def test_canonical_spec_ref_shortens_only_the_same_file(repo: Path) -> None:
     assert canonical_spec_ref("docs/superpowers/specs/y-design.md", repo) == "y-design.md"
 
 
+def test_canonical_spec_ref_keeps_a_repo_escaping_relative_ref_verbatim(repo: Path) -> None:
+    """#709: a relative ref that leaves the repo must not fall through to a
+    same-slug local spec just because the foreign target is absent here."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    escaping = "../sibling/docs/superpowers/specs/x-design.md"
+    assert canonical_spec_ref(escaping, repo) == escaping
+
+
+def test_canonical_spec_ref_keeps_an_absolute_out_of_repo_ref_verbatim(
+    repo: Path, tmp_path: Path
+) -> None:
+    """#709: an absolute out-of-repo path is foreign too."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    outside = str(tmp_path.parent / "elsewhere" / "x-design.md")
+    assert canonical_spec_ref(outside, repo) == outside
+
+
+def test_canonical_spec_ref_tolerates_a_relative_repo_root(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review cr-1: a relative `repo_root` beside an absolute ref must not make
+    `os.path.commonpath` raise (it refuses to mix the two) — the escape test
+    judges both as absolute paths."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    monkeypatch.chdir(repo.parent)
+    rel_root = Path(repo.name)
+    outside = str(tmp_path.parent / "elsewhere" / "x-design.md")
+    assert canonical_spec_ref(outside, rel_root) == outside
+    assert canonical_spec_ref("docs/superpowers/specs/x-design.md", rel_root) == "x-design.md"
+
+
+def test_canonical_spec_ref_still_canonicalizes_an_in_repo_dotdot(repo: Path) -> None:
+    """#709: the lexical escape test must not over-fire on an in-repo `..`."""
+    from fr.refs import canonical_spec_ref
+
+    _bare_spec(repo)
+    assert (
+        canonical_spec_ref("docs/superpowers/../superpowers/specs/x-design.md", repo)
+        == "x-design.md"
+    )
+
+
+def test_repair_leaves_a_repo_escaping_ref_byte_identical(repo: Path) -> None:
+    """#709: `fr repair` shares the escape guard — it never repoints a plan's
+    `spec:` that names a foreign path just because a same-named local spec
+    exists."""
+    _bare_spec(repo)
+    escaping = "../sibling/docs/superpowers/specs/x-design.md"
+    meta = _plan_with_spec(repo, "2026-09-01-a", escaping)
+    before = meta.read_bytes()
+    repair_repo(repo, write=True)
+    assert meta.read_bytes() == before
+
+
 def test_repair_leaves_a_same_named_spec_at_another_path_alone(repo: Path) -> None:
     """`fr repair` shares `canonical_spec_ref`'s guard: it never repoints a plan."""
     _bare_spec(repo)

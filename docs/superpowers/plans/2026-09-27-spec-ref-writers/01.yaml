@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'spec: writers agree on canonical_spec_ref — escaping refs kept, one archive
+    repair, canonical v1 migration'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-writers-one-canonical-form
+  - archive-repair-warns-once
+  tier: standard
+  files:
+  - packages/fr/src/fr/refs.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/migrate.py
+  - tests/unit/test_repair.py
+  - tests/unit/test_archive_cmd.py
+  - tests/unit/test_v2_migrate.py
+  - .changes/feat-batch-spec-ref-writers.yaml
+  - docs/acceptance/*
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: '#709 — a repo-escaping spec: ref is kept verbatim (red first)'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Red: in tests/unit/test_repair.py beside test_canonical_spec_ref_shortens_only_the_same_file, add failing tests (spec §4 item 1): with a local docs/superpowers/specs/x-design.md present, canonical_spec_ref("../sibling/docs/superpowers/specs/x-design.md", repo) returns the value verbatim; an absolute out-of-repo path (tmp_path.parent / "elsewhere/x-design.md") is kept verbatim; "docs/superpowers/../superpowers/specs/x-design.md" still canonicalizes to "x-design.md"; and repair_repo(write=True) leaves a plan whose _meta.yaml spec: is the escaping ref byte-identical. Run them and confirm the escaping cases fail today.
+  - id: P1.T1.S2
+    text: |-
+      Green: in fr/refs.py canonical_spec_ref, after the is_cross_repo_spec check and before resolution, return value when os.path.commonpath([root, normpath(join(root, value))]) != root with root = os.path.normpath(repo_root) (spec §3.A, lexical per operator decision). Update the docstring: the new verbatim case, and the v1→v2 migration as a fourth writer.
+  - id: P1.T1.S3
+    text: |-
+      Refactor: keep the escape test a small private helper in refs.py if it reads clearer, or record a refactor reason in the step record.
+- number: 2
+  title: '#710 — fr archive runs repair once (red first)'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      Red: in tests/unit/test_archive_cmd.py add a failing test (spec §4 item 2): a single-plan archive whose sweep moves a spec, in a repo where repair_repo emits one warning (monkeypatch repair_repo in fr.commands.archive_cmd to record calls and return a RepairResult carrying one warning, or build a real unresolvable ref), prints that warning exactly once and calls repair_repo once. Add a --sweep-only test that repair still runs (one call, repaired:/warning: output present) when the sweep moves a spec.
+  - id: P1.T2.S2
+    text: |-
+      Green: per spec §3.B, _report_sweep(repo_root, sweep) only prints moves/notes and returns bool(sweep.moves); add _repair_in_passing(repo_root, only_plans) that calls repair_repo(write=True, only_plans=...) and prints repaired:/warning: lines; call it once at the archive tail (if archived or specs_moved) and in --sweep-only when the sweep moved something (only_plans=None). Keep the plans_referencing_specs widening before the tail.
+  - id: P1.T2.S3
+    text: |-
+      Refactor: confirm no other caller of _report_sweep remains with the old signature, or record a refactor reason.
+- number: 3
+  title: '#711 — v1→v2 migration writes the canonical spec: (red first)'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Red: in tests/unit/test_v2_migrate.py add a failing test (spec §4 item 3): a v1 plan whose **Spec:** is docs/superpowers/specs/<slug>-design.md, with that spec file present, migrates to a _meta.yaml carrying spec: <slug>-design.md.
+  - id: P1.T3.S2
+    text: |-
+      Green: in fr/migrate.py _migrate_one, store refs.canonical_spec_ref(v1plan.spec, repo_root) when v1plan.spec is set (spec §3.C); leave _resolve_spec_file reading the original v1 value.
+  - id: P1.T3.S3
+    text: |-
+      Refactor: none expected beyond the one-line change — record a refactor reason if so.
+- number: 4
+  title: Fragment, acceptance, quality gate
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Add .changes/feat-batch-spec-ref-writers.yaml (bump: patch, one-line summary). Move both acceptance rows (spec-writers-one-canonical-form, archive-repair-warns-once) to ci with fr acceptance set-status, citing the new tests as unit levels.
+  - id: P1.T4.S2
+    text: |-
+      Run uv run ruff format packages/ tests/, uv run ruff check packages/ tests/, the mypy command from AGENTS.md, uv run pytest -q --no-cov -n auto, and uv run fr validate artifacts; all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-27T10:08:00+00:00'
+      note: null
+  completion:
+    at: '2026-09-27T10:08:00+00:00'
+    note: null
+    observed_prs: []

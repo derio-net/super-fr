@@ -47,27 +47,32 @@ def _make_gh_client() -> GhClient:
     return client_for(Path.cwd())
 
 
-def _report_sweep(
-    repo_root: Path, sweep: SpecSweepResult, only_plans: frozenset[str] | None = None
-) -> bool:
-    """Print a sweep result, repair refs in passing, report moves.
+def _report_sweep(repo_root: Path, sweep: SpecSweepResult) -> bool:
+    """Print a sweep result's moves and notes. Returns whether anything moved.
 
-    Shared by the post-move sweep and `--sweep-only`: the move and the ref
-    normalization land in the same operator commit (2026-06-06
-    spec-path-repair). Returns whether anything moved.
+    Repair is a separate concern (#710) — see `_repair_in_passing`, called
+    once by each caller of this function.
     """
-    moved = bool(sweep.moves)
     for m in sweep.moves:
         typer.echo(f"  archived spec: {m.src} -> {m.dst}")
     for n in sweep.notes:
         typer.echo(f"  note: {n}")
-    if moved:
-        repair = repair_repo(repo_root, write=True, only_plans=only_plans)
-        for r in repair.rewrites:
-            typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
-        for w in repair.warnings:
-            err_console.print(f"[yellow]warning:[/yellow] {w}")
-    return moved
+    return bool(sweep.moves)
+
+
+def _repair_in_passing(repo_root: Path, only_plans: frozenset[str] | None) -> None:
+    """Repair refs in passing — the one place `fr archive` calls `repair_repo`.
+
+    Shared by the post-move sweep and `--sweep-only`: the move and the ref
+    normalization land in the same operator commit (2026-06-06
+    spec-path-repair), and it runs exactly once per invocation (#710) so a
+    warning never reaches the operator twice.
+    """
+    repair = repair_repo(repo_root, write=True, only_plans=only_plans)
+    for r in repair.rewrites:
+        typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
+    for w in repair.warnings:
+        err_console.print(f"[yellow]warning:[/yellow] {w}")
 
 
 def archive_command(
@@ -116,6 +121,7 @@ def archive_command(
                 raise typer.Exit(2)
         repo_root = resolve_repo_root()
         if _report_sweep(repo_root, spec_archive_sweep(repo_root, _make_gh_client())):
+            _repair_in_passing(repo_root, None)
             typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
         else:
             typer.echo("spec sweep: nothing eligible to move.")
@@ -229,18 +235,15 @@ def archive_command(
             only_plans |= plans_referencing_specs(
                 repo_root, [repo_root / m.dst for m in sweep.moves]
             )
-        specs_moved = _report_sweep(repo_root, sweep, only_plans)
+        specs_moved = _report_sweep(repo_root, sweep)
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 
     # Repair in passing (2026-06-06 spec-path-repair): the move and the
-    # ref normalization land in the same operator commit.
+    # ref normalization land in the same operator commit. One pass, whether
+    # the sweep or a plan move (or both) triggered it (#710).
     if archived or specs_moved:
-        repair = repair_repo(repo_root, write=True, only_plans=only_plans)
-        for r in repair.rewrites:
-            typer.echo(f"  repaired: {r.file.name} · {r.field}: {r.old} → {r.new}")
-        for w in repair.warnings:
-            err_console.print(f"[yellow]warning:[/yellow] {w}")
+        _repair_in_passing(repo_root, only_plans)
 
     for s in skipped:
         typer.echo(f"  skipped: {s}")

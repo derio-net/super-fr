@@ -275,7 +275,7 @@ def _migrate_one(
     meta: dict[str, Any] = {
         "schema_version": 2,
         "plan": slug,
-        "spec": v1plan.spec,
+        "spec": refs.canonical_spec_ref(v1plan.spec, repo_root) if v1plan.spec else v1plan.spec,
         "target_repo": resolved_target,
         # Match `fr plan create`'s default (fr_version) — migrated plans are v2 plans (#245).
         # Widened past the 4.0.0 major bump, same reasoning as plan_cmd.py's default.

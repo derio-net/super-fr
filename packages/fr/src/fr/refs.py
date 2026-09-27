@@ -15,6 +15,7 @@ not-found reporting.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,19 +127,29 @@ def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = 
 
     Lifecycle-independent (it still resolves once the spec moves to
     `implemented/specs/`), unlike a full path. Every `spec:` writer —
-    `plan_ops.create`, `plan_ops.rework_create`, `repair._repair_meta` — calls
-    it, so they cannot drift (#686). A ref is left verbatim when it is
-    cross-repo notation, when it does not resolve, or when it names an
-    existing file OUTSIDE the spec lifecycle roots (`SPEC_ROOTS`): readers
-    resolve by slug either way, so shortening such a path would erase the
-    only visible sign that the operator pointed somewhere else. A path inside
-    a lifecycle root — including one whose spec has since moved, or one that
-    is ambiguous across roots — canonicalizes by slug, as repair always has.
-    `res` lets a caller that already resolved the ref skip a second lookup.
+    `plan_ops.create`, `plan_ops.rework_create`, `repair._repair_meta`, the
+    v1->v2 migration (`migrate._migrate_one`) — calls it, so they cannot
+    drift (#686, #711). A ref is left verbatim when it is cross-repo
+    notation, when it lexically escapes the repo (`os.path.normpath(repo_root
+    / value)` is not under `repo_root` — this judges what the operator
+    *wrote*, so a symlinked `docs/` inside the repo still canonicalizes),
+    when it does not resolve, or when it names an existing file OUTSIDE the
+    spec lifecycle roots (`SPEC_ROOTS`): readers resolve by slug either way,
+    so shortening such a path would erase the only visible sign that the
+    operator pointed somewhere else. A path inside a lifecycle root —
+    including one whose spec has since moved, or one that is ambiguous
+    across roots — canonicalizes by slug, as repair always has. `res` lets a
+    caller that already resolved the ref skip a second lookup.
     """
     from fr._urls import is_cross_repo_spec
 
     if is_cross_repo_spec(value):
+        return value
+    # abspath, not bare normpath: commonpath refuses to mix a relative root
+    # with an absolute ref.
+    root = os.path.abspath(repo_root)
+    target = os.path.abspath(os.path.join(root, value))
+    if os.path.commonpath([root, target]) != root:
         return value
     if res is None:
         res = resolve_spec_ref(value, repo_root)

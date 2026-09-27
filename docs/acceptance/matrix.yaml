@@ -324,6 +324,19 @@ rows:
     status: ci
     notes: 'issue #359 (follow-up to #351). Pinned by test_repair_quiet_on_pending_row;
       recognizer promoted to fr.refs (test_refs.py::test_is_pending_placeholder).'
+  - id: archive-repair-warns-once
+    capability: Archive spec-sweep
+    acceptance: fr archive runs repair once per invocation, so each repair warning reaches
+      the operator exactly once.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_cmd.py
+    status: ci
+    notes: Unit tests assert fr archive calls repair_repo exactly once and prints each
+      warning exactly once, for both the plan-move path and --sweep-only, when the sweep
+      moves a spec (#710).
   - id: opencode-skills-in-repo
     capability: OpenCode adaptation
     acceptance: An operator can git clone super-fr and use its fr-* skills directly
@@ -4912,3 +4925,17 @@ rows:
       stub; test_install_bridge does a real uv tool install of the same set. The git-URL
       POST_CREATE install was also run live 2026-09-27 into a disposable UV_TOOL_DIR:
       fr.runners = [cncd, herdr, vk]; fr_vk.bridge imports.'
+  - id: spec-writers-one-canonical-form
+    capability: Spec ref canonical form
+    acceptance: Every spec writer (fr plan create, rework create, fr repair, the v1-to-v2
+      migration) stores the same canonical spec form, and none of them shortens a ref
+      that leaves the repo.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-27-spec-ref-writers-design.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_repair.py
+      - super-fr:tests/unit/test_v2_migrate.py
+    status: ci
+    notes: 'Unit tests cover all four spec: writers agreeing on canonical_spec_ref,
+      incl. the repo-escape guard (#709) and the v1->v2 migration writer (#711).'

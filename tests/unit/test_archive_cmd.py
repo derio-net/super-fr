@@ -457,6 +457,70 @@ def test_archive_repairs_stale_refs_in_passing(tmp_path, monkeypatch):
     assert "docs/superpowers/plans/2026-06-06-done" not in text
 
 
+# --- #710: repair runs once per invocation, however many places would call it ---
+
+
+def test_archive_runs_repair_once_when_sweep_moves_a_spec(tmp_path, monkeypatch):
+    """A single-plan archive whose sweep moves a spec must call `repair_repo`
+    exactly once, and print every warning exactly once — not twice, as
+    `_report_sweep` and the archive tail both used to."""
+    repo = _repo(tmp_path)
+    spec = _add_spec(
+        repo,
+        "2026-06-06-fixture-spec.md",
+        [("Plan X", "`derio-net/test`", "docs/superpowers/plans/2026-06-06-done/")],
+    )
+    plan_dir = _add_plan(repo, "2026-06-06-done", ticked=True, spec_name=spec.name)
+    _seed(repo)
+
+    from fr.repair import RepairResult
+
+    calls: list[frozenset[str] | None] = []
+
+    def fake_repair_repo(repo_root, *, write, only_plans=None):
+        calls.append(only_plans)
+        return RepairResult(rewrites=[], warnings=["unresolved: some/ref (#710 fixture)"])
+
+    monkeypatch.setattr(archive_cmd, "repair_repo", fake_repair_repo)
+
+    result = _invoke(
+        monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
+    )
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert result.output.count("unresolved: some/ref (#710 fixture)") == 1
+
+
+def test_sweep_only_runs_repair_once_when_sweep_moves_a_spec(tmp_path, monkeypatch):
+    """`--sweep-only` still repairs when the sweep moves a spec — one call,
+    with the `repaired:`/`warning:` output present."""
+    repo = _repo(tmp_path)
+    _add_plan(repo, "2026-05-25-bookmarks", ticked=True, spec_name="2026-05-25-bm-design.md")
+    _add_spec(
+        repo,
+        "2026-05-25-bm-design.md",
+        [("bm", "derio-net/test", "docs/superpowers/implemented/plans/2026-05-25-bookmarks")],
+    )
+    _seed(repo)
+    _strand_plan(repo, "2026-05-25-bookmarks")
+
+    from fr.repair import RepairResult
+
+    calls: list[frozenset[str] | None] = []
+
+    def fake_repair_repo(repo_root, *, write, only_plans=None):
+        calls.append(only_plans)
+        return RepairResult(rewrites=[], warnings=["unresolved: some/ref (#710 fixture)"])
+
+    monkeypatch.setattr(archive_cmd, "repair_repo", fake_repair_repo)
+
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--sweep-only"])
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert result.output.count("unresolved: some/ref (#710 fixture)") == 1
+
+
 # --- --no-spec-sweep flag (2026-07-05 spec-sweep slice guard, #351) ---
 
 
