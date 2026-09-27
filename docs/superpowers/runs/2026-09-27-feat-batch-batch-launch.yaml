@@ -3,7 +3,7 @@ run: 2026-09-27-feat-batch-batch-launch
 workflow: fr-goal@1
 branch: feat/batch-batch-launch
 started: '2026-09-27T06:53:20+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -106,6 +106,10 @@ steps:
           reviewer: a8f69fccf579745c4
           findings: r2-1,r2-2
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-27T07:49:17+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): r2-2
   deliver:
     state: pending
