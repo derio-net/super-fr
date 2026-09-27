@@ -14,3 +14,8 @@ A runner's unit limit lives only inside can_dispatch(item), which needs a built 
 ### apply-runner-units-fix · finding [fixed] · Runner.units declared; apply refuses a non-phase runner before the forge; tick names the unit
 
 Source: Runner.units (protocols.py), registry.runner_units, apply_cmd refusal after the name check and before _make_gh_client; vk/cncd {phase}, herdr {run}, each can_dispatch gated on self.units; tick unit_mismatch vs generic refusal message. Pinned first by tests/unit/test_apply_runner_units.py (committed red in d27f7f12: 5 failed — apply reached the forge client, no runner declared units, tick said 'unknown repo'); green after. Full suite: 6519 passed, 2 failed under heavy host load (test_run_idle_guard, test_record_review_fixes), both pass when rerun alone — unrelated to this change.
+
+<!-- fr:journal kind=review scope=debug id=8d55554d378a created=2026-09-27T08:59:17 -->
+### 8d55554d378a · review · Independent adversarial review: no findings
+
+A separate read-only reviewer read every touched file plus neighbours (triage_batch_cmd, bridge_cli, render, shapes/resolve, testing, import-direction test). Verified: refusal fires before _make_gh_client and merge_evidence; render() projects runner labels on plan.phases only, so phase is the only unit apply --to queues; triage batch dispatch uses load_runner + can_dispatch (herdr only); soft-point import stays find_spec-guarded. Sub-threshold note, no action: fr_vk METRICS_REASON_ALIASES has no unit_mismatch entry, so it passes through unaliased (unreachable for vk today). Reviewer had no shell, so it read files at HEAD rather than the git diff.
