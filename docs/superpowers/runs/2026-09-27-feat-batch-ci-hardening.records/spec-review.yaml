@@ -1,0 +1,14 @@
+schema_version: 2
+run: 2026-09-27-feat-batch-ci-hardening
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "Tripwire's text-scan/yaml-parse equality misses a job-level uses (reusable workflow call)", body: "_pr_spec_status.yml:21 is jobs.status.uses with no steps; a steps-only walker drops it and the equality fails on this repo's own workflows. Spec 3.C must name both shapes."}
+  - {kind: finding, id: s2, review_scope: in, title: "Version-comment regex looser than the decided vX.Y.Z", body: "3.C said v<digits>(.<digits>)*, accepting '# v4'; decision 4 says vX.Y.Z."}
+  - {kind: finding, id: s3, review_scope: in, title: "Problem section miscounts remote uses (27 claimed, 34 actual)", body: "35 uses lines, 34 remote; the pin table's 12 unique pairs are complete."}
+  - {kind: review, id: spec-review, title: "independent spec review: 3 findings", body: "fr-spec-reviewer (standard tier): 3 in-scope findings (s1-s3), all fixed in the spec. Verified: ci-ok needs matches ci.yml's 8 jobs; pin table exhaustive; ci-budget needs no change; existing tests match on startswith, not tags; matrix rows present; packages/ and ruleset untouched."}
+resolves:
+  - {id: s1, state: fixed, body: "3.C now collects jobs.<id>.uses and jobs.<id>.steps[].uses and names _pr_spec_status.yml:21 as the real case; compares multisets."}
+  - {id: s2, state: fixed, body: "3.C now requires v\\d+\\.\\d+\\.\\d+ exactly."}
+  - {id: s3, state: fixed, body: "1 now says 34 remote (35 in all, one local)."}
+evidence: {review: spec-review, reviewer: a178979bb08f82fdb}

@@ -15,8 +15,8 @@
 
 ## 1. Problem
 
-**Mutable pins (#707).** 27 `uses:` references across 8 workflow files name a
-tag (`actions/checkout@v4`, `astral-sh/setup-uv@v4`, …). A tag is a movable
+**Mutable pins (#707).** 34 remote `uses:` references (35 in all, one of them
+local) across 8 workflow files name a tag (`actions/checkout@v4`, `astral-sh/setup-uv@v4`, …). A tag is a movable
 pointer: whoever controls the action's repo can move `v4` to new code, and the
 next run executes it. That code runs with each workflow's token.
 `release.yml` has `contents: write` + `issues: write` and pushes the release
@@ -108,14 +108,19 @@ survive a YAML parse. For each `uses:` value it requires one of:
 
 - a local reference starting with `./` (exempt), or
 - `owner/repo[/path]@<exactly 40 lowercase hex>` followed by a
-  `# v<digits>(.<digits>)*` comment on the same line.
+  `# vX.Y.Z` comment (`v\d+\.\d+\.\d+`, exactly three components, per
+  decision 4) on the same line.
 
 Anything else fails, naming `file:line` and the offending reference: a tag, a
 branch, a short SHA, a missing comment, or `docker://`.
 The regex scan must not be something a differently-formatted reference can
 slip past, such as a flow-style `{uses: …}` or a quoted value. So the test also
-parses each file with `yaml.safe_load`, collects every `uses` value from the
-jobs and steps, and asserts that the parsed set equals the scanned set.
+parses each file with `yaml.safe_load` and collects BOTH shapes of `uses`:
+job-level `jobs.<id>.uses` (a reusable-workflow call, which has no `steps:`;
+the real-repo case is `_pr_spec_status.yml:21`, `uses:
+./.github/workflows/fr-spec-status.yml`) and step-level
+`jobs.<id>.steps[].uses`. It then asserts that the parsed multiset equals the
+scanned multiset.
 A second test pins `dependabot.yml`: the `github-actions` ecosystem at `/`, a
 weekly interval, and one group covering `*`.
 
