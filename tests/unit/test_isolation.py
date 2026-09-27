@@ -3720,12 +3720,6 @@ def test_branch_changes_present_side_branch_merged_later_does_not_unland(
     assert res.missing == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="super-fr#741: after a --no-ff landing the branch is an ancestor of the "
-    "base, so merge-base == branch and branch_changes_present sees no changed path "
-    "before the blob fallback runs",
-)
 def test_branch_changes_present_reverted_no_ff_merge_is_missing(tmp_path: Path) -> None:
     """A merge-commit landing reverted with `git revert -m 1`."""
     repo = make_repo(tmp_path)
@@ -3742,10 +3736,6 @@ def test_branch_changes_present_reverted_no_ff_merge_is_missing(tmp_path: Path) 
     assert res.missing == ["report.md"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="super-fr#739: a three-way revert writes a blob the path never held",
-)
 def test_branch_changes_present_three_way_revert_is_missing(tmp_path: Path) -> None:
     """Another PR edits the path BETWEEN the landing and the revert, so the
     revert's result is new content. Known limit of content-only evidence."""
