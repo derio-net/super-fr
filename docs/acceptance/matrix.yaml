@@ -4296,7 +4296,7 @@ rows:
   - id: requirements-input-in-spec-journal
     capability: fr-goal-methodology
     acceptance: The operator's raw input is recorded verbatim in the spec journal as
-      an input entry and never reaches a phase executor's handoff
+      an input entry
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
     levels:
@@ -4494,6 +4494,51 @@ rows:
     notes: 'Phase 1 (spec §E, R7): fr-plan drops ''Prefer 4–6 phases'', states one agentic
       phase per independently reviewable ask with recorded split reasons, and keeps
       steps bite-sized per spec design section.'
+  - id: raw-input-relay-member-briefs
+    capability: fr-goal-methodology
+    acceptance: Every implement-phase and review-phase dispatch brief carries the operator's
+      verbatim input and recorded answers, read-only, with the rule that the spec governs
+      and a disagreement is a finding
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_operator_input.py
+    status: ci
+    notes: 'Unit-pinned: operator_input on implement/review member briefs, null without
+      input, refusal before the write-claim (#778).'
+  - id: raw-input-relay-handoff
+    capability: fr-goal-methodology
+    acceptance: The per-phase journal handoff opens with the operator's verbatim input,
+      recorded answers and the spec-governs rule, so an executor reads them even when
+      the orchestrator's relay drops them
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_operator_input.py
+    status: ci
+    notes: 'Unit-pinned: handoff opens with the fenced operator-input section, also
+      with no plan journal; cross-repo/no-input omit it (#778).'
+  - id: raw-input-relay-prose
+    capability: fr-goal-methodology
+    acceptance: fr-goal relays the operator input into both the executor's and the reviewer's
+      prompts, and an input statement the spec and no recorded answer covers becomes
+      a gated in-scope phase finding
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_operator_input_prose.py
+    status: ci
+    notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
+      in the phase-executor agent (#778); d5: unit tests suffice, no live row.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -4927,6 +4972,19 @@ rows:
       carry no cross-row aggregates; a temp-repo test merges two branches that each
       add a not-implemented row to a different capability with no conflict in matrix.yaml
       or the three reports.'
+  - id: acceptance-init-no-ci
+    capability: Acceptance matrix
+    acceptance: On a repo with no CI, fr acceptance init writes no pipeline file and
+      edits .gitignore by appending one line; a row reaches ci only in a repo with a
+      CI config
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-28-acceptance-init-no-ci.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_no_ci.py
+    status: ci
+    notes: 'gh#775: pinned per-PR by test_acceptance_init_no_ci.py (scaffold, ci gate
+      on add/set-status, byte-exact gitignore)'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
