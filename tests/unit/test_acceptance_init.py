@@ -37,7 +37,7 @@ def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
 
 def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _repo(tmp_path)
-    result = _invoke(root, monkeypatch, "init")
+    result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
 
     matrix = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
@@ -82,7 +82,8 @@ def test_init_skeleton_passes_check(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 def test_init_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _repo(tmp_path)
-    assert _invoke(root, monkeypatch, "init").exit_code == 0
+    # The re-run carries no flag: the workflow the first run wrote is CI now.
+    assert _invoke(root, monkeypatch, "init", "--with-ci").exit_code == 0
     snapshot = {
         p: (root / p).read_text()
         for p in (
@@ -141,7 +142,7 @@ def test_init_degrades_when_report_identity_unresolvable(tmp_path: Path) -> None
     (root / "docs" / "acceptance").mkdir(parents=True)
     (root / "docs" / "acceptance" / "matrix.yaml").write_text("rows:\n")  # no org/repo, no .git
 
-    outcome = init(root, "acme", "widget", backend="github")
+    outcome = init(root, "acme", "widget", backend="github", with_ci=True)
 
     for rel in (
         "docs/acceptance/report_local.html",
@@ -166,7 +167,7 @@ def _workflow(root: Path) -> dict:
 
 def test_workflow_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _repo(tmp_path)
-    assert _invoke(root, monkeypatch, "init").exit_code == 0
+    assert _invoke(root, monkeypatch, "init", "--with-ci").exit_code == 0
     wf = _workflow(root)
     assert wf["on"]["pull_request"] == {}
     assert "schedule" in wf["on"]
@@ -198,7 +199,7 @@ def test_check_warns_on_uncovered_matrix_path(
     (root / "scripts").mkdir()
     (root / "scripts" / "x.sh").write_text("#!/bin/sh\n")
     wf_dir = root / ".github" / "workflows"
-    wf_dir.mkdir(parents=True)
+    wf_dir.mkdir(parents=True, exist_ok=True)
     wf_dir.joinpath("acceptance-report.yml").write_text(
         "on:\n  pull_request:\n    paths:\n"
         "      - docs/acceptance/**\n      - docs/superpowers/specs/**\n"
@@ -215,7 +216,7 @@ def test_check_no_warning_when_covered(tmp_path: Path, monkeypatch: pytest.Monke
     (root / "scripts").mkdir()
     (root / "scripts" / "x.sh").write_text("#!/bin/sh\n")
     wf_dir = root / ".github" / "workflows"
-    wf_dir.mkdir(parents=True)
+    wf_dir.mkdir(parents=True, exist_ok=True)
     wf_dir.joinpath("acceptance-report.yml").write_text(
         "on:\n  pull_request:\n    paths:\n"
         "      - docs/acceptance/**\n      - docs/superpowers/specs/**\n"
@@ -237,7 +238,7 @@ def test_check_glob_star_does_not_span_slash(
     (root / "docs" / "sub").mkdir(parents=True)
     (root / "docs" / "sub" / "x.md").write_text("x\n")
     wf_dir = root / ".github" / "workflows"
-    wf_dir.mkdir(parents=True)
+    wf_dir.mkdir(parents=True, exist_ok=True)
     wf_dir.joinpath("acceptance-report.yml").write_text(
         "on:\n  pull_request:\n    paths:\n"
         "      - docs/*.md\n"  # does NOT cover docs/sub/x.md in Actions
@@ -254,7 +255,7 @@ def test_check_globstar_spans_slash(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     (root / "docs" / "sub").mkdir(parents=True)
     (root / "docs" / "sub" / "x.md").write_text("x\n")
     wf_dir = root / ".github" / "workflows"
-    wf_dir.mkdir(parents=True)
+    wf_dir.mkdir(parents=True, exist_ok=True)
     wf_dir.joinpath("acceptance-report.yml").write_text(
         "on:\n  pull_request:\n    paths:\n      - docs/**\n      - tests/**\n"
     )
@@ -319,9 +320,10 @@ def _repo_with_backend(tmp_path: Path, backend: str) -> Path:
 
 def test_init_github_backend_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Regression guard: backend="github" (the default) still writes
-    .github/workflows/acceptance-report.yml, unchanged."""
+    .github/workflows/acceptance-report.yml, unchanged, when CI is asked for
+    (gh#775: a repo with no CI gets none unless it asks)."""
     root = _repo(tmp_path)
-    result = _invoke(root, monkeypatch, "init")
+    result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
     assert (root / ".github" / "workflows" / "acceptance-report.yml").exists()
     assert not (root / ".gitea").exists()
@@ -336,7 +338,7 @@ def test_init_gitea_backend_writes_gitea_workflows_dir(
     YAML-schema-compatible with GitHub Actions, but uses its own
     directory, confirmed against Gitea's own docs)."""
     root = _repo_with_backend(tmp_path, "gitea")
-    result = _invoke(root, monkeypatch, "init")
+    result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
     assert not (root / ".github" / "workflows" / "acceptance-report.yml").exists()
     wf = root / ".gitea" / "workflows" / "acceptance-report.yml"
@@ -366,7 +368,7 @@ def test_init_gitlab_backend_writes_gitlab_ci_at_root(
     genuinely different schema (stages/script), not the GitHub-Actions
     on/jobs/steps shape."""
     root = _repo_with_backend(tmp_path, "gitlab")
-    result = _invoke(root, monkeypatch, "init")
+    result = _invoke(root, monkeypatch, "init", "--with-ci")
     assert result.exit_code == 0, result.output
     assert not (root / ".github" / "workflows" / "acceptance-report.yml").exists()
     ci_file = root / ".gitlab-ci.yml"
