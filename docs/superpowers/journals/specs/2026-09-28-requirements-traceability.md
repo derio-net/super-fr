@@ -144,3 +144,8 @@ Before the codebase lookups that otherwise consume its attention.
 ### d11-post-merge-rows · decision · Rows may declare verify: post-merge; deliver skips them, PR lists them
 
 Operator, on review finding o3: chosen over marking post-merge requirements in the spec Test Plan, and over relabelling such rows skipped. Matrix 1->2.
+
+<!-- fr:journal kind=decision scope=spec id=d12-coverage-in-pr created=2026-09-28T07:00:09+00:00 -->
+### d12-coverage-in-pr · decision · The input-coverage table is rendered in the PR body
+
+Part of the option the operator selected for d9 ('Rendered in the PR body'), missing from d9's entry; caught by spec-review finding r7.
