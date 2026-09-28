@@ -12,7 +12,7 @@ from fr.acceptance.check import resolve_identity
 from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
 from fr.commands.common import require_migrated_layout
 from fr.journal.model import parse_journal, resolve_journal_read_path, spec_journal_slug
-from fr.requirements import check_requirements, parse_requirements
+from fr.requirements import check_requirements, is_input_entry, parse_requirements
 from fr.spec import compute_status, parse_spec, render_status_md
 
 if TYPE_CHECKING:
@@ -92,7 +92,9 @@ def requirements_cmd(
     """Check a spec's `## Requirements` section (spec 2026-09-28 §C).
 
     Exits 2 and prints each problem when the capture is unsound; exits 0 with
-    a one-line summary otherwise. The only implementation of §C — the
+    a one-line summary otherwise. A spec journal with no input entry yet is
+    reported as pending, not unsound: this pre-check runs before the
+    brainstorm resolve that writes it (#776). The only implementation of §C — the
     `requirements` derived-evidence gate on `fr run resolve` calls the same
     `check_requirements`, never a copy.
     """
@@ -119,10 +121,17 @@ def requirements_cmd(
         raise typer.Exit(2) from e
     spec_ref = f"{repo}:{spec_path.as_posix()}"
 
-    problems = check_requirements(spec_text, entries, matrix, spec_ref)
+    problems = check_requirements(spec_text, entries, matrix, spec_ref, input_pending=True)
     if problems:
         for p in problems:
             err_console.print(f"- {p}")
         raise typer.Exit(2)
     n = len(parse_requirements(spec_text).items)
     typer.echo(f"{n} requirements")
+    if not any(is_input_entry(e) for e in entries):
+        typer.echo(
+            "input entry: pending — none in the spec journal yet, so input quotes are "
+            "unchecked. The brainstorm record's `journal:` entry with `input: true` is "
+            "written by its `fr run resolve`, which re-runs this check against it "
+            "(standalone: `fr journal add --scope spec --kind discovery --input`)."
+        )

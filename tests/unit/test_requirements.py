@@ -7,6 +7,7 @@ carrying the `input=true` header token (spec §A), built by `_input_entry`.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -183,6 +184,50 @@ def test_unknown_source_form_is_error() -> None:
         parse_requirements(text)
 
 
+def test_unknown_source_form_error_names_the_valid_forms_and_the_row() -> None:
+    """#776: take 9 wrote curly quotes with no `input` keyword, and the error
+    named no valid form — the agent had to read this module to pass."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        "| R1 | a \\| basket | \u201cA basket is a list\u201d |\n"
+    )
+    with pytest.raises(RequirementsError) as exc:
+        parse_requirements(text)
+    msg = str(exc.value)
+    assert 'input "<verbatim quote>"' in msg
+    assert "decision <id>" in msg
+    assert "<br>" in msg
+    assert "| R1 | a \\| basket | \u201cA basket is a list\u201d |" in msg
+
+
+def test_unescaped_double_quote_inside_a_quote_parses_and_matches() -> None:
+    """#776: a quote may contain `"` as-is — it runs first `"` to last `"`."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        '| R1 | x | input "labelled "\u2713 680\u2013720 g" when in range" |\n'
+    )
+    value = parse_requirements(text).items[0].sources[0].value
+    assert value == 'labelled "\u2713 680\u2013720 g" when in range'
+    assert quote_matches(value, 'the item is labelled "\u2713 680\u2013720 g" when in range')
+
+
+def test_backslash_escaped_double_quote_is_unescaped() -> None:
+    """#776: `\\"` is the escape an agent guesses; it used to be kept
+    literally, so the quote never matched the input."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        '| R1 | x | input "labelled \\"\u2713 680\u2013720 g\\" when" |\n'
+    )
+    assert (
+        parse_requirements(text).items[0].sources[0].value
+        == 'labelled "\u2713 680\u2013720 g" when'
+    )
+    deferred = REQ_ONE + (
+        '\n## Deferred from input\n\n| input | reason |\n|---|---|\n| "a \\"b\\" c" | later |\n'
+    )
+    assert parse_requirements(deferred).deferred == (Deferred(quote='a "b" c', reason="later"),)
+
+
 def test_no_requirements_section_is_error() -> None:
     with pytest.raises(RequirementsError, match=r"no `## Requirements` section"):
         parse_requirements("# Spec\n\nsome prose\n")
@@ -266,6 +311,23 @@ def test_no_input_entry_is_a_problem() -> None:
     entries = [_decision_entry("d1")]
     problems = check_requirements(text, entries, matrix, "widget:spec.md")
     assert any("no input entry" in p for p in problems)
+
+
+def test_pending_input_entry_is_not_a_problem_before_resolve() -> None:
+    """#776: the pre-check runs before the brainstorm resolve that writes the
+    input entry; with `input_pending=True` its absence (and the quotes it
+    would match) is not reported. The resolve gate never passes the flag."""
+    matrix = _matrix("widget:spec.md#R1")
+    assert check_requirements(REQ_ONE, [], matrix, "widget:spec.md", input_pending=True) == []
+    strict = check_requirements(REQ_ONE, [], matrix, "widget:spec.md")
+    assert any("no input entry" in p for p in strict)
+
+
+def test_input_pending_still_checks_quotes_once_the_entry_exists() -> None:
+    matrix = _matrix("widget:spec.md#R1")
+    entries = [_input_entry("i1", "something else entirely")]
+    problems = check_requirements(REQ_ONE, entries, matrix, "widget:spec.md", input_pending=True)
+    assert any("does not match any input entry" in p for p in problems)
 
 
 def test_unknown_decision_id_is_a_problem() -> None:
@@ -540,3 +602,21 @@ def test_759_replay_coverage_partitions_the_literal_ellipsis() -> None:
     assert counts.spans == 2
     assert counts.requirement == 1
     assert counts.context == 1
+
+
+def test_the_skill_documented_grammar_example_parses() -> None:
+    """#776: fr-brainstorming §2 is where an agent learns the `source`
+    grammar; its inline example must stay one this parser accepts."""
+    skill = (
+        Path(__file__).parents[2] / "plugins/super-fr/skills/fr-brainstorming/SKILL.md"
+    ).read_text()
+    m = re.search(r"e\.g\. `(input .+?)`;", skill)
+    assert m, "fr-brainstorming §2 lost its `source` example"
+    parsed = parse_requirements(
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        f"| R1 | x | {m.group(1)} |\n"
+    )
+    kinds = {s.kind for r in parsed.items for s in r.sources}
+    assert kinds == {"input", "decision"}
+    assert any('"' in s.value for r in parsed.items for s in r.sources if s.kind == "input")
+    assert any(len(r.sources) > 1 for r in parsed.items)

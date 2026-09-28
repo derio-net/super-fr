@@ -110,3 +110,27 @@ def test_requirements_cmd_exits_2_on_an_unsound_spec(
     result = CliRunner().invoke(app, ["spec", "requirements", "spec.md", "--matrix", "matrix.yaml"])
     assert result.exit_code == 2
     assert "not cited by any matrix row" in result.output
+
+
+def test_requirements_cmd_reports_a_missing_input_entry_as_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#776: before the brainstorm resolve writes the input entry, the
+    pre-check says it is pending and how it gets written — not an error."""
+    monkeypatch.chdir(tmp_path)
+    Path("spec.md").write_text(
+        "# Spec\n\n## Requirements\n\n"
+        "| id | requirement | source |\n"
+        "|---|---|---|\n"
+        '| R1 | x | input "not yet in any journal" |\n'
+    )
+    _write_matrix(Path("matrix.yaml"), origin="widget:spec.md#R1")
+
+    from fr.cli import app
+
+    result = CliRunner().invoke(app, ["spec", "requirements", "spec.md", "--matrix", "matrix.yaml"])
+    assert result.exit_code == 0, result.output
+    assert "pending" in result.output
+    assert "no input entry" not in result.output
+    assert "does not match" not in result.output
+    assert "1 requirements" in result.output
