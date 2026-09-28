@@ -651,3 +651,8 @@ Operator authorised: implemented in phase 2 (tests/unit/test_migration_profiles_
 ### p4r-other-forge-writes-resolved-2 · finding [deferred → #803] · resolves p4r-other-forge-writes: triage batch cancel/merge and fr undispatch still write labels/comments under tracking none
 
 Filed at closeout as #803.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-cross-repo-tracking-resolved-2 created=2026-09-28T23:33:53+00:00 state=open resolves=p4r-cross-repo-tracking tracked_by=#804 -->
+### p4r-cross-repo-tracking-resolved-2 · finding [deferred → #804] · resolves p4r-cross-repo-tracking: Cross-repo plans: the gate reads the plan's repo, not target_repo's tracking
+
+Filed at closeout as #804.
