@@ -111,3 +111,38 @@ clears such a cursor; phase 3 may want --branch to share it.
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 GREEN was itself the extraction: verify-merge's bound _branch_refs/_network_env/_run_network became module-level resolve_branch_refs/network_env/run_network with the methods delegating, so there is one ref-resolution path and nothing left to clean; the one duplication T1 introduced (IsolationError -> exit 2) was folded into _refuse_on_isolation_error in P2.T2.S3.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-28T20:17:44+00:00 phase=2 -->
+### p2-review · review · Phase 2 review: 6 findings (2 important, 4 minor), all fixed (phase 2)
+
+Independent reviewer (general-purpose, opus) over d9fd9723..8567e3c2 against spec §B and plan 02.yaml, with three probe tests run outside the checkout. It confirmed that the resolve_branch_refs extraction preserves verify-merge's argv, env and timeouts exactly, and that refusal order puts every refusal before the first git mv. Verdict: with fixes. All 6 in-scope findings are fixed (f348acca..ae5cd3f5). The orchestrator re-verified: 994 passed across archive/isolation/closeout/verify_merge, and ruff and mypy are clean. Declined to judge: the repo-wide spec-sweep printing (intended by §B.4), merge_evidence's fetch-failure tolerance (pre-existing), the PR-state check (verify-merge's job), and §C/§D/§F (later phases).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r1 · finding [fixed] (reviewer: in scope) · (Important) --branch discarded branch_fetched, verifying stale refs verify-merge would refuse (phase 2)
+
+Fixed in f348acca: exit 2 when the branch fetch failed and ls-remote did not confirm deletion; test with origin repointed at a missing repo.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r2 · finding [fixed] (reviewer: in scope) · (Important) run/usage held with a false 'did not move' reason when its plan was already archived (phase 2)
+
+Fixed in ea75aa73: an orphan run+usage whose plan is archived is moved via the new public archive_run_cursor (the §C orphan rule); held lines now say 'still live' / 'neither live nor archived' / 'destination already exists'. Supersedes implement discovery p2-run-held-even-when-plan-archived.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r3 · finding [fixed] (reviewer: in scope) · (Minor) ArchiveError from a journal git mv escaped as a traceback (phase 2)
+
+Fixed in 51e5cf1f: returned as the held reason; test patches _git_mv to raise.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r4 · finding [fixed] (reviewer: in scope) · (Minor) dirty followers were moved as RM instead of held (phase 2)
+
+Fixed in 51e5cf1f: dirty journal/run/usage held with the plans' 'commit or stash first' reason; test with an edited debug journal.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r5 · finding [fixed] (reviewer: in scope) · (Minor) archive_cmd imported the private fr.archive._archive_journal (phase 2)
+
+Fixed in 07164493: public archive_journal in __all__, _archive_journal kept as alias.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-09-28T20:17:44+00:00 phase=2 state=fixed review_scope=in -->
+### p2-r6 · finding [fixed] (reviewer: in scope) · (Minor) test gaps: dirty plan held, usage carried with plan, repair once (phase 2)
+
+Fixed in ae5cd3f5: three tests, each shown to fail when the guarded behaviour is removed.
