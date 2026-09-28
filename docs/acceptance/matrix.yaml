@@ -4486,9 +4486,14 @@ rows:
       and keeps steps bite-sized within a phase
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_plan_sizing_prose.py
+      - super-fr:tests/unit/test_skill_tokens.py
+    status: ci
+    notes: 'Phase 1 (spec §E, R7): fr-plan drops ''Prefer 4–6 phases'', states one agentic
+      phase per independently reviewable ask with recorded split reasons, and keeps
+      steps bite-sized per spec design section.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
