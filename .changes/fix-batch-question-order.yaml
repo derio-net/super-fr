@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr-goal asks a question round split across dialogs one dialog at a time, each after the previous is answered and split evenly, and labels every question with its own position (`(Round 1 · question 2 of 5)`) (#783)"
