@@ -403,3 +403,8 @@ unexpected fifth mention turned up.
 ### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
 
 a one-time sweep of owed artifacts (journal moves + four prose path updates + acceptance flips); there is no new code path to refactor, only data/doc moves and matrix status flips
+
+<!-- fr:journal kind=review scope=plan id=p6-review created=2026-09-28T22:10:10+00:00 phase=6 -->
+### p6-review · review · Phase 6 review: no findings (phase 6)
+
+Independent reviewer (general-purpose, sonnet) checked 3bfeae6b..40482e35 against §G/§F/R7. Findings: all 36 moves are 100%-similarity renames; the moves match the owed set exactly; `fr status` now reports nothing owed; `fr acceptance check`, `fr validate artifacts` and `fr acceptance report --check` pass, with matrix refs resolving through archive_twin; the 4 prose repoints are correct; each of the 6 flipped rows cites real tests verifying its statement (9 files, 107 passed); this run's own artifacts and every open PR's files are untouched. Declined to judge: test-file organisation (earlier phases), the flips beyond 06.yaml's declared row (required by the acceptance-matrix rule, so correct), a full-suite re-run (the executor's run was green; deliver re-runs it), and frozen evidence/fixture snapshots that quote old paths.
