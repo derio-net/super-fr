@@ -305,7 +305,8 @@ enough by itself. Where a script can drive the interface reliably, it is
 worth writing anyway, because it makes every later rerun cheap: one command,
 then a look at what it produced, instead of paying to re-drive the interface
 by hand each time. What the tool checks is coverage and opening — that every
-named state has a screenshot, and that a real agent actually looked at it —
+named state and interaction has a screenshot, and that a real agent actually
+looked at it —
 never what the picture shows; judging that stays the reviewer's job.</p>
 <p><strong>A step declares what it needs and what it emits.</strong> Artifacts are named —
 <code>spec</code>, <code>plan</code>, <code>pr</code> — so a later step can find the specification an earlier

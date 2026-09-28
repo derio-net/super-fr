@@ -5208,8 +5208,9 @@ rows:
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
     acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check
-      step: capture every named state and interaction at its limits, prefer a committed
-      script, open every screenshot, fill the record''s `visual:` section.'
+      step: capture every named state and interaction at its limits, prefer a capture
+      script re-run at each stage, open every screenshot, fill the record''s `visual:`
+      section.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R6

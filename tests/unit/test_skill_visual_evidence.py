@@ -73,6 +73,15 @@ def test_fr_execute_browser_check_fills_the_records_visual_section() -> None:
     assert "`visual:`" in t
 
 
+def test_fr_execute_browser_check_says_where_shots_live() -> None:
+    """Take 9 lost its screenshots in the container's own /tmp, which the host
+    (where `fr run resolve` and the reading agent run) never sees (p3-r2)."""
+    t = FR_EXECUTE.read_text()
+    assert "git-ignored" in t
+    assert "container's own `/tmp`" in t
+    assert "<run>.records/" in t
+
+
 # --- fr-phase-executor: the return contract names visual: ------------------
 
 
@@ -106,6 +115,13 @@ def test_fr_goal_section6_review_phase_names_the_reviewers_own_screenshots() -> 
     assert "visual" in t
     assert "own" in t and "screenshot" in t
     assert "capture script" in t
+    # the reviewer audits the script's coverage, not only its output (p3-r3)
+    assert "covers every name the row declares" in t
+
+
+def test_fr_goal_section5_says_where_shots_live() -> None:
+    t = _goal_section(5)
+    assert "git-ignored" in t and "`/tmp`" in t
 
 
 def test_fr_goal_section8_deliver_names_fresh_capture() -> None:
