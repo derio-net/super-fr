@@ -4341,9 +4341,14 @@ rows:
       PR-body section
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: Covered by the unconfirmed resolution-state tests (verb, record path, fold),
+      the required PR-body section, and journal check treating it as closed.
   - id: requirements-rows-deliver-gate
     capability: fr-goal-methodology
     acceptance: Every requirement is cited by an acceptance row, and deliver refuses
