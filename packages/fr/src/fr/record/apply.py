@@ -627,6 +627,15 @@ def _check_drops(
             )
 
 
+def _no_ci_reason(repo_root: Path) -> str | None:
+    """Why this repo cannot hold a `ci` row, or None when it has CI."""
+    from fr._hosts import detect_backend
+    from fr.acceptance.ci import ci_config, no_ci_message
+
+    backend = detect_backend(repo_root)
+    return None if ci_config(repo_root, backend) is not None else no_ci_message(backend)
+
+
 def _acceptance_writes(
     record: StepRecord,
     overlay: _Overlay,
@@ -648,6 +657,9 @@ def _acceptance_writes(
     counts: dict[str, int] = {}
     lines: list[str] = []
     valid = list(get_args(Status))
+    no_ci: str | None = (
+        _no_ci_reason(repo_root) if any(item.status == "ci" for item in record.acceptance) else None
+    )
     for item in record.acceptance:
         if item.status not in valid:
             raise RecordRefusedError(
@@ -711,6 +723,18 @@ def _acceptance_writes(
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
+        # gh#775: `ci` means a CI run is the evidence, so a row moves there only
+        # in a repo with CI. A row already `ci` is left alone — refusing it
+        # would block every unrelated edit to it.
+        if (
+            no_ci is not None
+            and row.status == "ci"
+            and (existing is None or existing.status != "ci")
+        ):
+            raise RecordRefusedError(
+                f"acceptance {item.id}: status `ci` needs a CI run as its evidence, but "
+                f"{no_ci}. Record it as `skipped` (verified, not in CI) instead."
+            )
         if creates and existing is not None:
             if existing == row:
                 continue  # already created by an earlier, interrupted apply (p3-r3)
