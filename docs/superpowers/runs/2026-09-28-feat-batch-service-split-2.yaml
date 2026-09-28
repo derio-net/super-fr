@@ -56,7 +56,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-09-28T21:58:30+00:00'
+    at: '2026-09-28T22:06:49+00:00'
     members:
     - implement-phase
     - review-phase
@@ -144,6 +144,13 @@ steps:
           session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
           returned: '2026-09-28T22:06:48+00:00'
           outcome: done
+      phase/4/review-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-28T22:06:49+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
   journal-check:
     state: pending
   deliver:
