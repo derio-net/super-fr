@@ -3,7 +3,7 @@ run: 2026-09-28-feat-batch-closeout-always-2
 workflow: fr-goal@1
 branch: feat/batch-closeout-always-2
 started: '2026-09-28T19:13:21+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -16,8 +16,8 @@ steps:
         evidence:
           requirements: 7 requirements:a81c06e1f960bc17bbcc4534cea6b6c502db9eae002c0ba7f5adb0b74de1c14b
   spec-review:
-    state: running
-    at: '2026-09-28T19:31:27+00:00'
+    state: done
+    at: '2026-09-28T19:39:02+00:00'
     units:
       step/spec-review:
         attempts:
@@ -26,6 +26,14 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 3fb23231-6b20-4e17-8549-56b4ab43f7b5
+          returned: '2026-09-28T19:39:02+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: af251b611e8f77f6f
+          requirements: 8 requirements:7f55b624df2de152b1bfd4dbd92c05fe7b6fdd94156f3b47ea95d354fd38e970
+          coverage: '49 spans: R=20 deferred=4 context=24 missing=1'
+          findings: s1,s2,s3,s4,s5,s6,s7,s8
   plan:
     state: pending
   plan-review:

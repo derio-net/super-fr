@@ -5190,3 +5190,13 @@ rows:
     status: not-implemented
     notes: ''
     verify: post-merge
+  - id: every-pr-flow-relays-closeout
+    capability: Branch-keyed close-out
+    acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
+      line (fr-goal's run line; fr-debugging and standalone fr-execute `fr pickup --branch
+      <b>`), and fr-isolation's post-merge cleanup points at the same brief.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
