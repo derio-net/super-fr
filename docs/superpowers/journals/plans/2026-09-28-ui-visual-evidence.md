@@ -99,3 +99,108 @@ owed_rows/check_visual were written with the per-shot rules already split into _
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 declarative YAML only (manifest evidence lists, one parity row); the pinned evidence tuples were updated in place, no code to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · witness_transcript returned None for an unpaired agent id, so any holder id skipped checks 4-5 (phase 2)
+
+witness_transcript returned None for an unpaired agent id, so any holder id skipped checks 4-5
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · a Read before the capture (or before a re-capture) counted as opening the image (phase 2)
+
+a Read before the capture (or before a re-capture) counted as opening the image
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · git check-ignore path never exercised for real (phase 2)
+
+git check-ignore path never exercised for real
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · dispatched but unclaimed implement-phase fell back to the orchestrator's stream (phase 2)
+
+dispatched but unclaimed implement-phase fell back to the orchestrator's stream
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · unobserved warning reused the questions-gate reason (phase 2)
+
+unobserved warning reused the questions-gate reason
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · orchestrator stream not filtered for isSidechain records (phase 2)
+
+orchestrator stream not filtered for isSidechain records
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · check 5 satisfied by any shell word naming the script (phase 2)
+
+check 5 satisfied by any shell word naming the script
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · relative Read targets matched by trailing filename (phase 2)
+
+relative Read targets matched by trailing filename
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · duplicate row entries silently dropped (phase 2)
+
+duplicate row entries silently dropped
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-09-28T20:58:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r10 · finding [open] (reviewer: in scope) · before-the-gates tripwire did not undo the visual additions (phase 2)
+
+before-the-gates tripwire did not undo the visual additions
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-09-28T20:58:18+00:00 phase=2 -->
+### review-p2 · review · phase 2 code review: 10 findings (all in scope) (phase 2)
+
+Independent reviewer (separate context, hard tier, with shell) reviewed git diff 03a43f08..HEAD against spec §B/§C/§F; ran the phase tests (242 passed) and two live probes (symlinked shot dir, symlinked repo root). Confirmed correct: reviewer-transcript witness at review-phase, freshness only at review-phase/deliver, None never refuses, derived name refused, flag-form refusal, none for runs without visual rows, thin run_cmd call. Findings p2-r1..p2-r10; p2-r1 reproduced (bogus holder id -> green resolve).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: witness_transcript returned None for an unpaired agent id, so any holder id skipped checks 4-5 (phase 2)
+
+059c25fb: witness_transcript is Path|False|None; False refuses ('names no subagent this session dispatched'). Pinned by test_an_agent_this_session_never_dispatched_is_false and test_a_record_naming_an_agent_this_session_never_dispatched_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: a Read before the capture (or before a re-capture) counted as opening the image (phase 2)
+
+059c25fb: read_file_since(..., not_before=) with a per-shot bound max(since, mtime-1s). Pinned by test_a_read_before_the_shots_last_write_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: git check-ignore path never exercised for real (phase 2)
+
+059c25fb: resolve-level ignored/non-ignored repo shots and a tracked-file-in-ignored-dir unit test (coverage; code was already correct).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: dispatched but unclaimed implement-phase fell back to the orchestrator's stream (phase 2)
+
+059c25fb: with no holder, a dispatch of the step's agent type in this session since the unit opened refuses with the `fr run claim ... --agent` hint; no such dispatch = inline (orchestrator witness). The literal 'agent_type is None' rule was not used: advance always stamps agent_type (run_cmd.py:3356), so it would wedge every inline fallback. Refusal wording names orchestrator/executor/reviewer. Spec §C updated.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: unobserved warning reused the questions-gate reason (phase 2)
+
+059c25fb: derive_visual carries a visual-specific reason; test_the_unobserved_warning_gives_a_visual_reason.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: orchestrator stream not filtered for isSidechain records (phase 2)
+
+059c25fb: session-file reads skip isSidechain; unit and resolve-level sidechain tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: check 5 satisfied by any shell word naming the script (phase 2)
+
+059c25fb: the script must be executed (command word or first argument after an interpreter, fr isolation exec / env prefix allowed); cat/ls/echo refused; npm-run limit documented. Parametrised tests (6 refused, 19 matched).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: relative Read targets matched by trailing filename (phase 2)
+
+059c25fb: absolute paths only, realpath both sides; test_a_relative_read_target_never_matches, symlink and tail-only tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: duplicate row entries silently dropped (phase 2)
+
+059c25fb: refused in check 1; test_a_row_named_by_two_entries_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-09-28T20:58:18+00:00 phase=2 state=fixed resolves=p2-r10 -->
+### p2-r10-resolved · finding [fixed] · resolves p2-r10: before-the-gates tripwire did not undo the visual additions (phase 2)
+
+12fc6791: _BEFORE_THE_GATES reverses implement-phase and review-phase visual evidence. The in-flight 'unevidenced: visual (predates)' lines are report-only and are noted in the PR body.
