@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: plan-single-phase
+    phase: 1
     title: One agentic phase, tier standard
     body: |-
       The change is one pure module (fr.operator_input), two call sites (member brief, handoff), prose and mirrors. With one agentic phase no walking-skeleton marker is owed, and a second phase would only re-read the accumulating handoff. No member issue is a tracking_issue (batch delivery rule).
