@@ -142,3 +142,58 @@ each change is a field, a flag or a stamp-only registration; the only judgement 
 ### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
 
 two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done
+
+<!-- fr:journal kind=finding scope=plan id=p2-d1 created=2026-09-28T11:04:38+00:00 phase=2 state=open review_scope=in -->
+### p2-d1 · finding [open] (reviewer: in scope) · Matrix 1->2 strands every consumer repo's non-interactive fr acceptance until migrated, and nothing says so (phase 2)
+
+registry.py matrix current_version 2; trigger.py:77 (acceptance not read-only); consumer CI installs fr@main. Gate is correct by design; the release note was missing.
+
+<!-- fr:journal kind=finding scope=plan id=p2-d2 created=2026-09-28T11:04:38+00:00 phase=2 state=open review_scope=in -->
+### p2-d2 · finding [open] (reviewer: in scope) · fr journal check passes unconfirmed findings silently (phase 2)
+
+journal_cmd.py:598-613 names deferred and out-of-scope findings but not unconfirmed ones.
+
+<!-- fr:journal kind=finding scope=plan id=p2-d3 created=2026-09-28T11:04:38+00:00 phase=2 state=open review_scope=in -->
+### p2-d3 · finding [open] (reviewer: in scope) · Shared record guard names the live version (3) in the 1->2 hop's refusal (phase 2)
+
+record_questions.py:66-67, 80-81 interpolate RECORD_SCHEMA_VERSION.
+
+<!-- fr:journal kind=finding scope=plan id=p2-d4 created=2026-09-28T11:04:38+00:00 phase=2 state=open review_scope=in -->
+### p2-d4 · finding [open] (reviewer: in scope) · Test Plan 10's 'applies' only half-tested; matrix test line 58 near-tautological (phase 2)
+
+Combined record only parsed; migrated v2 record only stamped; after[-1]==before[-1] does not prove rows: stays last.
+
+<!-- fr:journal kind=finding scope=plan id=p2-d5 created=2026-09-28T11:04:38+00:00 phase=2 state=open review_scope=out -->
+### p2-d5 · finding [open] (reviewer: out of scope) · parse_journal catches only KeyError; a hand-edited token invalid for its scope raises raw ValueError (phase 2)
+
+journal/model.py:359-382, 451-460. Same pattern pre-exists for out_of_scope and tracked_by; hand edits bypass the writers' target-aware checks.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-09-28T11:04:38+00:00 phase=2 -->
+### review-phase-2 · review · phase 2 code review: 5 findings (4 in scope fixed, 1 out of scope) (phase 2)
+
+Independent reviewer (dispatched code-reviewer, hard tier / Opus) over 53cf28bc..147077e2 against spec §A, §D, §H, Test Plan 9-10 and .claude/rules/artifact-versioning.md. No critical findings. Checked sound: older-reader fail-closed behaviour for both tokens, v3 record and v2 matrix; stamp-only migrations cannot half-write; every hop asserted; Matrix.schema_version added with the first move past 1; the three unconfirmed gatekeepers call one refusal function and agree with the model validator; input refused on both paths; fold closes the findings gate without hiding findings elsewhere; render_row_block byte-identical without verify; init stamping correct (writes only a missing file from the shipped template).
+
+<!-- fr:journal kind=finding scope=plan id=p2-d1-resolved created=2026-09-28T11:04:38+00:00 phase=2 state=fixed resolves=p2-d1 -->
+### p2-d1-resolved · finding [fixed] · resolves p2-d1: Matrix 1->2 strands every consumer repo's non-interactive fr acceptance until migrated, and nothing says so (phase 2)
+
+Change fragment (release notes) now tells consumer repos to run fr migrate artifacts --yes once and commit the stamped matrix (84ae753f).
+
+<!-- fr:journal kind=finding scope=plan id=p2-d2-resolved created=2026-09-28T11:04:38+00:00 phase=2 state=fixed resolves=p2-d2 -->
+### p2-d2-resolved · finding [fixed] · resolves p2-d2: fr journal check passes unconfirmed findings silently (phase 2)
+
+fr journal check prints 'N unconfirmed finding(s): ...'; TestResolveUnconfirmed pins it (red first) (84ae753f).
+
+<!-- fr:journal kind=finding scope=plan id=p2-d3-resolved created=2026-09-28T11:04:38+00:00 phase=2 state=fixed resolves=p2-d3 -->
+### p2-d3-resolved · finding [fixed] · resolves p2-d3: Shared record guard names the live version (3) in the 1->2 hop's refusal (phase 2)
+
+Guard messages no longer name a version (84ae753f).
+
+<!-- fr:journal kind=finding scope=plan id=p2-d4-resolved created=2026-09-28T11:04:38+00:00 phase=2 state=fixed resolves=p2-d4 -->
+### p2-d4-resolved · finding [fixed] · resolves p2-d4: Test Plan 10's 'applies' only half-tested; matrix test line 58 near-tautological (phase 2)
+
+Three tests: combined spec-review record applies; migrated v2 record applies through fr run resolve; no top-level key follows rows: (e0801f45).
+
+<!-- fr:journal kind=finding scope=plan id=p2-d5-resolved created=2026-09-28T11:04:38+00:00 phase=2 state=open resolves=p2-d5 out_of_scope=true -->
+### p2-d5-resolved · finding [out-of-scope] · resolves p2-d5: parse_journal catches only KeyError; a hand-edited token invalid for its scope raises raw ValueError (phase 2)
+
+Pre-existing: parse_journal already lets out_of_scope/tracked_by validator errors escape the same way; this change adds two more tokens to an existing pattern rather than causing it. Listed in the PR for filing.
