@@ -129,3 +129,8 @@ Standalone fr-brainstorming: the cursor was started at section 0 but `fr run adv
 ### d8-spec-review-hard · decision · spec-review runs at the hard tier
 
 Operator, after discussing reviewer strength: the spec is written by the orchestrator (usually Opus) and was reviewed at standard (Sonnet). Spec review is the one point the input is consulted again, so it moves to hard.
+
+<!-- fr:journal kind=decision scope=spec id=d9-coverage-partition created=2026-09-28T06:38:54+00:00 -->
+### d9-coverage-partition · decision · Spec review returns an input-coverage partition fr verifies
+
+Every span of the input labelled R<n>/deferred/context/missing <finding>; fr verifies the spans concatenate to the whole input. Makes skimming a refusal.
