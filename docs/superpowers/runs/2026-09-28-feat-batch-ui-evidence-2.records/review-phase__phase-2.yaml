@@ -1,0 +1,132 @@
+schema_version: 4
+run: 2026-09-28-feat-batch-ui-evidence-2
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+- kind: finding
+  id: p2-r1
+  phase: 2
+  review_scope: in
+  title: witness_transcript returned None for an unpaired agent id, so any holder id skipped checks 4-5
+  body: witness_transcript returned None for an unpaired agent id, so any holder id skipped checks 4-5
+- kind: finding
+  id: p2-r2
+  phase: 2
+  review_scope: in
+  title: a Read before the capture (or before a re-capture) counted as opening the image
+  body: a Read before the capture (or before a re-capture) counted as opening the image
+- kind: finding
+  id: p2-r3
+  phase: 2
+  review_scope: in
+  title: git check-ignore path never exercised for real
+  body: git check-ignore path never exercised for real
+- kind: finding
+  id: p2-r4
+  phase: 2
+  review_scope: in
+  title: dispatched but unclaimed implement-phase fell back to the orchestrator's stream
+  body: dispatched but unclaimed implement-phase fell back to the orchestrator's stream
+- kind: finding
+  id: p2-r5
+  phase: 2
+  review_scope: in
+  title: unobserved warning reused the questions-gate reason
+  body: unobserved warning reused the questions-gate reason
+- kind: finding
+  id: p2-r6
+  phase: 2
+  review_scope: in
+  title: orchestrator stream not filtered for isSidechain records
+  body: orchestrator stream not filtered for isSidechain records
+- kind: finding
+  id: p2-r7
+  phase: 2
+  review_scope: in
+  title: check 5 satisfied by any shell word naming the script
+  body: check 5 satisfied by any shell word naming the script
+- kind: finding
+  id: p2-r8
+  phase: 2
+  review_scope: in
+  title: relative Read targets matched by trailing filename
+  body: relative Read targets matched by trailing filename
+- kind: finding
+  id: p2-r9
+  phase: 2
+  review_scope: in
+  title: duplicate row entries silently dropped
+  body: duplicate row entries silently dropped
+- kind: finding
+  id: p2-r10
+  phase: 2
+  review_scope: in
+  title: before-the-gates tripwire did not undo the visual additions
+  body: before-the-gates tripwire did not undo the visual additions
+- kind: review
+  id: review-p2
+  phase: 2
+  title: 'phase 2 code review: 10 findings (all in scope)'
+  body: "Independent reviewer (separate context, hard tier, with shell) reviewed git diff 03a43f08..HEAD\
+    \ against spec \xA7B/\xA7C/\xA7F; ran the phase tests (242 passed) and two live probes (symlinked\
+    \ shot dir, symlinked repo root). Confirmed correct: reviewer-transcript witness at review-phase,\
+    \ freshness only at review-phase/deliver, None never refuses, derived name refused, flag-form refusal,\
+    \ none for runs without visual rows, thin run_cmd call. Findings p2-r1..p2-r10; p2-r1 reproduced (bogus\
+    \ holder id -> green resolve)."
+resolves:
+- id: p2-r1
+  phase: 2
+  state: fixed
+  body: '059c25fb: witness_transcript is Path|False|None; False refuses (''names no subagent this session
+    dispatched''). Pinned by test_an_agent_this_session_never_dispatched_is_false and test_a_record_naming_an_agent_this_session_never_dispatched_is_refused.'
+- id: p2-r2
+  phase: 2
+  state: fixed
+  body: '059c25fb: read_file_since(..., not_before=) with a per-shot bound max(since, mtime-1s). Pinned
+    by test_a_read_before_the_shots_last_write_is_refused.'
+- id: p2-r3
+  phase: 2
+  state: fixed
+  body: '059c25fb: resolve-level ignored/non-ignored repo shots and a tracked-file-in-ignored-dir unit
+    test (coverage; code was already correct).'
+- id: p2-r4
+  phase: 2
+  state: fixed
+  body: "059c25fb: with no holder, a dispatch of the step's agent type in this session since the unit\
+    \ opened refuses with the `fr run claim ... --agent` hint; no such dispatch = inline (orchestrator\
+    \ witness). The literal 'agent_type is None' rule was not used: advance always stamps agent_type (run_cmd.py:3356),\
+    \ so it would wedge every inline fallback. Refusal wording names orchestrator/executor/reviewer. Spec\
+    \ \xA7C updated."
+- id: p2-r5
+  phase: 2
+  state: fixed
+  body: '059c25fb: derive_visual carries a visual-specific reason; test_the_unobserved_warning_gives_a_visual_reason.'
+- id: p2-r6
+  phase: 2
+  state: fixed
+  body: '059c25fb: session-file reads skip isSidechain; unit and resolve-level sidechain tests.'
+- id: p2-r7
+  phase: 2
+  state: fixed
+  body: '059c25fb: the script must be executed (command word or first argument after an interpreter, fr
+    isolation exec / env prefix allowed); cat/ls/echo refused; npm-run limit documented. Parametrised
+    tests (6 refused, 19 matched).'
+- id: p2-r8
+  phase: 2
+  state: fixed
+  body: '059c25fb: absolute paths only, realpath both sides; test_a_relative_read_target_never_matches,
+    symlink and tail-only tests.'
+- id: p2-r9
+  phase: 2
+  state: fixed
+  body: '059c25fb: refused in check 1; test_a_row_named_by_two_entries_is_refused.'
+- id: p2-r10
+  phase: 2
+  state: fixed
+  body: '12fc6791: _BEFORE_THE_GATES reverses implement-phase and review-phase visual evidence. The in-flight
+    ''unevidenced: visual (predates)'' lines are report-only and are noted in the PR body.'
+evidence:
+  review: review-p2
+  reviewer: affe5d7530563b3ea
+  model: claude-opus-5-5
