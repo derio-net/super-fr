@@ -151,6 +151,11 @@ journal:
   id: d6-approach-a
   title: Requirements as a spec section with a fixed grammar, parsed by fr/requirements.py
   body: Chosen over a YAML sidecar (new artifact kind) and front matter.
+- kind: decision
+  id: d7-requirements-table
+  title: Requirements and Deferred from input are Markdown tables
+  body: 'Operator at spec review: the Requirements section should be a table, like Decisions. Sources
+    in one cell, separated by <br>; a literal | is escaped as \|.'
 resolves: []
 acceptance:
 - id: requirements-input-in-spec-journal

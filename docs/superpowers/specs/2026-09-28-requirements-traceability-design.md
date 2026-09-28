@@ -44,38 +44,31 @@ brainstorm decided those calls itself.
 | d3-late-unconfirmed | An invented or reinterpreted behaviour that spec-review finds AFTER the round closed does not reopen the gate: it is kept, resolved `unconfirmed`, and listed in the PR body for the operator to veto at merge. |
 | d4-structural-gate | fr machine-checks the Requirements section's form and sources (derived evidence); coverage ("was anything dropped?") stays reviewer judgement. |
 | d5-rows-gate-deliver | Every requirement is cited by ≥1 acceptance row; `deliver` refuses while any row citing the run's spec is `not-implemented`. |
-| d6-approach-a | Requirements live in a `## Requirements` section of the spec with a fixed list grammar, parsed by a new `fr/requirements.py` (not a YAML sidecar, not front matter). |
+| d6-approach-a | Requirements live in a `## Requirements` section of the spec with a fixed grammar, parsed by a new `fr/requirements.py` (not a YAML sidecar, not front matter). |
+| d7-requirements-table | Requirements (and Deferred from input) are Markdown tables, in the same form as `## Decisions`, not lists. |
 
-Out of scope, filed separately: the issue comment's item 1, fr-plan's "prefer
-4–6 phases" versus "one agentic phase is first-class" contradiction.
+Out of scope, filed as super-fr#760: the issue comment's item 1, fr-plan's
+"prefer 4–6 phases" versus "one agentic phase is first-class" contradiction.
 
 ## Requirements
 
-- **R1** — The operator's raw input is preserved verbatim where spec review can trace against it, and is not dispatched to executors or phase reviewers.
-  source: decision d0-spec-is-the-carrier
-  source: decision d1-input-in-spec-journal
-- **R2** — The spec separates requirements (each traced to a source: the raw input or an answered question) from fr's own design decisions.
-  source: input "Split the spec into Requirements and Design."
-  source: input "Quote acceptance criteria verbatim in the spec"
-- **R3** — User-visible behaviour the input does not ask for is asked in the question round, never silently promoted to a requirement.
-  source: input "never silently promoted"
-  source: decision d2-always-ask
-- **R4** — Spec review traces the spec back to the raw input: every input statement is covered or explicitly deferred, every requirement has a source, and invented or reinterpreted behaviour is a finding.
-  source: input "Spec review traces Requirements back to the raw input,"
-  source: input "each input statement is covered or explicitly deferred; every requirement has a source."
-- **R5** — Behaviour spec-review flags after the round closed is kept and listed in the PR body as built without operator confirmation.
-  source: decision d3-late-unconfirmed
-- **R6** — fr refuses a spec whose requirements are malformed, unsourced, or quote text the input does not contain.
-  source: decision d4-structural-gate
-- **R7** — Acceptance rows are seeded from the requirements, and `deliver` cannot pass while one is unevidenced.
-  source: input "Seed acceptance rows from Requirements,"
-  source: decision d5-rows-gate-deliver
+| id | requirement | source |
+|---|---|---|
+| R1 | The operator's raw input is preserved verbatim where spec review can trace against it, and is not dispatched to executors or phase reviewers. | decision d0-spec-is-the-carrier<br>decision d1-input-in-spec-journal |
+| R2 | The spec separates requirements (each traced to a source: the raw input or an answered question) from fr's own design decisions. | input "Split the spec into Requirements and Design."<br>input "Quote acceptance criteria verbatim in the spec" |
+| R3 | User-visible behaviour the input does not ask for is asked in the question round, never silently promoted to a requirement. | input "never silently promoted"<br>decision d2-always-ask |
+| R4 | Spec review traces the spec back to the raw input: every input statement is covered or explicitly deferred, every requirement has a source, and invented or reinterpreted behaviour is a finding. | input "Spec review traces Requirements back to the raw input,"<br>input "each input statement is covered or explicitly deferred; every requirement has a source." |
+| R5 | Behaviour spec-review flags after the round closed is kept and listed in the PR body as built without operator confirmation. | decision d3-late-unconfirmed |
+| R6 | fr refuses a spec whose requirements are malformed, unsourced, or quote text the input does not contain. | decision d4-structural-gate<br>decision d7-requirements-table |
+| R7 | Acceptance rows are seeded from the requirements, and `deliver` cannot pass while one is unevidenced. | input "Seed acceptance rows from Requirements,"<br>decision d5-rows-gate-deliver |
 
 ## Deferred from input
 
-- "Pass it in every executor and reviewer dispatch as **the source of truth**" — rejected by d0-spec-is-the-carrier.
-- "Review phases against the brief's criteria too" — rejected by d0-spec-is-the-carrier; review-phase keeps reviewing against the (now checked) spec.
-- "fewer, larger phases make the plan lossier" — corrected by the issue's own comment; the fr-plan guidance contradiction is filed separately.
+| input | reason |
+|---|---|
+| "Pass it in every executor and reviewer dispatch as **the source of truth**" | Rejected by d0-spec-is-the-carrier. |
+| "Review phases against the brief's criteria too" | Rejected by d0-spec-is-the-carrier; review-phase keeps reviewing against the (now checked) spec. |
+| "fewer, larger phases make the plan lossier" | Corrected by the issue's own comment; the fr-plan guidance contradiction is super-fr#760. |
 
 ## Design
 
@@ -105,37 +98,46 @@ includes it.
 
 ### B. The spec's Requirements grammar (R2, R6)
 
-A spec written by fr-brainstorming carries, before `## Design`:
+A spec written by fr-brainstorming carries, before `## Design`, two tables in
+the same form as `## Decisions` (d7-requirements-table):
 
 ```markdown
 ## Requirements
 
-- **R1** — <one requirement, one or more lines; continuation lines indented>
-  source: input "<verbatim quote from an input entry>"
-  source: decision <spec-journal decision id>
+| id | requirement | source |
+|---|---|---|
+| R1 | <one requirement, one line> | input "<verbatim quote>"<br>decision <journal decision id> |
 
 ## Deferred from input            (optional)
 
-- "<verbatim quote>" — <one-line reason it is not a requirement of this change>
+| input | reason |
+|---|---|
+| "<verbatim quote>" | <one-line reason it is not a requirement of this change> |
 ```
 
 Parse rules (`fr.requirements.parse_requirements`, pure, no I/O):
 
-- An item starts with `- **R<n>** — ` (em dash; ` - ` is also accepted). Ids are
-  `R` + a positive integer, unique within the spec, not required to be
+- Each section holds exactly one GitHub-flavoured Markdown table and nothing
+  else but blank lines. Its header row is exactly the column names above
+  (case-insensitive, surrounding spaces ignored), followed by a delimiter row.
+  Any other content in the section (a paragraph, a second table, a list) is a
+  parse error, never skipped.
+- Cells split on unescaped `|`. A `|` inside a quote or requirement is written
+  `\|` and unescaped before matching; a row with the wrong cell count is an
+  error.
+- `id` is `R` + a positive integer, unique within the spec, not required to be
   contiguous (so a deleted requirement never renumbers the rest and breaks row
-  citations).
-- `source:` lines are indented under their item. At least one per item. Two
-  forms: `input "<quote>"` (the quote runs to the LAST `"` on the line) and
-  `decision <id>`.
+  citations). `requirement` is non-empty.
+- `source` holds one or more sources separated by `<br>`, each either
+  `input "<quote>"` (the quote runs from the first `"` to the last `"` of that
+  source) or `decision <id>`. An empty cell or an unknown form is an error.
+  Deferred's `input` cell is one `"<quote>"`; its `reason` is non-empty.
 - A quote may contain ` … ` (U+2026 with a space on each side) to elide: each
   fragment must occur in the input entry, in order.
 - Quote matching normalises whitespace only: runs of whitespace (newlines
   included) collapse to one space, ends stripped. Case, punctuation and dashes
   are literal: "1–20" does not match "1-20". A quote must fall within a single
   input entry.
-- Anything else inside the section (a stray paragraph, a `source:` line outside
-  an item, an unknown source form) is a parse error, never skipped.
 
 `## Design` holds fr's own decisions. The gate does not parse it: whether it
 smuggles in user-visible behaviour is judgement (§D).
@@ -285,15 +287,17 @@ PR.
 - Reopening the operator gate at spec-review (d3).
 - Machine-checking coverage or Design content: both remain reviewer judgement (d4).
 - Tagging plan phases or steps with requirement ids.
-- Reconciling fr-plan's phase-count guidance (filed separately).
+- Reconciling fr-plan's phase-count guidance (super-fr#760).
 
 ## Test Plan
 
 Unit (CI):
 
-1. `parse_requirements`: a well-formed section; multi-line text; an item with no
-   `source:`; a malformed id; a duplicate id; a stray paragraph; an unknown
-   source form; a missing section. Each malformed case is a named error.
+1. `parse_requirements`: a well-formed table; `<br>`-separated sources; an
+   escaped `\|` in a quote; an empty source cell; a wrong cell count; a wrong
+   header; a malformed id; a duplicate id; a stray paragraph beside the table;
+   an unknown source form; a missing section. Each malformed case is a named
+   error.
 2. Quote matching: whitespace and newline normalisation matches; `1–20` does
    not match `1-20`; ` … ` fragments must occur in order; a quote spanning two
    input entries is refused; Deferred quotes are checked too.
