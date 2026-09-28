@@ -4355,9 +4355,13 @@ rows:
       while a row citing the spec is not-implemented
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+    status: ci
+    notes: 'Covered by deliver''s requirement-rows unit tests: refuses a not-implemented
+      row citing the spec, passes on skipped/ci/scheduled, counts rows the record itself
+      moves.'
   - id: requirements-coverage-partition
     capability: fr-goal-methodology
     acceptance: fr refuses a spec review whose input-coverage table leaves any part
