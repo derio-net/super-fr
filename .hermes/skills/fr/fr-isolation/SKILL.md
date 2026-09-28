@@ -103,7 +103,7 @@ scripts). **OpenCode:** no status-line hook (anomalyco/opencode#37464); run `--f
   MERGED-PR and content-merged workspaces, retires state records whose worktree is gone, removes empty repo folders + stale session indexes,
   and (devcontainer only) reaps orphaned containers / `vsc-*` images. Open-PR, dirty, no-PR work: never touched. **external** only reports.
 - **Ownership boundary.** gc acts only where fr ownership is provable (state record, cache, label); a foreign `git worktree add` is invisible.
-- **Cleaning up after a merged PR? Run `fr pickup --branch <b>` first** — the close-out brief (verify-merge, archive, commit/push, PR), built from git alone, ending in **`down`, the immediate lever**, not a substitute: verifies container + worktree gone before dropping state (never leaked);
+- **Post-merge cleanup is `fr pickup --branch <b>`'s brief** (verify-merge, archive, commit/push, PR; built from git alone), ending in **`down`, the immediate lever — never run alone in its place**: it verifies container + worktree gone before dropping state (never leaked);
   refuses an open PR, a dirty worktree (#435), content not on `origin/<default>` (#467).
 - **`--force` is operator-requested-and-informed only.** It bypasses all three. An agent must never reach for it on its own initiative — only after
   the operator asks — and first names what would be destroyed: `git worktree remove --force` drops the worktree and fr's record; the branch
