@@ -3,11 +3,18 @@ run: 2026-09-28-feat-batch-phase-sizing-2
 workflow: fr-goal@1
 branch: feat/batch-phase-sizing-2
 started: '2026-09-28T19:13:49+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-28T19:13:58+00:00'
+    state: done
+    at: '2026-09-28T20:09:05+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-phase-sizing-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 7 requirements:4b3b9e3e05c4a071d1c8c7949428a6b5a45a65d53e717b0a7bef34add59bf34a
   spec-review:
     state: pending
   plan:

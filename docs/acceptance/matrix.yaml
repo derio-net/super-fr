@@ -4421,6 +4421,55 @@ rows:
     status: ci
     notes: Covered by deliver's post-merge-row skip/count unit test and the PR body's
       Post-merge verification owed section.
+  - id: phase-sizing-ask-floor
+    capability: fr-goal-methodology
+    acceptance: fr plan self-review fails a plan with an agentic phase that serves no
+      ask of its own (including a standalone walking skeleton), unless a recorded split
+      decision explains it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: phase-sizing-split-reason
+    capability: fr-goal-methodology
+    acceptance: fr plan self-review fails a plan whose agentic phases after the first
+      carry no recorded split reason
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: phase-sizing-proportionality
+    capability: fr-goal-methodology
+    acceptance: fr plan proportionality reports agentic phases against the asks they
+      serve and names each phase with no ask of its own, without blocking
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: phase-sizing-manual-verification
+    capability: fr-goal-methodology
+    acceptance: 'An operator verification step is steered to a Test Plan line: self-review
+      warns on a single-step trailing manual phase and fr-plan says so'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: phase-sizing-plan-guidance
+    capability: fr-goal-methodology
+    acceptance: fr-plan's guidance sizes phases to asks, no longer asks for 4-6 phases,
+      and keeps steps bite-sized within a phase
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
