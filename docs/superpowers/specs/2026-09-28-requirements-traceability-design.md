@@ -490,3 +490,4 @@ Post-merge (operator-driven):
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-09-28-requirements-traceability | `derio-net/super-fr` | `2026-09-28-requirements-traceability` | — |
