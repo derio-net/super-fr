@@ -6,9 +6,10 @@ run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/4
 outcome: done            # done | failed | blocked
-ticks: [P4.T1.S1, P4.T1.S2]
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2]
 refactor:
   P4.T1: "one contiguous prose rewrite to fr-spec-reviewer.md; nothing duplicated to extract"
+  P4.T2: "each skill's addition is a paragraph in its own existing section; the mirror sync is generated, not hand-duplicated"
 journal: []
 resolves: []
 evidence: {}

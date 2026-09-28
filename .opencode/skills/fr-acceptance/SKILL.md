@@ -114,3 +114,19 @@ Archived specs auto-resolve (`specs/` ↔ `implemented/specs/`) — `check` warn
 never errors, on a moved ref. `fr acceptance report` renders the HTML;
 `fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
 weekly "Acceptance debt" issue upsert.
+
+## Requirement origins and post-merge rows
+
+A row born from a spec's `## Requirements` table cites the requirement, not
+just the spec: `--origin <repo>:<spec-path>#R<n>` (a row may repeat `--origin`
+to cover several ids). `deliver`'s `requirement-rows` gate matches on this
+`#R<n>` fragment, so a row missing it still counts toward "any row citing this
+spec" but cites nothing more precisely than the whole spec.
+
+A row a live, operator-driven run alone can prove — never a unit test —
+carries `--verify post-merge` (`fr acceptance add --verify post-merge …`).
+`deliver`'s `requirement-rows` gate skips it whatever its status; it stays
+`not-implemented`, keeps nagging in `fr acceptance status`, and the PR body
+lists it under `## Post-merge verification owed`. `set-status` never touches
+`verify` — moving the row off `not-implemented` after the live run is the
+ordinary transition once the evidence exists.
