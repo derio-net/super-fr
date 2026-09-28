@@ -1,0 +1,2 @@
+bump: patch
+summary: "spec-review: fr reads the reviewer's input-coverage block as written (raw `|` and `\\\"` inside a quoted span), and a refusal tells the orchestrator to re-dispatch the reviewer instead of editing its partition (#777)"

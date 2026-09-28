@@ -613,9 +613,9 @@ def test_777_raw_pipes_in_a_span_still_refuse_a_gap() -> None:
 def test_777_input_carrying_a_literal_backslash_quote_still_matches() -> None:
     """`\\"` is read as `"` on BOTH sides, so an input that itself contains
     `\\"` partitions whichever way the reviewer quotes it."""
-    entries = [_input_entry("i1", r'say \"hi\" now')]
+    entries = [_input_entry("i1", r"say \"hi\" now")]
     reqs = Requirements(items=())
-    for span in (r'say \"hi\" now', 'say "hi" now'):
+    for span in (r"say \"hi\" now", 'say "hi" now'):
         problems, _ = check_coverage(_coverage_block([(span, "context")]), entries, reqs, entries)
         assert problems == [], span
 
