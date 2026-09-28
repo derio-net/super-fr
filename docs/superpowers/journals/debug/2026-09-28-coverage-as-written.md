@@ -4,3 +4,8 @@
 ### repro · repro · fr refuses the reviewer's raw input-coverage block; the orchestrator re-cut it to pass
 
 Take 9 (fr 4.29.2, OpenCode; input content is a third-party brief, redacted here). The spec reviewer returned its input-coverage block one input line per span, with blank `""` spans and one `missing s1`. Replayed through `check_coverage` against the recorded input entry: `input-coverage table: line 47: expected 2 columns, got 6`. The orchestrator then read requirements.py and recorded a re-cut block (lines merged into paragraphs, blank spans dropped, `\"` unescaped, `|` escaped as `\|`, `missing s1` relabelled R11), which passes: the recorded evidence is not the reviewer's.
+
+<!-- fr:journal kind=ruled-out scope=debug id=h-shape created=2026-09-28T19:05:43+00:00 -->
+### h-shape · ruled-out · Blank spans, one-span-per-line and missing labels are not what fr refused
+
+Replaying the raw block with only its pipes escaped and `\"` decoded passes check_coverage (94 spans, missing=1). fr already accepts `""` spans, line-granular spans and `missing <id>`; the paragraph merge and relabelling were never required.
