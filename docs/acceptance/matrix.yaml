@@ -5495,9 +5495,12 @@ rows:
       scaffolds no pipeline and refuses ci; a pipeline type scaffolds its template'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_services.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-no-ci-delivery
     capability: fr-profiles services
     acceptance: 'Under ci: none, fr-goal''s Ready checklist and fr-acceptance name the
