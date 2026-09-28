@@ -365,9 +365,13 @@ live, operator-driven run can prove (this spec's R3 and R4 rows): it stays
 `not-implemented`, keeps nagging in `fr acceptance status`, and the PR body
 lists it under a new required section, `## Post-merge verification owed`
 (each row id and its acceptance line, or `None.`). Writers: `fr acceptance add
---verify post-merge`, and `verify: post-merge` on a record's `acceptance:` item.
-`set-status` leaves it alone; moving the row off `not-implemented` after the
-live run is the ordinary transition.
+--verify post-merge`, `verify: post-merge` on a record's `acceptance:` item,
+and `fr acceptance set-status --verify post-merge` (phase 4 review finding
+g2: rows created before they were known to be live-only must be markable
+without a delete verb — `add` is create-only and matrix.yaml is never
+hand-edited). `set-status` preserves the row's existing `verify` unless
+`--verify post-merge` is given; moving the row off `not-implemented` after the
+live run is the ordinary transition and needs no `--verify`.
 
 It records `<n> rows: <status>=<count>,…; post-merge=<m>`.
 

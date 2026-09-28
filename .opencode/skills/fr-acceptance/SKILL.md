@@ -111,10 +111,10 @@ never errors, on a moved ref. `fr acceptance report` renders the HTML;
 `fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
 weekly "Acceptance debt" issue upsert.
 
-A row born from a spec's `## Requirements` table cites the requirement, not
-just the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for
-several ids). A row only a live, operator-driven run can prove — never a
-unit test — carries `--verify post-merge`; `deliver`'s `requirement-rows`
-gate then skips it whatever its status, it keeps nagging in `fr acceptance
-status`, and the PR body lists it under `## Post-merge verification owed`.
-`set-status` never touches `verify`.
+A row born from a spec's `## Requirements` table cites the requirement, not just
+the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for several ids).
+A row only a live, operator-driven run can prove — never a unit test — carries
+`--verify post-merge`; `deliver`'s `requirement-rows` gate then skips it whatever
+its status, it keeps nagging in `fr acceptance status`, and the PR body lists it
+under `## Post-merge verification owed`. `set-status --verify post-merge` sets it
+too; omitting the flag preserves what the row already carries.

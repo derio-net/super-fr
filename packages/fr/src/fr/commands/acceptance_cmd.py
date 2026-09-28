@@ -382,6 +382,13 @@ def set_status_cmd(
         help="'<level>=<ref>' evidence to REMOVE (repeatable); refused if the ref is not "
         "on the row.",
     ),
+    verify: str | None = typer.Option(
+        None,
+        "--verify",
+        help="post-merge: mark the row as verifiable only after merge (spec 2026-09-28 "
+        "§F). Omit to leave the row's existing `verify` alone — set-status never "
+        "clears it.",
+    ),
 ) -> None:
     """Move an existing row's status, in place, with a reason (spec §3.G.2).
 
@@ -398,6 +405,12 @@ def set_status_cmd(
     so a row can be re-pointed — drop the old ref, `--level` the new one — in
     one call. A drop naming a ref not on the row, an unknown level, or a ref
     also named in `--level` is refused (exit 2) with nothing changed.
+
+    `--verify post-merge` marks a row created before it was known to be
+    live-only, in the same rewrite; omitting the flag preserves whatever the
+    row already carries (`add`'s create-only, and there is no delete verb, so
+    this is the only way to set it on an existing row without hand-editing
+    matrix.yaml).
     """
     from typing import get_args
 
@@ -412,6 +425,9 @@ def set_status_cmd(
         err_console.print(
             f"[red]error:[/red] unknown status {status!r} (valid: {' | '.join(valid)})"
         )
+        raise typer.Exit(2)
+    if verify is not None and verify != "post-merge":
+        err_console.print(f"[red]error:[/red] --verify must be 'post-merge', got {verify!r}")
         raise typer.Exit(2)
     target = next((r for r in matrix.rows if r.id == row_id), None)
     if target is None:
@@ -438,6 +454,7 @@ def set_status_cmd(
     except AcceptanceError as e:
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
+    new_verify = verify if verify is not None else target.verify
     try:
         new_row = Row(
             id=target.id,
@@ -447,6 +464,7 @@ def set_status_cmd(
             levels=merged,
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
+            verify=new_verify,  # type: ignore[arg-type]  # pydantic validates the literal
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {e}")
@@ -462,6 +480,7 @@ def set_status_cmd(
             status=status,
             notes=notes,
             levels={k: tuple(v) for k, v in additions.items()},
+            verify=verify,  # type: ignore[arg-type]  # None preserves; apply.py falls back to existing
         ),
         f"chore(fr): acceptance — {row_id} {target.status} → {new_row.status}",
         {row_id: {k: tuple(v) for k, v in drops.items()}} if drops else None,
