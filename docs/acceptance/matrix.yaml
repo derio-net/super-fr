@@ -5165,9 +5165,12 @@ rows:
       with the command that clears it, without failing.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_status_owed.py
+      - super-fr:tests/unit/test_closeout_owed.py
+    status: ci
+    notes: fr status's owed_artifacts block is covered by unit tests
   - id: fr-debugging-relays-closeout
     capability: Branch-keyed close-out
     acceptance: fr-debugging's deliver relays the `fr pickup --branch <b>` close-out
