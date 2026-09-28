@@ -214,8 +214,10 @@ steps:
       p4r-other-forge-writes, p5r-skill-doc, p5r-local-hint, p5r-comment-roundtrip,\
       \ \np5r-test-docstring\n"
   deliver:
-    state: running
-    at: '2026-09-28T23:16:16+00:00'
+    state: done
+    at: '2026-09-28T23:22:03+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/794
     units:
       step/deliver:
         attempts:
@@ -223,3 +225,10 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T23:22:01+00:00'
+          outcome: done
+        evidence:
+          tests: full-suite.log@d2c220a8f469
+          proportionality: 274ba2cd246766396a6314258ba39671403388a8:2c0c99a8d81252528cf9255207ac1c529746313a98ca6aeca5e33eb722e81d88
+          visual: none
+          requirement-rows: '8 rows: ci=7; post-merge=1'

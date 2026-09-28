@@ -1,7 +1,0 @@
-schema_version: 4
-run: 2026-09-28-feat-batch-service-split-2
-step: deliver
-outcome: done
-acceptance: []
-emitted: {pr: https://github.com/derio-net/super-fr/pull/794}
-evidence: {tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T//full-suite.log}
