@@ -5534,9 +5534,12 @@ rows:
       and --json, without touching any artifact
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_cli.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-init-detect
     capability: fr-profiles services
     acceptance: fr init scaffold writes the nested services, detecting ci and tracking
