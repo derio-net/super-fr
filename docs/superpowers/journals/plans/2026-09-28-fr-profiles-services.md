@@ -601,3 +601,43 @@ docs/explainers/01-fr-goal.md has no 'CI green' gate wording nor a backend:/issu
 ### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
 
 prose-only task; the one cleanup was condensing two fr-init lines to stay under the 120-line skill limit, and fixing two mypy arg-type errors phase 5 left in services/init.py
+
+<!-- fr:journal kind=finding scope=plan id=input-r6-no-issue-filing-skill-prose created=2026-09-28T23:15:19+00:00 phase=6 state=open review_scope=in -->
+### input-r6-no-issue-filing-skill-prose · finding [open] (reviewer: in scope) · fr-goal still told the agent which out-of-scope findings to file, and 'deferred = tracked', with no tracking-none branch (phase 6)
+
+Input: 'no skill tells an agent to file an issue' (R6). plugins/super-fr/skills/fr-goal/SKILL.md:109 (deliver PR-body additions) and :99 (input- resolution guidance) were not among §3.G's four listed passages, so the spec never decided them.
+
+<!-- fr:journal kind=finding scope=plan id=p6r-explainer-reason created=2026-09-28T23:15:19+00:00 phase=6 state=open review_scope=in -->
+### p6r-explainer-reason · finding [open] (reviewer: in scope) · Explainer 'no change needed' decision not recorded as the currency rule requires (phase 6)
+
+docs/explainers/01-fr-goal.md:900-901,979-983 describe --tracked-by lines 'ready to run once you have filed the issue' — true on the default path (tracking resolves to the forge's own), not under tracking: none. The rule is met by updating the page or recording why not in the PR body.
+
+<!-- fr:journal kind=finding scope=plan id=p6r-fragment-mitigation created=2026-09-28T23:15:19+00:00 phase=6 state=open review_scope=in -->
+### p6r-fragment-mitigation · finding [open] (reviewer: in scope) · Change fragment named the §3.D risk but not its lockstep-install mitigation (phase 6)
+
+.changes/feat-batch-service-split-2.yaml:2.
+
+<!-- fr:journal kind=discovery scope=plan id=p6r-merge-790 created=2026-09-28T23:15:19+00:00 phase=6 -->
+### p6r-merge-790 · discovery · Merging main superseded phase 4's no-empty-housekeeping rule (p4r-empty-housekeeping) (phase 6)
+
+Main's #790 (close-out is an always condition, keyed on the branch) prints the housekeeping block unconditionally. The merge (59ce8db3) re-applied tracking none inside branch_closeout_brief (no issue-filing / --tracked-by lines, the stays-recorded line) and kept #790's block; the phase-4 test pinning the old rule failed CI shard 3 and was rewritten to #790's design in 1e047d3e (local full suite on the merge: that one test failed, 7496 passed).
+
+<!-- fr:journal kind=review scope=plan id=p6-review created=2026-09-28T23:15:19+00:00 phase=6 -->
+### p6-review · review · Phase 6 + merge review: 3 findings, all fixed (phase 6)
+
+Independent reviewer over phase 6 (6f1614c0, 5f73f4bd) and the merge 59ce8db3, with the operator input relayed verbatim (#778). Verified: #790's branch_closeout_brief intact line for line, tracking-none re-applied correctly (TrackerRequiredError caught before ServicesError, warning only with findings), both migration imports kept, matrix = main's rows + the eight profiles-services rows, the four fr services clauses present, no harness-specific tool names, README services section, bump minor. Findings fixed in the commit after 1e047d3e; explainer resolved by the rule's record-why route.
+
+<!-- fr:journal kind=finding scope=plan id=input-r6-no-issue-filing-skill-prose-resolved created=2026-09-28T23:15:19+00:00 phase=6 state=fixed resolves=input-r6-no-issue-filing-skill-prose -->
+### input-r6-no-issue-filing-skill-prose-resolved · finding [fixed] · resolves input-r6-no-issue-filing-skill-prose: fr-goal still told the agent which out-of-scope findings to file, and 'deferred = tracked', with no tracking-none branch (phase 6)
+
+Both passages branch on tracking none (never deferred / none to file — they stay recorded in the journal and PR body); pinned by test_fr_goal_never_asks_to_file_under_tracking_none (red first); mirrors re-synced.
+
+<!-- fr:journal kind=finding scope=plan id=p6r-explainer-reason-resolved created=2026-09-28T23:15:19+00:00 phase=6 state=fixed resolves=p6r-explainer-reason -->
+### p6r-explainer-reason-resolved · finding [fixed] · resolves p6r-explainer-reason: Explainer 'no change needed' decision not recorded as the currency rule requires (phase 6)
+
+Recorded why no page change: 01-fr-goal describes the default path, which this change leaves as it was (tracking and ci resolve to the forge's own unless declared); the PR body states it under the explainers-currency rule. A tracking-none sentence for the page is optional follow-up.
+
+<!-- fr:journal kind=finding scope=plan id=p6r-fragment-mitigation-resolved created=2026-09-28T23:15:19+00:00 phase=6 state=fixed resolves=p6r-fragment-mitigation -->
+### p6r-fragment-mitigation-resolved · finding [fixed] · resolves p6r-fragment-mitigation: Change fragment named the §3.D risk but not its lockstep-install mitigation (phase 6)
+
+Summary now ends 'keep every machine on the same plugin version (lockstep install)'.
