@@ -81,9 +81,9 @@ app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.command(name="skills")(skills_command)
-app.command(
-    name="services", help="Read-only: the resolved forge / ci / tracking services."
-)(services_command)
+app.command(name="services", help="Read-only: the resolved forge / ci / tracking services.")(
+    services_command
+)
 
 
 def version_callback(value: bool) -> None:
