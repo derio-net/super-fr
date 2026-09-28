@@ -57,7 +57,7 @@ tasks:
     text: |-
       GREEN: `validate_profiles` in `fr/artifacts/structure.py`, reusing `fr.services.model`. Then run
       `uv run fr migrate artifacts --yes` in the workspace to migrate this repo's
-      `.devcontainer/fr-profiles.yaml` (never by hand), and confirm
+      `.devcontainer/fr-profiles.yaml` (the migration writes it, not an editor), and confirm
       `tests/unit/test_validate_artifacts.py::test_this_repos_own_artifacts_are_structurally_valid` and
       `test_tripwire_artifact_kinds.py`, `test_migration_runner.py` pass. Run: green.
   - id: P2.T2.S3
