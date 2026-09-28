@@ -389,3 +389,8 @@ fr acceptance set-status --verify post-merge (only value; omitted preserves); sp
 ### deliver-tmpdir-log · finding [open] (reviewer: out of scope) · fr-goal §8's '> $TMPDIR/full-suite.log' is refused by the tests evidence gate
 
 fr-goal SKILL.md §8 tells the orchestrator to log the suite with a shell redirect to $TMPDIR/full-suite.log. On Claude Code the deliver tests= gate refused exactly that ('no command of YOURS wrote it'): it resolves a $VAR log path only when the same command assigns it (#720), and TMPDIR is inherited. This run reran with a literal path. Found at deliver of run 2026-09-28-feat-gh-759.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-tmpdir-log-resolved created=2026-09-28T13:05:53+00:00 state=open resolves=deliver-tmpdir-log out_of_scope=true -->
+### deliver-tmpdir-log-resolved · finding [out-of-scope] · resolves deliver-tmpdir-log: fr-goal §8's '> $TMPDIR/full-suite.log' is refused by the tests evidence gate
+
+Not caused by this change: the §8 prose and the #720 gate predate it. Either the gate learns inherited env vars (expand TMPDIR from the command's environment) or §8 names a literal path.
