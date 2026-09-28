@@ -8,14 +8,21 @@ are judged locally, so the fr-goal close-out still archives. `--force` overrides
 plan only; `--force --all` is refused because blanket-forcing is how the
 2026-06-05 incident happens in reverse.
 
+`--branch <b>` (2026-09-28-closeout-always §B) archives what a MERGED branch
+added or modified, kind by kind; anything not ready is a `held:` line, exit 0.
+It refuses (exit 2, nothing moved) with no default ref, an unresolvable
+branch, or a branch whose changes are not all on the default ref.
+
 Exit codes: 0 archived (or clean no-op for --all); 2 gate failure, dirty
 tree, usage, legacy layout; 5 parse error.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import typer
 from rich.console import Console
@@ -41,7 +48,7 @@ from fr.isolation.local import (
     subprocess_runner,
 )
 from fr.isolation.types import IsolationError
-from fr.journal.model import archived_journal_path, journal_path
+from fr.journal.model import JournalScope, archived_journal_path, journal_path
 from fr.parser import PlanSchemaError
 from fr.repair import plans_referencing_specs, repair_repo
 from fr.run.model import archived_run_path, run_path
@@ -52,6 +59,8 @@ if TYPE_CHECKING:
 
 console = Console()
 err_console = Console(stderr=True)
+
+IMPLEMENTED_REL = Path("docs/superpowers/implemented")
 
 
 def _make_gh_client() -> GhClient:
@@ -102,16 +111,24 @@ def _branch_refs_or_exit(repo_root: Path, branch: str, remote: str) -> list[str]
     return refs
 
 
+@contextmanager
+def _refuse_on_isolation_error() -> Iterator[None]:
+    """A git diff the branch path cannot compute (no merge-base, a failed
+    rev-list) is a refusal, exit 2 — never a traceback, never a move."""
+    try:
+        yield
+    except IsolationError as e:
+        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
 def _require_landed(repo_root: Path, branch: str, refs: list[str], base_ref: str) -> None:
     """The mutating step's own guard (§B.3): every resolved ref's changes must
     be present on `base_ref`, or exit 2 naming the missing paths."""
     missing: list[str] = []
     for ref in refs:
-        try:
+        with _refuse_on_isolation_error():
             verdict = branch_changes_present(subprocess_runner, repo_root, ref, base_ref)
-        except IsolationError as e:
-            err_console.print(f"refusing to archive — {e}", soft_wrap=True)
-            raise typer.Exit(2) from e
         missing.extend(p for p in verdict.missing if p not in missing)
     if missing:
         err_console.print(
@@ -139,7 +156,14 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
     _require_landed(repo_root, branch, refs, base_ref)
     _note_fetch_error(evidence)
 
-    changed = sorted({p for ref in refs for p in _changed(repo_root, ref, base_ref)})
+    with _refuse_on_isolation_error():
+        changed = sorted(
+            {
+                p
+                for ref in refs
+                for p in branch_changed_paths(subprocess_runner, repo_root, ref, base_ref)
+            }
+        )
     artifacts = branch_artifacts(repo_root, changed)
     if not artifacts:
         typer.echo(f"nothing to archive for {branch}")
@@ -167,20 +191,17 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
     for a in artifacts:
         if a.kind in ("plan", "spec"):
             continue
-        dst, reason = _archive_follower(repo_root, a)
-        if dst is not None:
+        outcome = _archive_follower(repo_root, a)
+        if isinstance(outcome, Path):
             moved_followers = True
-            _echo_archived(a.path, dst)
+            _echo_archived(a.path, outcome)
         else:
-            _echo_held(a.path, reason or "not moved")
+            _echo_held(a.path, outcome)
 
     if moved_plans or spec_dsts or moved_followers:
         only_plans = frozenset(moved_plans) | plans_referencing_specs(repo_root, spec_dsts)
         _repair_in_passing(repo_root, only_plans)
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
-
-
-IMPLEMENTED_REL = Path("docs/superpowers/implemented")
 
 
 def _note_fetch_error(evidence: MergeEvidence) -> None:
@@ -190,14 +211,6 @@ def _note_fetch_error(evidence: MergeEvidence) -> None:
             f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
             soft_wrap=True,
         )
-
-
-def _changed(repo_root: Path, ref: str, base_ref: str) -> list[str]:
-    try:
-        return branch_changed_paths(subprocess_runner, repo_root, ref, base_ref)
-    except IsolationError as e:
-        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
-        raise typer.Exit(2) from e
 
 
 def _of_kind(artifacts: list[BranchArtifact], kind: str) -> list[BranchArtifact]:
@@ -265,9 +278,10 @@ def _archive_branch_specs(
     return [repo_root / m.dst for m in sweep.moves]
 
 
-def _archive_follower(repo_root: Path, a: BranchArtifact) -> tuple[Path | None, str | None]:
-    """(destination, None) when a journal/run/usage artifact is archived —
-    by its owner's move earlier in this run, or here — else (None, reason)."""
+def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
+    """A journal/run/usage artifact's repo-relative destination when it is
+    archived — by its owner's move earlier in this run, or here — else the
+    reason it is held."""
     if a.kind == "journal":
         return _archive_branch_journal(repo_root, a)
     run_id = a.path.stem
@@ -277,20 +291,27 @@ def _archive_follower(repo_root: Path, a: BranchArtifact) -> tuple[Path | None, 
         else archived_usage_path(repo_root, run_id)
     )
     if not (repo_root / a.path).exists():
-        return dst.relative_to(repo_root), None
+        return dst.relative_to(repo_root)
     cursor = run_path(repo_root, run_id)
     if not cursor.exists():
         cursor = archived_run_path(repo_root, run_id)
     plan = emitted_plan(cursor)
-    return None, (f"follows plan {plan}, still live" if plan else "follows no recorded plan")
+    return (
+        f"follows plan {plan}, which did not move in this run"
+        if plan
+        else "follows no recorded plan"
+    )
 
 
-def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> tuple[Path | None, str | None]:
-    scope = a.owner or ""
+def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
+    """§B.4: a debug journal on the default ref is done (d2/d3); a plan or
+    spec journal follows its owner — moved when the owner moved in this run
+    (its move carried the journal) or is already archived, else held."""
+    scope = cast("JournalScope", a.owner)
     slug = a.path.stem
-    dst = archived_journal_path(repo_root, scope, slug)  # type: ignore[arg-type]
+    dst = archived_journal_path(repo_root, scope, slug)
     if not (repo_root / a.path).exists():  # its owner's move carried it
-        return dst.relative_to(repo_root), None
+        return dst.relative_to(repo_root)
     if scope == "plan":
         owner_archived = (repo_root / IMPLEMENTED_REL / "plans" / slug).is_dir()
         owner = f"plan {slug}"
@@ -303,11 +324,11 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> tuple[Path | 
     else:  # debug: on the default ref (§B.3 proved it) means done (d2/d3)
         owner_archived, owner = True, ""
     if not owner_archived:
-        return None, f"follows {owner}, still live or missing"
+        return f"follows {owner}, still live or missing"
     _archive_journal(repo_root, scope, slug)
-    if journal_path(repo_root, scope, slug).exists():  # type: ignore[arg-type]
-        return None, f"destination {dst.relative_to(repo_root)} already exists"
-    return dst.relative_to(repo_root), None
+    if journal_path(repo_root, scope, slug).exists():
+        return f"destination {dst.relative_to(repo_root)} already exists"
+    return dst.relative_to(repo_root)
 
 
 def archive_command(
@@ -397,12 +418,7 @@ def archive_command(
     gh = _make_gh_client()
     # One merge-evidence read per invocation, never per plan (#544).
     evidence = merge_evidence(repo_root, fetch=True)
-    if evidence.fetch_error:
-        err_console.print(
-            f"note: {evidence.fetch_error} — judging merge state from the local "
-            f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
-            soft_wrap=True,
-        )
+    _note_fetch_error(evidence)
 
     if all_plans:
         plans_root = repo_root / "docs" / "superpowers" / "plans"
