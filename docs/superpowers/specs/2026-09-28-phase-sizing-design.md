@@ -309,5 +309,6 @@ ask; the #745 before/after audit is the deferred follow-up.
 
 ## Implementation Plans
 
-| Plan | Repo | Status |
-|---|---|---|
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-28-phase-sizing | `derio-net/super-fr` | `2026-09-28-phase-sizing` | — |

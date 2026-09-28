@@ -1,0 +1,277 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Size phases to the asks — sizing module, self-review gate, proportionality
+    section, prose
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - phase-sizing-ask-floor
+  - phase-sizing-split-reason
+  - phase-sizing-proportionality
+  - phase-sizing-manual-verification
+  - phase-sizing-plan-guidance
+  tier: hard
+  files:
+  - packages/fr/src/fr/phase_sizing.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/proportionality.py
+  - tests/unit/test_phase_sizing.py
+  - tests/unit/test_plan_phase_sizing.py
+  - tests/unit/test_plan_proportionality.py
+  - tests/unit/test_fr_plan_sizing_prose.py
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/skills/fr-plan/SKILL.md
+  - .opencode/skills/fr-goal/SKILL.md
+  - .hermes/skills/fr/fr-plan/SKILL.md
+  - .hermes/skills/fr/fr-goal/SKILL.md
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - .changes/feat-batch-phase-sizing-2.yaml
+  - .test_durations
+  estimate_lines: 950
+tasks:
+- number: 1
+  title: 'phase_sizing module: asks, own asks, split decisions (spec §A)'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_phase_sizing.py for a new pure module
+      fr.phase_sizing (spec §A, Test Plan items 1–2). Build PhaseHeader
+      objects (fr.types.PhaseHeader) and a Matrix via
+      fr.acceptance.model.parse_matrix(text) with rows whose `origin` is
+      `super-fr:docs/superpowers/specs/x-design.md#R<n>`; spec_ref
+      `super-fr:docs/superpowers/specs/x-design.md`. Cases: two agentic
+      phases sharing R1 (neither owns it) while each owns one other id;
+      a manual phase's rows are ignored (neither holds nor removes an ask);
+      an unknown row id contributes nothing; an origin naming the archived
+      spec twin (docs/superpowers/implemented/specs/…) counts; 20 rows
+      linked by one phase give one PhaseAsks carrying all their ids; the
+      s2 pair — p1 and p2 both cite R1, p2 has a `tier:` split decision —
+      p1's `own` is {R1}. split_decisions(entries, plan_slug): parse
+      spec-journal JournalEntry objects (kind decision, id
+      `phase-split-<slug>-p<N>`); titles `ask: …`, `tier: …`,
+      `risk-first: …`, `review-size: …` map to their reason; any other
+      prefix yields a malformed marker (not absent); non-decision kinds
+      and other plans' ids are ignored. Run
+      `uv run pytest tests/unit/test_phase_sizing.py -q --no-cov`; confirm
+      it fails on the missing module.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/phase_sizing.py (pure, no I/O):
+      `SplitReason = Literal["ask", "tier", "risk-first", "review-size"]`,
+      `WAIVING = frozenset({"tier", "risk-first", "review-size"})`,
+      frozen dataclasses `SplitDecision(number, reason: SplitReason | None,
+      title, malformed: bool)` and `PhaseAsks(number, asks, own)`,
+      `split_decisions(entries, plan_slug) -> dict[int, SplitDecision]`,
+      `phase_asks(phases, matrix, spec_ref, decisions) -> list[PhaseAsks]`
+      (agentic phases only; asks via fr.requirements.origin_fragment over
+      each linked row's origins, fragment matching `R\d+`; `own` = asks
+      minus asks of every OTHER agentic phase whose decision is not in
+      WAIVING). Run the T1 tests green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: module docstring citing spec
+      2026-09-28-phase-sizing-design.md §A and why `own` excludes waived
+      phases (review s2); ruff format + ruff check on the two files.
+- number: 2
+  title: self-review gate _phase_sizing_issues (spec §B, §C)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: create tests/unit/test_plan_phase_sizing.py (fixture style:
+      mirror tests/unit/test_plan_acceptance_links.py and
+      tests/unit/skeleton_override.py for writing a spec, matrix, spec
+      journal and plan folder under tmp_path). Cover every Test Plan item 3
+      bullet of the spec: silent without Requirements / with a legacy prose
+      Requirements section / cross-repo spec / missing spec file; a table
+      under `| id | requirement | source |` that fails to parse gives one
+      warn; one agentic phase with an own ask passes; one agentic phase
+      whose rows cite no requirement errors with "none of its acceptance
+      rows cites"; the #745 shape (skeleton phase with no rows + two ask
+      phases + single-step trailing [manual] phase) → floor error on the
+      skeleton, ceiling errors on later phases, one manual warn; folded to
+      two ask phases + `phase-split-<plan>-p2` "ask: …" passes, without it
+      the ceiling error; floor message contains tier:, risk-first:,
+      review-size: and not `ask:`; the s2 shared-ask tier pair passes; an
+      `ask:` split without an own ask fails; a malformed prefix errors; no
+      matrix → ceiling still applies plus the unverifiable-ask warn. Also
+      one CLI test (Test Plan item 4): `fr plan self-review` exits non-zero
+      on the #745 shape and 0 on the folded one (typer CliRunner, as
+      test_plan_cmd.py does). Confirm red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/plan_ops.py add
+      `_phase_sizing_issues(plan)` and call it right after
+      `_skeleton_issues` in self_review (~line 1384). Cut-off per spec §B:
+      same-repo spec (is_cross_repo_spec), file exists,
+      fr.requirements.parse_requirements succeeds; on RequirementsError,
+      warn only if the section holds a `| id | requirement | source |`
+      header row. Spec journal: resolve_journal_read_path(root, "spec",
+      spec_journal_slug(stem)) + parse_journal (share a small helper with
+      _skeleton_overridden rather than copying its body). Matrix:
+      load_matrix on docs/acceptance/matrix.yaml; spec_ref from
+      fr.requirements.load_spec_matrix or the matrix's repo. Apply the §B
+      table and messages verbatim in spirit (both floor wordings, the
+      three waiving tokens only in the floor message, all four in the
+      ceiling message, each with the `fr journal add --scope spec --slug
+      <spec-slug> --kind decision --id phase-split-<plan>-p<N> --title
+      "<reason>: …"` line). §C: warn on each manual phase in
+      _trailing_manual_block(plan) with exactly one step, same cut-off.
+      Run T2 tests green, then the neighbouring suites:
+      `uv run pytest tests/unit/test_plan_ops.py tests/unit/test_plan_acceptance_links.py tests/unit/test_plan_tier_gates.py tests/unit/test_plan_scope_fields.py tests/unit/test_v2_plan_ops.py -q --no-cov -n auto`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: docstring on _phase_sizing_issues naming spec §B/§C and
+      decisions d1/d5/d6; confirm `uv run fr plan self-review
+      docs/superpowers/plans/2026-07-09-multi-backend-git-host-adapters`
+      output is unchanged by the gate (its spec has no Requirements).
+- number: 3
+  title: 'proportionality ## Phases section, HEAD-only (spec §D)'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: extend tests/unit/test_plan_proportionality.py (reuse its git
+      repo fixture): the `## Phases` section after `## Size` for the #745
+      shape and the folded shape, with the line
+      "<n> agentic phases serve <k> of <T> requirements (R…)." and one
+      bullet per phase with no own ask (with its split reason, or "no split
+      reason"), "none." otherwise; an uncommitted spec-journal decision or
+      matrix edit does not change the report; the no-Requirements line,
+      the no-matrix line and the "matrix names no repo" line. Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/proportionality.py add the section in
+      _run after _size, built only from _phases_at_head, _show_head(spec),
+      parse_requirements, fr.acceptance.model.parse_matrix(_show_head(
+      "docs/acceptance/matrix.yaml")), the spec journal via _show_head on
+      the active then archived path (journal_path / archived_journal_path
+      with spec_journal_slug), spec_ref = f"{matrix.repo}:{spec_rel}"
+      (never resolve_identity's remote fallback), and fr.phase_sizing. Keep
+      the report-only contract (exit 0). Update the module docstring's
+      section list ("Three sections" → four). Run T3 tests green.
+- number: 4
+  title: 'prose: fr-plan + fr-goal skills, mirrors, prose tripwire (spec §E, R1/R5/R6/R7)'
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: create tests/unit/test_fr_plan_sizing_prose.py (style of
+      tests/unit/test_fr_plan_tier_prose.py): fr-plan SKILL.md does not
+      contain "Prefer 4–6 phases"; it states one agentic phase per
+      independently reviewable ask; it tells the planner to record a
+      `phase-split-<plan>-p<N>` decision with `ask:` for each per-ask phase
+      after the first and names tier:/risk-first:/review-size:; it says a
+      verification step is a Test Plan line or `verify: post-merge` row;
+      it says the skeleton is the first ask's phase; fr-goal SKILL.md §3
+      carries the same sizing sentence. Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: edit plugins/super-fr/skills/fr-plan/SKILL.md — rewrite the
+      "Size phases to the change" bullet and the "Pure agentic phases"
+      bullet per spec §E, replace "Bite-sized steps … Prefer 4–6 phases …"
+      with bite-sized steps that keep ≥1 step per spec design section even
+      in a one-phase plan. Edit plugins/super-fr/skills/fr-goal/SKILL.md §3
+      (the "Size phases to the change" and manual-phase sentences). Keep
+      the skills harness-neutral (no tool names). Then run BOTH mirror
+      generators: `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`. Run
+      `uv run pytest tests/unit/test_fr_plan_sizing_prose.py tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py tests/unit/test_skill_validation.py -q --no-cov`
+      green.
+- number: 5
+  title: explainer, change fragment, acceptance rows (spec §E)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Edit docs/explainers/01-fr-goal.md §5 ("Separate work only a human
+      can do") and the plan-sizing prose it has: a verification step is a
+      Test Plan line, a manual phase is for prerequisites and
+      dispatch/deploy; phases are sized one per ask with a recorded split
+      reason. Match the page's voice. Regenerate the page per
+      .claude/rules/explainers-currency.md, from `/`, with `--isolated`:
+      first re-render the UNMODIFIED .md (git stash or `git show
+      HEAD:docs/explainers/01-fr-goal.md > <scratch>`) and confirm it is
+      byte-identical to the committed .html, then render the edited .md to
+      docs/explainers/01-fr-goal.html. If the renderer does not resolve or
+      the unmodified render diverges, do not hand-edit the .html: record a
+      plan-journal finding that regeneration is owed. Run
+      `uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov`.
+  - id: P1.T5.S2
+    text: |-
+      Add .changes/feat-batch-phase-sizing-2.yaml with `bump: minor` and a
+      one-line summary (fr plan self-review sizes phases to the spec's asks;
+      proportionality reports phases vs asks; fr-plan drops "prefer 4–6").
+      Move the five phase-sizing-* acceptance rows to `ci` with their unit
+      test refs (through the step record's acceptance section or `fr
+      acceptance set-status --level unit=super-fr:<test path> --notes …`),
+      and confirm `uv run fr acceptance check` passes.
+- number: 6
+  title: full verification
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check
+      packages/ tests/`, the mypy command from AGENTS.md, and the full
+      suite `uv run pytest -q --no-cov -n auto` (it takes ~150 s: run it
+      as a single foreground command with a generous timeout, redirect
+      output to a log outside the repo, and read the tail — never pipe it
+      through a pager or re-run it in a loop). Fix any failure. Commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
