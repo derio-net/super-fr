@@ -1,2 +1,0 @@
-bump: minor
-summary: "Close-out is keyed on the branch: fr pickup --branch, fr archive --branch archives every artifact the branch touched (debug journals included), and fr status reports artifacts left live after their PR merged."
