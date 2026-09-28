@@ -4394,9 +4394,13 @@ rows:
       and stays visibly owed in the PR body
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R10
-    levels: {}
-    status: not-implemented
-    notes: Born at spec-review (d11); target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: Covered by deliver's post-merge-row skip/count unit test and the PR body's
+      Post-merge verification owed section.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
