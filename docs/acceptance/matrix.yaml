@@ -5163,9 +5163,8 @@ rows:
     notes: ''
   - id: visual-evidence-capture-script
     capability: fr-goal-evidence
-    acceptance: A capture script named in visual evidence must be tracked on the branch
-      and re-run by the stage that names it; the skills prefer such a script to agent-driven
-      browsing.
+    acceptance: A capture script named in visual evidence must exist and be re-run by the
+      stage that names it; the skills prefer such a script to agent-driven browsing.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
