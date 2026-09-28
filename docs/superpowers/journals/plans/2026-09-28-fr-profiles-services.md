@@ -366,3 +366,93 @@ is untouched (asserted by source inspection only, since it never calls require_t
 ### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
 
 one small shared helper (require_tracker) and three call sites; nothing duplicated to fold
+
+<!-- fr:journal kind=finding scope=plan id=p4r-repair-gate created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-repair-gate · finding [open] (reviewer: in scope) · `triage batch dispatch --repair --yes` skipped the tracking gate or read another repo's fr-profiles (phase 4)
+
+triage_batch_cmd.py:473-484/:794-815 — the gate swallowed TriageError expecting _open_checkout later, but --repair returned first; origin never checked against owner_repo.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-empty-housekeeping created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-empty-housekeeping · finding [open] (reviewer: in scope) · Closeout told the operator to open an empty housekeeping PR under tracking none (phase 4)
+
+closeout.py:215 — stays_recorded opened the housekeeping block with nothing to commit.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-require-scope created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-require-scope · finding [open] (reviewer: in scope) · require_tracker resolved every service, so a bad ci: refused apply --yes with a ci-only message (phase 4)
+
+services/require.py:24.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-collect-test created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-collect-test · finding [open] (reviewer: in scope) · triage collect test only checked the source text (phase 4)
+
+tests/unit/test_tracking_none.py:185-190.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-warning-noise created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-warning-noise · finding [open] (reviewer: in scope) · Malformed-tracking WARNING printed with no out-of-scope findings (phase 4)
+
+closeout.py:207-208.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-wording created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=in -->
+### p4r-wording · finding [open] (reviewer: in scope) · tracking none closeout line differed from spec §3.E wording (phase 4)
+
+closeout.py:211-212.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-cross-repo-tracking created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=out -->
+### p4r-cross-repo-tracking · finding [open] (reviewer: out of scope) · Cross-repo plans: the gate reads the plan's repo, not target_repo's tracking (phase 4)
+
+apply_cmd.py:265. The spec does not define whose tracking applies to a cross-repo plan, and fr has no checkout of the target; a follow-up question, not caused by an error in this change.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-other-forge-writes created=2026-09-28T22:23:33+00:00 phase=4 state=open review_scope=out -->
+### p4r-other-forge-writes · finding [open] (reviewer: out of scope) · triage batch cancel/merge and fr undispatch still write labels/comments under tracking none (phase 4)
+
+triage_batch_cmd.py:380-406, undispatch_cmd.py:102. §3.E names only apply --yes and dispatch; these verbs only touch issues that existed before the switch.
+
+<!-- fr:journal kind=discovery scope=plan id=p4r-serial-run created=2026-09-28T22:23:33+00:00 phase=4 -->
+### p4r-serial-run · discovery · test_tracking_none.py 'hang' did not reproduce (phase 4)
+
+The executor saw one serial whole-file run exceed 120 s. Two orchestrator reruns with a 150 s timeout: 21 passed in ~1.2 s each (wall 12 s and 59 s, the difference before pytest's own timer — process start-up contention, not a test). CI runs -n auto.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-09-28T22:23:33+00:00 phase=4 -->
+### p4-review · review · Phase 4 review: 8 findings (6 in scope, fixed in 3f9545eb; 2 out of scope) (phase 4)
+
+Independent reviewer over 629ba0f2 against spec R6 §3.E and plan 04.yaml: every other --yes issue-creating path is behind the gate (fr.apply only via _do_mutations; fr_dispatch.tick uses skip_issue_create=True; GithubTracker.create_item already refuses), pr_body and the workflow manifest carry no issue-filing prose, no eager import cycle. In-scope p4r-repair-gate, p4r-empty-housekeeping, p4r-require-scope, p4r-collect-test, p4r-warning-noise, p4r-wording fixed in 3f9545eb (full suite 7130 passed); p4r-cross-repo-tracking and p4r-other-forge-writes out of scope, listed for the operator at merge.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-repair-gate-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-repair-gate -->
+### p4r-repair-gate-resolved · finding [fixed] · resolves p4r-repair-gate: `triage batch dispatch --repair --yes` skipped the tracking gate or read another repo's fr-profiles (phase 4)
+
+3f9545eb: with --yes the gate opens the checkout via _open_checkout(checkout_path, owner_repo) on every path incl. --repair; tests: tracking none, no clone, wrong origin — no forge calls.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-empty-housekeeping-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-empty-housekeeping -->
+### p4r-empty-housekeeping-resolved · finding [fixed] · resolves p4r-empty-housekeeping: Closeout told the operator to open an empty housekeeping PR under tracking none (phase 4)
+
+3f9545eb: stays_recorded no longer opens the housekeeping block; test.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-require-scope-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-require-scope -->
+### p4r-require-scope-resolved · finding [fixed] · resolves p4r-require-scope: require_tracker resolved every service, so a bad ci: refused apply --yes with a ci-only message (phase 4)
+
+3f9545eb: resolve_tracking (forge + tracking only, no CI) used by require_tracker and closeout; tests for jenkins ci + valid tracking and malformed tracking.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-collect-test-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-collect-test -->
+### p4r-collect-test-resolved · finding [fixed] · resolves p4r-collect-test: triage collect test only checked the source text (phase 4)
+
+3f9545eb: behavioural test — fr triage collect against the fake forge under tracking none exits 0 and writes facts.json.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-warning-noise-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-warning-noise -->
+### p4r-warning-noise-resolved · finding [fixed] · resolves p4r-warning-noise: Malformed-tracking WARNING printed with no out-of-scope findings (phase 4)
+
+3f9545eb: warning only when out-of-scope findings exist.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-wording-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=fixed resolves=p4r-wording -->
+### p4r-wording-resolved · finding [fixed] · resolves p4r-wording: tracking none closeout line differed from spec §3.E wording (phase 4)
+
+3f9545eb: spec wording; pinned tests updated.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-cross-repo-tracking-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=open resolves=p4r-cross-repo-tracking out_of_scope=true -->
+### p4r-cross-repo-tracking-resolved · finding [out-of-scope] · resolves p4r-cross-repo-tracking: Cross-repo plans: the gate reads the plan's repo, not target_repo's tracking (phase 4)
+
+Undefined by the spec; needs a decision on whose tracking a cross-repo plan follows. Offered as a follow-up issue at merge.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-other-forge-writes-resolved created=2026-09-28T22:23:33+00:00 phase=4 state=open resolves=p4r-other-forge-writes out_of_scope=true -->
+### p4r-other-forge-writes-resolved · finding [out-of-scope] · resolves p4r-other-forge-writes: triage batch cancel/merge and fr undispatch still write labels/comments under tracking none (phase 4)
+
+Outside §3.E's named commands; they only act on pre-existing issues. Offered as a follow-up issue at merge.
