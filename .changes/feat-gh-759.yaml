@@ -1,2 +1,0 @@
-bump: minor
-summary: "fr-goal checks the spec against the operator's input — traced Requirements, an input-coverage partition, and rows gating deliver (#759). Consumer repos: the acceptance matrix moves to schema 2, so run `fr migrate artifacts --yes` once and commit the stamped docs/acceptance/matrix.yaml, or non-interactive `fr acceptance` commands (CI, agent sessions) refuse until you do."
