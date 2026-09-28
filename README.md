@@ -390,7 +390,7 @@ diffable against a base ref (`fr acceptance check --added-since <ref>`) and
 defended in the PR body, never silent scope drift.
 
 ```bash
-fr acceptance init        # scaffold matrix + CI workflow + backfill rule (idempotent)
+fr acceptance init        # scaffold matrix + backfill rule (+ CI workflow if the repo has CI, or --with-ci)
 fr acceptance backfill    # emit inventory + backfill protocol for an existing repo
 fr acceptance add ...     # append a row (never hand-edit the YAML)
 fr acceptance check       # validate refs/staleness/statuses; exit 2 on any `failing` row
