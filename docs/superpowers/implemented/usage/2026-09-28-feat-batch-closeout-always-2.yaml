@@ -69,3 +69,12 @@ captures:
       ab1afcd5539667c23: 4392
       phase/6/implement-phase: 4597
       a10997f9398601a6d: 3685
+- host: h-9c2b3edc
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-28T22:39:05+00:00'
+  at:
+  - closeout
+  sessions:
+  - session: 3fb23231-6b20-4e17-8549-56b4ab43f7b5
+    unavailable: no transcript found for this session on this host
