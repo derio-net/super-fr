@@ -641,3 +641,8 @@ Recorded why no page change: 01-fr-goal describes the default path, which this c
 ### p6r-fragment-mitigation-resolved · finding [fixed] · resolves p6r-fragment-mitigation: Change fragment named the §3.D risk but not its lockstep-install mitigation (phase 6)
 
 Summary now ends 'keep every machine on the same plugin version (lockstep install)'.
+
+<!-- fr:journal kind=finding scope=plan id=p1r-later-tests-resolved-3 created=2026-09-28T23:16:04+00:00 state=fixed resolves=p1r-later-tests answered_by=operator -->
+### p1r-later-tests-resolved-3 · finding [fixed] · resolves p1r-later-tests: Test Plan items owned by the migration phase: exempt commands on an unmigrated v1 file (source legacy), legacy ci == migrated ci
+
+Operator authorised: implemented in phase 2 (tests/unit/test_migration_profiles_services.py — exempt commands on an unmigrated v1 file read source: legacy; legacy ci equals the migrated ci).
