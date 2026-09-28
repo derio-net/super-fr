@@ -62,7 +62,7 @@ steps:
     - review-phase
     units:
       phase/1/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T19:41:03+00:00'
           agent: a93557581002d5e15
@@ -70,6 +70,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 3fb23231-6b20-4e17-8549-56b4ab43f7b5
+          returned: '2026-09-28T19:48:55+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
