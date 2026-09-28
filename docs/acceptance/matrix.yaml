@@ -4446,9 +4446,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+    status: ci
+    notes: 'Phase 1 (spec §B, R3): self-review errors on each agentic phase after the
+      first with no phase-split-<plan>-p<N> decision, and on a malformed reason prefix;
+      the folded two-ask plan passes with an ask: decision.'
   - id: phase-sizing-proportionality
     capability: fr-goal-methodology
     acceptance: fr plan proportionality reports agentic phases against the asks they
