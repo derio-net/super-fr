@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-09-28-feat-gh-759
+workflow: fr-goal@1
+branch: feat/gh-759
+started: '2026-09-28T04:28:22+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
