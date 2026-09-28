@@ -5429,8 +5429,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: skipped
+    notes: 'Proven live 2026-09-29 in a fresh session from the base clone: fr pickup
+      --run 2026-09-28-feat-batch-closeout-always-2 named fr archive --branch feat/batch-closeout-always-2;
+      run in the chore/archive workspace it archived spec, plan, run, usage and both
+      journals with no held: line, and fr status then reported no owed artifact from
+      the branch. Manual live run, not in CI.'
     verify: post-merge
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
