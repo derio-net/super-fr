@@ -67,6 +67,12 @@ class CoverageCounts:
     missing: int
 
 
+REQUIREMENTS_PREDATES = "predates the requirements gate"
+"""§G: what each derived requirements witness records on a run whose
+`brainstorm` resolved before the gate existed — recorded, never met, so `fr run
+status` and the PR body read it as debt."""
+
+
 class RequirementsError(Exception):
     """A §B grammar violation. Every message names the 1-based spec line and
     the rule it broke."""
@@ -412,6 +418,13 @@ _COVERAGE_BLOCK_RE = re.compile(r"```input-coverage\r?\n(.*?)```", re.DOTALL)
 _COVERAGE_HEADER = ["span", "coverage"]
 _REQ_LABEL_RE = re.compile(r"^R[1-9][0-9]*(,\s*R[1-9][0-9]*)*$")
 _MISSING_LABEL_RE = re.compile(r"^missing\s+(\S+)$")
+
+
+def coverage_block(review_body: str) -> str | None:
+    """The fenced `input-coverage` block of a review entry, fences included —
+    or None when there is not exactly one (§D). What the PR body renders."""
+    blocks = list(_COVERAGE_BLOCK_RE.finditer(review_body))
+    return blocks[0].group(0) if len(blocks) == 1 else None
 
 
 def check_coverage(

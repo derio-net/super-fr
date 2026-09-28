@@ -58,6 +58,7 @@ from fr.journal.model import (
     unauthorized_fixes,
 )
 from fr.records_commit import commit_records
+from fr.requirements import REQUIREMENTS_PREDATES
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
@@ -1396,9 +1397,6 @@ _VERIFIABLE_EVIDENCE = (
 _DERIVED_EVIDENCE = frozenset(
     {"findings", "proportionality", "requirements", "coverage", "requirement-rows"}
 )
-# §G: what a derived requirements witness records on a run whose `brainstorm`
-# resolved before the gate existed — and what `fr run status` reads as debt.
-REQUIREMENTS_PREDATES = "predates the requirements gate"
 # Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
 # journal (2026-09-24 spec §E) — verified against an `_EvidenceTarget`. A flat
 # `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
