@@ -1683,6 +1683,24 @@ def _verified_evidence(
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
         verified["proportionality"] = _proportionality_witness(key, repo_root, state)
+    derives = state_value == "done" and "findings" in step.evidence
+    review_journal: tuple[str, list[JournalEntry]] | None = None
+    if "review" in offered or derives:
+        assert target is not None  # `review`/`findings` are phase-scoped, refused above otherwise
+        try:
+            review_journal = _review_journal_entries(repo_root, state, target)
+        except RunStateError as e:
+            err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
+    if "review" in offered:
+        # Before the derived witnesses (e4): `coverage` reads the entry
+        # `review` names, so a stale id must be named by the review gate
+        # rather than reported as a coverage gap.
+        assert review_journal is not None and target is not None
+        slug, entries = review_journal
+        _verify_review_entry(
+            key, offered["review"], slug=slug, entries=entries, target=target, since=since
+        )
     if state_value == "done":
         verified.update(
             _requirements_witnesses(
@@ -1694,21 +1712,10 @@ def _verified_evidence(
                 review_id=offered.get("review"),
             )
         )
-    derives = state_value == "done" and "findings" in step.evidence
-    if "review" not in offered and not derives:
-        return verified
-    assert target is not None  # `review`/`findings` are phase-scoped, refused above otherwise
-    try:
-        slug, entries = _review_journal_entries(repo_root, state, target)
-    except RunStateError as e:
-        err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-    if "review" in offered:
-        _verify_review_entry(
-            key, offered["review"], slug=slug, entries=entries, target=target, since=since
-        )
     if not derives:
         return verified
+    assert review_journal is not None and target is not None
+    slug, entries = review_journal
     return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
 
 

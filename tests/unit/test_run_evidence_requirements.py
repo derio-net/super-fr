@@ -686,3 +686,22 @@ def test_deliver_refuses_when_no_row_cites_the_spec(tmp_path: Path) -> None:
     text = _squash(out.output)
     assert "no acceptance row cites" in text
     assert "R1" in text
+
+
+def test_a_bad_review_id_gets_the_review_gates_message_not_coverages(tmp_path: Path) -> None:
+    """e4: `review` is verified before the derived witnesses read it, so a
+    stale id is named by the review gate, not reported as a coverage gap."""
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _review_entry(repo, body=COVERAGE_BLOCK)
+
+    out = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "spec-review", "--state", "done",
+         "--evidence", "review=sr-stale", "--evidence", "reviewer=rv-1"],
+    )  # fmt: skip
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "review=sr-stale names no entry in the spec journal" in text
+    assert "cannot derive coverage evidence" not in text
