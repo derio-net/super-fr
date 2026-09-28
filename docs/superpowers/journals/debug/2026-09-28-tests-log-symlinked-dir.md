@@ -9,3 +9,8 @@ gh#758. `mvn -q test > /tmp/x.log 2>&1` then `fr run resolve --step deliver --ev
 ### b3a48e50b336 · root-cause · _is_log compares an unresolved absolute target against a resolved log path
 
 `run_cmd._verify_tests_log` resolves the evidence path (`.resolve()` -> `/private/tmp/x.log`); `telemetry._is_log` compares the literal absolute target (`/tmp/x.log`) with `==`, so any log reached through a symlinked directory never matches.
+
+<!-- fr:journal kind=finding scope=debug id=6db98a501310 created=2026-09-28T16:38:23+00:00 state=fixed -->
+### 6db98a501310 · finding [fixed] · _is_log compares real paths on both sides
+
+Fix: `os.path.realpath(target) == os.path.realpath(log)` for an absolute target (realpath, not Path.resolve: never raises on a loop, and every transcript word reaches it). Failing test first: `test_a_suite_logged_through_a_symlinked_dir_is_accepted` (tests/unit/test_run_evidence_separate_context.py) refused with the production message before the fix, passes after. Full suite 6860 passed. Not covered: a RELATIVE target through a symlinked dir is still suffix-matched, since the command cwd is unknowable from the transcript.
