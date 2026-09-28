@@ -4294,9 +4294,14 @@ rows:
       an input entry and never reaches a phase executor's handoff
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+    status: ci
+    notes: 'Covered by unit tests: input token round-trip on the model/verb/record paths,
+      and the redaction contract.'
   - id: requirements-structural-gate
     capability: fr-goal-methodology
     acceptance: fr refuses a brainstorm or spec-review whose spec has malformed or unsourced
