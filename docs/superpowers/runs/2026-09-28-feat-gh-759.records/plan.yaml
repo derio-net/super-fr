@@ -1,0 +1,14 @@
+schema_version: 2
+run: 2026-09-28-feat-gh-759
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-approach-a
+    title: Four layered phases (parser skeleton, artifact shapes, run gates, prose)
+    body: Operator-approved in the standalone fr-plan dialogue before switching to fr-goal. Chosen over vertical per-requirement slices (reopens run_cmd/pr_body/record model 3-4 times) and two phases (a ~2100-line phase 1).
+    global: true
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-09-28-requirements-traceability
+evidence: {}
