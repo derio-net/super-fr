@@ -5128,3 +5128,65 @@ rows:
       markers exported (int ref): the old fr recorded claude-code plus a borrowed session
       (the defect), the branch fr detected opencode and advance recorded harness opencode,
       session None and the OpenCode tier model.'
+  - id: closeout-branch-brief
+    capability: Branch-keyed close-out
+    acceptance: Any fr flow's merged branch gets a self-contained close-out brief from
+      `fr pickup --branch <b>`, and `fr pickup --run` delegates to the same builder,
+      adding only run extras.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: archive-branch-every-artifact
+    capability: Branch-keyed close-out
+    acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch
+      added or modified (debug journals included) through each kind''s gate, reports
+      what it holds, and refuses a branch whose changes are not on the default ref.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: status-reports-owed-artifacts
+    capability: Branch-keyed close-out
+    acceptance: '`fr status` lists every live artifact whose PR has merged (debug journals
+      on the default ref, archivable plans, fully implemented specs, orphan journals)
+      with the command that clears it, without failing.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: fr-debugging-relays-closeout
+    capability: Branch-keyed close-out
+    acceptance: fr-debugging's deliver relays the `fr pickup --branch <b>` close-out
+      line on every harness mirror.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: debug-journal-sweep-keeps-refs
+    capability: Branch-keyed close-out
+    acceptance: '`fr archive --all` moves every debug journal live on the default ref,
+      and evidence refs to a moved journal still resolve in `fr acceptance check`.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: closeout-branch-live-run
+    capability: Branch-keyed close-out
+    acceptance: This feature's own post-merge close-out, run from its relayed line in
+      a new session, archives the branch's spec, plan, run, usage and journals with
+      nothing held.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge

@@ -3,11 +3,18 @@ run: 2026-09-28-feat-batch-closeout-always-2
 workflow: fr-goal@1
 branch: feat/batch-closeout-always-2
 started: '2026-09-28T19:13:21+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-28T19:19:04+00:00'
+    state: done
+    at: '2026-09-28T19:31:11+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-closeout-always-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 7 requirements:a81c06e1f960bc17bbcc4534cea6b6c502db9eae002c0ba7f5adb0b74de1c14b
   spec-review:
     state: pending
   plan:
