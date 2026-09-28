@@ -1,2 +1,0 @@
-bump: patch
-summary: "deliver's tests= refusal now says when the suite ran in the same call as the advance that opened the unit, and fr-goal §8 says to run it as its own command after that advance (gh#765)"
