@@ -5169,9 +5169,14 @@ rows:
       reviewer's own transcript; the executor having opened them is refused.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+    status: ci
+    notes: 'Implemented in phase 2 of plan 2026-09-28-ui-visual-evidence: at review-phase
+      the witness is the offered reviewer''s own transcript; reads only in the executor''s
+      transcript are refused (test_review_reads_only_in_the_executors_transcript_are_refused);
+      CI.'
   - id: visual-evidence-capture-script
     capability: fr-goal-evidence
     acceptance: A capture script named in visual evidence must exist and be re-run by the
