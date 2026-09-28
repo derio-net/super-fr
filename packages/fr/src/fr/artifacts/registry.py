@@ -45,6 +45,7 @@ from fr.artifacts.structure import (
     validate_journal,
     validate_matrix,
     validate_plan,
+    validate_profiles,
     validate_record,
     validate_run,
     validate_spec,
@@ -438,6 +439,20 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_record,
+        ),
+        ArtifactKind(
+            name="profiles",
+            # 1 -> 2: top-level `backend:`/`host:` become nested `forge:`, `ci:`
+            # and `tracking:` blocks (spec `2026-09-28-fr-profiles-services-design`
+            # §3.D), migration `fr.artifacts.profiles_services`. Fields MOVE, so
+            # version 1 is read only through the frozen
+            # `fr.services.legacy.ProfilesV1`. An unstamped file is version 1.
+            current_version=2,
+            locator=".devcontainer/fr-profiles.yaml",
+            stamp="`schema_version` in `fr-profiles.yaml`",
+            read_stamp=_read_yaml_stamp,
+            write_version=_write_yaml_stamp,
+            validate=validate_profiles,
         ),
     )
 }

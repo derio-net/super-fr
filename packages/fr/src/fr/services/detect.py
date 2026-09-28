@@ -24,6 +24,7 @@ import yaml
 
 from fr._hosts import HostBackend
 from fr.acceptance.ci import ci_config
+from fr.services.model import CI_FOR_FORGE
 
 CiPresence = Literal["real", "fr-only", "absent"]
 
@@ -78,3 +79,11 @@ def detect_ci(root: Path, forge_type: str) -> CiPresence:
     if path.is_file():
         return _gitlab_presence(path)
     return _workflows_presence(path)
+
+
+def detected_ci_type(root: Path, forge_type: str) -> str:
+    """The `ci` type a version-1 file stands for: the forge's own pipeline
+    when `root` carries real CI, else `none`. ONE function for the resolver's
+    legacy branch and the 1 -> 2 migration, so `fr services` on an unmigrated
+    file shows exactly what the migration then writes."""
+    return CI_FOR_FORGE[forge_type] if detect_ci(root, forge_type) == "real" else "none"

@@ -35,7 +35,7 @@ from pydantic import ValidationError
 from fr._hosts import HostBackend, backend_for_hostname, origin_hostname, self_hosted_hostname
 from fr.acceptance.ci import ci_config
 from fr.isolation.types import profiles_config
-from fr.services.detect import detect_ci
+from fr.services.detect import detected_ci_type
 from fr.services.legacy import ProfilesV1
 from fr.services.model import (
     CI_FOR_FORGE,
@@ -198,8 +198,7 @@ def _ci(
         if declared is not None:
             return _with_host("ci", declared.type, declared.host, "declared", forge)
     elif config is not None:
-        presence = detect_ci(repo_root, forge.type)
-        return _with_host("ci", own if presence == "real" else "none", None, "legacy", forge)
+        return _with_host("ci", detected_ci_type(repo_root, forge.type), None, "legacy", forge)
     found = ci_config(repo_root, cast(HostBackend, forge.type))
     return _with_host("ci", own if found else "none", None, "default", forge)
 

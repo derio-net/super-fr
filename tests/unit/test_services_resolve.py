@@ -174,7 +174,7 @@ class TestForgeOnly:
         def boom(*_a: object, **_k: object) -> None:
             raise AssertionError("must not be called")
 
-        for name in ("origin_hostname", "detect_ci", "ci_config"):
+        for name in ("origin_hostname", "detected_ci_type", "ci_config"):
             monkeypatch.setattr(resolve_mod, name, boom)
 
     @pytest.mark.parametrize(
