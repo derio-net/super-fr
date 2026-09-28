@@ -9,3 +9,8 @@ On 2026-09-28, six triage batches (fr 4.29.7, Claude Code) reached fr-goal's rou
 ### 21baff7ec6bc · ruled-out · resolve's round counter does not depend on the label or on calls sharing a message
 
 answered_rounds_since (fr/run/telemetry.py) groups consecutive QUESTION_TOOL tool_uses across assistant records; user tool_result records and text turns never close a round, only a non-question, non-progress-tracking tool_use does. test_a_round_counts_when_any_of_its_calls_was_answered already chains call→answer→call as ONE round. The only label text resolve reads is the substring 'a 2nd round may follow' (run_cmd.ANNOUNCEMENTS), matched in any question text of round 1. So sequential calls and a per-question label need no code change.
+
+<!-- fr:journal kind=root-cause scope=debug id=c0b529d429c9 created=2026-09-28T18:46:25+00:00 -->
+### c0b529d429c9 · root-cause · fr-goal §1's split rule says 'back-to-back', never 'wait for the answer', and gives a per-call label to per-question tabs
+
+'ceil(N/4) CONSECUTIVE calls, back-to-back with no other tool call between them' is satisfied by parallel calls in one message, which Claude Code shows last-first — defeating 'interpretations of the input come first'. The 'a–b names each call's part' label is attached to a call but written into each question's text, so agents disagree on whose range it is, and a lone last question reads '5–5 of 5'. The greedy 4+1 split also leaves a singleton call. fr-brainstorming defers to fr-goal and does not restate the rule.
