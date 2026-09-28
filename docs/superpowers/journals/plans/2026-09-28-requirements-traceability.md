@@ -321,3 +321,41 @@ spec_emitter, run_spec, rows_citing, load_spec_matrix in fr.requirements, used b
 ### p3-e6-resolved · finding [out-of-scope] · resolves p3-e6: fr run adopt on a brand-new spec switches all three gates off (phase 3)
 
 The code implements spec §G as written; closing it is a spec change (have adopt mark its brainstorm record, or compare brainstorm's time to the gate's release). Listed in the PR for filing.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-verify-has-no-set-status-verb created=2026-09-28T12:26:36+00:00 phase=4 -->
+### p4-verify-has-no-set-status-verb · discovery · fr acceptance set-status has no --verify flag — verify:post-merge cannot be set on an existing row (phase 4)
+
+P4.T3.S2 asked to set `verify: post-merge` on requirements-always-ask
+and requirements-spec-review-traceability, two rows `fr acceptance add`
+already created (phase 1/brainstorm) without `verify`. Checked
+`set_status_cmd` (`packages/fr/src/fr/commands/acceptance_cmd.py:423-469`)
+and `apply.py:685-706`: `set-status` builds its `AcceptanceItem` with no
+`verify` field at all, and the apply path's own comment confirms the
+design — "a status move keeps the row's `verify` unless it names one" —
+so it can only PRESERVE an existing `verify`, never SET one on a row
+that lacks it. Only `add` accepts `--verify`, and `add` refuses a
+duplicate id (by design, so a typo never orphans a row). There is no
+verb today that adds `verify: post-merge` to an existing row without
+deleting and re-adding it (also no delete verb). Left both rows
+untouched rather than hand-editing matrix.yaml (forbidden by
+.claude/rules/acceptance-matrix.md); they still correctly report
+not-implemented, just without the post-merge marker, so `deliver`'s
+`requirement-rows` gate will (correctly, if conservatively) block on
+them citing this spec's own requirements until either a `--verify` is
+added to `set-status`, or they are deleted and re-added with `add
+--verify post-merge`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-09-28T12:26:36+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+one contiguous prose rewrite to fr-spec-reviewer.md; nothing duplicated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-09-28T12:26:36+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+each skill's addition is a paragraph in its own existing section; the mirror sync is generated, not hand-duplicated
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-09-28T12:26:36+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+the explainer prose, AGENTS.md bullet and the 7 acceptance set-status calls are each a single addition; nothing duplicated to extract

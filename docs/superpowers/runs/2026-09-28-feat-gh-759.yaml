@@ -136,7 +136,7 @@ steps:
           reviewer: a3f3d05b5a69fe965
           findings: p3-e1,p3-e2,p3-e3,p3-e4,p3-e5,p3-e6
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T11:58:29+00:00'
           agent: a64b542f9ba248379
@@ -144,6 +144,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: a913f2c8-de7e-4aab-99a6-e1bfe2c563de
+          returned: '2026-09-28T12:26:37+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
