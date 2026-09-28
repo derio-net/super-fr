@@ -121,23 +121,14 @@ def render_out_of_scope(lines: Sequence[str]) -> str:
     return "\n".join(lines) if lines else "None."
 
 
-def _run_spec(state: RunState) -> str | None:
-    return next(
-        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
-        None,
-    )
-
-
 def _predates_gate(state: RunState) -> bool:
     """§G, as the run records it: no step recorded the run's spec, the one
     that did carries no `requirements` evidence, or a unit stored the
     predates line for `requirements`/`coverage`."""
-    from fr.requirements import REQUIREMENTS_PREDATES
+    from fr.requirements import REQUIREMENTS_PREDATES, spec_emitter
     from fr.run import units
 
-    emitter = next(
-        ((sid, r) for sid, r in state.steps.items() if r.emitted and "spec" in r.emitted), None
-    )
+    emitter = spec_emitter(state)
     if emitter is None:
         return True
     sid, record = emitter
@@ -155,12 +146,12 @@ def _input_coverage(repo_root: Path, state: RunState) -> str:
     long), read from the review entry the unit that recorded `coverage` names.
     The predates line only for a run §G covers; any other miss says why it is
     `Not available` — a lookup failure is not a run from before the gate."""
-    from fr.requirements import coverage_block
+    from fr.requirements import coverage_block, run_spec
     from fr.run import units
 
     if _predates_gate(state):
         return PREDATES_LINE
-    spec_rel = _run_spec(state)
+    spec_rel = run_spec(state)
     assert spec_rel is not None  # _predates_gate is True without one
     recorded = next(
         (
@@ -192,24 +183,21 @@ def _input_coverage(repo_root: Path, state: RunState) -> str:
 
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     """Every `verify: post-merge` row citing the run's spec (§F), or `None.`."""
-    from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, load_matrix
-    from fr.requirements import origin_fragment
+    from fr.acceptance.model import AcceptanceError
+    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.requirements import load_spec_matrix, rows_citing, run_spec
 
-    spec_rel = _run_spec(state)
-    matrix_path = repo_root / "docs" / "acceptance" / "matrix.yaml"
-    if spec_rel is None or not matrix_path.is_file():
+    spec_rel = run_spec(state)
+    if spec_rel is None or not (repo_root / MATRIX_REL).is_file():
         return "None."
     try:
-        matrix = load_matrix(matrix_path)
-        _, repo = resolve_identity(matrix, repo_root)
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
     except AcceptanceError as e:
         return f"Not available: {e}"
-    ref = f"{repo}:{spec_rel}"
     lines = [
         f"- `{r.id}` — {r.acceptance}"
-        for r in matrix.rows
-        if r.verify == "post-merge" and any(origin_fragment(o, ref) is not None for o in r.origin)
+        for r in rows_citing(matrix, spec_ref)
+        if r.verify == "post-merge"
     ]
     return "\n".join(lines) if lines else "None."
 

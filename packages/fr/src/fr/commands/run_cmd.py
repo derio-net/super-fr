@@ -1535,8 +1535,9 @@ def _review_journal_entries(
     one: no spec recorded is a refusal, not an empty journal."""
     if target.scope == "plan":
         return _plan_journal_entries(repo_root, state)
-    found = _spec_emitter(state)
-    spec_rel = found[1].emitted["spec"] if found is not None and found[1].emitted else None
+    from fr.requirements import run_spec
+
+    spec_rel = run_spec(state)
     if spec_rel is None:
         raise RunStateError(
             "cannot verify evidence — no spec recorded yet (resolve the step "
@@ -1791,13 +1792,6 @@ def _requirements_refusal(key: str, lines: list[str]) -> NoReturn:
     raise typer.Exit(2)
 
 
-def _spec_emitter(state: RunState) -> tuple[str, StepRecord] | None:
-    """The step that recorded the run's spec, and its record."""
-    return next(
-        ((sid, r) for sid, r in state.steps.items() if r.emitted and "spec" in r.emitted), None
-    )
-
-
 def _predates_requirements(state: RunState, step: Step) -> bool:
     """§G, decided by the step. The step that emits `spec` is the gate itself
     and never predates it. Any other step predates the gate when no step
@@ -1805,9 +1799,11 @@ def _predates_requirements(state: RunState, step: Step) -> bool:
     or a cursor rebuilt by `fr run adopt`) or when the step that did carries no
     `requirements` evidence. Such a run records the predates line instead of
     refusing: an obligation is never enforced backwards in time."""
+    from fr.requirements import spec_emitter
+
     if "spec" in step.emits:
         return False
-    found = _spec_emitter(state)
+    found = spec_emitter(state)
     if found is None:
         return True
     sid, record = found
@@ -1820,15 +1816,10 @@ def _requirements_capture(
     """Load the spec, spec journal and matrix once, for all three witnesses —
     or exit 2. Fail-closed: a gate that cannot read its source does not know
     whether it passed."""
-    from fr.acceptance.check import resolve_identity
-    from fr.acceptance.model import AcceptanceError, Matrix
-    from fr.acceptance.model import load_matrix as load_acceptance_matrix
-    from fr.commands.acceptance_cmd import MATRIX_REL
+    from fr.acceptance.model import AcceptanceError
+    from fr.requirements import load_spec_matrix, run_spec
 
-    found = _spec_emitter(state)
-    spec_rel = emitted.get("spec") or (
-        found[1].emitted["spec"] if found is not None and found[1].emitted else None
-    )
+    spec_rel = emitted.get("spec") or run_spec(state)
     why = "cannot derive requirements evidence"
     if spec_rel is None:
         # Reached only by the step that emits `spec` (any other predates the
@@ -1850,10 +1841,8 @@ def _requirements_capture(
         entries = parse_journal(jpath.read_text()) if jpath.exists() else []
     except (JournalParseError, OSError) as e:
         _requirements_refusal(key, [f"{why} — spec journal {jpath} is unreadable: {e}"])
-    matrix_path = repo_root / MATRIX_REL
     try:
-        matrix = load_acceptance_matrix(matrix_path) if matrix_path.exists() else Matrix()
-        _, repo = resolve_identity(matrix, repo_root)
+        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
     except AcceptanceError as e:
         _requirements_refusal(key, [f"{why} — {e}"])
     return _RequirementsCapture(
@@ -1861,7 +1850,7 @@ def _requirements_capture(
         spec_text=spec_text,
         entries=entries,
         matrix=matrix,
-        spec_ref=f"{repo}:{spec_rel}",
+        spec_ref=spec_ref,
     )
 
 
@@ -1962,16 +1951,12 @@ def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:
     from fr.requirements import (
         RequirementsError,
         is_cited,
-        origin_fragment,
         parse_requirements,
+        rows_citing,
         uncited_problem,
     )
 
-    rows = [
-        r
-        for r in capture.matrix.rows
-        if any(origin_fragment(o, capture.spec_ref) is not None for o in r.origin)
-    ]
+    rows = rows_citing(capture.matrix, capture.spec_ref)
     # Re-apply §C's citation rule: a row deleted after spec-review, or a spec
     # amended to another, must not pass on whatever rows happen to remain.
     try:

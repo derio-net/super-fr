@@ -1,11 +1,10 @@
 """Requirements traceability: §B grammar, §C structural gate, §D coverage
 partition (spec `2026-09-28-requirements-traceability-design.md`).
 
-Phase 1 skeleton: this module is pure, no I/O. The CLI wrapper
-(`fr spec requirements`, `fr.commands.spec_cmd`) is the only caller that
-touches disk; `fr run resolve`'s `requirements`/`coverage` derived-evidence
-wiring (spec §C/§D) lands in a later phase and calls the SAME
-`check_requirements`/`check_coverage` — never a copy.
+The checks are pure, no I/O. The one disk read here is `load_spec_matrix`,
+shared by `fr run resolve`'s derived evidence (`fr.commands.run_cmd`) and the
+PR body (`fr.record.pr_body`), which both call the SAME `run_spec`,
+`rows_citing` and `check_requirements`/`check_coverage` — never a copy.
 
 Input-entry detection (`is_input_entry`) reads `JournalEntry.input`, the
 `input=true` header token (spec §A) the model allows only on a spec-scope
@@ -17,10 +16,14 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
-from fr.acceptance.model import AcceptanceError, Matrix, archive_twin, split_ref
+from fr.acceptance.model import AcceptanceError, Matrix, Row, archive_twin, split_ref
 from fr.journal.model import JournalEntry
+
+if TYPE_CHECKING:
+    from fr.run.model import RunState, StepRecord
 
 # --- shapes ----------------------------------------------------------------
 
@@ -325,6 +328,15 @@ def origin_fragment(origin: str, spec_ref: str) -> str | None:
     return None
 
 
+def rows_citing(matrix: Matrix, spec_ref: str) -> list[Row]:
+    """Every matrix row with an `origin` naming the spec `spec_ref` (any
+    fragment or none) — what the `requirement-rows` gate counts and the PR
+    body's post-merge section lists (§F)."""
+    return [
+        r for r in matrix.rows if any(origin_fragment(o, spec_ref) is not None for o in r.origin)
+    ]
+
+
 def is_cited(req_id: str, matrix: Matrix, spec_ref: str) -> bool:
     """True when some matrix row's `origin` names `spec_ref#<req_id>` (its
     archive twin resolves too) — the §C citation rule, which the
@@ -511,3 +523,32 @@ def check_coverage(
         )
 
     return problems, counts
+
+
+# --- the run's spec and its matrix ---------------------------------------------
+
+
+def spec_emitter(state: RunState) -> tuple[str, StepRecord] | None:
+    """The step that recorded the run's `emitted.spec`, and its record."""
+    return next(
+        ((sid, r) for sid, r in state.steps.items() if r.emitted and "spec" in r.emitted), None
+    )
+
+
+def run_spec(state: RunState) -> str | None:
+    """The run's spec (repo-relative), as the step that emitted it recorded it."""
+    found = spec_emitter(state)
+    return found[1].emitted["spec"] if found is not None and found[1].emitted else None
+
+
+def load_spec_matrix(repo_root: Path, spec_rel: str) -> tuple[Matrix, str]:
+    """The acceptance matrix (empty when the repo has none) and `spec_rel`'s
+    `<repo>:<spec-path>` ref — or `AcceptanceError`."""
+    from fr.acceptance.check import resolve_identity
+    from fr.acceptance.model import load_matrix
+    from fr.commands.acceptance_cmd import MATRIX_REL
+
+    path = repo_root / MATRIX_REL
+    matrix = load_matrix(path) if path.exists() else Matrix()
+    _, repo = resolve_identity(matrix, repo_root)
+    return matrix, f"{repo}:{spec_rel}"
