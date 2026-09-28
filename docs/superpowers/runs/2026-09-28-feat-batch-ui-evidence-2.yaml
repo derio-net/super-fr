@@ -3,7 +3,7 @@ run: 2026-09-28-feat-batch-ui-evidence-2
 workflow: fr-goal@1
 branch: feat/batch-ui-evidence-2
 started: '2026-09-28T19:04:41+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -50,7 +50,11 @@ steps:
           returned: '2026-09-28T19:25:28+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-28T19:25:29+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
