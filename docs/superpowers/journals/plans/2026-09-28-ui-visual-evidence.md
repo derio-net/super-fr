@@ -235,3 +235,58 @@ Prose-only edits across five canonical files plus their generated mirrors, and o
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 One GitHub issue filed and four verification commands run (ruff format/check, mypy, full suite); no code touched, nothing to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-09-28T21:38:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · visual-evidence-browser-check-prose row text still said 'prefer a committed script' (phase 3)
+
+visual-evidence-browser-check-prose row text still said 'prefer a committed script'
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-28T21:38:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · browser-check prose never says where shots live (take 9 lost them in the container /tmp) (phase 3)
+
+browser-check prose never says where shots live (take 9 lost them in the container /tmp)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-28T21:38:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · fr-goal §6 dropped the reviewer's script-coverage audit (phase 3)
+
+fr-goal §6 dropped the reviewer's script-coverage audit
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-09-28T21:38:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · fr-brainstorming §3 collapsed into one 601-char line against the file's 76-80 col style (phase 3)
+
+fr-brainstorming §3 collapsed into one 601-char line against the file's 76-80 col style
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-09-28T21:38:44+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · explainer said 'every named state' though interactions are covered too (phase 3)
+
+explainer said 'every named state' though interactions are covered too
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-09-28T21:38:44+00:00 phase=3 -->
+### review-p3 · review · phase 3 prose review: 5 findings (all in scope) (phase 3)
+
+Independent reviewer (separate context, standard tier, with shell) reviewed git diff f7a53fec..HEAD (skills, agent, mirrors, explainer, prose test, matrix). Verified mirrors in sync, neutrality tripwire clean, skill validation and explainer tripwire green, acceptance check/report clean, fr-execute renumbering consistent. Findings p3-r1..p3-r5.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-09-28T21:38:44+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: visual-evidence-browser-check-prose row text still said 'prefer a committed script' (phase 3)
+
+7069e120: row text now reads 'prefer a capture script re-run at each stage' (spec §D: committing is the implementer's call); reports regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-09-28T21:38:44+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: browser-check prose never says where shots live (take 9 lost them in the container /tmp) (phase 3)
+
+7069e120: fr-execute step 3 and fr-goal §5 name a git-ignored worktree dir (devcontainer bind mount) or a host-visible scratch dir, never the container's /tmp or <run>.records/. Pinned by test_fr_execute_browser_check_says_where_shots_live and test_fr_goal_section5_says_where_shots_live.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-09-28T21:38:44+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: fr-goal §6 dropped the reviewer's script-coverage audit (phase 3)
+
+7069e120: §6 adds 'checking the script covers every name the row declares'; test_fr_goal_section6_review_phase_names_the_reviewers_own_screenshots asserts it.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-09-28T21:38:44+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: fr-brainstorming §3 collapsed into one 601-char line against the file's 76-80 col style (phase 3)
+
+7069e120: original wrapping restored; the new sentence is appended to the one line where it belongs (187 chars). The file was already at exactly the 120-line cap before this change and no paragraph saves a line on rewrap, so a fully wrapped form (122 lines) would fail test_skill_validation's cap; this is the smallest outlier that fits.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-09-28T21:38:44+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: explainer said 'every named state' though interactions are covered too (phase 3)
+
+7069e120: 'every named state and interaction'; the .html regenerated per explainers-currency (unmodified re-render byte-identical first, then a one-sentence page diff).
