@@ -80,3 +80,65 @@ Independent reviewer (dispatched code-reviewer, standard tier) over eac98902..9d
 ### p1-c1-resolved · finding [fixed] · resolves p1-c1: check_coverage's single-space join falsely refuses a partition cut with no whitespace at the boundary (phase 1)
 
 Whitespace-insensitive comparison in check_coverage; three boundary tests (no-space cut, cut at a space, entries with no separator); spec §D check 2 reworded.
+
+<!-- fr:journal kind=decision scope=plan id=p2-token-scope-in-model created=2026-09-28T10:42:24+00:00 phase=2 -->
+### p2-token-scope-in-model · decision · input/unconfirmed scope rules live in the JournalEntry validator; only the review_scope=out refusal lives in the writers (phase 2)
+
+A JournalEntry carries its own `scope`, so both scope rules (`input` only on a
+spec `discovery`, `unconfirmed` only on a spec `open` resolution record that
+is neither a deferral nor out-of-scope) are enforced once, in the model
+validator beside `out_of_scope`'s, and every writer shares them. The one
+refusal the model cannot make is `unconfirmed` on a finding the reviewer
+tagged `review_scope: out`, because that needs the TARGET finding; it is
+enforced in `fr journal resolve` and `record.apply._journal_writes`.
+`is_input_entry` now reads `JournalEntry.input` directly; the phase-1
+`parse_journal` bridge in test_spec_requirements_cmd.py is removed.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-unconfirmed-one-refusal-fn created=2026-09-28T10:42:24+00:00 phase=2 -->
+### p2-unconfirmed-one-refusal-fn · discovery · the verb and the record path share one unconfirmed-refusal function; record fields landed in T2 (phase 2)
+
+`fr journal resolve` already routes through `apply_record` with a
+one-entry StepRecord, so the verb and a step record hit `_journal_writes`
+alike. The two target-dependent rules (spec scope; not a reviewer-`out`
+finding) are stated once, in `fr.record.apply.unconfirmed_refusal`; the
+verb also calls it right after the target loads (spec §D point 1) so it
+refuses with its own message before building a record, and
+`_journal_writes` calls it with the step's manifest-derived journal scope
+(point 2). `JournalItem.input` and `ResolutionState` + `unconfirmed`
+had to land in T2 (the record-path tests need them); T3 carries the
+stamp bump and migration for them. The record-path tests walk a real
+run to `spec-review` (spec scope) and to `implement-phase` (plan scope).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-matrix-born-current created=2026-09-28T10:42:24+00:00 phase=2 -->
+### p2-matrix-born-current · discovery · fr acceptance init now scaffolds schema_version, and reports are untouched by verify (phase 2)
+
+With the matrix kind at 2, a freshly scaffolded matrix with no stamp would
+read as version 1 and be stale on birth, so the non-interactive CLI gate
+would refuse the first fr command in a new consumer repo. `init` now writes
+`schema_version: <current>` above `org:` (read from the registry, never a
+second constant), keeping `rows:` the last top-level key. `verify` is
+rendered into matrix.yaml only when set, so every existing row stays
+byte-identical, and the three reports do not render it (the plan allowed
+that only with no layout change; none was attempted). The runner's
+closed-world test now treats matrix like run: stamped, parseable, body
+untouched.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-28T10:42:24+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the one duplicated rule (the verb's and the record's unconfirmed refusals) was extracted into unconfirmed_refusal while going green; nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-09-28T10:42:24+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the 1->2 guard was renamed guard_record and reused by the 2->3 hop rather than copied; the new migration module is a registration and nothing else
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-09-28T10:42:24+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+each change is a field, a flag or a stamp-only registration; the only judgement call (verify preserved on a status move unless the record names one) lives in one line of _acceptance_writes
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-28T10:42:24+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done
