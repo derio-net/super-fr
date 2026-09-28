@@ -1,0 +1,70 @@
+name: acceptance-report
+
+# The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
+# - `failing` rows FAIL this workflow (by design — fix or re-classify).
+# - `skipped` / `not-implemented` rows surface as warning annotations; the
+#   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - A Markdown summary is written to each Actions run (branch, PR, main).
+# - The built report (GitHub-linked at this ref) is uploaded as an artifact.
+# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
+# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
+# check` warns and verifies them on local runs, where siblings exist.
+# If PR-time path filters are added later, they must include every own-repo
+# path the matrix references — `fr acceptance check` warns when one falls outside them.
+
+on:
+  pull_request: {}
+  push:
+    branches: ["**"]
+  schedule:
+    - cron: "47 5 * * 1" # weekly, Monday 05:47 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v5
+      - name: Install fr
+        run: uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+      - name: Check matrix (gate — failing rows fail here)
+        run: fr acceptance check
+      - name: Write Actions summary (branch / PR / main)
+        if: always()
+        run: fr acceptance summary >> "$GITHUB_STEP_SUMMARY"
+      - name: Build report (GitHub links at this ref)
+        env:
+          REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: fr acceptance report --link-mode github --ref "$REF"
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-report
+          path: docs/acceptance/report.html
+          retention-days: 90
+      - name: Upsert acceptance-debt issue (weekly digest)
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fr acceptance digest > /tmp/digest.md
+          # Idempotence keyed on the body marker `fr acceptance digest` emits,
+          # not the title — a pre-existing issue that merely says "Acceptance
+          # debt" in its title must not be hijacked.
+          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \
+                --json number --jq '.[0].number // empty')
+          if grep -q "No open acceptance debt." /tmp/digest.md; then
+            if [ -n "$num" ]; then
+              gh issue close "$num" --comment "Acceptance debt cleared — closing."
+            fi
+          elif [ -n "$num" ]; then
+            gh issue edit "$num" --body-file /tmp/digest.md
+          else
+            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
+          fi

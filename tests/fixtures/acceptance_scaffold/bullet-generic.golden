@@ -1,0 +1,2 @@
+- CI: the acceptance job in `{path}` runs `fr acceptance check` on every
+  pipeline and upserts the weekly "Acceptance debt" issue.

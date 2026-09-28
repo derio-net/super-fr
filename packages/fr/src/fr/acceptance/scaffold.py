@@ -124,8 +124,7 @@ on:
 
 permissions:
   contents: read
-  issues: write
-
+@@DEBT_PERMS@@
 jobs:
   matrix:
     runs-on: ubuntu-latest
@@ -379,11 +378,17 @@ WORKFLOW_TEMPLATES = {
 }
 
 
+DEBT_PERMS = "  issues: write\n"
+
+
 def render_workflow(ci_type: str, *, debt: bool) -> str:
-    """The scaffolded pipeline for `ci_type`, with or without the debt step."""
+    """The scaffolded pipeline for `ci_type`, with or without the debt step
+    (and the `issues: write` permission only that step needs)."""
     text = WORKFLOW_TEMPLATES[ci_type]
-    return text.replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "").replace(
-        "@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else ""
+    return (
+        text.replace("@@DEBT_PERMS@@", DEBT_PERMS if debt else "")
+        .replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "")
+        .replace("@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else "")
     )
 
 

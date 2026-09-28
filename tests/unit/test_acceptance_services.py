@@ -135,7 +135,7 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
         outcome = init(root, "derio-net", "demo", "github", ci_type=ci_type, tracking_type=tracking)
         assert "Acceptance debt" not in (root / path).read_text()
         assert "Acceptance debt" not in (root / ".claude/rules/acceptance-matrix.md").read_text()
-        assert any("debt" in n for n in outcome.notices)
+        assert any(n.startswith("no debt  the weekly") for n in outcome.notices)
         assert "on:" in (root / path).read_text() or "stages:" in (root / path).read_text()
 
     @pytest.mark.parametrize(
@@ -159,3 +159,126 @@ class TestDebtStepOnlyOnTheTrackersPlatform:
         assert result.exit_code == 0, result.output
         assert "Acceptance debt" not in (root / GITHUB_WF).read_text()
         assert "debt" in result.output
+
+
+GOLDEN = Path(__file__).parent.parent / "fixtures" / "acceptance_scaffold"
+CI_TYPES = ("github-actions", "gitea-actions", "gitlab-ci")
+
+
+class TestGoldenRenders:
+    """Captured from origin/main's scaffold.py before the debt split (r4)."""
+
+    @pytest.mark.parametrize("ci_type", CI_TYPES)
+    def test_debt_on_is_byte_identical_to_the_pre_split_template(self, ci_type: str) -> None:
+        from fr.acceptance.scaffold import render_workflow
+
+        assert render_workflow(ci_type, debt=True) == (GOLDEN / f"{ci_type}.golden").read_text()
+
+    @pytest.mark.parametrize("debt", [True, False])
+    @pytest.mark.parametrize("ci_type", CI_TYPES)
+    def test_no_token_survives_a_render(self, ci_type: str, debt: bool) -> None:
+        from fr.acceptance.scaffold import render_workflow
+
+        assert "@@" not in render_workflow(ci_type, debt=debt)
+
+    def test_debt_off_drops_the_issues_permission(self) -> None:
+        from fr.acceptance.scaffold import render_workflow
+
+        assert "issues: write" in render_workflow("github-actions", debt=True)
+        off = render_workflow("github-actions", debt=False)
+        assert "issues: write" not in off
+        assert "permissions:\n  contents: read\n\njobs:" in off
+
+    def test_rule_bullets_are_byte_identical_when_debt_is_kept(self, tmp_path: Path) -> None:
+        gh = tmp_path / "gh"
+        gh.mkdir()
+        init(gh, "o", "r", "github", ci_type="github-actions", tracking_type="github")
+        rule = (gh / ".claude/rules/acceptance-matrix.md").read_text()
+        assert (GOLDEN / "bullet-github.golden").read_text() in rule
+        gl = tmp_path / "gl"
+        gl.mkdir()
+        init(gl, "o", "r", "gitlab", ci_type="gitlab-ci", tracking_type="gitlab")
+        rule = (gl / ".claude/rules/acceptance-matrix.md").read_text()
+        generic = (GOLDEN / "bullet-generic.golden").read_text().format(path=".gitlab-ci.yml")
+        assert generic in rule
+
+    def test_the_omitted_notice_is_exact(self, tmp_path: Path) -> None:
+        root = tmp_path / "r"
+        root.mkdir()
+        outcome = init(root, "o", "r", "github", ci_type="github-actions", tracking_type="none")
+        assert outcome.notices == [
+            'no debt  the weekly "Acceptance debt" issue step is omitted from '
+            ".github/workflows/acceptance-report.yml — tracking is 'none', not the "
+            "github-actions platform's own (github); see `fr services`"
+        ]
+
+
+class TestMalformedCiDeclarationRefuses:
+    """r1 — a malformed `ci:` never falls through to the raw probe."""
+
+    @pytest.mark.parametrize(
+        "block", ["ci: none\n", "ci: {type: bogus}\n", "ci: {type: jenkins}\n"]
+    )
+    def test_set_status_ci_refused_and_matrix_unchanged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, block: str
+    ) -> None:
+        root = make_repo(tmp_path, row(id="target", status="skipped"), ci=True)
+        (root / ".devcontainer").mkdir()
+        (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+            PROFILES + "schema_version: 2\n" + block
+        )
+        matrix = root / "docs" / "acceptance" / "matrix.yaml"
+        before = matrix.read_text()
+        result = _invoke(
+            root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"
+        )
+        assert result.exit_code != 0, result.output
+        assert "fr-profiles.yaml" in result.output
+        assert matrix.read_text() == before
+
+    def test_add_ci_refused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        root = make_repo(tmp_path, "", ci=True)
+        (root / ".devcontainer").mkdir()
+        (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+            PROFILES + "schema_version: 2\nci: none\n"
+        )
+        result = _invoke(
+            root, monkeypatch, "add", "--id", "n", "--capability", "C",
+            "--acceptance", "A", "--status", "ci",
+        )  # fmt: skip
+        assert result.exit_code != 0
+        assert "fr-profiles.yaml" in result.output
+
+
+class TestFrOnlyScaffoldIsNotCi:
+    """r3 — v1 file whose only CI file is fr's own scaffold."""
+
+    def _v1(self, tmp_path: Path) -> Path:
+        root = tmp_path / "demo"
+        root.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(["git", "remote", "add", "origin", GITHUB], cwd=root, check=True)
+        (root / ".devcontainer").mkdir()
+        (root / ".devcontainer" / "fr-profiles.yaml").write_text(PROFILES + "backend: github\n")
+        wf = root / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "acceptance-report.yml").write_text("on: push\n")
+        return root
+
+    def test_reason_says_only_the_scaffold_was_found(self, tmp_path: Path) -> None:
+        from fr.acceptance.ci import ci_reason
+
+        reason = ci_reason(self._v1(tmp_path))
+        assert reason is not None
+        assert "acceptance scaffold" in reason
+        assert "declare `ci:`" in reason
+        assert "no CI config" not in reason
+
+    def test_set_status_ci_refusal_and_init_notice(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = self._v1(tmp_path)
+        result = _invoke(root, monkeypatch, "init")
+        assert result.exit_code == 0, result.output
+        assert "acceptance scaffold" in result.output
+        assert "no CI config" not in result.output

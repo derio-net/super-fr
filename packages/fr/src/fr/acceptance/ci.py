@@ -14,7 +14,7 @@ gh#774 adds a declared `ci:` service (`type: none` switches CI off):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from fr._hosts import HostBackend
 
@@ -65,20 +65,43 @@ def no_ci_message(backend: HostBackend) -> str:
     return f"this repo has no CI config for its {backend} backend (looked for {looked})"
 
 
+def ci_none_reason(root: Path, services: Any) -> str | None:
+    """Why the resolved `ci` is none, when that is more specific than "no CI
+    config found": a declaration, or fr's own scaffold being the only CI file
+    (a v1 file's legacy detection discounts it). None otherwise."""
+    ci = services.ci
+    if ci.type != "none":
+        return None
+    if ci.source == "declared":
+        return "this repo declares `ci: {type: none}` in .devcontainer/fr-profiles.yaml"
+    if ci.source == "legacy":
+        from fr.services.detect import detect_ci
+
+        if detect_ci(root, services.forge.type) == "fr-only":
+            return (
+                "the only CI file found is fr's own acceptance scaffold, which does not count "
+                "as CI; declare `ci:` in .devcontainer/fr-profiles.yaml (see `fr services`)"
+            )
+    return None
+
+
 def ci_reason(root: Path) -> str | None:
     """Why this repo cannot hold a `ci` row, or None when it has CI.
 
-    Asks the resolved `ci` service (#774): a declared type wins outright
-    (`none` refuses, naming the declaration); undeclared, it is #787's probe of
-    the forge's own CI config."""
+    Asks the resolved `ci` service (#774), strictly: a malformed declaration is
+    a refusal naming .devcontainer/fr-profiles.yaml, never a fall-through to
+    the raw probe. A declared type wins outright (`none` refuses); undeclared,
+    it is #787's probe of the forge's own CI config."""
+    from fr.services.model import ServicesError
     from fr.services.resolve import resolve_services
 
-    services = resolve_services(root, lenient=True)
+    try:
+        services = resolve_services(root)
+    except ServicesError as exc:
+        return str(exc)
     if services.ci.type != "none":
         return None
-    if services.ci.source == "declared":
-        return "this repo declares `ci: {type: none}` in .devcontainer/fr-profiles.yaml"
-    return no_ci_message(cast(HostBackend, services.forge.type))
+    return ci_none_reason(root, services) or no_ci_message(cast(HostBackend, services.forge.type))
 
 
 def ci_active(root: Path) -> bool:

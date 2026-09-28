@@ -597,7 +597,6 @@ def init_cmd(
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(2) from e
     ci = services.ci
-    reason: str | None = None
     if ci.source == "declared" and ci.type == "none":
         if with_ci:
             err_console.print(
@@ -605,7 +604,9 @@ def init_cmd(
                 ".devcontainer/fr-profiles.yaml — change it with `fr services` or drop the flag"
             )
             raise typer.Exit(2)
-        reason = "this repo declares `ci: {type: none}`"
+    from fr.acceptance.ci import ci_none_reason
+
+    reason = ci_none_reason(root, services)
     ci_type = ci.type
     if ci_type == "none" and with_ci:
         ci_type = CI_FOR_FORGE[services.forge.type]
