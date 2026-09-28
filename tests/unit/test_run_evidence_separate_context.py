@@ -267,6 +267,25 @@ def test_a_suite_the_orchestrator_ran_is_accepted_with_its_hash(tmp_path: Path) 
     assert tests.startswith("c1.log@") and len(tests) == len("c1.log@") + 12
 
 
+def test_a_suite_logged_through_a_symlinked_dir_is_accepted(tmp_path: Path) -> None:
+    """gh#758: macOS `/tmp` is a symlink to `/private/tmp`. The gate resolves
+    the evidence path, so the command's own target must be resolved too, or a
+    `> /tmp/suite.log` can never match the log it wrote."""
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-d")
+    repo, shipped, opened = _at_deliver(tmp_path, root=root)
+    real = tmp_path / "private-tmp"
+    real.mkdir()
+    link = tmp_path / "tmp"
+    link.symlink_to(real, target_is_directory=True)
+    (real / "suite.log").write_text("291 passed in 45.99s\n")
+    ran_at(root, _later(opened), session_id="s-d", until=_soon(), log=link / "suite.log")
+
+    result = _deliver(repo, shipped, root, "s-d", f"tests={link / 'suite.log'}")
+
+    assert result.exit_code == 0, result.output
+
+
 def test_a_log_no_command_of_the_orchestrator_produced_is_refused(tmp_path: Path) -> None:
     """The #497 shape: a log exists (the executor wrote one), but this session
     never ran the suite."""
