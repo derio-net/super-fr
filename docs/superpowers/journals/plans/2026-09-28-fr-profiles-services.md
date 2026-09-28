@@ -656,3 +656,8 @@ Filed at closeout as #803.
 ### p4r-cross-repo-tracking-resolved-2 · finding [deferred → #804] · resolves p4r-cross-repo-tracking: Cross-repo plans: the gate reads the plan's repo, not target_repo's tracking
 
 Filed at closeout as #804.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-comment-roundtrip-resolved-2 created=2026-09-28T23:33:54+00:00 state=open resolves=p5r-comment-roundtrip tracked_by=#805 -->
+### p5r-comment-roundtrip-resolved-2 · finding [deferred → #805] · resolves p5r-comment-roundtrip: _update_profiles_yaml's safe_dump round trip drops comments in profiles:
+
+Filed at closeout as #805.
