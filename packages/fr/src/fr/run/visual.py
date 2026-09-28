@@ -114,7 +114,8 @@ def check_visual(
 ) -> VisualCheck:
     """Checks 1–3 of §C over every owed row — every problem, not the first.
 
-    1. the record's `visual` section has an entry for the row;
+    1. the record's `visual` section has exactly one entry for the row (a
+       repeated `row` id is refused, naming it);
     2. every state and interaction the row declares is named by some shot's
        `shows`, and `shows` names nothing the row does not declare;
     3. every shot has an image suffix, is not in `<run>.records/`, is
@@ -122,9 +123,16 @@ def check_visual(
        `fresh_required` (`review-phase`, `deliver`), was modified at or after
        the unit opened (one second of slack); a named capture script exists."""
     by_row: dict[str, VisualEvidence] = {}
+    repeated: list[str] = []
     for given in entries:
+        if given.row in by_row and given.row not in repeated:
+            repeated.append(given.row)
         by_row.setdefault(given.row, given)
-    problems: list[str] = []
+    problems = [
+        f"row {rid}: the record names it in more than one `visual` entry — merge its "
+        "shots into one entry"
+        for rid in repeated
+    ]
     checked: list[RowCheck] = []
     for row in owed:
         assert row.visual is not None  # `owed_rows` keeps only visual rows
@@ -236,6 +244,9 @@ class VisualRefusedError(Exception):
 class Derived:
     witness: str
     unobserved: bool
+    why: str | None = None
+    """Why checks 4–5 could not be read, when `unobserved` — printed by the
+    caller in its warning."""
 
 
 def role_for(evidence: Sequence[str], phase: int | None) -> Role:
@@ -291,14 +302,23 @@ def derive_visual(
     repo_root: Path,
     records_dir: Path,
     env: Mapping[str, str],
+    dispatched_as: str | None = None,
+    claim_hint: str = "fr run claim <run> --step <step> --item <item> --agent <id>",
 ) -> Derived:
     """The `visual` witness for one unit resolving `done` — or `VisualRefusedError`.
 
     `entries` is the record's `visual:` section, `None` on the flag form (which
     can carry none, so a unit that owes a row is refused and pointed at
     `--record`). Checks 1–3 (`check_visual`) always apply; checks 4–5 read the
-    witness transcript and are skipped — the witness marked `unobserved` —
-    only when it cannot be read."""
+    witness transcript and are skipped — the witness marked `unobserved`, with
+    `Derived.why` saying why — only when it cannot be read.
+
+    `dispatched_as` is the agent type the unit's attempt was dispatched to
+    (`None` when fr recorded no dispatch). A `holder` unit with no holder named
+    ran inline — the orchestrator's stream is its witness — UNLESS this session
+    shows a dispatch of that agent type since the unit opened: then an executor
+    did the work and must be claimed (`claim_hint`), because the orchestrator
+    opening the shots is not the executor opening them (review p2-r4)."""
     if not owed:
         return Derived(NONE, unobserved=False)
     ids = ", ".join(r.id for r in owed)
@@ -324,30 +344,69 @@ def derive_visual(
         raise VisualRefusedError(
             [f"refused — the visual evidence for {ids} is incomplete:", *check.problems]
         )
+
+    def unobserved(why: str) -> Derived:
+        return Derived(check.witness(unobserved=True), unobserved=True, why=why)
+
+    if since is None:
+        return unobserved("the unit's open time is not recorded, so there is no window to read")
+    witness = _witness_file(
+        env,
+        role,
+        holder=holder,
+        reviewer=reviewer,
+        since=since,
+        dispatched_as=dispatched_as,
+    )
+    if isinstance(witness, str):
+        return unobserved(witness)
+    transcript, whose, agent = witness
+    if transcript is False:
+        raise VisualRefusedError(
+            [
+                f"refused — the visual evidence for {ids} names {whose}, but {agent!r} "
+                "names no subagent this session dispatched. The screenshots must be opened "
+                "by a dispatched agent (a separate context), named by the id its dispatch "
+                "returned."
+            ]
+        )
+    if transcript == "unclaimed":
+        raise VisualRefusedError(
+            [
+                f"refused — this unit was dispatched to {dispatched_as}, and this session "
+                "shows that dispatch, but no holder was claimed, so fr cannot tell whose "
+                f"transcript owes the screenshot reads for {ids}. Claim the executor: "
+                f"`{claim_hint}` (or name it as `evidence: {{agent: <id>}}` in the record), "
+                "then resolve again."
+            ]
+        )
+    assert isinstance(transcript, Path)
+    main_thread = agent is None
     problems: list[str] = []
-    transcript = _witness_file(env, role, holder=holder, reviewer=reviewer)
-    if transcript is None or since is None:
-        return Derived(check.witness(unobserved=True), unobserved=True)
-    whose = _whose(role, holder=holder, reviewer=reviewer)
     for row in check.rows:
         for shot in row.shots:
-            seen = read_file_since(transcript, shot, since)
+            written = _dt.datetime.fromtimestamp(shot.stat().st_mtime, tz=_dt.UTC)
+            seen = read_file_since(
+                transcript, shot, since, not_before=written - SLACK, main_thread=main_thread
+            )
             if seen is None:
-                return Derived(check.witness(unobserved=True), unobserved=True)
+                return unobserved(f"the transcript {transcript} could not be read")
             if seen is False:
                 problems.append(
-                    f"row {row.row}: {shot} was not opened by {whose} since this unit "
-                    f"opened at {since} — open it with an image read and look at it"
+                    f"row {row.row}: {shot} was not opened in the transcript of {whose} "
+                    f"since this unit opened at {since} and the file was last written "
+                    f"({written.isoformat()}) — open it with an image read and look at it"
                 )
         if row.script is not None:
-            ran = shell_named_since(transcript, row.script, since)
+            ran = shell_named_since(transcript, row.script, since, main_thread=main_thread)
             if ran is None:
-                return Derived(check.witness(unobserved=True), unobserved=True)
+                return unobserved(f"the transcript {transcript} could not be read")
             if ran is False:
                 problems.append(
-                    f"row {row.row}: no shell call by {whose} named the capture script "
-                    f"{row.script} since this unit opened at {since} — re-run it, then "
-                    "open its fresh screenshots"
+                    f"row {row.row}: no shell call in the transcript of {whose} executed "
+                    f"the capture script {row.script} since this unit opened at {since} — "
+                    "re-run it by name (e.g. `node <script>`), then open its fresh "
+                    "screenshots"
                 )
     if problems:
         raise VisualRefusedError(
@@ -356,24 +415,74 @@ def derive_visual(
     return Derived(check.witness(), unobserved=False)
 
 
-def _whose(role: Role, *, holder: str | None, reviewer: str | None) -> str:
-    if role == "reviewer":
-        return f"the reviewer {reviewer}"
-    if role == "holder" and holder is not None:
-        return f"the unit's holder {holder}"
-    return "the orchestrator"
+def _unobservable(env: Mapping[str, str]) -> str:
+    """Why no session transcript can be read here — visual's own wording."""
+    from fr.harness.detect import detect_harness
+    from fr.harness.model import HarnessError
+
+    try:
+        harness = detect_harness(env)
+    except HarnessError:
+        harness = None
+    if harness is None:
+        return "no harness detected, so there is no transcript to find the screenshot reads in"
+    if harness != "claude-code":
+        return f"fr cannot yet read file opens from {harness}'s transcripts"
+    return "no readable transcript for this session"
+
+
+def _same_agent(observed: str | None, expected: str) -> bool:
+    """`observed` is `expected`, plugin-qualified or bare, on either side."""
+    if observed is None:
+        return False
+    return observed.split(":", 1)[-1] == expected.split(":", 1)[-1]
+
+
+_Witness = tuple[Path | Literal[False, "unclaimed"], str, str | None]
 
 
 def _witness_file(
-    env: Mapping[str, str], role: Role, *, holder: str | None, reviewer: str | None
-) -> Path | None:
-    """The witness transcript (§C, check 4), or `None` when unreadable."""
-    from fr.run.telemetry import _this_session, witness_transcript
+    env: Mapping[str, str],
+    role: Role,
+    *,
+    holder: str | None,
+    reviewer: str | None,
+    since: str,
+    dispatched_as: str | None,
+) -> _Witness | str:
+    """The witness transcript (§C, check 4) as `(file, whose, agent id)` — the
+    file `False` for an agent id this session never dispatched, `"unclaimed"`
+    for a dispatched holder unit nobody claimed — or, when it cannot be read,
+    the reason (a `str`)."""
+    from fr.run.telemetry import _this_session, attribute_dispatches, witness_transcript
 
     session = _this_session(env)
     if session is None:
-        return None
-    agent = reviewer if role == "reviewer" else holder if role == "holder" else None
-    if role == "reviewer" and agent is None:
-        return None
-    return witness_transcript(session, agent)
+        return _unobservable(env)
+    if role == "reviewer":
+        if reviewer is None:
+            return "no reviewer was named, so there is no reviewer transcript to read"
+        agent, whose = reviewer, f"the reviewer {reviewer}"
+    elif role == "holder" and holder is not None:
+        agent, whose = holder, f"the executor {holder} (the unit's holder)"
+    elif role == "holder":
+        agent = None
+        whose = "the orchestrator (the unit ran inline — no executor was claimed)"
+        if dispatched_as is not None:
+            start = parse_timestamp(since)
+            dispatched = [
+                d
+                for d in attribute_dispatches(session)
+                if _same_agent(d.agent_type, dispatched_as)
+                and d.started is not None
+                and start is not None
+                and d.started >= start
+            ]
+            if dispatched:
+                return ("unclaimed", whose, None)
+    else:
+        agent, whose = None, "the orchestrator"
+    found = witness_transcript(session, agent)
+    if found is None:
+        return f"the session transcript {session} could not be read"
+    return (found, whose, agent)

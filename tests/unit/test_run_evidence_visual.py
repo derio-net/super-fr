@@ -623,7 +623,7 @@ def test_a_named_script_no_shell_call_named_is_refused(tmp_path: Path) -> None:
     out = _resolve(repo, shipped, "code", "phase/1", record, root)
 
     assert out.exit_code == 2, out.output
-    assert "no shell call" in _squash(out.output)
+    assert "executed the capture script" in _squash(out.output)
 
 
 def test_a_named_script_that_was_run_passes(tmp_path: Path) -> None:
@@ -800,6 +800,7 @@ def _to_deliver(tmp_path: Path) -> tuple[Path, Path, str]:
                    visual=_visual(shot)))  # fmt: skip
     assert out.exit_code == 0, out.output
     _advance(repo, shipped, "phase/1/peer-review")
+    os.utime(shot)  # the review's own capture: fresh however long the steps above took
     out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot))
     assert out.exit_code == 0, out.output
     return repo, shipped, _advance(repo, shipped, "step/deliver")
@@ -831,3 +832,261 @@ def test_deliver_stale_shots_are_refused(tmp_path: Path) -> None:
 
     assert out.exit_code == 2, out.output
     assert "predates this unit" in _squash(out.output)
+
+
+# --- review findings p2-r1 … p2-r9 ---------------------------------------------------
+
+
+def test_a_record_naming_an_agent_this_session_never_dispatched_is_refused(
+    tmp_path: Path,
+) -> None:
+    """p2-r1: a readable session and a bogus holder id is a refusal — never
+    `unobserved`, which would let any made-up id skip checks 4–5."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", evidence={"agent": "bogus-id"}, visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "names no subagent this session dispatched" in _squash(out.output)
+    assert "'bogus-id'" in _squash(out.output)
+    assert "visual" not in _unit_evidence(repo, "implement", "phase/1/code")
+
+
+def test_a_read_before_the_shots_last_write_is_refused(tmp_path: Path) -> None:
+    """p2-r2: the read at T looked at bytes the write at T+5 replaced."""
+    from fr.run.telemetry import parse_timestamp
+
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    read_at = _stamp(opened, 2)
+    stamp = parse_timestamp(read_at)
+    assert stamp is not None
+    written = stamp.timestamp() + 5
+    os.utime(shot, (written, written))
+    _session(root, orchestrator=[_read(read_at, shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "was not opened" in _squash(out.output)
+    assert "last written" in _squash(out.output)
+
+
+def test_an_ignored_shot_inside_the_repo_passes_through_git(tmp_path: Path) -> None:
+    """p2-r3: the real `git check-ignore`, against the fixture's `shots/`."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = repo / "shots" / "a.png"
+    shot.parent.mkdir()
+    shot.write_bytes(b"\x89PNG in repo")
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+
+
+def test_a_shot_inside_the_repo_that_git_does_not_ignore_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = repo / "other" / "a.png"
+    shot.parent.mkdir()
+    shot.write_bytes(b"\x89PNG in repo")
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "not git-ignored" in _squash(out.output)
+
+
+def test_git_ignored_does_not_cover_a_tracked_file_in_an_ignored_dir(tmp_path: Path) -> None:
+    """p2-r3: `git add -f` tracks a file under an ignored directory — it would be
+    committed with the next `git commit -a`, so it is not ignored."""
+    import subprocess
+
+    from fr.run.visual import git_ignored
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = ["git", "-C", str(repo)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    (repo / ".gitignore").write_text("shots/\n")
+    tracked = _shot(repo / "shots", "tracked.png")
+    loose = _shot(repo / "shots", "loose.png")
+    subprocess.run([*git, "add", "-f", ".gitignore", "shots/tracked.png"], check=True)
+    subprocess.run(
+        [*git, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"],
+        check=True,
+    )
+
+    ignored = git_ignored(repo)
+    assert ignored(loose.resolve()) is True
+    assert ignored(tracked.resolve()) is False
+    result = check_visual(
+        [_row()],
+        [_entry("ui-row", (tracked, ("accepted", "20 cap")))],
+        opened=OPENED,
+        fresh_required=False,
+        repo_root=repo,
+        records_dir=repo / "docs/superpowers/runs/r1.records",
+        is_ignored=ignored,
+    )
+    assert any("not git-ignored" in p for p in result.problems)
+
+
+def test_a_dispatched_but_unclaimed_implement_phase_is_refused(tmp_path: Path) -> None:
+    """p2-r4: the session shows the executor's dispatch, nobody claimed it —
+    the orchestrator's own reads must not stand in for the executor's."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        orchestrator=[_read(_stamp(opened, 3), shot, 1)],
+        agents={EXEC_ID: (_stamp(opened), "toolu_exec", "super-fr:fr-phase-executor", [])},
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "no holder was claimed" in text
+    assert "fr run claim r1 --step code --item phase/1 --agent <id>" in text
+
+
+def test_an_inline_refusal_names_the_orchestrator(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(root, orchestrator=[])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "transcript of the orchestrator (the unit ran inline" in _squash(out.output)
+    assert opened
+
+
+def test_a_holder_refusal_names_the_executor(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        orchestrator=[_read(_stamp(opened, 3), shot, 1)],
+        agents={EXEC_ID: (_stamp(opened), "toolu_exec", "super-fr:fr-phase-executor", [])},
+    )
+    record = _record(repo, "code", "phase/1", evidence={"agent": EXEC_ID}, visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert f"transcript of the executor {EXEC_ID}" in _squash(out.output)
+
+
+def test_a_review_refusal_names_the_reviewer(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, code_opened, opened = _to_review(tmp_path, root)
+    shot = _fresh_shot(tmp_path, "rev.png", b"\x89PNG rev")
+    _session(root, agents={REV_ID: (_stamp(opened), "toolu_rev", "general-purpose", [])})
+
+    out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot), root)
+
+    assert out.exit_code == 2, out.output
+    assert f"transcript of the reviewer {REV_ID}" in _squash(out.output)
+    assert code_opened
+
+
+def test_the_unobserved_warning_gives_a_visual_reason(tmp_path: Path) -> None:
+    """p2-r5: not the `questions` wording borrowed from the question gate."""
+    from tests.unit.test_run_cli import _invoke_as_harness
+
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--record", str(record)],
+        {"FR_HARNESS": "hermes"},
+    )
+
+    assert out.exit_code == 0, out.output
+    text = _squash(out.stderr)
+    assert "could not verify that the screenshots were opened" in text
+    assert "questions" not in text
+    assert "fr cannot yet read file opens from hermes's transcripts" in text
+
+
+def test_a_sidechain_read_in_the_session_file_does_not_count_inline(tmp_path: Path) -> None:
+    """p2-r6: a sidechain record in the orchestrator's file is a subagent's."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    read = _read(_stamp(opened, 2), shot, 1)
+    read["isSidechain"] = True
+    _session(root, orchestrator=[read])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "was not opened" in _squash(out.output)
+
+
+def test_a_command_that_only_names_the_script_is_refused(tmp_path: Path) -> None:
+    """p2-r7: `cat shots.cjs` names the script and does not run it."""
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    (repo / "shots.cjs").write_text("// capture\n")
+    _session(
+        root,
+        orchestrator=[
+            _bash(_stamp(opened, 1), f"cat {repo}/shots.cjs", 1),
+            _read(_stamp(opened, 2), shot, 1),
+        ],
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "executed the capture script" in _squash(out.output)
+
+
+def test_a_row_named_by_two_entries_is_refused(tmp_path: Path) -> None:
+    """p2-r9: two entries for one row — which one is the evidence?"""
+    shot = _shot(_outside(tmp_path), "a.png")
+    result = _check(
+        tmp_path,
+        [_row()],
+        [
+            _entry("ui-row", (shot, ("accepted", "20 cap"))),
+            _entry("ui-row", (shot, ("accepted",))),
+        ],
+    )
+
+    assert any("ui-row" in p and "more than one `visual` entry" in p for p in result.problems)

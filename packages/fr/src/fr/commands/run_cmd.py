@@ -1733,6 +1733,7 @@ def _verified_evidence(
             holder=holder or (attempt.agent if attempt is not None else None),
             reviewer=offered.get("reviewer"),
             since=since or (state.steps[step.id].at if step.id in state.steps else None),
+            dispatched_as=attempt.agent_type if attempt is not None else None,
         )
     if state_value == "done":
         verified.update(
@@ -1763,6 +1764,7 @@ def _visual_witness(
     holder: str | None,
     reviewer: str | None,
     since: str | None,
+    dispatched_as: str | None = None,
 ) -> str:
     """The derived `visual` witness — or exit 2. A thin call into
     `fr.run.visual`, which owns every rule and every refusal's wording."""
@@ -1784,6 +1786,12 @@ def _visual_witness(
             repo_root=repo_root,
             records_dir=records_dir(repo_root, state.run),
             env=os.environ,
+            dispatched_as=dispatched_as,
+            claim_hint=(
+                f"fr run claim {state.run} --step {step.id}"
+                + (f" --item phase/{phase}" if phase is not None else "")
+                + " --agent <id>"
+            ),
         )
     except VisualRefusedError as e:
         _requirements_refusal(key, e.lines)
@@ -1791,7 +1799,7 @@ def _visual_witness(
         _note_unobserved("visual")
         err_console.print(
             f"[yellow]{key}: could not verify that the screenshots were opened — "
-            f"{_why_unobservable()}; recorded as checked on disk, unverified "
+            f"{derived.why}; recorded as checked on disk, unverified "
             "(evidence: unobserved=visual).[/yellow]",
             soft_wrap=True,
         )
