@@ -104,15 +104,9 @@ def resolve_init_services(
             return None
         block = {str(k): str(v) for k, v in block.items()}
         try:
-            if name == "ci":
-                model: CiService | TrackingService = CiService(**block)
-            else:
-                model = TrackingService(**block)
-            validate_services(
-                ForgeService(**(forge or {"type": forge_type})),
-                model if name == "ci" else CiService(type="none"),
-                model if name == "tracking" else TrackingService(type="none"),
-            )
+            ci = CiService(**block) if name == "ci" else CiService(type="none")
+            tr = TrackingService(**block) if name == "tracking" else TrackingService(type="none")
+            validate_services(ForgeService(**(forge or {"type": forge_type})), ci, tr)
         except (ServicesError, ValidationError):
             return None
         return block
