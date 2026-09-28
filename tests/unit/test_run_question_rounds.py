@@ -46,7 +46,7 @@ SPEC = "docs/superpowers/specs/2026-09-26-x-design.md"
 SPEC_SLUG = "2026-09-26-x"
 SESSION = "s-rounds"
 PATHS = ["record", "flags"]
-ANNOUNCED = "(Round 1 of 2) Which store owns the cursor?"
+ANNOUNCED = "(Round 1 · questions 1–1 of 1 · a 2nd round may follow) Which store owns the cursor?"
 ROUND_TWO = {"rounds": 2, "trigger": "design-risk", "reason": "B vs C changes the store"}
 
 
@@ -269,7 +269,7 @@ def test_an_unannounced_design_risk_second_round_is_refused(
         root,
         _resolve_brainstorm(root, path, ROUND_TWO),
         "not told a second round would follow",
-        "Round 1 of 2",
+        "a 2nd round may follow",
     )
 
 
@@ -520,8 +520,30 @@ def _round(*texts: str) -> Any:
     [
         ([("q",)], None, None),
         ([("q",)], {"rounds": 1}, None),
+        # The pre-gh#766 token, still accepted: a session that asked round 1
+        # under the old prose is not refused by the fr it upgraded to.
         ([("Round 1 of 2: q",), ("q",)], ROUND_TWO, None),
         ([("ROUND 1 OF 2 — q",), ("q",)], ROUND_TWO, None),
+        # gh#766: a round split across dialogs names each dialog's part; the
+        # forecast is its own phrase, found wherever it sits in the label.
+        (
+            [
+                (
+                    "(Round 1 · questions 1–4 of 8 · a 2nd round may follow) q",
+                    "(Round 1 · questions 5–8 of 8 · a 2nd round may follow) q",
+                ),
+                ("(Round 2 · questions 1–3 of 3) q",),
+            ],
+            ROUND_TWO,
+            None,
+        ),
+        ([("(Round 1 · A 2ND ROUND MAY FOLLOW) q",), ("q",)], ROUND_TWO, None),
+        # A label without the forecast never announced a design-risk round 2.
+        (
+            [("(Round 1 · questions 1–4 of 8) q", "(Round 1 · questions 5–8 of 8) q"), ("q",)],
+            ROUND_TWO,
+            "not told",
+        ),
         ([("q",), ("Round 1 of 2",)], ROUND_TWO, "not told"),
         ([("q",), ("q",)], {**ROUND_TWO, "trigger": "operator-request"}, None),
         ([("q",), ("q",)], None, "declares 1"),
