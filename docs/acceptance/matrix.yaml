@@ -5455,9 +5455,13 @@ rows:
       jenkins, jira and a cross-forge tracker are refused naming the follow-up issue
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_model.py
+      - super-fr:tests/unit/test_validate_profiles.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-defaults
     capability: fr-profiles services
     acceptance: An undeclared ci or tracking resolves to the forge's own, hosts default
