@@ -144,3 +144,19 @@ def test_branch_artifacts_collapses_plan_dir_drops_deletions_and_non_artifacts(
     assert not any("records" in str(a.path) for a in artifacts)
     assert Path("packages/fr/src/fr/closeout.py") not in kept_paths
     assert len(artifacts) == 7
+
+
+def test_every_journal_scope_is_classified(tmp_path: Path) -> None:
+    """A journal scope added to fr.journal.model.SCOPE_DIRS is classified with
+    no edit to fr.closeout: the scope map has one public owner."""
+    from fr.journal.model import JOURNALS_REL, SCOPE_DIRS
+
+    changed = []
+    for dirname in SCOPE_DIRS.values():
+        rel = JOURNALS_REL / dirname / "x.md"
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x\n")
+        changed.append(str(rel))
+    got = branch_artifacts(tmp_path, changed)
+    assert sorted(a.owner or "" for a in got) == sorted(SCOPE_DIRS)
+    assert all(a.kind == "journal" for a in got)

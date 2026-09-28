@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from fr.archive import PLANS_REL
-from fr.journal.model import _SCOPE_DIR, JOURNALS_REL
+from fr.journal.model import JOURNALS_REL, SCOPE_DIRS
 from fr.run.model import RUNS_REL
 from fr.usage.file import USAGE_REL
 
@@ -27,7 +27,7 @@ ArtifactKind = Literal["plan", "spec", "journal", "run", "usage"]
 SPECS_REL = Path("docs/superpowers/specs")
 
 # dir name (e.g. "specs") -> journal scope (e.g. "spec")
-_JOURNAL_SCOPE_BY_DIR: dict[str, str] = {dirname: scope for scope, dirname in _SCOPE_DIR.items()}
+_JOURNAL_SCOPE_BY_DIR: dict[str, str] = {dirname: scope for scope, dirname in SCOPE_DIRS.items()}
 
 
 @dataclass(frozen=True)
