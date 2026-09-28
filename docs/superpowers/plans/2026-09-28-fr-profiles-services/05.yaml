@@ -1,0 +1,87 @@
+schema_version: 2
+phase:
+  number: 5
+  title: fr init scaffold writes the nested services, detected
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - profiles-services-init-detect
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/init_cmd.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_glabclient.py
+  - packages/fr/src/fr/real_teaclient.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_init_scaffold.py
+  - tests/unit/test_issues_enabled.py
+  - tests/unit/test_migration_trigger.py
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: issues_enabled on the forge clients
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: tests/unit/test_issues_enabled.py — gh (`gh repo view --json hasIssuesEnabled`), glab (`glab api
+      projects/<url-encoded path>` → `issues_enabled`) return True/False from captured-shape fixtures, None on
+      a command failure; tea returns None. Use the fake-runner injection the client tests already use. Run: red.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: `issues_enabled() -> bool | None` on the GhClient protocol and the three real clients; run: green.
+  - id: P5.T1.S3
+    text: |-
+      REFACTOR: none expected; record the reason if skipped.
+- number: 2
+  title: --ci / --tracking, v1 handling, stamp
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: extend tests/unit/test_init_scaffold.py — `fr init scaffold` writes `schema_version: 2` and the
+      nested forge/ci/tracking; `--ci auto` → real CI → forge's pipeline type, absent → none, fr-only →
+      exit 2 naming `--ci`; `--tracking auto` → issues_enabled True → forge's own, False → none, None → exit 2
+      naming `--tracking`; explicit `--ci none --tracking none` needs no detection; over an existing v1 file
+      the migration runs in process first (profiles kept, stamped 2); a v1 file with an unknown key is refused
+      untouched. Update the READ_ONLY_COMMANDS docstring for `init` (writes only the fr-profiles artifact, at
+      its current version) and its pinned test. Run: red.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: flags in init_cmd.py, `_update_profiles_yaml` writing the nested shape via phase 2's block
+      renderer, the in-process migration call. Run: green.
+  - id: P5.T2.S3
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy; commit; push.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+    P5.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+    P5.T2.S3:
+      state: x
+      ticked_at: '2026-09-28T22:37:45+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T22:37:45+00:00'
+    note: null
+    observed_prs: []

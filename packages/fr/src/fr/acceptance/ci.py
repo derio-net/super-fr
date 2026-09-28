@@ -7,13 +7,14 @@ forge backend alone (gh#775), so a GitLab project with no CI got a
 them. The fact they were missing is whether the repo already carries a CI
 config for its backend; this module is the only place that looks.
 
-gh#774 later replaces the detection with a declared `ci:` service (`type:
-none` switches CI off); the callers ask `ci_config` and need not change.
+gh#774 adds a declared `ci:` service (`type: none` switches CI off):
+`ci_active`/`ci_reason` resolve it, with `ci_config` as the undeclared probe.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 from fr._hosts import HostBackend
 
@@ -25,11 +26,21 @@ CI_CONFIG_PATHS: dict[HostBackend, tuple[str, ...]] = {
     "gitlab": (".gitlab-ci.yml",),
 }
 
-# The file `fr acceptance init` scaffolds, per backend.
-SCAFFOLD_PATHS: dict[HostBackend, str] = {
-    "github": ".github/workflows/acceptance-report.yml",
-    "gitea": ".gitea/workflows/acceptance-report.yml",
-    "gitlab": ".gitlab-ci.yml",
+# The file `fr acceptance init` scaffolds, per ci service type (#774): the
+# pipeline follows the declared `ci` service, not the forge.
+SCAFFOLD_PATHS: dict[str, str] = {
+    "github-actions": ".github/workflows/acceptance-report.yml",
+    "gitea-actions": ".gitea/workflows/acceptance-report.yml",
+    "gitlab-ci": ".gitlab-ci.yml",
+}
+
+# The platform whose issue tracker a ci type's "Acceptance debt" step files
+# into (github-actions↔github, ...): the step calls that platform's CLI with
+# the pipeline's own credentials, so it is only kept for that tracker.
+DEBT_PLATFORM: dict[str, str] = {
+    "github-actions": "github",
+    "gitlab-ci": "gitlab",
+    "gitea-actions": "gitea",
 }
 
 
@@ -52,3 +63,46 @@ def ci_config(root: Path, backend: HostBackend) -> str | None:
 def no_ci_message(backend: HostBackend) -> str:
     looked = ", ".join(CI_CONFIG_PATHS[backend])
     return f"this repo has no CI config for its {backend} backend (looked for {looked})"
+
+
+def ci_none_reason(root: Path, services: Any) -> str | None:
+    """Why the resolved `ci` is none, when that is more specific than "no CI
+    config found": a declaration, or fr's own scaffold being the only CI file
+    (a v1 file's legacy detection discounts it). None otherwise."""
+    ci = services.ci
+    if ci.type != "none":
+        return None
+    if ci.source == "declared":
+        return "this repo declares `ci: {type: none}` in .devcontainer/fr-profiles.yaml"
+    if ci.source == "legacy":
+        from fr.services.detect import detect_ci
+
+        if detect_ci(root, services.forge.type) == "fr-only":
+            return (
+                "the only CI file found is fr's own acceptance scaffold, which does not count "
+                "as CI; declare `ci:` in .devcontainer/fr-profiles.yaml (see `fr services`)"
+            )
+    return None
+
+
+def ci_reason(root: Path) -> str | None:
+    """Why this repo cannot hold a `ci` row, or None when it has CI.
+
+    Asks the resolved `ci` service (#774), strictly: a malformed declaration is
+    a refusal naming .devcontainer/fr-profiles.yaml, never a fall-through to
+    the raw probe. A declared type wins outright (`none` refuses); undeclared,
+    it is #787's probe of the forge's own CI config."""
+    from fr.services.model import ServicesError
+    from fr.services.resolve import resolve_services
+
+    try:
+        services = resolve_services(root)
+    except ServicesError as exc:
+        return str(exc)
+    if services.ci.type != "none":
+        return None
+    return ci_none_reason(root, services) or no_ci_message(cast(HostBackend, services.forge.type))
+
+
+def ci_active(root: Path) -> bool:
+    return ci_reason(root) is None

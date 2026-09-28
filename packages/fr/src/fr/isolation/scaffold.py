@@ -455,9 +455,11 @@ def scaffold_profile(
     default: bool = False,
     force: bool = False,
     commit: bool = True,
-    backend: HostBackend = "github",
+    backend: HostBackend | None = None,
     host: str | None = None,
     features: list[str] | None = None,
+    ci: str = "auto",
+    tracking: str = "auto",
 ) -> Path:
     """Write the profile and (by default) commit it. Returns the devcontainer.json path.
 
@@ -466,12 +468,13 @@ def scaffold_profile(
     scaffold commits by default; `commit=False` writes the files only.
 
     `backend`/`host` are repo-level (not per-profile — a repo lives on one
-    host regardless of which devcontainer profile is active), written to
-    `.devcontainer/fr-profiles.yaml`'s top-level keys, which
-    `fr._hosts.detect_backend` reads. `backend="github"` (the default) is
-    NOT written explicitly, matching `detect_backend`'s own fallback — an
-    unmodified `fr-profiles.yaml` behaves identically to before this
-    feature existed.
+    host regardless of which devcontainer profile is active); they set the
+    `forge:` service of `.devcontainer/fr-profiles.yaml`, beside `ci:` and
+    `tracking:` (`ci`/`tracking` take a type or `auto`, spec
+    2026-09-28-fr-profiles-services §3.C). The file is always written at
+    version 2; an existing version-1 file is migrated first, in process. With
+    no `backend`/`host` the forge is declared only when the origin is a
+    recognised one, and the CLI-install feature is GitHub's, as before.
     """
     if not (repo_root / ".git").exists():
         raise IsolationError(
@@ -485,6 +488,7 @@ def scaffold_profile(
             "external → external), so a devcontainer profile by that name would be "
             "misrouted. Pick another name."
         )
+    feature_backend: HostBackend = backend or "github"
     # Before ANY write (gh#574): an unknown tool must leave no file behind.
     resolved = resolve_tools(tools, list(features or []))
     tool_names = {parse_tool(t)[0] for t in tools}
@@ -497,18 +501,22 @@ def scaffold_profile(
             "(the host secrets file is preserved either way)."
         )
 
+    # Services (and the v1 -> v2 migration) settle before the first write too: an
+    # inconclusive `auto` refuses naming its flag and leaves the tree as found.
+    services = _prepare_profiles(repo_root, backend, host, ci, tracking)
+
     # Gated on the TOOLS, not the feature ref: a bare `--feature <java ref>` is
     # taken exactly as written (p4r-f4).
     java_opts = resolved.get(JAVA_FEATURE)
     if tool_names & {"java", "maven"} and java_opts is not None and "version" not in java_opts:
         _apply_detected_java_version(repo_root, java_opts)
 
-    host_feature = HOST_CLI_FEATURE.get(backend)
+    host_feature = HOST_CLI_FEATURE.get(feature_backend)
     feature_map: dict[str, dict[str, object]] = {host_feature: {}} if host_feature else {}
     feature_map.update(resolved)
 
     post_create = POST_CREATE
-    host_pin = HOST_CLI_PINS.get(backend)
+    host_pin = HOST_CLI_PINS.get(feature_backend)
     if host_pin is not None:
         post_create = f"{POST_CREATE}; {render_host_cli_post_create(host_pin)}"
 
@@ -540,7 +548,7 @@ def scaffold_profile(
     profile_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
 
-    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, backend, host)
+    _update_profiles_yaml(repo_root, profile, purpose, secrets, default, services)
     _ensure_env_placeholders(env_file, repo_root.name, profile, secrets)
     include_validator_wrapper = False
     if plans_dir_exists(repo_root):
@@ -614,15 +622,65 @@ def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=True)
 
 
+def _prepare_profiles(
+    repo_root: Path, backend: str | None, host: str | None, ci: str, tracking: str
+) -> dict[str, dict[str, str]]:
+    """Bring an existing fr-profiles.yaml to version 2 (the SAME 1 -> 2 migration
+    function the CLI-entry gate runs — `init` is exempt from that gate, spec
+    §3.E.1) and settle the service blocks to write. A refusal at either step
+    leaves the file byte-identical: an unmigratable v1 file is untouched by the
+    migration itself, and a migrated one is restored if `auto` is inconclusive."""
+    from fr.artifacts.profiles_services import rewrite_to_services
+    from fr.artifacts.registry import artifact_kind
+    from fr.artifacts.runner import ArtifactMigrationError
+    from fr.services.init import resolve_init_services
+    from fr.services.model import ServicesError
+
+    path = repo_root / ".devcontainer" / "fr-profiles.yaml"
+    kind = artifact_kind("profiles")
+    original: bytes | None = path.read_bytes() if path.is_file() else None
+    migrated = False
+    try:
+        if original is not None:
+            version = kind.read_version(path)
+            if version > kind.current_version:
+                raise IsolationError(
+                    f"{path} is on version {version}, newer than this fr writes "
+                    f"({kind.current_version}) — upgrade fr."
+                )
+            if version < kind.current_version:
+                rewrite_to_services(path)
+                kind.write_version(path, kind.current_version)
+                migrated = True
+        existing = (yaml.safe_load(path.read_text()) if path.is_file() else None) or {}
+        if migrated:
+            # What the migration just derived is not the operator's declaration:
+            # `auto` detects those again (and asks, when it cannot).
+            existing.pop("ci", None)
+            existing.pop("tracking", None)
+        return resolve_init_services(
+            repo_root, existing, backend=backend, host=host, ci=ci, tracking=tracking
+        )
+    except BaseException as err:
+        # ANY failure leaves the file as found — an unexpected one included.
+        if original is not None and path.read_bytes() != original:
+            path.write_bytes(original)
+        if isinstance(err, ArtifactMigrationError | ServicesError):
+            raise IsolationError(str(err)) from err
+        raise
+
+
 def _update_profiles_yaml(
     repo_root: Path,
     profile: str,
     purpose: str,
     secrets: list[str],
     default: bool,
-    backend: HostBackend = "github",
-    host: str | None = None,
+    services: dict[str, dict[str, str]],
 ) -> None:
+    from fr.artifacts.registry import artifact_kind
+    from fr.services.render import SERVICE_ORDER, render_services
+
     path = repo_root / ".devcontainer" / "fr-profiles.yaml"
     data = yaml.safe_load(path.read_text()) if path.is_file() else {}
     data = data or {}
@@ -631,15 +689,13 @@ def _update_profiles_yaml(
     data["profiles"][profile] = entry
     if default or "default" not in data:
         data["default"] = profile if default else data.get("default", profile)
-    # Repo-level (not per-profile) keys `fr._hosts.detect_backend` reads.
-    # "github" is NOT written explicitly — matches detect_backend's own
-    # fallback, so a repo that scaffolds nothing special behaves
-    # identically to before this feature existed.
-    if backend != "github":
-        data["backend"] = backend
-    if host:
-        data["host"] = host
-    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    # The stamp is re-applied below; the service blocks are rendered as text
+    # (the one renderer the migration also uses), never round-tripped.
+    for key in ("schema_version", "backend", "host", *SERVICE_ORDER):
+        data.pop(key, None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, sort_keys=False) + render_services(services))
+    artifact_kind("profiles").write_version(path, artifact_kind("profiles").current_version)
 
 
 def _ensure_env_placeholders(env_file: Path, repo: str, profile: str, secrets: list[str]) -> None:

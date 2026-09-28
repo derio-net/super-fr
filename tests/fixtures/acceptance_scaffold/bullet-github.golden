@@ -1,0 +1,3 @@
+- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
+  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
+  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.

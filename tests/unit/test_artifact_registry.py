@@ -23,7 +23,7 @@ from fr.artifacts.registry import (
     write_version,
 )
 
-EXPECTED_KINDS = {"plan", "journal", "run", "matrix", "spec", "usage", "record"}
+EXPECTED_KINDS = {"plan", "journal", "run", "matrix", "spec", "usage", "record", "profiles"}
 
 
 # --- Task 1: the registry ------------------------------------------------
@@ -90,6 +90,7 @@ def _seed_repo(root: Path) -> dict[str, Path]:
     live["record"] = w(
         "docs/superpowers/runs/2026-01-01-live.records/deliver.yaml", "step: deliver\n"
     )
+    live["profiles"] = w(".devcontainer/fr-profiles.yaml", "default: dev\n")
 
     return live
 
@@ -136,6 +137,7 @@ def _diff(before: str, after: str) -> tuple[list[str], list[str]]:
 UNSTAMPED: dict[str, str] = {
     "usage": ("# a usage file\nrun: r\ncaptures: []   # none yet\n"),
     "record": ("# a step record\nstep: implement-phase\n\nticks: [P1.T1.S1]   # one so far\n"),
+    "profiles": ("# fr-profiles\nprofiles:\n  dev: {}   # the only one\n\ndefault: dev\n"),
     "plan": (
         "# hand-edited plan meta — key order is NOT the canonical one\n"
         "\n"
@@ -209,6 +211,9 @@ STAMPED_3: dict[str, str] = {
     "usage": UNSTAMPED["usage"].replace("run: r\n", "schema_version: 3\nrun: r\n"),
     "record": UNSTAMPED["record"].replace(
         "step: implement-phase\n", "schema_version: 3\nstep: implement-phase\n"
+    ),
+    "profiles": UNSTAMPED["profiles"].replace(
+        "default: dev\n", "schema_version: 3\ndefault: dev\n"
     ),
 }
 
@@ -589,6 +594,7 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "spec": next((root / "docs" / "superpowers" / "specs").glob("*.md")),
         "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
         "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),
+        "profiles": root / ".devcontainer" / "fr-profiles.yaml",
     }[kind]
     artifact_kind(kind).write_version(target, version)
     return target

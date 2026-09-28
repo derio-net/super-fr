@@ -44,6 +44,7 @@ from fr.diff import (
 )
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_ops import PlanEditError
+from fr.services import ServicesError, require_tracker
 from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import workflow_for_plan
 
@@ -259,6 +260,17 @@ def _apply_one(
     applies (remote runners pull the repo; plain tracking applies never
     pay it — super-fr split design).
     """
+    tracking_problem: str | None = None
+    try:
+        require_tracker(resolve_repo_root(plan_dir.resolve()))
+    except ServicesError as e:
+        tracking_problem = str(e)
+    if yes and tracking_problem is not None:
+        # Before any forge call: `fr apply` files issues, and this repo has no
+        # tracker (or a tracking declaration fr cannot read — strict, never a
+        # silent fall back to "has a tracker").
+        return 2, tracking_problem, {"plan": str(plan_dir), "tracking_refused": tracking_problem}
+
     try:
         report = build_plan_report(plan_dir, gh, force=force, queue_runner=to)
     except PlanSchemaError as e:
@@ -273,6 +285,8 @@ def _apply_one(
         parts.append("\nrefused (completion guard):")
         for s in d.suppressed:
             parts.append(f"  phase {s.phase_number}: {s.reason}")
+    if tracking_problem is not None:
+        parts.append(f"\nwarning: --yes would be refused — {tracking_problem}")
     if rendered.warnings:
         parts.append("\nwarnings:")
         for w in rendered.warnings:
@@ -292,7 +306,12 @@ def _apply_one(
         "plan": plan.meta.plan,
         "mutations": [_mutation_to_json(m) for m in d.mutations],
         "suppressed": [{"phase_number": s.phase_number, "reason": s.reason} for s in d.suppressed],
-        "warnings": [{"severity": w.severity, "message": w.message} for w in rendered.warnings],
+        "warnings": [{"severity": w.severity, "message": w.message} for w in rendered.warnings]
+        + (
+            [{"severity": "warning", "message": f"tracking: {tracking_problem}"}]
+            if tracking_problem is not None
+            else []
+        ),
         "applied": False,
         "failures": [],
         "created_issues": {},

@@ -24,6 +24,7 @@ from fr.journal.model import (
     spec_journal_slug,
 )
 from fr.run.model import RunState
+from fr.services import ServicesError, TrackerRequiredError, require_tracker
 
 __all__ = [
     "CloseoutNotReadyError",
@@ -126,6 +127,29 @@ def _out_of_scope_lines(repo_root: Path, scope: str, slug: str) -> list[str]:
     ]
 
 
+_NO_TRACKER = "no-tracker"
+
+
+def _tracker_note(repo_root: Path) -> str | None:
+    """`_NO_TRACKER` under `tracking: {type: none}`; a warning line when the
+    services declaration cannot be read; None otherwise.
+
+    Strict resolution, deliberately: the brief is read-only, but a malformed
+    `tracking:` block must not silently read as "has a tracker" and hand the
+    reader issue-filing commands. It cannot refuse either — the brief has to
+    stay usable after a merge — so it warns loudly and keeps the default lines."""
+    try:
+        require_tracker(repo_root)
+    except TrackerRequiredError:
+        return _NO_TRACKER
+    except ServicesError as exc:
+        return (
+            f"the services declaration in .devcontainer/fr-profiles.yaml is invalid "
+            f"({exc}); the issue-filing lines below assume a tracker — fix it first"
+        )
+    return None
+
+
 @dataclass(frozen=True)
 class RunExtras:
     """Run-mode-only additions to the branch brief (spec
@@ -212,10 +236,21 @@ def branch_closeout_brief(
     if run_extras is not None and run_extras.spec_path and run_extras.has_test_plan:
         lines.append(f"  run the spec's Test Plan: {run_extras.spec_path}")
 
-    lines.append("  fr status")
-
     plan_path = run_extras.plan_path if run_extras is not None else None
     out_of_scope = run_extras.out_of_scope if run_extras is not None else []
+    if out_of_scope:
+        tracker_note = _tracker_note(repo_root)
+        if tracker_note == _NO_TRACKER:
+            # R6: nowhere to file — the findings stay in the journal and PR body.
+            out_of_scope = []
+            lines.append(
+                "  out-of-scope findings stay recorded in the journal and PR body; "
+                "no tracker is configured"
+            )
+        elif tracker_note:
+            # only the issue-filing lines below depend on the declaration
+            lines.append(f"  WARNING: {tracker_note}")
+    lines.append("  fr status")
 
     # p4-r2: exact commands, not a "# on a housekeeping branch" comment that
     # leaves it to the reader to invent one — a fresh session with no memory

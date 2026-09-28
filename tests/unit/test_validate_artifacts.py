@@ -163,6 +163,22 @@ captures:
         unavailable: transcript pruned
 """
 
+GOOD_PROFILES = (
+    f"schema_version: {ARTIFACT_KINDS['profiles'].current_version}\n"  # built, never typed
+    + """profiles:
+  dev:
+    purpose: x
+default: dev
+forge:
+  type: gitlab
+  host: gitlab.example.com
+ci:
+  type: none
+tracking:
+  type: gitlab
+"""
+)
+
 
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
@@ -179,6 +195,7 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
         "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
         "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
+        "profiles": _w(root, ".devcontainer/fr-profiles.yaml", GOOD_PROFILES),
     }
 
 
@@ -272,6 +289,11 @@ MISSING_FIELD_CASES = {
         GOOD_RECORD_REL,
         GOOD_RECORD.replace(", title: kept the pump", ""),
         "title",
+    ),
+    "profiles": (
+        ".devcontainer/fr-profiles.yaml",
+        GOOD_PROFILES.replace("  type: none\n", "  host: ci.example.com\n"),
+        "type",
     ),
 }
 

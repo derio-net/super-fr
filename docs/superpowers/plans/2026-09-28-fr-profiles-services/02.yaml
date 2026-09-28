@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr-profiles artifact kind — migration 1→2 and structure validator
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - profiles-services-migration
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/profiles_services.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/services/*
+  - .devcontainer/fr-profiles.yaml
+  - tests/unit/test_migration_profiles_services.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/unit/test_migration_runner.py
+  - tests/unit/test_tripwire_artifact_kinds.py
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Migration 1→2
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_migration_profiles_services.py — fixtures (spec Test Plan): github origin with real CI
+      → `forge {type: github}`, `ci {type: github-actions}`, `tracking {type: github}`; gitlab with fr-only
+      `.gitlab-ci.yml` + `host:` → `ci {type: none}`, forge host kept; gitea; no backend key (origin inference);
+      CRLF file keeps CRLF; comments and the `profiles:`/`default:` lines kept byte-for-byte; top-level
+      backend/host removed; stamped `schema_version: 2`; a body already wholly v2 (crash window) lets the
+      runner stamp; a v1 file with an unknown key is refused and left byte-identical; the kind's chain from 1
+      reaches 2 (`[2]`, mirror the run kind's reachability test). Run: red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: register `ArtifactKind(name="profiles", current_version=2, locator=".devcontainer/fr-profiles.yaml",
+      stamp="`schema_version` in fr-profiles.yaml", read_stamp=_read_yaml_stamp, write_version=_write_yaml_stamp,
+      validate=validate_profiles)` in registry.py; `fr/artifacts/profiles_services.py` with a SchemaMigration
+      1→2 reading only through `ProfilesV1`, building the body in memory (text-level: drop the backend/host
+      lines, append the three blocks in the file's newline style) and writing once via `write_text_atomic`;
+      import it in `fr/artifacts/__init__.py`. Share `detect_ci` with the resolver. Run: green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: one helper renders the three blocks for both the migration and (phase 5) `fr init scaffold`; rerun.
+- number: 2
+  title: Structure validator and this repo's own file
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests for `validate_profiles` — unknown type, jenkins/jira (naming #795), missing required host,
+      top-level backend/host at version 2, duplicate key (the shared strict loader) all fail
+      `fr validate artifacts`; a valid v2 file passes. Run: red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `validate_profiles` in `fr/artifacts/structure.py`, reusing `fr.services.model`. Then run
+      `uv run fr migrate artifacts --yes` in the workspace to migrate this repo's
+      `.devcontainer/fr-profiles.yaml` (the migration writes it, not an editor), and confirm
+      `tests/unit/test_validate_artifacts.py::test_this_repos_own_artifacts_are_structurally_valid` and
+      `test_tripwire_artifact_kinds.py`, `test_migration_runner.py` pass. Run: green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy; commit; push.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-28T21:23:14+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T21:23:14+00:00'
+    note: null
+    observed_prs: []

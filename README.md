@@ -472,9 +472,20 @@ context file (it outranks `AGENTS.md`, so read both).
 - Your repo's forge CLI, authenticated: [GitHub CLI](https://cli.github.com/)
   (`gh`, the default), [GitLab CLI](https://gitlab.com/gitlab-org/cli) (`glab`),
   or [Gitea's `tea`](https://gitea.com/gitea/tea) — whichever the repo's
-  `.devcontainer/fr-profiles.yaml` `backend:` key (or its git remote) resolves to
+  `.devcontainer/fr-profiles.yaml` `forge:` service (or its git remote) resolves to
 
-  **Self-hosted instances**: declare `backend: gitlab` in
+  **Services**: fr-profiles.yaml declares up to three nested services,
+  `forge:`, `ci:` and `tracking:` (each a `type`, optionally a `host`); run
+  `fr services` (`--json` for machines) to see what fr resolved and from where.
+  `fr init scaffold --ci ... --tracking ...` writes them (`auto` detects; an
+  inconclusive detection exits 2 naming the flag to pass). `ci: none` means the
+  local suite is the gate; `tracking: none` means no issues are filed and
+  `fr apply --yes` / `fr triage batch dispatch --yes` refuse. Jenkins and Jira are
+  not supported yet (derio-net/super-fr#795). An `fr` older than this release
+  reading a migrated file falls back to origin inference, so a self-hosted
+  forge is lost there.
+
+  **Self-hosted instances**: declare `forge: {type: gitlab}` in
   `.devcontainer/fr-profiles.yaml` and nothing else is needed — the instance
   hostname is taken from the repo's own git remote. Add `host:` only when the
   remote's hostname is not the API host you want to target; it overrides the

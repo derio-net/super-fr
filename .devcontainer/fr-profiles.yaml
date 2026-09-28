@@ -1,3 +1,4 @@
+schema_version: 2
 profiles:
   dev:
     purpose: 'day-to-day development: uv run pytest -q --no-cov, ruff, mypy'
@@ -7,3 +8,9 @@ profiles:
     secrets:
     - GH_TOKEN
 default: dev
+forge:
+  type: github
+ci:
+  type: github-actions
+tracking:
+  type: github

@@ -5,10 +5,13 @@ this repo?" for the whole codebase (fr apply's CLI wiring, fr-vk's dispatch
 bridge, the isolation lifecycle, and scaffold all resolve through this
 instead of hardcoding gh). Resolution order:
 
-1. `.devcontainer/fr-profiles.yaml`'s top-level `backend:` key, if present —
-   authoritative. It's the only way to declare Gitea (no free SaaS-hostname
-   default exists for it — self-hosting is the norm) or a self-hosted
-   GitLab/GitHub Enterprise instance.
+1. `.devcontainer/fr-profiles.yaml`'s `forge:` service (or, in a version-1
+   file, its flat top-level `backend:` key), if present — authoritative.
+   It's the only way to declare Gitea (no free SaaS-hostname default exists
+   for it — self-hosting is the norm) or a self-hosted GitLab/GitHub
+   Enterprise instance. Resolution itself lives in
+   `fr.services.resolve.resolve_services`; this module's functions are thin
+   wrappers over its `forge` (spec 2026-09-28-fr-profiles-services §3.B).
 2. Else: `git remote get-url origin`'s hostname, matched against
    `DEFAULT_HOST_BACKENDS` (github.com / gitlab.com only).
 3. Else: `"github"` — today's only behavior, preserved so a repo that
@@ -17,7 +20,7 @@ instead of hardcoding gh). Resolution order:
 Two separate questions about the instance *hostname* are answered here,
 and the split is load-bearing rather than cosmetic (gh-486, spec §4.D):
 
-- `declared_host(repo_root)` — the raw `host:` key, and nothing inferred.
+- `declared_host(repo_root)` — the declared forge host, and nothing inferred.
   An operator expectation, so `hostclient.client_for` may warn when fr
   cannot honour it for the resolved backend.
 - `host_for(repo_root)` — what a forge CLI should actually be pointed at:
@@ -39,10 +42,11 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 from urllib.parse import urlparse
 
-from fr.isolation.types import profiles_config
+if TYPE_CHECKING:
+    from fr.services.model import ResolvedService
 
 HostBackend = Literal["github", "gitlab", "gitea"]
 
@@ -75,7 +79,7 @@ _REMOTE_HOST_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?([^/:]+)")
 _WARNED_UNKNOWN_HOSTS: set[str] = set()
 
 
-def _origin_hostname(repo_root: Path) -> str | None:
+def origin_hostname(repo_root: Path) -> str | None:
     """Best-effort hostname from `git remote get-url origin`. None on any
     failure (no repo, no remote, git not found) — callers fall through."""
     try:
@@ -93,6 +97,27 @@ def _origin_hostname(repo_root: Path) -> str | None:
     if not url:
         return None
     m = _REMOTE_HOST_RE.match(url)
+    return m.group(1) if m else None
+
+
+_REMOTE_PATH_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?[^/:]+(?::\d+)?[:/](.+?)(?:\.git)?/?$")
+
+
+def origin_slug(repo_root: Path) -> str | None:
+    """The `owner/repo` (GitLab: `group/sub/project`) path of `origin`, from
+    `git remote get-url origin` — local, no network. None on any failure, so a
+    caller asking a forge about it reads "unknown" rather than guessing."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, FileNotFoundError):
+        return None
+    url = (result.stdout or "").strip() if result.returncode == 0 else ""
+    m = _REMOTE_PATH_RE.match(url) if url else None
     return m.group(1) if m else None
 
 
@@ -165,48 +190,49 @@ def backend_for_url(url: str) -> HostBackend:
     return backend_for_hostname(parsed.hostname)
 
 
-def detect_backend(repo_root: Path) -> HostBackend:
-    """Resolve which git-forge backend `repo_root` talks to. See module
-    docstring for the 3-tier resolution order. Never raises — a malformed
-    or absent `.devcontainer/fr-profiles.yaml` and an unreadable git remote
-    both fall through to the next tier rather than erroring."""
-    try:
-        config = profiles_config(repo_root)
-    except Exception:  # noqa: BLE001 — malformed config must not crash detection
-        config = {}
-    explicit = config.get("backend")
-    if explicit == "github":
-        return "github"
-    if explicit == "gitlab":
-        return "gitlab"
-    if explicit == "gitea":
-        return "gitea"
+def _forge(repo_root: Path) -> ResolvedService:
+    """The resolved `forge` service alone (no CI probe), leniently — these consumers have always
+    promised never to raise. Imported late: `fr.services.resolve` imports
+    this module's origin helpers."""
+    from fr.services.resolve import resolve_forge
 
-    hostname = _origin_hostname(repo_root)
-    if hostname and hostname not in DEFAULT_HOST_BACKENDS and hostname not in _WARNED_UNKNOWN_HOSTS:
-        _WARNED_UNKNOWN_HOSTS.add(hostname)
-        print(
-            f"warning: origin host {hostname!r} is not a recognized forge; "
-            'assuming backend "github". Declare it as `backend: gitlab` '
-            "(or gitea) in .devcontainer/fr-profiles.yaml, or run "
-            "`fr init scaffold --backend <b>`.",
-            file=sys.stderr,
-        )
-    return backend_for_hostname(hostname)
+    return resolve_forge(repo_root, lenient=True)
+
+
+def detect_backend(repo_root: Path) -> HostBackend:
+    """Resolve which git-forge backend `repo_root` talks to: the `forge`
+    service's type (spec 2026-09-28-fr-profiles-services §3.B) — declared
+    `forge:`, a version-1 `backend:`, else the origin tiers in the module
+    docstring. Never raises — a malformed or absent
+    `.devcontainer/fr-profiles.yaml` and an unreadable git remote both fall
+    through to the next tier rather than erroring."""
+    forge = _forge(repo_root)
+    if forge.source == "default":
+        hostname = origin_hostname(repo_root)
+        if (
+            hostname
+            and hostname not in DEFAULT_HOST_BACKENDS
+            and hostname not in _WARNED_UNKNOWN_HOSTS
+        ):
+            _WARNED_UNKNOWN_HOSTS.add(hostname)
+            print(
+                f"warning: origin host {hostname!r} is not a recognized forge; "
+                'assuming backend "github". Declare it as `forge: {type: gitlab}` '
+                "(or gitea) in .devcontainer/fr-profiles.yaml, or run "
+                "`fr init scaffold --backend <b>`.",
+                file=sys.stderr,
+            )
+    return cast(HostBackend, forge.type)
 
 
 def declared_host(repo_root: Path) -> str | None:
-    """The `host:` key from `.devcontainer/fr-profiles.yaml`, and nothing
-    inferred. An operator EXPECTATION, which is why
+    """The forge host the operator DECLARED — `forge.host`, or a version-1
+    `host:` — and nothing inferred. An operator EXPECTATION, which is why
     `hostclient.client_for` warns when fr cannot honour it for the
     resolved backend — see spec §4.D. Use `host_for` to actually target
     an instance; use this only when the *provenance* matters."""
-    try:
-        config = profiles_config(repo_root)
-    except Exception:  # noqa: BLE001 — same tolerance as detect_backend
-        return None
-    host = config.get("host")
-    return host if isinstance(host, str) and host else None
+    forge = _forge(repo_root)
+    return forge.host if forge.host_source in ("declared", "legacy") else None
 
 
 def self_hosted_hostname(hostname: str | None) -> str | None:
@@ -222,15 +248,12 @@ def self_hosted_hostname(hostname: str | None) -> str | None:
 
 def host_for(repo_root: Path) -> str | None:
     """Which instance hostname this repo's forge CLI should talk to: the
-    declared `host:`, else the origin's own hostname when it is not a
-    recognized SaaS domain, else None.
+    `forge` service's host — declared, else the origin's own hostname when
+    it is not a recognized SaaS domain, else None.
 
-    The fallback is what makes `backend: gitlab` sufficient on its own for
-    a self-hosted repo (gh-486 gap 1): the host is already in the remote
+    The fallback is what makes `forge: {type: gitlab}` sufficient on its own
+    for a self-hosted repo (gh-486 gap 1): the host is already in the remote
     the operator has. `github.com`/`gitlab.com` return None so nothing
     changes for a SaaS repo — returning a host there would make every
     normal repo look self-hosted. Never raises, same as `declared_host`."""
-    declared = declared_host(repo_root)
-    if declared:
-        return declared
-    return self_hosted_hostname(_origin_hostname(repo_root))
+    return _forge(repo_root).host

@@ -1,0 +1,55 @@
+schema_version: 2
+phase:
+  number: 4
+  title: tracking none switches off every issue path
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - profiles-services-no-tracker
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/commands/apply_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/services/*
+  - tests/unit/test_tracking_none.py
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: Closeout, apply --yes, triage batch dispatch
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_tracking_none.py — with `tracking: {type: none}`: the `fr pickup --run` closeout
+      brief (run/closeout.py) prints no "file an issue" / `deferred --tracked-by` lines and says out-of-scope
+      findings stay recorded in the journal and PR body; `fr apply <plan> --yes` exits 2 naming
+      `tracking: {type: none}` in .devcontainer/fr-profiles.yaml before any forge call; `fr triage batch
+      dispatch ... --yes` exits 2 the same way; `fr triage collect` unaffected. With the default tracking,
+      existing closeout/apply tests unchanged. Run: red.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: one helper `fr.services.require_tracker(repo_root) -> None` raising a typed refusal the two
+      commands turn into exit 2; closeout branches on `resolve_services(...).tracking.type`. Run: green.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy; commit; push.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T22:06:48+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T22:06:48+00:00'
+      note: null
+    P4.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T22:06:48+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T22:06:48+00:00'
+    note: null
+    observed_prs: []

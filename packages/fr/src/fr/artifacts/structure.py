@@ -453,3 +453,96 @@ def validate_spec(path: Path) -> list[str]:
     if not has_title:
         problems.append("missing required `# ` title heading on the first heading level")
     return problems
+
+
+# --- profiles ------------------------------------------------------------
+
+
+_PROFILES_SERVICE_KEYS = ("forge", "ci", "tracking")
+_PROFILES_LEGACY_KEYS = ("backend", "host")
+_PROFILES_V2_KEYS = ("schema_version", "profiles", "default", "forge", "ci", "tracking")
+
+
+def validate_profiles(path: Path) -> list[str]:
+    """`.devcontainer/fr-profiles.yaml` (spec
+    `2026-09-28-fr-profiles-services-design.md` §3.D.4).
+
+    A version-2 file (a stamp past 1 or any service block — the resolver's own
+    test, `fr.services.resolve.is_version_two`) is checked through the live
+    service models: an unknown or deferred type (`jenkins`/`jira` name the
+    follow-up), a cross-forge tracker and a missing required host all fail, and
+    so does a leftover top-level `backend:`/`host:`, which the resolver would
+    silently ignore, and any other top-level key outside the v2 shape (a typo
+    such as `trackng:` would otherwise fall back to the forge's own tracker).
+    With no `forge:` the cross-service rules run against the forge derived
+    offline, as the resolver derives it. A version-1 file is checked through the frozen
+    `fr.services.legacy.ProfilesV1` — the only reader of that shape; that it is
+    stale is the stamp check's business, not this one's.
+    """
+    from pydantic import ValidationError
+
+    from fr.services.legacy import ProfilesV1
+    from fr.services.model import (
+        CiService,
+        ForgeService,
+        ServicesError,
+        TrackingService,
+        validate_services,
+    )
+    from fr.services.resolve import is_version_two, resolve_forge
+
+    data, problems = _load_mapping(path)
+    if problems or data is None:
+        return problems
+    if not is_version_two(data):
+        return _model_problems(ProfilesV1, data)
+
+    problems = [
+        f"top-level `{key}:` is a version-1 key; at version 2 the forge is declared as "
+        f"`forge: {{type: ..., host: ...}}` and `{key}:` is ignored"
+        for key in _PROFILES_LEGACY_KEYS
+        if key in data
+    ]
+    problems += [
+        f"unknown top-level key `{key}:` (expected one of "
+        f"{', '.join(_PROFILES_V2_KEYS)}) — a misspelt service falls back to its default"
+        for key in data
+        if key not in _PROFILES_V2_KEYS and key not in _PROFILES_LEGACY_KEYS
+    ]
+    models: dict[str, Any] = {"forge": ForgeService, "ci": CiService, "tracking": TrackingService}
+    parsed: dict[str, Any] = {}
+    for key, model in models.items():
+        if key not in data:
+            continue
+        if not isinstance(data[key], dict):
+            problems.append(f"`{key}` must be a mapping with a `type`, got {data[key]!r}")
+            continue
+        try:
+            parsed[key] = model.model_validate(data[key])
+        except ValidationError as e:
+            for err in e.errors():
+                field = _loc((key, *err["loc"]))
+                if err["type"] == "missing":
+                    problems.append(f"missing required field `{field}`")
+                else:
+                    msg = str(err["msg"]).removeprefix("Value error, ")
+                    problems.append(f"invalid field `{field}`: {msg}")
+    if len(parsed) == len([k for k in models if k in data]):
+        # The cross-service rules need the forge. An undeclared one is derived
+        # offline exactly as the resolver derives it (origin remote, leniently —
+        # phase-2 review r2), so a file `resolve_services` would refuse cannot
+        # pass here. An undeclared ci or tracking is the forge's own, which
+        # those rules always accept.
+        forge = parsed.get("forge")
+        if forge is None:
+            derived = resolve_forge(path.parent.parent, lenient=True)
+            forge = ForgeService(type=derived.type, host=derived.host)
+        try:
+            validate_services(
+                forge,
+                parsed.get("ci") or CiService(type="none"),
+                parsed.get("tracking") or TrackingService(type=forge.type),
+            )
+        except ServicesError as e:
+            problems.append(str(e))
+    return problems

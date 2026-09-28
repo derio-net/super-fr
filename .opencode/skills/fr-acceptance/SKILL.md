@@ -49,7 +49,7 @@ up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`) with
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
 the row in place, adds the test refs that justify the move, and regenerates the
 three committed reports. `--notes` is required, and an unknown id is refused
-rather than created (`add`'s job), as is `ci` in a repo with no CI config.
+rather than created (`add`'s job), as is `ci` in a repo with no CI config. Under `ci: none` (see `fr services`) the local suite is the gate: `ci` needs a declared or detected CI service.
 `fr plan edit --complete-phase` warns on unflipped rows — fix or record why in the completion note.
 
 ## Live verification on another harness

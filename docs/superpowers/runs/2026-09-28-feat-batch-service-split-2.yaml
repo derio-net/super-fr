@@ -1,0 +1,234 @@
+schema_version: 7
+run: 2026-09-28-feat-batch-service-split-2
+workflow: fr-goal@1
+branch: feat/batch-service-split-2
+started: '2026-09-28T19:14:10+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-28T20:11:06+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 8 requirements:a127ec3102b3029fac33a34b6984fcba341c464bf19c6f27fcf45062568d5c15
+  spec-review:
+    state: done
+    at: '2026-09-28T20:19:11+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-28T20:11:25+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T20:19:11+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a3e7014fd49e77820
+          requirements: 8 requirements:1caaffa616c37c174c77c4390b1b326e0ff5e23c3eab2862e2914404d40f3651
+          coverage: '42 spans: R=15 deferred=6 context=21 missing=0'
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11
+  plan:
+    state: done
+    at: '2026-09-28T20:21:24+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-28-fr-profiles-services
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-28T20:19:18+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T20:21:24+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-28T20:21:26+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-28T23:15:19+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T20:21:31+00:00'
+          agent: a067fe2e209e367a2
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T20:39:57+00:00'
+          outcome: done
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T20:40:00+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T20:58:00+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: a5d309366f632ae83
+          findings: p1r-forge-only,p1r-lenient-raise,p1r-warning-advice,p1r-v1-stamp,p1r-tests,p1r-later-tests
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T20:58:07+00:00'
+          agent: acfd002df8c712052
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T21:23:15+00:00'
+          outcome: done
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T21:23:16+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T21:38:02+00:00'
+          outcome: done
+        evidence:
+          review: p2-review
+          reviewer: a151348ce9235a6bd
+          findings: p2r-fallback-declared,p2r-validator-no-forge,p2r-unknown-keys,p2r-flow-branch,p2r-mixed-message,p2r-edge-tests,p2r-splitlines
+      phase/3/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T21:38:05+00:00'
+          agent: aa9d44d4dc5b8a4b5
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T21:49:13+00:00'
+          outcome: done
+      phase/3/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T21:49:14+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T21:58:27+00:00'
+          outcome: done
+        evidence:
+          review: p3-review
+          reviewer: a2a74881ce965871d
+          findings: p3r-lenient-ci-gate,p3r-issues-write,p3r-fr-only-message,p3r-golden-tests
+      phase/4/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T21:58:30+00:00'
+          agent: a338ba6a7ec6917c8
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:06:48+00:00'
+          outcome: done
+      phase/4/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T22:06:49+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:23:34+00:00'
+          outcome: done
+        evidence:
+          review: p4-review
+          reviewer: adedf4b03bf1631ca
+          findings: p4r-repair-gate,p4r-empty-housekeeping,p4r-require-scope,p4r-collect-test,p4r-warning-noise,p4r-wording,p4r-cross-repo-tracking,p4r-other-forge-writes
+      phase/5/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T22:23:37+00:00'
+          agent: a87abb9ae4a9a75c9
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:37:45+00:00'
+          outcome: done
+      phase/5/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T22:37:45+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:47:09+00:00'
+          outcome: done
+        evidence:
+          review: p5-review
+          reviewer: a40ee0ae10bc4eac2
+          findings: p5r-missing-binary,p5r-fallback-forge-asked,p5r-self-hosted-host,p5r-v1-auto-skipped,p5r-trigger-docstring,p5r-skill-doc,p5r-local-hint,p5r-comment-roundtrip,p5r-test-docstring
+      phase/6/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T22:47:11+00:00'
+          agent: ac97247991cc8ca62
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T23:05:44+00:00'
+          outcome: done
+      phase/6/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T23:07:27+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T23:15:19+00:00'
+          outcome: done
+        evidence:
+          review: p6-review
+          reviewer: a863a94cb6d597688
+          visual: none
+          findings: input-r6-no-issue-filing-skill-prose,p6r-explainer-reason,p6r-fragment-mitigation
+  journal-check:
+    state: done
+    at: '2026-09-28T23:16:06+00:00'
+    exit: 0
+    stdout: "7 out-of-scope finding(s): p2r-splitlines, p4r-cross-repo-tracking, \n\
+      p4r-other-forge-writes, p5r-skill-doc, p5r-local-hint, p5r-comment-roundtrip,\
+      \ \np5r-test-docstring\n"
+  deliver:
+    state: done
+    at: '2026-09-28T23:22:03+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/794
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-28T23:16:16+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T23:22:01+00:00'
+          outcome: done
+        evidence:
+          tests: full-suite.log@d2c220a8f469
+          proportionality: 274ba2cd246766396a6314258ba39671403388a8:2c0c99a8d81252528cf9255207ac1c529746313a98ca6aeca5e33eb722e81d88
+          visual: none
+          requirement-rows: '8 rows: ci=7; post-merge=1'

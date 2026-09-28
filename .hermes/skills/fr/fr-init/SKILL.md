@@ -24,13 +24,10 @@ Before asking anything, learn what the repo already says:
 
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
-- Existing `.devcontainer/` (profiles already present? then this is an edit, not a
-  green-field init). Check `.devcontainer/fr-profiles.yaml` for an existing top-level
-  `backend:`/`host:` key too.
+- Existing `.devcontainer/` (profiles present? then this is an edit, not a green-field init),
+  incl. `.devcontainer/fr-profiles.yaml`'s `forge:`/`ci:`/`tracking:`.
 - Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com`
-  self-identify; anything else, including a literal `gitea.com`, is self-hosted and needs
-  the operator to confirm the backend explicitly — no hostname alone distinguishes GitLab
-  Self-Managed / Gitea / GitHub Enterprise).
+  self-identify; any other host is self-hosted: the operator confirms the backend explicitly).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
   cloud/k8s configs — candidates for the profile's expected secrets.
 - Working patterns: Makefile/justfile/scripts (what do humans run here?).
@@ -76,9 +73,11 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
     --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
-For a non-GitHub repo, pass `--backend` on every profile call for that repo.
-`--host` is OPTIONAL for GitLab (derived from the remote, override-only);
-`gh`/`tea` aren't host-threaded (gh-486), so fr warns on next use, not here.
+Services: `forge`, `ci`, `tracking` (`fr services [--json]` shows type, host, source). Pass
+`--ci none|github-actions|gitlab-ci|gitea-actions|auto` and `--tracking none|github|gitlab|gitea|auto`
+(auto default; jenkins/jira refused, derio-net/super-fr#795). An inconclusive auto exits 2 naming `--ci`,
+`--tracking` or `--backend`/`--host`: ask the operator, then re-run explicitly. Non-GitHub forge: pass
+`--backend` on every profile call (`--host` optional for GitLab; `gh`/`tea` aren't host-threaded, gh-486).
 
 Each call writes:
 
@@ -88,7 +87,8 @@ Each call writes:
   devcontainer feature exists for either) + mapped tool features + vk
   installed in postCreate + `--env-file` pointing at the host secrets path.
 - `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile, purpose, expected
-  secret keys, and the repo-level `backend`/`host` keys (github, the default, is not written).
+  secret keys, and the repo-level nested `forge:` / `ci:` / `tracking:` services (each `type`, optional
+  `host`; schema_version 2 — an older flat `backend`/`host` file is migrated by the CLI-entry gate).
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.

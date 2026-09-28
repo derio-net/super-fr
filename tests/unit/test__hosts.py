@@ -278,7 +278,8 @@ class TestDetectBackendWarnsOnce:
         repo = _repo_with_remote(tmp_path, "git@gitlab.local.corp:g/p.git")
         assert detect_backend(repo) == "github"
         first = capsys.readouterr().err
-        assert "gitlab.local.corp" in first and "backend: gitlab" in first
+        assert "gitlab.local.corp" in first and "forge: {type: gitlab}" in first
+        assert "backend:" not in first
         assert detect_backend(repo) == "github"
         assert capsys.readouterr().err == ""  # once per host, not per call
 
@@ -302,3 +303,58 @@ class TestDetectBackendWarnsOnce:
         assert backend_for_hostname("gitlab.local.corp") == "github"
         assert backend_for_hostname("gitlab.local.corp") == "github"
         assert capsys.readouterr().err == ""
+
+
+class TestForgeConsumersResolveThroughTheForgeService:
+    """spec 2026-09-28-fr-profiles-services §3.B / R2: `detect_backend`,
+    `declared_host` and `host_for` are thin wrappers over the resolved
+    `forge` service, so a version-2 file and a version-1 file answer alike."""
+
+    V2 = "schema_version: 2\nforge:\n  type: gitlab\n  host: h.example.com\nci:\n  type: none\n"
+    V1 = "backend: gitlab\nhost: h.example.com\n"
+
+    @pytest.mark.parametrize("body", [V2, V1], ids=["v2", "v1"])
+    def test_a_declared_forge(self, tmp_path: Path, body: str) -> None:
+        repo = make_repo(tmp_path, remote="https://github.com/o/r.git")
+        write_profiles_yaml(repo, body + "profiles:\n  dev:\n    purpose: x\n")
+        assert detect_backend(repo) == "gitlab"
+        assert declared_host(repo) == "h.example.com"
+        assert host_for(repo) == "h.example.com"
+
+    def test_a_v2_forge_without_a_host_derives_one_but_declares_none(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, remote="git@gitlab.example.org:g/p.git")
+        write_profiles_yaml(repo, "forge:\n  type: gitlab\nprofiles:\n  dev:\n    purpose: x\n")
+        assert detect_backend(repo) == "gitlab"
+        assert declared_host(repo) is None  # default-sourced, not declared
+        assert host_for(repo) == "gitlab.example.org"
+
+    def test_an_invalid_v2_block_never_raises(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, remote="https://gitlab.com/g/p.git")
+        write_profiles_yaml(repo, "forge:\n  type: jenkins\nprofiles: {}\n")
+        assert detect_backend(repo) == "gitlab"  # falls through to the origin
+
+
+class TestForgeConsumersAreLenient:
+    """r5: the wrappers never raise, and an invalid declaration of another
+    service does not disturb the forge."""
+
+    def test_an_extra_key_in_a_v1_file_keeps_its_backend_and_host(self, tmp_path: Path) -> None:
+        repo = make_repo(tmp_path, remote="https://github.com/o/r.git")
+        write_profiles_yaml(repo, "backend: gitlab\nhost: h\nextra: 1\nprofiles: {}\n")
+        assert detect_backend(repo) == "gitlab"
+        assert declared_host(repo) == "h"
+        assert host_for(repo) == "h"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "forge: {type: github}\ntracking: {type: gitlab}\n",
+            "forge: {type: github}\nci: {type: gitlab-ci}\n",
+        ],
+        ids=["cross-forge-tracker", "hostless-non-native-ci"],
+    )
+    def test_an_invalid_other_service_does_not_raise(self, tmp_path: Path, body: str) -> None:
+        repo = make_repo(tmp_path, remote="https://gitlab.com/g/p.git")
+        write_profiles_yaml(repo, body + "profiles: {}\n")
+        assert detect_backend(repo) == "github"
+        assert declared_host(repo) is None

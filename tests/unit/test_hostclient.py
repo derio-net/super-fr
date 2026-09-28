@@ -131,6 +131,17 @@ class TestClientForWarnsOnAnUnthreadedDeclaredHost:
         err = capsys.readouterr().err
         assert "git.corp.com" in err and "gitea" in err
 
+    def test_a_declared_v2_forge_host_for_an_unthreaded_backend_warns(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The provenance survives the move to `forge: {type, host}` (spec
+        2026-09-28-fr-profiles-services §3.B): a host declared in the nested
+        block is still an operator expectation fr cannot honour for github."""
+        repo = _repo_with_profiles(tmp_path, {"forge": "{type: github, host: x.example.com}"})
+        hostclient.client_for(repo)
+        err = capsys.readouterr().err
+        assert "x.example.com" in err and "github" in err
+
     def test_a_derived_host_for_an_unthreaded_backend_is_silent(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

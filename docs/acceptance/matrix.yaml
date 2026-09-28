@@ -5449,3 +5449,107 @@ rows:
     status: ci
     notes: Every PR-opening flow's close-out relay (fr-goal, fr-debugging, standalone
       fr-execute, fr-isolation) is covered by the relay tripwire
+  - id: profiles-services-schema
+    capability: fr-profiles services
+    acceptance: fr-profiles declares forge, ci and tracking as nested {type, host} services;
+      jenkins, jira and a cross-forge tracker are refused naming the follow-up issue
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_model.py
+      - super-fr:tests/unit/test_validate_profiles.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-defaults
+    capability: fr-profiles services
+    acceptance: An undeclared ci or tracking resolves to the forge's own, hosts default
+      to the forge host for native types, and every forge consumer keeps today's behaviour
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_resolve.py
+      - super-fr:tests/unit/test__hosts.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-migration
+    capability: fr-profiles services
+    acceptance: A flat backend/host fr-profiles.yaml is migrated to the nested services
+      shape at the first fr command (ci detected offline), and an invalid services block
+      fails fr validate artifacts
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_profiles_services.py
+      - super-fr:tests/unit/test_validate_profiles.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-ci-drives-acceptance
+    capability: fr-profiles services
+    acceptance: 'acceptance init and the ci status follow the declared ci service: none
+      scaffolds no pipeline and refuses ci; a pipeline type scaffolds its template'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_services.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-no-ci-delivery
+    capability: fr-profiles services
+    acceptance: 'Under ci: none, fr-goal''s Ready checklist and fr-acceptance name the
+      local suite as the gate'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_services_prose.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+    verify: post-merge
+  - id: profiles-services-no-tracker
+    capability: fr-profiles services
+    acceptance: 'Under tracking: none, no issue path fires: closeout prints no filing
+      lines, apply --yes and triage batch dispatch refuse, the pipeline omits the debt
+      issue, findings stay out-of-scope'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracking_none.py
+      - super-fr:tests/unit/test_skill_services_prose.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-cli
+    capability: fr-profiles services
+    acceptance: fr services prints each resolved service's type, host and source, plain
+      and --json, without touching any artifact
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_cli.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
+  - id: profiles-services-init-detect
+    capability: fr-profiles services
+    acceptance: fr init scaffold writes the nested services, detecting ci and tracking
+      and refusing with the flag to pass when detection is inconclusive
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_init_scaffold.py
+      - super-fr:tests/unit/test_issues_enabled.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.

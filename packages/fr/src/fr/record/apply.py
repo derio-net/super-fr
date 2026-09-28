@@ -629,11 +629,9 @@ def _check_drops(
 
 def _no_ci_reason(repo_root: Path) -> str | None:
     """Why this repo cannot hold a `ci` row, or None when it has CI."""
-    from fr._hosts import detect_backend
-    from fr.acceptance.ci import ci_config, no_ci_message
+    from fr.acceptance.ci import ci_reason
 
-    backend = detect_backend(repo_root)
-    return None if ci_config(repo_root, backend) is not None else no_ci_message(backend)
+    return ci_reason(repo_root)
 
 
 def _acceptance_writes(
