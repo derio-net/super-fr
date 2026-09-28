@@ -85,8 +85,9 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    mode, do NOT open a per-phase PR:** push the branch only; the single PR is
    fr-goal's step 8, opened as a draft by the orchestrator *after* its review
    pass — opening here reorders deliver ahead of review and reintroduces the
-   #320 merge-race. Per-phase PRs are the standalone **dispatched** (Issue/VK)
-   flow only.
+   #320 merge-race; with no PR here there is nothing to relay. Per-phase PRs are the standalone
+   **dispatched** (Issue/VK) flow only — there, once the PR opens, relay `closeout: fr pickup --branch
+   <phase-branch>` verbatim (a non-final phase's brief holds the plan until the last phase lands).
 
 7. **Reconcile GitHub state:**
    ```bash

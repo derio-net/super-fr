@@ -5352,3 +5352,96 @@ rows:
     notes: 'Phase 3: fr-execute''s Browser check step, fr-phase-executor''s return contract,
       and fr-goal/fr-brainstorming/fr-plan''s visual mentions land; test_skill_visual_evidence.py
       pins them.'
+  - id: closeout-branch-brief
+    capability: Branch-keyed close-out
+    acceptance: Any fr flow's merged branch gets a self-contained close-out brief from
+      `fr pickup --branch <b>`, and `fr pickup --run` delegates to the same builder,
+      adding only run extras.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pickup_branch.py
+      - super-fr:tests/unit/test_run_closeout.py
+    status: ci
+    notes: fr pickup --branch and fr pickup --run's delegation to branch_closeout_brief
+      are covered by unit tests
+  - id: archive-branch-every-artifact
+    capability: Branch-keyed close-out
+    acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch
+      added or modified (debug journals included) through each kind''s gate, reports
+      what it holds, and refuses a branch whose changes are not on the default ref.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_branch.py
+      - super-fr:tests/unit/test_closeout_branch_artifacts.py
+    status: ci
+    notes: fr archive --branch's per-kind gates and artifact coverage are covered by
+      unit tests
+  - id: status-reports-owed-artifacts
+    capability: Branch-keyed close-out
+    acceptance: '`fr status` lists every live artifact whose PR has merged (debug journals
+      on the default ref, archivable plans, fully implemented specs, orphan journals)
+      with the command that clears it, without failing.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_status_owed.py
+      - super-fr:tests/unit/test_closeout_owed.py
+    status: ci
+    notes: fr status's owed_artifacts block is covered by unit tests
+  - id: fr-debugging-relays-closeout
+    capability: Branch-keyed close-out
+    acceptance: fr-debugging's deliver relays the `fr pickup --branch <b>` close-out
+      line on every harness mirror.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_closeout_relay.py
+    status: ci
+    notes: fr-debugging's deliver-line relay to every harness mirror is covered by the
+      relay tripwire
+  - id: debug-journal-sweep-keeps-refs
+    capability: Branch-keyed close-out
+    acceptance: '`fr archive --all` moves every debug journal live on the default ref,
+      and evidence refs to a moved journal still resolve in `fr acceptance check`.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_all_debug.py
+      - super-fr:tests/unit/test_acceptance_archive_twin.py
+    status: ci
+    notes: fr archive --all's debug-journal sweep and archive_twin ref resolution are
+      covered by unit tests
+  - id: closeout-branch-live-run
+    capability: Branch-keyed close-out
+    acceptance: This feature's own post-merge close-out, run from its relayed line in
+      a new session, archives the branch's spec, plan, run, usage and journals with
+      nothing held.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: every-pr-flow-relays-closeout
+    capability: Branch-keyed close-out
+    acceptance: Every shipped skill that ends its flow at a PR it opens relays a close-out
+      line (fr-goal's run line; fr-debugging and standalone fr-execute `fr pickup --branch
+      <b>`), and fr-isolation's post-merge cleanup points at the same brief.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_closeout_relay.py
+    status: ci
+    notes: Every PR-opening flow's close-out relay (fr-goal, fr-debugging, standalone
+      fr-execute, fr-isolation) is covered by the relay tripwire

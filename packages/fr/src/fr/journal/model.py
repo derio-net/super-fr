@@ -64,7 +64,7 @@ IMPLEMENTED_JOURNALS_REL = Path("docs/superpowers/implemented/journals")
 # Each scope gets its own subdirectory so a bare `ls journals/` tells you which
 # journal is which at a glance (a debug-slug and a plan-slug can otherwise look
 # identical). Mirrors the `specs/` + `plans/` split of the parent tree.
-_SCOPE_DIR: dict[str, str] = {"spec": "specs", "plan": "plans", "debug": "debug"}
+SCOPE_DIRS: dict[str, str] = {"spec": "specs", "plan": "plans", "debug": "debug"}
 
 # Specs are written `<YYYY-MM-DD-slug>-design.md`, but the spec-scope journal is
 # keyed by the bare feature slug (`journals/specs/<slug>.md`). Own the suffix in
@@ -220,12 +220,12 @@ def journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     The scope names a subdirectory (``specs`` / ``plans`` / ``debug``) so the
     tree is glanceable and a debug-slug can never be mistaken for a plan-slug.
     """
-    return repo_root / JOURNALS_REL / _SCOPE_DIR[scope] / f"{slug}.md"
+    return repo_root / JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
 def archived_journal_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:
     """Archived journal path (mirrors ``implemented/plans`` / ``implemented/specs``)."""
-    return repo_root / IMPLEMENTED_JOURNALS_REL / _SCOPE_DIR[scope] / f"{slug}.md"
+    return repo_root / IMPLEMENTED_JOURNALS_REL / SCOPE_DIRS[scope] / f"{slug}.md"
 
 
 def resolve_journal_read_path(repo_root: Path, scope: JournalScope, slug: str) -> Path:

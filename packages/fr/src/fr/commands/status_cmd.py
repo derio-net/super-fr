@@ -13,13 +13,13 @@ Exit codes: 0 report printed (drift included); 2 usage / legacy layout;
 from __future__ import annotations
 
 import json as _json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
 
+from fr.closeout import HeldSpec, Owed, OwedArtifacts, PlanSweep, owed_artifacts
 from fr.commands.common import (
     PlanReport,
     build_plan_report,
@@ -32,7 +32,6 @@ from fr.parser import PlanSchemaError
 if TYPE_CHECKING:
     from fr.archive import DefaultRef, MergeEvidence
     from fr.ghclient import GhClient
-    from fr.parser import Plan
 
 console = Console()
 err_console = Console(stderr=True)
@@ -129,70 +128,23 @@ def _report_json(report: PlanReport, evidence: MergeEvidence) -> dict[str, Any]:
     }
 
 
-@dataclass(frozen=True)
-class _Sweep:
-    """The four buckets of the repo-wide sweep (spec 2026-09-23 §3.B)."""
-
-    evidence: MergeEvidence
-    archivable: list[str]
-    """Merged (see ``_merged``) and locally complete, manual phases included."""
-    merged_manual_open: list[tuple[str, list[int]]]
-    """Merged, but these local phase numbers are still open."""
-    complete_unmerged: list[str]
-    """Locally complete, not merged — or merge state unknown (``ref is None``)."""
-    in_progress: list[str]
-    """Everything else, a plan the working tree cannot parse included."""
-
-
-def _merged(name: str, plan: Plan, evidence: MergeEvidence) -> bool:
-    """Every agentic phase of the WORKING-TREE plan is complete on the ref.
-
-    ``agentic_landed`` alone is judged from the ref's copy of the plan, so a
-    phase added on the branch after an earlier merge would not block it
-    (f-p2-local-phases); each local agentic phase must be in ``landed_phases``.
-    """
-    landed = evidence.landed_phases.get(name, frozenset())
-    return name in evidence.agentic_landed and all(
-        p.phase.number in landed for p in plan.phases if p.phase.tag == "agentic"
-    )
-
-
-def _sweep_lists(repo_root: Path) -> _Sweep:
+def _sweep_lists(repo_root: Path) -> PlanSweep:
     """Bucket every plan dir under docs/superpowers/plans/ by merge evidence
-    from the default branch's remote-tracking ref (fetched first)."""
-    from fr.archive import PLANS_REL, merge_evidence
-    from fr.parser import parse
-    from fr.render import plan_locally_complete
+    from the default branch's remote-tracking ref (fetched first).
+
+    The bucketing itself (``PlanSweep``, the "archivable" predicate) lives in
+    ``fr.closeout`` so ``owed_artifacts`` (§C) shares it rather than
+    re-deriving "merged and locally complete" a second time
+    (2026-09-28-closeout-always spec §C).
+    """
+    from fr.archive import merge_evidence
+    from fr.closeout import plan_sweep
 
     evidence = merge_evidence(repo_root, fetch=True)
-    sweep = _Sweep(evidence, [], [], [], [])
-    plans_dir = repo_root / PLANS_REL
-    names = (
-        sorted(p.name for p in plans_dir.iterdir() if (p / "_meta.yaml").exists())
-        if plans_dir.is_dir()
-        else []
-    )
-    for name in names:
-        try:
-            plan = parse(plans_dir / name)
-        except PlanSchemaError:
-            sweep.in_progress.append(name)
-            continue
-        open_phases = [p.phase.number for p in plan.phases if not plan_locally_complete(p)]
-        complete = bool(plan.phases) and not open_phases
-        if _merged(name, plan, evidence):
-            if complete:
-                sweep.archivable.append(name)
-            else:
-                sweep.merged_manual_open.append((name, open_phases))
-        elif complete:
-            sweep.complete_unmerged.append(name)
-        else:
-            sweep.in_progress.append(name)
-    return sweep
+    return plan_sweep(repo_root, evidence)
 
 
-def _sweep_json(sweep: _Sweep) -> dict[str, Any]:
+def _sweep_json(sweep: PlanSweep, owed: OwedArtifacts) -> dict[str, Any]:
     ev = sweep.evidence
     return {
         "archivable": sweep.archivable,
@@ -211,6 +163,10 @@ def _sweep_json(sweep: _Sweep) -> dict[str, Any]:
         ),
         "ref_error": ev.ref_error,
         "unparsed_on_ref": list(ev.unparsed_on_ref),
+        # §C: everything `owed_artifacts` reports, alongside the buckets
+        # above (unchanged) — new keys, nothing removed or renamed.
+        "owed": [{"kind": o.kind, "path": str(o.path), "clear": o.clear} for o in owed.owed],
+        "held": [{"spec": h.spec, "note": h.note} for h in owed.held],
     }
 
 
@@ -239,14 +195,14 @@ def _manual_open_row(name: str, phases: list[int]) -> str:
     return f"{name}  ({label} {', '.join(map(str, phases))})"
 
 
-def _unknown_ref_blocks(sweep: _Sweep) -> list[_Block]:
+def _unknown_ref_blocks(sweep: PlanSweep) -> list[_Block]:
     """No resolvable default ref: nothing is merged, so every locally
     complete plan is listed as unknown rather than archivable."""
     hint = f"{sweep.evidence.ref_error}; try git fetch / git remote set-head origin -a"
     return [_block(f"merge state unknown ({hint})", sweep.complete_unmerged)]
 
 
-def _known_ref_blocks(sweep: _Sweep, ref: DefaultRef) -> list[_Block]:
+def _known_ref_blocks(sweep: PlanSweep, ref: DefaultRef) -> list[_Block]:
     ev = sweep.evidence
     blocks: list[_Block] = []
     if ev.fetch_error:
@@ -264,9 +220,34 @@ def _known_ref_blocks(sweep: _Sweep, ref: DefaultRef) -> list[_Block]:
     return blocks
 
 
-def _sweep_text(sweep: _Sweep) -> str:
+def _owed_block(owed: tuple[Owed, ...]) -> _Block:
+    """Every owed kind but ``plan`` — that one already has its own line in
+    ``_archivable_block`` above, and printing it twice would just be noise.
+    Empty (not even a heading) when nothing is owed, so a clean repo's
+    report is unchanged (2026-09-28-closeout-always §C)."""
+    entries = [o for o in owed if o.kind != "plan"]
+    if not entries:
+        return []
+    block = [f"owed ({len(entries)}):"]
+    for o in entries:
+        block += [f"  {o.path}", f"    {o.clear}"]
+    return block
+
+
+def _held_block(held: tuple[HeldSpec, ...]) -> _Block:
+    """One line per held spec — visible, but not owed (R5)."""
+    return [f"held live (spec): {h.spec} — {h.note}" for h in held]
+
+
+def _sweep_text(sweep: PlanSweep, owed: OwedArtifacts) -> str:
     ref = sweep.evidence.ref
     blocks = _unknown_ref_blocks(sweep) if ref is None else _known_ref_blocks(sweep, ref)
+    owed_block = _owed_block(owed.owed)
+    if owed_block:
+        blocks.append(owed_block)
+    held_block = _held_block(owed.held)
+    if held_block:
+        blocks.append(held_block)
     if sweep.in_progress:
         blocks.append(_block("in progress", sweep.in_progress))
     return "\n\n".join("\n".join(b) for b in blocks)
@@ -313,11 +294,15 @@ def status_command(
         raise typer.Exit(2)
 
     if plan_dir is None:
-        sweep = _sweep_lists(resolve_repo_root())
+        repo_root = resolve_repo_root()
+        sweep = _sweep_lists(repo_root)
+        # One merge-evidence read for the whole sweep (#544) — reused here,
+        # never re-fetched.
+        owed = owed_artifacts(repo_root, sweep.evidence)
         if output_format == "json":
-            console.print_json(_json.dumps(_sweep_json(sweep)))
+            console.print_json(_json.dumps(_sweep_json(sweep, owed)))
         else:
-            console.print(_sweep_text(sweep), markup=False, highlight=False, soft_wrap=True)
+            console.print(_sweep_text(sweep, owed), markup=False, highlight=False, soft_wrap=True)
         return
 
     gh = _make_gh_client()

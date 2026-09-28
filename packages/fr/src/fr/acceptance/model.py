@@ -20,6 +20,8 @@ from pydantic import (
     model_validator,
 )
 
+from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, SCOPE_DIRS
+
 LEVELS: tuple[str, ...] = ("unit", "api", "int", "ui")
 
 Status = Literal["ci", "scheduled", "skipped", "not-implemented", "failing"]
@@ -39,17 +41,30 @@ def split_ref(ref: str) -> tuple[str, str, str]:
 
 
 # Specs migrate specs/ ↔ implemented/specs/ at `fr archive` without renaming
-# (spec trap 1). Refs written against either location resolve to wherever the
-# file actually is, so an archive never breaks links or the staleness guard.
-ARCHIVE_TWIN_DIRS = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
+# (spec trap 1), and journals migrate journals/<scope> ↔
+# implemented/journals/<scope> the same way (2026-09-28-closeout-always §F).
+# Refs written against either location resolve to wherever the file actually
+# is, so an archive never breaks links or the staleness guard. The journal
+# pairs are DERIVED from `fr.journal.model` (`SCOPE_DIRS` / `JOURNALS_REL` /
+# `IMPLEMENTED_JOURNALS_REL`) rather than re-declared here, so a new journal
+# scope needs no edit on this side.
+ARCHIVE_TWIN_DIRS: tuple[tuple[str, str], ...] = (
+    ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/"),
+    *(
+        (f"{JOURNALS_REL}/{scope_dir}/", f"{IMPLEMENTED_JOURNALS_REL}/{scope_dir}/")
+        for scope_dir in SCOPE_DIRS.values()
+    ),
+)
 
 
 def archive_twin(path: str) -> str | None:
-    live, done = ARCHIVE_TWIN_DIRS
-    if path.startswith(live):
-        return done + path[len(live) :]
-    if path.startswith(done):
-        return live + path[len(done) :]
+    """The counterpart path for whichever `ARCHIVE_TWIN_DIRS` pair matches
+    `path` at either end, or `None` when no pair matches."""
+    for live, done in ARCHIVE_TWIN_DIRS:
+        if path.startswith(live):
+            return done + path[len(live) :]
+        if path.startswith(done):
+            return live + path[len(done) :]
     return None
 
 

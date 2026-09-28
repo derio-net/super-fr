@@ -1,6 +1,6 @@
 """A marketplace name is `<org>--<repo>`, and the bare org name is retired.
 
-Root cause (docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md):
+Root cause (docs/superpowers/implemented/journals/debug/2026-07-23-marketplace-config-clobber.md):
 a Claude Code marketplace name is a 1:1 namespace over ONE source repo — its
 manifest at `plugins/marketplaces/<name>/.claude-plugin/marketplace.json` is a
 single file listing every plugin of that marketplace, and each installer

@@ -3,7 +3,7 @@
 `scripts/validate-plans.sh` is a thin wrapper that every fr-enabled repo
 **commits**, and it hardcodes the marketplace directory it delegates to.  When
 the marketplace was renamed `derio-net` -> `derio-net--super-fr` (see
-docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md) every
+docs/superpowers/implemented/journals/debug/2026-07-23-marketplace-config-clobber.md) every
 one of those committed wrappers still carried the old path.
 
 `ensure_validator_wrapper` refuses to overwrite a file it doesn't recognize as
