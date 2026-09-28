@@ -40,3 +40,18 @@ GREEN already lands the shared shape: branch_changed_paths and branch_changes_pr
 ### no-refactor-p1-t2 · discovery · no-refactor-because P1.T2 (phase 1)
 
 branch_artifacts is one flat classification function over constants imported from their owning modules; its only smell (the private _SCOPE_DIR import) is left to review as discovery p1-scope-dir-reuse rather than widened here.
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-09-28T19:55:45+00:00 phase=1 -->
+### p1-review · review · Phase 1 review: 2 minor findings (1 fixed, 1 refuted) (phase 1)
+
+Independent reviewer (general-purpose, sonnet) over d37afdba..527cc106 with spec §A and plan 01.yaml. Verdict: ready, no critical/important issues. It confirmed the branch_changes_present lift is byte-for-byte behaviour-preserving (86 hardened tests re-run green). Findings: p1-r1 (private _SCOPE_DIR import, in scope) fixed; p1-r2 (spec owner None, in scope) refuted. Declined to judge: owner semantics for plan/spec journals (§B/§C), list ordering (no caller yet), duplicate-path defence (§B unions first), §B–§G behaviour (later phases).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-09-28T19:55:45+00:00 phase=1 state=fixed review_scope=in -->
+### p1-r1 · finding [fixed] (reviewer: in scope) · fr.closeout imported the module-private fr.journal.model._SCOPE_DIR (phase 1)
+
+closeout.py:21 coupled to a private name nothing lints. Fixed by promoting it to public `SCOPE_DIRS` (its only other users are journal_path/archived_journal_path in the same module), plus test_every_journal_scope_is_classified, which pins that every scope in SCOPE_DIRS is classified with no edit to fr.closeout. Phase 3's archive_twin journal pairs will read the same public map.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-09-28T19:55:45+00:00 phase=1 state=refuted review_scope=in -->
+### p1-r2 · finding [refuted] (reviewer: in scope) · BranchArtifact.owner is None for a spec artifact (phase 1)
+
+Refuted: spec §A defines `owner` as "plan dir name / spec slug for followers", and a spec is an owner, not a follower (followers are its spec journal, plus runs/usage for plans). Run/usage owners come from the cursor's `emitted.plan`, which phase 2 (§B) reads. That is planned work in a later phase, not a defect here.
