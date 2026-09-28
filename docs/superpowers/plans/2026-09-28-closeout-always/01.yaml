@@ -1,0 +1,72 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Branch artifacts helper (walking skeleton)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - archive-branch-every-artifact
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/closeout.py
+  - tests/unit/test_closeout_branch_artifacts.py
+  - .changes/feat-batch-closeout-always-2.yaml
+  estimate_lines: 260
+tasks:
+- number: 1
+  title: branch_changed_paths lifted out of branch_changes_present
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_closeout_branch_artifacts.py, build a real git repo in tmp_path (bare origin + clone, main with one commit, feature branch adding docs/superpowers/journals/debug/x.md, modifying an existing plan file, deleting a spec), and assert `fr.isolation.local.branch_changed_paths(run, repo, "feat", "origin/main")` returns exactly the added+modified+deleted names that `branch_changes_present` diffs (same `changed` list). Run `uv run pytest tests/unit/test_closeout_branch_artifacts.py -q --no-cov` — fails (ImportError).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add `branch_changed_paths(run, repo_root, branch, base_ref) -> list[str]` in packages/fr/src/fr/isolation/local.py = merge-base (same IsolationError message) → `_fork_point` → `_diff_names([fork, branch])`; make `branch_changes_present` call it for `changed` (it still needs the fork, so return both via a private `_branch_fork_and_changes` helper both use). Re-run the test and the existing branch_changes_present tests (`uv run pytest tests/ -q --no-cov -n auto -k "branch_changes or verify_merge or fork_point"`) — green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: keep one merge-base/fork computation path; no duplicated diff logic between the two public functions.
+- number: 2
+  title: branch_artifacts classification
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests asserting `fr.closeout.branch_artifacts(repo_root, changed)` returns `BranchArtifact(kind, path, owner)` for: files under one plan dir collapse to one `plan` artifact (owner = plan dir name); a spec `.md` → `spec`; `journals/{specs,plans,debug}/*.md` → `journal` with owner = scope; `docs/superpowers/runs/<id>.yaml` → `run`; `docs/superpowers/usage/<id>.yaml` → `usage`; deleted paths (not in the working tree) and non-artifact paths (packages/, implemented/) dropped; `runs/<id>.records/*` ignored. Fails (no module).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/closeout.py with the frozen `BranchArtifact` dataclass and `branch_artifacts`, using `fr.journal.model` / `fr.archive.PLANS_REL` / `fr.run.model.RUNS_REL` constants rather than new string literals. Tests green; `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src` clean.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: add the change fragment `.changes/feat-batch-closeout-always-2.yaml` with `bump: minor` and `summary: Close-out is keyed on the branch: fr pickup --branch, fr archive --branch archives every artifact the branch touched (debug journals included), and fr status reports artifacts left live after their PR merged.` Push the branch so CI runs green on this slice.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,88 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Owed-artifact predicate, fr status, fr archive --all, archive_twin
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - status-reports-owed-artifacts
+  - debug-journal-sweep-keeps-refs
+  tier: standard
+  files:
+  - packages/fr/src/fr/closeout.py
+  - packages/fr/src/fr/commands/status_cmd.py
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/acceptance/model.py
+  - tests/unit/test_closeout_owed.py
+  - tests/unit/test_status_owed.py
+  - tests/unit/test_acceptance_archive_twin.py
+  - tests/unit/test_archive_all_debug.py
+  estimate_lines: 480
+tasks:
+- number: 1
+  title: archive_twin covers journals
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_archive_twin.py: `archive_twin` maps specs (existing) and journals/{specs,plans,debug} ↔ implemented/journals/{specs,plans,debug} both ways and returns None otherwise; `fr acceptance check` over a tmp matrix whose row cites `docs/superpowers/journals/debug/x.md` passes before and after `git mv` of that journal to implemented/journals/debug/.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: turn ARCHIVE_TWIN_DIRS into a tuple of (live, done) pairs and make archive_twin return the counterpart for the matching pair; callers unchanged. Tests green plus `uv run pytest tests/unit -q --no-cov -n auto -k acceptance` green.
+- number: 2
+  title: owed_artifacts — the one definition
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_closeout_owed.py: `fr.closeout.owed_artifacts(repo_root, evidence)` over a tmp repo with origin/main returns, each with its clearing command (spec §C table): a debug journal present on the ref (`fr archive --all`) but NOT one present only in the working tree; an archivable plan (`fr archive <plan-dir>`); a fully implemented spec (`fr archive --sweep-only`); an orphan plan journal and an orphan spec journal whose owner is under implemented/; an orphan run cursor whose emitted plan is archived. A held spec (pending slice) is returned in a separate held list with its `_spec_fully_implemented` note; a merged plan with open manual phases is in neither.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement owed_artifacts (no forge calls; `_spec_fully_implemented(..., gh=None)` tuple `[0]`/`[1]`), moving status_cmd's archivable-plan bucketing into fr.closeout so status and archive share it (status_cmd imports it back). Tests green.
+- number: 3
+  title: fr status and fr archive --all
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_status_owed.py: `fr status` (text and --json) lists owed debug journals, specs, orphan journals and orphan runs each with its clearing command, prints the `held live (spec): <spec> — <note>` block, keeps today's plan blocks unchanged, exits 0. tests/unit/test_archive_all_debug.py: `fr archive --all` moves debug journals present on the default ref, leaves a branch-only one, moves orphan journals and orphan runs (+ usage), and `--no-spec-sweep` does not stop them.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: extend status_cmd's sweep text/json with the new blocks from owed_artifacts; extend archive --all to move owed debug journals, orphan journals and orphan runs after its plan loop and spec sweep (orphan run: move the cursor to archived_run_path and its usage like _archive_usage). Tests green; existing status/archive tests green (`uv run pytest tests/unit -q --no-cov -n auto -k "status or archive"`).
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: one owed-artifact code path — status output and archive --all both iterate owed_artifacts; no second predicate anywhere. ruff + mypy clean.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

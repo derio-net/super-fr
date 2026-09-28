@@ -257,3 +257,9 @@ line this run's `deliver` relays. Confirm the brief names `fr archive --branch
 feat/batch-closeout-always-2`, and that running it in the housekeeping workspace archives this
 branch's spec, plan, run, usage and both journals with no `held:` line. Then `fr status` reports
 no owed artifact from this branch.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-28-closeout-always | `derio-net/super-fr` | `2026-09-28-closeout-always` | — |

@@ -1,0 +1,66 @@
+schema_version: 2
+phase:
+  number: 2
+  title: fr archive --branch
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - archive-branch-every-artifact
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/archive_cmd.py
+  - packages/fr/src/fr/archive.py
+  - packages/fr/src/fr/closeout.py
+  - packages/fr/src/fr/isolation/local.py
+  - tests/unit/test_archive_branch.py
+  estimate_lines: 420
+tasks:
+- number: 1
+  title: Refusals and ref resolution
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_archive_branch.py (real git repos in tmp_path, CliRunner on `fr archive`): `--branch` with plan_dir / --all / --sweep-only / --force each exit 2 naming the conflict; a branch resolving neither locally nor as origin/<b> exits 2 with `resolves neither locally nor as origin/<b>` and moves nothing; a branch with an added line absent from origin/main exits 2 naming the missing path and `fr isolation verify-merge --branch <b>`, moving nothing; no default ref exits 2 naming ref_error.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add the `--branch` option to archive_command. Resolve refs like verify-merge (spec §B.2): explicit-refspec fetch of `+refs/heads/<b>:refs/remotes/origin/<b>` (tolerating failure), then every ref among `origin/<b>` and local `<b>` that resolves; reuse the isolation module's ref logic where it is callable without a state file (factor a small shared helper if `_branch_refs` is bound to the ops object). Check `branch_changes_present` per ref. Tests green.
+- number: 2
+  title: Per-kind archiving with held lines
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: a merged branch that added a complete plan (+ run file naming it + plan journal), a spec whose plan rows are all archived after the move, and a debug journal → exit 0, each printed `archived:` and moved to implemented/; a second branch that only MODIFIED an existing debug journal gets it archived (d2); an incomplete plan prints `held: <plan> — <blockers>`; `--no-spec-sweep` prints `held: <spec> — spec sweep skipped`; a plan journal whose plan stays live prints `held:` naming the owner; a branch touching no artifact prints `nothing to archive for <b>`, exit 0.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement spec §B.4-5: union `branch_changed_paths` across resolved refs → `branch_artifacts`; plans through the existing single-plan path (archive_blockers, paths_dirty, archive_plan_dir) turned into held lines instead of exits; `spec_archive_sweep` once after plan moves, reporting moves and a held line for each branch spec left live (with the sweep note when available); debug journals via `_archive_journal(repo_root, "debug", slug)`; plan/spec journals follow their owner (moved when the owner moved or is already archived, else held); unmoved runs/usage held naming the plan; `_repair_in_passing` once; the existing footer. Tests green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: keep archive_command readable — extract the `--branch` path into `_archive_branch(...)` (or into fr.closeout) so the command body stays a dispatcher; `uv run ruff check`, `uv run mypy packages/fr/src` clean; run `uv run pytest tests/unit -q --no-cov -n auto -k archive` green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

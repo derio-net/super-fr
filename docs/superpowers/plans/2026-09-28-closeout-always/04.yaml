@@ -1,0 +1,49 @@
+schema_version: 2
+phase:
+  number: 4
+  title: fr pickup --branch and the shared close-out brief
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - closeout-branch-brief
+  - closeout-branch-live-run
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - tests/unit/test_closeout_brief.py
+  - tests/unit/test_pickup_branch.py
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: branch_closeout_brief, run mode as a caller
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_pickup_branch.py: `fr pickup --branch feat/x` on a repo with no run cursor prints `branch: feat/x`, the primary-checkout line, `fr isolation verify-merge --branch feat/x`, the STOP line, `fr status`, `fr isolation up --branch chore/closeout-feat-x`, `fr archive --branch feat/x`, `git add -A && git commit -m 'chore: close out feat/x' && git push -u origin chore/closeout-feat-x`, the forge PR line and `fr isolation down --branch feat/x`; an unresolvable branch exits 2; `--branch` with a plan dir, --phase or --run exits 2. Update the existing closeout-brief tests to the spec §D run-mode table: `fr archive --branch <b>` replaces `fr archive <plan-dir>`, housekeeping block always printed, `chore/archive-<plan-slug>` / `chore/closeout-<run-id>` naming unchanged, commit line `chore: archive <plan-slug>` with a plan else `chore: close out <b>`; out-of-scope lines unchanged. Fails.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: split closeout.py: `branch_closeout_brief(repo_root, branch, *, run_extras=None)` builds the brief; `closeout_brief(repo_root, state)` keeps its deliver-done refusal and calls it with a RunExtras (pr, spec, plan, test-plan line, out-of-scope lines, housekeeping branch, commit message). Add `--branch` to pickup_command with the refusals. Tests green, plus `uv run pytest tests/unit -q --no-cov -n auto -k "closeout or pickup"`.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: exactly one brief builder — no command string for the close-out steps exists outside branch_closeout_brief. ruff + mypy clean.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
