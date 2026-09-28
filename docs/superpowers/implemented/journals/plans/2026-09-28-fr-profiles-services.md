@@ -646,3 +646,38 @@ Summary now ends 'keep every machine on the same plugin version (lockstep instal
 ### p1r-later-tests-resolved-3 · finding [fixed] · resolves p1r-later-tests: Test Plan items owned by the migration phase: exempt commands on an unmigrated v1 file (source legacy), legacy ci == migrated ci
 
 Operator authorised: implemented in phase 2 (tests/unit/test_migration_profiles_services.py — exempt commands on an unmigrated v1 file read source: legacy; legacy ci equals the migrated ci).
+
+<!-- fr:journal kind=finding scope=plan id=p4r-other-forge-writes-resolved-2 created=2026-09-28T23:33:52+00:00 state=open resolves=p4r-other-forge-writes tracked_by=#803 -->
+### p4r-other-forge-writes-resolved-2 · finding [deferred → #803] · resolves p4r-other-forge-writes: triage batch cancel/merge and fr undispatch still write labels/comments under tracking none
+
+Filed at closeout as #803.
+
+<!-- fr:journal kind=finding scope=plan id=p4r-cross-repo-tracking-resolved-2 created=2026-09-28T23:33:53+00:00 state=open resolves=p4r-cross-repo-tracking tracked_by=#804 -->
+### p4r-cross-repo-tracking-resolved-2 · finding [deferred → #804] · resolves p4r-cross-repo-tracking: Cross-repo plans: the gate reads the plan's repo, not target_repo's tracking
+
+Filed at closeout as #804.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-comment-roundtrip-resolved-2 created=2026-09-28T23:33:54+00:00 state=open resolves=p5r-comment-roundtrip tracked_by=#805 -->
+### p5r-comment-roundtrip-resolved-2 · finding [deferred → #805] · resolves p5r-comment-roundtrip: _update_profiles_yaml's safe_dump round trip drops comments in profiles:
+
+Filed at closeout as #805.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-splitlines-resolved-2 created=2026-09-28T23:33:54+00:00 state=open resolves=p2r-splitlines tracked_by=#806 -->
+### p2r-splitlines-resolved-2 · finding [deferred → #806] · resolves p2r-splitlines: str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped
+
+Filed at closeout as #806 (bundled minor follow-ups).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-local-hint-resolved-2 created=2026-09-28T23:33:55+00:00 state=open resolves=p5r-local-hint tracked_by=#806 -->
+### p5r-local-hint-resolved-2 · finding [deferred → #806] · resolves p5r-local-hint: isolation/local.py:945's `fr init scaffold --profile` hint may now refuse on a repo with no remote
+
+Filed at closeout as #806 (bundled minor follow-ups).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-test-docstring-resolved-2 created=2026-09-28T23:33:56+00:00 state=open resolves=p5r-test-docstring tracked_by=#806 -->
+### p5r-test-docstring-resolved-2 · finding [deferred → #806] · resolves p5r-test-docstring: test_migration_trigger.py:178-180 docstring says exempt commands never write, untrue for init scaffold
+
+Filed at closeout as #806 (bundled minor follow-ups).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-skill-doc-resolved-2 created=2026-09-28T23:33:57+00:00 state=fixed resolves=p5r-skill-doc answered_by=operator -->
+### p5r-skill-doc-resolved-2 · finding [fixed] · resolves p5r-skill-doc: fr-init SKILL.md still documents flat backend/host and lacks --ci/--tracking
+
+Fixed by phase 6: plugins/super-fr/skills/fr-init/SKILL.md documents --ci/--tracking (lines 77-79). Operator authorized the fixed state at closeout.
