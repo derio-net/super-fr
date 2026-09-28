@@ -491,3 +491,103 @@ one small method per client, each already the narrowest shape; nothing to fold
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 the migrate/restore step and the service resolver already sit in their own helpers (_prepare_profiles, fr.services.init); no duplication left
+
+<!-- fr:journal kind=finding scope=plan id=p5r-missing-binary created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=in -->
+### p5r-missing-binary · finding [open] (reviewer: in scope) · Missing gh/glab binary crashed fr init scaffold and could leave a v1 file migrated (phase 5)
+
+real_ghclient.py:384, real_glabclient.py:254, isolation/scaffold.py:657 — FileNotFoundError escaped issues_enabled and _prepare_profiles restored only on three exception types.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-fallback-forge-asked created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=in -->
+### p5r-fallback-forge-asked · finding [open] (reviewer: in scope) · An unrecognised forge's github fallback was asked about issues on github.com (phase 5)
+
+services/init.py:87,113.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-self-hosted-host created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=in -->
+### p5r-self-hosted-host · finding [open] (reviewer: in scope) · Self-hosted GitLab / GitHub Enterprise hosts not passed to the issues check (phase 5)
+
+services/init.py:43,90; real_ghclient.py:384.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-v1-auto-skipped created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=in -->
+### p5r-v1-auto-skipped · finding [open] (reviewer: in scope) · Over a v1 file, the migration's derived ci/tracking were kept as declared, so auto never detected (phase 5)
+
+isolation/scaffold.py:650-655 + services/init.py:99,112; a forge change also refused with a cross-service error.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-trigger-docstring created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=in -->
+### p5r-trigger-docstring · finding [open] (reviewer: in scope) · trigger.py init docstring overstated the exemption (fr init migrate leaves a v1 file) (phase 5)
+
+trigger.py:128-132.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-skill-doc created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=out -->
+### p5r-skill-doc · finding [open] (reviewer: out of scope) · fr-init SKILL.md still documents flat backend/host and lacks --ci/--tracking (phase 5)
+
+Owned by phase 6 (plan 06.yaml), not this phase's code.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-local-hint created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=out -->
+### p5r-local-hint · finding [open] (reviewer: out of scope) · isolation/local.py:945's `fr init scaffold --profile` hint may now refuse on a repo with no remote (phase 5)
+
+The refusal names the flag to pass; harmless.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-comment-roundtrip created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=out -->
+### p5r-comment-roundtrip · finding [open] (reviewer: out of scope) · _update_profiles_yaml's safe_dump round trip drops comments in profiles: (phase 5)
+
+Pre-existing on main (scaffold.py:642); not caused by this change.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-test-docstring created=2026-09-28T22:47:09+00:00 phase=5 state=open review_scope=out -->
+### p5r-test-docstring · finding [open] (reviewer: out of scope) · test_migration_trigger.py:178-180 docstring says exempt commands never write, untrue for init scaffold (phase 5)
+
+init scaffold wrote and committed before this change.
+
+<!-- fr:journal kind=decision scope=plan id=p5r-derived-blocks created=2026-09-28T22:47:09+00:00 phase=5 -->
+### p5r-derived-blocks · decision · fr init scaffold treats blocks the in-process migration derived as undeclared, so auto detects them; blocks already in a v2 file are kept unless the forge now in force rejects them (phase 5)
+
+Orchestrator's reading of decision r2q3 ('both should be detected and if not, the user should be asked'): the migration's tracking = forge's own is not a detection.
+
+<!-- fr:journal kind=review scope=plan id=p5-review created=2026-09-28T22:47:09+00:00 phase=5 -->
+### p5-review · review · Phase 5 review: 9 findings (5 in scope, fixed in 6e0269f4; 4 out of scope) (phase 5)
+
+Independent reviewer over f77b2cbb against spec R8 §3.C/§3.D/§3.E.1 and plan 05.yaml: a fresh repo with no origin refusing under the default auto is what r2q3 specifies, and init_cmd is scaffold_profile's only caller; glab URL-encoding, JSON shapes and origin_slug parsing correct; refusal atomicity correct for the handled types, and nothing is written before _prepare_profiles. In-scope findings fixed test-first in 6e0269f4 (full suite 7162 passed).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-missing-binary-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=fixed resolves=p5r-missing-binary -->
+### p5r-missing-binary-resolved · finding [fixed] · resolves p5r-missing-binary: Missing gh/glab binary crashed fr init scaffold and could leave a v1 file migrated (phase 5)
+
+6e0269f4: OSError → None in both issues_enabled; _prepare_profiles restores bytes on any exception and re-raises; tests.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-fallback-forge-asked-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=fixed resolves=p5r-fallback-forge-asked -->
+### p5r-fallback-forge-asked-resolved · finding [fixed] · resolves p5r-fallback-forge-asked: An unrecognised forge's github fallback was asked about issues on github.com (phase 5)
+
+6e0269f4: no forge call without a known forge; refusal names --backend and --tracking; test asserts zero client calls.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-self-hosted-host-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=fixed resolves=p5r-self-hosted-host -->
+### p5r-self-hosted-host-resolved · finding [fixed] · resolves p5r-self-hosted-host: Self-hosted GitLab / GitHub Enterprise hosts not passed to the issues check (phase 5)
+
+6e0269f4: host = declared or self_hosted_hostname(origin); glab via GITLAB_HOST on the origin project path; gh as HOST/owner/repo; argv tests.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-v1-auto-skipped-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=fixed resolves=p5r-v1-auto-skipped -->
+### p5r-v1-auto-skipped-resolved · finding [fixed] · resolves p5r-v1-auto-skipped: Over a v1 file, the migration's derived ci/tracking were kept as declared, so auto never detected (phase 5)
+
+6e0269f4: migration-derived blocks dropped so auto detects; v2-on-disk blocks kept unless the new forge rejects them; tests for v1+auto and a forge change.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-trigger-docstring-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=fixed resolves=p5r-trigger-docstring -->
+### p5r-trigger-docstring-resolved · finding [fixed] · resolves p5r-trigger-docstring: trigger.py init docstring overstated the exemption (fr init migrate leaves a v1 file) (phase 5)
+
+6e0269f4: scoped to init scaffold; notes init migrate.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-skill-doc-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=open resolves=p5r-skill-doc out_of_scope=true -->
+### p5r-skill-doc-resolved · finding [out-of-scope] · resolves p5r-skill-doc: fr-init SKILL.md still documents flat backend/host and lacks --ci/--tracking (phase 5)
+
+Phase 6 updates the fr-init skill (including that an inconclusive --tracking auto may name --backend/--host).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-local-hint-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=open resolves=p5r-local-hint out_of_scope=true -->
+### p5r-local-hint-resolved · finding [out-of-scope] · resolves p5r-local-hint: isolation/local.py:945's `fr init scaffold --profile` hint may now refuse on a repo with no remote (phase 5)
+
+Refusal is self-explanatory; no change needed.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-comment-roundtrip-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=open resolves=p5r-comment-roundtrip out_of_scope=true -->
+### p5r-comment-roundtrip-resolved · finding [out-of-scope] · resolves p5r-comment-roundtrip: _update_profiles_yaml's safe_dump round trip drops comments in profiles: (phase 5)
+
+Pre-existing behaviour on main.
+
+<!-- fr:journal kind=finding scope=plan id=p5r-test-docstring-resolved created=2026-09-28T22:47:09+00:00 phase=5 state=open resolves=p5r-test-docstring out_of_scope=true -->
+### p5r-test-docstring-resolved · finding [out-of-scope] · resolves p5r-test-docstring: test_migration_trigger.py:178-180 docstring says exempt commands never write, untrue for init scaffold (phase 5)
+
+Pre-existing inaccuracy predating this change.
