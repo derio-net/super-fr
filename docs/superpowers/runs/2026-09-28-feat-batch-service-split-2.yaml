@@ -3,11 +3,18 @@ run: 2026-09-28-feat-batch-service-split-2
 workflow: fr-goal@1
 branch: feat/batch-service-split-2
 started: '2026-09-28T19:14:10+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-28T19:14:18+00:00'
+    state: done
+    at: '2026-09-28T20:11:06+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 8 requirements:a127ec3102b3029fac33a34b6984fcba341c464bf19c6f27fcf45062568d5c15
   spec-review:
     state: pending
   plan:
