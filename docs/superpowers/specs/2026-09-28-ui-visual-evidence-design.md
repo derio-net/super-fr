@@ -148,17 +148,28 @@ the fix:
    `implement-phase` the executor's shots may predate the unit, because d2
    constrains only when they are opened.
 4. **Opened.** The *witness transcript* holds an image read of each shot path
-   issued since the unit opened. The witness transcript is:
+   issued since the unit opened *and* at or after the shot's last write (one
+   second of slack). A read issued before the capture ran, or before a
+   re-capture, did not see these bytes. The witness transcript is:
    - `implement-phase`: the claimed holder's subagent transcript
-     (`attribute_dispatches`), or the orchestrator's own stream when the phase
-     ran inline (no holder);
+     (`attribute_dispatches`). When no holder is claimed, fr looks for a
+     dispatch of the step's agent type in this session since the unit opened.
+     If one exists, the resolve is refused and asks for the claim
+     (`fr run claim … --agent <id>`). The orchestrator's reads can never stand
+     in for a dispatched executor's. If none exists, the phase ran inline and
+     the orchestrator's own stream is the witness;
    - `review-phase`: the transcript of the agent named by this unit's
      `reviewer` evidence (d3), never the executor's;
    - `deliver`: the orchestrator's own stream.
 5. If the entry names a `script`, the file exists, and the witness transcript
-   holds a shell call naming it since the unit opened. The stage that claims the
-   script re-ran it. fr does not require the script to be committed: the input
-   asks for a script to be preferred, not versioned.
+   holds a shell call since the unit opened that *executes* it. The script must
+   be the command word, or the first non-flag argument after an interpreter
+   (`node`, `python`, `bash`, `npx`, `uv run`, … behind an optional
+   `fr isolation exec --` or env prefix). `cat`, `ls` or `echo` of the script
+   does not count. The known limit: an `npm run <alias>` is not recognised;
+   name the script directly. fr does not require the script to be committed,
+   because the input asks for a script to be preferred, not versioned.
+6. No row appears in two `visual:` entries.
 
 **The transcript predicates.** Two new functions in `fr.run.telemetry`,
 alongside `subagent_dispatch_since` and with its three-valued contract (a value
@@ -166,19 +177,25 @@ when found, `False` when the transcript was read and holds none, `None` when it
 could not be read):
 
 - `read_file_since(transcript, path, since) -> datetime | False | None`. The
-  first `tool_use` in `transcript`, at or after `since`, whose tool name
-  normalises to `Read` (`fr.usage.classify`'s alias table, so `read_file` and
-  `view` count too) and whose input `file_path` (or `path`) resolves to the same
-  file as `path`. "An image read" is a read of an image-suffixed path; fr does
+  first `tool_use` in `transcript`, at or after `since` (and at or after an
+  optional `not_before`), whose tool name normalises to `Read`
+  (`fr.usage.classify`'s alias table, so `read_file` and `view` count too) and
+  whose input `file_path` (or `path`) is an *absolute* path that resolves
+  (realpath) to the same file as `path`. A relative read target never matches. "An image read" is a read of an image-suffixed path; fr does
   not inspect the tool result.
 - `shell_named_since(transcript, name, since) -> datetime | False | None`. The
-  first `Bash` `tool_use` at or after `since` whose command names `name`
-  (`_names`' matching, `:788`).
+  first `Bash` `tool_use` at or after `since` whose command executes `name`
+  (check 5's rule).
 
 Both take a transcript *file*, not the session, so the same predicate reads the
-orchestrator stream or one subagent's file. `witness_transcript(env, step, unit)`
-picks the file: the orchestrator's session, or the `Dispatch.transcript` of the
-holder or reviewer found through `attribute_dispatches` (`:281`).
+orchestrator stream or one subagent's file. Read against the orchestrator's
+session file, they skip `isSidechain` records, as `orchestrator_wrote_since`
+does. `witness_transcript` picks the file: the orchestrator's session, or the
+`Dispatch.transcript` of the holder or reviewer found through
+`attribute_dispatches` (`:281`). It is three-valued too. It returns `None` only
+when the session cannot be read, and `False` when the session is read but no
+dispatch pairs with the named agent id. `False` is a **refusal**, because an id
+this session never dispatched is not an unobservable transcript.
 
 Unobservable, when no transcript is readable (a Claude Code session file fr
 cannot find; OpenCode, whose session store fr already reads for `tests=`
