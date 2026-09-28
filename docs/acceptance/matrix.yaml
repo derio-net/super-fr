@@ -4309,9 +4309,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R2
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: Born at brainstorm; target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_requirements.py
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+      - super-fr:tests/unit/test_spec_requirements_cmd.py
+    status: ci
+    notes: Covered by parse_requirements/check_requirements unit tests, the brainstorm
+      resolve gate, and the fr spec requirements CLI.
   - id: requirements-always-ask
     capability: fr-goal-methodology
     acceptance: fr-goal's question round asks about every user-visible behaviour and
