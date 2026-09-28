@@ -1,20 +1,17 @@
 """fr.requirements — §B grammar, §C structural gate, §D coverage partition.
 
 Spec `docs/superpowers/specs/2026-09-28-requirements-traceability-design.md`
-Test Plan items 1-4, 12. Input entries are identified by
-`fr.requirements.is_input_entry`, which reads the `input` attribute with
-`getattr` — phase 2 adds a real field to `JournalEntry`; until then tests
-build a small stand-in (`_input_entry` below) exposing `.input` plus the
-attributes `check_requirements`/`check_coverage` read.
+Test Plan items 1-4, 12. Input entries are real `JournalEntry` objects
+carrying the `input=true` header token (spec §A), built by `_input_entry`.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fr.acceptance.model import Matrix, Row
+from fr.journal.model import JournalEntry
 from fr.requirements import (
     Deferred,
     Requirement,
@@ -32,19 +29,22 @@ from fr.requirements import (
 # ── fixtures / helpers ──────────────────────────────────────────────────────
 
 
-def _input_entry(id: str, body: str) -> SimpleNamespace:
-    """The "small helper" P1.T3.S1 names: a stand-in for a phase-2
-    `input=True` journal entry. `is_input_entry` reads `.input` via
-    `getattr`, so this object needs nothing else to be recognised as one."""
-    return SimpleNamespace(kind="discovery", id=id, body=body, input=True)
+def _spec_entry(**kw: object) -> JournalEntry:
+    base: dict[str, object] = dict(scope="spec", created="2026-09-28T00:00:00", title="t")
+    return JournalEntry(**{**base, **kw})  # type: ignore[arg-type]
 
 
-def _decision_entry(id: str) -> SimpleNamespace:
-    return SimpleNamespace(kind="decision", id=id, body="")
+def _input_entry(id: str, body: str) -> JournalEntry:
+    """A real spec-journal input entry: `kind=discovery` + `input=true` (§A)."""
+    return _spec_entry(kind="discovery", id=id, body=body, input=True)
 
 
-def _finding_entry(id: str) -> SimpleNamespace:
-    return SimpleNamespace(kind="finding", id=id, body="", state="open")
+def _decision_entry(id: str) -> JournalEntry:
+    return _spec_entry(kind="decision", id=id, body="")
+
+
+def _finding_entry(id: str) -> JournalEntry:
+    return _spec_entry(kind="finding", id=id, body="", state="open")
 
 
 def _matrix(*origins: str) -> Matrix:
@@ -324,10 +324,10 @@ def test_citation_to_archived_spec_twin_resolves() -> None:
     assert problems == []
 
 
-def test_is_input_entry_reads_getattr() -> None:
+def test_is_input_entry_reads_the_real_token() -> None:
     assert is_input_entry(_input_entry("i1", "x"))
     assert not is_input_entry(_decision_entry("d1"))
-    assert not is_input_entry(SimpleNamespace(kind="discovery", id="x"))
+    assert not is_input_entry(_spec_entry(kind="discovery", id="x"))
 
 
 def test_normalise_collapses_whitespace() -> None:

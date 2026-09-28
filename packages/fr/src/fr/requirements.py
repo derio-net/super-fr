@@ -7,14 +7,9 @@ touches disk; `fr run resolve`'s `requirements`/`coverage` derived-evidence
 wiring (spec §C/§D) lands in a later phase and calls the SAME
 `check_requirements`/`check_coverage` — never a copy.
 
-Input-entry detection (`is_input_entry`) reads the `input` attribute with
-`getattr` rather than assuming a `JournalEntry` field: phase 2 adds a real
-`input: bool = False` field to `JournalEntry` (spec §A), and this function
-lights up unchanged the moment that lands. Until then no real `JournalEntry`
-carries the attribute, so this reads `False` for every one of them — tests
-that need an "input entry" build a small stand-in object exposing `.input`
-alongside the few attributes `check_requirements`/`check_coverage` read
-(`kind`, `id`, `body`).
+Input-entry detection (`is_input_entry`) reads `JournalEntry.input`, the
+`input=true` header token (spec §A) the model allows only on a spec-scope
+`discovery`.
 """
 
 from __future__ import annotations
@@ -25,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from fr.acceptance.model import AcceptanceError, Matrix, archive_twin, split_ref
+from fr.journal.model import JournalEntry
 
 # --- shapes ----------------------------------------------------------------
 
@@ -79,9 +75,9 @@ class RequirementsError(Exception):
 # --- §A: identifying an input entry -----------------------------------------
 
 
-def is_input_entry(entry: Any) -> bool:
+def is_input_entry(entry: JournalEntry) -> bool:
     """Whether `entry` is a raw-input spec-journal entry (§A)."""
-    return bool(getattr(entry, "input", False))
+    return entry.input
 
 
 # --- §B: the table grammar --------------------------------------------------

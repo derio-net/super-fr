@@ -1,0 +1,27 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-09-28-feat-gh-759 --step implement-phase --item phase/2 --record docs/superpowers/runs/2026-09-28-feat-gh-759.records/implement-phase__phase-2.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 2
+run: 2026-09-28-feat-gh-759
+step: implement-phase
+item: phase/2
+outcome: done            # done | failed | blocked
+ticks: [P2.T1.S1, P2.T1.S2]
+refactor:
+  P2.T1: "two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done"
+journal:
+  - kind: decision
+    id: p2-token-scope-in-model
+    title: input/unconfirmed scope rules live in the JournalEntry validator; only the review_scope=out refusal lives in the writers
+    body: |
+      A JournalEntry carries its own `scope`, so both scope rules (`input` only on a
+      spec `discovery`, `unconfirmed` only on a spec `open` resolution record that
+      is neither a deferral nor out-of-scope) are enforced once, in the model
+      validator beside `out_of_scope`'s, and every writer shares them. The one
+      refusal the model cannot make is `unconfirmed` on a finding the reviewer
+      tagged `review_scope: out`, because that needs the TARGET finding; it is
+      enforced in `fr journal resolve` and `record.apply._journal_writes`.
+      `is_input_entry` now reads `JournalEntry.input` directly; the phase-1
+      `parse_journal` bridge in test_spec_requirements_cmd.py is removed.
+resolves: []
+evidence: {}
