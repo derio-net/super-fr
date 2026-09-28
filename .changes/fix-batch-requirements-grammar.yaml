@@ -1,0 +1,2 @@
+bump: patch
+summary: "Requirements gate: the source-cell grammar is documented (fr-brainstorming, fr-goal), an unknown source form names the valid forms and the row, a backslash-escaped double quote in a quote is read as a plain one, and `fr spec requirements` reports a not-yet-written input entry as pending"

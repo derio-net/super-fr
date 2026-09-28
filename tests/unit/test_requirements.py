@@ -7,6 +7,7 @@ carrying the `input=true` header token (spec §A), built by `_input_entry`.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -217,7 +218,10 @@ def test_backslash_escaped_double_quote_is_unescaped() -> None:
         "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
         '| R1 | x | input "labelled \\"\u2713 680\u2013720 g\\" when" |\n'
     )
-    assert parse_requirements(text).items[0].sources[0].value == 'labelled "\u2713 680\u2013720 g" when'
+    assert (
+        parse_requirements(text).items[0].sources[0].value
+        == 'labelled "\u2713 680\u2013720 g" when'
+    )
     deferred = REQ_ONE + (
         '\n## Deferred from input\n\n| input | reason |\n|---|---|\n| "a \\"b\\" c" | later |\n'
     )
@@ -598,3 +602,21 @@ def test_759_replay_coverage_partitions_the_literal_ellipsis() -> None:
     assert counts.spans == 2
     assert counts.requirement == 1
     assert counts.context == 1
+
+
+def test_the_skill_documented_grammar_example_parses() -> None:
+    """#776: fr-brainstorming §2 is where an agent learns the `source`
+    grammar; its inline example must stay one this parser accepts."""
+    skill = (
+        Path(__file__).parents[2] / "plugins/super-fr/skills/fr-brainstorming/SKILL.md"
+    ).read_text()
+    m = re.search(r"e\.g\. `(input .+?)`;", skill)
+    assert m, "fr-brainstorming §2 lost its `source` example"
+    parsed = parse_requirements(
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        f"| R1 | x | {m.group(1)} |\n"
+    )
+    kinds = {s.kind for r in parsed.items for s in r.sources}
+    assert kinds == {"input", "decision"}
+    assert any('"' in s.value for r in parsed.items for s in r.sources if s.kind == "input")
+    assert any(len(r.sources) > 1 for r in parsed.items)
