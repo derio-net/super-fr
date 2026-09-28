@@ -397,3 +397,53 @@ def test_archive_cmd_uses_the_public_journal_mover():
     assert "archive_journal" in archive_mod.__all__
     assert archive_mod._archive_journal is archive_mod.archive_journal
     assert "_archive_journal" not in inspect.getsource(archive_cmd)
+
+
+def _base_with_archived_plan(tmp_path: Path) -> Path:
+    """A published main whose plan PLAN is already under implemented/plans/."""
+    repo = _base(tmp_path, remote=False)
+    _plan(repo, PLAN, ticked=True)
+    _commit(repo, "plan")
+    (repo / IMPL / "plans").mkdir(parents=True)
+    _git(repo, "mv", str(SP / "plans" / PLAN), str(IMPL / "plans" / PLAN))
+    _commit(repo, "archive plan")
+    _add_remote(repo, tmp_path / "origin.git")
+    _publish(repo)
+    return repo
+
+
+def test_branch_moves_an_orphan_run_and_usage_whose_plan_is_archived(tmp_path, monkeypatch):
+    """review p2 #2: §C's orphan rule — a cursor whose emitted.plan is already
+    archived moves, carrying its usage, exactly as orphan journals do."""
+    repo = _base_with_archived_plan(tmp_path)
+
+    def build(r: Path) -> None:
+        _run_file(r, RUN, PLAN)
+        _write(r, SP / "usage" / f"{RUN}.yaml", "schema_version: 1\n")
+
+    _merged(repo, build)
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert "held:" not in result.output
+    assert (repo / IMPL / "runs" / f"{RUN}.yaml").is_file()
+    assert (repo / IMPL / "usage" / f"{RUN}.yaml").is_file()
+    assert not (repo / SP / "runs" / f"{RUN}.yaml").exists()
+    assert not (repo / SP / "usage" / f"{RUN}.yaml").exists()
+    assert f"archived: docs/superpowers/runs/{RUN}.yaml" in result.output
+    assert f"archived: docs/superpowers/usage/{RUN}.yaml" in result.output
+
+
+def test_branch_names_why_an_orphan_run_was_not_carried(tmp_path, monkeypatch):
+    """The plan is archived but the cursor's destination is taken: the held
+    line says so, rather than claiming the plan did not move."""
+    repo = _base_with_archived_plan(tmp_path)
+    _write(repo, IMPL / "runs" / f"{RUN}.yaml", "stale\n")
+    _commit(repo, "stale archived cursor")
+    _publish(repo)
+
+    _merged(repo, lambda r: _run_file(r, RUN, PLAN))
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert f"held: docs/superpowers/runs/{RUN}.yaml — " in result.output
+    assert "already exists" in result.output
+    assert "did not move" not in result.output

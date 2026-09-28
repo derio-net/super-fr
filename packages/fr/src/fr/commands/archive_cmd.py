@@ -34,6 +34,7 @@ from fr.archive import (
     archive_blockers,
     archive_journal,
     archive_plan_dir,
+    archive_run_cursor,
     emitted_plan,
     merge_evidence,
     paths_dirty,
@@ -305,17 +306,26 @@ def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
         if a.kind == "run"
         else archived_usage_path(repo_root, run_id)
     )
-    if not (repo_root / a.path).exists():
+    if not (repo_root / a.path).exists():  # its plan's move carried it
         return dst.relative_to(repo_root)
     cursor = run_path(repo_root, run_id)
     if not cursor.exists():
         cursor = archived_run_path(repo_root, run_id)
     plan = emitted_plan(cursor)
-    return (
-        f"follows plan {plan}, which did not move in this run"
-        if plan
-        else "follows no recorded plan"
-    )
+    if not plan:
+        return "follows no recorded plan"
+    if (repo_root / plan).exists():
+        return f"follows plan {plan}, still live"
+    if not (repo_root / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
+        return f"follows plan {plan}, which is neither live nor archived"
+    # The orphan rule (§C): its plan is already archived, so it follows.
+    try:
+        archive_run_cursor(repo_root, run_id)
+    except ArchiveError as e:
+        return str(e)
+    if (repo_root / a.path).exists():
+        return f"plan {plan} is archived, but {dst.relative_to(repo_root)} already exists"
+    return dst.relative_to(repo_root)
 
 
 def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:

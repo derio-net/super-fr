@@ -54,6 +54,7 @@ __all__ = [
     "MergeEvidence",
     "SpecSweepResult",
     "archive_plan_dir",
+    "archive_run_cursor",
     "completed_unarchived_plans",
     "find_run_for_plan",
     "landed_for",
@@ -494,10 +495,26 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
     run_id = find_run_for_plan(repo_root, plan_rel)
     if run_id is None:
         return
+    if run_path(repo_root, run_id).exists():
+        archive_run_cursor(repo_root, run_id)
+
+
+def archive_run_cursor(repo_root: Path, run_id: str) -> None:
+    """Move run `run_id`'s cursor to implemented/runs/, carrying its usage
+    file (`_archive_usage`). With the cursor already archived, a usage file
+    left live is moved on its own. A no-op when the destination already holds
+    a cursor (a re-run) — the caller sees the live file remain.
+
+    Public so `fr archive --branch` can move an orphan cursor — one whose
+    `emitted.plan` is already archived (2026-09-28-closeout-always §C's
+    orphan rule; review p2 #2) — through the same path a plan move uses.
+    """
     src = run_path(repo_root, run_id)
-    if not src.exists():
-        return
     dst = archived_run_path(repo_root, run_id)
+    if not src.exists():
+        if dst.exists():
+            _archive_usage(repo_root, dst, run_id)
+        return
     if dst.exists():
         return
     _archive_usage(repo_root, src, run_id)
