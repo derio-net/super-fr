@@ -4262,12 +4262,13 @@ rows:
       README, OpenCode /fr-goal command) to the sized, at-most-two-round contract. The
       tripwire (normalised, casefolded text) asserts the old fixed-batch phrase list
       is absent from all of them; on the canonical fr-goal skill and both mirrors it
-      asserts the behavioural markers (questions: {rounds, (Round 1 of, (Round 2 of
-      2), design-risk, operator-request, never a round 3, tool-call round separation,
-      announced round 2 as a ceiling, gate-question-rounds journal entry) and that no
-      prose-only cross-examination instruction remains; on fr-brainstorming, the explainer
-      .md, README and index.html it asserts only that a question round is described.
-      It is a wording check, not a behavioural one.'
+      asserts the behavioural markers (questions: {rounds, the (Round 1 · questions
+      / (Round 2 · questions labels and the a 2nd round may follow forecast (gh#766),
+      design-risk, operator-request, never a round 3, tool-call round separation, announced
+      round 2 as a ceiling, gate-question-rounds journal entry), each dialog of a split
+      round naming its part, no (Round N of total label, and that no prose-only cross-examination
+      instruction remains; on fr-brainstorming, the explainer .md, README and index.html
+      it asserts only that a question round is described.'
   - id: deliver-tests-log-background
     capability: fr-goal-methodology
     acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the
