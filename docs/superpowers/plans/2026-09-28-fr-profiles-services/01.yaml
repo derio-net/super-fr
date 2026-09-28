@@ -1,0 +1,163 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Walking skeleton — services model, resolver, legacy reader, `fr services`
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - profiles-services-schema
+  - profiles-services-defaults
+  - profiles-services-cli
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/services/*
+  - packages/fr/src/fr/_hosts.py
+  - packages/fr/src/fr/commands/services_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/artifacts/trigger.py
+  - tests/unit/test_services_*.py
+  - tests/unit/test__hosts.py
+  - tests/unit/test_hostclient.py
+  - tests/unit/test_migration_trigger.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Skeleton — `fr services` prints the forge of a flat file (smoke the runtime)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_services_cli.py — a tmp git repo (origin https://gitlab.com/example-org/demo.git) with a
+      v1 `.devcontainer/fr-profiles.yaml` (`backend: gitlab`, `host: gitlab.example.com`, a `profiles:` block);
+      `CliRunner().invoke(app, ["services", "--json"])` (VK_REPO_ROOT / cwd as other CLI tests do) exits 0 and
+      the JSON has `forge: {type: gitlab, host: gitlab.example.com, source: legacy}`. Run it; it fails (no command).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: minimal `packages/fr/src/fr/services/{__init__,model,resolve}.py` and
+      `packages/fr/src/fr/commands/services_cmd.py` registered in `fr/cli.py` as `fr services` with `--json`;
+      enough resolution to pass S1. Add "services" to `fr.artifacts.trigger.READ_ONLY_COMMANDS` and to the
+      literal in `tests/unit/test_migration_trigger.py::test_the_exemption_list_is_exactly_these_things`
+      (docstring criterion: it reads, never writes an artifact). Run S1 + that test: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: none beyond naming; record `refactor: {P1.T1: "skeleton — the full model lands in T2"}`.
+- number: 2
+  title: Model and frozen v1 reader
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_services_model.py — spec §3.A/R1: ForgeService type github|gitlab|gitea; CiService
+      none|github-actions|gitlab-ci|gitea-actions; TrackingService none|github|gitlab|gitea; extra keys (e.g.
+      `job:`, `project:`) round-trip; `jenkins` / `jira` refused with a message containing
+      "derio-net/super-fr#795"; a tracking type other than none or the forge's own type refused naming #795;
+      a non-native type with no host refused ("host is required"). tests/unit/test_services_legacy.py:
+      `ProfilesV1` accepts {profiles, default, backend, host}, refuses an unknown top-level key, and its source
+      is pinned by `FROZEN_CLASS_SHA256` (mirror tests/unit/test_run_legacy.py's pin). Run: red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: `fr/services/model.py` (pydantic; `extra="allow"` on each service; a `validate_services(forge, ci,
+      tracking)` cross-check for host/required and the tracking-vs-forge rule; a constant
+      `FOLLOW_UP = "derio-net/super-fr#795"` used in every refusal) and `fr/services/legacy.py`
+      (`ProfilesV1`, closed-world, vocabulary inlined, `FROZEN_CLASS_SHA256`). Run: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: dedupe the type vocabularies into module-level tuples the CLI and validator will share; rerun.
+- number: 3
+  title: Offline ci detection and the resolver
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_services_detect.py — spec §3.C `detect_ci(root, forge_type) -> "real"|"fr-only"|"absent"`:
+      .github/workflows/{ci.yml,acceptance-report.yml} → real; only acceptance-report.yml → fr-only; GitLab
+      `.gitlab-ci.yml` whose only job key is `acceptance-report` → fr-only, with an `include:` → real, with another
+      job → real; nothing → absent; gitea checks .gitea/workflows then .github/workflows.
+      tests/unit/test_services_resolve.py — §3.B precedence per service with `source`: declared v2 blocks;
+      v1 file → forge from backend/host (legacy), ci from detect_ci (real → forge's pipeline type, fr-only/absent
+      → none, legacy), tracking forge's own; no file → origin inference / github fallback (default), ci via
+      `fr.acceptance.ci.ci_config` raw probe (#787), tracking forge's own; host defaults to the forge host for
+      native types. Run: red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: `fr/services/detect.py` (reuse `fr.acceptance.ci.CI_CONFIG_PATHS`/`ci_config`; parse
+      `.gitlab-ci.yml` with yaml.safe_load, non-job top-level keys: stages, variables, workflow, default, image,
+      services, before_script, after_script, cache) and `fr/services/resolve.py::resolve_services(repo_root)`
+      reading raw data via `fr.isolation.types.profiles_config`, v1 through `ProfilesV1`, origin inference via
+      the existing `fr._hosts` helpers. Run: green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: keep the origin-inference helpers in `_hosts.py`; resolve.py imports them (no cycle); rerun.
+- number: 4
+  title: Forge consumers through the service; `fr services` output
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: extend tests/unit/test__hosts.py — `detect_backend`, `declared_host`, `host_for` return the forge
+      service's values for a v2 file (`forge: {type: gitlab, host: h.example.com}`) and a v1 file alike;
+      `declared_host` is None for a default-sourced host. tests/unit/test_hostclient.py — client_for's
+      declared-host warning (gh#486) still fires for a v2 `forge: {type: github, host: x.example.com}`.
+      test_services_cli.py — plain output lists forge/ci/tracking with type, host (`—` when none) and source;
+      `--json` shape per spec §3.F. Run: red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: make `detect_backend`/`declared_host`/`host_for` thin wrappers over `resolve_services(...).forge`
+      (signatures unchanged); finish services_cmd output. Run the new tests plus test__hosts.py,
+      test_hostclient.py, test_isolation.py: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR + gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy on
+      packages/fr/src; commit; push the branch.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

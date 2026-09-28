@@ -245,3 +245,9 @@ Post-merge (operator): on a scratch GitLab project with no CI and issues
 disabled, `fr init scaffold` → `fr services` shows `ci none`, `tracking none`;
 `fr acceptance init` writes no pipeline; an fr-goal run's closeout prints no
 issue-filing lines.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-28-fr-profiles-services | `derio-net/super-fr` | `2026-09-28-fr-profiles-services` | — |
