@@ -101,6 +101,20 @@ _INPUT_SOURCE_RE = re.compile(r'^input\s+"(.*)"$', re.DOTALL)
 _DECISION_SOURCE_RE = re.compile(r"^decision\s+(\S+)$")
 _DELIMITER_CELL_RE = re.compile(r"^:?-+:?$")
 
+SOURCE_FORMS = (
+    'valid forms: `input "<verbatim quote>"` (straight quotes; a `"` inside the '
+    "quote is fine as-is) or `decision <id>` (a spec-journal decision id); "
+    "separate several with `<br>`"
+)
+"""The `source` cell grammar in one line — what an unknown-form error names
+(#776), and what fr-brainstorming §2 documents with an example per form."""
+
+
+def _unescape_quote(value: str) -> str:
+    """`\\"` -> `"`: the escape an agent reaches for. Unescaped, a quote that
+    kept the backslash could never match the input (#776)."""
+    return value.replace('\\"', '"')
+
 
 def _split_row(line: str, line_no: int) -> list[str]:
     """One GFM table row -> its cells: split on unescaped `|`, `\\|`
@@ -210,7 +224,7 @@ def _extract_quote(cell: str, line_no: int) -> str:
     return cell[first + 1 : last]
 
 
-def _parse_sources(cell: str, line_no: int) -> tuple[Source, ...]:
+def _parse_sources(cell: str, line_no: int, row: str) -> tuple[Source, ...]:
     if not cell.strip():
         raise RequirementsError(f"line {line_no}: empty `source` cell")
     sources: list[Source] = []
@@ -220,13 +234,15 @@ def _parse_sources(cell: str, line_no: int) -> tuple[Source, ...]:
             raise RequirementsError(f"line {line_no}: empty source in a `<br>`-separated list")
         m = _INPUT_SOURCE_RE.match(part)
         if m:
-            sources.append(Source(kind="input", value=m.group(1)))
+            sources.append(Source(kind="input", value=_unescape_quote(m.group(1))))
             continue
         m = _DECISION_SOURCE_RE.match(part)
         if m:
             sources.append(Source(kind="decision", value=m.group(1)))
             continue
-        raise RequirementsError(f"line {line_no}: unknown source form {part!r}")
+        raise RequirementsError(
+            f"line {line_no}: unknown source form {part!r} in row `{row}` — {SOURCE_FORMS}"
+        )
     return tuple(sources)
 
 
@@ -257,7 +273,8 @@ def parse_requirements(spec_text: str) -> Requirements:
         seen_ids[rid] = line_no
         if not req_text:
             raise RequirementsError(f"line {line_no}: requirement {rid} has an empty cell")
-        sources = _parse_sources(source_cell, line_no)
+        row = "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
+        sources = _parse_sources(source_cell, line_no, row)
         items.append(Requirement(id=rid, text=req_text, sources=sources))
 
     deferred: list[Deferred] = []
@@ -267,7 +284,7 @@ def parse_requirements(spec_text: str) -> Requirements:
         d_rows = _parse_table(d_lines, d_first_line_no, _DEFERRED_HEADER, _DEFERRED_HEADING)
         for cells, line_no in d_rows:
             input_cell, reason = cells
-            quote = _extract_quote(input_cell, line_no)
+            quote = _unescape_quote(_extract_quote(input_cell, line_no))
             if not reason:
                 raise RequirementsError(f"line {line_no}: Deferred entry has an empty `reason`")
             deferred.append(Deferred(quote=quote, reason=reason))
@@ -375,15 +392,23 @@ def check_requirements(
     entries: Sequence[Any],
     matrix: Matrix,
     spec_ref: str,
+    *,
+    input_pending: bool = False,
 ) -> list[str]:
     """The §C structural gate: problems with the spec's Requirements capture,
     empty when sound. `spec_ref` is `<repo>:<spec-path>` (no fragment) — a
     requirement `R<n>` is cited when a matrix row's `origin` names
-    `spec_ref#R<n>` (its archive twin resolves too)."""
+    `spec_ref#R<n>` (its archive twin resolves too).
+
+    `input_pending` is the pre-check's stance (`fr spec requirements`, run
+    before the brainstorm resolve that writes the input entry, #776): with no
+    input entry yet, neither its absence nor the quotes it would match is a
+    problem. The resolve gate never passes it, so it stays strict."""
     problems: list[str] = []
 
     input_entries = [e for e in entries if is_input_entry(e)]
-    if not input_entries:
+    skip_quotes = input_pending and not input_entries
+    if not input_entries and not skip_quotes:
         problems.append(
             "no input entry (a `kind=discovery` entry carrying `input`) found in the spec journal"
         )
@@ -405,7 +430,7 @@ def check_requirements(
     for req in parsed.items:
         for src in req.sources:
             if src.kind == "input":
-                if not _quote_ok(src.value):
+                if not skip_quotes and not _quote_ok(src.value):
                     problems.append(
                         f"requirement {req.id}: quoted input {src.value!r} does not match "
                         "any input entry in the spec journal"
@@ -420,7 +445,7 @@ def check_requirements(
             problems.append(uncited_problem(req.id, spec_ref))
 
     for d in parsed.deferred:
-        if not _quote_ok(d.quote):
+        if not skip_quotes and not _quote_ok(d.quote):
             problems.append(
                 f"Deferred entry {d.quote!r}: does not match any input entry in the spec journal"
             )
@@ -460,7 +485,7 @@ def _coverage_form(pieces: Iterable[str]) -> str:
     sides, so a reviewer may quote either way (#777). Decoding before the
     join keeps a trailing `\\` in one span from pairing with the next span's
     leading `"`, so no escape can hide a gap, overlap or reordering."""
-    return _strip_ws("".join(p.replace('\\"', '"').replace("\\|", "|") for p in pieces))
+    return _strip_ws("".join(_unescape_quote(p).replace("\\|", "|") for p in pieces))
 
 
 def coverage_block(review_body: str) -> str | None:

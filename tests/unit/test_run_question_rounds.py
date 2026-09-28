@@ -537,6 +537,27 @@ def _round(*texts: str) -> Any:
             ROUND_TWO,
             None,
         ),
+        # gh#783: every question carries its own position in the round; the
+        # forecast is still found on any of them.
+        (
+            [
+                (
+                    "(Round 1 · question 1 of 5 · a 2nd round may follow) q",
+                    "(Round 1 · question 2 of 5 · a 2nd round may follow) q",
+                    "(Round 1 · question 3 of 5 · a 2nd round may follow) q",
+                    "(Round 1 · question 4 of 5 · a 2nd round may follow) q",
+                    "(Round 1 · question 5 of 5 · a 2nd round may follow) q",
+                ),
+                ("(Round 2 · question 1 of 2) q", "(Round 2 · question 2 of 2) q"),
+            ],
+            ROUND_TWO,
+            None,
+        ),
+        (
+            [("(Round 1 · question 1 of 2) q", "(Round 1 · question 2 of 2) q"), ("q",)],
+            ROUND_TWO,
+            "not told",
+        ),
         ([("(Round 1 · A 2ND ROUND MAY FOLLOW) q",), ("q",)], ROUND_TWO, None),
         # A label without the forecast never announced a design-risk round 2.
         (

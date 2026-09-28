@@ -1,12 +1,16 @@
 """`fr acceptance init` — scaffold the matrix, CI workflow, rule, HTML report.
 
 Write-if-missing semantics throughout: re-running init never touches a file
-the operator (or a previous run) already owns.
+the operator (or a previous run) already owns. The one file init edits rather
+than creates, `.gitignore`, gets one appended line and no other byte changed.
+
+The CI workflow is scaffolded only for a repo that already has CI for its
+backend, or when the caller asks (`--with-ci`) — see `fr.acceptance.ci`.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fr._hosts import HostBackend
@@ -17,8 +21,7 @@ GITIGNORE_LINE = "docs/acceptance/report.html"
 
 MATRIX_TEMPLATE = """\
 # Acceptance matrix — the registry of business-level acceptance tests and
-# where each is verified. Rendered by `fr acceptance report`; gated in CI by
-# .github/workflows/acceptance-report.yml (`fr acceptance check`).
+# where each is verified. Rendered by `fr acceptance report`; {ci_gate}
 #
 # Row schema:
 #   id:         kebab-case, stable
@@ -94,9 +97,7 @@ backfill owed) · `not-implemented` (nothing exists — warning) · `failing`
   acceptance report` (no flag) writes it git-stamped honoring `--link-mode`
   (github in CI, local otherwise); links resolve relative to sibling checkouts
   (`--sibling-root`, default `..`).
-- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
-  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
-  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue.
+{ci_bullet}
 """
 
 WORKFLOW_TEMPLATE = """\
@@ -352,15 +353,59 @@ acceptance-report:
 """
 
 
+# The matrix header's gate line, and the rule's CI bullet. GitHub's wording is
+# the one every GitHub repo was scaffolded with, kept byte-for-byte.
+_CI_GATE = "gated in CI by\n# {path} (`fr acceptance check`)."
+_NO_CI_GATE = "no CI is configured,\n# so `fr acceptance check` runs locally and no row is `ci`."
+_CI_BULLET_GITHUB = """\
+- CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
+  writes a Markdown summary to each Actions run (branch, PR, main), uploads the
+  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue."""
+_CI_BULLET = """\
+- CI: the acceptance job in `{path}` runs `fr acceptance check` on every
+  pipeline and upserts the weekly "Acceptance debt" issue."""
+_NO_CI_BULLET = """\
+- CI: none is configured. `fr acceptance check` runs locally, and no row may
+  move to `ci` until the repo has a CI config (`fr acceptance init --with-ci`
+  scaffolds one)."""
+
+
 @dataclass(frozen=True)
 class InitOutcome:
     created: list[str]
     skipped: list[str]
+    notices: list[str] = field(default_factory=list)
 
 
-def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> InitOutcome:
+def _append_gitignore_line(path: Path, line: str) -> bool:
+    """Append `line` to `path` unless it already lists it. True when written.
+
+    Append-only and byte-exact (gh#775): the file's existing bytes, line
+    endings and blank lines are left alone, so reverting the one line restores
+    the original file. A final line with no newline gets one, in the file's
+    own style, because the new line cannot share it."""
+    data = path.read_bytes() if path.exists() else b""
+    if line.encode() in (raw.rstrip(b"\r") for raw in data.split(b"\n")):
+        return False
+    eol = b"\r\n" if b"\r\n" in data else b"\n"
+    lead = eol if data and not data.endswith(b"\n") else b""
+    path.write_bytes(data + lead + line.encode() + eol)
+    return True
+
+
+def init(
+    root: Path,
+    org: str,
+    repo: str,
+    backend: HostBackend = "github",
+    *,
+    with_ci: bool = False,
+) -> InitOutcome:
+    from fr.acceptance.ci import SCAFFOLD_PATHS, ci_config, no_ci_message
+
     created: list[str] = []
     skipped: list[str] = []
+    notices: list[str] = []
 
     def write_if_missing(rel: str, content: str) -> None:
         path = root / rel
@@ -375,20 +420,39 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
 
     # Born at the kind's current version, so a fresh matrix is never stale.
     stamp = artifact_kind("matrix").current_version
+    # Decided before anything is written: a pipeline only for a repo that
+    # already runs CI on this backend, or when the caller asks for one.
+    scaffold_path = SCAFFOLD_PATHS[backend]
+    has_ci = with_ci or ci_config(root, backend) is not None
+    if has_ci:
+        ci_gate = _CI_GATE.format(path=scaffold_path)
+        ci_bullet = (
+            _CI_BULLET_GITHUB if backend == "github" else _CI_BULLET.format(path=scaffold_path)
+        )
+    else:
+        ci_gate, ci_bullet = _NO_CI_GATE, _NO_CI_BULLET
     write_if_missing(
         "docs/acceptance/matrix.yaml",
-        MATRIX_TEMPLATE.format(org=org, repo=repo, schema_version=stamp),
+        MATRIX_TEMPLATE.format(org=org, repo=repo, schema_version=stamp, ci_gate=ci_gate),
     )
-    write_if_missing(".claude/rules/acceptance-matrix.md", RULE_TEMPLATE)
+    write_if_missing(
+        ".claude/rules/acceptance-matrix.md", RULE_TEMPLATE.replace("{ci_bullet}", ci_bullet)
+    )
     # Template + destination path both vary by backend — see
     # WORKFLOW_TEMPLATE_GITEA/WORKFLOW_TEMPLATE_GITLAB's module-level
     # docstrings for why each is shaped the way it is.
-    if backend == "gitea":
-        write_if_missing(".gitea/workflows/acceptance-report.yml", WORKFLOW_TEMPLATE_GITEA)
-    elif backend == "gitlab":
-        write_if_missing(".gitlab-ci.yml", WORKFLOW_TEMPLATE_GITLAB)
+    workflow = {
+        "gitea": WORKFLOW_TEMPLATE_GITEA,
+        "gitlab": WORKFLOW_TEMPLATE_GITLAB,
+        "github": WORKFLOW_TEMPLATE,
+    }[backend]
+    if has_ci:
+        write_if_missing(scaffold_path, workflow)
     else:
-        write_if_missing(".github/workflows/acceptance-report.yml", WORKFLOW_TEMPLATE)
+        notices.append(
+            f"no CI  {scaffold_path} not scaffolded — {no_ci_message(backend)}; "
+            "pass --with-ci to scaffold one"
+        )
 
     # The committed report SET (report_local.html + report_linked.html +
     # report_linked.md) are TRACKED artifacts kept in lockstep with the matrix
@@ -423,12 +487,8 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
         prune_stale_reports(root)
 
     # `report.html` is the ad-hoc / uncommitted render — gitignore it.
-    gitignore = root / ".gitignore"
-    lines = gitignore.read_text().splitlines() if gitignore.exists() else []
-    if GITIGNORE_LINE in lines:
-        skipped.append(".gitignore")
-    else:
-        lines.append(GITIGNORE_LINE)
-        gitignore.write_text("\n".join(lines) + "\n")
+    if _append_gitignore_line(root / ".gitignore", GITIGNORE_LINE):
         created.append(".gitignore")
-    return InitOutcome(created=created, skipped=skipped)
+    else:
+        skipped.append(".gitignore")
+    return InitOutcome(created=created, skipped=skipped, notices=notices)
