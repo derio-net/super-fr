@@ -1,7 +1,7 @@
 # Step record. Fill it as you work and commit it with your work; then
 #   fr run resolve 2026-09-28-feat-gh-759 --step implement-phase --item phase/2 --record docs/superpowers/runs/2026-09-28-feat-gh-759.records/implement-phase__phase-2.yaml
 # applies all of it in one commit (spec 2026-09-25 §5.C).
-schema_version: 2
+schema_version: 3
 run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/2
