@@ -311,4 +311,6 @@ If it names them, add `visual` and regenerate the `.html` per
 
 ## Implementation Plans
 
-(filled by fr-plan)
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-28-ui-visual-evidence | `derio-net/super-fr` | `2026-09-28-ui-visual-evidence` | — |
