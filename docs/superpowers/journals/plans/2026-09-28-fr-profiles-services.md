@@ -646,3 +646,8 @@ Summary now ends 'keep every machine on the same plugin version (lockstep instal
 ### p1r-later-tests-resolved-3 · finding [fixed] · resolves p1r-later-tests: Test Plan items owned by the migration phase: exempt commands on an unmigrated v1 file (source legacy), legacy ci == migrated ci
 
 Operator authorised: implemented in phase 2 (tests/unit/test_migration_profiles_services.py — exempt commands on an unmigrated v1 file read source: legacy; legacy ci equals the migrated ci).
+
+<!-- fr:journal kind=finding scope=plan id=p4r-other-forge-writes-resolved-2 created=2026-09-28T23:33:52+00:00 state=open resolves=p4r-other-forge-writes tracked_by=#803 -->
+### p4r-other-forge-writes-resolved-2 · finding [deferred → #803] · resolves p4r-other-forge-writes: triage batch cancel/merge and fr undispatch still write labels/comments under tracking none
+
+Filed at closeout as #803.
