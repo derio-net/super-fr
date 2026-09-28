@@ -24,8 +24,8 @@ Before asking anything, learn what the repo already says:
 
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
-- Existing `.devcontainer/` (profiles already present? then this is an edit, not a
-  green-field init). Check `.devcontainer/fr-profiles.yaml` for existing `forge:`/`ci:`/`tracking:` too.
+- Existing `.devcontainer/` (profiles present? then this is an edit, not a green-field init),
+  incl. `.devcontainer/fr-profiles.yaml`'s `forge:`/`ci:`/`tracking:`.
 - Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com`
   self-identify; any other host is self-hosted: the operator confirms the backend explicitly).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
@@ -73,12 +73,11 @@ fr init scaffold --repo . --profile admin --purpose "deploys, gh writes" \
     --secret GH_TOKEN --secret KUBECONFIG_B64
 ```
 
-Services are three: `forge`, `ci`, `tracking` (`fr services [--json]` prints each with type, host, source).
-Pass `--ci none|github-actions|gitlab-ci|gitea-actions|auto` and `--tracking none|github|gitlab|gitea|auto`
-(auto is the default; jenkins/jira are refused, derio-net/super-fr#795). An inconclusive auto exits 2 naming
-`--ci`, `--tracking` or `--backend`/`--host`: ask the operator, then re-run with an explicit value. For a
-non-GitHub forge pass `--backend` on every profile call; `--host` is OPTIONAL for GitLab (derived from the
-remote, override-only); `gh`/`tea` aren't host-threaded (gh-486), so fr warns on next use, not here.
+Services: `forge`, `ci`, `tracking` (`fr services [--json]` shows type, host, source). Pass
+`--ci none|github-actions|gitlab-ci|gitea-actions|auto` and `--tracking none|github|gitlab|gitea|auto`
+(auto default; jenkins/jira refused, derio-net/super-fr#795). An inconclusive auto exits 2 naming `--ci`,
+`--tracking` or `--backend`/`--host`: ask the operator, then re-run explicitly. Non-GitHub forge: pass
+`--backend` on every profile call (`--host` optional for GitLab; `gh`/`tea` aren't host-threaded, gh-486).
 
 Each call writes:
 
