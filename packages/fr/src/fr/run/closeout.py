@@ -19,6 +19,7 @@ from fr.journal.model import (
     spec_journal_slug,
 )
 from fr.run.model import RunState
+from fr.services import ServicesError, TrackerRequiredError, require_tracker
 
 __all__ = ["CloseoutNotReadyError", "closeout_brief", "primary_checkout"]
 
@@ -115,6 +116,29 @@ def _out_of_scope_lines(repo_root: Path, scope: str, slug: str) -> list[str]:
     ]
 
 
+_NO_TRACKER = "no-tracker"
+
+
+def _tracker_note(repo_root: Path) -> str | None:
+    """`_NO_TRACKER` under `tracking: {type: none}`; a warning line when the
+    services declaration cannot be read; None otherwise.
+
+    Strict resolution, deliberately: the brief is read-only, but a malformed
+    `tracking:` block must not silently read as "has a tracker" and hand the
+    reader issue-filing commands. It cannot refuse either — the brief has to
+    stay usable after a merge — so it warns loudly and keeps the default lines."""
+    try:
+        require_tracker(repo_root)
+    except TrackerRequiredError:
+        return _NO_TRACKER
+    except ServicesError as exc:
+        return (
+            f"the services declaration in .devcontainer/fr-profiles.yaml is invalid "
+            f"({exc}); the issue-filing lines below assume a tracker — fix it first"
+        )
+    return None
+
+
 def closeout_brief(repo_root: Path, state: RunState) -> str:
     """A self-contained closeout brief for a run whose `deliver` step is done.
 
@@ -173,8 +197,22 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         )
     if plan_path:
         out_of_scope += _out_of_scope_lines(repo_root, "plan", Path(plan_path).name)
+    tracker_note = _tracker_note(repo_root)
+    stays_recorded = False
+    if tracker_note == _NO_TRACKER:
+        # R6: nowhere to file — the findings stay in the journal and PR body.
+        stays_recorded = bool(out_of_scope)
+        out_of_scope = []
+        tracker_note = None
+    if tracker_note:
+        lines.append(f"  WARNING: {tracker_note}")
+    if stays_recorded:
+        lines.append(
+            "  this repo declares `tracking: {type: none}`: out-of-scope findings "
+            "stay recorded in the journal and PR body — file no issue for them"
+        )
     lines.append("  fr status")
-    if plan_path or out_of_scope:
+    if plan_path or stays_recorded or out_of_scope:
         # p4-r2: exact commands, not a "# on a housekeeping branch" comment
         # that leaves it to the reader to invent one — a fresh session with
         # no memory of this run could otherwise `fr archive` right here, in

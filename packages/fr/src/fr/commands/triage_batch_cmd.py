@@ -56,6 +56,7 @@ from fr.ghclient import MERGE_METHODS, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_backend
 from fr.labels import FR_IN_PROGRESS
 from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
+from fr.services import ServicesError, require_tracker
 from fr.triage.batch import (
     CLOSED_OUT,
     batch_branch,
@@ -469,6 +470,20 @@ def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
     return checkout
 
 
+def _tracking_gate(checkout_path: Path | None, *, yes: bool) -> None:
+    """R6: dispatch marks issues taken, so a repo with `tracking: {type: none}`
+    refuses `--yes` (exit 2) before the first forge call; a dry run only warns.
+    Strict: a malformed tracking block refuses too."""
+    try:
+        require_tracker(make_checkout(checkout_path).path)
+    except ServicesError as exc:
+        if yes:
+            _fail(str(exc))
+        console.print(f"warning: --yes would be refused — {exc}", markup=False, soft_wrap=True)
+    except TriageError:
+        pass  # no clone to read; `_open_checkout` reports it where it matters
+
+
 def _orchestrator(repo_root: Path | None) -> Callable[[str], str | None]:
     """The `resolve_launch` orchestrator rung (spec 2026-09-27-triage-batch-launch
     §A): the ORCHESTRATOR tier binding for a harness, repo-over-user, read from
@@ -776,6 +791,7 @@ def batch_dispatch_command(
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
+    _tracking_gate(checkout_path, yes=yes)  # before any forge call
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
     if (handle or reserved_version) and not repair:
         _fail("--handle and --reserved-version go with --repair only")

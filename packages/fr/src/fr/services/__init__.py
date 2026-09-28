@@ -4,3 +4,8 @@
 `resolve.resolve_services` is the only reader of the three services;
 `fr.isolation.types.profiles_config` stays the raw reader it is.
 """
+
+from fr.services.model import ServicesError  # noqa: E402
+from fr.services.require import TrackerRequiredError, require_tracker  # noqa: E402
+
+__all__ = ["ServicesError", "TrackerRequiredError", "require_tracker"]
