@@ -6,10 +6,11 @@ run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/2
 outcome: done            # done | failed | blocked
-ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2]
 refactor:
   P2.T2: "the one duplicated rule (the verb's and the record's unconfirmed refusals) was extracted into unconfirmed_refusal while going green; nothing further to clean"
   P2.T3: "the 1->2 guard was renamed guard_record and reused by the 2->3 hop rather than copied; the new migration module is a registration and nothing else"
+  P2.T4: "each change is a field, a flag or a stamp-only registration; the only judgement call (verify preserved on a status move unless the record names one) lives in one line of _acceptance_writes"
   P2.T1: "two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done"
 journal:
   - kind: decision
@@ -40,5 +41,19 @@ journal:
       had to land in T2 (the record-path tests need them); T3 carries the
       stamp bump and migration for them. The record-path tests walk a real
       run to `spec-review` (spec scope) and to `implement-phase` (plan scope).
+  - kind: discovery
+    id: p2-matrix-born-current
+    title: fr acceptance init now scaffolds schema_version, and reports are untouched by verify
+    body: |
+      With the matrix kind at 2, a freshly scaffolded matrix with no stamp would
+      read as version 1 and be stale on birth, so the non-interactive CLI gate
+      would refuse the first fr command in a new consumer repo. `init` now writes
+      `schema_version: <current>` above `org:` (read from the registry, never a
+      second constant), keeping `rows:` the last top-level key. `verify` is
+      rendered into matrix.yaml only when set, so every existing row stays
+      byte-identical, and the three reports do not render it (the plan allowed
+      that only with no layout change; none was attempted). The runner's
+      closed-world test now treats matrix like run: stamped, parseable, body
+      untouched.
 resolves: []
 evidence: {}

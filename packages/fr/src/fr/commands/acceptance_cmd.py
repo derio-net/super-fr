@@ -484,6 +484,12 @@ def add_cmd(
         ..., "--status", help="ci | scheduled | skipped | not-implemented | failing."
     ),
     notes: str = typer.Option("", "--notes", help="Evidence detail / backfill owed."),
+    verify: str | None = typer.Option(
+        None,
+        "--verify",
+        help="post-merge: the row can only be verified after merge — the PR body lists "
+        "it as owed (spec 2026-09-28 §F).",
+    ),
 ) -> None:
     """Insert a schema-validated row after its capability's last row (agents
     never hand-edit YAML shapes); a new capability appends at the end.
@@ -505,6 +511,7 @@ def add_cmd(
             levels={k: tuple(v) for k, v in levels.items()},
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
+            verify=verify,  # type: ignore[arg-type]  # pydantic validates the literal
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {e}")
@@ -531,6 +538,7 @@ def add_cmd(
             levels={k: v for k, v in new_row.levels.items() if v},
             status=new_row.status,
             notes=new_row.notes,
+            verify=new_row.verify,
         ),
         f"chore(fr): acceptance — add {new_row.id}",
     )

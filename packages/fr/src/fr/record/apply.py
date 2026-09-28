@@ -682,6 +682,7 @@ def _acceptance_writes(
                     levels=dict(item.levels),
                     status=item.status,  # type: ignore[arg-type]
                     notes=item.notes or "",
+                    verify=item.verify,
                 )
             else:
                 assert existing is not None  # refused above when absent
@@ -701,6 +702,8 @@ def _acceptance_writes(
                     ),
                     status=item.status,  # type: ignore[arg-type]
                     notes=item.notes,
+                    # A status move keeps the row's `verify` unless it names one.
+                    verify=item.verify if item.verify is not None else existing.verify,
                 )
             for ref in row.refs():
                 split_ref(ref)

@@ -410,6 +410,8 @@ def test_is_stale_short_circuits_and_agrees_with_the_plan(tmp_path: Path) -> Non
 # `RunState` gained an optional defaulted `schema_version` in the same PR
 # (`.claude/rules/artifact-versioning.md`). So the run assertions below are
 # "stamped, still parseable, body untouched" — not "never written to".
+# The `matrix` kind joined it (spec 2026-09-28 §H, 1 -> 2 for `Row.verify`),
+# on the same terms: `Matrix` gained `schema_version` in the same change.
 
 
 def _seed_closed_world(root: Path) -> dict[str, Path]:
@@ -448,18 +450,24 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
     assert report.failed == ()
     for name, p in paths.items():
-        if name == "run":
+        if name in ("run", "matrix"):
             continue  # stamped on purpose — see the block comment above
         assert _unchanged(p, frozen[name]), f"the runner wrote to a {name} artifact"
     # And the closed-world models still parse — the failure mode the finding
     # named. For the run cursor this is now the load-bearing assertion: it WAS
     # written to, and it must still parse afterwards.
     parse_run_state(paths["run"].read_text())
-    load_matrix(paths["matrix"])
+    assert load_matrix(paths["matrix"]).schema_version == 2
+    stamped = paths["matrix"].read_text().splitlines(keepends=True)
+    assert [ln for ln in stamped if ln != "schema_version: 2\n"] == [
+        "org: derio-net\n",
+        "repo: super-fr\n",
+        "rows:\n",
+    ], "the matrix body is untouched — only the stamp line was added"
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
-    for name in ("journal", "matrix", "spec", "usage"):
+    for name in ("journal", "spec", "usage"):  # matrix left at 1 -> 2 (spec 2026-09-28 §H)
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"
