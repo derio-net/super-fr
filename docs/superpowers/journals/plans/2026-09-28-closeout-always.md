@@ -146,3 +146,89 @@ Fixed in 07164493: public archive_journal in __all__, _archive_journal kept as a
 ### p2-r6 · finding [fixed] (reviewer: in scope) · (Minor) test gaps: dirty plan held, usage carried with plan, repair once (phase 2)
 
 Fixed in ae5cd3f5: three tests, each shown to fail when the guarded behaviour is removed.
+
+<!-- fr:journal kind=decision scope=plan id=p3-plan-sweep-moved-to-closeout created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-plan-sweep-moved-to-closeout · decision · status_cmd's PlanSweep/_merged/_sweep_lists moved into fr.closeout; status_cmd imports it back (phase 3)
+
+`fr.closeout.PlanSweep` + `plan_sweep(repo_root, evidence)` (pure given
+`evidence` — it never fetches) replace status_cmd's private `_Sweep` /
+`_merged` / `_sweep_lists`. `status_cmd._sweep_lists` is now a thin
+wrapper: one `merge_evidence(fetch=True)` (unchanged: still exactly one
+fetch per `fr status` invocation, per #544) then a call into
+`fr.closeout.plan_sweep`. `owed_artifacts`'s "plan" entries
+(`_owed_plans`) call the same `plan_sweep`, so `fr status`'s "merged but
+not archived" block and `owed_artifacts`'s plan bucket can never
+disagree — one predicate, two readers, exactly as §C asks.
+
+<!-- fr:journal kind=decision scope=plan id=p3-held-spec-is-every-blocking-note created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-held-spec-is-every-blocking-note · decision · held (spec) = any not-yet-implemented spec with a note, not just pending/cross-repo (phase 3)
+
+§C names two held examples (a pending slice; an unresolved cross-repo
+row without the forge). `_owed_specs` treats the held set as EVERY spec
+`_spec_fully_implemented` returns a note for (excluding the "no
+Implementation Plans rows" case) — including a spec whose row is simply
+still active under a live `plans/` dir. This is the same filter
+`spec_archive_sweep` already applies to its own notes, so it introduces
+no second classification of "not implemented yet, and why". The
+alternative (limiting `held` to only the two named note shapes) would
+leave an ordinary in-progress spec neither owed nor held — silent,
+which is exactly what R5 forbids. Flagging this because the spec table
+names only two examples, not a closed set: if the orchestrator or a
+reviewer intended a narrower `held` list, this is the line to revisit.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-owed-block-omits-plan-kind-in-status-text created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-owed-block-omits-plan-kind-in-status-text · discovery · fr status's text 'owed' block filters out kind=plan; --format json does not (phase 3)
+
+`owed_artifacts` always includes plan entries (kind `plan`) so
+`fr archive --all` and any other consumer see the complete predicate.
+`fr status`'s TEXT rendering (`_owed_block`) drops `plan` entries
+because they would just repeat the existing "merged but not archived"
+block's own per-plan `fr archive <dir>` line — printing the same plan
+twice, once under each heading, would read as two different findings.
+The `--format json` `owed` array is NOT filtered: a machine reader gets
+every kind `owed_artifacts` returns, `plan` included, with no
+text-only-special-case to reconstruct.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-journal-scope-and-slug-extracted created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-journal-scope-and-slug-extracted · discovery · fr.closeout.journal_scope_and_slug extracted for branch_artifacts and owed_artifacts/archive --all to share (phase 3)
+
+`branch_artifacts` inlined "journals/<scope-dir>/<slug>.md ->
+(scope, slug)" parsing. `owed_artifacts`'s orphan-journal check and
+`fr archive --all`'s new clearing loop need the identical derivation
+(to look up an owner and, for `--all`, to call `archive_journal(repo,
+scope, slug)`), so it is now the public `journal_scope_and_slug(path)`,
+and `branch_artifacts` calls it too — one classifier, not two.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-deliver-done-added-to-archive created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-deliver-done-added-to-archive · discovery · fr.archive.deliver_done(cursor) added, reading any cursor version like emitted_plan (phase 3)
+
+The orphan-run rule's no-named-plan branch (§C) needs "this cursor's
+`deliver` step is done" — no existing public helper answered that
+without reaching into the private `_read_any_version`. Added
+`deliver_done(cursor) -> bool` beside `emitted_plan` in `fr.archive`,
+same shape (any version, `False` — never a raise — on anything
+unreadable or not a cursor), and exported it in `__all__` alongside
+`emitted_plan` (which had been usable but was missing from `__all__`
+since its own introduction in phase 2).
+
+<!-- fr:journal kind=discovery scope=plan id=p3-orphan-journal-no-ref-check created=2026-09-28T20:50:23+00:00 phase=3 -->
+### p3-orphan-journal-no-ref-check · discovery · orphan plan/spec journal owed status never consults the default ref (phase 3)
+
+Per the §C table, only the debug-journal rule and the orphan-run rule's
+no-named-plan branch consult `evidence.ref`. An orphan plan/spec
+journal is owed purely because its owner directory is already under
+`implemented/` — no ref check, matching the table literally (and
+`_archive_branch_journal`'s existing per-branch equivalent, which also
+treats "owner archived" as sufficient with no ref condition for
+plan/spec scope). Noted explicitly in case a reviewer expected the same
+ref gate debug journals get.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-28T20:50:23+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+covered by the refactor field above.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-28T20:50:23+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+covered by the refactor field above.
