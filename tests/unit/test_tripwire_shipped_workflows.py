@@ -159,7 +159,12 @@ def test_shipped_fr_goal_declares_the_requirements_gates() -> None:
     assert review.tier == "hard"
     assert review.emits == ("journal:spec", "acceptance")
     assert review.evidence == ("review", "reviewer", "findings", "requirements", "coverage")
-    assert _step(manifest, "deliver").evidence == ("tests", "proportionality", "requirement-rows")
+    assert _step(manifest, "deliver").evidence == (
+        "tests",
+        "proportionality",
+        "requirement-rows",
+        "visual",
+    )
 
 
 # The additions, undone — the shape an in-flight cursor was started against.
@@ -172,7 +177,7 @@ _BEFORE_THE_GATES = (
         "    evidence: [review, reviewer, findings]\n",
     ),
     (
-        "    evidence: [tests, proportionality, requirement-rows]\n",
+        "    evidence: [tests, proportionality, requirement-rows, visual]\n",
         "    evidence: [tests, proportionality]\n",
     ),
 )
@@ -200,3 +205,19 @@ def test_a_cursor_started_before_the_gates_does_not_drift(tmp_path: Path) -> Non
     assert started.exit_code == 0, started.output
 
     _check_step_drift(load_run_state(repo, "r1"), _shipped_fr_goal())  # raises on drift
+
+
+# ── visual evidence (spec 2026-09-28-ui-visual-evidence §C) ──────────────────
+
+
+def test_shipped_fr_goal_declares_visual_on_the_three_ui_stages() -> None:
+    """`visual` on implement-phase, review-phase and deliver — each stage opens
+    its own screenshots. A step owing no `visual` row derives `none`."""
+    manifest = _shipped_fr_goal()
+    implement = _step(manifest, "implement")
+    members = {m.id: m for m in implement.steps}
+
+    assert check_workflow(manifest) == []
+    assert members["implement-phase"].evidence == ("visual",)
+    assert members["review-phase"].evidence == ("review", "reviewer", "findings", "visual")
+    assert _step(manifest, "deliver").evidence[-1] == "visual"

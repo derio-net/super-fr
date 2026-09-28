@@ -306,6 +306,39 @@ surfaces:
       codex: {state: unsupported}
       copilot-cli: {state: unsupported}
 
+  - id: visual-evidence
+    kind: interaction
+    summary: A unit owing a `visual` acceptance row (spec 2026-09-28-ui-visual-evidence §C) resolves `done` only through a step record whose `visual:` section names screenshots covering every state and interaction the row declares — image files that exist, are non-empty, are git-ignored or outside the repo and never under `<run>.records/`, and (at review-phase and deliver) were written since the unit opened. `fr run resolve` then reads the witness transcript — the implement-phase holder's subagent file (the orchestrator's when inline), the review-phase reviewer's, deliver's orchestrator stream — for an image read of each shot, and a shell call naming any capture script, since the unit opened. `--evidence visual=` is refused as derived. An unreadable transcript records the witness `unobserved` with a warning; the file checks still apply.
+    harnesses:
+      claude-code:
+        state: enforced
+        modes:
+          host-worktree: {state: enforced}
+          devcontainer:
+            state: enforced
+            scope_note: >-
+              enforced because `fr run` resolves on the host, where the session
+              transcript is — shots must sit where the host sees them (a
+              git-ignored dir of the bind-mounted worktree, not the container's /tmp)
+          external: {state: enforced, scope_note: "harness and fr share the container, and its transcript"}
+        scope_note: >-
+          file-read tool_use blocks (`Read`, alias-normalised) naming the shot,
+          in the subagent file `attribute_dispatches` pairs to the holder or
+          reviewer, or in the orchestrator's own stream
+      opencode:
+        state: advisory
+        scope_note: >-
+          the session store is read for `tests=`, but no file-read detection
+          exists yet, so the image-read and script checks record as unobserved;
+          the file checks apply
+      hermes:
+        state: advisory
+        scope_note: >-
+          no session-store reader, so the image-read and script checks record
+          as unobserved; the file checks apply
+      codex: {state: unsupported}
+      copilot-cli: {state: unsupported}
+
   - id: phase-sequence
     kind: interaction
     summary: fr run enforces spec/plan before implementation (`implement` declares `needs [spec, plan]`).
