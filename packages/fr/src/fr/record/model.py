@@ -25,6 +25,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
 
+from fr.acceptance.model import Visual
 from fr.journal.model import FindingState, JournalKind, ReviewScope
 from fr.run.model import AnsweredBy
 from fr.workflow.artifacts import ALWAYS_RECORD_SECTIONS, record_sections
@@ -154,6 +155,10 @@ class AcceptanceItem(_Strict):
     verify: Literal["post-merge"] | None = None
     """A row whose verification can only happen after merge (spec
     2026-09-28 §F): the PR body lists it as owed."""
+    visual: Visual | None = None
+    """A user-visible UI requirement's evidence obligation (spec
+    2026-09-28-ui-visual-evidence-design.md §A). `fr acceptance set-status`
+    never sets this — it is create-only, like `capability`/`acceptance`."""
 
 
 class QuestionRounds(_Strict):

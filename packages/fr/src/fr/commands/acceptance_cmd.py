@@ -465,6 +465,7 @@ def set_status_cmd(
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
             verify=new_verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            visual=target.visual,  # set-status never touches `visual` (spec 2026-09-28 §A)
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {e}")
@@ -509,6 +510,17 @@ def add_cmd(
         help="post-merge: the row can only be verified after merge — the PR body lists "
         "it as owed (spec 2026-09-28 §F).",
     ),
+    visual_state: list[str] = typer.Option(
+        [],
+        "--visual-state",
+        help="A named UI state visual evidence must cover (repeatable; spec 2026-09-28 §A).",
+    ),
+    visual_interaction: list[str] = typer.Option(
+        [],
+        "--visual-interaction",
+        help="A named UI interaction (limits included) visual evidence must cover "
+        "(repeatable; spec 2026-09-28 §A).",
+    ),
 ) -> None:
     """Insert a schema-validated row after its capability's last row (agents
     never hand-edit YAML shapes); a new capability appends at the end.
@@ -516,12 +528,18 @@ def add_cmd(
     `add` CREATES rows; moving an existing row's status is
     `fr acceptance set-status` (re-adding an id is refused below, by design).
     """
+    from fr.acceptance.model import Visual
 
     root = resolve_repo_root()
     matrix = _load(root)
 
     levels = _parse_levels(level)
     try:
+        visual = (
+            Visual(states=tuple(visual_state), interactions=tuple(visual_interaction))
+            if visual_state or visual_interaction
+            else None
+        )
         new_row = Row(
             id=row_id,
             capability=capability,
@@ -531,6 +549,7 @@ def add_cmd(
             status=status,  # type: ignore[arg-type]  # pydantic validates the literal
             notes=notes,
             verify=verify,  # type: ignore[arg-type]  # pydantic validates the literal
+            visual=visual,
         )
     except Exception as e:  # pydantic ValidationError → operator-readable
         err_console.print(f"[red]error:[/red] {e}")
@@ -558,6 +577,7 @@ def add_cmd(
             status=new_row.status,
             notes=new_row.notes,
             verify=new_row.verify,
+            visual=new_row.visual,
         ),
         f"chore(fr): acceptance — add {new_row.id}",
     )

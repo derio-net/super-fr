@@ -10,6 +10,10 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.acceptance.model import AcceptanceError, load_matrix
+from fr.cli import app
+from typer.testing import CliRunner
+
+from tests.unit.acceptance_helpers import make_repo, row
 
 HEADER = "# header comment — must survive\nrows:\n"
 
@@ -105,3 +109,131 @@ def test_a_row_with_visual_dumped_and_reparsed_is_identical(tmp_path: Path) -> N
     dumped = yaml.safe_dump(matrix.model_dump(mode="json"), sort_keys=False)
     reparsed = parse_matrix(dumped)
     assert reparsed == matrix
+
+
+# ── P1.T2: CLI — `fr acceptance add --visual-state / --visual-interaction` ─
+
+cli_runner = CliRunner()
+
+ADD_ARGS = [
+    "add",
+    "--id",
+    "new-row",
+    "--capability",
+    "Caps",
+    "--acceptance",
+    "Operator can add rows",
+    "--origin",
+    "own:docs/superpowers/specs/s.md",
+    "--level",
+    "unit=own:tests/test_a.py",
+    "--status",
+    "not-implemented",
+    "--notes",
+    "born in a test",
+]
+
+
+def _invoke(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):
+    monkeypatch.setenv("VK_REPO_ROOT", str(root))
+    return cli_runner.invoke(app, ["acceptance", *args])
+
+
+def test_add_visual_state_and_interaction_writes_the_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.model import load_matrix
+
+    root = make_repo(tmp_path, row())
+    result = _invoke(
+        root,
+        monkeypatch,
+        *ADD_ARGS,
+        "--visual-state",
+        "a",
+        "--visual-interaction",
+        "20 cap",
+    )
+    assert result.exit_code == 0, result.output
+    (added,) = [
+        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        if r.id == "new-row"
+    ]
+    assert added.visual is not None
+    assert added.visual.states == ("a",)
+    assert added.visual.interactions == ("20 cap",)
+
+
+def test_add_visual_state_repeatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.acceptance.model import load_matrix
+
+    root = make_repo(tmp_path, row())
+    result = _invoke(
+        root,
+        monkeypatch,
+        *ADD_ARGS,
+        "--visual-state",
+        "a",
+        "--visual-state",
+        "b",
+    )
+    assert result.exit_code == 0, result.output
+    (added,) = [
+        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        if r.id == "new-row"
+    ]
+    assert added.visual is not None
+    assert added.visual.states == ("a", "b")
+
+
+def test_add_without_visual_writes_no_visual_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row())
+    assert _invoke(root, monkeypatch, *ADD_ARGS).exit_code == 0
+    assert "visual" not in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+
+
+def test_add_visual_refuses_a_name_duplicated_across_state_and_interaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row())
+    before = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    result = _invoke(
+        root,
+        monkeypatch,
+        *ADD_ARGS,
+        "--visual-state",
+        "a",
+        "--visual-interaction",
+        "a",
+    )
+    assert result.exit_code == 2, result.output
+    assert (root / "docs" / "acceptance" / "matrix.yaml").read_text() == before
+
+
+def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.acceptance.model import load_matrix
+
+    root = make_repo(tmp_path, row())
+    assert (
+        _invoke(root, monkeypatch, *ADD_ARGS, "--visual-state", "a").exit_code == 0
+    )
+    moved = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "--id",
+        "new-row",
+        "--status",
+        "skipped",
+        "--notes",
+        "verified live once",
+    )
+    assert moved.exit_code == 0, moved.output
+    (row_after,) = [
+        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        if r.id == "new-row"
+    ]
+    assert row_after.visual is not None
+    assert row_after.visual.states == ("a",)
