@@ -368,3 +368,38 @@ Fixed in 0cd998c8: reworded to '… ending in `down`, the immediate lever — ne
 ### p5-r2 · finding [fixed] (reviewer: in scope) · (Minor) the new bullet opened with a rhetorical question, unlike its bolded-declarative siblings (phase 5)
 
 Fixed in 0cd998c8: the bullet now opens with the bolded declarative '**Post-merge cleanup is `fr pickup --branch <b>`'s brief**'.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-sweep-owed-set-matched-exactly created=2026-09-28T22:04:26+00:00 phase=6 -->
+### p6-sweep-owed-set-matched-exactly · discovery · fr status's owed set and fr archive --all's moves matched exactly: 36 debug journals, no extra move (phase 6)
+
+Ran `uv run fr status` first and recorded its 36-line owed set (all
+`docs/superpowers/journals/debug/*.md`, each with `fr archive --all`
+as the clearing command). Ran `uv run fr archive --all` and it moved
+exactly those 36 files to `docs/superpowers/implemented/journals/debug/`
+and nothing else — the merged-but-manual-phase plan
+(`2026-07-09-multi-backend-git-host-adapters`, phase 9 incomplete) and
+this run's own plan/spec (phase 6 still undispatched, not yet on
+`origin/main`) were both correctly skipped with printed reasons. No
+move fell outside the recorded owed set, so no finding was needed for
+this step.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-four-prose-mentions-were-exactly-four created=2026-09-28T22:04:26+00:00 phase=6 -->
+### p6-four-prose-mentions-were-exactly-four · discovery · Repo-wide grep confirmed exactly the four named prose mentions of the moved marketplace-config-clobber journal, plus only allowed exceptions (phase 6)
+
+Grepped the whole tree (excluding
+`docs/superpowers/implemented/`) for every one of the 36 moved
+journals' `journals/debug/<name>` path. The
+2026-07-23-marketplace-config-clobber.md hits were exactly the four
+named files (AGENTS.md, scripts/install.sh, the two test docstrings) —
+all four now point at `docs/superpowers/implemented/journals/debug/`.
+Every other hit across the 36 files was a matrix-ref
+(`docs/acceptance/matrix.yaml` + its three generated reports, which
+`fr acceptance check` resolves through `archive_twin` and which the
+brief says must NOT be rewritten) or the `tests/fixtures/triage/`
+fixture / triage anchor code, both explicitly out of scope. No
+unexpected fifth mention turned up.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-09-28T22:04:26+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+a one-time sweep of owed artifacts (journal moves + four prose path updates + acceptance flips); there is no new code path to refactor, only data/doc moves and matrix status flips
