@@ -1,0 +1,11 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-raw-input-relay-2
+step: deliver
+outcome: done
+journal: []
+resolves: []
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/791
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/17573c60-c1b3-42d0-ab75-bf4783d5f140/scratchpad/full-suite.log
