@@ -1,2 +1,0 @@
-bump: patch
-summary: OpenCode provenance gates read the session database OpenCode actually uses ($XDG_DATA_HOME/opencode/ when set), and a database that never saw the run degrades to unverified instead of refusing a valid deliver suite log (#740)
