@@ -16,19 +16,21 @@
 | R5 | `fr status` reports every live artifact whose introducing PR has merged: a debug journal live on the default ref, a plan the archive gate would pass, a spec the sweep would move, and a plan/spec journal whose owner is already archived. Each is listed with the command that clears it. This is advisory and never fails CI. | input "a live artifact is legal only while the PR that introduced it is open."<br>input "report every live artifact whose introducing PR has merged,"<br>decision d3-status-advisory |
 | R6 | fr-debugging's deliver relays the same close-out line, `fr pickup --branch <b>`, that fr-goal's run relays. It does this without gaining a run cursor. | input "fr-debugging's deliver relays the close-out line."<br>input "**fr-debugging's `deliver`** relays the same close-out line fr-goal does."<br>decision d4-no-debug-cursor |
 | R7 | This PR sweeps every debug journal live on `main`, using the new code (`fr archive --all` learns debug journals), and no evidence ref to a moved journal breaks. | input "The first run sweeps the 26."<br>decision d5-sweep-in-pr |
+| R8 | Every shipped skill whose flow ends at a PR it opens ends by relaying a close-out line: fr-goal relays its `fr pickup --run` line, and fr-debugging and standalone fr-execute relay `fr pickup --branch <b>`. fr-isolation's post-merge cleanup points at the same brief. A flow that relays nothing is still caught by R5. | input "Make the close-out an always-on condition at the end of **every** fr-shaped flow."<br>decision d4-no-debug-cursor |
 
 ## Deferred from input
 
 | input | reason |
 |---|---|
 | "and/or `fr triage check`" | Operator chose `fr status` only (d3-status-advisory). |
-| "#458 (`fr archive` offering to file open ends) belongs in the same close-out step." | #458 is its own issue. This change only lists open debug findings in the brief, the same way fr-goal's run brief lists out-of-scope ones (§D). |
+| "#458 (`fr archive` offering to file open ends) belongs in the same close-out step." | #458 is its own issue. The brief keeps only today's run-mode out-of-scope filing lines (§D). |
 | "closeout-queue (#667) builds on this." | A follow-up that loops over R1, one branch per merged batch. It is out of this change. |
 
 ## Background
 
-Only fr-goal has a close-out today. `fr pickup --run` (`packages/fr/src/fr/commands/pickup_cmd.py:46`)
-calls `closeout_brief` (`packages/fr/src/fr/run/closeout.py:125`), which needs a done `deliver`
+Only fr-goal has a close-out today. `fr pickup --run` (`pickup_command`,
+`packages/fr/src/fr/commands/pickup_cmd.py:24`, its `--run` branch at `:48`) calls `closeout_brief`
+(`packages/fr/src/fr/run/closeout.py:118`), which needs a done `deliver`
 step and names `fr archive <plan-dir>`. fr-debugging's §4 Deliver
 (`plugins/super-fr/skills/fr-debugging/SKILL.md:101`) ends at "Stop — the operator merges".
 `fr archive` (`packages/fr/src/fr/commands/archive_cmd.py:78`) moves plan dirs, their runs, usage
@@ -72,15 +74,22 @@ treated alike (d2).
 
 `--branch` is a fourth mode of `archive_command`. It is mutually exclusive with `plan_dir`,
 `--all`, `--sweep-only` and `--force`, and each conflict is refused with exit 2 in the existing
-`--sweep-only` style.
+`--sweep-only` style. `--no-spec-sweep` is accepted and skips the spec step, and each branch
+spec is then reported `held: <spec> — spec sweep skipped`.
 
 1. `merge_evidence(repo_root, fetch=True)` supplies the default ref. If there is none, refuse
    (exit 2) naming `ref_error`.
-2. Run `branch_changes_present(branch, <default ref>)`. If it is not present, refuse with exit 2,
-   listing the missing paths and pointing at `fr isolation verify-merge --branch <b>`. This is
-   the mutating step's own guard; the brief still runs verify-merge (with its PR-state check)
-   first.
-3. Compute `branch_artifacts(branch_changed_paths(...))`, then per kind:
+2. **Branch refs.** Resolve refs the same way verify-merge does
+   (`isolation_cmd.py:878`, `local.py` `_branch_refs`): try to fetch `origin/<b>` with the
+   explicit refspec, then take every ref that resolves, which is `origin/<b>` and the local
+   `<b>`. If neither resolves, refuse with exit 2: `branch <b> resolves neither locally nor as
+   origin/<b> — nothing to diff`, and nothing moves.
+3. Run `branch_changes_present(ref, <default ref>)` for **each** resolved ref. If any is not
+   present, refuse with exit 2, listing the missing paths and pointing at `fr isolation
+   verify-merge --branch <b>`. This is the mutating step's own guard; the brief still runs
+   verify-merge (with its PR-state check) first.
+4. Compute `branch_artifacts` over the **union** of `branch_changed_paths` across the resolved
+   refs, then per kind:
    - **plan**: the same path a single `fr archive <dir>` takes (`archive_blockers`, `paths_dirty`,
      `archive_plan_dir`, which already moves its run, usage and plan journal). A blocked plan is
      a `held:` line with its blockers, never a failure of the command.
@@ -91,7 +100,7 @@ treated alike (d2).
    - **journal, scope plan/spec**: it follows its owner. It moves only when the owner moved in
      this run or is already archived (§C's orphan rule). Otherwise it is held, naming the owner.
    - **run / usage** that no plan move carried: held, naming the plan it follows.
-4. Repair in passing through the existing `_repair_in_passing`, once. Print one line per artifact
+5. Repair in passing through the existing `_repair_in_passing`, once. Print one line per artifact
    (`archived:` / `held:`), then the "moves staged via git mv" footer. If the branch touched no
    artifact, print `nothing to archive for <b>` and exit 0.
 
@@ -100,18 +109,27 @@ treated alike (d2).
 `fr.closeout.owed_artifacts(repo_root, evidence) -> list[Owed]` is the ONE definition of "live
 but its PR merged". It reads the working tree and the default ref only; it makes no forge call:
 
-- **debug journal**: live, and the same path exists on the default ref.
-- **plan**: already computed by `status_cmd._sweep_lists`' `archivable` bucket. It is moved into
-  `fr.closeout` so status and archive share it.
-- **spec**: `_spec_fully_implemented(spec, repo_root, gh=None)` is true. A cross-repo row that
-  cannot be resolved without the forge is simply not listed, because it is unknown rather than
-  owed.
-- **orphan plan/spec journal**: live, while its owner (`implemented/plans/<slug>/` or
-  `implemented/specs/<slug>-design.md`) is already archived.
+Every live kind is covered, and each owed entry carries the command that clears it:
+
+| kind | owed when (live, and …) | clearing command printed |
+|---|---|---|
+| debug journal | the same path exists on the default ref | `fr archive --all` |
+| plan (+ its run, usage, plan journal) | `status_cmd._sweep_lists`' `archivable` bucket, moved into `fr.closeout` so status and archive share it | `fr archive <plan-dir>` (today's line) |
+| spec (+ its spec journal) | `fr.migrate._spec_fully_implemented(spec, repo_root, gh=None)[0]` is true | `fr archive --sweep-only` |
+| orphan plan/spec journal | its owner (`implemented/plans/<slug>/` or `implemented/specs/<slug>-design.md`) is already archived | `fr archive --all` |
+| orphan run cursor (+ usage) | its `emitted.plan` names a plan that is already archived, or it names no plan, its `deliver` is done, and it is on the default ref | `fr archive --all` |
+
+Some things are deliberately **not** reported as owed, because the PR that introduced them does
+not end their life. A merged plan with open manual phases stays in today's "merged, manual
+phases still open" block, as back-loaded operator work. A spec whose `_spec_fully_implemented`
+note says it is held (a pending slice, an unresolved cross-repo row without the forge) is
+listed in a separate `held live (spec): <spec> — <note>` block, visible but not owed. That keeps
+R5 honest: every live artifact whose PR merged is either owed (with a command) or shown as held
+(with its reason). None of them is silent.
 
 `fr archive --all` (after its plan loop and spec sweep, as today) also moves every owed debug
-journal and every orphan journal. `--no-spec-sweep` does not affect them, because they are not
-specs.
+journal, orphan journal and orphan run. `--no-spec-sweep` does not affect them, because they are
+not specs.
 
 ### §D. `fr pickup --branch <b>` — the brief; `--run` becomes a caller
 
@@ -130,22 +148,32 @@ Closeout, in order:
   [run the spec's Test Plan: <spec> — run mode, when present]
   fr status
   fr isolation up --branch <housekeeping>   # from the base clone above — …
-  [file an issue for each finding below … + one `fr journal resolve` line each]
+  [run mode: file an issue for each out-of-scope finding … + one `fr journal resolve` line each]
   fr archive --branch <b>   # inside the new <housekeeping> workspace
-  git add -A && git commit -m 'chore: close out <b>' && git push -u origin <housekeeping>
+  git add -A && git commit -m '<commit message>' && git push -u origin <housekeeping>
   open the housekeeping PR (e.g. `<forge pr command>`)
   fr isolation down --branch <b>
 ```
 
-- The housekeeping branch is `chore/archive-<plan-slug>` when the run names a plan (unchanged),
-  and `chore/closeout-<branch-slug>` otherwise (`/` → `-`).
-- The findings lines come from the run's spec/plan journals (unchanged) **plus** every debug
-  journal in `branch_artifacts` whose effective finding state is `out-of-scope` or `open`, using
-  the same `_out_of_scope_lines` shape with `--scope debug`. Unlike the old brief, which printed
-  them only when a plan existed, the housekeeping step is now always printed, because
-  `fr archive --branch` always has something to consider.
-- `fr pickup --branch` refuses (exit 2) a branch that resolves neither locally nor as
-  `origin/<b>`, and refuses in combination with a plan dir, `--phase` or `--run`.
+The brief's findings lines are exactly today's run-mode out-of-scope lines
+(`_out_of_scope_lines`, `closeout.py:93`, from the run's spec and plan journals). Branch mode
+prints none, and no debug-journal finding lines are added (#458 is deferred).
+
+**Run-mode changes, stated explicitly** (everything else in today's run brief is unchanged):
+
+| | today (`closeout.py:118-211`) | after |
+|---|---|---|
+| archive line | `fr archive <plan-dir>`, only when the run names a plan | `fr archive --branch <b>`, always |
+| housekeeping block | printed only `if plan_path or out_of_scope` | always printed, because the branch always has at least its run cursor to consider |
+| housekeeping branch | `chore/archive-<plan-slug>`; else `chore/closeout-<run-id>` | unchanged |
+| commit line | `chore: archive <plan-slug>`; the no-plan case prints only `git push` | `chore: archive <plan-slug>` when a plan exists; otherwise `chore: close out <b>`, with the commit line always printed |
+
+Branch mode (`fr pickup --branch <b>`, no run) uses `chore/closeout-<branch-slug>` (`/` → `-`)
+and `chore: close out <b>`.
+
+`fr pickup --branch` refuses (exit 2) a branch that resolves neither locally nor as `origin/<b>`
+(the same resolution as §B.2, without the fetch). It also refuses in combination with a plan
+dir, `--phase` or `--run`.
 
 ### §E. fr-debugging relays the line
 
@@ -153,8 +181,14 @@ fr-debugging §4 Deliver gains one sentence after the PR opens: relay
 `closeout: fr pickup --branch <branch>` to the operator verbatim; after merge, a NEW session runs
 it from the base clone. The "Cleanup" sentence points at that brief instead of `fr isolation
 down` alone. fr-goal's Post-merge close-out section names `fr archive --branch <b>` where it
-says `fr archive <plan-dir>`. Mirrors: `scripts/sync-opencode.py` and `scripts/sync-hermes.py`,
-both of them.
+says `fr archive <plan-dir>`. fr-execute's step 5 (standalone dispatched flow only, never
+under fr-goal) relays `closeout: fr pickup --branch <phase-branch>` after opening its PR. On a
+non-final phase, that close-out reports the plan `held:` until the last phase lands, so its
+housekeeping PR carries only what the phase itself finished. fr-isolation's "clean up after a
+merged PR" guidance names `fr pickup --branch <b>` as the route, with `fr isolation down` as
+its last step. fr-dispatch relays nothing, because its runners open the PRs; `fr status`
+(§C) is the backstop there (R8). Mirrors: `scripts/sync-opencode.py` and
+`scripts/sync-hermes.py`, both of them.
 
 ### §F. Refs survive the move — `archive_twin` covers journals
 
@@ -169,10 +203,14 @@ phase.
 
 ### §G. The one-time sweep
 
-The last agentic phase runs `uv run fr archive --all` in the workspace. It commits the debug
-journal moves (and any orphan journal) as `chore: sweep live debug journals (#733)`, then
-regenerates the acceptance reports if any link text changed (`fr acceptance report
---deterministic`). The PR body states the count moved.
+The last agentic phase runs `uv run fr status` first and records what §C reports as owed.
+It then runs `uv run fr archive --all` in the workspace. `--all` is repo-wide: besides the
+debug journals, it moves any gate-passing plan, qualifying spec, orphan journal or orphan run,
+and repairs refs in passing. The phase checks that the moves equal the owed set it recorded
+beforehand, and treats any extra move as a finding. It commits every move as `chore: sweep owed
+artifacts (#733)`, then regenerates the acceptance reports (`fr acceptance report
+--deterministic`) and confirms `fr acceptance check` passes. The PR body lists the moves by kind
+with a count for each.
 
 ### Change fragment and explainers
 
@@ -189,6 +227,30 @@ otherwise the PR body says no explainer describes it.
 - A dirty plan path is held, following today's `--all` behaviour.
 
 ## Test Plan
+
+Pre-merge, automated (unit level, with real git repos in `tmp_path` and no mocked git):
+
+1. `branch_changed_paths` returns the same set `branch_changes_present` diffs, and
+   `branch_artifacts` groups plan-dir files, drops deleted paths and ignores non-artifact paths
+   (R3, R4).
+2. `fr archive --branch <b>` on a merged branch that added a plan, spec, run and debug journal
+   moves all of them. It prints `held:` for an incomplete plan and for a spec under
+   `--no-spec-sweep`; it prints `nothing to archive for <b>` (exit 0) for a branch that touched
+   no artifact; it refuses an unmerged branch and an unresolvable branch with exit 2, moving
+   nothing; and it refuses each conflicting flag (R3, R4).
+3. A branch that only **modified** an existing debug journal gets that journal archived (d2).
+4. `fr pickup --branch <b>` on a branch with no run cursor prints the brief with `fr archive
+   --branch <b>`, `chore/closeout-<slug>` and the verify-merge STOP. `fr pickup --run` on a done
+   run prints the same core and its run extras, with the run-mode table of §D pinned line by
+   line. Both mutual-exclusion refusals exit 2 (R1, R2).
+5. `fr status` lists each owed kind of §C with its clearing command, lists the held spec block,
+   and exits 0 (R5).
+6. `fr archive --all` moves debug journals present on the default ref, leaves one that exists
+   only on the branch, and moves orphan journals and runs (R7).
+7. `archive_twin` maps each journal scope both ways, and `fr acceptance check` passes on a
+   matrix citing a debug journal before and after it is moved (R7).
+8. A tripwire over the canonical skills: fr-debugging §4, fr-execute step 5 and fr-isolation's
+   cleanup contain `fr pickup --branch`, and the OpenCode and Hermes mirrors are in sync (R6, R8).
 
 Post-merge, operator-driven: in a NEW session from the base clone, run the `fr pickup --run`
 line this run's `deliver` relays. Confirm the brief names `fr archive --branch
