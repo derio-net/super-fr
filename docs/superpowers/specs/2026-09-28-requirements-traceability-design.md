@@ -297,9 +297,12 @@ A new derived evidence, `coverage`, on `spec-review` verifies it at resolve
 
 1. the review entry named by `evidence.review` contains exactly one
    `input-coverage` block, and it parses;
-2. the spans, whitespace-normalised and concatenated in table order, EQUAL the
-   input entries' bodies, whitespace-normalised and concatenated in journal
-   order: a partition, with no gap, overlap or reordering;
+2. the spans concatenated in table order EQUAL the input entries' bodies
+   concatenated in journal order, compared with ALL whitespace removed on both
+   sides: a partition, with no gap, overlap or reordering. Whitespace-insensitive
+   rather than whitespace-normalised, because a boundary may fall on whitespace
+   (lost when the cell is trimmed) or on none (a cut right after `)`), and no
+   single join rebuilds both (phase 1 review finding c1);
 3. every requirement id exists in the spec's Requirements table as it stands at
    resolve;
 4. every `missing <id>` names a `kind=finding` entry in the spec journal. The

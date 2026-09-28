@@ -412,6 +412,34 @@ def test_exact_partition_passes_and_counts() -> None:
     assert counts.missing == 0
 
 
+def test_partition_cut_with_no_whitespace_at_the_boundary_passes() -> None:
+    """Review c1: a cut right after `)` with no space is a sound partition.
+    Joining spans with an invented space would rebuild `range(1-20) ,done`."""
+    entries = [_input_entry("i1", "range(1-20),done")]
+    reqs = Requirements(items=(Requirement(id="R1", text="x", sources=()),))
+    body = _coverage_block([("range(1-20)", "R1"), (",done", "context")])
+    problems, _ = check_coverage(body, entries, reqs, entries)
+    assert problems == []
+
+
+def test_partition_cut_at_whitespace_passes_though_cells_are_trimmed() -> None:
+    """The other side of c1: table cells lose edge whitespace, so a plain
+    `"".join` would rebuild `alphabeta` from a cut at the space."""
+    entries = [_input_entry("i1", "alpha beta")]
+    reqs = Requirements(items=(Requirement(id="R1", text="x", sources=()),))
+    body = _coverage_block([("alpha", "R1"), ("beta", "context")])
+    problems, _ = check_coverage(body, entries, reqs, entries)
+    assert problems == []
+
+
+def test_partition_across_entries_with_no_separator_passes() -> None:
+    entries = [_input_entry("i1", "one"), _input_entry("i2", "two")]
+    reqs = Requirements(items=(Requirement(id="R1", text="x", sources=()),))
+    body = _coverage_block([("one", "R1"), ("two", "context")])
+    problems, _ = check_coverage(body, entries, reqs, entries)
+    assert problems == []
+
+
 def test_partition_with_literal_ellipsis_in_input() -> None:
     body_text = "first part … second part, literally"
     entries = [_input_entry("i1", body_text)]

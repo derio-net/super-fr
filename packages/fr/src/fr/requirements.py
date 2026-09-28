@@ -282,6 +282,11 @@ def normalise(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _strip_ws(text: str) -> str:
+    """All whitespace removed — the coverage partition's comparison form (§D)."""
+    return re.sub(r"\s+", "", text)
+
+
 def quote_matches(quote: str, body: str) -> bool:
     """Does `quote` (optionally eliding with `ELLIPSIS`) occur, in order, in
     `body`? Both sides whitespace-normalised first (§B)."""
@@ -450,13 +455,13 @@ def check_coverage(
         missing=n_missing,
     )
 
-    # §D: "compare with single-space joins on both sides so span boundaries
-    # carry no whitespace ambiguity" — both the input entries (joined across
-    # journal entries) and the spans (joined across table rows) get an
-    # explicit separator; `normalise` then collapses any doubled-up
-    # whitespace at a boundary that already had its own.
-    expected = normalise(" ".join(e.body for e in input_entries))
-    actual = normalise(" ".join(spans))
+    # §D check 2, whitespace-INSENSITIVE (review c1). A span boundary may fall
+    # on whitespace (table cells are trimmed, so it is lost) or on none (a cut
+    # right after `)`), so neither a space-join nor a bare join rebuilds the
+    # input in both cases. Dropping all whitespace on both sides does, and the
+    # partition still refuses any skipped, repeated or reordered text.
+    expected = _strip_ws("".join(e.body for e in input_entries))
+    actual = _strip_ws("".join(spans))
     if actual != expected:
         problems.append(
             "the input-coverage spans do not partition the input entries exactly "
