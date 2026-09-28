@@ -94,8 +94,9 @@ NEW_CONTRACT_MARKERS = tuple(
     m.casefold()
     for m in (
         "questions: {rounds",  # the record declaration (§3.B)
-        "(Round 1 of",  # the up-front announcement the gate looks for
-        "(Round 2 of 2)",
+        "(Round 1 · questions",  # the round label (gh#766)
+        "(Round 2 · questions",
+        "a 2nd round may follow",  # the up-front announcement the gate looks for
         "design-risk",  # the two triggers a second round may carry
         "operator-request",
         "never a round 3",
@@ -111,6 +112,25 @@ NEW_CONTRACT_MARKERS = tuple(
         "gate-question-rounds",  # the spec-journal entry that reaches the PR (p3-r9)
     )
 )
+
+# gh#766: a round of N questions on Claude Code is ceil(N/4) dialogs, and a
+# round label alone made every dialog read `(Round 1 of 1)` — a repeat or a
+# miscount to the operator. Each dialog names its part of the round, and the
+# questions the spec's Requirements depend on come first.
+DIALOG_PART_MARKERS = tuple(
+    m.casefold()
+    for m in (
+        "(Round 1 · questions 1–4 of 8)",
+        "(Round 1 · questions 5–8 of 8)",
+        "interpretations of the input come first",
+    )
+)
+
+# gh#766: `of N` was a forecast printed as a count — `of 1` becomes 2 on an
+# operator request and `of 2` is a ceiling that may resolve `rounds: 1`. The
+# label counts only what is certain; the forecast is its own phrase, shown
+# only when the agent predicts a design-risk round 2.
+FORECAST_LABEL_PHRASES = tuple(p.casefold() for p in ("(Round 1 of", "(Round 2 of"))
 
 # The instruction review p3-r1 found: cross-examining "in prose" merges round
 # 1 and round 2 into ONE transcript round, so a declared `rounds: 2` is refused.
@@ -179,6 +199,27 @@ def test_fr_goal_states_the_new_round_contract(skill: Path, marker: str) -> None
         "announcement, the two triggers, the never-a-round-3 rule, per-decision "
         "sizing, the tool-call round separation and the record's `questions:` "
         "declaration."
+    )
+
+
+@pytest.mark.parametrize("skill", FR_GOAL_COPIES, ids=_rel)
+@pytest.mark.parametrize("marker", DIALOG_PART_MARKERS)
+def test_fr_goal_labels_each_dialog_of_a_split_round(skill: Path, marker: str) -> None:
+    assert marker in _surface_text(skill), (
+        f"{_rel(skill)} is missing {marker!r} — a round spread over several "
+        "question dialogs must name each dialog's part of the round, after the "
+        "round label, or every dialog reads as the same label (gh#766)."
+    )
+
+
+@pytest.mark.parametrize("skill", FR_GOAL_COPIES, ids=_rel)
+@pytest.mark.parametrize("phrase", FORECAST_LABEL_PHRASES)
+def test_fr_goal_never_prints_a_round_forecast_as_a_count(skill: Path, phrase: str) -> None:
+    assert phrase not in _surface_text(skill), (
+        f"{_rel(skill)} still labels a round {phrase!r} — the round total is a "
+        "forecast (an operator request adds a round, an announced round 2 may "
+        "not happen), so the label counts only the round and its questions; a "
+        "predicted round 2 is `a 2nd round may follow` (gh#766)."
     )
 
 

@@ -141,3 +141,62 @@ def test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver() -> N
     assert implement_index < journal_check_index < deliver_index, (
         f"journal-check must sit strictly between implement and deliver, got order {step_ids}"
     )
+
+
+# ── requirements traceability (spec 2026-09-28 §C, §D, §F, d8; Test Plan 14) ──
+
+
+def _step(manifest, step_id: str):
+    return next(s for s in manifest.steps if s.id == step_id)
+
+
+def test_shipped_fr_goal_declares_the_requirements_gates() -> None:
+    manifest = _shipped_fr_goal()
+
+    assert check_workflow(manifest) == []
+    assert _step(manifest, "brainstorm").evidence == ("requirements",)
+    review = _step(manifest, "spec-review")
+    assert review.tier == "hard"
+    assert review.emits == ("journal:spec", "acceptance")
+    assert review.evidence == ("review", "reviewer", "findings", "requirements", "coverage")
+    assert _step(manifest, "deliver").evidence == ("tests", "proportionality", "requirement-rows")
+
+
+# The additions, undone — the shape an in-flight cursor was started against.
+_BEFORE_THE_GATES = (
+    ("    evidence: [requirements]\n", ""),
+    ("    tier: hard\n", "    tier: standard\n"),
+    ("    emits: [journal:spec, acceptance]\n", "    emits: [journal:spec]\n"),
+    (
+        "    evidence: [review, reviewer, findings, requirements, coverage]\n",
+        "    evidence: [review, reviewer, findings]\n",
+    ),
+    (
+        "    evidence: [tests, proportionality, requirement-rows]\n",
+        "    evidence: [tests, proportionality]\n",
+    ),
+)
+
+
+def test_a_cursor_started_before_the_gates_does_not_drift(tmp_path: Path) -> None:
+    """Drift compares step and member ids only: every addition is a field,
+    so a run started on the old shape keeps advancing on the new one."""
+    from fr.commands.run_cmd import _check_step_drift
+    from fr.run.model import load_run_state
+
+    from tests.unit.test_run_cli import _invoke, _repo
+
+    text = (SHIPPED_WORKFLOWS_DIR / "fr-goal.yaml").read_text()
+    for new, old in _BEFORE_THE_GATES:
+        assert new in text, new
+        text = text.replace(new, old, 1)
+    old_shipped = tmp_path / "old"
+    old_shipped.mkdir()
+    (old_shipped / "fr-goal.yaml").write_text(text)
+    repo = _repo(tmp_path)
+    started = _invoke(
+        repo, old_shipped, ["run", "start", "fr-goal", "--branch", "b", "--run-id", "r1"]
+    )
+    assert started.exit_code == 0, started.output
+
+    _check_step_drift(load_run_state(repo, "r1"), _shipped_fr_goal())  # raises on drift

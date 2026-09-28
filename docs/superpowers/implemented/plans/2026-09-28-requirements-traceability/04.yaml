@@ -1,0 +1,133 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Prose, mirrors, explainer and repo obligations
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - requirements-spec-review-hard-first
+  - requirements-always-ask
+  - requirements-spec-review-traceability
+  tier: standard
+  files:
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/agents/fr-spec-reviewer.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - AGENTS.md
+  - docs/acceptance/*
+  - tests/unit/test_spec_reviewer_agent.py
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: fr-spec-reviewer — traceability first, partition return
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_spec_reviewer_agent.py pins on plugins/super-fr/agents/fr-spec-reviewer.md:
+      the front-matter description names traceability to the input; the checks heading says
+      four things and traceability is listed first; the body names the ```input-coverage
+      return, the four labels, and `unconfirmed` as the expected resolution for invented /
+      reinterpreted findings. Fails.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: rewrite the agent's checks section per spec §D (covered-or-deferred, faithful,
+      nothing invented; dropped → fix with the row; invented/reinterpreted → recommend
+      `unconfirmed` or removal, never rewriting the requirement to fit the design; the
+      partition block). Tool-neutral prose. Green.
+- number: 2
+  title: Skills — fr-brainstorming, fr-goal, fr-acceptance
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      fr-brainstorming: record the input first as a spec-journal `discovery` with `input:
+      true`, redacted per third-party-privacy and saying so; before the round list every
+      user-visible behaviour and every ambiguous input statement the input does not settle
+      and ask each (d2); write `## Requirements` / `## Deferred from input` tables (§B) before
+      Design; one row per requirement or group, origin `<repo>:<spec>#R<n>`,
+      `verify: post-merge` for requirements only a live run can prove. fr-goal §1 the same
+      in one sentence plus a pointer; §2 the `unconfirmed` resolution, the coverage partition
+      the reviewer returns, `acceptance` rows in the spec-review record; §8
+      `requirement-rows` and the three new PR sections. fr-acceptance: `#R<n>` origins and
+      `--verify post-merge`. Keep each skill's voice; no harness-specific tool names outside
+      a `**Harness —` clause.
+  - id: P4.T2.S2
+    text: |-
+      Run BOTH mirror generators: `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`; commit the regenerated
+      `.opencode/` and `.hermes/` files. Run the tripwires:
+      `uv run pytest tests/unit/test_tripwire_opencode_skills_sync.py
+      tests/unit/test_tripwire_opencode_instructions_sync.py tests/unit/test_opencode_agent_mirror.py
+      tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py
+      -q --no-cov`: green.
+- number: 3
+  title: Explainer, AGENTS.md, acceptance rows
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      docs/explainers/01-fr-goal.md: a short section on requirements capture (the spec's
+      Requirements table traced to the input, always ask, the coverage partition, the rows
+      gate), second person, matching the page's voice. Regenerate the .html per
+      .claude/rules/explainers-currency.md: first re-render the UNMODIFIED .md from `/` with
+      `uv run --isolated --no-project --with markdown --with pyyaml python
+      "$B/tools/render_explainer.py" … --style broadsheet --embed-fonts` and confirm it is
+      byte-identical to the committed .html; then render the edited .md. If the renderer is
+      unavailable, leave the .html and record a `discovery` that regeneration is owed.
+      test_tripwire_explainers_fresh.py green.
+  - id: P4.T3.S2
+    text: |-
+      AGENTS.md: a `fr/requirements.py` bullet under the `fr` package list (parse/check/
+      coverage; callers: `fr spec requirements` and the three derived evidence names).
+      Acceptance: `fr acceptance set-status` moves requirements-structural-gate,
+      requirements-coverage-partition, requirements-rows-deliver-gate,
+      requirements-unconfirmed-in-pr, requirements-post-merge-rows,
+      requirements-input-in-spec-journal and requirements-spec-review-hard-first to `ci`
+      with their unit test refs (`--level unit=super-fr:tests/unit/<file>`); set
+      `verify: post-merge` on requirements-always-ask and
+      requirements-spec-review-traceability (they stay not-implemented, owed to the
+      post-merge Test Plan item 17). `uv run fr acceptance check` exits 0.
+  - id: P4.T3.S3
+    text: |-
+      Final gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`,
+      mypy per AGENTS.md, `uv run --no-project python scripts/bump-version.py --check`,
+      `uv run fr validate artifacts`, full `uv run pytest -q --no-cov -n auto` green.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+    P4.T3.S3:
+      state: x
+      ticked_at: '2026-09-28T12:26:36+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T12:26:36+00:00'
+    note: null
+    observed_prs: []

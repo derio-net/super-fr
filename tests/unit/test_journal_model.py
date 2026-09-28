@@ -853,6 +853,103 @@ class TestOutOfScope:
             JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", out_of_scope=True)
 
 
+# --- input + unconfirmed (spec 2026-09-28 §A, §D) --------------------------
+
+_INPUT_TEXT = (
+    "<!-- fr:journal kind=discovery scope=spec id=input-1 created=2026-09-28T00:00:00 "
+    "input=true -->\n### input-1 · discovery · operator input\n\nthe goal, verbatim\n"
+)
+
+_UNCONFIRMED_TEXT = (
+    "<!-- fr:journal kind=finding scope=spec id=f1 created=2026-09-28T00:00:00 "
+    "state=open review_scope=in -->\n### f1 · finding [open] · invented (reviewer: in scope)"
+    "\n\nbody\n\n"
+    "<!-- fr:journal kind=finding scope=spec id=f1-resolved created=2026-09-28T00:01:00 "
+    "state=open resolves=f1 unconfirmed=true -->\n"
+    "### f1-resolved · finding [unconfirmed] · resolves f1: invented\n\nwhat gets built\n"
+)
+
+
+class TestInputToken:
+    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        e = _entry(kind="discovery", scope="spec", id="input-1", phase=None, input=True)
+        text = serialize_entry(e)
+        assert "input=true" in text.splitlines()[0]
+        assert parse_journal(text)[0].input is True
+        assert parse_journal(_INPUT_TEXT)[0].input is True
+        plain = serialize_entry(_entry(kind="discovery", scope="spec", id="d2", phase=None))
+        assert "input" not in plain.splitlines()[0]
+
+    def test_a_reader_that_ignores_the_token_reads_a_plain_discovery(self) -> None:
+        from fr.journal.model import parse_journal
+
+        older = parse_journal(_INPUT_TEXT.replace(" input=true", ""))
+        assert older[0].kind == "discovery" and older[0].input is False
+
+    def test_input_is_refused_on_a_non_discovery_kind(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        with pytest.raises(ValueError, match="`input` is only valid"):
+            JournalEntry(kind="decision", scope="spec", id="d", created="t", title="x", input=True)
+
+    def test_input_is_refused_on_a_non_spec_scope(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        for scope in ("plan", "debug"):
+            with pytest.raises(ValueError, match="`input` is only valid"):
+                JournalEntry(
+                    kind="discovery", scope=scope, id="d", created="t", title="x", input=True
+                )
+
+
+class TestUnconfirmed:
+    def test_the_fold_reads_it_as_unconfirmed_and_the_gates_stop_counting_it(self) -> None:
+        from fr.journal.model import effective_finding_states, open_finding_ids, parse_journal
+
+        entries = parse_journal(_UNCONFIRMED_TEXT)
+        assert entries[1].state == "open" and entries[1].unconfirmed is True
+        assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+        assert open_finding_ids(entries) == []
+
+    def test_a_reader_that_ignores_the_token_reads_it_open(self) -> None:
+        from fr.journal.model import open_finding_ids, parse_journal
+
+        older = _UNCONFIRMED_TEXT.replace(" unconfirmed=true", "")
+        assert open_finding_ids(parse_journal(older)) == ["f1"]
+
+    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        record = _entry(
+            kind="finding", scope="spec", id="r1", state="open", resolves="f1", unconfirmed=True
+        )
+        text = serialize_entry(record)
+        assert "unconfirmed=true" in text.splitlines()[0]
+        assert "[unconfirmed]" in text.splitlines()[1]
+        assert parse_journal(text)[0].unconfirmed is True
+        plain = serialize_entry(_entry(kind="finding", scope="spec", id="f2", state="open"))
+        assert "unconfirmed" not in plain
+
+    def test_only_an_open_spec_resolution_record_may_carry_it(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        base = dict(kind="finding", scope="spec", id="r", created="t", title="x", body="")
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**base, state="open", unconfirmed=True)  # no `resolves`
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**base, state="fixed", resolves="f1", unconfirmed=True)
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", unconfirmed=True)
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**base, state="open", resolves="f1", out_of_scope=True, unconfirmed=True)
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**{**base, "scope": "plan"}, state="open", resolves="f1", unconfirmed=True)
+        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
+            JournalEntry(**{**base, "kind": "discovery"}, unconfirmed=True)
+
+
 def test_a_review_scope_value_this_fr_does_not_know_is_dropped_not_fatal() -> None:
     """The tag is display-only: one bad value must not make the journal — and
     every gate reading it — unparseable."""

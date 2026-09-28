@@ -65,6 +65,10 @@ class Row(BaseModel):
     levels: dict[str, tuple[StrictStr, ...]] = Field(default={}, validate_default=True)
     status: Status
     notes: StrictStr = ""
+    # A row whose verification can only run after merge (spec 2026-09-28 §F):
+    # the PR body lists it as owed. Matrix kind 1 -> 2 (§H), because an older
+    # fr would reject the key on this `extra="forbid"` row.
+    verify: Literal["post-merge"] | None = None
 
     @field_validator("levels")
     @classmethod
@@ -84,6 +88,10 @@ class Row(BaseModel):
 
 class Matrix(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+    # The artifact stamp (`fr.artifacts.registry`, kind `matrix`). The first
+    # move past 1 (spec 2026-09-28 §H) writes it, and this model is closed, so
+    # it must accept the key or a stamped matrix would not parse.
+    schema_version: int = 1
     org: StrictStr | None = None
     repo: StrictStr | None = None
     rows: tuple[Row, ...] = ()

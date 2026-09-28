@@ -165,6 +165,12 @@ def add(
     answered_by: str | None = typer.Option(
         None, "--answered-by", help="--resolves only: " + _ANSWERED_BY_HELP
     ),
+    is_input: bool = typer.Option(
+        False,
+        "--input",
+        help="--scope spec --kind discovery only: this entry is the operator's input, "
+        "verbatim after third-party redaction (spec 2026-09-28 §A).",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
@@ -222,6 +228,7 @@ def add(
             resolves=resolves,
             review_scope=review_scope,  # type: ignore[arg-type]
             answered_by=answered_by,  # type: ignore[arg-type]
+            input=is_input,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -261,6 +268,7 @@ def add(
             "review_scope": review_scope,
             "resolves": resolves,
             "answered_by": answered_by,
+            "input": is_input,
         }
     )
     _apply(
@@ -294,7 +302,7 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
         err_console.print(notice, markup=False, soft_wrap=True)
 
 
-RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
+RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope", "unconfirmed")
 """What `resolve` may close a finding to. Re-opening is `add --resolves`:
 `resolve` is the verb for "this is done with", and a re-open is new
 information, which belongs in an entry with a body of its own."""
@@ -311,9 +319,11 @@ def resolve(
     state: str = typer.Option(
         ...,
         "--state",
-        help="fixed | refuted | deferred | out-of-scope. `deferred` = the finding is "
-        "valid but not this change's to fix; requires --tracked-by. `out-of-scope` = "
-        "true, but not caused by this change (--note says why); no issue needed yet.",
+        help="fixed | refuted | deferred | out-of-scope | unconfirmed. `deferred` = the "
+        "finding is valid but not this change's to fix; requires --tracked-by. "
+        "`out-of-scope` = true, but not caused by this change (--note says why); no "
+        "issue needed yet. `unconfirmed` = --scope spec only: the behaviour is built "
+        "without the operator confirming it (--note says what gets built).",
     ),
     note: str = typer.Option(
         ...,
@@ -406,6 +416,13 @@ def resolve(
             "finding has a state to resolve"
         )
         raise typer.Exit(2)
+    if state == "unconfirmed":
+        from fr.record.apply import unconfirmed_refusal
+
+        reason = unconfirmed_refusal(entry_id, target, scope)
+        if reason is not None:
+            err_console.print(f"[red]{reason}[/red] — nothing resolved", soft_wrap=True)
+            raise typer.Exit(2)
     from fr.record.model import Resolution, StepRecord
 
     record_id = _record_id(entry_id, {e.id for e in entries})
@@ -589,11 +606,15 @@ def check(
         )
     # Same for out-of-scope: passes, and is listed, so the operator can still
     # choose to file each as an issue.
-    out_of_scope = [
-        fid for fid, st in effective_finding_states(entries).items() if st == "out-of-scope"
-    ]
+    states = effective_finding_states(entries)
+    out_of_scope = [fid for fid, st in states.items() if st == "out-of-scope"]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
+    # And for unconfirmed (spec 2026-09-28 §D): behaviour built without the
+    # operator's answer passes, but is named here as in the PR body.
+    unconfirmed = [fid for fid, st in states.items() if st == "unconfirmed"]
+    if unconfirmed:
+        console.print(f"{len(unconfirmed)} unconfirmed finding(s): " + ", ".join(unconfirmed))
     unauthorized = unauthorized_fixes(entries)
     if unauthorized:
         err_console.print(

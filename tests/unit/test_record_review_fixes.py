@@ -29,6 +29,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
+from tests.unit.requirements_support import seed_requirements
 from tests.unit.test_deliver_pr_body import PR, _at_deliver, _body
 from tests.unit.test_record_apply import _implemented, _resolve, _review_record
 
@@ -321,6 +322,7 @@ def test_a_brainstorm_record_expresses_the_no_questions_bypass(tmp_path: Path) -
     spec = root / "docs" / "superpowers" / "specs" / "2026-09-25-x-design.md"
     spec.parent.mkdir(parents=True, exist_ok=True)
     spec.write_text("# x design\n")
+    seed_requirements(root, "docs/superpowers/specs/2026-09-25-x-design.md")
     data = {
         "run": RUN, "step": "brainstorm", "outcome": "done",
         "emitted": {"spec": "docs/superpowers/specs/2026-09-25-x-design.md"},

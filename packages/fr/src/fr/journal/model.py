@@ -44,10 +44,15 @@ _REVIEW_SCOPE_LABEL: dict[str, str] = {"in": "in scope", "out": "out of scope"}
 # TOKEN, never written as a `state=` value, because an older fr would reject an
 # unknown value and fail to parse the whole journal:
 #   - `deferred`     — an `open` resolution record carrying `tracked_by=`;
-#   - `out-of-scope` — an `open` resolution record carrying `out_of_scope=true`.
+#   - `out-of-scope` — an `open` resolution record carrying `out_of_scope=true`;
+#   - `unconfirmed`  — an `open` spec resolution record carrying
+#                      `unconfirmed=true` (spec 2026-09-28 §D): built without
+#                      the operator confirming it, closed for every gate.
 # `parse_journal` projects tokens by name, so an older reader drops the token
 # and reads the finding as still open — fail closed, and no journal stamp bump.
-EffectiveFindingState = Literal["fixed", "refuted", "open", "deferred", "out-of-scope"]
+EffectiveFindingState = Literal[
+    "fixed", "refuted", "open", "deferred", "out-of-scope", "unconfirmed"
+]
 
 # Where deferred work may be tracked: `#N`, `owner/repo#N`, or an http(s) URL.
 # A reference, not prose — so a deferral always says where the work went.
@@ -111,6 +116,19 @@ class JournalEntry(BaseModel):
     # not caused by this change (spec 2026-09-24 §A). Folds to `out-of-scope`;
     # header token `out_of_scope=true`, serialized only when set.
     out_of_scope: bool = False
+    # OPERATOR INPUT: a spec-scope `discovery` holding the operator's input
+    # verbatim (after redaction) — the text a spec's requirements quote (spec
+    # 2026-09-28 §A). Header token `input=true`, serialized only when set, so
+    # an older fr reads a plain discovery.
+    input: bool = False
+    # UNCONFIRMED: an `open` spec resolution record saying the behaviour is
+    # built without the operator confirming it (spec 2026-09-28 §D). Folds to
+    # `unconfirmed`; header token `unconfirmed=true`, carried like
+    # `out_of_scope`, so an older fr reads the finding as open (fail closed).
+    # The model checks what the ENTRY knows (kind, record shape, its scope);
+    # the refusal that needs the TARGET finding (`review_scope: out`) lives in
+    # the two writers — `fr journal resolve` and `record.apply._journal_writes`.
+    unconfirmed: bool = False
     # The REVIEWER's in/out tag, copied onto the finding when the orchestrator
     # journals it. Kept beside the fold's verdict so a finding the reviewer
     # called in-scope and the orchestrator moved out renders as reclassified.
@@ -160,6 +178,22 @@ class JournalEntry(BaseModel):
             raise ValueError(
                 "`out_of_scope` is only valid on an `open` resolution record that is not "
                 "a deferral: it says the finding is true but not this change's"
+            )
+        if self.input and (self.kind != "discovery" or self.scope != "spec"):
+            raise ValueError(
+                "`input` is only valid on a spec-scope `discovery` entry: it holds the "
+                "operator's input, which only a spec journal carries"
+            )
+        if self.unconfirmed and (
+            self.resolves is None
+            or self.state != "open"
+            or self.tracked_by is not None
+            or self.out_of_scope
+            or self.scope != "spec"
+        ):
+            raise ValueError(
+                "`unconfirmed` is only valid on an `open` spec-scope resolution record "
+                "that is neither a deferral nor out-of-scope: it is a spec-capture state"
             )
         if self.review_scope is not None and (self.kind != "finding" or self.resolves):
             raise ValueError(
@@ -234,6 +268,8 @@ _HEADER_FIELDS = (
     "out_of_scope",
     "review_scope",
     "answered_by",
+    "input",
+    "unconfirmed",
 )
 
 
@@ -254,6 +290,8 @@ def serialize_entry(entry: JournalEntry) -> str:
         state_bit = f" [deferred → {entry.tracked_by}]"
     elif entry.out_of_scope:
         state_bit = " [out-of-scope]"
+    elif entry.unconfirmed:
+        state_bit = " [unconfirmed]"
     if entry.review_scope is not None:
         state_bit += f" (reviewer: {_REVIEW_SCOPE_LABEL[entry.review_scope]})"
     heading = f"### {entry.id} · {entry.kind}{state_bit} · {entry.title}{phase_bit}"
@@ -333,6 +371,8 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 out_of_scope=fields.get("out_of_scope") == "true",
                 review_scope=_review_scope_token(fields.get("review_scope")),
                 answered_by=_answered_by_token(fields.get("answered_by")),
+                input=fields.get("input") == "true",
+                unconfirmed=fields.get("unconfirmed") == "true",
             )
             if entry.id in entry_ids:
                 raise JournalParseError(f"duplicate journal entry id: {entry.id!r}")
@@ -415,6 +455,8 @@ def _record_state(e: JournalEntry) -> EffectiveFindingState | None:
         return "deferred"
     if e.out_of_scope:
         return "out-of-scope"
+    if e.unconfirmed:
+        return "unconfirmed"
     return e.state
 
 
