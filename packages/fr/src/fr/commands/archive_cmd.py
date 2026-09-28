@@ -297,7 +297,13 @@ def _archive_branch_specs(
 def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
     """A journal/run/usage artifact's repo-relative destination when it is
     archived — by its owner's move earlier in this run, or here — else the
-    reason it is held."""
+    reason it is held.
+
+    A follower with uncommitted edits is held, as a dirty plan path is:
+    `git mv` would stage the rename with the edit folded in (review p2 #4)."""
+    live = repo_root / a.path
+    if live.exists() and paths_dirty(repo_root, live):
+        return f"worktree dirty at {a.path} — commit or stash first"
     if a.kind == "journal":
         return _archive_branch_journal(repo_root, a)
     run_id = a.path.stem
@@ -350,7 +356,10 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
         owner_archived, owner = True, ""
     if not owner_archived:
         return f"follows {owner}, still live or missing"
-    archive_journal(repo_root, scope, slug)
+    try:
+        archive_journal(repo_root, scope, slug)
+    except ArchiveError as e:  # a held reason, as for a plan (review p2 #3)
+        return str(e)
     if journal_path(repo_root, scope, slug).exists():
         return f"destination {dst.relative_to(repo_root)} already exists"
     return dst.relative_to(repo_root)

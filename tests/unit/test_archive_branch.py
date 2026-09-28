@@ -447,3 +447,38 @@ def test_branch_names_why_an_orphan_run_was_not_carried(tmp_path, monkeypatch):
     assert f"held: docs/superpowers/runs/{RUN}.yaml — " in result.output
     assert "already exists" in result.output
     assert "did not move" not in result.output
+
+
+def test_branch_holds_a_journal_whose_move_fails(tmp_path, monkeypatch):
+    """review p2 #3: an ArchiveError from the journal move is a held reason,
+    as it is for a plan — never a traceback."""
+    import fr.archive as archive_mod
+
+    repo = _base(tmp_path)
+    _merged(repo, lambda r: _journal(r, "debug", "2026-09-28-bug"))
+
+    def boom(root, src, dst):
+        raise archive_mod.ArchiveError(f"git mv {src} -> {dst} failed: boom")
+
+    monkeypatch.setattr(archive_mod, "_git_mv", boom)
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert "held: docs/superpowers/journals/debug/2026-09-28-bug.md — git mv" in result.output
+    assert "boom" in result.output
+
+
+def test_branch_holds_a_dirty_follower(tmp_path, monkeypatch):
+    """review p2 #4: a locally edited debug journal is held with the plan
+    path's dirty reason, not moved as a staged RM carrying the edit."""
+    repo = _base(tmp_path)
+    _merged(repo, lambda r: _journal(r, "debug", "2026-09-28-bug"))
+    _write(repo, SP / "journals/debug/2026-09-28-bug.md", "# journal\n\nlocal edit\n")
+
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert (
+        "held: docs/superpowers/journals/debug/2026-09-28-bug.md — worktree dirty at "
+        "docs/superpowers/journals/debug/2026-09-28-bug.md — commit or stash first"
+    ) in result.output
+    assert (repo / SP / "journals/debug/2026-09-28-bug.md").is_file()
+    assert not (repo / IMPL / "journals/debug/2026-09-28-bug.md").exists()
