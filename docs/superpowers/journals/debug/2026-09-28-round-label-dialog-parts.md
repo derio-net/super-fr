@@ -19,3 +19,8 @@ First fix (a part suffix after '(Round 1 of N') rejected by the operator before 
 ### 8d152a00fb8b · finding [fixed] · Round labels count only what is certain; the forecast is its own phrase
 
 fr-goal SKILL.md §1 + Claude Code questions clause (and both mirrors): labels are (Round K · questions a–b of N); round 1 adds '· a 2nd round may follow' iff a design-risk round 2 is forecast; interpretation questions come first in a split round. run_cmd.py ANNOUNCEMENT -> ANNOUNCEMENTS ('a 2nd round may follow', legacy 'round 1 of 2'). Tests written red first: test_tripwire_fr_goal_question_rounds.py (dialog-part markers, no '(Round N of' label, new contract markers — 12 then 31 failures before the fix) and test_run_question_rounds.py (verdict rows for the split-round labels, the case-insensitive phrase, the legacy token, and a label without the forecast refused). Matrix rows fr-goal-second-round-announced-and-verified / fr-goal-contract-prose-two-rounds reworded, reports regenerated. Full suite: 6838 passed.
+
+<!-- fr:journal kind=review scope=debug id=801a7a6b0c4d created=2026-09-28T14:22:21+00:00 -->
+### 801a7a6b0c4d · review · Independent adversarial review: no findings at confidence >= 80
+
+Separate-context reviewer covered stale 'Round X of N' surfaces, fr-goal §1/Harness-clause consistency, gate correctness (casing, unicode, split rounds, legacy token, phrase in round 2 not counted), test adequacy and tool-neutrality: none found. Two low-confidence notes: (1) prose did not say whether the forecast rides every dialog of a split round 1 — fixed ('Every round-1 label adds'); (2) telemetry folds question headers into question_texts, so the phrase in a header alone satisfies the gate — pre-existing, not introduced here, left as is.
