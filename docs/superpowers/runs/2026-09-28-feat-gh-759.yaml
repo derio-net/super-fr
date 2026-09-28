@@ -3,7 +3,7 @@ run: 2026-09-28-feat-gh-759
 workflow: fr-goal@1
 branch: feat/gh-759
 started: '2026-09-28T04:28:22+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -160,6 +160,10 @@ steps:
           reviewer: a1cfebeb02be4f2b8
           findings: p4-g1,p4-g2
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-28T12:51:23+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p2-d5, p3-e6
   deliver:
     state: pending
