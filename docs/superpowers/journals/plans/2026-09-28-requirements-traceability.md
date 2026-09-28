@@ -65,3 +65,18 @@ check_requirements's two local closures (_cited, _quote_ok) are already single-p
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 check_coverage already reuses T2's shared _parse_table/_split_row for its own input-coverage block (the refactor step's own stated purpose, "used by both tables (and later by check_coverage's block)"); the label classification is one linear scan over four mutually exclusive forms, nothing repeated to extract.
+
+<!-- fr:journal kind=finding scope=plan id=p1-c1 created=2026-09-28T09:12:35+00:00 phase=1 state=open review_scope=in -->
+### p1-c1 · finding [open] (reviewer: in scope) · check_coverage's single-space join falsely refuses a partition cut with no whitespace at the boundary (phase 1)
+
+requirements.py:458-459 joined spans and entries with " ", so a sound cut right after `)` rebuilt as `range(1-20) ,done`. Root cause: the plan's P1.T4.S2 wording ("single-space joins"), not the spec. The reviewer's suggested bare join fails the other case (trimmed cells rebuild `alphabeta`). Fixed by comparing with all whitespace removed; spec §D check 2 reworded.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-28T09:12:35+00:00 phase=1 -->
+### review-phase-1 · review · phase 1 code review: 1 finding (c1, in scope, fixed) (phase 1)
+
+Independent reviewer (dispatched code-reviewer, standard tier) over eac98902..9df2e0f4 against spec §B-§D and Test Plan 1-4, 12, 13. One finding: p1-c1. Checked clean: grammar hard-errors, whitespace-only quote normalisation, literal dashes, in-order ellipsis fragments, one-entry quote rule, literal spans, archive twins both directions, complexity. Executor choice 2 (test-only parse_journal bridge for the phase-2 input token) judged acceptable. Test Plan 13 exercised by two CLI cases rather than every fixture: below the reviewer's threshold, noted.
+
+<!-- fr:journal kind=finding scope=plan id=p1-c1-resolved created=2026-09-28T09:12:35+00:00 phase=1 state=fixed resolves=p1-c1 -->
+### p1-c1-resolved · finding [fixed] · resolves p1-c1: check_coverage's single-space join falsely refuses a partition cut with no whitespace at the boundary (phase 1)
+
+Whitespace-insensitive comparison in check_coverage; three boundary tests (no-space cut, cut at a space, entries with no separator); spec §D check 2 reworded.
