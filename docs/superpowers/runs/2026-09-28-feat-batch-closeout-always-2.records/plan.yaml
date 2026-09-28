@@ -1,0 +1,14 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-closeout-always-2
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: p0-phase-shape
+    title: Six phases, skeleton first, sweep last
+    body: |
+      P1 skeleton (branch_changed_paths + branch_artifacts + fragment), P2 `fr archive --branch` (hard tier: ref resolution, per-kind held lines), P3 owed_artifacts + status + archive --all + archive_twin, P4 brief split / `fr pickup --branch`, P5 skill relays + both mirror generators + tripwire + explainer check, P6 the one-time sweep checked against `fr status`'s owed set. No manual phase: the post-merge Test Plan walk is operator-driven at close-out. #733 is no phase's tracking_issue.
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-09-28-closeout-always
+evidence: {}
