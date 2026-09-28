@@ -1,0 +1,206 @@
+schema_version: 2
+run: 2026-09-28-feat-gh-759
+step: brainstorm
+outcome: done
+questions:
+  rounds: 1
+journal:
+- kind: discovery
+  id: input-issue-759
+  title: 'Raw input: issue #759 title and body (verbatim)'
+  body: "fr-goal is a lossy relay: the brief is paraphrased into the spec, executors and reviewers never\
+    \ see it, and nothing checks the spec against it\n\n## Problem\n\nfr-goal loses the operator's requirements\
+    \ on the way from the brief to the code, and no stage checks the result against the brief. The pipeline\
+    \ works as a relay: every step works from the previous step's paraphrase.\n\n- **brief → spec:** the\
+    \ orchestrator paraphrases the brief into a spec, adding its own design decisions and dropping constraints.\n\
+    - **spec review:** `fr-spec-reviewer` checks the spec \"against the operator's recorded decisions,\
+    \ against the codebase it names, and against itself\" (its agent description). Not against the brief.\
+    \ An invented behaviour or a dropped acceptance criterion passes.\n- **spec → plan:** the plan compresses\
+    \ the work further into steps.\n- **plan → executor:** the phase executor is dispatched with the spec\
+    \ and plan only. It never sees the brief.\n- **review-phase:** checks the code against spec + plan,\
+    \ so it confirms conformance to the paraphrase.\n- **deliver:** gates evidence of what was *planned*:\
+    \ tests, reviews, acceptance rows the run wrote itself.\n\nSo fr is rigorous about \"did we do what\
+    \ we planned\", and nothing checks \"did we plan what was asked\". Detail an operator writes into\
+    \ a brief can only survive if the orchestrator happens to carry it into the spec.\n\n## Evidence (one\
+    \ run; generic brief/spec lines quoted)\n\nA feature brief with an explicit UI acceptance-criteria\
+    \ list, run end to end with `/fr-goal` (fr 4.28.0, OpenCode, single phase).\n\n- **The brief:**\n\
+    \  > Quantities: − / + on each article card (1–20), styled like the cards; the card shows its quantity.\
+    \ … Every new control uses the page's colours, font and radius — no unstyled browser defaults.\n-\
+    \ **The spec the orchestrator wrote** (`docs/superpowers/specs/…-design.md`, UI section):\n  > In\
+    \ basket mode **cards toggle membership**, with styled minus/plus controls **(1–20)** and displayed\
+    \ quantity …\n  - \"cards toggle membership\" is **invented**. The brief says nothing about card clicks.\n\
+    \  - \"(1–20)\" became a lower bound on the − control, so a quantity can't reach 0.\n  - \"page font\
+    \ / no unstyled browser defaults\" is **dropped**.\n- **The plan** (`01.yaml`): the whole UI is one\
+    \ step, \"implement styled mode buttons, card quantities and number input\".\n- **The executor's dispatch**\
+    \ (task input, 1,457 characters): \"read spec … and fr journal handoff … Implement basket logic, API,\
+    \ UI; browser-check accepted, rejected, staff check and back to article …\". The brief is neither\
+    \ included nor referenced.\n- **Transcript check:** zero parts in the executor's and the reviewer's\
+    \ sessions contain any of the brief's UI acceptance wording.\n- **Result:** the delivered UI implements\
+    \ the spec faithfully, including the invented and dropped items:\n  - the card click toggles the article\
+    \ and resets its quantity;\n  - − stops at 1;\n  - − / + are hidden until the card is clicked;\n \
+    \ - the new controls fall back to the browser's default font.\n\n  The executor's browser check photographed\
+    \ the four states the *spec* listed, so it couldn't catch these.\n- **Control:** a plain single-context\
+    \ agent given the same brief met every one of those criteria. The agent that wrote the code had read\
+    \ the brief. Same model.\n- **Across repeated runs of the same brief,** fr's divergences cluster at\
+    \ the brief → spec step. It reinterprets limits, adds interaction designs, and loses constraints,\
+    \ while its implementation and gates are sound.\n\n## Proposed\n\n1. **Carry the source brief verbatim\
+    \ through the run.** Store it as a run artifact at `start` (the goal text the operator gave, or the\
+    \ issue body). Pass it in every executor and reviewer dispatch as **the source of truth**, with the\
+    \ spec as the design built on it.\n2. **Make spec review a traceability check.** `fr-spec-reviewer`\
+    \ gets the brief. Every acceptance criterion / business rule in the brief must map to a spec section.\
+    \ Findings for **invented behaviour** (spec says X, brief doesn't) and **dropped constraints** (brief\
+    \ says X, spec doesn't) are in scope by default.\n3. **Seed the acceptance matrix from the brief's\
+    \ criteria, word for word.** Seed rows from the brief's own criteria at brainstorm, so `deliver` can't\
+    \ pass while one is unmet or unevidenced. The rows shouldn't be only the run's own restatements.\n\
+    4. **Quote acceptance criteria verbatim in the spec** (an \"Acceptance criteria (from the brief)\"\
+    \ block). Paraphrase only in the design sections.\n5. **Review phases against the brief's criteria\
+    \ too:** review-phase's brief includes the criteria the phase claims to satisfy.\n\n## Related\n\n\
+    - #690: operator-gate provenance.\n- #745: phase sizing. Fewer, larger phases make the plan an even\
+    \ lossier summary without (1).\n"
+- kind: discovery
+  id: input-issue-759-comment
+  title: 'Raw input: issue #759 follow-up comment (verbatim)'
+  body: 'Two follow-ups to the issue text.
+
+
+    **1. A correction: phase count isn''t the cause.** The "Related" line above says fewer, larger phases
+    make the plan lossier. That claims more than the evidence shows.
+
+
+    - **Nothing in fr limits a plan''s size:** no cap on phases or steps, and no truncation of the executor''s
+    handoff. The only truncation is `render.py`''s 55k budget for GitHub Issue bodies.
+
+    - **What happened was the planner''s choice:** told "single phase", it compressed. The whole UI became
+    one step ("implement styled mode buttons, card quantities and number input"; the plan had 3 tasks,
+    9 steps, 98 lines), and the detail lived only in the spec.
+
+    - **fr-plan''s own guidance pulls both ways:** "Prefer 4–6 phases … cost grows superlinearly with
+    phase count" sits next to "one agentic phase is first-class" and "bite-sized steps: 2–5 minutes".
+    "Prefer 4–6" also contradicts #745''s measurements (one-phase plans cheaper). Worth reconciling there.
+
+
+    **2. A reframing: the spec IS the requirements carrier.** In general the input isn''t a carefully
+    written brief. It can be a user''s one-line request. So "carry the brief verbatim" (proposal 1) can''t
+    be the main fix. The spec has to capture the requirements, and the defect this run shows is that nothing
+    checks the capture:
+
+
+    - **Invented requirements pass silently.** The spec introduced user-visible behaviour nobody asked
+    for ("cards toggle membership") and reinterpreted a stated range (1–20 as a lower bound on −). Those
+    are design decisions dressed as requirements.
+
+    - **Dropped requirements pass silently.** A stated constraint ("no unstyled browser defaults") vanished
+    between input and spec.
+
+    - **Spec review can''t see either.** It checks the spec against itself, the codebase, and the recorded
+    answers, but not against what the operator actually said.
+
+
+    Directions that work whatever the input''s quality:
+
+
+    - **Split the spec into Requirements and Design.** *Requirements, as captured* holds each item traced
+    to its source: the goal text or issue, or an answered question. *Design* holds fr''s own decisions.
+    Any user-visible behaviour in Design that no requirement asks for gets surfaced as a question in the
+    (single) question round, or flagged as an assumption in the PR, never silently promoted.
+
+    - **Spec review traces Requirements back to the raw input,** however short. Its findings: each input
+    statement is covered or explicitly deferred; every requirement has a source. This is the one place
+    the original wording is needed. It stays a review input, not something dispatched downstream.
+
+    - **Seed acceptance rows from Requirements,** so `deliver` gates on the captured requirements rather
+    than the plan''s restatement of them.
+
+
+    With that in place, executors and reviewers working from the spec is fine, because the spec is checked
+    to be a faithful capture.
+
+    '
+- kind: decision
+  id: d0-spec-is-the-carrier
+  title: The raw input is not carried downstream; improve spec creation and review instead
+  body: 'Operator: the input has no quality control (one line to spec-shaped), brainstorming may depart
+    from it for good reason, and carrying it to executors/reviewers would confuse them. Proposals 1 and
+    5 of #759 are dropped; the spec is the requirements carrier, checked once against the input.'
+- kind: decision
+  id: d1-input-in-spec-journal
+  title: Raw input preserved verbatim as a spec-journal entry
+  body: Chosen over a verbatim spec section (every executor would read it) and a sibling run file (no
+    run id for standalone brainstorms). The reviewer already reads the spec journal; executors never get
+    it.
+- kind: decision
+  id: d2-always-ask
+  title: Unasked user-visible behaviour is always a round question
+  body: Chosen over 'ask or list as assumption' and 'always assumption'. Also covers every ambiguous input
+    statement. No assumption list at brainstorm time.
+- kind: decision
+  id: d3-late-unconfirmed
+  title: Late spec-review findings of invented behaviour are kept and flagged in the PR
+  body: Chosen over reopening the gate and over stripping to a minimal reading. Resolved 'unconfirmed',
+    rendered under 'Built without operator confirmation'.
+- kind: decision
+  id: d4-structural-gate
+  title: Structural gate plus reviewer judgement
+  body: fr machine-checks Requirements form, sources, quotes and row citations as derived evidence; coverage
+    stays with fr-spec-reviewer.
+- kind: decision
+  id: d5-rows-gate-deliver
+  title: Every requirement cited by a row; deliver refuses not-implemented rows
+  body: Chosen over report-only and rows-by-judgement. skipped passes.
+- kind: decision
+  id: d6-approach-a
+  title: Requirements as a spec section with a fixed grammar, parsed by fr/requirements.py
+  body: Chosen over a YAML sidecar (new artifact kind) and front matter.
+resolves: []
+acceptance:
+- id: requirements-input-in-spec-journal
+  capability: fr-goal-methodology
+  acceptance: The operator's raw input is recorded verbatim in the spec journal as an input entry and
+    never reaches a phase executor's handoff
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
+  status: not-implemented
+  notes: Born at brainstorm; target level unit.
+- id: requirements-structural-gate
+  capability: fr-goal-methodology
+  acceptance: fr refuses a brainstorm or spec-review whose spec has malformed or unsourced requirements,
+    or quotes text the input does not contain
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R6
+  status: not-implemented
+  notes: Born at brainstorm; target level unit.
+- id: requirements-always-ask
+  capability: fr-goal-methodology
+  acceptance: fr-goal's question round asks about every user-visible behaviour and ambiguous statement
+    the input leaves open
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R3
+  status: not-implemented
+  notes: Born at brainstorm; target level live.
+- id: requirements-spec-review-traceability
+  capability: fr-goal-methodology
+  acceptance: fr-spec-reviewer flags dropped, reinterpreted and invented requirements against the raw
+    input
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
+  status: not-implemented
+  notes: Born at brainstorm; target level live.
+- id: requirements-unconfirmed-in-pr
+  capability: fr-goal-methodology
+  acceptance: Behaviour built without operator confirmation is listed in its own required PR-body section
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R5
+  status: not-implemented
+  notes: Born at brainstorm; target level unit.
+- id: requirements-rows-deliver-gate
+  capability: fr-goal-methodology
+  acceptance: Every requirement is cited by an acceptance row, and deliver refuses while a row citing
+    the spec is not-implemented
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R7
+  status: not-implemented
+  notes: Born at brainstorm; target level unit.
+emitted:
+  spec: docs/superpowers/specs/2026-09-28-requirements-traceability-design.md
+evidence: {}
