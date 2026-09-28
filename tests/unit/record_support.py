@@ -122,6 +122,12 @@ def _plan(root: Path) -> None:
             body="one phase",
         ),
     )
+    # The phase links no acceptance rows, so once `seed_requirements` gives the
+    # spec a Requirements table the sizing gate (2026-09-28 phase-sizing §B)
+    # needs its recorded reason to pass plan-review.
+    from tests.unit.requirements_support import write_phase_splits
+
+    write_phase_splits(root, "docs/spec.md", SLUG, {1: "review-size: fixture phase, links no rows"})
 
 
 def started_run(tmp_path: Path) -> Path:
