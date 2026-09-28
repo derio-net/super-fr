@@ -74,3 +74,96 @@ Prose-only task: the skill edits were written once in their final form and both 
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 Docs, a change fragment and matrix status moves through fr acceptance set-status; no code to refactor.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · phase-split fix paths named an id `fr journal add` refuses, wedging plan-review (phase 1)
+
+severity: important
+scope reason: this change introduced the only fix path it suggests
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · proportionality's Phases section read the spec path and plan slug from the working tree (phase 1)
+
+severity: minor
+scope reason: new section, breaks the HEAD-only contract deliver hashes
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · an existing but unreadable matrix was reported as 'no matrix' and the floor skipped silently (phase 1)
+
+severity: minor
+scope reason: new message is wrong for that case
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · unparseable-table warning blamed the Requirements table when Deferred was broken (phase 1)
+
+severity: minor
+scope reason: new warning wording
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · skill prose said --slug <spec-slug>, a stem that writes to a journal nothing reads (phase 1)
+
+severity: minor
+scope reason: new prose
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · split decisions naming a non-agentic or missing phase were silently ignored (or errored unfixably when malformed) (phase 1)
+
+severity: minor
+scope reason: new behaviour
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · run-walk fixtures passed the gate only via waivers, never the normal own-ask path (phase 1)
+
+severity: minor
+scope reason: fixture change in this PR
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-09-28T21:20:39+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · an ask: phase could claim an ask a waived phase also serves (phase 1)
+
+severity: minor
+scope reason: RECLASSIFIED: the reviewer tagged it out (follows spec §A as written), but the waiver exclusion is this change's own s2 rule, so the hole it opens is this change's
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-09-28T21:20:39+00:00 phase=1 -->
+### p1-review · review · Independent review of phase 1: 8 findings (1 important, 7 minor), all fixed (phase 1)
+
+Reviewer (dispatched, separate context) checked spec §A–§E, the rule table, s1/s2, cut-off, §C, proportionality HEAD purity, fixtures, prose and explainer; ran 102 targeted tests + tripwires. Findings p1-r1..p1-r8 raised; all verified against the code (r1: journal_cmd.py:238 refuses an existing id) and fixed by the implementer with tests first (commits 0977b94d, 46cb1b24, aa8a2556, 219fbbeb; targeted suites 494 passed). r8 reclassified out->in by the orchestrator (see its finding).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: phase-split fix paths named an id `fr journal add` refuses, wedging plan-review (phase 1)
+
+0977b94d: superseding ids phase-split-<plan>-p<N>-<k> (highest k wins), next_split_id named in floor/ceiling/malformed messages; CliRunner test drives the suggested command.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: proportionality's Phases section read the spec path and plan slug from the working tree (phase 1)
+
+46cb1b24: _meta.yaml read at HEAD, spec probed per spec folder at HEAD; tests for uncommitted spec: edit, uncommitted git mv, archived-at-HEAD.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: an existing but unreadable matrix was reported as 'no matrix' and the floor skipped silently (phase 1)
+
+0977b94d: 'acceptance matrix unreadable (<e>); ask floor not checked' when the file exists; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: unparseable-table warning blamed the Requirements table when Deferred was broken (phase 1)
+
+0977b94d: worded 'Requirements/Deferred tables do not parse (<e>)'; tested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: skill prose said --slug <spec-slug>, a stem that writes to a journal nothing reads (phase 1)
+
+aa8a2556: --slug <spec-journal-slug> explained as the stem without -design; mirrors regenerated; prose tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: split decisions naming a non-agentic or missing phase were silently ignored (or errored unfixably when malformed) (phase 1)
+
+0977b94d: orphan decisions warn and never raise the malformed error; tested for manual, nonexistent and malformed orphans.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: run-walk fixtures passed the gate only via waivers, never the normal own-ask path (phase 1)
+
+219fbbeb: phase 1 of record_support._plan and _toy_plan link the seeded req-r1 row; waivers kept only on later toy phases.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8-resolved created=2026-09-28T21:20:39+00:00 phase=1 state=fixed resolves=p1-r8 -->
+### p1-r8-resolved · finding [fixed] · resolves p1-r8: an ask: phase could claim an ask a waived phase also serves (phase 1)
+
+0977b94d: an ask: phase subtracts every other agentic phase incl. waived; s2 pair still passes; spec §A and docstring updated; unit + gate tests.
