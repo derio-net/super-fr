@@ -5136,9 +5136,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pickup_branch.py
+      - super-fr:tests/unit/test_run_closeout.py
+    status: ci
+    notes: fr pickup --branch and fr pickup --run's delegation to branch_closeout_brief
+      are covered by unit tests
   - id: archive-branch-every-artifact
     capability: Branch-keyed close-out
     acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch
