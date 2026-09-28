@@ -1919,6 +1919,9 @@ class TestResolveUnconfirmed:
         assert effective_finding_states(entries) == {"f1": "unconfirmed"}
         check = runner.invoke(app, ["journal", "check", "--scope", "spec", "--slug", "S"])
         assert check.exit_code == 0, check.output
+        # Passes, but SAID, never silent — like deferred and out-of-scope
+        # (review d2): the operator must see what was built unasked.
+        assert "1 unconfirmed finding(s): f1" in check.output
 
     def test_it_is_refused_on_a_finding_the_reviewer_tagged_out(
         self, tmp_path: Path, monkeypatch

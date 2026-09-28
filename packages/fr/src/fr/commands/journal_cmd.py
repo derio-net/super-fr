@@ -606,11 +606,15 @@ def check(
         )
     # Same for out-of-scope: passes, and is listed, so the operator can still
     # choose to file each as an issue.
-    out_of_scope = [
-        fid for fid, st in effective_finding_states(entries).items() if st == "out-of-scope"
-    ]
+    states = effective_finding_states(entries)
+    out_of_scope = [fid for fid, st in states.items() if st == "out-of-scope"]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
+    # And for unconfirmed (spec 2026-09-28 §D): behaviour built without the
+    # operator's answer passes, but is named here as in the PR body.
+    unconfirmed = [fid for fid, st in states.items() if st == "unconfirmed"]
+    if unconfirmed:
+        console.print(f"{len(unconfirmed)} unconfirmed finding(s): " + ", ".join(unconfirmed))
     unauthorized = unauthorized_fixes(entries)
     if unauthorized:
         err_console.print(

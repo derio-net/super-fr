@@ -63,8 +63,9 @@ def guard_record(path: Path) -> None:
         data: Any = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise UnreadableRecordError(
-            f"{path}: not valid YAML, so fr will not stamp it as record version "
-            f"{RECORD_SCHEMA_VERSION} ({e})."
+            # No version number: this guard is shared by every record hop
+            # (review d3), so naming the live version misreports the 1 -> 2 one.
+            f"{path}: not valid YAML, so fr will not stamp it ({e})."
         ) from e
     if data is None:
         data = {}  # `parse_record` reads an empty file as `{}`; agree with it (p1-r4)
@@ -77,8 +78,8 @@ def guard_record(path: Path) -> None:
         StepRecord.model_validate(candidate)
     except ValidationError as e:
         raise UnreadableRecordError(
-            f"{path}: not a readable record, so fr will not stamp it as version "
-            f"{RECORD_SCHEMA_VERSION} ({e}). Fix the file by hand — it is left on its "
+            f"{path}: not a readable record, so fr will not stamp it ({e}). "
+            "Fix the file by hand — it is left on its "
             "current version and will be retried."
         ) from e
 
