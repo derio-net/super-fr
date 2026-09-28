@@ -671,6 +671,11 @@ input</strong> table for anything the input mentioned that is deliberately not p
 of this change, each with a reason. Together they trace every requirement
 back to what you actually said, rather than to what the agent inferred you
 meant.</p>
+<p>Your raw input does not stop at the specification. It stays recorded, verbatim,
+in the specification's journal, and later — when the code is built and
+reviewed — it travels on beside your recorded answers as a read-only reference.
+The specification still governs; the input is there only so a clause the
+requirements lost along the way can be caught.</p>
 <p>That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they
 wrote, so <code>spec-review</code> dispatches a separate, read-only reviewer,
@@ -795,8 +800,11 @@ there waiting for you.</p>
 <p>Now the central loop from the opening diagram begins. The shape says this step
 runs once per plan phase, so the phases are worked through in dependency order,
 one at a time. Each one goes to a dedicated phase executor, which is given the
-phase's scope, the specification, and the running journal of what earlier phases
-discovered. It writes a failing test, implements the behavior, and cleans up
+phase's scope, the specification, the running journal of what earlier phases
+discovered, and — read-only — your original input together with the answers you
+gave. The specification governs: if that input asks for something neither the
+specification nor your answers cover, the executor (and later the reviewer)
+reports it as a finding rather than silently building it or ignoring it. It writes a failing test, implements the behavior, and cleans up
 without changing that behavior. This test-first cycle is commonly called
 <strong>TDD</strong>, or test-driven development.</p>
 <p>Each phase carries a difficulty <strong>tier</strong>, assigned when the plan was written,
