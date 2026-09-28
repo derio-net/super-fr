@@ -83,6 +83,7 @@ READ_ONLY_COMMANDS: Final[tuple[str, ...]] = (
     "harness",
     "triage",
     "usage",
+    "services",
 )
 """Commands that promise not to mutate the repo's artifacts — so the gate must
 not mutate them on their behalf.
@@ -120,7 +121,11 @@ same shape as `triage`: it READS a run cursor (for its sessions and step
 windows) and the harness's own transcripts, and writes only under its cache
 directory (`$HOME/.cache/fr/usage/`, or `FR_USAGE_CACHE`) — never a registered
 artifact, so it cannot proceed over a stale one. It must also run where the
-cursor is stale: reporting what an old run cost is exactly the audit's job."""
+cursor is stale: reporting what an old run cost is exactly the audit's job.
+`fr services` (2026-09-28 fr-profiles-services, spec §3.F) only READS
+`.devcontainer/fr-profiles.yaml` and the repo's CI files and writes nothing; it
+must keep working on an unmigrated repo, whose version-1 file it reports as
+`source: legacy`."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

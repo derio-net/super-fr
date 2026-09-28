@@ -1,0 +1,11 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-service-split-2
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3]
+refactor:
+  P1.T1: "skeleton — the full model lands in T2"
+journal: []
+resolves: []
+evidence: {}

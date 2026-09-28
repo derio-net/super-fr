@@ -120,13 +120,15 @@ artifacts` (preview), `fr migrate artifacts --yes` (apply) and
 
 **Exempt commands** are `migrate` plus the read-only commands in
 `fr.artifacts.trigger.READ_ONLY_COMMANDS` — `status`, `skills`, `isolation`, `init`,
-`validate`, `harness`, `triage` and `usage` at the time of writing, but the tuple is the source of
+`validate`, `harness`, `triage`, `usage` and `services` at the time of writing, but the tuple is the source of
 truth; this sentence used to say "the read-only five" and was two short before anyone
 noticed — along with `--help`, `--version` and `FR_SKIP_MIGRATION=1`. The criterion for
 membership is the tuple's own docstring: the command never mutates a registered artifact.
 `harness` meets it by only reading hook registrations; `triage` by never reading or
 writing an artifact at all (its state lives under `~/.cache/fr/triage/`); `usage` by only
-reading a run cursor and harness transcripts and writing under `~/.cache/fr/usage/`. Two of those
+reading a run cursor and harness transcripts and writing under `~/.cache/fr/usage/`. `services`
+only reads `.devcontainer/fr-profiles.yaml` and the repo's CI files, and must work on an
+unmigrated repo. Two of those
 matter beyond tidiness: `fr status` is
 registered as never mutating and must not mutate by proxy, and `fr validate
 artifacts` is the diagnostic for exactly the state the gate repairs — if the

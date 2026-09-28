@@ -33,6 +33,7 @@ from fr.commands.plan_cmd import plan_app
 from fr.commands.repair_cmd import repair_command
 from fr.commands.repos_cmd import repos_app
 from fr.commands.run_cmd import run_app
+from fr.commands.services_cmd import services_command
 from fr.commands.skills_cmd import skills as skills_command
 from fr.commands.spec_cmd import spec_app
 from fr.commands.status_cmd import status_command
@@ -80,6 +81,9 @@ app.add_typer(validate_app, name="validate")
 app.add_typer(triage_app, name="triage")
 app.add_typer(usage_app, name="usage")
 app.command(name="skills")(skills_command)
+app.command(
+    name="services", help="Read-only: the resolved forge / ci / tracking services."
+)(services_command)
 
 
 def version_callback(value: bool) -> None:

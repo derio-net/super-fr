@@ -110,6 +110,10 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     §5.A.5): it reads a run cursor and harness transcripts and writes only
     under `$HOME/.cache/fr/usage/` — never a registered artifact — and must
     report on an old run whose cursor is stale, which is the audit's job.
+
+    `services` was added by 2026-09-28 fr-profiles-services phase 1 (spec §3.F):
+    it reads fr-profiles.yaml and the CI files, writes nothing, and must report
+    an unmigrated version-1 file as `source: legacy` rather than be refused.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(
@@ -123,6 +127,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
             "harness",
             "triage",
             "usage",
+            "services",
         }
     )
     assert trigger.SKIP_ENV_VAR == "FR_SKIP_MIGRATION"
@@ -138,6 +143,7 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
         "harness",
         "triage",
         "usage",
+        "services",
         "FR_SKIP_MIGRATION=1",
     )
 
