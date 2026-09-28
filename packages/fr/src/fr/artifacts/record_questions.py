@@ -35,7 +35,12 @@ from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, SchemaMigrat
 
 MIGRATION_NAME = "record-question-rounds"
 
-__all__ = ["MIGRATION_NAME", "RECORD_QUESTIONS_MIGRATION", "UnreadableRecordError"]
+__all__ = [
+    "MIGRATION_NAME",
+    "RECORD_QUESTIONS_MIGRATION",
+    "UnreadableRecordError",
+    "guard_record",
+]
 
 
 class UnreadableRecordError(ArtifactMigrationError):
@@ -43,7 +48,11 @@ class UnreadableRecordError(ArtifactMigrationError):
     as a version-2 `StepRecord`."""
 
 
-def _guard(path: Path) -> None:
+def guard_record(path: Path) -> None:
+    """Refuse to let the runner stamp a record that does not read as the LIVE
+    `StepRecord`. Every record hop so far is additive, so the live model is a
+    superset of every older body; a hop that removes a field must freeze the
+    old shape instead (artifact-versioning rule) and stop using this."""
     from fr.record.model import RECORD_SCHEMA_VERSION, StepRecord
 
     try:
@@ -78,7 +87,7 @@ RECORD_QUESTIONS_MIGRATION = SchemaMigration(
     kind="record",
     from_version=1,
     to_version=2,
-    fn=_guard,
+    fn=guard_record,
     description="record: add question-round declaration (`questions`) — stamp only, no body change",
 )
 

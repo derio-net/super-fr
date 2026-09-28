@@ -425,8 +425,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # tracked while its step runs, deleted by the `fr run resolve
             # --record` that applies it. Born at 1; 1 -> 2 for `questions`
             # (spec `2026-09-26-dynamic-brainstorm-question-rounds-design`
-            # §3.B), migration `fr.artifacts.record_questions`.
-            current_version=2,
+            # §3.B), migration `fr.artifacts.record_questions`; 2 -> 3 for
+            # `input`/`verify`/`unconfirmed` (spec
+            # `2026-09-28-requirements-traceability-design` §H), migration
+            # `fr.artifacts.record_input_unconfirmed`.
+            current_version=3,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

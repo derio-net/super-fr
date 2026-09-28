@@ -49,6 +49,7 @@ from fr.artifacts import run_unit_record as _run_unit_record  # noqa: F401  (iso
 from fr.artifacts import run_main_session as _run_main_session  # noqa: F401  (isort: skip)
 from fr.artifacts import run_usage_split as _run_usage_split  # noqa: F401  (isort: skip)
 from fr.artifacts import record_questions as _record_questions  # noqa: F401  (isort: skip)
+from fr.artifacts import record_input_unconfirmed as _record_input_unconfirmed  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

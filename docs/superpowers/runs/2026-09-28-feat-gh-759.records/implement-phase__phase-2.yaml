@@ -6,9 +6,10 @@ run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/2
 outcome: done            # done | failed | blocked
-ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2]
 refactor:
   P2.T2: "the one duplicated rule (the verb's and the record's unconfirmed refusals) was extracted into unconfirmed_refusal while going green; nothing further to clean"
+  P2.T3: "the 1->2 guard was renamed guard_record and reused by the 2->3 hop rather than copied; the new migration module is a registration and nothing else"
   P2.T1: "two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done"
 journal:
   - kind: decision
