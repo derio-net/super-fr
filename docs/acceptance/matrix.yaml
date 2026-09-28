@@ -5482,9 +5482,13 @@ rows:
       fails fr validate artifacts
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_profiles_services.py
+      - super-fr:tests/unit/test_validate_profiles.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-ci-drives-acceptance
     capability: fr-profiles services
     acceptance: 'acceptance init and the ci status follow the declared ci service: none
