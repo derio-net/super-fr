@@ -336,3 +336,33 @@ Independent reviewer over e89b1168 against spec R4 §3.B/§3.E and plan 03.yaml:
 ### p3r-golden-tests-resolved · finding [fixed] · resolves p3r-golden-tests: No byte-equality test for the unchanged debt=True renders; '@@' leakage and the notice assertion unpinned (phase 3)
 
 867e43ab: golden fixtures from origin/main for 3 renders + 2 bullets, '@@' absent in all 6 renders, exact notice list.
+
+<!-- fr:journal kind=decision scope=plan id=p4-strict-write-paths created=2026-09-28T22:06:48+00:00 phase=4 -->
+### p4-strict-write-paths · decision · require_tracker resolves strictly; apply/dispatch refuse a malformed tracking block (phase 4)
+
+`fr.services.require_tracker(repo_root)` calls `resolve_services` strict. `tracking: {type: none}`
+raises `TrackerRequiredError` (a ServicesError); an invalid declaration raises the plain ServicesError.
+`fr apply --yes` (top of `_apply_one`, before build_plan_report's observe) and `fr triage batch
+dispatch --yes` (before make_client; reads the checkout's path, so it also covers --repair) exit 2 on
+either. Dry runs do not refuse: apply adds a `warning:` line and a json warning; dispatch prints a warning.
+
+<!-- fr:journal kind=decision scope=plan id=p4-closeout-strict-warn created=2026-09-28T22:06:48+00:00 phase=4 -->
+### p4-closeout-strict-warn · decision · The closeout brief resolves strictly but warns instead of refusing on a malformed declaration (phase 4)
+
+The brief is read-only and read by a fresh session after merge, so it must stay usable; but lenient
+mode would silently read a malformed tracking block as "has a tracker" and print issue-filing lines.
+So closeout_brief resolves strictly: none -> no `file an issue` / `--tracked-by` lines and a line saying
+out-of-scope findings stay recorded in the journal and PR body; invalid -> a loud WARNING line, default
+lines kept.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-apply-root created=2026-09-28T22:06:48+00:00 phase=4 -->
+### p4-apply-root · discovery · apply's repo root comes from the plan dir, dispatch's from the checkout (phase 4)
+
+`_apply_one` uses `resolve_repo_root(plan_dir.resolve())` (honours VK_REPO_ROOT); `fr triage collect`
+is untouched (asserted by source inspection only, since it never calls require_tracker).
+`fr.services/__init__` now re-exports ServicesError, TrackerRequiredError, require_tracker.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-09-28T22:06:48+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+one small shared helper (require_tracker) and three call sites; nothing duplicated to fold

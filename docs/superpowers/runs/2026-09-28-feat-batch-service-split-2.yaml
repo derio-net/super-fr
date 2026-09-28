@@ -134,7 +134,7 @@ steps:
           reviewer: a2a74881ce965871d
           findings: p3r-lenient-ci-gate,p3r-issues-write,p3r-fr-only-message,p3r-golden-tests
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T21:58:30+00:00'
           agent: a338ba6a7ec6917c8
@@ -142,6 +142,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:06:48+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
