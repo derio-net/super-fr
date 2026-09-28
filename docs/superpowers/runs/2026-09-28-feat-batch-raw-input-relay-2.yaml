@@ -55,10 +55,20 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: pending
+    state: running
+    at: '2026-09-28T19:42:42+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-09-28T19:42:42+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5
+          session: 17573c60-c1b3-42d0-ab75-bf4783d5f140
   journal-check:
     state: pending
   deliver:
