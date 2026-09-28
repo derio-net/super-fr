@@ -1,0 +1,167 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Run gates — requirements, coverage, requirement-rows; manifest; PR body
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - requirements-structural-gate
+  - requirements-coverage-partition
+  - requirements-rows-deliver-gate
+  - requirements-unconfirmed-in-pr
+  - requirements-post-merge-rows
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/requirements.py
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - packages/fr/src/fr/workflows/*
+  - tests/unit/test_run_evidence_requirements.py
+  - tests/unit/test_run_evidence.py
+  - tests/unit/test_deliver_pr_body.py
+  - tests/unit/test_pr_body_adapters.py
+  - tests/unit/test_tripwire_shipped_workflows.py
+  - tests/unit/test_run_cli.py
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: Wire the three names; `requirements` on brainstorm and spec-review
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_run_evidence_requirements.py (fixtures after test_run_evidence.py's
+      proportionality block, :584-): a manifest with `brainstorm evidence: [requirements]`;
+      resolve --step brainstorm with a record carrying `emitted: {spec}`, an input entry and
+      rows refuses each §C problem (one test per problem) and on success stores
+      `<n> requirements:<sha256>`; the `--emitted spec=` form works too; rows staged in the
+      same record count; `--evidence requirements=x` is refused as derived. spec-review
+      re-derives after a spec edit (new hash); a spec-review record adding a requirement and
+      its row (`acceptance:`) applies. Fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: run_cmd.py — add `requirements`, `coverage`, `requirement-rows` to
+      `_VERIFIABLE_EVIDENCE`, `_DERIVED_EVIDENCE`, `_DERIVED_FROM` (:1381-1397); derive
+      `requirements` at the `done` branch beside proportionality (:1660) by calling
+      fr.requirements.check_requirements against (brainstorm) this resolve's emitted spec,
+      (spec-review) brainstorm's stored emitted.spec, the spec journal, and the matrix as the
+      record leaves it (inside apply_record's in-process resolve). Green.
+- number: 2
+  title: '`coverage` on spec-review'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in test_run_evidence_requirements.py — spec-review with `evidence: [review,
+      reviewer, findings, requirements, coverage]`: the review entry named by
+      evidence.review carrying a valid block stores `<n> spans: R=… deferred=… context=…
+      missing=…`; a gap refuses; `missing sX` with sX open is held by the findings gate;
+      `--evidence coverage=` refused. Fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: derive `coverage` from the review entry `_review_journal_entries` already loads
+      (:1509) via fr.requirements.check_coverage. Green.
+- number: 3
+  title: '`requirement-rows` on deliver; predates handling'
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: deliver with `evidence: [tests, proportionality, requirement-rows]` refuses on a
+      not-implemented row citing the spec and names the `fr acceptance set-status` line;
+      passes on skipped/ci/scheduled; skips and counts a `verify: post-merge` row; counts a
+      row the deliver record itself moves; stores `<n> rows: …; post-merge=<m>`. A run whose
+      brainstorm evidence lacks `requirements` records `predates the requirements gate` for
+      `requirements` (spec-review), `coverage` and `requirement-rows`, and `fr run status`
+      renders `done, unevidenced`. Fails.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: implement; reuse `_unevidenced_units` (:2086-2131) wording for the status line.
+      Green.
+- number: 4
+  title: PR body sections and the unconfirmed bucket
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      RED: test_deliver_pr_body.py — `## Built without operator confirmation` (resolution
+      note, or `None.`), `## Input coverage` (table in `<details>`, or the predates line),
+      `## Post-merge verification owed` (rows, or `None.`) render in that order after
+      `## Out-of-scope findings`; all three are in REQUIRED_SECTIONS; a live body missing
+      any is refused; an unconfirmed finding is absent from `## Findings`. Fails.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: pr_body.py — third bucket beside `_CLOSED_OUT` (:50, :86-98), the three
+      renderers, REQUIRED_SECTIONS. Update pr-body fixtures in test_pr_body_adapters.py.
+      Green.
+- number: 5
+  title: Manifest
+  steps:
+  - id: P3.T5.S1
+    text: |-
+      RED: test_tripwire_shipped_workflows.py (or test_workflow_resolve.py) pins: brainstorm
+      `evidence: [requirements]`; spec-review `tier: hard`, `emits: [journal:spec,
+      acceptance]`, `evidence: [review, reviewer, findings, requirements, coverage]`;
+      deliver `evidence: [tests, proportionality, requirement-rows]`; `fr workflow check`
+      passes; a cursor started on the old manifest does not drift. Fails.
+  - id: P3.T5.S2
+    text: |-
+      GREEN: edit plugins/super-fr/workflows/fr-goal.yaml with a comment block citing the
+      spec (§C, §D, §F, d8) in the file's existing voice; update the wheel's copy if the
+      package ships one (check packages/fr/src/fr/workflows/). Green.
+  - id: P3.T5.S3
+    text: |-
+      REFACTOR + quality gate: fold duplicated spec/journal/matrix loading across the three
+      derivations into one helper in run_cmd.py; `uv run ruff format`, `ruff check`, mypy on
+      packages/fr/src, full `uv run pytest -q --no-cov -n auto` green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T5.S1:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T5.S2:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+    P3.T5.S3:
+      state: x
+      ticked_at: '2026-09-28T11:37:40+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T11:37:40+00:00'
+    note: null
+    observed_prs: []

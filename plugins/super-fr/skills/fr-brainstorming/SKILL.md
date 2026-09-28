@@ -52,45 +52,64 @@ fr isolation up --branch <feature-branch> [--profile <name>]
   `fr run advance <id>`. Refused over stale artifacts? Run
   `fr migrate artifacts --yes` and retry — `fr run start` is not exempt.
 
-## 1. Brainstorm
+## 1. Record the input, then brainstorm
 
-Run `superpowers:brainstorming` as usual — understand the context and goal,
-explore the codebase (in the worktree), propose approaches, refine into a
-design.
+Before exploring anything, record the operator's raw input **verbatim** as a
+spec-journal entry: the goal text as typed, or the issue's title and body plus
+any comments pointed at (several input entries are fine — an issue plus a
+clarifying message). Redact per `.claude/rules/third-party-privacy.md` first —
+a third-party host, org, repo or person becomes an RFC 2606 name
+(`example.com`, `.invalid`, …) keeping the shape, entry noting it was
+redacted, since everything downstream (quotes, coverage) matches the redacted
+text, the only text ever committed. Standalone: `fr journal add --scope spec
+--kind discovery --input …`. Under fr-goal: `journal: [{kind: discovery,
+input: true, id, title, body}]` on the brainstorm record.
+
+Then run `superpowers:brainstorming` as usual: understand the context and
+goal, explore the codebase (in the worktree), propose approaches, refine.
 
 - **Standalone invocation:** fully interactive — ask questions as they
   arise, section-by-section validation, the normal brainstorming flow.
 - **Under fr-goal:** the sized-round contract applies instead — collect every
   operator-owned decision into one round, rarely two (fr-goal's rules win
   while it drives).
+- **Before the round, always ask.** List every user-visible behaviour the
+  design needs, and every statement in the recorded input with more than one
+  reasonable reading; each one the input does not itself settle is a question
+  in the round, its answer a `decision` a requirement can cite. fr-goal's
+  "past ~10 questions" guard is the pressure valve on size; there is no
+  separate assumption list — an unsettled point is asked, never assumed.
 
 ## 2. Hand off
 
 The brainstorm's design document becomes the spec
 (`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the
-worktree). **Standalone:** resolve the cursor §0 started with its step
-record — the brief's `record` file, filled as you go: `emitted: {spec: <path>}`,
-each operator answer as a `decision` in `journal:`, each §3 row in
-`acceptance:` — in ONE `fr run resolve <run-id> --step brainstorm --record
-<file>`, then drive everything after this through `fr run advance <run-id>`. That is what makes
-the cursor a gate rather than a file on disk: `implement`'s
-`needs: [spec, plan]` only refuses work that asks it to. Hand off to
-`fr-plan` (the fr-plan-override rule already routes
-`writing-plans` there). The isolation workspace stays up — planning and
-implementation continue in it; cleanup belongs to whoever finishes the run
+worktree), written in this shape, in order: `## Requirements` (one row per
+requirement, quoting the input verbatim in `source` — paraphrase only in the
+requirement's own text), `## Deferred from input` (optional, one-line reason),
+then `## Design`. **Standalone:** resolve the cursor §0 started with its step
+record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
+the input entry from §1, each §3 row in `acceptance:` — in ONE `fr run
+resolve <run-id> --step brainstorm --record <file>`, then `fr run advance
+<run-id>` for everything after (the cursor is a gate, not a file on disk:
+`implement`'s `needs: [spec, plan]` refuses work that never wrote one). Hand
+off to `fr-plan` (fr-plan-override routes `writing-plans` there); the
+isolation workspace stays up — cleanup belongs to whoever finishes the run
 (`fr isolation down` after the PR merges).
 
 ## 3. Acceptance rows — born with the spec, presented at the close
 
-Each key "operator can do X" claim in the design becomes a matrix row — an
-`acceptance:` entry of the brainstorm record (`status: not-implemented`,
-`origin: [<repo>:<new-spec-path>]`), or with no run `fr acceptance add`
-(run `fr acceptance init` first if the repo has no matrix). **The brainstorm
-ENDS by presenting the rows to the operator with a one-line defense each** —
-the business claim it pins, the target verification level, why it is
-business-level rather than an implementation detail. Silent row creation is
-not acceptance-of-scope; the presentation is. Under fr-goal the presentation
-rides the spec-review step. Hand-off checklist: rows added AND presented.
+One acceptance row per requirement, or per closely related group of
+requirements — an `acceptance:` entry of the brainstorm record (`status:
+not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
+post-merge` when only a live run can prove it), or with no run
+`fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
+first if the repo has no matrix). **The brainstorm ENDS by presenting the
+rows to the operator with a one-line defense each** — the business claim,
+the target verification level, why it is business-level not implementation
+detail. Silent row creation is not acceptance-of-scope; the presentation is.
+Under fr-goal the presentation rides spec-review. Hand-off checklist: rows
+added AND presented, each citing its requirement id.
 
 ## Scope notes
 

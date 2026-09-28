@@ -85,17 +85,20 @@ def render_template(
             "#   - {kind: decision|discovery|finding, id: <id>, title: <line>, body: <md>}"
         )
         lines.append("#     a finding also takes review_scope: in|out (state defaults to open)")
+        lines.append("#     a spec-journal discovery holding the operator input takes input: true")
     if "resolves" in allowed:
         lines.append("resolves: []")
         lines.append(
             "#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}"
         )
+        lines.append("#     spec journal only: state: unconfirmed, body: <what gets built>")
     if "acceptance" in allowed:
         lines.append("acceptance: []")
         lines.append(
             "#   - {id: <row>, capability: <c>, acceptance: <statement>, "
             "origin: [<repo>:<path>], status: not-implemented}"
         )
+        lines.append("#     a row only verifiable after merge also takes verify: post-merge")
     if emitted:
         lines.append("emitted: {}")
         lines.append(f"#   {', '.join(f'{n}: <path or url>' for n in emitted)}")
