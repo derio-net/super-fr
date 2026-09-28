@@ -19,3 +19,8 @@ scaffold.init picks the pipeline file from detect_backend (the forge) and writes
 ### 1f74045b4b19 · root-cause · B: init rewrites .gitignore wholesale
 
 splitlines()+join+'\n' normalises the final newline and CRLF→LF, so the diff is larger than the one line and reverting that line still leaves the worktree dirty (the stray edit that blocked `isolation down`). Operator confirmed: two causes, fix both in one PR; `ci` gate = a CI config exists for the backend.
+
+<!-- fr:journal kind=finding scope=debug id=1ba19b3ddc46 created=2026-09-28T19:19:07+00:00 state=fixed -->
+### 1ba19b3ddc46 · finding [fixed] · init scaffolds CI only beside existing CI; `ci` needs a CI config; .gitignore append-only
+
+fr/acceptance/ci.py (ci_config, one detector); scaffold.init(with_ci=) + templates parametrised on the CI line; record/apply.py refuses a move INTO `ci` without CI (rows already ci untouched); _append_gitignore_line byte-exact. Failing-test-first: tests/unit/test_acceptance_init_no_ci.py (7 red → 15 green). Existing init tests now pass --with-ci where they pin the workflow's shape; make_repo gains ci=True.
