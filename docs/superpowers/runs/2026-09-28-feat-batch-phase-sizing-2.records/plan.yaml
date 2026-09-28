@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: plan-one-phase
+    global: true
     title: One agentic phase, dogfooding the rule this plan implements
     body: |
       The change serves one independently reviewable ask (size phases to the asks, with its checks and prose), so the plan has one agentic phase, tier hard: no skeleton, no phase-split decisions, no [manual] phase. The post-merge fr-goal check is a Test Plan line; the before/after audit is #793.
