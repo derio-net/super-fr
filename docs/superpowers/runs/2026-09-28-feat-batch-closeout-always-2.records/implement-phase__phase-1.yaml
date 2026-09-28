@@ -9,6 +9,7 @@ outcome: done
 ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3]
 refactor:
   P1.T1: "GREEN already lands the shared shape: branch_changed_paths and branch_changes_present both call the new _branch_fork_and_changes helper, so there is exactly one merge-base/fork computation path and nothing left to extract."
+  P1.T2: "branch_artifacts is one flat classification function over constants imported from their owning modules; its only smell (the private _SCOPE_DIR import) is left to review as discovery p1-scope-dir-reuse rather than widened here."
 journal:
   - kind: discovery
     id: p1-scope-dir-reuse
