@@ -46,6 +46,9 @@ brainstorm decided those calls itself.
 | d5-rows-gate-deliver | Every requirement is cited by ≥1 acceptance row; `deliver` refuses while any row citing the run's spec is `not-implemented`. |
 | d6-approach-a | Requirements live in a `## Requirements` section of the spec with a fixed grammar, parsed by a new `fr/requirements.py` (not a YAML sidecar, not front matter). |
 | d7-requirements-table | Requirements (and Deferred from input) are Markdown tables, in the same form as `## Decisions`, not lists. |
+| d8-spec-review-hard | `spec-review` runs at the `hard` tier. It is the one point where the input is consulted again, and the drift it must catch is produced fluently by a strong author; a weaker reviewer is the wrong economy there. |
+| d9-coverage-partition | Spec review returns an input-coverage table that partitions ALL of the input text into spans labelled `R<n>` / `deferred` / `context` / `missing <finding>`; fr verifies the partition, so a skimmed input is a refusal rather than an invisible miss. |
+| d10-traceability-first | fr-spec-reviewer runs the traceability check FIRST, before the codebase lookups that otherwise consume its attention. |
 
 Out of scope, filed as super-fr#760: the issue comment's item 1, fr-plan's
 "prefer 4–6 phases" versus "one agentic phase is first-class" contradiction.
@@ -56,11 +59,13 @@ Out of scope, filed as super-fr#760: the issue comment's item 1, fr-plan's
 |---|---|---|
 | R1 | The operator's raw input is preserved verbatim where spec review can trace against it, and is not dispatched to executors or phase reviewers. | decision d0-spec-is-the-carrier<br>decision d1-input-in-spec-journal |
 | R2 | The spec separates requirements (each traced to a source: the raw input or an answered question) from fr's own design decisions. | input "Split the spec into Requirements and Design."<br>input "Quote acceptance criteria verbatim in the spec" |
-| R3 | User-visible behaviour the input does not ask for is asked in the question round, never silently promoted to a requirement. | input "never silently promoted"<br>decision d2-always-ask |
+| R3 | User-visible behaviour the input does not ask for, and the interpretation of any input statement with more than one reasonable reading, is asked in the question round, never silently promoted to a requirement. | input "never silently promoted"<br>decision d2-always-ask |
 | R4 | Spec review traces the spec back to the raw input: every input statement is covered or explicitly deferred, every requirement has a source, and invented or reinterpreted behaviour is a finding. | input "Spec review traces Requirements back to the raw input,"<br>input "each input statement is covered or explicitly deferred; every requirement has a source." |
 | R5 | Behaviour spec-review flags after the round closed is kept and listed in the PR body as built without operator confirmation. | decision d3-late-unconfirmed |
 | R6 | fr refuses a spec whose requirements are malformed, unsourced, or quote text the input does not contain. | decision d4-structural-gate<br>decision d7-requirements-table |
 | R7 | Acceptance rows are seeded from the requirements, and `deliver` cannot pass while one is unevidenced. | input "Seed acceptance rows from Requirements,"<br>decision d5-rows-gate-deliver |
+| R8 | Spec review accounts for every part of the input, and fr refuses a review that leaves any of it unclassified. | decision d9-coverage-partition |
+| R9 | Spec review runs on the strongest reviewing tier and checks traceability before anything else. | decision d8-spec-review-hard<br>decision d10-traceability-first |
 
 ## Deferred from input
 
@@ -164,10 +169,10 @@ resolve `done`, fr runs the check against the spec named by `brainstorm`'s
 otherwise records `<n> requirements:<sha256 of the normalised section>`.
 
 The manifest (`plugins/super-fr/workflows/fr-goal.yaml`) declares it on
-`brainstorm` (`evidence: [requirements]`) and on `spec-review` (appended to
-`[review, reviewer, findings]`): spec-review's fixes edit the spec, so it is
-re-derived there. Drift compares step ids only, so neither addition strands a
-cursor.
+`brainstorm` (`evidence: [requirements]`) and on `spec-review` (appended, with
+§D's `coverage`, to `[review, reviewer, findings]`): spec-review's fixes edit the
+spec, so it is re-derived there. Drift compares step ids only, so no addition
+strands a cursor.
 
 When the record also carries the acceptance rows (brainstorm emits
 `acceptance`), the check runs against the matrix as the record will leave it:
@@ -178,11 +183,12 @@ function and exits 2 on any problem (0 and a one-line summary otherwise). It is
 what a brainstorm without a cursor uses, and it is the only implementation:
 both gates call `check_requirements`, never a copy.
 
-### D. Spec review: the fourth check (R4, R5)
+### D. Spec review: traceability first (R4, R5, R8, R9)
 
-`plugins/super-fr/agents/fr-spec-reviewer.md` gains a fourth check, after the
-three it has, **Traceability to the input**, reading the input entries from the
-spec journal it is already given:
+`plugins/super-fr/agents/fr-spec-reviewer.md` gains a check, **Traceability to
+the input**, and runs it FIRST, before its existing three (decisions, codebase
+reality, internal consistency), so the codebase lookups cannot crowd it out
+(d10). It reads the input entries from the spec journal it is already given:
 
 - **Covered or deferred.** Every statement of the input maps to a requirement,
   or appears under `## Deferred from input`. A statement in neither is a
@@ -213,11 +219,71 @@ the finding as open: fail closed, no journal bump. `unconfirmed` is refused on a
 finding whose `review_scope` is `out`, and on a plan-scope finding (it is a
 spec-capture state).
 
+Resolution state is gated in THREE places today, and all three move together
+(review finding s1):
+
+1. the verb: `RESOLUTION_STATES` in `packages/fr/src/fr/commands/journal_cmd.py:297`
+   (checked at `:366`) gains `unconfirmed`; the `review_scope == "out"` and
+   `--scope plan` refusals run in `resolve()` after the target finding is
+   loaded (`:396`);
+2. the record path: `_journal_writes` in `packages/fr/src/fr/record/apply.py:352-374`
+   maps `unconfirmed` like `out-of-scope` (`state="open"` at `:363`, the
+   `unconfirmed=True` token beside `out_of_scope=` at `:366`), and applies the
+   same two refusals, reading the step's journal scope from the manifest since
+   a flat `Resolution` carries no `--scope`;
+3. the model: `ResolutionState` in `packages/fr/src/fr/record/model.py:60`
+   (§H's record bump).
+
+**The input-coverage partition (d9).** Spec review returns, inside the body of
+its `kind: review` journal entry (the entry `evidence.review` already names), a
+fenced table that partitions the input:
+
+````markdown
+```input-coverage
+| span | coverage |
+|---|---|
+| "<verbatim span of the input>" | R1, R4 |
+| "<next span>" | context |
+| "<next span>" | deferred |
+| "<next span>" | missing s3 |
+```
+````
+
+`coverage` is one of: one or more requirement ids (comma-separated);
+`deferred`; `context` (narrative, evidence, rationale, i.e. not a requirement);
+`missing <finding-id>`. Cell escaping follows §B; ` … ` elision is NOT allowed
+here (an elided stretch is text nobody classified).
+
+A new derived evidence, `coverage`, on `spec-review` verifies it at resolve
+(`fr.requirements.check_coverage`):
+
+1. the review entry named by `evidence.review` contains exactly one
+   `input-coverage` block, and it parses;
+2. the spans, whitespace-normalised and concatenated in table order, EQUAL the
+   input entries' bodies, whitespace-normalised and concatenated in journal
+   order: a partition, with no gap, overlap or reordering;
+3. every requirement id exists in the spec's Requirements table as it stands at
+   resolve;
+4. every `missing <id>` names a `kind=finding` entry in the spec journal. The
+   existing `findings` gate then holds the resolve until that finding is closed.
+
+It records `<n> spans: R=<a> deferred=<b> context=<c> missing=<d>`. Whether a
+span is labelled correctly (above all, something mislabelled `context`) stays
+the reviewer's judgement. The partition makes the labelling complete and
+visible, not correct.
+
+**Tier (d8).** `fr-goal.yaml`'s `spec-review` moves from `tier: standard` to
+`tier: hard`. A tier is not a step id, so no cursor drifts.
+
 **PR body.** `packages/fr/src/fr/record/pr_body.py` adds
 `## Built without operator confirmation` to `REQUIRED_SECTIONS`, after
 `## Out-of-scope findings`: every `unconfirmed` spec finding with its note, or
 `None.`. `deliver` already refuses a live PR missing a required section, so this
 list cannot be left out.
+
+It also adds `## Input coverage` to `REQUIRED_SECTIONS`, after the unconfirmed
+section: the spec-review coverage table inside `<details>` (it can be long),
+or `Not recorded (predates the requirements gate).` for a run §G covers.
 
 ### E. Brainstorm prose: always ask (R3)
 
@@ -250,8 +316,9 @@ in CI, which the SessionStart nag already reports as debt.
 ### G. Runs from before this gate
 
 If `brainstorm`'s step record carries no `requirements` evidence (resolved by an
-older `fr`, or rebuilt by `fr run adopt`), the `spec-review` and `deliver` gates
-record `predates the requirements gate` instead of refusing, and `fr run status`
+older `fr`, or rebuilt by `fr run adopt`), the `requirements`, `coverage` and
+`requirement-rows` gates record `predates the requirements gate` instead of
+refusing, and `fr run status`
 shows it as `done, unevidenced`, the same treatment `review-phase` got. Nothing in
 flight is stranded, and nothing is retroactively failed.
 
@@ -285,7 +352,11 @@ PR.
   dispatch brief (d0).
 - An "assumptions" list at brainstorm time (d2).
 - Reopening the operator gate at spec-review (d3).
-- Machine-checking coverage or Design content: both remain reviewer judgement (d4).
+- Machine-checking the CORRECTNESS of coverage labels or Design content: both
+  remain reviewer judgement (d4). fr checks that the coverage partition is
+  complete (d9), not that each label is right.
+- A second, dedicated traceability reviewer: d10's ordering and d9's partition
+  buy most of its focus without another dispatch and gate.
 - Tagging plan phases or steps with requirement ids.
 - Reconciling fr-plan's phase-count guidance (super-fr#760).
 
@@ -316,25 +387,35 @@ Unit (CI):
 7. `deliver`: refuses with a `not-implemented` row citing the spec, naming the
    `set-status` line; passes on `skipped` / `ci` / `scheduled`; records counts.
 8. A run whose brainstorm evidence lacks `requirements` records
-   `predates the requirements gate` at spec-review and deliver.
+   `predates the requirements gate` for `requirements`, `coverage` and
+   `requirement-rows`.
 9. Journal: `input=true` and `unconfirmed=true` round-trip; a parse that ignores
    both tokens reads a discovery and an open finding; the fold yields
    `unconfirmed`; `fr journal check` and the `findings` gate treat it as closed;
    `--input` on a non-discovery kind and `unconfirmed` on an `out` or plan-scope
-   finding are refused.
+   finding are refused, on BOTH the `fr journal resolve` verb and the record
+   path (`apply.py`), each exercised separately.
 10. Record: the 2 → 3 migration hop is asserted; a record carrying `input` and
     an `unconfirmed` resolution applies; a v2 record still migrates and applies.
-11. PR body: `## Built without operator confirmation` is rendered (a list, or
-    `None.`) and is in `REQUIRED_SECTIONS`; a live body missing it is refused.
-12. `fr spec requirements` exits 0 and 2 on the fixtures of 1–3.
-13. The shipped `fr-goal.yaml` passes `fr workflow check`; an in-flight cursor
-    does not drift.
-14. Mirrors in sync (OpenCode skills, agents, instructions; Hermes skills);
+11. PR body: `## Built without operator confirmation` (a list, or `None.`) and
+    `## Input coverage` (the table, or the predates line) are rendered and in
+    `REQUIRED_SECTIONS`; a live body missing either is refused.
+12. `check_coverage`: an exact partition passes and records its counts; a gap,
+    an overlap, a reordered span, an elided span, a second block, no block, an
+    unknown requirement id, and `missing <id>` naming no finding are each
+    refused; a `missing` finding still open holds the resolve through the
+    existing `findings` gate; `--evidence coverage=` is refused.
+13. `fr spec requirements` exits 0 and 2 on the fixtures of 1–3.
+14. The shipped `fr-goal.yaml` passes `fr workflow check`, its `spec-review` is
+    `tier: hard`, and an in-flight cursor does not drift.
+15. fr-spec-reviewer's prose orders traceability before the other checks
+    (a text pin on the agent file).
+16. Mirrors in sync (OpenCode skills, agents, instructions; Hermes skills);
     tool-neutrality tripwire green.
 
 Post-merge (operator-driven):
 
-15. One live `/fr-goal` on a small UI brief that leaves card interactions and a
+17. One live `/fr-goal` on a small UI brief that leaves card interactions and a
     range's edge behaviour unstated. The round asks about each; the spec's
     requirements quote the brief verbatim and cite the answers; `deliver`
     refuses until the rows move off `not-implemented`.
