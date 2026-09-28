@@ -628,3 +628,14 @@ def test_777_unreadable_block_says_to_redispatch_the_reviewer() -> None:
     problems, _ = check_coverage(block, entries, reqs, entries)
     assert problems
     assert any("re-dispatch the reviewer" in p for p in problems)
+
+
+def test_777_escape_never_pairs_across_a_span_boundary() -> None:
+    """Review: decoding after the join let a stray trailing `\\` in one span
+    pair with the next span's leading `"` — a character the input does not
+    hold, passed as an exact partition. Each span decodes on its own."""
+    entries = [_input_entry("i1", 'ab"cd')]
+    reqs = Requirements(items=())
+    block = _coverage_block([("ab\\", "context"), ('"cd', "context")])
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert any("do not partition" in p for p in problems)

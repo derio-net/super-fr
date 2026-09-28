@@ -14,7 +14,7 @@ Input-entry detection (`is_input_entry`) reads `JournalEntry.input`, the
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -454,11 +454,13 @@ def _protect_span_pipes(line: str) -> str:
     return m.group(1) + _UNESCAPED_PIPE_RE.sub(r"\\|", m.group(2)) + m.group(3)
 
 
-def _coverage_form(text: str) -> str:
-    """The partition's comparison form: whitespace dropped and `\\"` / `\\|`
-    read as `"` / `|`, on BOTH sides — so a reviewer may quote either way,
-    and no escape can hide a gap, overlap or reordering (#777)."""
-    return _strip_ws(text.replace('\\"', '"').replace("\\|", "|"))
+def _coverage_form(pieces: Iterable[str]) -> str:
+    """The partition's comparison form: `\\"` / `\\|` read as `"` / `|` in
+    each piece ON ITS OWN, then joined with whitespace dropped — on BOTH
+    sides, so a reviewer may quote either way (#777). Decoding before the
+    join keeps a trailing `\\` in one span from pairing with the next span's
+    leading `"`, so no escape can hide a gap, overlap or reordering."""
+    return _strip_ws("".join(p.replace('\\"', '"').replace("\\|", "|") for p in pieces))
 
 
 def coverage_block(review_body: str) -> str | None:
@@ -541,8 +543,8 @@ def check_coverage(
     # input in both cases. Dropping all whitespace on both sides does, and the
     # partition still refuses any skipped, repeated or reordered text. `\"`
     # and `\|` are read the same way, on both sides (#777).
-    expected = _coverage_form("".join(e.body for e in input_entries))
-    actual = _coverage_form("".join(spans))
+    expected = _coverage_form(e.body for e in input_entries)
+    actual = _coverage_form(spans)
     if actual != expected:
         problems.append(
             "the input-coverage spans do not partition the input entries exactly "
