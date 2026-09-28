@@ -57,6 +57,12 @@ and the spec's `## Requirements` / `## Deferred from input` tables, then check:
      outside `## Requirements`) with no requirement behind it is an
      **invented** finding.
 
+   All three — dropped, reinterpreted and invented — are always tagged
+   `in scope`, never `out`: the orchestrator resolves invented/reinterpreted
+   findings `unconfirmed`, and `unconfirmed` is refused on a finding tagged
+   `review_scope: out`, so a mistagged one would be stranded with no way to
+   close the gate.
+
    Return your partition of the input as the `input-coverage` block below —
    it is what makes "nothing missed" checkable, not just claimed.
 

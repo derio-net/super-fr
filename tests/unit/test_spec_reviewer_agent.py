@@ -63,3 +63,22 @@ def test_body_names_unconfirmed_as_the_resolution_for_invented_or_reinterpreted(
     assert "invented" in body
     assert "reinterpreted" in body
     assert "dropped" in body
+
+
+def test_traceability_findings_are_always_tagged_in_scope() -> None:
+    """spec §D: "All three are tagged in scope." apply.py's unconfirmed_refusal
+    (packages/fr/src/fr/record/apply.py) refuses `--state unconfirmed` on a
+    finding tagged `review_scope: out` — a mistagged invented/reinterpreted/
+    dropped finding would be stranded with no way to close the gate. The
+    traceability section (not the later, general "tag every finding" section)
+    must state this explicitly, with the reason."""
+    body = _body(AGENT.read_text())
+    trace_start = body.index("## What you check")
+    scope_start = body.index("## Tag every finding")
+    trace_section = body[trace_start:scope_start]
+
+    assert "always" in trace_section.lower()
+    assert "in scope" in trace_section.lower()
+    assert "never" in trace_section.lower() and "out" in trace_section.lower()
+    assert "unconfirmed" in trace_section
+    assert "review_scope" in trace_section or "out of scope" in trace_section.lower()
