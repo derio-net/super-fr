@@ -1,0 +1,67 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-closeout-always-2
+step: review-phase
+outcome: done
+journal:
+- kind: review
+  id: p3-review
+  phase: 3
+  title: 'Phase 3 review: 4 findings (1 critical, 2 important, 1 minor), all fixed'
+  body: 'Independent reviewer (general-purpose, sonnet) over 9f17e751..f809f1d8 against spec §C/§F, including
+    a live `fr status` on this repo''s artifacts, which exposed p3-r1. It confirmed the single shared
+    predicate, one merge-evidence read, JSON back-compat, and the archive_twin pairs. Verdict: with fixes.
+    All 4 in-scope findings were fixed in 72f0cd1c. The orchestrator re-verified: 611 passed; ruff and
+    mypy clean; `fr status` exit 0 with owed (36) debug journals, no held block, and this PR''s plan only
+    under ''in progress''. Declined to judge: §B internals (phase 2), skill prose (phase 5), fragment/explainers,
+    pre-existing acceptance-check warnings, estimate overrun (the deliver proportionality gate reports
+    it).
+
+    '
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  state: fixed
+  title: (Critical) held (spec) swallowed every noted spec, incl. the ordinary 'still active under plans/'
+    state and this PR's own unmerged spec
+  body: 'Fixed in 72f0cd1c: a spec is owed/held only if the spec itself is on the default ref; held only
+    for the pending-slice or cross-repo-unresolved notes; an active-plan row is silent (its plan is reported
+    by the plan blocks). Verified live: fr status shows no held block and does not list this PR''s spec.
+
+    '
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  state: fixed
+  title: (Important) owner-archived checks for specs, orphan journals and named-plan runs read the working
+    tree, not the default ref
+  body: 'Fixed in 72f0cd1c: artifact and owner both gated on the ref via _spec_rows_on_ref / _dir_on_ref;
+    a --force archive on an unmerged branch no longer makes anything owed.
+
+    '
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  state: fixed
+  title: (Important) one git ls-tree subprocess per artifact (36+ per fr status) instead of one bulk read
+  body: 'Fixed in 72f0cd1c: _ref_tree does one ls-tree -r of docs/superpowers per owed_artifacts call,
+    reused as a frozenset by every check (the _plans_on_ref pattern); an unreadable ref fails closed.
+
+    '
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  state: fixed
+  title: (Minor) no negative tests with the owner or artifact only on the branch
+  body: 'Fixed in 72f0cd1c: 7 unit cases plus CLI-level equivalents, all written after _publish. This
+    also fixed fixtures whose empty owner dirs were invisible to git.
+
+    '
+resolves: []
+evidence:
+  review: p3-review
+  reviewer: a71909fe44537c759
+  model: claude-opus-5-5
