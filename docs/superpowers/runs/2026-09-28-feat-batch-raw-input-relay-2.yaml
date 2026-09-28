@@ -3,11 +3,18 @@ run: 2026-09-28-feat-batch-raw-input-relay-2
 workflow: fr-goal@1
 branch: feat/batch-raw-input-relay-2
 started: '2026-09-28T19:14:11+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-28T19:14:28+00:00'
+    state: done
+    at: '2026-09-28T19:33:53+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-raw-input-relay-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 6 requirements:731b82ebafee89d6b5f9f0986dbf087a92e1df03d20c7e3aeff339d17e13db8e
   spec-review:
     state: pending
   plan:

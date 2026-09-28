@@ -1,0 +1,37 @@
+schema_version: 1
+run: 2026-09-28-feat-batch-raw-input-relay-2
+captures:
+- host: h-7b39195b
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-28T19:33:53+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 17573c60-c1b3-42d0-ab75-bf4783d5f140
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 70
+        cache_write: 130953
+        cache_read: 4145042
+        output: 28190
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 12
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 15
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
+      brainstorm:
+        usd: null
+        turns: 30

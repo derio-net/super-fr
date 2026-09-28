@@ -4421,6 +4421,39 @@ rows:
     status: ci
     notes: Covered by deliver's post-merge-row skip/count unit test and the PR body's
       Post-merge verification owed section.
+  - id: raw-input-relay-member-briefs
+    capability: fr-goal-methodology
+    acceptance: Every implement-phase and review-phase dispatch brief carries the operator's
+      verbatim input and recorded answers, read-only, with the rule that the spec governs
+      and a disagreement is a finding
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: raw-input-relay-handoff
+    capability: fr-goal-methodology
+    acceptance: The per-phase journal handoff opens with the operator's verbatim input,
+      recorded answers and the spec-governs rule, so an executor reads them even when
+      the orchestrator's relay drops them
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: raw-input-relay-prose
+    capability: fr-goal-methodology
+    acceptance: fr-goal relays the operator input into both the executor's and the reviewer's
+      prompts, and an input statement the spec and no recorded answer covers becomes
+      a gated in-scope phase finding
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
