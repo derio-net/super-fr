@@ -1,0 +1,2 @@
+bump: minor
+summary: fr-goal checks the spec against the operator's input — traced Requirements, an input-coverage partition, and rows gating deliver (#759)
