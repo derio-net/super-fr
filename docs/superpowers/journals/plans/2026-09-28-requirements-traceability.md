@@ -256,3 +256,68 @@ requirement-rows reuses origin_fragment (T1) for the spec match and _unevidenced
 ### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
 
 the three renderers reuse origin_fragment and a new coverage_block beside the block regex check_coverage already owns; the predates string moved to fr.requirements so run_cmd and pr_body share one constant
+
+<!-- fr:journal kind=finding scope=plan id=p3-e1 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=in -->
+### p3-e1 · finding [open] (reviewer: in scope) · Old runs with no recorded spec are stranded at deliver instead of predating (phase 3)
+
+run_cmd.py:1794-1803 _predates_requirements returned False when no step emitted a spec; deliver then refused with a --emitted hint that step cannot accept.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e2 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=in -->
+### p3-e2 · finding [open] (reviewer: in scope) · requirement-rows passes with zero citing rows and never re-checks every requirement is cited (phase 3)
+
+run_cmd.py:1938-1958; reachable by deleting a row after spec-review or amending brainstorm's emitted.spec.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e3 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=in -->
+### p3-e3 · finding [open] (reviewer: in scope) · PR body claims 'predates' on any coverage lookup miss (phase 3)
+
+pr_body.py:139-153 _input_coverage falls back to the predates line for journal parse failures, missing entries or undeclared coverage.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e4 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=in -->
+### p3-e4 · finding [open] (reviewer: in scope) · A bad review id gets the coverage message, not the review gate's (phase 3)
+
+run_cmd.py:1686-1709 derived requirements witnesses before _verify_review_entry.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e5 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=in -->
+### p3-e5 · finding [open] (reviewer: in scope) · Spec/matrix loading duplicated between run_cmd and pr_body (plan P3.T5.S3) (phase 3)
+
+pr_body._run_spec duplicates run_cmd._spec_emitter; _post_merge_owed re-implements matrix/identity/origin filtering with a hardcoded path.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e6 created=2026-09-28T11:58:28+00:00 phase=3 state=open review_scope=out -->
+### p3-e6 · finding [open] (reviewer: out of scope) · fr run adopt on a brand-new spec switches all three gates off (phase 3)
+
+run/adopt.py:354-403: the adopted brainstorm is done with emitted.spec and no evidence, so all three gates record predates. Matches spec §G as written ('rebuilt by fr run adopt'); the weakness is the spec's.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-09-28T11:58:28+00:00 phase=3 -->
+### review-phase-3 · review · phase 3 code review: 6 findings (5 in scope fixed, 1 out of scope) (phase 3)
+
+Independent reviewer (dispatched code-reviewer, hard tier / Opus) over the phase-3 commits against spec §C, §D, §F, §G, Test Plan 5-8, 11, 12, 14. No critical findings. Checked sound: none of the three gates can be satisfied by assertion (all in the three tuples; _parse_evidence refuses; record evidence passes through the same path; derived values overwrite offers); a new run cannot dodge via predates apart from e1/e6; spec path from this resolve on brainstorm, stored on later steps; staged matrix counted on all three steps; archive-aware origin matching; post-merge rows counted not gated; PR sections ordered and enforced; the ~91 seeded fixtures spot-checked with no loosened assertion; both manifest copies identical, step ids unchanged, no drift.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e1-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=fixed resolves=p3-e1 -->
+### p3-e1-resolved · finding [fixed] · resolves p3-e1: Old runs with no recorded spec are stranded at deliver instead of predating (phase 3)
+
+Predates decided by the step: the spec-emitting step is gated; any other step predates when no emitter exists or it lacks requirements; the predates path never loads the spec; the hint names the amend form (0b6535aa).
+
+<!-- fr:journal kind=finding scope=plan id=p3-e2-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=fixed resolves=p3-e2 -->
+### p3-e2-resolved · finding [fixed] · resolves p3-e2: requirement-rows passes with zero citing rows and never re-checks every requirement is cited (phase 3)
+
+requirement-rows refuses zero citing rows and any uncited requirement id via the shared fr.requirements.is_cited rule (43a33081).
+
+<!-- fr:journal kind=finding scope=plan id=p3-e3-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=fixed resolves=p3-e3 -->
+### p3-e3-resolved · finding [fixed] · resolves p3-e3: PR body claims 'predates' on any coverage lookup miss (phase 3)
+
+Predates line only for genuinely pre-gate runs; otherwise 'Not available: <reason>' (1c964257).
+
+<!-- fr:journal kind=finding scope=plan id=p3-e4-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=fixed resolves=p3-e4 -->
+### p3-e4-resolved · finding [fixed] · resolves p3-e4: A bad review id gets the coverage message, not the review gate's (phase 3)
+
+Review entry verified before the requirements witnesses (ff3bded4).
+
+<!-- fr:journal kind=finding scope=plan id=p3-e5-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=fixed resolves=p3-e5 -->
+### p3-e5-resolved · finding [fixed] · resolves p3-e5: Spec/matrix loading duplicated between run_cmd and pr_body (plan P3.T5.S3) (phase 3)
+
+spec_emitter, run_spec, rows_citing, load_spec_matrix in fr.requirements, used by run_cmd and pr_body (1fc8e5bc).
+
+<!-- fr:journal kind=finding scope=plan id=p3-e6-resolved created=2026-09-28T11:58:28+00:00 phase=3 state=open resolves=p3-e6 out_of_scope=true -->
+### p3-e6-resolved · finding [out-of-scope] · resolves p3-e6: fr run adopt on a brand-new spec switches all three gates off (phase 3)
+
+The code implements spec §G as written; closing it is a spec change (have adopt mark its brainstorm record, or compare brainstorm's time to the gate's release). Listed in the PR for filing.
