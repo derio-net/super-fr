@@ -5151,9 +5151,13 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R3
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_branch.py
+      - super-fr:tests/unit/test_closeout_branch_artifacts.py
+    status: ci
+    notes: fr archive --branch's per-kind gates and artifact coverage are covered by
+      unit tests
   - id: status-reports-owed-artifacts
     capability: Branch-keyed close-out
     acceptance: '`fr status` lists every live artifact whose PR has merged (debug journals
