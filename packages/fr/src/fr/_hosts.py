@@ -75,7 +75,7 @@ _REMOTE_HOST_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?([^/:]+)")
 _WARNED_UNKNOWN_HOSTS: set[str] = set()
 
 
-def _origin_hostname(repo_root: Path) -> str | None:
+def origin_hostname(repo_root: Path) -> str | None:
     """Best-effort hostname from `git remote get-url origin`. None on any
     failure (no repo, no remote, git not found) — callers fall through."""
     try:
@@ -182,7 +182,7 @@ def detect_backend(repo_root: Path) -> HostBackend:
     if explicit == "gitea":
         return "gitea"
 
-    hostname = _origin_hostname(repo_root)
+    hostname = origin_hostname(repo_root)
     if hostname and hostname not in DEFAULT_HOST_BACKENDS and hostname not in _WARNED_UNKNOWN_HOSTS:
         _WARNED_UNKNOWN_HOSTS.add(hostname)
         print(
@@ -233,4 +233,4 @@ def host_for(repo_root: Path) -> str | None:
     declared = declared_host(repo_root)
     if declared:
         return declared
-    return self_hosted_hostname(_origin_hostname(repo_root))
+    return self_hosted_hostname(origin_hostname(repo_root))

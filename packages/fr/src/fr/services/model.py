@@ -126,3 +126,5 @@ class ResolvedService:
 @dataclass(frozen=True)
 class Services:
     forge: ResolvedService
+    ci: ResolvedService
+    tracking: ResolvedService
