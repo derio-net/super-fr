@@ -281,6 +281,31 @@ def test_a_log_no_command_of_the_orchestrator_produced_is_refused(tmp_path: Path
     assert "no command of YOURS wrote it" in _squash(result.output)
 
 
+def test_a_suite_issued_before_the_unit_opened_is_refused_and_says_so(tmp_path: Path) -> None:
+    """gh#765: one Bash call ran `fr run advance` (opening deliver) and then the
+    suite, so the call is stamped seconds BEFORE the unit it evidences. It is
+    still refused — the suite must run during delivery — but the refusal names
+    that, not "no command of YOURS", which sent the run chasing $TMPDIR."""
+    from datetime import timedelta
+
+    root = tmp_path / "projects"
+    write_session(root, session_id="s-d")
+    repo, shipped, opened = _at_deliver(tmp_path, root=root)
+    (repo / "c1.log").write_text("291 passed in 45.99s\n")
+    at = parse_timestamp(opened)
+    assert at is not None
+    issued = (at - timedelta(seconds=4)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    ran_at(root, issued, session_id="s-d", until=_soon(), log=repo / "c1.log")
+
+    result = _deliver(repo, shipped, root, "s-d", "tests=c1.log")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "no command of YOURS" not in out
+    assert "issued before this unit opened" in out
+    assert "as its own command" in out
+
+
 def test_a_log_whose_bytes_postdate_the_command_is_refused(tmp_path: Path) -> None:
     """Review r1-1: a command naming the log is not enough — the bytes on disk
     must have been written inside that command's run window. Overwriting the
