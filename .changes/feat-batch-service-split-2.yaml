@@ -1,2 +1,0 @@
-bump: minor
-summary: "fr-profiles.yaml declares nested forge/ci/tracking services (fr services; ci/tracking none supported); it migrates to schema 2, and an fr older than this release reading a migrated file falls back to origin inference, losing a self-hosted forge — keep every machine on the same plugin version (lockstep install)"
