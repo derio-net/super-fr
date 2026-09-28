@@ -91,9 +91,7 @@ def _finding_line(scope: str, entry: JournalEntry, state: str, where: str | None
     return f"- `{entry.id}` ({scope}{phase}) — {entry.title} — **{state}**{tail}"
 
 
-def _findings(
-    repo_root: Path, state: RunState
-) -> tuple[list[str], list[str], list[str]]:
+def _findings(repo_root: Path, state: RunState) -> tuple[list[str], list[str], list[str]]:
     """`(in scope, out of scope, unconfirmed)` — three disjoint buckets, so an
     unconfirmed spec finding renders under its own section only (§D)."""
     inside: list[str] = []
@@ -110,7 +108,9 @@ def _findings(
                 continue
             verdict = states.get(e.id, e.state or "open")
             if verdict == _UNCONFIRMED:
-                unconfirmed.append(f"{_finding_line(scope, e, verdict, None)}: {notes.get(e.id, '')}")
+                unconfirmed.append(
+                    f"{_finding_line(scope, e, verdict, None)}: {notes.get(e.id, '')}"
+                )
                 continue
             line = _finding_line(scope, e, verdict, tracked.get(e.id))
             (outside if verdict in _CLOSED_OUT else inside).append(line)
@@ -172,8 +172,7 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     lines = [
         f"- `{r.id}` — {r.acceptance}"
         for r in matrix.rows
-        if r.verify == "post-merge"
-        and any(origin_fragment(o, ref) is not None for o in r.origin)
+        if r.verify == "post-merge" and any(origin_fragment(o, ref) is not None for o in r.origin)
     ]
     return "\n".join(lines) if lines else "None."
 

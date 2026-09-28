@@ -1535,10 +1535,8 @@ def _review_journal_entries(
     one: no spec recorded is a refusal, not an empty journal."""
     if target.scope == "plan":
         return _plan_journal_entries(repo_root, state)
-    spec_rel = next(
-        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
-        None,
-    )
+    found = _spec_emitter(state)
+    spec_rel = found[1].emitted["spec"] if found is not None and found[1].emitted else None
     if spec_rel is None:
         raise RunStateError(
             "cannot verify evidence — no spec recorded yet (resolve the step "
@@ -1908,9 +1906,7 @@ def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | 
     )
 
     why = "cannot derive coverage evidence"
-    review = next(
-        (e for e in capture.entries if e.id == review_id and e.kind == "review"), None
-    )
+    review = next((e for e in capture.entries if e.id == review_id and e.kind == "review"), None)
     if review is None:
         _requirements_refusal(
             key,
@@ -1969,7 +1965,7 @@ def _requirement_rows_refusal(key: str, spec_rel: str, ids: list[str]) -> NoRetu
             f"refused — {len(ids)} acceptance row(s) citing {spec_rel} are still "
             "`not-implemented`. Move each once its verification exists:",
             *(
-                f'fr acceptance set-status --id {rid} --status <ci|scheduled|skipped> '
+                f"fr acceptance set-status --id {rid} --status <ci|scheduled|skipped> "
                 '--notes "<why it moved>"'
                 for rid in ids
             ),

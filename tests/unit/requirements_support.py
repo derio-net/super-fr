@@ -57,7 +57,7 @@ def write_input_entry(repo: Path, spec_rel: str, *, body: str = INPUT_TEXT) -> N
         JournalEntry(
             kind="discovery",
             scope="spec",
-            id="input-1",
+            id="operator-input",
             created=now(),
             title="operator input",
             body=body,

@@ -376,7 +376,6 @@ def test_a_spec_review_record_adding_a_requirement_and_its_row_applies(tmp_path:
     assert "req-r2" in (repo / MATRIX_REL).read_text()
 
 
-
 # --- Task 2: `coverage` on spec-review ----------------------------------------
 
 _WITH_COVERAGE = "[review, reviewer, findings, requirements, coverage]"
@@ -536,9 +535,7 @@ def test_deliver_skips_and_counts_a_post_merge_row(tmp_path: Path) -> None:
     out = _deliver(repo, shipped)
 
     assert out.exit_code == 0, out.output
-    assert _evidence(repo, "deliver")["requirement-rows"] == (
-        "2 rows: skipped=1; post-merge=1"
-    )
+    assert _evidence(repo, "deliver")["requirement-rows"] == ("2 rows: skipped=1; post-merge=1")
 
 
 def test_deliver_counts_a_row_its_own_record_moves(tmp_path: Path) -> None:

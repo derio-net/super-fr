@@ -26,6 +26,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
+from tests.unit.requirements_support import COVERAGE_BLOCK, seed_requirements
 
 
 def _resolve(root: Path, record: Path, step: str = "implement-phase", item: str | None = "phase/1"):
@@ -432,6 +433,11 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
 # `emits:` in the manifest, not from a `--scope` flag.
 
 
+# The shipped `spec-review` derives `coverage` (2026-09-28 spec §D): the review
+# body partitions the seeded input, plus any input entry the record adds.
+_WITH_X = COVERAGE_BLOCK.replace("```\n", '| "build X" | context |\n```\n', 1)
+
+
 def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
     """A run whose `spec-review` step is open, optionally with an open spec
     finding `f1` the reviewer tagged `finding_scope`."""
@@ -444,6 +450,7 @@ def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path
     root = _workspace(tmp_path, "feat/rec")
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "spec.md").write_text("# spec\n")
+    seed_requirements(root, "docs/spec.md")
     commit_all(root, "spec")
     for argv in (
         ["run", "start", "fr-goal", "--branch", "feat/rec", "--run-id", RUN],
@@ -481,7 +488,9 @@ def _spec_review_record(**overrides: object) -> dict[str, object]:
         "run": RUN,
         "step": "spec-review",
         "outcome": "done",
-        "journal": [{"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}],
+        "journal": [
+            {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
+        ],
         "evidence": {"review": "sr-1", "reviewer": "spec-reviewer-1"},
     }
     record.update(overrides)
@@ -494,7 +503,7 @@ def _spec_entries(root: Path):
 
 def test_a_spec_record_writes_an_input_discovery(tmp_path: Path) -> None:
     root = _at_spec_review(tmp_path)
-    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": _WITH_X}
     given = {"kind": "discovery", "id": "input-1", "title": "input", "body": "build X"}
     record = write_record(root, _spec_review_record(journal=[review, {**given, "input": True}]))
 
@@ -525,7 +534,7 @@ def test_a_spec_record_resolves_a_finding_unconfirmed_and_the_findings_gate_pass
 
 def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> None:
     root = _at_spec_review(tmp_path)
-    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
     bad = {"kind": "decision", "id": "d1", "title": "t", "body": "b", "input": True}
     record = write_record(root, _spec_review_record(journal=[review, bad]))
     files = snapshot(root)

@@ -34,6 +34,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
+from tests.unit.requirements_support import seed_requirements
 from tests.unit.transcript_sessions import (
     bash_rows,
     conversation_at,
@@ -62,6 +63,7 @@ def _blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str
     spec = root / SPEC
     spec.parent.mkdir(parents=True, exist_ok=True)
     spec.write_text("# x design\n")
+    seed_requirements(root, SPEC)
     blocked_at = parse_timestamp(load_run_state(root, RUN).steps["brainstorm"].at)
     assert blocked_at is not None
     monkeypatch.setenv("FR_HARNESS", "claude-code")
@@ -189,7 +191,12 @@ def test_an_announced_design_risk_second_round_is_the_operator_and_journalled(
 
     assert step.answered_by == "operator"
     assert _decisions(root) == ["gate-question-rounds-brainstorm"]
-    entry = parse_journal(journal_path(root, "spec", SPEC_SLUG).read_text())[0]
+    # By id: the spec journal also holds the brainstorm's `input` entry.
+    (entry,) = [
+        e
+        for e in parse_journal(journal_path(root, "spec", SPEC_SLUG).read_text())
+        if e.id == "gate-question-rounds-brainstorm"
+    ]
     assert entry.kind == "decision"
     assert "design-risk" in entry.body and "B vs C changes the store" in entry.body
 
