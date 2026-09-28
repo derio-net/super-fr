@@ -29,7 +29,15 @@ steps:
           reviewer: aeb7c01357117f901
           findings: s1,s2,o1,o2,o3,o4,o5,o6,o7,o8,r1,r2,r3,r4,r5,r6,r7,r8,r9
   plan:
-    state: pending
+    state: running
+    at: '2026-09-28T07:11:32+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-28T07:11:32+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: a913f2c8-de7e-4aab-99a6-e1bfe2c563de
   plan-review:
     state: pending
   implement:
