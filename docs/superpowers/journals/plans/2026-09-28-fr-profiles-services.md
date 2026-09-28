@@ -676,3 +676,8 @@ Filed at closeout as #806 (bundled minor follow-ups).
 ### p5r-test-docstring-resolved-2 · finding [deferred → #806] · resolves p5r-test-docstring: test_migration_trigger.py:178-180 docstring says exempt commands never write, untrue for init scaffold
 
 Filed at closeout as #806 (bundled minor follow-ups).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-skill-doc-resolved-2 created=2026-09-28T23:33:57+00:00 state=fixed resolves=p5r-skill-doc answered_by=operator -->
+### p5r-skill-doc-resolved-2 · finding [fixed] · resolves p5r-skill-doc: fr-init SKILL.md still documents flat backend/host and lacks --ci/--tracking
+
+Fixed by phase 6: plugins/super-fr/skills/fr-init/SKILL.md documents --ci/--tracking (lines 77-79). Operator authorized the fixed state at closeout.
