@@ -263,3 +263,31 @@ Independent reviewer over 2e1d3240, 5b5db21f, 2c0d0b9e against spec R3 §3.C-D, 
 ### p2r-splitlines-resolved · finding [out-of-scope] · resolves p2r-splitlines: str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped (phase 2)
 
 Pre-existing text-surgery pattern (registry stamp writer); not caused by this change and not realistic input.
+
+<!-- fr:journal kind=decision scope=plan id=p3-ci-reason-seam created=2026-09-28T21:49:13+00:00 phase=3 -->
+### p3-ci-reason-seam · decision · fr.acceptance.ci.ci_reason/ci_active resolve the ci service leniently; init takes ci_type/tracking_type (phase 3)
+
+`ci_reason(root)` (None = active) calls `resolve_services(root, lenient=True)` (lazy import: resolve imports
+acceptance.ci). Declared `ci: {type: none}` refuses `ci` rows naming the declaration; undeclared none keeps
+#787's no_ci_message. `record/apply._no_ci_reason` delegates to it. `scaffold.init(..., ci_type=None,
+tracking_type=None, no_ci_reason=None)`: with ci_type None it is the old backend path (test_acceptance_init_no_ci
+unchanged). `SCAFFOLD_PATHS` is now keyed by ci TYPE, plus `DEBT_PLATFORM` (github-actions->github, ...).
+`init_cmd` resolves strictly (ServicesError -> exit 2), refuses `--with-ci` only when ci is DECLARED none, and
+maps undeclared/legacy none + --with-ci to the forge's own ci type.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-debt-fragments created=2026-09-28T21:49:13+00:00 phase=3 -->
+### p3-debt-fragments · discovery · Debt step is @@DEBT_COMMENT@@/@@DEBT_STEP@@ tokens in each template; render_workflow(ci_type, debt=) (phase 3)
+
+With debt=True each render is byte-identical to the pre-phase template (verified against HEAD). Omission prints
+a `no debt` notice and drops the sentence from the rule's CI bullet. The github template's `issues: write`
+permission is left in place when the step is omitted.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-28T21:49:13+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+scaffold.py had no backend-keyed leftovers no caller uses: backend still drives the no-declaration path and the no-CI message; the per-backend workflow dict was replaced by WORKFLOW_TEMPLATES keyed by ci type.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-28T21:49:13+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+the debt step was split into fragments as part of the GREEN itself; nothing further to clean.
