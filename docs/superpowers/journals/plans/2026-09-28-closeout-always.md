@@ -257,3 +257,48 @@ Fixed in 72f0cd1c: _ref_tree does one ls-tree -r of docs/superpowers per owed_ar
 ### p3-r4 · finding [fixed] (reviewer: in scope) · (Minor) no negative tests with the owner or artifact only on the branch (phase 3)
 
 Fixed in 72f0cd1c: 7 unit cases plus CLI-level equivalents, all written after _publish. This also fixed fixtures whose empty owner dirs were invisible to git.
+
+<!-- fr:journal kind=decision scope=plan id=p4-branch-mode-intro-line-diverges-from-run-mode created=2026-09-28T21:21:22+00:00 phase=4 -->
+### p4-branch-mode-intro-line-diverges-from-run-mode · decision · branch mode's "Run this from" line drops the run-file/reaped-workspace language run mode keeps (phase 4)
+
+§D's template shows one generic "Run this from <primary checkout> — the
+base clone, after the branch's PR has merged." line, but the existing
+run-mode text (p4-r3, kept verbatim per the table's "everything else …
+is unchanged") also says "on the default branch" and "(the run file
+lives there; the feature workspace this run happened in may already be
+reaped)" — true only because a run FILE exists to be reaped away from.
+`branch_closeout_brief` prints that fuller sentence only when
+`run_extras is not None`; a plain `--branch` brief (no run cursor at
+all) gets the shorter generic sentence instead, since there is no run
+file for "lives there" to refer to.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-pickup-branch-check-is-its-own-no-fetch-helper created=2026-09-28T21:21:22+00:00 phase=4 -->
+### p4-pickup-branch-check-is-its-own-no-fetch-helper · discovery · fr pickup --branch's unresolvable-branch check does not call fr.isolation.local.resolve_branch_refs (phase 4)
+
+§D says the check is "the same resolution as §B.2, without the fetch".
+`resolve_branch_refs` always fetches (it IS §B.2's fetch-then-verify),
+so reusing it and discarding the network step was not an option without
+also discarding its purpose. `pickup_cmd._refuse_unresolvable_branch`
+instead composes the two primitives `resolve_branch_refs` itself is
+built on — `fr.git.ref_exists` and `fr.git.remote_name` — checking the
+local `<branch>` ref and, when a single remote is configured, the
+already-fetched `<remote>/<branch>` tracking ref. `--branch` only
+decides whether to print a brief, never whether to move anything, so a
+round trip to the network buys it nothing (unlike `fr archive --branch`,
+which mutates and must not act on a stale ref).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-branch-closeout-brief-is-the-one-builder created=2026-09-28T21:21:22+00:00 phase=4 -->
+### p4-branch-closeout-brief-is-the-one-builder · discovery · branch_closeout_brief(repo_root, branch, *, run_extras=None) is the only place a close-out command string is built (phase 4)
+
+`closeout.py` now has one `RunExtras` dataclass (run id, pr, spec/plan
+paths, has_test_plan, out_of_scope lines) carrying everything run mode
+adds on top of the branch core. `closeout_brief(repo_root, state)` kept
+its done-`deliver` refusal, reads the run's emitted values and its
+spec's Test Plan marker and out-of-scope journal lines, packs them into
+a `RunExtras`, and delegates entirely to `branch_closeout_brief`. Every
+command line (`fr isolation verify-merge`, `fr status`, `fr isolation
+up`, `fr archive --branch <b>`, the commit/push line, the housekeeping
+PR line, `fr isolation down`) is built exactly once, in
+`branch_closeout_brief`, for both modes — confirmed by grep: no other
+module constructs an `fr archive --branch` / `chore: archive` /
+`chore: close out` string.
