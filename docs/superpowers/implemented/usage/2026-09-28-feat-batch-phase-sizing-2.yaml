@@ -1,0 +1,86 @@
+schema_version: 1
+run: 2026-09-28-feat-batch-phase-sizing-2
+captures:
+- host: h-f5d58d69
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-28T21:41:07+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 6abc4931-7695-498d-b6b0-6bfc92730400
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 612
+        cache_write: 946025
+        cache_read: 47883706
+        output: 86581
+        usd: 22.92109079999999
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001689
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 8.803232229248147
+        turns: 147
+      other:
+        usd: 7.285442183176801
+        turns: 77
+      paperwork:
+        usd: 6.83410538757506
+        turns: 80
+    steps:
+      (outside run):
+        usd: 2.0816843303720445
+        turns: 18
+      brainstorm:
+        usd: 2.160340401663755
+        turns: 24
+      spec-review:
+        usd: 2.767978905915223
+        turns: 46
+      plan:
+        usd: 0.9939951601235125
+        turns: 10
+      implement:
+        usd: 13.694929669151461
+        turns: 189
+      journal-check:
+        usd: 0.1096934061642244
+        turns: 1
+      deliver:
+        usd: 1.114157926609784
+        turns: 11
+    briefs:
+      acb4099ba44a19249: 1967
+      phase/1/implement-phase: 2748
+      phase/1/review-phase: 3016
+  - session: 55f9f123-015d-41d1-8381-112e096fe0d5
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 18
+        cache_write: 72763
+        cache_read: 800531
+        output: 2392
+        usd: null
+        usd_source: none
+    activity:
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 5
+    steps:
+      (outside run):
+        usd: null
+        turns: 9

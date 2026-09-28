@@ -1,13 +1,18 @@
-"""The closeout brief `fr pickup --run` prints for a finished delivery run.
+"""The closeout brief `fr pickup --run` and `fr pickup --branch` print.
 
-Spec `2026-09-25-fr-goal-closeout-defects-design.md` §3.D.1. Built ONLY from
-the `RunState` handed to it and the artifacts it names (spec, plan, both
-journals) — never from anything else the delivering session remembers,
-because this is read by a brand-new session that inherits none of it.
+Spec `2026-09-25-fr-goal-closeout-defects-design.md` §3.D.1 built the run-mode
+brief; `2026-09-28-closeout-always-design.md` §D split it in two:
+`branch_closeout_brief` is the ONE builder (branch-mode brief, or run-mode's
+core plus its `RunExtras`), and `closeout_brief` keeps the run-mode
+done-`deliver` refusal and calls it. Built ONLY from `RunState`/`branch` and
+the artifacts they name (spec, plan, both journals) — never from anything
+else the delivering session remembers, because this is read by a brand-new
+session that inherits none of it.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from fr.git import GitUnavailableError, git_answer
@@ -21,7 +26,13 @@ from fr.journal.model import (
 from fr.run.model import RunState
 from fr.services import ServicesError, TrackerRequiredError, require_tracker
 
-__all__ = ["CloseoutNotReadyError", "closeout_brief", "primary_checkout"]
+__all__ = [
+    "CloseoutNotReadyError",
+    "RunExtras",
+    "branch_closeout_brief",
+    "closeout_brief",
+    "primary_checkout",
+]
 
 TEST_PLAN_MARKER = "## Test Plan"
 
@@ -139,6 +150,142 @@ def _tracker_note(repo_root: Path) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class RunExtras:
+    """Run-mode-only additions to the branch brief (spec
+    2026-09-28-closeout-always §D): the PR/spec/plan lines, the spec's Test
+    Plan line, the run's out-of-scope journal-resolve lines, and the run id
+    that names the housekeeping branch when no plan was ever emitted."""
+
+    run_id: str
+    pr: str | None
+    spec_path: str | None
+    plan_path: str | None
+    has_test_plan: bool
+    out_of_scope: list[str]
+
+
+def _housekeeping_branch(branch: str, run_extras: RunExtras | None) -> str:
+    """`chore/archive-<plan-slug>` when a plan was named (run mode);
+    `chore/closeout-<run-id>` for a run with no plan; `chore/closeout-<branch
+    -slug>` (`/` -> `-`) for a plain branch brief with no run at all — the
+    naming §D's table leaves unchanged for run mode and introduces for
+    branch mode."""
+    if run_extras is not None:
+        if run_extras.plan_path:
+            return f"chore/archive-{Path(run_extras.plan_path).name}"
+        return f"chore/closeout-{run_extras.run_id}"
+    return f"chore/closeout-{branch.replace('/', '-')}"
+
+
+def _commit_message(branch: str, plan_path: str | None) -> str:
+    """`chore: archive <plan-slug>` with a plan; else `chore: close out <b>`
+    — always printed now (§D's table), never the bare `git push` the no-plan
+    run-mode case used to fall back to."""
+    if plan_path:
+        return f"chore: archive {Path(plan_path).name}"
+    return f"chore: close out {branch}"
+
+
+def branch_closeout_brief(
+    repo_root: Path, branch: str, *, run_extras: RunExtras | None = None
+) -> str:
+    """The close-out brief for `branch` (spec 2026-09-28-closeout-always §D).
+
+    `fr pickup --branch <b>` calls this directly with `run_extras=None`.
+    `closeout_brief` calls it for a finished run, passing `run_extras` for
+    the run-only lines (PR/spec/plan, the Test Plan line, out-of-scope
+    findings) — everything else (verify-merge/STOP, `fr status`, the
+    housekeeping block, `fr archive --branch <b>`, the commit/push line, the
+    housekeeping PR, `fr isolation down`) is common to both modes and always
+    printed, because the branch always has at least its own artifacts (or,
+    in run mode, its run cursor) to consider.
+    """
+    lines = [f"branch: {branch}"]
+    if run_extras is not None:
+        lines.append(f"PR: {run_extras.pr}" if run_extras.pr else "PR: (none recorded)")
+        if run_extras.spec_path:
+            lines.append(f"spec: {run_extras.spec_path}")
+        if run_extras.plan_path:
+            lines.append(f"plan: {run_extras.plan_path}")
+    lines.append("")
+    if run_extras is not None:
+        # p4-r3: name the checkout — the transient "start a NEW session in
+        # <workspace>" line printed by the delivering session is gone by the
+        # time a brand-new session reads this brief back, and the run file
+        # itself now lives on the default branch (the feature workspace it
+        # was written in may already be reaped).
+        lines.append(
+            f"Run this from {primary_checkout(repo_root)} — the base clone, on the default "
+            "branch, after the PR above has merged (the run file lives there; the feature "
+            "workspace this run happened in may already be reaped)."
+        )
+    else:
+        lines.append(
+            f"Run this from {primary_checkout(repo_root)} — the base clone, after {branch}'s "
+            "PR has merged."
+        )
+    lines.append("")
+    lines.append("Closeout, in order:")
+    lines.append(
+        f"  fr isolation verify-merge --branch {branch}   "
+        "# works from the repo root above even once the feature workspace is gone"
+    )
+    lines.append("  STOP here if that refuses — the branch is not actually merged yet.")
+
+    if run_extras is not None and run_extras.spec_path and run_extras.has_test_plan:
+        lines.append(f"  run the spec's Test Plan: {run_extras.spec_path}")
+
+    plan_path = run_extras.plan_path if run_extras is not None else None
+    out_of_scope = run_extras.out_of_scope if run_extras is not None else []
+    if out_of_scope:
+        tracker_note = _tracker_note(repo_root)
+        if tracker_note == _NO_TRACKER:
+            # R6: nowhere to file — the findings stay in the journal and PR body.
+            out_of_scope = []
+            lines.append(
+                "  out-of-scope findings stay recorded in the journal and PR body; "
+                "no tracker is configured"
+            )
+        elif tracker_note:
+            # only the issue-filing lines below depend on the declaration
+            lines.append(f"  WARNING: {tracker_note}")
+    lines.append("  fr status")
+
+    # p4-r2: exact commands, not a "# on a housekeeping branch" comment that
+    # leaves it to the reader to invent one — a fresh session with no memory
+    # of this run could otherwise `fr archive` right here, in the
+    # just-merged feature workspace, and commit to a dead branch.
+    housekeeping_branch = _housekeeping_branch(branch, run_extras)
+    lines.append(
+        f"  fr isolation up --branch {housekeeping_branch}   "
+        f"# from the base clone above — do NOT run the steps below inside "
+        f"{branch}, that workspace is the just-merged feature branch"
+    )
+    if out_of_scope:
+        # gh#621: inside the housekeeping workspace, never on the default
+        # branch — there fr writes the record but commits nothing (§3.C), so
+        # it would miss the PR and the journal `fr archive` moves.
+        lines.append(
+            f"  file an issue for each out-of-scope finding below, then, inside the "
+            f"new {housekeeping_branch} workspace (fr commits each record):"
+        )
+        lines.extend(out_of_scope)
+    lines.append(
+        f"  fr archive --branch {branch}   # inside the new {housekeeping_branch} workspace"
+    )
+    lines.append(
+        "  git add -A && git commit -m "
+        f"'{_commit_message(branch, plan_path)}' && git push -u origin {housekeeping_branch}"
+    )
+    from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
+
+    lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
+    lines.append(f"  fr isolation down --branch {branch}")
+
+    return "\n".join(lines)
+
+
 def closeout_brief(repo_root: Path, state: RunState) -> str:
     """A self-contained closeout brief for a run whose `deliver` step is done.
 
@@ -156,39 +303,13 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
     spec_path = _emitted(state, "spec")
     plan_path = _emitted(state, "plan")
 
-    lines = [f"branch: {state.branch}"]
-    lines.append(f"PR: {pr}" if pr else "PR: (none recorded)")
-    if spec_path:
-        lines.append(f"spec: {spec_path}")
-    if plan_path:
-        lines.append(f"plan: {plan_path}")
-    lines.append("")
-    # p4-r3: name the checkout — the transient "start a NEW session in
-    # <workspace>" line printed by the delivering session is gone by the time
-    # a brand-new session reads this brief back, and the run file itself now
-    # lives on the default branch (the feature workspace it was written in
-    # may already be reaped).
-    lines.append(
-        f"Run this from {primary_checkout(repo_root)} — the base clone, on the default branch, "
-        "after the PR above has merged (the run file lives there; the feature "
-        "workspace this run happened in may already be reaped)."
-    )
-    lines.append("")
-    lines.append("Closeout, in order:")
-    lines.append(
-        f"  fr isolation verify-merge --branch {state.branch}   "
-        "# works from the repo root above even once the feature workspace is gone"
-    )
-    lines.append("  STOP here if that refuses — the branch is not actually merged yet.")
-
+    has_test_plan = False
     if spec_path:
         spec_file = repo_root / spec_path
         try:
             has_test_plan = TEST_PLAN_MARKER in spec_file.read_text()
         except OSError:
             has_test_plan = False
-        if has_test_plan:
-            lines.append(f"  run the spec's Test Plan: {spec_path}")
 
     out_of_scope: list[str] = []
     if spec_path:
@@ -197,59 +318,13 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         )
     if plan_path:
         out_of_scope += _out_of_scope_lines(repo_root, "plan", Path(plan_path).name)
-    tracker_note = _tracker_note(repo_root)
-    stays_recorded = False
-    if tracker_note == _NO_TRACKER:
-        # R6: nowhere to file — the findings stay in the journal and PR body.
-        stays_recorded = bool(out_of_scope)
-        out_of_scope = []
-    elif tracker_note and out_of_scope:
-        # only the issue-filing lines below depend on the declaration
-        lines.append(f"  WARNING: {tracker_note}")
-    if stays_recorded:
-        lines.append(
-            "  out-of-scope findings stay recorded in the journal and PR body; "
-            "no tracker is configured"
-        )
-    lines.append("  fr status")
-    if plan_path or out_of_scope:
-        # p4-r2: exact commands, not a "# on a housekeeping branch" comment
-        # that leaves it to the reader to invent one — a fresh session with
-        # no memory of this run could otherwise `fr archive` right here, in
-        # the just-merged feature workspace, and commit to a dead branch.
-        # Branch naming matches this repo's own housekeeping PRs (`git log
-        # --oneline origin/main | grep -i archive`): `chore/archive-<slug>`.
-        housekeeping_branch = (
-            f"chore/archive-{Path(plan_path).name}" if plan_path else f"chore/closeout-{state.run}"
-        )
-        lines.append(
-            f"  fr isolation up --branch {housekeeping_branch}   "
-            f"# from the base clone above — do NOT run the steps below inside "
-            f"{state.branch}, that workspace is the just-merged feature branch"
-        )
-        if out_of_scope:
-            # gh#621: inside the housekeeping workspace, never on the default
-            # branch — there fr writes the record but commits nothing (§3.C),
-            # so it would miss the PR and the journal `fr archive` moves.
-            lines.append(
-                f"  file an issue for each out-of-scope finding below, then, inside the "
-                f"new {housekeeping_branch} workspace (fr commits each record):"
-            )
-            lines.extend(out_of_scope)
-        if plan_path:
-            plan_slug = Path(plan_path).name
-            lines.append(
-                f"  fr archive {plan_path}   # inside the new {housekeeping_branch} workspace"
-            )
-            lines.append(
-                "  git add -A && git commit -m "
-                f"'chore: archive {plan_slug}' && git push -u origin {housekeeping_branch}"
-            )
-        else:
-            lines.append(f"  git push -u origin {housekeeping_branch}")
-        from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
 
-        lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
-    lines.append(f"  fr isolation down --branch {state.branch}")
-
-    return "\n".join(lines)
+    run_extras = RunExtras(
+        run_id=state.run,
+        pr=pr,
+        spec_path=spec_path,
+        plan_path=plan_path,
+        has_test_plan=has_test_plan,
+        out_of_scope=out_of_scope,
+    )
+    return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)

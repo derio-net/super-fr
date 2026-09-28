@@ -693,6 +693,7 @@ def _acceptance_writes(
                     status=item.status,  # type: ignore[arg-type]
                     notes=item.notes or "",
                     verify=item.verify,
+                    visual=item.visual,
                 )
             else:
                 assert existing is not None  # refused above when absent
@@ -714,6 +715,9 @@ def _acceptance_writes(
                     notes=item.notes,
                     # A status move keeps the row's `verify` unless it names one.
                     verify=item.verify if item.verify is not None else existing.verify,
+                    # `visual` is create-only — set-status never touches it (spec
+                    # 2026-09-28 §A), so a move always keeps the existing value.
+                    visual=existing.visual,
                 )
             for ref in row.refs():
                 split_ref(ref)
@@ -927,6 +931,7 @@ def apply_record(
             questions=record.questions,
             also_commit=commit_paths,
             guard=guard,
+            visual=record.visual,
         )
     except BaseException:
         if not guard.landed:

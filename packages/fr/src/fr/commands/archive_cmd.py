@@ -8,36 +8,60 @@ are judged locally, so the fr-goal close-out still archives. `--force` overrides
 plan only; `--force --all` is refused because blanket-forcing is how the
 2026-06-05 incident happens in reverse.
 
+`--branch <b>` (2026-09-28-closeout-always §B) archives what a MERGED branch
+added or modified, kind by kind; anything not ready is a `held:` line, exit 0.
+It refuses (exit 2, nothing moved) with no default ref, an unresolvable
+branch, or a branch whose changes are not all on the default ref.
+
 Exit codes: 0 archived (or clean no-op for --all); 2 gate failure, dirty
 tree, usage, legacy layout; 5 parse error.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import typer
 from rich.console import Console
 
 from fr.archive import (
     ArchiveError,
+    MergeEvidence,
     SpecSweepResult,
     archive_blockers,
+    archive_journal,
     archive_plan_dir,
+    archive_run_cursor,
+    emitted_plan,
     merge_evidence,
     paths_dirty,
     spec_archive_sweep,
 )
+from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
+from fr.isolation.local import (
+    branch_changed_paths,
+    branch_changes_present,
+    resolve_branch_refs,
+    subprocess_runner,
+)
+from fr.isolation.types import IsolationError
+from fr.journal.model import JournalScope, archived_journal_path, journal_path
 from fr.parser import PlanSchemaError
 from fr.repair import plans_referencing_specs, repair_repo
+from fr.run.model import archived_run_path, run_path
+from fr.usage.file import archived_usage_path
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
 
 console = Console()
 err_console = Console(stderr=True)
+
+IMPLEMENTED_REL = Path("docs/superpowers/implemented")
 
 
 def _make_gh_client() -> GhClient:
@@ -75,6 +99,272 @@ def _repair_in_passing(repo_root: Path, only_plans: frozenset[str] | None) -> No
         err_console.print(f"[yellow]warning:[/yellow] {w}")
 
 
+def _branch_refs_or_exit(repo_root: Path, branch: str, remote: str) -> list[str]:
+    """Every ref of `branch` that resolves, fetched the way verify-merge does
+    (§B.2) — or exit 2 when neither `<remote>/<b>` nor the local `<b>` does,
+    or when the remote branch's state is unknown.
+
+    Unknown is verify-merge's `branch_fetched=False`: the fetch failed and
+    `ls-remote` did not confirm the branch was deleted. The refs this clone
+    holds may then be stale — a post-merge push from another clone would be
+    invisible — so the mutating step refuses exactly where verify-merge would
+    not verify (review p2 #1)."""
+    refs, branch_fetched = resolve_branch_refs(subprocess_runner, repo_root, branch, remote)
+    if not refs:
+        err_console.print(
+            f"branch {branch} resolves neither locally nor as {remote}/{branch} — nothing to diff",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not branch_fetched:
+        err_console.print(
+            f"refusing to archive — could not fetch {remote}/{branch}, and {remote} did not "
+            f"confirm the branch was deleted, so its remote state is unknown; check it with "
+            f"`fr isolation verify-merge --branch {branch}`",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return refs
+
+
+@contextmanager
+def _refuse_on_isolation_error() -> Iterator[None]:
+    """A git diff the branch path cannot compute (no merge-base, a failed
+    rev-list) is a refusal, exit 2 — never a traceback, never a move."""
+    try:
+        yield
+    except IsolationError as e:
+        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
+def _require_landed(repo_root: Path, branch: str, refs: list[str], base_ref: str) -> None:
+    """The mutating step's own guard (§B.3): every resolved ref's changes must
+    be present on `base_ref`, or exit 2 naming the missing paths."""
+    missing: list[str] = []
+    for ref in refs:
+        with _refuse_on_isolation_error():
+            verdict = branch_changes_present(subprocess_runner, repo_root, ref, base_ref)
+        missing.extend(p for p in verdict.missing if p not in missing)
+    if missing:
+        err_console.print(
+            f"refusing to archive — {branch} has changes not on {base_ref}:", soft_wrap=True
+        )
+        for path in missing:
+            err_console.print(f"  missing: {path}", soft_wrap=True)
+        err_console.print(
+            f"check it with `fr isolation verify-merge --branch {branch}`", soft_wrap=True
+        )
+        raise typer.Exit(2)
+
+
+def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> None:
+    """`fr archive --branch <b>` (2026-09-28-closeout-always §B)."""
+    evidence = merge_evidence(repo_root, fetch=True)
+    if evidence.ref is None:
+        err_console.print(
+            f"refusing to archive — no default ref: {evidence.ref_error}", soft_wrap=True
+        )
+        raise typer.Exit(2)
+    base_ref = evidence.ref.ref
+    remote = base_ref.split("/", 1)[0]
+    refs = _branch_refs_or_exit(repo_root, branch, remote)
+    _require_landed(repo_root, branch, refs, base_ref)
+    _note_fetch_error(evidence)
+
+    with _refuse_on_isolation_error():
+        changed = sorted(
+            {
+                p
+                for ref in refs
+                for p in branch_changed_paths(subprocess_runner, repo_root, ref, base_ref)
+            }
+        )
+    artifacts = branch_artifacts(repo_root, changed)
+    if not artifacts:
+        typer.echo(f"nothing to archive for {branch}")
+        return
+
+    gh = _make_gh_client()
+    moved_plans: list[str] = []
+    for a in _of_kind(artifacts, "plan"):
+        reason = _archive_branch_plan(repo_root, a.path, gh, evidence)
+        if reason is None:
+            moved_plans.append(a.path.name)
+            _echo_archived(a.path, IMPLEMENTED_REL / "plans" / a.path.name)
+        else:
+            _echo_held(a.path, reason)
+
+    spec_dsts = _archive_branch_specs(
+        repo_root,
+        _of_kind(artifacts, "spec"),
+        gh,
+        no_spec_sweep=no_spec_sweep,
+        run_sweep=bool(moved_plans),
+    )
+
+    moved_followers = False
+    for a in artifacts:
+        if a.kind in ("plan", "spec"):
+            continue
+        outcome = _archive_follower(repo_root, a)
+        if isinstance(outcome, Path):
+            moved_followers = True
+            _echo_archived(a.path, outcome)
+        else:
+            _echo_held(a.path, outcome)
+
+    if moved_plans or spec_dsts or moved_followers:
+        only_plans = frozenset(moved_plans) | plans_referencing_specs(repo_root, spec_dsts)
+        _repair_in_passing(repo_root, only_plans)
+        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+
+
+def _note_fetch_error(evidence: MergeEvidence) -> None:
+    if evidence.fetch_error:
+        err_console.print(
+            f"note: {evidence.fetch_error} — judging merge state from the local "
+            f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
+            soft_wrap=True,
+        )
+
+
+def _of_kind(artifacts: list[BranchArtifact], kind: str) -> list[BranchArtifact]:
+    return [a for a in artifacts if a.kind == kind]
+
+
+def _echo_archived(src: Path, dst: Path) -> None:
+    typer.echo(f"  archived: {src} -> {dst}")
+
+
+def _echo_held(path: Path, reason: str) -> None:
+    typer.echo(f"  held: {path} — {reason}")
+
+
+def _archive_branch_plan(
+    repo_root: Path, plan_rel: Path, gh: GhClient, evidence: MergeEvidence
+) -> str | None:
+    """The single-plan path (gate, dirty check, move — which carries the
+    plan's run, usage and plan journal), with every refusal turned into a
+    held reason. `None` means the plan moved."""
+    target = repo_root / plan_rel
+    try:
+        report = build_plan_report(target, gh)
+    except PlanSchemaError as e:
+        return f"parse error: {e}"
+    blockers = archive_blockers(report.plan, report.observed, evidence)
+    if blockers:
+        return "; ".join(blockers)
+    if paths_dirty(repo_root, target):
+        return "worktree dirty at the plan path — commit or stash first"
+    try:
+        archive_plan_dir(repo_root, target)
+    except ArchiveError as e:
+        return str(e)
+    return None
+
+
+def _archive_branch_specs(
+    repo_root: Path,
+    specs: list[BranchArtifact],
+    gh: GhClient,
+    *,
+    no_spec_sweep: bool,
+    run_sweep: bool,
+) -> list[Path]:
+    """Run `spec_archive_sweep` once (§B.4 spec), print its moves, and hold
+    each branch spec it left live. Returns the moved specs' destinations."""
+    if no_spec_sweep:
+        for a in specs:
+            _echo_held(a.path, "spec sweep skipped")
+        return []
+    if not (specs or run_sweep):
+        return []
+    sweep = spec_archive_sweep(repo_root, gh)
+    for m in sweep.moves:
+        _echo_archived(m.src, m.dst)
+    for a in specs:
+        if (repo_root / a.path).exists():
+            prefix = f"{a.path.name}: "
+            note = next(
+                (n[len(prefix) :] for n in sweep.notes if n.startswith(prefix)),
+                "not every Implementation Plans row is archived yet",
+            )
+            _echo_held(a.path, note)
+    return [repo_root / m.dst for m in sweep.moves]
+
+
+def _archive_follower(repo_root: Path, a: BranchArtifact) -> Path | str:
+    """A journal/run/usage artifact's repo-relative destination when it is
+    archived — by its owner's move earlier in this run, or here — else the
+    reason it is held.
+
+    A follower with uncommitted edits is held, as a dirty plan path is:
+    `git mv` would stage the rename with the edit folded in (review p2 #4)."""
+    live = repo_root / a.path
+    if live.exists() and paths_dirty(repo_root, live):
+        return f"worktree dirty at {a.path} — commit or stash first"
+    if a.kind == "journal":
+        return _archive_branch_journal(repo_root, a)
+    run_id = a.path.stem
+    dst = (
+        archived_run_path(repo_root, run_id)
+        if a.kind == "run"
+        else archived_usage_path(repo_root, run_id)
+    )
+    if not (repo_root / a.path).exists():  # its plan's move carried it
+        return dst.relative_to(repo_root)
+    cursor = run_path(repo_root, run_id)
+    if not cursor.exists():
+        cursor = archived_run_path(repo_root, run_id)
+    plan = emitted_plan(cursor)
+    if not plan:
+        return "follows no recorded plan"
+    if (repo_root / plan).exists():
+        return f"follows plan {plan}, still live"
+    if not (repo_root / IMPLEMENTED_REL / "plans" / Path(plan).name).is_dir():
+        return f"follows plan {plan}, which is neither live nor archived"
+    # The orphan rule (§C): its plan is already archived, so it follows.
+    try:
+        archive_run_cursor(repo_root, run_id)
+    except ArchiveError as e:
+        return str(e)
+    if (repo_root / a.path).exists():
+        return f"plan {plan} is archived, but {dst.relative_to(repo_root)} already exists"
+    return dst.relative_to(repo_root)
+
+
+def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
+    """§B.4: a debug journal on the default ref is done (d2/d3); a plan or
+    spec journal follows its owner — moved when the owner moved in this run
+    (its move carried the journal) or is already archived, else held."""
+    scope = cast("JournalScope", a.owner)
+    slug = a.path.stem
+    dst = archived_journal_path(repo_root, scope, slug)
+    if not (repo_root / a.path).exists():  # its owner's move carried it
+        return dst.relative_to(repo_root)
+    if scope == "plan":
+        owner_archived = (repo_root / IMPLEMENTED_REL / "plans" / slug).is_dir()
+        owner = f"plan {slug}"
+    elif scope == "spec":
+        owner_archived = any(
+            (repo_root / IMPLEMENTED_REL / "specs" / name).is_file()
+            for name in (f"{slug}-design.md", f"{slug}.md")
+        )
+        owner = f"spec {slug}"
+    else:  # debug: on the default ref (§B.3 proved it) means done (d2/d3)
+        owner_archived, owner = True, ""
+    if not owner_archived:
+        return f"follows {owner}, still live or missing"
+    try:
+        archive_journal(repo_root, scope, slug)
+    except ArchiveError as e:  # a held reason, as for a plan (review p2 #3)
+        return str(e)
+    if journal_path(repo_root, scope, slug).exists():
+        return f"destination {dst.relative_to(repo_root)} already exists"
+    return dst.relative_to(repo_root)
+
+
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
@@ -97,6 +387,13 @@ def archive_command(
         "stranded live by an earlier run — e.g. a TBD slice removed after the plan "
         "moved, when no plan path can name the work anymore.",
     ),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Archive every live artifact this MERGED branch added or modified "
+        "(plans with their runs/usage/journals, specs, debug journals); "
+        "anything not ready is printed as `held:`, never a failure.",
+    ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
@@ -109,6 +406,18 @@ def archive_command(
     close-out whose plan moves already landed.
     """
     require_migrated_layout()
+    if branch is not None:
+        for conflicting, name in (
+            (plan_dir is not None, "plan_dir"),
+            (all_plans, "--all"),
+            (sweep_only, "--sweep-only"),
+            (force, "--force"),
+        ):
+            if conflicting:
+                err_console.print(f"--branch takes no {name} — it archives what the branch touched")
+                raise typer.Exit(2)
+        _archive_branch(resolve_repo_root(), branch, no_spec_sweep=no_spec_sweep)
+        return
     if sweep_only:
         for conflicting, name in (
             (plan_dir is not None, "plan_dir"),
@@ -143,12 +452,7 @@ def archive_command(
     gh = _make_gh_client()
     # One merge-evidence read per invocation, never per plan (#544).
     evidence = merge_evidence(repo_root, fetch=True)
-    if evidence.fetch_error:
-        err_console.print(
-            f"note: {evidence.fetch_error} — judging merge state from the local "
-            f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
-            soft_wrap=True,
-        )
+    _note_fetch_error(evidence)
 
     if all_plans:
         plans_root = repo_root / "docs" / "superpowers" / "plans"
@@ -239,6 +543,32 @@ def archive_command(
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 
+    # §C (2026-09-28-closeout-always): owed debug journals, orphan journals
+    # and orphan run cursors (+ usage) — after the plan loop and spec sweep
+    # above, as today, so an owner archived JUST NOW by this same --all run
+    # already counts. Recomputed here rather than reusing an earlier read:
+    # the plan/spec moves above changed the working tree `owed_artifacts`
+    # reads. Unaffected by --no-spec-sweep — none of these are specs.
+    owed_moved = False
+    if all_plans:
+        for o in owed_artifacts(repo_root, evidence).owed:
+            if o.kind in ("debug_journal", "orphan_journal"):
+                scope_slug = journal_scope_and_slug(o.path)
+                assert scope_slug is not None, o.path
+                scope, slug = scope_slug
+                journal_scope = cast("JournalScope", scope)
+                archive_journal(repo_root, journal_scope, slug)
+                _echo_archived(
+                    o.path,
+                    archived_journal_path(repo_root, journal_scope, slug).relative_to(repo_root),
+                )
+                owed_moved = True
+            elif o.kind == "orphan_run":
+                run_id = o.path.stem
+                archive_run_cursor(repo_root, run_id)
+                _echo_archived(o.path, archived_run_path(repo_root, run_id).relative_to(repo_root))
+                owed_moved = True
+
     # Repair in passing (2026-06-06 spec-path-repair): the move and the
     # ref normalization land in the same operator commit. One pass, whether
     # the sweep or a plan move (or both) triggered it (#710).
@@ -247,7 +577,7 @@ def archive_command(
 
     for s in skipped:
         typer.echo(f"  skipped: {s}")
-    if archived or specs_moved:
+    if archived or specs_moved or owed_moved:
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
     elif all_plans:
         typer.echo("nothing to archive.")

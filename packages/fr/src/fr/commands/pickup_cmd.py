@@ -10,8 +10,9 @@ from rich.console import Console
 
 from fr import parse
 from fr.commands.common import require_migrated_layout, resolve_repo_root
+from fr.git import ref_exists, remote_name
 from fr.parser import PlanSchemaError
-from fr.run.closeout import CloseoutNotReadyError, closeout_brief
+from fr.run.closeout import CloseoutNotReadyError, branch_closeout_brief, closeout_brief
 from fr.run.model import RunStateError, load_run_state
 
 if TYPE_CHECKING:
@@ -28,11 +29,17 @@ def pickup_command(
         None,
         "--run",
         help="Run id — print the closeout brief for a finished run's `fr pickup --run` "
-        "handoff instead of a phase's scope. Mutually exclusive with a plan dir/--phase.",
+        "handoff instead of a phase's scope. Mutually exclusive with a plan dir/--phase/--branch.",
+    ),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Branch name — print the close-out brief for this branch (no run cursor "
+        "required). Mutually exclusive with a plan dir/--phase/--run.",
     ),
 ) -> None:
-    """Output a phase's scope (markdown) for an agent, or a run's closeout
-    brief. No state mutation either way.
+    """Output a phase's scope (markdown) for an agent, or a close-out brief
+    for a run or a plain branch. No state mutation either way.
 
     Phase mode returns: phase title, all step text (full multi-line), PR
     title template, dependency reminder, pointer to `_prose.md` for
@@ -42,13 +49,18 @@ def pickup_command(
     self-contained closeout brief for a run whose `deliver` step is done —
     read by a brand-new session that inherits none of the delivering
     session's context.
+
+    `--branch` mode (spec 2026-09-28-closeout-always §D) returns the same
+    brief with no run cursor at all, for a branch that resolves locally or as
+    `<remote>/<branch>` — no fetch, so it never contacts the network.
     """
     require_migrated_layout()
 
     if run is not None:
-        if plan_dir is not None or phase is not None:
+        if plan_dir is not None or phase is not None or branch is not None:
             err_console.print(
-                "[red]--run cannot be combined with a plan dir or --phase — pick one mode[/red]"
+                "[red]--run cannot be combined with a plan dir, --phase or --branch — "
+                "pick one mode[/red]"
             )
             raise typer.Exit(2)
         repo_root = resolve_repo_root()
@@ -63,6 +75,17 @@ def pickup_command(
             err_console.print(f"[red]{e}[/red]")
             raise typer.Exit(2) from e
         typer.echo(brief)
+        return
+
+    if branch is not None:
+        if plan_dir is not None or phase is not None:
+            err_console.print(
+                "[red]--branch cannot be combined with a plan dir or --phase — pick one mode[/red]"
+            )
+            raise typer.Exit(2)
+        repo_root = resolve_repo_root()
+        _refuse_unresolvable_branch(repo_root, branch)
+        typer.echo(branch_closeout_brief(repo_root, branch))
         return
 
     if plan_dir is None or phase is None:
@@ -123,6 +146,34 @@ def pickup_command(
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))
+
+
+def _refuse_unresolvable_branch(repo_root: Path, branch: str) -> None:
+    """Exit 2 when `branch` resolves neither locally nor as `<remote>/<b>`
+    (spec 2026-09-28-closeout-always §D) — checked with NO fetch, unlike
+    `fr archive --branch`'s `resolve_branch_refs`: this only decides whether
+    to print a brief, never whether to move anything, so a network round trip
+    buys nothing here."""
+    if ref_exists(repo_root, branch):
+        return
+    remote = remote_name(repo_root)
+    if not isinstance(remote, str):
+        # Never guess a remote the repo may not have (review p4-r1): say why
+        # the remote-tracking ref could not be consulted.
+        why = "this repo has no remote" if remote is None else remote.reason
+        err_console.print(
+            f"branch {branch} does not resolve locally, and no remote-tracking ref "
+            f"could be checked: {why}",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if ref_exists(repo_root, f"{remote}/{branch}"):
+        return
+    err_console.print(
+        f"branch {branch} resolves neither locally nor as {remote}/{branch}",
+        soft_wrap=True,
+    )
+    raise typer.Exit(2)
 
 
 def _record_section(plan: object, phase: int) -> list[str]:

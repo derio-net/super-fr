@@ -395,7 +395,9 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 1 -> 2 for `Row.verify` (spec
             # `2026-09-28-requirements-traceability-design` §H), migration
             # `fr.artifacts.matrix_verify`; `Matrix.schema_version` added with it.
-            current_version=2,
+            # 2 -> 3 for `Row.visual` (spec `2026-09-28-ui-visual-evidence-design`
+            # §G), migration `fr.artifacts.matrix_visual`.
+            current_version=3,
             locator="docs/acceptance/matrix.yaml",
             stamp="`schema_version` in `matrix.yaml`",
             read_stamp=_read_yaml_stamp,
@@ -432,8 +434,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # §3.B), migration `fr.artifacts.record_questions`; 2 -> 3 for
             # `input`/`verify`/`unconfirmed` (spec
             # `2026-09-28-requirements-traceability-design` §H), migration
-            # `fr.artifacts.record_input_unconfirmed`.
-            current_version=3,
+            # `fr.artifacts.record_input_unconfirmed`; 3 -> 4 for
+            # `AcceptanceItem.visual`/`StepRecord.visual` (spec
+            # `2026-09-28-ui-visual-evidence-design` §G), migration
+            # `fr.artifacts.record_visual`.
+            current_version=4,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

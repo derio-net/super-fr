@@ -51,6 +51,13 @@ def render_row_block(row: Row) -> str:
     }
     if row.verify is not None:  # absent when unset: older rows stay byte-identical
         data["verify"] = row.verify
+    if row.visual is not None:  # absent when unset: older rows stay byte-identical
+        visual_data: dict[str, list[str]] = {}
+        if row.visual.states:
+            visual_data["states"] = list(row.visual.states)
+        if row.visual.interactions:
+            visual_data["interactions"] = list(row.visual.interactions)
+        data["visual"] = visual_data
     block = yaml.dump([data], default_flow_style=False, sort_keys=False, allow_unicode=True)
     return "".join(
         ("  " + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")

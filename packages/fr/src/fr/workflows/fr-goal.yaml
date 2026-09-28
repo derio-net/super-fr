@@ -125,6 +125,13 @@ steps:
         needs: [spec, plan]
         tier: from_phase
         emits: [journal:plan, plan:ticks]
+        # `visual` (spec 2026-09-28-ui-visual-evidence §C) is DERIVED from the
+        # record's `visual:` section: for each `visual` acceptance row the phase
+        # header links (no `verify: post-merge`), shots covering every named
+        # state/interaction, each opened — and any named capture script re-run —
+        # in the holder's transcript (the orchestrator's when inline) since the
+        # unit opened. No such row: `visual=none`.
+        evidence: [visual]
       - id: review-phase
         kind: agent
         # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
@@ -172,7 +179,10 @@ steps:
         # scope — true, but not caused by this change. The orchestrator journals
         # the tag as `--review-scope`, fixes every in-scope finding, and files
         # the rest with `fr journal resolve --state out-of-scope`.
-        evidence: [review, reviewer, findings]
+        # `visual` (spec 2026-09-28-ui-visual-evidence §C): the REVIEWER's own
+        # fresh screenshots, opened in the reviewer's transcript — never the
+        # executor's.
+        evidence: [review, reviewer, findings, visual]
 
   - id: journal-check
     kind: cli
@@ -202,4 +212,7 @@ steps:
     # step's own record moves. A row declaring `verify: post-merge` (d11) is
     # counted and skipped: only a live run after merge can prove it, and the
     # PR body lists it under `## Post-merge verification owed`.
-    evidence: [tests, proportionality, requirement-rows]
+    # `visual` (spec 2026-09-28-ui-visual-evidence §C): for the rows citing the
+    # run's spec, screenshots captured and opened by the orchestrator itself
+    # during delivery, on the delivered branch.
+    evidence: [tests, proportionality, requirement-rows, visual]

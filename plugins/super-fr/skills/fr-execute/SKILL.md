@@ -49,12 +49,14 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    ```
    Markdown: title, `Depends on:` (not yet `Complete` → stop, report), tasks + steps, `_prose.md`. In
    an fr-goal run it ends with a `## Step record`: keep THAT (ticks, `refactor:`, journal) instead of
-   steps 3–4's verbs — the orchestrator's `fr run resolve --record` applies it in one commit.
+   steps 4–5's verbs — the orchestrator's `fr run resolve --record` applies it in one commit.
 
 2. **Implement** (`superpowers:executing-plans`, parallel phases: `subagent-driven-development`):
    end every task red → green → refactor or record `no-refactor-because: P<n>.T<m>` in the journal — `fr journal add --scope plan` requires `--phase N` or `--global`, so tag it explicitly; `--complete-phase` refuses a phase with a task that has neither. **Context discipline:** don't re-derive from the code what the handoff already states, read the narrowest thing that answers the question, and never paste verbatim tool output into your return — cache reads accumulate as context size summed over turns, so your own re-reads dominate the cost (super-fr#464).
 
-3. **Tick steps as you complete them:**
+3. **Browser check** — when the phase's row carries `visual`: capture every named state and interaction, limits included, preferring a capture script (re-run it, don't re-drive by hand); open every screenshot with an image read — a script's exit code is never the evidence; fill the record's `visual:` section. Write shots where both `fr run resolve` (on the host) and the reading agent see them: a git-ignored directory of the worktree (devcontainer mode's bind mount reaches it) or a scratch dir outside the repo — never the container's own `/tmp`, where take 9's screenshots were lost, and never `<run>.records/`. **Harness — image read:** on Claude Code that is the file-read tool, recorded in the transcript; OpenCode and Hermes read it with their own tool, unobserved until their readers recognise one.
+
+4. **Tick steps as you complete them:**
    ```bash
    fr plan edit <plan-dir> --tick P<n>.T<n>.S<n> --state x
    # or, to record a deliberate skip:
@@ -70,26 +72,24 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    phase. Never do that work inline instead: the dispatch existed to put it in
    a context blind to this one, so doing it here destroys that (#428).
 
-4. **Mark the phase complete (after every step is ticked):**
+5. **Mark the phase complete (after every step is ticked):**
    ```bash
    fr plan edit <plan-dir> --complete-phase N
    # manual phases require --note describing what was done
    fr plan edit <plan-dir> --complete-phase N --note "<runbook ref>"
    ```
-   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now
-   (`not-implemented` → `skipped`/`ci`), citing the test refs; the CLI warns
-   on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
-   (`fr acceptance add`) — defended at PR time, never silent scope drift.
+   A phase carrying `acceptance: [row-ids]` — flip those matrix rows now (`not-implemented` → `skipped`/`ci`), citing the test refs; the CLI warns on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
-5. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
+6. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
    `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
    mode, do NOT open a per-phase PR:** push the branch only; the single PR is
    fr-goal's step 8, opened as a draft by the orchestrator *after* its review
    pass — opening here reorders deliver ahead of review and reintroduces the
-   #320 merge-race. Per-phase PRs are the standalone **dispatched** (Issue/VK)
-   flow only.
+   #320 merge-race; with no PR here there is nothing to relay. Per-phase PRs are the standalone
+   **dispatched** (Issue/VK) flow only — there, once the PR opens, relay `closeout: fr pickup --branch
+   <phase-branch>` verbatim (a non-final phase's brief holds the plan until the last phase lands).
 
-6. **Reconcile GitHub state:**
+7. **Reconcile GitHub state:**
    ```bash
    fr apply <plan-dir>           # preview the projected mutations
    fr apply <plan-dir> --yes     # push label / state changes
@@ -102,9 +102,9 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
 ## Constraints
 
 - Don't touch other phases. One phase = one PR, except fr-goal LOCAL mode
-  (step 5's caveat) — never open a per-phase PR there.
+  (step 6's caveat) — never open a per-phase PR there.
 - Stop if blocked — report what's missing.
-- A dispatch instruction is a BLOCKER, never a tick or a skip (step 3).
+- A dispatch instruction is a BLOCKER, never a tick or a skip (step 4).
 - Step IDs: `P<n>.T<n>.S<n>`.
 
 ## v1 plan migration

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 __all__ = ["RecordBrief", "in_progress_summary", "record_brief", "render_template"]
 
-_DERIVED = frozenset({"findings", "proportionality"})
+_DERIVED = frozenset({"findings", "proportionality", "visual"})
 _EMITTED_NAMES = ("spec", "plan", "pr")
 
 
@@ -106,6 +106,14 @@ def render_template(
     lines.append("evidence: {}")
     if owed:
         lines.append(f"#   owed: {', '.join(f'{n}: <id>' for n in owed)}")
+    if "visual" in evidence:
+        # 2026-09-28-ui-visual-evidence §B/§C: fr derives `visual` from this
+        # section for every `visual` row the unit owes (none owed: leave it out).
+        lines.append("# visual:              # one entry per owed `visual` acceptance row")
+        lines.append("#   - row: <row-id>")
+        lines.append("#     script: <capture script, optional — re-run it this unit>")
+        lines.append("#     shots:           # git-ignored or outside the repo; opened this unit")
+        lines.append("#       - {path: <image>, shows: [<state or interaction>, ...]}")
     return "\n".join(lines) + "\n"
 
 

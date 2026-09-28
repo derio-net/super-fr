@@ -1,0 +1,107 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Prose — the browser check in the skills, mirrors, explainer
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - visual-evidence-browser-check-prose
+  tier: standard
+  files:
+  - plugins/super-fr/skills/fr-execute/SKILL.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - tests/unit/test_skill_visual_evidence.py
+  estimate_lines: 300
+tasks:
+- number: 1
+  title: The browser-check step in the skills and the executor agent
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_skill_visual_evidence.py — fr-execute's SKILL.md has a "Browser check"
+      step naming every named state and interaction at its limits, a capture script preferred and
+      re-run, every screenshot opened with an image read, a script's exit code never the evidence,
+      and the record's `visual:` section; fr-phase-executor.md's return contract names `visual:`;
+      fr-goal §1 names `visual` on UI rows, §5 the executor's browser check, §6 the reviewer driving
+      the UI or re-running the script and opening its own screenshots, §8 fresh capture at deliver;
+      fr-brainstorming §3 names `visual` with states and interactions (limits asked when unstated);
+      fr-plan links the visual row on the phase that builds the UI. Fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: write that prose, matching each file's voice and density (spec §B location rule, §D,
+      §E). A harness-specific tool (Claude Code's file-read tool for an image read) is named only in
+      a "**Harness — …:**" clause, so tests/unit/test_tripwire_skill_tool_neutrality.py stays green.
+      Tests green.
+  - id: P3.T1.S3
+    text: |-
+      Run `uv run --no-project python scripts/sync-opencode.py` and
+      `uv run --no-project python scripts/sync-hermes.py`, commit the regenerated mirrors, then
+      `uv run pytest -q --no-cov tests/unit -k "opencode or hermes or neutrality or install"` green.
+- number: 2
+  title: The explainer
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      In docs/explainers/01-fr-goal.md's "evidence you did not write yourself" passage (~line 205)
+      add one paragraph in its voice: a UI requirement's row names its states and controls; the
+      executor, the reviewer and delivery each open their own screenshots, which the tool confirms
+      from the transcript, and a script's pass/fail is not enough; a reusable capture script is
+      preferred so reruns are cheap; the tool checks coverage and opening, never what the image
+      shows. Regenerate per .claude/rules/explainers-currency.md: from `/`, first re-render the
+      UNMODIFIED .md (a copy from HEAD) and confirm byte-identity with the committed .html, then
+      render the edited .md with the `uv run --isolated --no-project --with markdown --with pyyaml`
+      command from that rule. `uv run pytest -q --no-cov tests/unit/test_tripwire_explainers_fresh.py`
+      green. If byte-identity cannot be reached, say so in the step note and leave the .html owed.
+- number: 3
+  title: Follow-up issue and full verification
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      File the OpenCode follow-up named in the spec's Non-goals:
+      `gh issue create --repo derio-net/super-fr --title "visual evidence: recognise a file read in OpenCode's session store"`
+      with a body naming the unobserved contract, `_opencode_wrote_since` as the reader to extend,
+      and spec 2026-09-28-ui-visual-evidence §C. Put its number in the step note.
+  - id: P3.T3.S2
+    text: |-
+      `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the AGENTS.md mypy
+      command, and `uv run pytest -q --no-cov -n auto > $TMPDIR/p3-suite.log 2>&1` (backgrounded per
+      the long_commands rule if needed): all green, counts in the step note.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T21:25:52+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T21:25:52+00:00'
+    note: null
+    observed_prs: []

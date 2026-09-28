@@ -49,11 +49,15 @@ __all__ = [
     "FETCH_TIMEOUT_SECONDS",
     "ArchiveError",
     "archive_blockers",
+    "archive_journal",
     "DefaultRef",
     "MergeEvidence",
     "SpecSweepResult",
     "archive_plan_dir",
+    "archive_run_cursor",
     "completed_unarchived_plans",
+    "deliver_done",
+    "emitted_plan",
     "find_run_for_plan",
     "landed_for",
     "merge_evidence",
@@ -435,6 +439,42 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     return None
 
 
+def emitted_plan(cursor: Path) -> str | None:
+    """The plan path a run cursor's steps recorded as `emitted.plan`, or
+    `None` when the file is unreadable, not a cursor of any version, or names
+    no plan. The reverse question of `find_run_for_plan`, read the same way —
+    by data, never by a name convention — so `fr archive --branch` can say
+    which plan an unmoved run or usage file follows (2026-09-28-closeout-always
+    §B.4)."""
+    try:
+        state = _read_any_version(cursor.read_text())
+    except OSError:
+        return None
+    if state is None:
+        return None
+    for record in state.steps.values():
+        plan = (record.emitted or {}).get("plan")
+        if plan:
+            return str(plan).rstrip("/")
+    return None
+
+
+def deliver_done(cursor: Path) -> bool:
+    """True iff `cursor`'s `deliver` step is recorded `done`, read the same
+    way as `emitted_plan` (any cursor version, never the live model alone).
+    `False` when the file is unreadable, not a cursor, or has no `deliver`
+    step — an unfinished or unrecognized cursor is never treated as orphaned
+    (2026-09-28-closeout-always §C's no-named-plan orphan-run rule)."""
+    try:
+        state = _read_any_version(cursor.read_text())
+    except OSError:
+        return False
+    if state is None:
+        return False
+    record = state.steps.get("deliver")
+    return record is not None and record.state == "done"
+
+
 def _read_any_version(text: str) -> RunState | RunStateV6 | RunStateV4 | None:
     """`text` as a run cursor of ANY version, or `None` if it is not one.
 
@@ -473,10 +513,26 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
     run_id = find_run_for_plan(repo_root, plan_rel)
     if run_id is None:
         return
+    if run_path(repo_root, run_id).exists():
+        archive_run_cursor(repo_root, run_id)
+
+
+def archive_run_cursor(repo_root: Path, run_id: str) -> None:
+    """Move run `run_id`'s cursor to implemented/runs/, carrying its usage
+    file (`_archive_usage`). With the cursor already archived, a usage file
+    left live is moved on its own. A no-op when the destination already holds
+    a cursor (a re-run) — the caller sees the live file remain.
+
+    Public so `fr archive --branch` can move an orphan cursor — one whose
+    `emitted.plan` is already archived (2026-09-28-closeout-always §C's
+    orphan rule; review p2 #2) — through the same path a plan move uses.
+    """
     src = run_path(repo_root, run_id)
-    if not src.exists():
-        return
     dst = archived_run_path(repo_root, run_id)
+    if not src.exists():
+        if dst.exists():
+            _archive_usage(repo_root, dst, run_id)
+        return
     if dst.exists():
         return
     _archive_usage(repo_root, src, run_id)
@@ -510,7 +566,7 @@ def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
     _git_mv(repo_root, rel, dst.relative_to(repo_root))
 
 
-def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
+def archive_journal(repo_root: Path, scope: str, slug: str) -> None:
     """Move a scoped journal to implemented/journals/<scope-dir>/.
 
     A no-op when no journal exists (back-compat with pre-journal plans/specs)
@@ -526,6 +582,11 @@ def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
+
+
+# The internal name every existing caller uses; `archive_journal` is the
+# public one for callers outside this module (review p2 #5).
+_archive_journal = archive_journal
 
 
 def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:

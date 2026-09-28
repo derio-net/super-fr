@@ -112,3 +112,19 @@ def test_deliver_tests_provenance_is_enforced_on_claude_and_opencode_only() -> N
 def test_the_parity_check_passes() -> None:
     result = CliRunner().invoke(app, ["harness", "parity", "--check"])
     assert result.exit_code == 0, result.output
+
+
+def test_visual_evidence_row_follows_spec_section_f() -> None:
+    """Spec 2026-09-28-ui-visual-evidence §F: an evidence gate like
+    deliver-tests-provenance — enforced per mode on Claude Code, advisory on
+    OpenCode and Hermes (checks 4–5 recorded unobserved), unsupported elsewhere."""
+    row = _shipped("visual-evidence")
+    assert row.kind == "interaction"
+    claude = row.harnesses["claude-code"]
+    assert claude.modes is not None and set(claude.modes) == set(MODES)
+    assert {claude.state_in(m) for m in MODES} == {"enforced"}
+    assert "host" in (claude.modes["devcontainer"].scope_note or "")
+    for harness in ("opencode", "hermes"):
+        assert row.harnesses[harness].state == "advisory", harness
+    for harness in ("codex", "copilot-cli"):
+        assert row.harnesses[harness].state == "unsupported", harness

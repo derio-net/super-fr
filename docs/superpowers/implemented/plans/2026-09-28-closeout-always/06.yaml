@@ -1,0 +1,57 @@
+schema_version: 2
+phase:
+  number: 6
+  title: One-time sweep of owed artifacts
+  tag: agentic
+  depends_on:
+  - 3
+  - 5
+  tracking_issue: null
+  acceptance:
+  - debug-journal-sweep-keeps-refs
+  tier: standard
+  files:
+  - docs/superpowers/journals/debug/*
+  - docs/superpowers/implemented/journals/debug/*
+  - docs/superpowers/journals/*
+  - docs/superpowers/implemented/*
+  - docs/superpowers/plans/*
+  - docs/superpowers/specs/*
+  - docs/superpowers/runs/*
+  - docs/acceptance/*
+  - AGENTS.md
+  - scripts/install.sh
+  - tests/integration/test_install_marketplace_namespace.py
+  - tests/unit/test_plan_validator_wrapper_rename.py
+  estimate_lines: 120
+tasks:
+- number: 1
+  title: Sweep with the new code
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      Run `uv run fr status` in the workspace and record the owed set it lists (kind + path) in the step note. Then `uv run fr archive --all`; compare the moves to the recorded owed set — any move outside it is a finding in the step record, not silently kept. The run's own spec/plan/journals must NOT move (they are not on the default ref).
+  - id: P6.T1.S2
+    text: |-
+      Update the four prose mentions of `docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md` (AGENTS.md, scripts/install.sh comment, the two test docstrings) to its implemented/journals/debug/ path. Run `uv run fr acceptance report --deterministic` and `uv run fr acceptance check` (must pass: matrix refs resolve through archive_twin), then `uv run fr validate artifacts`.
+  - id: P6.T1.S3
+    text: |-
+      Commit every move as `chore: sweep owed artifacts (#733)` and record in the step note the moves by kind with counts (the deliver PR body cites it). Run `uv run pytest -q --no-cov -n auto` (full suite) — green.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T22:04:26+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T22:04:26+00:00'
+      note: null
+    P6.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T22:04:26+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T22:04:26+00:00'
+    note: null
+    observed_prs: []

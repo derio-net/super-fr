@@ -621,6 +621,31 @@ def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base
         fork, upper = earlier, f"{landing}^1"
 
 
+def _branch_fork_and_changes(
+    run: Runner, repo_root: Path, branch: str, base_ref: str
+) -> tuple[str, list[str]]:
+    """(fork point, changed names) — the one merge-base/fork computation path
+    shared by `branch_changed_paths` and `branch_changes_present`, so the two
+    can never drift (#696/#727/#716 all hardened this diff)."""
+    mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
+    if mb.returncode != 0:
+        raise IsolationError(
+            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
+            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
+        )
+    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
+    changed = _diff_names(run, repo_root, [merge_base, branch])
+    return merge_base, changed
+
+
+def branch_changed_paths(run: Runner, repo_root: Path, branch: str, base_ref: str) -> list[str]:
+    """The paths `branch` added, modified or deleted since its fork from
+    `base_ref` — the same `changed` list `branch_changes_present` diffs
+    (§A, 2026-09-28-closeout-always spec). The first half of that function,
+    lifted out for close-out's "what did the branch touch"."""
+    return _branch_fork_and_changes(run, repo_root, branch, base_ref)[1]
+
+
 def branch_changes_present(
     run: Runner, repo_root: Path, branch: str, base_ref: str
 ) -> MergeVerification:
@@ -647,14 +672,7 @@ def branch_changes_present(
     Conservative: anything it cannot positively confirm reads as missing (a safe
     "STOP and check", never a false "verified").
     """
-    mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
-    if mb.returncode != 0:
-        raise IsolationError(
-            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
-            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
-        )
-    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
-    changed = _diff_names(run, repo_root, [merge_base, branch])
+    merge_base, changed = _branch_fork_and_changes(run, repo_root, branch, base_ref)
     if not changed:
         return MergeVerification(changed=[], missing=[], changes_present=True)
     differing = _diff_names(run, repo_root, [branch, base_ref, "--", *changed])
@@ -733,6 +751,83 @@ class BranchDecision:
 # A git call that talks to origin is bounded and never prompts (#438 review).
 _NETWORK_TIMEOUT_S = 60.0
 _BATCH_SSH = "ssh -o BatchMode=yes -o ConnectTimeout=15"
+
+
+def network_env(run: Runner, repo_root: Path) -> dict[str, str]:
+    """The environment for a git call that talks to origin: never prompt
+    (no terminal credential prompt; ssh in BatchMode with a connect
+    timeout) — unless the operator already chose an ssh command, which a
+    GIT_SSH_COMMAND of ours would silently override."""
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    if not env.get("GIT_SSH_COMMAND") and not env.get("GIT_SSH"):
+        configured = run(["git", "config", "--get", "core.sshCommand"], cwd=repo_root)
+        if configured.returncode != 0 or not (configured.stdout or "").strip():
+            env["GIT_SSH_COMMAND"] = _BATCH_SSH
+    return env
+
+
+def run_network(
+    run: Runner, repo_root: Path, argv: list[str], cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """A bounded, non-interactive git call against origin. A timeout comes
+    back as a non-zero, non-2 exit — `unknown`, never `absent`."""
+    return run(
+        argv, cwd=cwd or repo_root, env=network_env(run, repo_root), timeout=_NETWORK_TIMEOUT_S
+    )
+
+
+def resolve_branch_refs(
+    run: Runner, repo_root: Path, branch: str, remote: str
+) -> tuple[list[str], bool]:
+    """Fetch `<branch>` from `<remote>`, and report whether that fetch is
+    trustworthy as `branch_fetched`.
+
+    The fetch uses an EXPLICIT refspec (`+refs/heads/<b>:refs/remotes/
+    <remote>/<b>`, like `_remote_view`), not a bare `git fetch <remote>
+    <branch>` (C2 review, #665/#598): in a `--single-branch` clone the
+    configured fetch refspec only covers the default branch, so a bare
+    fetch of another branch updates FETCH_HEAD only, never the
+    remote-tracking ref — leaving `<remote>/<branch>` stale or entirely
+    absent and hiding a commit pushed to the real remote branch (from a
+    different clone) after the merge.
+
+    A failed fetch is not automatically a fallback: GitHub deletes a
+    merged branch by default, and THAT case — `git ls-remote --heads`
+    confirms exit 2 for the EXACT `refs/heads/<b>` (a bare name
+    pattern-matches `foo/<b>` too) — is the one situation where the
+    refs this clone still has (typically the local branch) are still
+    trustworthy. Any other outcome (`ls-remote` finds the branch, or
+    `ls-remote` itself fails) means the branch's true remote state is
+    unknown, so `branch_fetched` is False and the caller must not verify
+    off a possibly-stale ref alone.
+
+    Module-level (not bound to a workspace's ops object) so a caller with no
+    state file — `fr archive --branch` (2026-09-28-closeout-always §B.2) —
+    resolves refs exactly as verify-merge does. Returns every ref among
+    `<remote>/<branch>` and the local `<branch>` that resolves; an empty list
+    means neither does, and the caller decides how to refuse.
+    """
+    tracking = f"refs/remotes/{remote}/{branch}"
+    fetch = run_network(
+        run, repo_root, ["git", "fetch", remote, f"+refs/heads/{branch}:{tracking}"]
+    )
+    branch_fetched = fetch.returncode == 0
+    if not branch_fetched:
+        ls = run_network(
+            run, repo_root, ["git", "ls-remote", "--exit-code", remote, f"refs/heads/{branch}"]
+        )
+        branch_fetched = ls.returncode == 2
+    refs = [
+        cand
+        for cand in (f"{remote}/{branch}", branch)
+        if run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{cand}^{{commit}}"],
+            cwd=repo_root,
+        ).returncode
+        == 0
+    ]
+    return refs, branch_fetched
 
 
 def _why(what: str, result: subprocess.CompletedProcess[str]) -> str:
@@ -1392,45 +1487,9 @@ class LocalWorktreeDevcontainerTarget:
         return res
 
     def _branch_refs(self, branch: str, remote: str) -> tuple[list[str], bool]:
-        """Fetch `<branch>` from `<remote>`, and report whether that fetch is
-        trustworthy as `branch_fetched`.
-
-        The fetch uses an EXPLICIT refspec (`+refs/heads/<b>:refs/remotes/
-        <remote>/<b>`, like `_remote_view`), not a bare `git fetch <remote>
-        <branch>` (C2 review, #665/#598): in a `--single-branch` clone the
-        configured fetch refspec only covers the default branch, so a bare
-        fetch of another branch updates FETCH_HEAD only, never the
-        remote-tracking ref — leaving `<remote>/<branch>` stale or entirely
-        absent and hiding a commit pushed to the real remote branch (from a
-        different clone) after the merge.
-
-        A failed fetch is not automatically a fallback: GitHub deletes a
-        merged branch by default, and THAT case — `git ls-remote --heads`
-        confirms exit 2 for the EXACT `refs/heads/<b>` (a bare name
-        pattern-matches `foo/<b>` too) — is the one situation where the
-        refs this clone still has (typically the local branch) are still
-        trustworthy. Any other outcome (`ls-remote` finds the branch, or
-        `ls-remote` itself fails) means the branch's true remote state is
-        unknown, so `branch_fetched` is False and the caller must not verify
-        off a possibly-stale ref alone.
-        """
-        tracking = f"refs/remotes/{remote}/{branch}"
-        fetch = self._run_network(["git", "fetch", remote, f"+refs/heads/{branch}:{tracking}"])
-        branch_fetched = fetch.returncode == 0
-        if not branch_fetched:
-            ls = self._run_network(
-                ["git", "ls-remote", "--exit-code", remote, f"refs/heads/{branch}"]
-            )
-            branch_fetched = ls.returncode == 2
-        refs = [
-            cand
-            for cand in (f"{remote}/{branch}", branch)
-            if self.run(
-                ["git", "rev-parse", "--verify", "--quiet", f"{cand}^{{commit}}"],
-                cwd=self.repo_root,
-            ).returncode
-            == 0
-        ]
+        """`resolve_branch_refs`, raising IsolationError when neither ref
+        resolves (verify-merge has nothing to check)."""
+        refs, branch_fetched = resolve_branch_refs(self.run, self.repo_root, branch, remote)
         if not refs:
             raise IsolationError(
                 f"cannot resolve branch ref {branch!r} (neither local nor {remote}/{branch})."
@@ -2399,26 +2458,14 @@ class LocalWorktreeDevcontainerTarget:
         return sha if result.returncode == 0 and sha else None
 
     def _network_env(self) -> dict[str, str]:
-        """The environment for a git call that talks to origin: never prompt
-        (no terminal credential prompt; ssh in BatchMode with a connect
-        timeout) — unless the operator already chose an ssh command, which a
-        GIT_SSH_COMMAND of ours would silently override."""
-        env = dict(os.environ)
-        env["GIT_TERMINAL_PROMPT"] = "0"
-        if not env.get("GIT_SSH_COMMAND") and not env.get("GIT_SSH"):
-            configured = self.run(["git", "config", "--get", "core.sshCommand"], cwd=self.repo_root)
-            if configured.returncode != 0 or not (configured.stdout or "").strip():
-                env["GIT_SSH_COMMAND"] = _BATCH_SSH
-        return env
+        return network_env(self.run, self.repo_root)
 
     def _run_network(
         self, argv: list[str], cwd: Path | None = None
     ) -> subprocess.CompletedProcess[str]:
         """A bounded, non-interactive git call against origin. A timeout comes
         back as a non-zero, non-2 exit — `unknown`, never `absent`."""
-        return self.run(
-            argv, cwd=cwd or self.repo_root, env=self._network_env(), timeout=_NETWORK_TIMEOUT_S
-        )
+        return run_network(self.run, self.repo_root, argv, cwd=cwd)
 
     def _remote_view(self, branch: str, no_fetch: bool) -> RemoteView:
         """Probe `origin/<B>`: `ls-remote --exit-code` (0 exists, 2 absent,

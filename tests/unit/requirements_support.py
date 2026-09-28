@@ -114,3 +114,25 @@ def seed_requirements(repo: Path, spec_rel: str, *, status: str = "skipped") -> 
         spec.write_text(text.rstrip("\n") + "\n" + REQUIREMENTS_SECTION)
     write_input_entry(repo, spec_rel)
     write_matrix(repo, [row(spec_rel, status=status)])
+
+
+def write_phase_splits(repo: Path, spec_rel: str, plan_slug: str, reasons: dict[int, str]) -> None:
+    """Record a `phase-split-<plan>-p<N>` spec-journal decision per phase
+    (spec `2026-09-28-phase-sizing-design.md` §B): what lets a multi-phase toy
+    plan whose phases link no requirement rows pass `fr plan self-review`'s
+    sizing gate once `seed_requirements` gives its spec a Requirements table.
+    Each title must start with a reason token (`tier:`, `risk-first:`,
+    `review-size:`, or `ask:`)."""
+    slug = spec_journal_slug(Path(spec_rel).stem)
+    for n, title in sorted(reasons.items()):
+        append_journal_entry(
+            journal_path(repo, "spec", slug),
+            slug,
+            JournalEntry(
+                kind="decision",
+                scope="spec",
+                id=f"phase-split-{plan_slug}-p{n}",
+                created=now(),
+                title=title,
+            ),
+        )

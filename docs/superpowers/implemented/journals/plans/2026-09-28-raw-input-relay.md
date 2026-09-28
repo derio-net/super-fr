@@ -1,0 +1,51 @@
+# Journal: 2026-09-28-raw-input-relay
+
+<!-- fr:journal kind=decision scope=plan id=plan-single-phase created=2026-09-28T19:42:32+00:00 phase=1 -->
+### plan-single-phase · decision · One agentic phase, tier standard (phase 1)
+
+The change is one pure module (fr.operator_input), two call sites (member brief, handoff), prose and mirrors. With one agentic phase no walking-skeleton marker is owed, and a second phase would only re-read the accumulating handoff. No member issue is a tracking_issue (batch delivery rule).
+
+<!-- fr:journal kind=discovery scope=plan id=oi-explainer-regenerated created=2026-09-28T19:55:07+00:00 phase=1 -->
+### oi-explainer-regenerated · discovery · Explainer 01-fr-goal.html regenerated (phase 1)
+
+The unmodified .md re-rendered byte-identical to the committed .html (from /, --isolated), so the edited .md was rendered over it. No regeneration is owed.
+
+<!-- fr:journal kind=discovery scope=plan id=oi-handoff-no-journal-phase-check created=2026-09-28T19:55:07+00:00 phase=1 -->
+### oi-handoff-no-journal-phase-check · discovery · With no plan journal the handoff skips the phase-existence check (phase 1)
+
+When the plan journal does not exist, `fr journal handoff` echoes only the operator-input section (or nothing) and does not validate that the phase exists, matching today's fail-open behaviour for a never-written journal.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-09-28T19:55:07+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+prose and mirrors only; the edits are one sentence each, nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t5 created=2026-09-28T19:55:07+00:00 phase=1 -->
+### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
+
+matrix reword, change fragment and gate run; no code to clean
+
+<!-- fr:journal kind=finding scope=plan id=r1-f1 created=2026-09-28T20:01:50+00:00 phase=1 state=fixed review_scope=in -->
+### r1-f1 · finding [fixed] (reviewer: in scope) · Two near-identical operator-input loaders word the unparseable-journal refusal differently (phase 1)
+
+Reviewer (Minor, in scope — added by this change): run_cmd._load_operator_input and journal_cmd._load_operator_input each catch JournalParseError, rebuild the journal path and exit 2 with different text; the spec's premise is one source.
+Verified: true. Fixed: fr.operator_input.load now raises OperatorInputUnreadableError (a JournalParseError subclass) carrying the one message "cannot relay the operator input: spec journal <path> is not parseable (...)"; both callers print it (markup-escaped) and exit 2. Tests assert the shared wording on both paths.
+
+<!-- fr:journal kind=finding scope=plan id=r1-f2 created=2026-09-28T20:01:50+00:00 phase=1 state=fixed review_scope=in -->
+### r1-f2 · finding [fixed] (reviewer: in scope) · No tests for the cross-repo/no-spec handoff and the no-journal + unparseable-plan fail-open branch (phase 1)
+
+Reviewer (Minor, in scope — test gap): spec §C names the cross-repo/no-spec case; the fail-open branch introduced by parsing the plan first was untested.
+Fixed: test_handoff_cross_repo_spec_has_no_section (a same-named local spec journal with input is NOT picked up) and test_handoff_no_plan_journal_and_unparseable_plan_stays_fail_open. The --redispatch path shares _advance_group's load before any abandon; left without a dedicated test (works by construction, reviewer agrees).
+
+<!-- fr:journal kind=finding scope=plan id=r1-f3 created=2026-09-28T20:01:50+00:00 phase=1 state=refuted review_scope=in -->
+### r1-f3 · finding [refuted] (reviewer: in scope) · One over-long line in the reworded explainer §6 paragraph (phase 1)
+
+Refuted: docs/explainers/01-fr-goal.md already carries many >100-char lines (e.g. 35, 49, 122, 548, 977), so the new line matches the file's convention, and the reviewer notes the render is unaffected. Rewrapping would force a re-render for no reader-visible change.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-28T20:01:50+00:00 phase=1 -->
+### review-phase-1 · review · phase 1 code review: 3 findings (2 fixed, 1 refuted), no input- findings (phase 1)
+
+Independent reviewer (dispatched subagent, not the implementer) reviewed 17a847ad..faec4dad against the spec and plan, with the brief's operator_input relayed verbatim. Verdict: ready to merge. It ran the targeted suite (458 passed) and the tripwire/mirror/explainer/acceptance subset (930 passed); both sync --check and fr acceptance report --check in sync.
+Findings: r1-f1 (fixed), r1-f2 (fixed), r1-f3 (refuted). Input-vs-spec (`input-`) findings: none — R1–R6 cover the input; d1–d5 honoured.
+Declined to judge: #773 clause fidelity; whether relays happen at runtime (d4/d5); brief size growth; .test_durations; stdout ordering beyond the added argument; plan/record content.
+Post-fix: targeted suite 460 passed.

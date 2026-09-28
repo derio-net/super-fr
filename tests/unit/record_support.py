@@ -39,6 +39,8 @@ LAST_BRIEF: dict[str, object] = {}
 """The `implement-phase phase/1` brief the last `started_run` printed."""
 SLUG = "2026-09-25-rec"
 PLAN_REL = f"docs/superpowers/plans/{SLUG}"
+SEEDED_ROW = "req-r1"
+"""The matrix row `requirements_support.seed_requirements` writes."""
 fr = _fr
 
 
@@ -100,6 +102,10 @@ def _plan(root: Path) -> None:
                     },
                 ),
                 skeleton=True,
+                # The row `seed_requirements` writes (citing R1), so the
+                # run-walk's plan-review exercises the sizing gate's normal
+                # floor path (2026-09-28 phase-sizing §B, review r7).
+                acceptance=(SEEDED_ROW,),
             )
         ],
         prose="# rec\n",

@@ -14,7 +14,7 @@ Input-entry detection (`is_input_entry`) reads `JournalEntry.input`, the
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -246,6 +246,27 @@ def _parse_sources(cell: str, line_no: int, row: str) -> tuple[Source, ...]:
     return tuple(sources)
 
 
+def has_requirements_table(spec_text: str) -> bool:
+    """Does the spec's `## Requirements` section hold a `| id | requirement |
+    source |` header row — whether or not the table under it parses? What
+    tells a broken §B table (worth a warning) from a legacy prose section
+    (silent) — spec 2026-09-28-phase-sizing-design.md §B, review s4."""
+    section = _locate_section(spec_text, _REQUIREMENTS_HEADING)
+    if section is None:
+        return False
+    for line in section[0]:
+        s = line.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        try:
+            cells = [c.lower() for c in _split_row(s, 0)]
+        except RequirementsError:
+            continue
+        if cells == _REQUIREMENTS_HEADER:
+            return True
+    return False
+
+
 def parse_requirements(spec_text: str) -> Requirements:
     """Parse a spec's `## Requirements` (+ optional `## Deferred from
     input`) tables (§B). Pure, no I/O. Raises `RequirementsError` on any
@@ -459,6 +480,33 @@ _COVERAGE_BLOCK_RE = re.compile(r"```input-coverage\r?\n(.*?)```", re.DOTALL)
 _COVERAGE_HEADER = ["span", "coverage"]
 _REQ_LABEL_RE = re.compile(r"^R[1-9][0-9]*(,\s*R[1-9][0-9]*)*$")
 _MISSING_LABEL_RE = re.compile(r"^missing\s+(\S+)$")
+# A data row whose span cell is quoted: the span runs from the first `"` to
+# the last `"` before the label cell, which holds neither `|` nor `"` (#777).
+_QUOTED_SPAN_ROW_RE = re.compile(r'^(\s*\|\s*")(.*)("\s*\|[^|"]*\|\s*)$')
+_UNESCAPED_PIPE_RE = re.compile(r"(?<!\\)\|")
+_REDISPATCH = (
+    "re-dispatch the reviewer with this message; never edit its partition, "
+    "which is recorded as the reviewer's evidence"
+)
+
+
+def _protect_span_pipes(line: str) -> str:
+    """Escape the raw `|` inside a quoted span, so `_split_row` keeps the span
+    one cell. The reviewer quotes the input verbatim, and an input quoting a
+    Markdown table carries `|` of its own (#777, take 9)."""
+    m = _QUOTED_SPAN_ROW_RE.match(line)
+    if m is None:
+        return line
+    return m.group(1) + _UNESCAPED_PIPE_RE.sub(r"\\|", m.group(2)) + m.group(3)
+
+
+def _coverage_form(pieces: Iterable[str]) -> str:
+    """The partition's comparison form: `\\"` / `\\|` read as `"` / `|` in
+    each piece ON ITS OWN, then joined with whitespace dropped — on BOTH
+    sides, so a reviewer may quote either way (#777). Decoding before the
+    join keeps a trailing `\\` in one span from pairing with the next span's
+    leading `"`, so no escape can hide a gap, overlap or reordering."""
+    return _strip_ws("".join(_unescape_quote(p).replace("\\|", "|") for p in pieces))
 
 
 def coverage_block(review_body: str) -> str | None:
@@ -488,10 +536,12 @@ def check_coverage(
         problems.append(f"expected exactly one `input-coverage` block, found {len(blocks)}")
         return problems, empty_counts
 
+    lines = [_protect_span_pipes(line) for line in blocks[0].splitlines()]
     try:
-        rows = _parse_table(blocks[0].splitlines(), 1, _COVERAGE_HEADER, "input-coverage")
+        rows = _parse_table(lines, 1, _COVERAGE_HEADER, "input-coverage")
+        quoted = [(_extract_quote(cells[0], line_no), cells[1], line_no) for cells, line_no in rows]
     except RequirementsError as exc:
-        problems.append(f"input-coverage table: {exc}")
+        problems.append(f"input-coverage table: {exc} — {_REDISPATCH}")
         return problems, empty_counts
 
     req_ids = {r.id for r in requirements.items}
@@ -499,9 +549,8 @@ def check_coverage(
 
     spans: list[str] = []
     n_req = n_deferred = n_context = n_missing = 0
-    for cells, line_no in rows:
-        span_cell, label = cells
-        spans.append(_extract_quote(span_cell, line_no))
+    for span, label, line_no in quoted:
+        spans.append(span)
         if label == "deferred":
             n_deferred += 1
         elif label == "context":
@@ -524,7 +573,7 @@ def check_coverage(
                         "the spec journal"
                     )
             else:
-                problems.append(f"line {line_no}: unknown coverage label {label!r}")
+                problems.append(f"line {line_no}: unknown coverage label {label!r} — {_REDISPATCH}")
 
     counts = CoverageCounts(
         spans=len(spans),
@@ -538,13 +587,14 @@ def check_coverage(
     # on whitespace (table cells are trimmed, so it is lost) or on none (a cut
     # right after `)`), so neither a space-join nor a bare join rebuilds the
     # input in both cases. Dropping all whitespace on both sides does, and the
-    # partition still refuses any skipped, repeated or reordered text.
-    expected = _strip_ws("".join(e.body for e in input_entries))
-    actual = _strip_ws("".join(spans))
+    # partition still refuses any skipped, repeated or reordered text. `\"`
+    # and `\|` are read the same way, on both sides (#777).
+    expected = _coverage_form(e.body for e in input_entries)
+    actual = _coverage_form(spans)
     if actual != expected:
         problems.append(
             "the input-coverage spans do not partition the input entries exactly "
-            "(a gap, an overlap, or a reordered span)"
+            f"(a gap, an overlap, or a reordered span) — {_REDISPATCH}"
         )
 
     return problems, counts

@@ -620,3 +620,102 @@ def test_the_skill_documented_grammar_example_parses() -> None:
     assert kinds == {"input", "decision"}
     assert any('"' in s.value for r in parsed.items for s in r.sources if s.kind == "input")
     assert any(len(r.sources) > 1 for r in parsed.items)
+
+
+# ── #777: the reviewer's partition is read as the reviewer wrote it ─────────
+#
+# Take 9 (fr 4.29.2): the spec reviewer returned one span per input line,
+# with blank `""` spans, `\"` for a quote inside a span, the input's own
+# Markdown table quoted with its raw `|`, and a `missing s1`. fr refused it
+# (`expected 2 columns, got 6`), so the orchestrator re-cut and relabelled
+# the block until it passed — recorded evidence that was not the reviewer's.
+# The input below is synthetic (the real one is third-party); the SHAPE is
+# take 9's, row for row.
+
+_777_INPUT = """# Library: renew several loans at once
+
+## Background
+
+Today a member renews **one loan at a time**. Members say "renew all" is
+what they "expect" from the app.
+
+| Loans | Result |
+|---|---|
+| 3 books | renewed |
+
+Plan this as a single phase.
+"""
+
+_777_REVIEWER_BLOCK = r"""```input-coverage
+| span | coverage |
+|---|---|
+| "# Library: renew several loans at once" | context |
+| "" | context |
+| "## Background" | context |
+| "" | context |
+| "Today a member renews **one loan at a time**. Members say \"renew all\" is" | R1 |
+| "what they \"expect\" from the app." | R1 |
+| "" | context |
+| "| Loans | Result |" | context |
+| "|---|---|" | context |
+| "| 3 books | renewed |" | R1 |
+| "" | context |
+| "Plan this as a single phase." | missing s1 |
+```
+"""
+
+
+def _777_fixture() -> tuple[list[JournalEntry], Requirements]:
+    entries = [_input_entry("i1", _777_INPUT), _finding_entry("s1")]
+    reqs = Requirements(items=(Requirement(id="R1", text="x", sources=()),))
+    return entries, reqs
+
+
+def test_777_take9_reviewer_partition_is_accepted_as_written() -> None:
+    entries, reqs = _777_fixture()
+    problems, counts = check_coverage(_777_REVIEWER_BLOCK, entries, reqs, entries)
+    assert problems == []
+    assert counts.spans == 12
+    assert counts.requirement == 3
+    assert counts.context == 8
+    assert counts.missing == 1
+
+
+def test_777_raw_pipes_in_a_span_still_refuse_a_gap() -> None:
+    """Reading a quoted span's raw `|` must not loosen the partition: the
+    table's middle row dropped is still a gap."""
+    entries, reqs = _777_fixture()
+    block = _777_REVIEWER_BLOCK.replace('| "|---|---|" | context |\n', "")
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert any("do not partition" in p for p in problems)
+
+
+def test_777_input_carrying_a_literal_backslash_quote_still_matches() -> None:
+    """`\\"` is read as `"` on BOTH sides, so an input that itself contains
+    `\\"` partitions whichever way the reviewer quotes it."""
+    entries = [_input_entry("i1", r"say \"hi\" now")]
+    reqs = Requirements(items=())
+    for span in (r"say \"hi\" now", 'say "hi" now'):
+        problems, _ = check_coverage(_coverage_block([(span, "context")]), entries, reqs, entries)
+        assert problems == [], span
+
+
+def test_777_unreadable_block_says_to_redispatch_the_reviewer() -> None:
+    """A shape fr still cannot read names the remedy: the reviewer re-writes
+    it. The orchestrator never edits the reviewer's partition."""
+    entries, reqs = _777_fixture()
+    block = "```input-coverage\n| span | coverage |\n|---|---|\n| alpha | context |\n```\n"
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert problems
+    assert any("re-dispatch the reviewer" in p for p in problems)
+
+
+def test_777_escape_never_pairs_across_a_span_boundary() -> None:
+    """Review: decoding after the join let a stray trailing `\\` in one span
+    pair with the next span's leading `"` — a character the input does not
+    hold, passed as an exact partition. Each span decodes on its own."""
+    entries = [_input_entry("i1", 'ab"cd')]
+    reqs = Requirements(items=())
+    block = _coverage_block([("ab\\", "context"), ('"cd', "context")])
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert any("do not partition" in p for p in problems)

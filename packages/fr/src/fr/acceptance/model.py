@@ -17,7 +17,10 @@ from pydantic import (
     StrictStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
+
+from fr.journal.model import IMPLEMENTED_JOURNALS_REL, JOURNALS_REL, SCOPE_DIRS
 
 LEVELS: tuple[str, ...] = ("unit", "api", "int", "ui")
 
@@ -38,18 +41,68 @@ def split_ref(ref: str) -> tuple[str, str, str]:
 
 
 # Specs migrate specs/ ↔ implemented/specs/ at `fr archive` without renaming
-# (spec trap 1). Refs written against either location resolve to wherever the
-# file actually is, so an archive never breaks links or the staleness guard.
-ARCHIVE_TWIN_DIRS = ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
+# (spec trap 1), and journals migrate journals/<scope> ↔
+# implemented/journals/<scope> the same way (2026-09-28-closeout-always §F).
+# Refs written against either location resolve to wherever the file actually
+# is, so an archive never breaks links or the staleness guard. The journal
+# pairs are DERIVED from `fr.journal.model` (`SCOPE_DIRS` / `JOURNALS_REL` /
+# `IMPLEMENTED_JOURNALS_REL`) rather than re-declared here, so a new journal
+# scope needs no edit on this side.
+ARCHIVE_TWIN_DIRS: tuple[tuple[str, str], ...] = (
+    ("docs/superpowers/specs/", "docs/superpowers/implemented/specs/"),
+    *(
+        (f"{JOURNALS_REL}/{scope_dir}/", f"{IMPLEMENTED_JOURNALS_REL}/{scope_dir}/")
+        for scope_dir in SCOPE_DIRS.values()
+    ),
+)
 
 
 def archive_twin(path: str) -> str | None:
-    live, done = ARCHIVE_TWIN_DIRS
-    if path.startswith(live):
-        return done + path[len(live) :]
-    if path.startswith(done):
-        return live + path[len(done) :]
+    """The counterpart path for whichever `ARCHIVE_TWIN_DIRS` pair matches
+    `path` at either end, or `None` when no pair matches."""
+    for live, done in ARCHIVE_TWIN_DIRS:
+        if path.startswith(live):
+            return done + path[len(live) :]
+        if path.startswith(done):
+            return live + path[len(done) :]
     return None
+
+
+def check_visual_names(states: tuple[str, ...], interactions: tuple[str, ...]) -> None:
+    """Shared by `Visual`'s validator and any CLI pre-check (spec 2026-09-28
+    §A): at least one of `states`/`interactions` must be non-empty, and no
+    name may appear twice — within a list or across the two — because a
+    name is what a screenshot's `shows` points at, and a duplicate would make
+    that pointer ambiguous."""
+    if not states and not interactions:
+        raise ValueError("visual: at least one of states/interactions must be non-empty")
+    seen: dict[str, str] = {}
+    for field, names in (("states", states), ("interactions", interactions)):
+        for name in names:
+            if name in seen:
+                where = "itself" if seen[name] == field else seen[name]
+                raise ValueError(
+                    f"visual: name {name!r} is duplicated ({field} vs {where}) — "
+                    "each name must be unambiguous"
+                )
+            seen[name] = field
+
+
+class Visual(BaseModel):
+    """A row's user-visible UI evidence obligation (spec 2026-09-28 §A): the
+    named states and interactions its screenshots must cover."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    states: tuple[StrictStr, ...] = ()
+    interactions: tuple[StrictStr, ...] = ()
+
+    @model_validator(mode="after")
+    def _names_are_well_formed(self) -> Visual:
+        try:
+            check_visual_names(self.states, self.interactions)
+        except ValueError as e:
+            raise ValueError(str(e)) from e
+        return self
 
 
 class Row(BaseModel):
@@ -69,6 +122,10 @@ class Row(BaseModel):
     # the PR body lists it as owed. Matrix kind 1 -> 2 (§H), because an older
     # fr would reject the key on this `extra="forbid"` row.
     verify: Literal["post-merge"] | None = None
+    # A user-visible UI requirement's evidence obligation (spec 2026-09-28
+    # §A). Matrix kind 2 -> 3 (§G), because an older fr would reject the key
+    # on this `extra="forbid"` row.
+    visual: Visual | None = None
 
     @field_validator("levels")
     @classmethod

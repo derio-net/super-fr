@@ -133,7 +133,7 @@ def test_closeout_brief_orders_every_section_correctly(tmp_path: Path) -> None:
         f"fr journal resolve --scope plan --slug {SPEC_SLUG} --id pf1 "
         "--state deferred --tracked-by '<#N>'"
     )
-    i_archive = idx(f"fr archive {PLAN_REL}")
+    i_archive = idx(f"fr archive --branch {BRANCH}")
     i_housekeeping_pr = idx("housekeeping PR")
     i_down = idx(f"fr isolation down --branch {BRANCH}")
 
@@ -175,7 +175,7 @@ def test_closeout_brief_runs_every_resolve_inside_the_housekeeping_workspace(
     brief = closeout_brief(tmp_path, _state())
 
     i_up = brief.index("fr isolation up --branch chore/archive-")
-    i_archive = brief.index(f"fr archive {PLAN_REL}")
+    i_archive = brief.index(f"fr archive --branch {BRANCH}")
     positions = [brief.index(line) for line in _resolve_lines(brief)]
     assert len(positions) == 2
     assert all(i_up < pos < i_archive for pos in positions), brief
@@ -243,7 +243,7 @@ def test_closeout_brief_housekeeping_gives_exact_commands_on_a_new_branch(
 
     housekeeping_branch = f"chore/archive-{SPEC_SLUG}"
     i_up = brief.index(f"fr isolation up --branch {housekeeping_branch}")
-    i_archive = brief.index(f"fr archive {PLAN_REL}")
+    i_archive = brief.index(f"fr archive --branch {BRANCH}")
     assert i_up < i_archive
     # The warning names the feature branch by value, not just "this
     # workspace" — a fresh session has no notion of "this" the transcript did.
@@ -356,8 +356,9 @@ def test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_the
 ) -> None:
     """The `if spec_path:` / `if plan_path:` guards: a run whose `deliver`
     only emitted `pr` must still print a usable brief — no spec/plan lines,
-    no Test Plan line, no out-of-scope journal lines, no archive command —
-    rather than crashing on a path that was never recorded."""
+    no Test Plan line, no out-of-scope journal lines — but the housekeeping
+    block (§D: always printed) and `fr archive --branch <b>` still appear,
+    named off the run id since no plan was ever emitted."""
     state = RunState(
         run="r1",
         workflow="fr-goal@1",
@@ -372,9 +373,10 @@ def test_closeout_brief_omits_spec_and_plan_lines_when_the_run_never_emitted_the
     assert "spec:" not in brief
     assert "plan:" not in brief
     assert "Test Plan" not in brief
-    assert "fr archive" not in brief
-    assert "fr isolation up --branch chore/" not in brief
-    assert "housekeeping PR" not in brief  # no housekeeping branch was ever created
+    assert f"fr archive --branch {BRANCH}" in brief
+    assert "fr isolation up --branch chore/closeout-r1" in brief
+    assert "housekeeping PR" in brief
+    assert "chore: close out feat/x" in brief
     assert PR_URL in brief
     assert f"fr isolation verify-merge --branch {BRANCH}" in brief
     assert "fr status" in brief
@@ -470,9 +472,12 @@ def test_primary_checkout_falls_back_to_repo_root_for_a_bare_repository(tmp_path
 def test_closeout_brief_without_a_plan_still_resolves_off_the_default_branch(
     tmp_path: Path,
 ) -> None:
-    """gh#621 (1), the no-plan edge: with no plan there is no `chore/archive-`
-    branch, but an out-of-scope spec finding still needs a workspace to be
-    committed in — never the default branch the brief is run from."""
+    """gh#621 (1), the no-plan edge: with no plan the housekeeping branch is
+    named off the run id (`chore/closeout-<run-id>`) rather than a plan slug,
+    but the housekeeping block (§D: always printed) and `fr archive --branch
+    <b>` still appear, and an out-of-scope spec finding still needs a
+    workspace to be committed in — never the default branch the brief is run
+    from."""
     _spec_file(tmp_path, with_test_plan=False)
     _spec_out_of_scope_finding(tmp_path)
     state = RunState(
@@ -491,6 +496,7 @@ def test_closeout_brief_without_a_plan_still_resolves_off_the_default_branch(
 
     i_up = brief.index("fr isolation up --branch chore/closeout-r1")
     i_resolve = brief.index("fr journal resolve --scope spec")
+    i_archive = brief.index(f"fr archive --branch {BRANCH}")
     i_push = brief.index("git push -u origin chore/closeout-r1")
-    assert i_up < i_resolve < i_push
-    assert "fr archive" not in brief
+    assert i_up < i_resolve < i_archive < i_push
+    assert "chore: close out feat/x" in brief

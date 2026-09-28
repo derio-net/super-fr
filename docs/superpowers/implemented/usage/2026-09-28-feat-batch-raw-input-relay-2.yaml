@@ -1,0 +1,93 @@
+schema_version: 1
+run: 2026-09-28-feat-batch-raw-input-relay-2
+captures:
+- host: h-7b39195b
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-28T20:33:24+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 17573c60-c1b3-42d0-ab75-bf4783d5f140
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 260
+        cache_write: 342922
+        cache_read: 19256920
+        output: 77942
+        usd: 8.682134200000002
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 92
+        cache_write: 353233
+        cache_read: 4204642
+        output: 1721
+        usd: 2.3887035999999995
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001453
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 3.0014975371802666
+        turns: 64
+      other:
+        usd: 3.6696088233397477
+        turns: 53
+      paperwork:
+        usd: 4.40118443947999
+        turns: 63
+    steps:
+      (outside run):
+        usd: 0.7388045530446818
+        turns: 7
+      brainstorm:
+        usd: 1.8816577228486393
+        turns: 30
+      spec-review:
+        usd: 1.9266920907078788
+        turns: 40
+      plan:
+        usd: 0.9994968929000805
+        turns: 12
+      implement:
+        usd: 4.587067835141211
+        turns: 72
+      journal-check:
+        usd: 0.08626474766423335
+        turns: 1
+      deliver:
+        usd: 0.8523069576932787
+        turns: 10
+    briefs:
+      a953fd5054782ee96: 2221
+      phase/1/implement-phase: 2696
+      phase/1/review-phase: 4458
+  - session: 69090a3c-95dd-40c6-9aef-a8ccb80a88fc
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 18
+        cache_write: 71871
+        cache_read: 791721
+        output: 2307
+        usd: null
+        usd_source: none
+    activity:
+      other:
+        usd: null
+        turns: 1
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 9

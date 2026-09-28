@@ -25,10 +25,13 @@ def test_fr_plan_names_the_skeleton_mandate() -> None:
 
 def test_fr_plan_names_phase_granularity_guidance() -> None:
     """The cost consequence of phase count is stated where phases are
-    authored — with the live numbers behind it (`fr run status`)."""
+    authored — with the live numbers behind it (`fr run cost`). Since the
+    2026-09-28 phase-sizing spec (R7, #760) the rule is one phase per ask,
+    not a 4–6 phase target."""
     t = FR_PLAN.read_text()
-    assert "4–6 phases" in t
-    assert "fr run status" in t
+    assert "4–6 phases" not in t
+    assert "one agentic phase per independently reviewable ask" in t
+    assert "fr run cost" in t
 
 
 def test_fr_plan_names_refactor_or_justify() -> None:
