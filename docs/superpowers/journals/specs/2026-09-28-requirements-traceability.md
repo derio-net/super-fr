@@ -124,3 +124,8 @@ Operator at spec review: the Requirements section should be a table, like Decisi
 ### gate-opened-after-answers · discovery · Design answers d0-d7 predate the brainstorm gate opening
 
 Standalone fr-brainstorming: the cursor was started at section 0 but `fr run advance` (which opens the operator gate) ran only after the operator had answered the five design questions and reviewed the spec. The gate is cleared by the operator's answer to the gate-clearing question itself; d0-d7 were decided interactively before it. Skill gap filed separately.
+
+<!-- fr:journal kind=decision scope=spec id=d8-spec-review-hard created=2026-09-28T06:38:53+00:00 -->
+### d8-spec-review-hard · decision · spec-review runs at the hard tier
+
+Operator, after discussing reviewer strength: the spec is written by the orchestrator (usually Opus) and was reviewed at standard (Sonnet). Spec review is the one point the input is consulted again, so it moves to hard.
