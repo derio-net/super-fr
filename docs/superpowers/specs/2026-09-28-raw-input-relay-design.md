@@ -71,16 +71,23 @@ relay says, so the brief, the handoff and the prose cannot drift apart
 - `to_brief(oi) -> dict` — `{"rule", "input": [{id, title, body}],
   "decisions": [{id, title, body}]}`.
 - `to_markdown(oi) -> str` — a `## Operator input (read-only — the spec
-  governs)` section: the rule, each input entry under `### <id> — <title>`
-  with its body verbatim, then `### Recorded answers` with each decision under
-  `#### <id> — <title>` and its body verbatim.
+  governs)` section: the rule, each input entry under `### <id> — <title>`,
+  then `### Recorded answers` with each decision under `#### <id> — <title>`.
+  Every body is verbatim **inside a fenced block** whose backtick fence is
+  longer than any backtick run in the body (review sr-4): issue and brief
+  inputs carry their own `##` headings, and unfenced they would read as peers
+  of the handoff's `## Open findings`, so a reader could not tell where the
+  read-only reference ends.
 
 ### B. The member brief (R1–R3)
 
 `_build_member_brief` (`packages/fr/src/fr/commands/run_cmd.py:2854`) gains an
-`operator_input` key, the `to_brief` payload or `null`. It stays pure: the
-caller (`_advance_group`, via `_print_member_dispatch`) loads it once with
-`run_spec(state)` and passes it in. It rides every member brief of the group —
+`operator_input` key, the `to_brief` payload or `null`. It stays pure:
+`_advance_group` loads it once with `run_spec(state)` **before the write-claim**
+that marks the unit `running` (`run_cmd.py:3253`) and passes it down through
+`_print_member_dispatch` (review sr-2). An unparseable spec journal is then a
+refusal with nothing claimed: exit 2, naming the spec journal, the unit left
+pending, never a brief-less `running` unit that only `--redispatch` clears. It rides every member brief of the group —
 in the shipped `fr-goal` shape those are exactly `implement-phase` and
 `review-phase`; a repo-override shape with other members gets it too, which is
 harmless and keeps one rule rather than a member-id list that drifts with the
@@ -98,6 +105,12 @@ findings: it is the text take 9 showed nobody reading. No spec, a cross-repo
 spec, or no input entry → no section, exactly as today. An unparseable spec
 journal → exit 2, like every other handoff input.
 
+A plan journal that does not exist yet no longer ends the command before the
+plan is parsed (review sr-3; today `journal_cmd.py:749-750` returns first, so
+phase 1 of every fresh plan would lose the section R4 exists for). The plan is
+parsed first; with no plan journal the handoff is the operator-input section
+alone (still exit 0, and still empty output when there is no input either).
+
 ### D. The prose (R5, R6)
 
 - `plugins/super-fr/skills/fr-goal/SKILL.md` §5: copy the brief's
@@ -111,6 +124,11 @@ journal → exit 2, like every other handoff input.
   and its rule, and that it is also the first section of the handoff.
 - Regenerate the OpenCode and Hermes mirrors (`sync-opencode.py`,
   `sync-hermes.py`).
+- `docs/explainers/01-fr-goal.md` (review sr-5, `explainers-currency` rule):
+  the §6 paragraph that lists what the executor is given ("the phase's scope,
+  the specification, and the running journal") and §2's input-entry text gain
+  the operator input; regenerate the `.html` with the blog-craft renderer, or
+  state in the PR body that the regeneration is owed.
 
 ### E. The acceptance row this contradicts
 
@@ -135,10 +153,13 @@ Unit, in CI:
 
 1. A grouped advance prints `implement-phase` and `review-phase` briefs whose
    `operator_input` carries every input entry and every spec decision verbatim
-   plus `OPERATOR_INPUT_RULE`; a spec journal with no input entry gives `null`.
-2. `fr journal handoff` renders the operator-input section first, verbatim, for
-   a plan whose spec journal has an input; omits it with no spec or no input;
-   exits 2 on an unparseable spec journal.
+   plus `OPERATOR_INPUT_RULE`; a spec journal with no input entry gives `null`;
+   an unparseable spec journal exits 2 and leaves the unit unclaimed.
+2. `fr journal handoff` renders the operator-input section first, verbatim and
+   fenced (an input body carrying a `##` heading stays inside the fence), for a
+   plan whose spec journal has an input — including when the plan journal does
+   not exist yet; omits it with no spec or no input; exits 2 on an unparseable
+   spec journal.
 3. `compose_handoff` with `operator_input=None` is byte-identical to today.
 4. A prose tripwire: the fr-goal skill names `operator_input` in §5 and §6,
    and the phase-executor agent file carries the rule's load-bearing tokens
