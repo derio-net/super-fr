@@ -588,7 +588,37 @@ def init_cmd(
         err_console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1) from e
     backend = detect_backend(root)
-    outcome = init(root, org, repo, backend=backend, with_ci=with_ci)
+    from fr.services.model import CI_FOR_FORGE, ServicesError
+    from fr.services.resolve import resolve_services
+
+    try:
+        services = resolve_services(root)
+    except ServicesError as e:
+        err_console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(2) from e
+    ci = services.ci
+    reason: str | None = None
+    if ci.source == "declared" and ci.type == "none":
+        if with_ci:
+            err_console.print(
+                "[red]error:[/red] --with-ci contradicts the declared `ci: {type: none}` in "
+                ".devcontainer/fr-profiles.yaml — change it with `fr services` or drop the flag"
+            )
+            raise typer.Exit(2)
+        reason = "this repo declares `ci: {type: none}`"
+    ci_type = ci.type
+    if ci_type == "none" and with_ci:
+        ci_type = CI_FOR_FORGE[services.forge.type]
+    outcome = init(
+        root,
+        org,
+        repo,
+        backend=backend,
+        with_ci=with_ci,
+        ci_type=ci_type,
+        tracking_type=services.tracking.type,
+        no_ci_reason=reason,
+    )
     for rel in outcome.created:
         typer.echo(f"created {rel}")
     for rel in outcome.skipped:

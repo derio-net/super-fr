@@ -109,8 +109,7 @@ name: acceptance-report
 #   backfill rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
 # - A Markdown summary is written to each Actions run (branch, PR, main).
 # - The built report (GitHub-linked at this ref) is uploaded as an artifact.
-# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
-# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
+@@DEBT_COMMENT@@# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
 # check` warns and verifies them on local runs, where siblings exist.
 # If PR-time path filters are added later, they must include every own-repo
 # path the matrix references — `fr acceptance check` warns when one falls outside them.
@@ -151,27 +150,7 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
-      - name: Upsert acceptance-debt issue (weekly digest)
-        if: github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          fr acceptance digest > /tmp/digest.md
-          # Idempotence keyed on the body marker `fr acceptance digest` emits,
-          # not the title — a pre-existing issue that merely says "Acceptance
-          # debt" in its title must not be hijacked.
-          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \\
-                --json number --jq '.[0].number // empty')
-          if grep -q "No open acceptance debt." /tmp/digest.md; then
-            if [ -n "$num" ]; then
-              gh issue close "$num" --comment "Acceptance debt cleared — closing."
-            fi
-          elif [ -n "$num" ]; then
-            gh issue edit "$num" --body-file /tmp/digest.md
-          else
-            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
-          fi
-"""
+@@DEBT_STEP@@"""
 
 # Gitea Actions is deliberately GitHub-Actions-YAML-compatible (per Gitea's
 # own docs — "designed to be compatible with GitHub Actions wherever
@@ -206,8 +185,7 @@ name: acceptance-report
 #   Gitea Actions supports GITHUB_STEP_SUMMARY (aliased GITEA_STEP_SUMMARY,
 #   confirmed against Gitea's own Actions-variables docs).
 # - The built report is uploaded as an artifact.
-# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).
-#
+@@DEBT_COMMENT@@#
 # IMPORTANT: Gitea Actions must be enabled for this repo (Settings ->
 # Enable Repository Actions) even if the instance has Actions on globally,
 # and needs a self-hosted act_runner registered — there is no SaaS-hosted
@@ -254,6 +232,89 @@ jobs:
           name: acceptance-report
           path: docs/acceptance/report.html
           retention-days: 90
+@@DEBT_STEP@@"""
+
+# GitLab CI is a genuinely different schema (stages:/script:, not
+# on:/jobs:/steps:) — not a reuse of WORKFLOW_TEMPLATE's shape. Written to
+# `.gitlab-ci.yml` at the repo root (GitLab's fixed convention, not a
+# configurable directory). Same residual link-mode gap as the Gitea
+# template above. GitLab CI also has no generic job-summary feature
+# analogous to GITHUB_STEP_SUMMARY (confirmed against GitLab's own
+# artifacts:reports docs — every report type is a specific structured
+# format: junit, sast, codequality, etc., not an arbitrary Markdown blob),
+# so `fr acceptance summary` is only wired into the GitHub/Gitea templates.
+WORKFLOW_TEMPLATE_GITLAB = """\
+# The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
+# - `failing` rows FAIL this pipeline (by design — fix or re-classify).
+# - `skipped` / `not-implemented` rows surface as warnings; the backfill
+#   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
+# - The built report is kept as a pipeline artifact.
+@@DEBT_COMMENT@@# - No step-summary equivalent — GitLab CI has none (see module comment).
+# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
+# check` warns and verifies them on local runs, where siblings exist.
+# If path filters (`rules:changes:`) are added later, they must include
+# every own-repo path the matrix references — `fr acceptance check` warns
+# when one falls outside them.
+
+stages:
+  - acceptance
+
+acceptance-report:
+  stage: acceptance
+  image: python:3.12
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
+  script:
+    - fr acceptance check
+    - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
+@@DEBT_STEP@@  artifacts:
+    paths:
+      - docs/acceptance/report.html
+    expire_in: 90 days
+"""
+
+
+# The weekly "Acceptance debt" issue step, split out of each template so it is
+# included only when the tracker is the ci type's own platform (#774 §3.E): the
+# step files through that platform's CLI with the pipeline's own credentials.
+_DEBT_COMMENT_ACTIONS = (
+    '# - The weekly run upserts one "Acceptance debt" issue (closed at zero debt).\n'
+)
+DEBT_COMMENT = {
+    "github-actions": _DEBT_COMMENT_ACTIONS,
+    "gitea-actions": _DEBT_COMMENT_ACTIONS,
+    "gitlab-ci": '# - The weekly (scheduled) run upserts one "Acceptance debt" issue.\n',
+}
+DEBT_STEP_GITHUB = """\
+      - name: Upsert acceptance-debt issue (weekly digest)
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fr acceptance digest > /tmp/digest.md
+          # Idempotence keyed on the body marker `fr acceptance digest` emits,
+          # not the title — a pre-existing issue that merely says "Acceptance
+          # debt" in its title must not be hijacked.
+          num=$(gh issue list --state open --search '"fr-acceptance-digest" in:body' \\
+                --json number --jq '.[0].number // empty')
+          if grep -q "No open acceptance debt." /tmp/digest.md; then
+            if [ -n "$num" ]; then
+              gh issue close "$num" --comment "Acceptance debt cleared — closing."
+            fi
+          elif [ -n "$num" ]; then
+            gh issue edit "$num" --body-file /tmp/digest.md
+          else
+            gh issue create --title "Acceptance debt" --body-file /tmp/digest.md
+          fi
+"""
+DEBT_STEP_GITEA = """\
       - name: Upsert acceptance-debt issue (weekly digest)
         if: gitea.event_name == 'schedule'
         run: |
@@ -281,48 +342,7 @@ jobs:
             tea issues create --title "Acceptance debt" --description "$(cat /tmp/digest.md)"
           fi
 """
-
-# GitLab CI is a genuinely different schema (stages:/script:, not
-# on:/jobs:/steps:) — not a reuse of WORKFLOW_TEMPLATE's shape. Written to
-# `.gitlab-ci.yml` at the repo root (GitLab's fixed convention, not a
-# configurable directory). Same residual link-mode gap as the Gitea
-# template above. GitLab CI also has no generic job-summary feature
-# analogous to GITHUB_STEP_SUMMARY (confirmed against GitLab's own
-# artifacts:reports docs — every report type is a specific structured
-# format: junit, sast, codequality, etc., not an arbitrary Markdown blob),
-# so `fr acceptance summary` is only wired into the GitHub/Gitea templates.
-WORKFLOW_TEMPLATE_GITLAB = """\
-# The acceptance matrix (docs/acceptance/matrix.yaml) rendered + gated.
-# - `failing` rows FAIL this pipeline (by design — fix or re-classify).
-# - `skipped` / `not-implemented` rows surface as warnings; the backfill
-#   rule (.claude/rules/acceptance-matrix.md) owns their lifecycle.
-# - The built report is kept as a pipeline artifact.
-# - The weekly (scheduled) run upserts one "Acceptance debt" issue.
-# - No step-summary equivalent — GitLab CI has none (see module comment).
-# Sister-repo refs are not verifiable here (no checkout) — `fr acceptance
-# check` warns and verifies them on local runs, where siblings exist.
-# If path filters (`rules:changes:`) are added later, they must include
-# every own-repo path the matrix references — `fr acceptance check` warns
-# when one falls outside them.
-
-stages:
-  - acceptance
-
-acceptance-report:
-  stage: acceptance
-  image: python:3.12
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "push"
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "web"
-  before_script:
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - export PATH="$HOME/.local/bin:$PATH"
-    - uv tool install "git+https://github.com/derio-net/super-fr@main#subdirectory=packages/fr"
-  script:
-    - fr acceptance check
-    - fr acceptance report --link-mode github --ref "$CI_COMMIT_SHA"
+DEBT_STEP_GITLAB = """\
     - |
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then
         fr acceptance digest > /tmp/digest.md
@@ -346,11 +366,25 @@ acceptance-report:
           glab api projects/:id/issues -F title="Acceptance debt" -F description=@/tmp/digest.md
         fi
       fi
-  artifacts:
-    paths:
-      - docs/acceptance/report.html
-    expire_in: 90 days
 """
+DEBT_STEP = {
+    "github-actions": DEBT_STEP_GITHUB,
+    "gitea-actions": DEBT_STEP_GITEA,
+    "gitlab-ci": DEBT_STEP_GITLAB,
+}
+WORKFLOW_TEMPLATES = {
+    "github-actions": WORKFLOW_TEMPLATE,
+    "gitea-actions": WORKFLOW_TEMPLATE_GITEA,
+    "gitlab-ci": WORKFLOW_TEMPLATE_GITLAB,
+}
+
+
+def render_workflow(ci_type: str, *, debt: bool) -> str:
+    """The scaffolded pipeline for `ci_type`, with or without the debt step."""
+    text = WORKFLOW_TEMPLATES[ci_type]
+    return text.replace("@@DEBT_COMMENT@@", DEBT_COMMENT[ci_type] if debt else "").replace(
+        "@@DEBT_STEP@@", DEBT_STEP[ci_type] if debt else ""
+    )
 
 
 # The matrix header's gate line, and the rule's CI bullet. GitHub's wording is
@@ -360,10 +394,12 @@ _NO_CI_GATE = "no CI is configured,\n# so `fr acceptance check` runs locally and
 _CI_BULLET_GITHUB = """\
 - CI: `.github/workflows/acceptance-report.yml` gates every PR and branch push,
   writes a Markdown summary to each Actions run (branch, PR, main), uploads the
-  GitHub-linked report artifact, and upserts the weekly "Acceptance debt" issue."""
+  GitHub-linked report artifact{debt}."""
 _CI_BULLET = """\
 - CI: the acceptance job in `{path}` runs `fr acceptance check` on every
-  pipeline and upserts the weekly "Acceptance debt" issue."""
+  pipeline{debt}."""
+_DEBT_TAIL_GITHUB = ', and upserts the weekly "Acceptance debt" issue'
+_DEBT_TAIL = ' and upserts the weekly "Acceptance debt" issue'
 _NO_CI_BULLET = """\
 - CI: none is configured. `fr acceptance check` runs locally, and no row may
   move to `ci` until the repo has a CI config (`fr acceptance init --with-ci`
@@ -400,8 +436,16 @@ def init(
     backend: HostBackend = "github",
     *,
     with_ci: bool = False,
+    ci_type: str | None = None,
+    tracking_type: str | None = None,
+    no_ci_reason: str | None = None,
 ) -> InitOutcome:
-    from fr.acceptance.ci import SCAFFOLD_PATHS, ci_config, no_ci_message
+    """`ci_type`/`tracking_type` are the resolved services (`fr.services`);
+    left None (a caller with no declaration) the pipeline follows `backend`
+    as #787 had it: the forge's own CI, when the repo has one or `with_ci`.
+    `ci_type="none"` scaffolds no pipeline; `no_ci_reason` says why."""
+    from fr.acceptance.ci import DEBT_PLATFORM, SCAFFOLD_PATHS, ci_config, no_ci_message
+    from fr.services.model import CI_FOR_FORGE
 
     created: list[str] = []
     skipped: list[str] = []
@@ -420,15 +464,24 @@ def init(
 
     # Born at the kind's current version, so a fresh matrix is never stale.
     stamp = artifact_kind("matrix").current_version
-    # Decided before anything is written: a pipeline only for a repo that
-    # already runs CI on this backend, or when the caller asks for one.
-    scaffold_path = SCAFFOLD_PATHS[backend]
-    has_ci = with_ci or ci_config(root, backend) is not None
+    # Decided before anything is written: a pipeline only for a repo whose ci
+    # service is active (a declared type, or the forge's own CI already
+    # present / asked for with --with-ci).
+    if ci_type is None:
+        own = CI_FOR_FORGE[backend]
+        ci_type = own if with_ci or ci_config(root, backend) is not None else "none"
+        tracking_type = backend if tracking_type is None else tracking_type
+    has_ci = ci_type != "none"
+    # The weekly debt issue is filed through the ci platform's own tracker CLI,
+    # so it is kept only when the tracker is that platform (#774 §3.E).
+    debt = has_ci and tracking_type == DEBT_PLATFORM[ci_type]
     if has_ci:
+        scaffold_path = SCAFFOLD_PATHS[ci_type]
         ci_gate = _CI_GATE.format(path=scaffold_path)
-        ci_bullet = (
-            _CI_BULLET_GITHUB if backend == "github" else _CI_BULLET.format(path=scaffold_path)
-        )
+        if ci_type == "github-actions":
+            ci_bullet = _CI_BULLET_GITHUB.format(debt=_DEBT_TAIL_GITHUB if debt else "")
+        else:
+            ci_bullet = _CI_BULLET.format(path=scaffold_path, debt=_DEBT_TAIL if debt else "")
     else:
         ci_gate, ci_bullet = _NO_CI_GATE, _NO_CI_BULLET
     write_if_missing(
@@ -438,19 +491,19 @@ def init(
     write_if_missing(
         ".claude/rules/acceptance-matrix.md", RULE_TEMPLATE.replace("{ci_bullet}", ci_bullet)
     )
-    # Template + destination path both vary by backend — see
-    # WORKFLOW_TEMPLATE_GITEA/WORKFLOW_TEMPLATE_GITLAB's module-level
-    # docstrings for why each is shaped the way it is.
-    workflow = {
-        "gitea": WORKFLOW_TEMPLATE_GITEA,
-        "gitlab": WORKFLOW_TEMPLATE_GITLAB,
-        "github": WORKFLOW_TEMPLATE,
-    }[backend]
     if has_ci:
-        write_if_missing(scaffold_path, workflow)
+        write_if_missing(scaffold_path, render_workflow(ci_type, debt=debt))
+        if not debt:
+            notices.append(
+                f'no debt  the weekly "Acceptance debt" issue step is omitted from '
+                f"{scaffold_path} — tracking is {tracking_type!r}, not the {ci_type} platform's "
+                f"own ({DEBT_PLATFORM[ci_type]}); see `fr services`"
+            )
+    elif no_ci_reason:
+        notices.append(f"no CI  no pipeline scaffolded — {no_ci_reason}; see `fr services`")
     else:
         notices.append(
-            f"no CI  {scaffold_path} not scaffolded — {no_ci_message(backend)}; "
+            f"no CI  no pipeline scaffolded — {no_ci_message(backend)}; "
             "pass --with-ci to scaffold one"
         )
 

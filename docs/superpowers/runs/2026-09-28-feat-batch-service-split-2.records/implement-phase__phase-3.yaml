@@ -1,0 +1,28 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-service-split-2
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T2.S3]
+refactor:
+  P3.T1: "scaffold.py had no backend-keyed leftovers no caller uses: backend still drives the no-declaration path and the no-CI message; the per-backend workflow dict was replaced by WORKFLOW_TEMPLATES keyed by ci type."
+  P3.T2: "the debt step was split into fragments as part of the GREEN itself; nothing further to clean."
+journal:
+  - kind: decision
+    id: p3-ci-reason-seam
+    title: "fr.acceptance.ci.ci_reason/ci_active resolve the ci service leniently; init takes ci_type/tracking_type"
+    body: |
+      `ci_reason(root)` (None = active) calls `resolve_services(root, lenient=True)` (lazy import: resolve imports
+      acceptance.ci). Declared `ci: {type: none}` refuses `ci` rows naming the declaration; undeclared none keeps
+      #787's no_ci_message. `record/apply._no_ci_reason` delegates to it. `scaffold.init(..., ci_type=None,
+      tracking_type=None, no_ci_reason=None)`: with ci_type None it is the old backend path (test_acceptance_init_no_ci
+      unchanged). `SCAFFOLD_PATHS` is now keyed by ci TYPE, plus `DEBT_PLATFORM` (github-actions->github, ...).
+      `init_cmd` resolves strictly (ServicesError -> exit 2), refuses `--with-ci` only when ci is DECLARED none, and
+      maps undeclared/legacy none + --with-ci to the forge's own ci type.
+  - kind: discovery
+    id: p3-debt-fragments
+    title: "Debt step is @@DEBT_COMMENT@@/@@DEBT_STEP@@ tokens in each template; render_workflow(ci_type, debt=)"
+    body: |
+      With debt=True each render is byte-identical to the pre-phase template (verified against HEAD). Omission prints
+      a `no debt` notice and drops the sentence from the rule's CI bullet. The github template's `issues: write`
+      permission is left in place when the step is omitted.
