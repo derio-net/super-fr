@@ -367,18 +367,22 @@ def _toy_plan(root: Path) -> str:
                     },
                 ),
                 skeleton=(n == 1),
+                # Phase 1 serves the requirement `seed_requirements` cites
+                # (row `req-r1`), so plan-review's sizing gate takes its
+                # normal floor path (review r7).
+                acceptance=("req-r1",) if n == 1 else (),
             )
             for n in (1, 2, 3)
         ],
         prose="# toy\n",
     )
-    # The phases link no rows, so each records why it exists (2026-09-28
+    # Phases 2 and 3 link no rows, so each records why it exists (2026-09-28
     # phase-sizing §B) — the gate reads them once the spec gains Requirements.
     write_phase_splits(
         root,
         "docs/spec.md",
         slug,
-        {n: f"review-size: toy phase {n}" for n in (1, 2, 3)},
+        {n: f"review-size: toy phase {n}" for n in (2, 3)},
     )
     return f"docs/superpowers/plans/{slug}"
 
