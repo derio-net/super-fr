@@ -50,8 +50,7 @@ Cover, with scan-informed recommended options:
    an explicit `backend:` key already in fr-profiles.yaml). Confirm the
    hostname too (`--host`) if self-hosted — drives which CLI
    (`gh`/`glab`/`tea`) gets installed and which CI template
-   `fr acceptance init` picks (it writes one only when the repo already has
-   CI for that backend, or with `--with-ci`).
+   `fr acceptance init` picks (written only beside existing CI).
 2. **Profiles wanted** — one `dev` default, or split (e.g. `readonly` for
    review/exploration vs `admin` with deploy credentials)? Profiles differ
    by CREDENTIALS first, tools second — same binaries, different env-files

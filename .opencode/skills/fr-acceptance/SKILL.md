@@ -28,10 +28,8 @@ set-status`, never a hand-edit; when in doubt between ci and skipped,
 
 ## Backfill an existing repo
 
-1. `fr acceptance init` (idempotent) if the repo has no matrix — scaffolds
-   matrix + backfill rule + gitignore entry, plus the CI workflow **only when
-   the repo already has CI for its backend** (`--with-ci` asks for one
-   anyway). A repo with no CI gets no pipeline file.
+1. `fr acceptance init` (idempotent) if the repo has no matrix — matrix +
+   rule + gitignore entry; a CI workflow only beside existing CI (or `--with-ci`).
 2. `fr acceptance backfill` — emits the inventory (Test Plan specs not yet
    cited, plans without linked rows, test-tree hints) + this protocol.
 3. DRAFT rows — **one row per business acceptance, not per test** — via
@@ -51,10 +49,8 @@ up the ladder (`not-implemented` → `skipped` → `ci`/`scheduled`) with
 --level unit=<repo>:<path>` — one command for the whole transition: it moves
 the row in place, adds the test refs that justify the move, and regenerates the
 three committed reports. `--notes` is required, and an unknown id is refused
-rather than created (that is `add`'s job). `ci` means a CI run is the
-evidence, so a row reaches it only in a repo with a CI config for its backend —
-anywhere else the move is refused; record `skipped` instead. `fr plan edit --complete-phase`
-warns on unflipped rows — fix or record why in the completion note.
+rather than created (`add`'s job), as is `ci` in a repo with no CI config.
+`fr plan edit --complete-phase` warns on unflipped rows — fix or record why in the completion note.
 
 ## Live verification on another harness
 
