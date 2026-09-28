@@ -81,13 +81,12 @@ draft PR) for `fr:in-progress`; take the PR out of draft for `fr:pr-ready`.
    on unflipped rows (see `fr-acceptance`). Discovered edges may ADD rows
    (`fr acceptance add`) — defended at PR time, never silent scope drift.
 
-5. **Open the PR** via `superpowers:finishing-a-development-branch`, with the
-   `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
-   mode, do NOT open a per-phase PR:** push the branch only; the single PR is
-   fr-goal's step 8, opened as a draft by the orchestrator *after* its review
-   pass — opening here reorders deliver ahead of review and reintroduces the
-   #320 merge-race. Per-phase PRs are the standalone **dispatched** (Issue/VK)
-   flow only.
+5. **Open the PR** via `superpowers:finishing-a-development-branch`, with the `fr pickup` title and the body shape above. **Caveat — under fr-goal LOCAL
+   mode, do NOT open a per-phase PR:** push the branch only; the single PR is fr-goal's step 8, opened as a draft by the orchestrator *after* its review
+   pass — opening here reorders deliver ahead of review and reintroduces the #320 merge-race, and fr-goal pushes and opens no PR here, so there is
+   nothing to relay. Per-phase PRs are the standalone **dispatched** (Issue/VK) flow only — there, once the PR opens, relay
+   `closeout: fr pickup --branch <phase-branch>` to the operator verbatim (a non-final phase's brief reports the plan `held:` until the last
+   phase lands, so this phase's housekeeping PR carries only what this phase finished).
 
 6. **Reconcile GitHub state:**
    ```bash
