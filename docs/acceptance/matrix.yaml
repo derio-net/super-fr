@@ -4430,9 +4430,13 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R2
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_operator_input.py
+    status: ci
+    notes: 'Unit-pinned: operator_input on implement/review member briefs, null without
+      input, refusal before the write-claim (#778).'
   - id: raw-input-relay-handoff
     capability: fr-goal-methodology
     acceptance: The per-phase journal handoff opens with the operator's verbatim input,
