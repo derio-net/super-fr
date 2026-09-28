@@ -55,7 +55,14 @@ def test_a_v1_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     after = path.read_text().splitlines(keepends=True)
     assert "schema_version: 2\n" in after
     assert [ln for ln in after if ln != "schema_version: 2\n"] == before
-    assert after[-1] == before[-1], "rows: must stay the last top-level key"
+    rows_at = after.index("rows:\n")
+    trailing_top_level_keys = [
+        ln for ln in after[rows_at + 1 :] if ln and not ln[0].isspace() and ":" in ln
+    ]
+    assert not trailing_top_level_keys, (
+        f"a top-level key follows rows: {trailing_top_level_keys!r} — "
+        "rows: must stay the last top-level key"
+    )
     m = load_matrix(path)
     assert m.schema_version == 2 and [r.id for r in m.rows] == ["a"]
 

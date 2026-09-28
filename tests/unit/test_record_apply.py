@@ -4,6 +4,7 @@ commits once and prints one line — and an invalid record changes nothing."""
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -580,3 +581,129 @@ def test_a_plan_record_refuses_an_unconfirmed_resolution(tmp_path: Path) -> None
     assert out.exit_code == 2, out.output
     assert "`unconfirmed` is only valid" in out.output
     assert snapshot(root) == files
+
+
+# --- code review finding d4: `input` + `verify: post-merge` + `unconfirmed` --
+# all together, through one `apply_record` (spec 2026-09-28 Test Plan 10). The
+# shipped `fr-goal` manifest's `spec-review` step does not emit `acceptance`
+# yet (phase 3 adds it), so this drives a repo-authored override whose
+# `spec-review` emits `[journal:spec, acceptance]` — same pattern
+# `test_a_repo_authored_manifest_overrides_the_shipped_one_wholesale` in
+# `tests/integration/test_fr_goal_shape.py` proves resolves ahead of the
+# shipped one.
+
+
+def _spec_review_emits_acceptance_manifest() -> str:
+    return textwrap.dedent(
+        """\
+        workflow: fr-goal
+        schema: 1
+        description: >-
+          test override — spec-review also emits acceptance (phase 3 of spec
+          2026-09-28-requirements-traceability-design.md has not shipped it).
+        unit: run
+        requires: [git]
+        steps:
+          - id: brainstorm
+            kind: agent
+            skill: super-fr:fr-brainstorming
+            gate: operator
+            emits: [spec, journal:spec, acceptance]
+
+          - id: spec-review
+            kind: agent
+            agent: super-fr:fr-spec-reviewer
+            tier: standard
+            needs: [spec]
+            emits: [journal:spec, acceptance]
+            evidence: [review, reviewer, findings]
+        """
+    )
+
+
+def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
+    """Like `_at_spec_review`, but with a repo-authored manifest override
+    whose `spec-review` step also emits `acceptance` — so a single record can
+    carry an `acceptance:` item alongside `journal:`/`resolves:`, which the
+    shipped manifest does not allow yet."""
+    from datetime import datetime
+
+    from fr.journal.model import JournalEntry, append_journal_entry
+
+    from tests.integration.test_fr_goal_shape import _workspace
+
+    root = _workspace(tmp_path, "feat/rec2")
+    workflows_dir = root / "docs" / "superpowers" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+    (workflows_dir / "fr-goal.yaml").write_text(_spec_review_emits_acceptance_manifest())
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "spec.md").write_text("# spec\n")
+    (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "acceptance" / "matrix.yaml").write_text("org: t\nrepo: t\nrows:\n")
+    commit_all(root, "spec, matrix and manifest override")
+    for argv in (
+        ["run", "start", "fr-goal", "--branch", "feat/rec2", "--run-id", RUN],
+        ["run", "advance", RUN],
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+         "--emitted", "spec=docs/spec.md"],
+        ["run", "advance", RUN],
+    ):  # fmt: skip
+        out = fr(root, argv)
+        assert out.exit_code == 0, (argv, out.output)
+    append_journal_entry(
+        journal_path(root, "spec", "spec"),
+        "spec",
+        JournalEntry(
+            kind="finding",
+            scope="spec",
+            id="f1",
+            created=datetime.now().replace(microsecond=0).isoformat(),
+            title="invented behaviour",
+            body="the spec builds Y; the input never asked for it",
+            state="open",
+            review_scope="in",  # type: ignore[arg-type]
+        ),
+    )
+    commit_all(root, "at spec-review")
+    return root
+
+
+def test_a_spec_review_record_applies_input_post_merge_and_unconfirmed_together(
+    tmp_path: Path,
+) -> None:
+    root = _at_spec_review_with_acceptance(tmp_path)
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}
+    given = {"kind": "discovery", "id": "input-1", "title": "input", "body": "build X"}
+    record = write_record(
+        root,
+        _spec_review_record(
+            journal=[review, {**given, "input": True}],
+            resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}],
+            acceptance=[
+                {
+                    "id": "trace-row",
+                    "capability": "Requirements trace",
+                    "acceptance": "Operator can trace an input to its acceptance row",
+                    "status": "not-implemented",
+                    "verify": "post-merge",
+                }
+            ],
+        ),
+    )
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 0, out.output
+    entries = _spec_entries(root)
+    (input_entry,) = [e for e in entries if e.id == "input-1"]
+    assert input_entry.input is True and input_entry.kind == "discovery"
+    assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+    (resolution,) = [e for e in entries if e.resolves == "f1"]
+    assert resolution.state == "open" and resolution.unconfirmed is True
+    assert resolution.body == "builds Y"
+
+    from fr.acceptance.model import load_matrix
+
+    matrix = load_matrix(root / "docs" / "acceptance" / "matrix.yaml")
+    (row,) = [r for r in matrix.rows if r.id == "trace-row"]
+    assert row.verify == "post-merge"
