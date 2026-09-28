@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import json
 
 import typer
@@ -16,4 +15,5 @@ def services_command(
 ) -> None:
     """Read-only: the resolved services with their type, host and source."""
     services = resolve_services(resolve_repo_root())
-    typer.echo(json.dumps({"forge": dataclasses.asdict(services.forge)}))
+    f = services.forge
+    typer.echo(json.dumps({"forge": {"type": f.type, "host": f.host, "source": f.source}}))
