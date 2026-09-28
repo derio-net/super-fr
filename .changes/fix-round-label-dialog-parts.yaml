@@ -1,2 +1,0 @@
-bump: patch
-summary: "fr-goal: question labels count only what is certain — `(Round 1 · questions 5–8 of 8)` names each dialog of a split round instead of repeating `(Round 1 of 1)`, and `· a 2nd round may follow` appears only when the agent forecasts one (the gate's design-risk announcement; the old `Round 1 of 2` is still accepted)."
