@@ -144,6 +144,74 @@ def needs_capture(repo_root: Path, state: RunState, env: Mapping[str, str]) -> b
     return existing is None or existing.host(this_host(state.run, env)) is None
 
 
+def build_capture(
+    repo_root: Path,
+    state: RunState,
+    at: str,
+    env: Mapping[str, str],
+    existing: UsageFile,
+    *,
+    require_sessions: bool = False,
+) -> Capture | None:
+    """This host's capture of `state`'s run, merged over its entry in
+    `existing` — built in memory, written nowhere. `None` when
+    `require_sessions` and there is no session at all. May raise: `capture`
+    is the never-raising writer, `live_usage` the never-raising reader."""
+    pairs = candidates(state, env, repo_root)
+    if require_sessions and not pairs:
+        return None
+    windows = windows_from_cursor(
+        {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
+    )
+    units = units_by_agent(state.model_dump(mode="json"))
+    entries: list[SessionEntry] = []
+    for harness, session in pairs:
+        try:
+            record = read_session(harness, session, env)
+        except Exception as e:  # noqa: BLE001 — a reader must not fail a step
+            record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
+        entries.append(session_entry(record, windows, units))
+    label = this_host(state.run, env)
+    previous = existing.host(label)
+    events = previous.at if previous is not None else ()
+    if at not in events:
+        events = (*events, at)
+    try:
+        from fr.harness.detect import detect_harness
+
+        harness_now = detect_harness(env) or (pairs[-1][0] if pairs else "unknown")
+    except Exception:  # noqa: BLE001
+        harness_now = "unknown"
+    merged = _merge(previous, entries)
+    if not merged:
+        merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, units)]
+    return Capture(
+        host=label,
+        harness=harness_now,
+        mode=isolation_mode(repo_root, state),
+        captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
+        at=events,
+        sessions=tuple(merged),
+    )
+
+
+def live_usage(
+    repo_root: Path, state: RunState, at: str, env: Mapping[str, str], file: UsageFile | None
+) -> UsageFile:
+    """`file` with this host's capture replaced by a fresh reading, in memory
+    (gh#680): what a capture here would write NOW. `deliver` renders its PR
+    body before its own capture runs, so the file alone holds only what the
+    last capture on this host saw. `at` is the capture event this reading
+    stands in for (the closed `Capture.at` vocabulary). Never raises; a failed
+    reading leaves `file` as it was."""
+    base = file or UsageFile(run=state.run)
+    try:
+        live = build_capture(repo_root, state, at, env, base, require_sessions=True)
+    except Exception:  # noqa: BLE001 — a render is not hostage to observability
+        return base
+    return base if live is None else upsert_capture(base, live)
+
+
 def capture(
     repo_root: Path,
     state: RunState,
@@ -161,42 +229,9 @@ def capture(
     target = path or usage_path(repo_root, state.run)
     try:
         existing = load_usage(target) or UsageFile(run=state.run)
-        pairs = candidates(state, env, repo_root)
-        if require_sessions and not pairs:
+        new = build_capture(repo_root, state, at, env, existing, require_sessions=require_sessions)
+        if new is None:
             return None
-        windows = windows_from_cursor(
-            {"started": state.started, "steps": {k: {"at": v.at} for k, v in state.steps.items()}}
-        )
-        units = units_by_agent(state.model_dump(mode="json"))
-        entries: list[SessionEntry] = []
-        for harness, session in pairs:
-            try:
-                record = read_session(harness, session, env)
-            except Exception as e:  # noqa: BLE001 — a reader must not fail a step
-                record = unavailable(session, harness, f"reader failed: {type(e).__name__}")
-            entries.append(session_entry(record, windows, units))
-        label = this_host(state.run, env)
-        previous = existing.host(label)
-        events = previous.at if previous is not None else ()
-        if at not in events:
-            events = (*events, at)
-        try:
-            from fr.harness.detect import detect_harness
-
-            harness_now = detect_harness(env) or (pairs[-1][0] if pairs else "unknown")
-        except Exception:  # noqa: BLE001
-            harness_now = "unknown"
-        merged = _merge(previous, entries)
-        if not merged:
-            merged = [session_entry(unavailable("", harness_now, NO_SESSION_FOUND), windows, units)]
-        new = Capture(
-            host=label,
-            harness=harness_now,
-            mode=isolation_mode(repo_root, state),
-            captured_at=_dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat(),
-            at=events,
-            sessions=tuple(merged),
-        )
         from fr.artifacts.atomic import write_text_atomic
 
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -207,4 +242,13 @@ def capture(
         return None
 
 
-__all__ = ["HOSTNAME_ENV", "candidates", "capture", "hostname", "isolation_mode", "needs_capture"]
+__all__ = [
+    "HOSTNAME_ENV",
+    "build_capture",
+    "candidates",
+    "capture",
+    "hostname",
+    "isolation_mode",
+    "live_usage",
+    "needs_capture",
+]

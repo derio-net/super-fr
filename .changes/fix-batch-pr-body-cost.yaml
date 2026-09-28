@@ -1,0 +1,2 @@
+bump: patch
+summary: "deliver's PR body Cost table now reads this host's sessions live instead of a stale earlier capture, and says why dollars are missing while a session is still running (gh#680)"
