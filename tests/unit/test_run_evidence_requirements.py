@@ -590,3 +590,64 @@ def test_a_run_whose_brainstorm_predates_the_gate_records_it_and_reports_debt(
     assert "unevidenced: requirement-rows" in status
     check = _squash(_invoke(repo, shipped, ["run", "check", "r1"]).output)
     assert "step/deliver is done, unevidenced: requirement-rows" in check
+
+
+def _forget_brainstorm_spec(repo: Path) -> None:
+    """The cursor an older fr (or `fr run adopt`) leaves: brainstorm done with
+    no `emitted.spec` and no `requirements` evidence."""
+    from fr.run.model import save_run_state
+
+    state = load_run_state(repo, "r1")
+    record = state.steps["brainstorm"].model_copy(update={"emitted": None})
+    save_run_state(repo, state.model_copy(update={"steps": {**state.steps, "brainstorm": record}}))
+
+
+def test_a_run_with_no_recorded_spec_predates_the_gate_at_deliver(tmp_path: Path) -> None:
+    """e1: no step recorded `emitted.spec` — the brainstorm predates emits
+    enforcement, or the cursor was adopted. §G: the predates line, never the
+    "name it with --emitted spec=" refusal deliver cannot follow."""
+    repo, shipped = _started(tmp_path, brainstorm="[]", spec_review="[review, reviewer]")
+    _spec(repo, "\n## Design\n\nno requirements here\n")
+    assert _brainstorm(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _review_entry(repo)
+    assert _spec_review(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_brainstorm_spec(repo)
+
+    delivered = _deliver(repo, shipped)
+
+    assert delivered.exit_code == 0, delivered.output
+    assert _evidence(repo, "deliver")["requirement-rows"] == "predates the requirements gate"
+
+
+def test_a_run_with_no_recorded_spec_predates_the_gate_at_spec_review(tmp_path: Path) -> None:
+    repo, shipped = _started(tmp_path, brainstorm="[]", spec_review="[requirements, coverage]")
+    _spec(repo, "\n## Design\n\nno requirements here\n")
+    assert _brainstorm(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _forget_brainstorm_spec(repo)
+
+    out = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "spec-review", "--state", "done"]
+    )
+
+    assert out.exit_code == 0, out.output
+    ev = _evidence(repo, "spec-review")
+    assert ev["requirements"] == "predates the requirements gate"
+    assert ev["coverage"] == "predates the requirements gate"
+
+
+def test_no_recorded_spec_on_the_emitting_step_names_the_amend_form(tmp_path: Path) -> None:
+    """The step that emits `spec` itself is never "predates"; with no spec to
+    read, the hint is the brainstorm amend form, a command every step can follow."""
+    repo, shipped = _started(tmp_path)
+
+    out = _invoke(
+        repo, shipped, ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done"]
+    )
+
+    assert out.exit_code == 2, out.output
+    assert "fr run resolve r1 --step brainstorm --state done --emitted spec=<path>" in _squash(
+        out.output
+    )

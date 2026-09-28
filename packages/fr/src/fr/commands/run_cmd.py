@@ -1792,19 +1792,23 @@ def _spec_emitter(state: RunState) -> tuple[str, StepRecord] | None:
 
 
 def _predates_requirements(state: RunState, step: Step) -> bool:
-    """§G: the step that emitted the run's spec is not this one and carries no
-    `requirements` evidence — resolved by an older fr, or rebuilt by `fr run
-    adopt`. Such a run records the predates line instead of refusing: an
-    obligation is never enforced backwards in time."""
-    found = _spec_emitter(state)
-    if found is None or found[0] == step.id:
+    """§G, decided by the step. The step that emits `spec` is the gate itself
+    and never predates it. Any other step predates the gate when no step
+    recorded the run's spec (a brainstorm resolved before emits were enforced,
+    or a cursor rebuilt by `fr run adopt`) or when the step that did carries no
+    `requirements` evidence. Such a run records the predates line instead of
+    refusing: an obligation is never enforced backwards in time."""
+    if "spec" in step.emits:
         return False
+    found = _spec_emitter(state)
+    if found is None:
+        return True
     sid, record = found
     return "requirements" not in units.evidence_of(record, f"step/{sid}")
 
 
 def _requirements_capture(
-    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
+    key: str, repo_root: Path, state: RunState, step: Step, emitted: Mapping[str, str]
 ) -> _RequirementsCapture:
     """Load the spec, spec journal and matrix once, for all three witnesses —
     or exit 2. Fail-closed: a gate that cannot read its source does not know
@@ -1820,8 +1824,14 @@ def _requirements_capture(
     )
     why = "cannot derive requirements evidence"
     if spec_rel is None:
+        # Reached only by the step that emits `spec` (any other predates the
+        # gate, §G): the amend form records it whether or not it is done yet.
         _requirements_refusal(
-            key, [f"{why} — no spec recorded yet (name it with --emitted spec=<path>)"]
+            key,
+            [
+                f"{why} — no spec recorded yet (record it with `fr run resolve "
+                f"{state.run} --step {step.id} --state done --emitted spec=<path>`)"
+            ],
         )
     try:
         spec_text = (repo_root / spec_rel).read_text()
@@ -1863,7 +1873,7 @@ def _requirements_witnesses(
         return {}
     if _predates_requirements(state, step):
         return dict.fromkeys(wanted, REQUIREMENTS_PREDATES)
-    capture = _requirements_capture(key, repo_root, state, emitted)
+    capture = _requirements_capture(key, repo_root, state, step, emitted)
     out: dict[str, str] = {}
     if "requirements" in wanted:
         out["requirements"] = _requirements_witness(key, capture)
