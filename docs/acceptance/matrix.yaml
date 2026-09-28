@@ -4472,9 +4472,14 @@ rows:
       warns on a single-step trailing manual phase and fr-plan says so'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+      - super-fr:tests/unit/test_fr_plan_sizing_prose.py
+    status: ci
+    notes: 'Phase 1 (spec §C/§E, R5): self-review warns on a single-step trailing manual
+      phase; fr-plan and fr-goal say a verification step is a Test Plan line or verify:
+      post-merge row.'
   - id: phase-sizing-plan-guidance
     capability: fr-goal-methodology
     acceptance: fr-plan's guidance sizes phases to asks, no longer asks for 4-6 phases,
