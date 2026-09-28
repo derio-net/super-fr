@@ -5177,9 +5177,12 @@ rows:
       line on every harness mirror.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_closeout_relay.py
+    status: ci
+    notes: fr-debugging's deliver-line relay to every harness mirror is covered by the
+      relay tripwire
   - id: debug-journal-sweep-keeps-refs
     capability: Branch-keyed close-out
     acceptance: '`fr archive --all` moves every debug journal live on the default ref,
