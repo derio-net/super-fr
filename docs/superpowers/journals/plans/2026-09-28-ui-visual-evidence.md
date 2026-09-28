@@ -29,3 +29,30 @@ VisualShot/VisualEvidence mirror existing closed-model patterns (TickItem, Accep
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 matrix_visual.py/record_visual.py are built directly from matrix_verify.py/record_input_unconfirmed.py's own shape (the established pattern for a stamp-only hop); the one piece of duplication that did exist — the matrix guard — was extracted to guard_matrix (shared by both matrix hops) as part of writing T4.S2, not after.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1 created=2026-09-28T20:04:39+00:00 phase=1 state=open review_scope=in -->
+### p1-f1 · finding [open] (reviewer: in scope) · visual-evidence-row-flag left not-implemented although phase 1 implements and tests it (phase 1)
+
+The phase links the row and its unit tests exercise the whole claim; acceptance-matrix rule requires moving it with levels in the same PR.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f2 created=2026-09-28T20:04:39+00:00 phase=1 state=open review_scope=in -->
+### p1-f2 · finding [open] (reviewer: in scope) · P1.T4.S3 ticked without the pass count its text asks for (phase 1)
+
+The step says to put the targeted run's pass count in the step note; note was null.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-09-28T20:04:39+00:00 phase=1 -->
+### review-p1 · review · phase 1 code review: 2 findings (both in scope) (phase 1)
+
+Independent reviewer (separate context, standard tier) read the phase-1 state against spec §A/§B/§G and the artifact-versioning rule.
+Correct: Visual model + shared check_visual_names, Row.visual, acceptance add --visual-*, set-status preserving visual, AcceptanceItem.visual, VisualShot/VisualEvidence/StepRecord.visual in the evidence group, RECORD_SCHEMA_VERSION 4, matrix 2->3 and record 3->4 stamp-only migrations registered and imported, chain reachability asserted, reports in sync.
+Findings: p1-f1 (row status), p1-f2 (missing step note). Method note: the reviewer had no shell and read files directly rather than the diff.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f1-resolved created=2026-09-28T20:04:39+00:00 phase=1 state=fixed resolves=p1-f1 -->
+### p1-f1-resolved · finding [fixed] · resolves p1-f1: visual-evidence-row-flag left not-implemented although phase 1 implements and tests it (phase 1)
+
+fr acceptance set-status visual-evidence-row-flag -> ci with unit levels test_acceptance_visual.py and test_record_visual.py (commit 2b242f36); reports regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p1-f2-resolved created=2026-09-28T20:04:39+00:00 phase=1 state=fixed resolves=p1-f2 -->
+### p1-f2-resolved · finding [fixed] · resolves p1-f2: P1.T4.S3 ticked without the pass count its text asks for (phase 1)
+
+P1.T4.S3 note backfilled with the targeted and full-suite counts (commit 9aceb0a3).
