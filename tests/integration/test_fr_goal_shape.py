@@ -33,7 +33,7 @@ from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
 
-from tests.unit.requirements_support import seed_requirements
+from tests.unit.requirements_support import seed_requirements, write_phase_splits
 from tests.unit.spec_review_support import spec_review_evidence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -371,6 +371,14 @@ def _toy_plan(root: Path) -> str:
             for n in (1, 2, 3)
         ],
         prose="# toy\n",
+    )
+    # The phases link no rows, so each records why it exists (2026-09-28
+    # phase-sizing §B) — the gate reads them once the spec gains Requirements.
+    write_phase_splits(
+        root,
+        "docs/spec.md",
+        slug,
+        {n: f"review-size: toy phase {n}" for n in (1, 2, 3)},
     )
     return f"docs/superpowers/plans/{slug}"
 
@@ -881,6 +889,9 @@ def test_a_phases_file_tier_reaches_the_dispatch_brief(tmp_path: Path, monkeypat
     )
     assert created.exit_code == 0, created.output
     plan_rel = f"docs/superpowers/plans/{slug}"
+    write_phase_splits(
+        root, spec_rel, slug, {1: "tier: declares the hard tier", 2: "review-size: toy phase 2"}
+    )
 
     _drive_to_implement(root, "r1", "feat/tier", spec_rel, plan_rel)
 
