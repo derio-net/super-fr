@@ -1,0 +1,8 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-closeout-always-2
+step: deliver
+outcome: done
+acceptance: []
+emitted: {}
+evidence:
+  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T//full-suite.log
