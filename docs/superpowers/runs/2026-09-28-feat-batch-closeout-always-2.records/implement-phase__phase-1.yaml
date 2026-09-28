@@ -38,7 +38,4 @@ journal:
       that data. Left open for phase 2/3 to either confirm this shape or
       extend BranchArtifact once the real owner-resolution need is in view.
 resolves: []
-evidence:
-  tests: "uv run pytest tests/unit/test_closeout_branch_artifacts.py -q --no-cov (2 passed); uv run pytest tests/ -q --no-cov -n auto -k \"branch_changes or verify_merge or fork_point\" (86 passed)"
-  lint: "uv run ruff format packages/ tests/ (2 files reformatted, clean); uv run ruff check packages/ tests/ (all checks passed)"
-  typecheck: "uv run mypy packages/fr/src (success, 171 source files)"
+evidence: {}
