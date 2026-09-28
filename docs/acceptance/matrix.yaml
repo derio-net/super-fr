@@ -5154,9 +5154,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R2
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R3
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+      - super-fr:tests/unit/test_run_telemetry_visual.py
+    status: ci
+    notes: 'Implemented in phase 2 of plan 2026-09-28-ui-visual-evidence: fr.run.visual
+      checks 1-5 and the resolve gate at implement-phase, review-phase and deliver (freshness,
+      image reads in the witness transcript, unobserved, derived refusals); unit tests
+      run in CI.'
   - id: visual-evidence-reviewer-own-eyes
     capability: fr-goal-evidence
     acceptance: At `review-phase` the screenshots must have been opened in the dispatched
