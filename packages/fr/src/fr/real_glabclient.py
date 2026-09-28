@@ -246,6 +246,17 @@ class RealGlabClient(UnsupportedBatchOps):
         `issue comment` — verified directly against `glab issue --help`)."""
         self._glab(["issue", "note", str(number), "--repo", repo, "--message", body])
 
+    def issues_enabled(self, repo: str | None = None) -> bool | None:
+        """`issues_enabled` of GitLab's `projects/:id` object, via `glab api`."""
+        if not repo:
+            return None
+        try:
+            raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
+        except (_glab.GlabError, ValueError):
+            return None
+        value = raw.get("issues_enabled") if isinstance(raw, dict) else None
+        return value if isinstance(value, bool) else None
+
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe via `glab api
         projects/:id/repository/files/:path?ref=HEAD`. A NOT-FOUND reads

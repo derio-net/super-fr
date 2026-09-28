@@ -22,6 +22,13 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _no_forge_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--tracking auto` asks the forge; no test here may. Issues read as
+    disabled unless a test says otherwise."""
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: False)
+
+
 @pytest.fixture()
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -582,8 +589,8 @@ def test_scaffold_profile_writes_backend_and_host_to_profiles_yaml(repo: Path) -
         repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab", host="gitlab.mycorp.com"
     )
     data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
-    assert data["backend"] == "gitlab"
-    assert data["host"] == "gitlab.mycorp.com"
+    assert data["forge"] == {"type": "gitlab", "host": "gitlab.mycorp.com"}
+    assert "backend" not in data and "host" not in data
 
 
 def test_scaffold_profile_github_default_omits_backend_key(repo: Path) -> None:
@@ -615,8 +622,8 @@ def test_cli_backend_flag_reaches_scaffold_profile(repo: Path) -> None:
     res = scaffold(repo, "--backend", "gitlab", "--host", "gitlab.mycorp.com")
     assert res.exit_code == 0, res.output
     data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
-    assert data["backend"] == "gitlab"
-    assert data["host"] == "gitlab.mycorp.com"
+    assert data["forge"] == {"type": "gitlab", "host": "gitlab.mycorp.com"}
+    assert "backend" not in data and "host" not in data
     config = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
     assert "glab" in config["postCreateCommand"]
 
@@ -695,3 +702,158 @@ def test_this_repos_own_uv_profiles_carry_it() -> None:
     for path in uv_profiles:
         env = json.loads(path.read_text()).get("containerEnv", {})
         assert env.get("UV_PROJECT_ENVIRONMENT") == UV_CONTAINER_PROJECT_ENV, path
+
+
+# --- fr-profiles services (spec 2026-09-28-fr-profiles-services §3.C, §3.E.1, R8) ---
+
+PROFILES = ".devcontainer/fr-profiles.yaml"
+
+
+def _profiles(repo: Path) -> dict:
+    return yaml.safe_load((repo / PROFILES).read_text())
+
+
+def _real_ci(repo: Path, forge: str = "github") -> None:
+    path = repo / (".github/workflows/ci.yml" if forge == "github" else ".gitlab-ci.yml")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("test:\n  script: [pytest]\n" if forge != "github" else "name: ci\non: push\n")
+
+
+def _fr_only_ci(repo: Path) -> None:
+    path = repo / ".github" / "workflows" / "acceptance-report.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("name: acceptance-report\non: push\n")
+
+
+def test_scaffold_writes_schema_2_and_nested_services(repo: Path) -> None:
+    _initial_commit(repo)
+    res = scaffold(repo, "--backend", "gitlab", "--host", "gl.example.com", "--ci", "none")
+    assert res.exit_code == 0, res.output
+    data = _profiles(repo)
+    assert data["schema_version"] == 2
+    assert data["forge"] == {"type": "gitlab", "host": "gl.example.com"}
+    assert data["ci"] == {"type": "none"}
+    assert data["tracking"] == {"type": "none"}  # issues disabled by the autouse fake
+    assert "backend" not in data
+
+
+def test_ci_auto_real_ci_is_the_forges_pipeline(repo: Path) -> None:
+    _initial_commit(repo)
+    _real_ci(repo)
+    res = scaffold(repo, "--backend", "github", "--tracking", "none")
+    assert res.exit_code == 0, res.output
+    assert _profiles(repo)["ci"] == {"type": "github-actions"}
+
+
+def test_ci_auto_absent_is_none(repo: Path) -> None:
+    _initial_commit(repo)
+    res = scaffold(repo, "--backend", "github", "--tracking", "none")
+    assert res.exit_code == 0, res.output
+    assert _profiles(repo)["ci"] == {"type": "none"}
+
+
+def test_ci_auto_fr_only_is_inconclusive_and_writes_nothing(repo: Path) -> None:
+    _initial_commit(repo)
+    _fr_only_ci(repo)
+    res = scaffold(repo, "--backend", "github", "--tracking", "none")
+    assert res.exit_code == 2
+    assert "--ci" in res.output
+    assert not (repo / PROFILES).exists()
+    assert not (repo / ".devcontainer" / "dev").exists()
+
+
+@pytest.mark.parametrize(("answer", "expected"), [(True, "github"), (False, "none")])
+def test_tracking_auto_follows_issues_enabled(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, answer: bool, expected: str
+) -> None:
+    _initial_commit(repo)
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: answer)
+    res = scaffold(repo, "--backend", "github", "--ci", "none")
+    assert res.exit_code == 0, res.output
+    assert _profiles(repo)["tracking"] == {"type": expected}
+
+
+def test_tracking_auto_unknown_is_inconclusive(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _initial_commit(repo)
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: None)
+    res = scaffold(repo, "--backend", "github", "--ci", "none")
+    assert res.exit_code == 2
+    assert "--tracking" in res.output
+    assert not (repo / PROFILES).exists()
+
+
+def test_explicit_none_none_needs_no_detection(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _initial_commit(repo)
+    _fr_only_ci(repo)  # would be inconclusive under auto
+
+    def boom(*a: object, **k: object) -> bool:
+        raise AssertionError("no forge call expected")
+
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", boom)
+    res = scaffold(repo, "--ci", "none", "--tracking", "none")
+    assert res.exit_code == 0, res.output
+    data = _profiles(repo)
+    assert data["ci"] == {"type": "none"} and data["tracking"] == {"type": "none"}
+
+
+def test_deferred_and_unknown_types_are_refused(repo: Path) -> None:
+    _initial_commit(repo)
+    res = scaffold(repo, "--ci", "jenkins", "--tracking", "none")
+    assert res.exit_code == 2 and "derio-net/super-fr#795" in res.output
+    res = scaffold(repo, "--ci", "none", "--tracking", "jira")
+    assert res.exit_code == 2 and "derio-net/super-fr#795" in res.output
+    res = scaffold(repo, "--ci", "circle", "--tracking", "none")
+    assert res.exit_code == 2 and "--ci" in res.output
+    assert not (repo / PROFILES).exists()
+
+
+def test_scaffold_over_a_v1_file_migrates_it_in_process(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text(
+        "# mine\nprofiles:\n  old:\n    purpose: p\n    secrets: []\ndefault: old\n"
+        "backend: gitlab\nhost: gl.example.com\n"
+    )
+    res = scaffold(repo, "--ci", "none", "--tracking", "none")
+    assert res.exit_code == 0, res.output
+    data = _profiles(repo)
+    assert data["schema_version"] == 2
+    assert set(data["profiles"]) == {"old", "dev"}
+    assert data["forge"] == {"type": "gitlab", "host": "gl.example.com"}
+    assert "backend" not in data and "host" not in data
+
+
+def test_an_unmigratable_v1_file_is_refused_untouched(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    body = "profiles: {}\nmystery: 1\nbackend: gitlab\n"
+    (repo / PROFILES).write_text(body)
+    res = scaffold(repo, "--ci", "none", "--tracking", "none")
+    assert res.exit_code == 2
+    assert (repo / PROFILES).read_text() == body
+    assert not (repo / ".devcontainer" / "dev").exists()
+
+
+def test_a_refusal_after_the_migration_restores_the_v1_file(repo: Path) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    body = "profiles: {}\nbackend: github\n"
+    (repo / PROFILES).write_text(body)
+    res = scaffold(repo, "--ci", "circle", "--tracking", "none")
+    assert res.exit_code == 2 and "--ci" in res.output
+    assert (repo / PROFILES).read_text() == body
+
+
+def test_a_declared_block_survives_a_second_profile(repo: Path) -> None:
+    _initial_commit(repo)
+    assert (
+        scaffold(repo, "--backend", "github", "--ci", "none", "--tracking", "none").exit_code == 0
+    )
+    res = runner.invoke(
+        app,
+        ["init", "scaffold", "--repo", str(repo), "--profile", "admin", "--purpose", "x"],
+    )
+    assert res.exit_code == 0, res.output
+    data = _profiles(repo)
+    assert set(data["profiles"]) == {"dev", "admin"}
+    assert data["ci"] == {"type": "none"} and data["forge"] == {"type": "github"}

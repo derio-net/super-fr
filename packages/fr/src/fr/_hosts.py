@@ -100,6 +100,27 @@ def origin_hostname(repo_root: Path) -> str | None:
     return m.group(1) if m else None
 
 
+_REMOTE_PATH_RE = re.compile(r"^(?:[\w+.-]+://)?(?:[^@/]+@)?[^/:]+(?::\d+)?[:/](.+?)(?:\.git)?/?$")
+
+
+def origin_slug(repo_root: Path) -> str | None:
+    """The `owner/repo` (GitLab: `group/sub/project`) path of `origin`, from
+    `git remote get-url origin` — local, no network. None on any failure, so a
+    caller asking a forge about it reads "unknown" rather than guessing."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, FileNotFoundError):
+        return None
+    url = (result.stdout or "").strip() if result.returncode == 0 else ""
+    m = _REMOTE_PATH_RE.match(url) if url else None
+    return m.group(1) if m else None
+
+
 def backend_for_hostname(hostname: str | None) -> HostBackend:
     """Resolve a backend from a bare hostname alone — the plain heuristic
     tier of `detect_backend`, for contexts that only have a URL, not a

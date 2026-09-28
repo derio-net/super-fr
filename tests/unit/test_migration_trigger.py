@@ -114,6 +114,11 @@ def test_the_exemption_list_is_exactly_these_things() -> None:
     `services` was added by 2026-09-28 fr-profiles-services phase 1 (spec §3.F):
     it reads fr-profiles.yaml and the CI files, writes nothing, and must report
     an unmigrated version-1 file as `source: legacy` rather than be refused.
+
+    `init` stays exempt (2026-09-28 fr-profiles-services phase 5, spec §3.E.1):
+    `fr init scaffold` writes only the fr-profiles artifact, always at its
+    current version, and migrates a version-1 file in process before merging
+    into it — so the gate has nothing to protect it from and never runs first.
     """
     assert trigger.EXEMPT_OPTIONS == frozenset({"--help", "--version"})
     assert trigger.EXEMPT_COMMANDS == frozenset(

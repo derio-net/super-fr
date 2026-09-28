@@ -157,7 +157,9 @@ def test_the_snippet_is_the_last_command_of_post_create(
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend=backend, commit=False)  # type: ignore[arg-type]
+    scaffold_profile(
+        repo, "dev", "purpose", tools=[], secrets=[], backend=backend, commit=False, tracking="none"
+    )  # type: ignore[arg-type]
     config = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
     snippet = render_host_cli_post_create(HOST_CLI_PINS[backend])
     assert config["postCreateCommand"] == f"{POST_CREATE}; {snippet}"
@@ -225,7 +227,16 @@ def test_the_whole_post_create_command_carries_the_snippets_status(
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab", commit=False)
+    scaffold_profile(
+        repo,
+        "dev",
+        "purpose",
+        tools=[],
+        secrets=[],
+        backend="gitlab",
+        commit=False,
+        tracking="none",
+    )
     command = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())[
         "postCreateCommand"
     ]

@@ -377,6 +377,16 @@ class RealGhClient:
             "allowed": [m for m, key in flags if raw.get(key)],
         }
 
+    def issues_enabled(self, repo: str | None = None) -> bool | None:
+        if not repo:
+            return None
+        try:
+            raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "hasIssuesEnabled"]))
+        except (_gh.GhError, ValueError):
+            return None
+        value = raw.get("hasIssuesEnabled") if isinstance(raw, dict) else None
+        return value if isinstance(value, bool) else None
+
 
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}

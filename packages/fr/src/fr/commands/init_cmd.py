@@ -47,13 +47,14 @@ def scaffold(
     no_commit: bool = typer.Option(
         False, "--no-commit", help="Write the files only; do not commit the profile."
     ),
-    backend: str = typer.Option(
-        "github",
+    backend: str | None = typer.Option(
+        None,
         "--backend",
-        help="Which forge this repo lives on: github (default), gitlab, or gitea. "
+        help="Which forge this repo lives on: github, gitlab, or gitea. "
         "Picks the devcontainer CLI-install step (github-cli feature vs a "
-        "versioned glab/tea binary install) and is recorded in fr-profiles.yaml "
-        "for fr._hosts.detect_backend.",
+        "versioned glab/tea binary install) and is recorded as the `forge:` "
+        "service in fr-profiles.yaml. Omitted: the forge is declared only when "
+        "the origin is a recognised one, and the GitHub CLI feature is used.",
     ),
     host: str | None = typer.Option(
         None,
@@ -61,11 +62,27 @@ def scaffold(
         help="Self-hosted instance hostname (e.g. gitlab.mycorp.com). Omit for "
         "gitlab.com/gitea.com or GitHub.",
     ),
+    ci: str = typer.Option(
+        "auto",
+        "--ci",
+        help="The `ci:` service: none, github-actions, gitlab-ci, gitea-actions, or auto "
+        "(default). auto: real CI files -> the forge's pipeline; none present -> none; "
+        "only fr's own acceptance pipeline -> refused, pass --ci. Jenkins arrives with "
+        "derio-net/super-fr#795.",
+    ),
+    tracking: str = typer.Option(
+        "auto",
+        "--tracking",
+        help="The `tracking:` service: none, the forge's own type (github, gitlab, "
+        "gitea), or auto (default). auto asks the forge whether issues are enabled "
+        "(enabled -> the forge's own, disabled -> none); when it cannot say -> "
+        "refused, pass --tracking. Jira arrives with derio-net/super-fr#795.",
+    ),
 ) -> None:
     """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
     host secrets placeholders. The commit is what lets `fr isolation up` see the
     profile; pass --no-commit to write only."""
-    if backend not in ("github", "gitlab", "gitea"):
+    if backend is not None and backend not in ("github", "gitlab", "gitea"):
         typer.echo(
             f"error: --backend must be one of github, gitlab, gitea; got {backend!r}", err=True
         )
@@ -83,6 +100,8 @@ def scaffold(
             backend=backend,  # type: ignore[arg-type]
             host=host,
             features=list(feature),
+            ci=ci,
+            tracking=tracking,
         )
     except IsolationError as err:
         typer.echo(f"error: {err}", err=True)

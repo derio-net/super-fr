@@ -206,6 +206,14 @@ class GhClient(Protocol):
         (one of `MERGE_METHODS`, or None) and the methods the repo allows."""
         ...
 
+    def issues_enabled(self, repo: str | None = None) -> bool | None:
+        """Whether the forge has issues switched on for *repo* (`owner/repo`):
+        True / False as the forge answers, None when it cannot say (no repo, a
+        failed call, an unexpected shape, or a backend that cannot ask). Never
+        raises — `fr init scaffold --tracking auto` reads None as
+        inconclusive and refuses, naming the flag."""
+        ...
+
 
 class UnsupportedBatchOps:
     """The §3.J batch operations, each declared unsupported for `backend`.

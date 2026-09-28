@@ -218,6 +218,10 @@ class RealTeaClient(UnsupportedBatchOps):
         """Post a comment via `tea comments add <n> <body> --repo <repo>`."""
         _tea._run_tea(["comments", "add", str(number), body, "--repo", repo])
 
+    def issues_enabled(self, repo: str | None = None) -> bool | None:
+        """tea has no command that says — unknown (spec §3.C)."""
+        return None
+
     def file_exists(self, repo: str, path: str) -> bool:
         """Contents-API existence probe. Any error reads as "not found"
         — the safe direction (same posture as the GitHub/GitLab adapters)."""
