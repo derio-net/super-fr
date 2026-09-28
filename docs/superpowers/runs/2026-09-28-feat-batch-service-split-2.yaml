@@ -97,12 +97,18 @@ steps:
           returned: '2026-09-28T21:23:15+00:00'
           outcome: done
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T21:23:16+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T21:38:02+00:00'
+          outcome: done
+        evidence:
+          review: p2-review
+          reviewer: a151348ce9235a6bd
+          findings: p2r-fallback-declared,p2r-validator-no-forge,p2r-unknown-keys,p2r-flow-branch,p2r-mixed-message,p2r-edge-tests,p2r-splitlines
   journal-check:
     state: pending
   deliver:

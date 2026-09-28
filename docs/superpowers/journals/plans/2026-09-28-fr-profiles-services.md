@@ -191,3 +191,75 @@ migrated ci; resolution unchanged across the migration).
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 validate_profiles reuses _load_mapping/_loc and the live service models + validate_services; the only duplication left (pydantic error formatting) mirrors _model_problems but needs the service-name prefix, so there was nothing worth extracting
+
+<!-- fr:journal kind=finding scope=plan id=p2r-fallback-declared created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-fallback-declared · finding [open] (reviewer: in scope) · Migration wrote the github FALLBACK as a declared forge for an unknown or missing origin (phase 2)
+
+profiles_services.py:104 — flipped the source default->declared and silenced detect_backend's unknown-forge warning.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-validator-no-forge created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-validator-no-forge · finding [open] (reviewer: in scope) · Validator's cross-service checks ran only with a declared forge: (phase 2)
+
+structure.py:520-531 — a cross-forge tracker or hostless gitlab-ci with no forge: passed validate but was refused by strict resolve; R3 is fail-closed.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-unknown-keys created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-unknown-keys · finding [open] (reviewer: in scope) · v2 validation accepted unknown top-level keys (e.g. `trackng:`) (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2r-flow-branch created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-flow-branch · finding [open] (reviewer: in scope) · Reachable YAMLError branch marked no-cover; message pointed at the wrong branch (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2r-mixed-message created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-mixed-message · finding [open] (reviewer: in scope) · Invalid service block with no legacy key refused as 'mixes version-1 backend:/host:' (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2r-edge-tests created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=in -->
+### p2r-edge-tests · finding [open] (reviewer: in scope) · Missing migration tests: BOM, nested host:, quoted/indented backend:, continuation line, empty file, flow-style (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2r-splitlines created=2026-09-28T21:38:02+00:00 phase=2 state=open review_scope=out -->
+### p2r-splitlines · finding [open] (reviewer: out of scope) · str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped (phase 2)
+
+Unrealistic; the same text-surgery pattern predates this change in the registry's stamp writer.
+
+<!-- fr:journal kind=decision scope=plan id=p2r-lone-host created=2026-09-28T21:38:02+00:00 phase=2 -->
+### p2r-lone-host · decision · A v1 file with host: and no backend: migrates to a declared github forge (phase 2)
+
+Deviation accepted during the r1 fix: `fr init scaffold --host X` with the default backend never wrote `backend: github`, so a lone host: is fr's own declaration of a GitHub Enterprise forge, and the v1 resolver already reads it as github.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-28T21:38:02+00:00 phase=2 -->
+### p2-review · review · Phase 2 review: 7 findings (6 in scope, fixed in 478273ed; 1 out of scope) (phase 2)
+
+Independent reviewer over 2e1d3240, 5b5db21f, 2c0d0b9e against spec R3 §3.C-D, plan 02.yaml and .claude/rules/artifact-versioning.md. All artifact-versioning obligations met (registry-only stamp, imported migration, validator via ArtifactKind.validate, pinned frozen reader on the single hop, in-memory build + single atomic write, byte-identical refusals, crash-window handling, chain [2], duplicate keys); CRLF/BOM/nested-host/crash-window line surgery verified by reading. The six in-scope findings were fixed test-first in 478273ed (full suite 7076 passed); p2r-splitlines is out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-fallback-declared-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-fallback-declared -->
+### p2r-fallback-declared-resolved · finding [fixed] · resolves p2r-fallback-declared: Migration wrote the github FALLBACK as a declared forge for an unknown or missing origin (phase 2)
+
+478273ed: forge:/tracking: declared only when the type is known (backend:, recognised origin or host, or a lone host: -> github); otherwise omitted, source stays default and the warning fires; tests for unknown and no origin.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-validator-no-forge-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-validator-no-forge -->
+### p2r-validator-no-forge-resolved · finding [fixed] · resolves p2r-validator-no-forge: Validator's cross-service checks ran only with a declared forge: (phase 2)
+
+478273ed: with no forge:, the validator derives it via resolve_forge(lenient=True) and runs validate_services; tests for a cross-forge tracker and hostless gitlab-ci.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-unknown-keys-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-unknown-keys -->
+### p2r-unknown-keys-resolved · finding [fixed] · resolves p2r-unknown-keys: v2 validation accepted unknown top-level keys (e.g. `trackng:`) (phase 2)
+
+478273ed: top-level keys outside the v2 set are reported; test with `trackng:`.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-flow-branch-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-flow-branch -->
+### p2r-flow-branch-resolved · finding [fixed] · resolves p2r-flow-branch: Reachable YAMLError branch marked no-cover; message pointed at the wrong branch (phase 2)
+
+478273ed: pragma removed, messages and docstring corrected, flow-style refusal tested.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-mixed-message-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-mixed-message -->
+### p2r-mixed-message-resolved · finding [fixed] · resolves p2r-mixed-message: Invalid service block with no legacy key refused as 'mixes version-1 backend:/host:' (phase 2)
+
+478273ed: the mixed message only when a legacy key is present; otherwise _service_problems names the invalid block; test ci: {type: travis}.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-edge-tests-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=fixed resolves=p2r-edge-tests -->
+### p2r-edge-tests-resolved · finding [fixed] · resolves p2r-edge-tests: Missing migration tests: BOM, nested host:, quoted/indented backend:, continuation line, empty file, flow-style (phase 2)
+
+478273ed: BOM, nested host:, continuation line, empty file, quoted/indented/flow-style refusal tests added.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-splitlines-resolved created=2026-09-28T21:38:02+00:00 phase=2 state=open resolves=p2r-splitlines out_of_scope=true -->
+### p2r-splitlines-resolved · finding [out-of-scope] · resolves p2r-splitlines: str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped (phase 2)
+
+Pre-existing text-surgery pattern (registry stamp writer); not caused by this change and not realistic input.
