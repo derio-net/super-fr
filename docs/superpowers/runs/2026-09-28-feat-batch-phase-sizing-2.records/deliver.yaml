@@ -1,9 +1,0 @@
-schema_version: 3
-run: 2026-09-28-feat-batch-phase-sizing-2
-step: deliver
-outcome: done
-acceptance: []
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/792
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/6abc4931-7695-498d-b6b0-6bfc92730400/scratchpad/full-suite.log
