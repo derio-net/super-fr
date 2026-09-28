@@ -471,3 +471,125 @@ def test_a_caller_supplied_coverage_is_refused_as_derived(tmp_path: Path) -> Non
 
     assert out.exit_code == 2, out.output
     assert "not yours to pass" in _squash(out.output)
+
+
+# --- Task 3: `requirement-rows` on deliver ------------------------------------
+
+
+def _at_deliver(tmp_path: Path, **shape: str) -> tuple[Path, Path]:
+    repo, shipped = _at_spec_review(tmp_path, **shape)
+    _review_entry(repo)
+    assert _spec_review(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    return repo, shipped
+
+
+def _deliver(repo: Path, shipped: Path):
+    return _invoke(repo, shipped, ["run", "resolve", "r1", "--step", "deliver", "--state", "done"])
+
+
+def test_deliver_refuses_a_not_implemented_row_naming_its_set_status_line(
+    tmp_path: Path,
+) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    write_matrix(repo, [row(SPEC, status="not-implemented")])
+
+    out = _deliver(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "req-r1" in text
+    assert "fr acceptance set-status --id req-r1" in text
+    assert load_run_state(repo, "r1").steps["deliver"].state != "done"
+
+
+def test_deliver_passes_on_skipped_ci_and_scheduled_and_counts_them(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    write_matrix(
+        repo,
+        [
+            row(SPEC, rid="a", status="skipped"),
+            row(SPEC, rid="b", fragment="", status="ci"),
+            row(SPEC, rid="c", status="scheduled"),
+            row("docs/other.md", rid="elsewhere", status="not-implemented"),
+        ],
+    )
+
+    out = _deliver(repo, shipped)
+
+    assert out.exit_code == 0, out.output
+    assert _evidence(repo, "deliver")["requirement-rows"] == (
+        "3 rows: ci=1,scheduled=1,skipped=1; post-merge=0"
+    )
+
+
+def test_deliver_skips_and_counts_a_post_merge_row(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    write_matrix(
+        repo,
+        [
+            row(SPEC, status="skipped"),
+            row(SPEC, rid="live", status="not-implemented", verify="post-merge"),
+        ],
+    )
+
+    out = _deliver(repo, shipped)
+
+    assert out.exit_code == 0, out.output
+    assert _evidence(repo, "deliver")["requirement-rows"] == (
+        "2 rows: skipped=1; post-merge=1"
+    )
+
+
+def test_deliver_counts_a_row_its_own_record_moves(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    write_matrix(repo, [row(SPEC, status="not-implemented")])
+    _commit(repo)
+    record = _record(
+        repo,
+        {
+            "step": "deliver",
+            "acceptance": [{"id": "req-r1", "status": "skipped", "notes": "verified by hand"}],
+        },
+    )
+
+    out = _resolve_record(repo, shipped, "deliver", record)
+
+    assert out.exit_code == 0, out.output
+    assert _evidence(repo, "deliver")["requirement-rows"] == "1 rows: skipped=1; post-merge=0"
+
+
+# --- Task 3: runs from before the gate (§G) -----------------------------------
+
+
+def test_a_run_whose_brainstorm_predates_the_gate_records_it_and_reports_debt(
+    tmp_path: Path,
+) -> None:
+    """Brainstorm resolved under a shape with no `requirements`; the shape
+    then grew all three. Nothing refuses (there is no Requirements section
+    at all), each derived name records the predates line, and `status` and
+    `check` show the debt."""
+    full = {"spec_review": _WITH_COVERAGE}
+    repo, shipped = _started(tmp_path, brainstorm="[]", **full)
+    _spec(repo, "\n## Design\n\nno requirements here\n")
+    assert _brainstorm(repo, shipped).exit_code == 0
+    _write_shape(shipped, "traced", _shape(**full))  # the shape grows the gate
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _review_entry(repo)
+    reviewed = _spec_review(repo, shipped)
+    assert reviewed.exit_code == 0, reviewed.output
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+
+    delivered = _deliver(repo, shipped)
+
+    assert delivered.exit_code == 0, delivered.output
+    predates = "predates the requirements gate"
+    review_ev = _evidence(repo, "spec-review")
+    assert review_ev["requirements"] == predates
+    assert review_ev["coverage"] == predates
+    assert _evidence(repo, "deliver")["requirement-rows"] == predates
+    status = _squash(_invoke(repo, shipped, ["run", "status", "r1"]).output)
+    assert "unevidenced: requirements, coverage" in status
+    assert "unevidenced: requirement-rows" in status
+    check = _squash(_invoke(repo, shipped, ["run", "check", "r1"]).output)
+    assert "step/deliver is done, unevidenced: requirement-rows" in check

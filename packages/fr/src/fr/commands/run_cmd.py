@@ -1873,6 +1873,8 @@ def _requirements_witnesses(
         out["requirements"] = _requirements_witness(key, capture)
     if "coverage" in wanted:
         out["coverage"] = _coverage_witness(key, capture, review_id)
+    if "requirement-rows" in wanted:
+        out["requirement-rows"] = _requirement_rows_witness(key, capture)
     return out
 
 
@@ -1936,6 +1938,45 @@ def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | 
     return (
         f"{counts.spans} spans: R={counts.requirement} deferred={counts.deferred} "
         f"context={counts.context} missing={counts.missing}"
+    )
+
+
+def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:
+    """`<n> rows: <status>=<count>,…; post-merge=<m>` over every matrix row
+    citing the run's spec (any fragment or none) — or exit 2 while one is
+    `not-implemented` (§F). A `verify: post-merge` row is counted, never gated:
+    only a live run after merge can move it."""
+    from collections import Counter
+
+    from fr.requirements import origin_fragment
+
+    rows = [
+        r
+        for r in capture.matrix.rows
+        if any(origin_fragment(o, capture.spec_ref) is not None for o in r.origin)
+    ]
+    gated = [r for r in rows if r.verify != "post-merge"]
+    owed = [r for r in gated if r.status == "not-implemented"]
+    if owed:
+        _requirement_rows_refusal(key, capture.spec_rel, [r.id for r in owed])
+    counts = Counter(r.status for r in gated)
+    summary = ",".join(f"{status}={n}" for status, n in sorted(counts.items())) or "none"
+    return f"{len(rows)} rows: {summary}; post-merge={len(rows) - len(gated)}"
+
+
+def _requirement_rows_refusal(key: str, spec_rel: str, ids: list[str]) -> NoReturn:
+    _requirements_refusal(
+        key,
+        [
+            f"refused — {len(ids)} acceptance row(s) citing {spec_rel} are still "
+            "`not-implemented`. Move each once its verification exists:",
+            *(
+                f'fr acceptance set-status --id {rid} --status <ci|scheduled|skipped> '
+                '--notes "<why it moved>"'
+                for rid in ids
+            ),
+            "(a row only a live run after merge can prove declares `verify: post-merge`)",
+        ],
     )
 
 
@@ -2333,7 +2374,12 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
                 if not matches or unit_state != "done":
                     continue
                 held = units.evidence_of(record, key)
-                lacking = tuple(name for name in member.evidence if name not in held)
+                # A §G predates witness is recorded, not met: it reads as debt.
+                lacking = tuple(
+                    name
+                    for name in member.evidence
+                    if held.get(name, REQUIREMENTS_PREDATES) == REQUIREMENTS_PREDATES
+                )
                 if lacking:
                     out[(step_id, key)] = lacking
     return out

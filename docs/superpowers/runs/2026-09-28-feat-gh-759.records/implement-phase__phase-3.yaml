@@ -6,10 +6,11 @@ run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/3
 outcome: done
-ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2]
+ticks: [P3.T1.S1, P3.T1.S2, P3.T2.S1, P3.T2.S2, P3.T3.S1, P3.T3.S2]
 refactor:
   P3.T1: "the one duplicated rule (does a matrix origin name this spec, twin-aware) was extracted into fr.requirements.origin_fragment while going green, and check_requirements now reads it; the capture loading is one helper from the start"
   P3.T2: "one witness function over the capture T1 already loads; check_coverage owns the partition, nothing is repeated to extract"
+  P3.T3: "requirement-rows reuses origin_fragment (T1) for the spec match and _unevidenced_units' existing debt wording; the predates marker is one constant read by both the writer and the status reader"
 journal: []
 resolves: []
 evidence: {}
