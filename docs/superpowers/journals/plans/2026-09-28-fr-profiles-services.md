@@ -124,3 +124,70 @@ Findings p1r-forge-only, p1r-lenient-raise, p1r-warning-advice, p1r-v1-stamp, p1
 ### p1r-later-tests-resolved · finding [out-of-scope] · resolves p1r-later-tests: Test Plan items owned by the migration phase: exempt commands on an unmigrated v1 file (source legacy), legacy ci == migrated ci (phase 1)
 
 Needs the phase-2 migration to exist; phase 2's brief carries both tests.
+
+<!-- fr:journal kind=decision scope=plan id=p2-render-shared created=2026-09-28T21:23:14+00:00 phase=2 -->
+### p2-render-shared · decision · fr.services.render.render_services is the ONE text renderer of the service blocks (phase 5 reuses it) (phase 2)
+
+`render_services({"forge": {...}, "ci": {...}, "tracking": {...}}, newline=...)`
+returns the three blocks as text in forge/ci/tracking order, `type` first, the
+caller's newline style, scalars plain when YAML reads them back unchanged else
+JSON-double-quoted. The 1 -> 2 migration appends it; phase 5's `fr init scaffold`
+should call it rather than yaml.safe_dump. `fr.artifacts.profiles_services.v1_services(root,
+backend, host)` computes what a v1 `backend:`/`host:` pair stands for (forge from
+backend else origin inference, host only when declared; ci via
+`fr.services.detect.detected_ci_type`; tracking = forge type) — the scaffold's
+"migrate a v1 file in process" path can call `rewrite_to_services(path)` then
+`artifact_kind("profiles").write_version(path, 2)`, exactly what the runner does.
+
+<!-- fr:journal kind=decision scope=plan id=p2-wholly-v2 created=2026-09-28T21:23:14+00:00 phase=2 -->
+### p2-wholly-v2 · decision · What the migration treats as an already-v2 (crash-window) body, and what it refuses (phase 2)
+
+Wholly v2 = no top-level backend/host, at least one service block, and every
+present block validates through the live ForgeService/CiService/TrackingService;
+then `fn` returns and the runner stamps. A file carrying BOTH backend/host and a
+service block is refused (half-merged). A v1 file ProfilesV1 rejects (unknown key,
+out-of-vocabulary backend) is refused. After the textual rewrite the new text is
+re-parsed and must equal {old keys minus backend/host} | services, else refused
+(catches flow-style documents). Every refusal leaves the file byte-identical.
+
+<!-- fr:journal kind=decision scope=plan id=p2-validator-v1 created=2026-09-28T21:23:14+00:00 phase=2 -->
+### p2-validator-v1 · decision · validate_profiles checks a v1 file through ProfilesV1; cross-service rules only when a forge block is declared (phase 2)
+
+At v2 (is_version_two) it checks each present block through the live models
+(unknown/deferred types name #795), leftover top-level backend/host, and runs
+validate_services only when `forge:` is declared and every present block parsed
+(undeclared ci/tracking default to the forge's own, which always passes). Without
+a declared forge the host-required rule cannot be decided offline, so it is not
+checked. `fr validate artifacts` reports a v1 file as stale and does not reach
+the structure check; the v1 branch is exercised by calling the validator directly.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-no-change-fragment created=2026-09-28T21:23:14+00:00 phase=2 -->
+### p2-no-change-fragment · discovery · The branch has no .changes fragment yet (phase 2)
+
+`.changes/` holds only README.md on this branch; the PR changes packages/*/src,
+so the change-fragment CI job will fail until a `.changes/feat-batch-service-split-2.yaml`
+is added (minor — new artifact kind, `fr services`). Owed before delivery; the
+release note must carry the §3.D stated risk (an older fr reading a migrated file
+falls back to origin inference — wrong for self-hosted GitLab/Gitea).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-scaffold-writes-v1 created=2026-09-28T21:23:14+00:00 phase=2 -->
+### p2-scaffold-writes-v1 · discovery · fr init scaffold still writes an unstamped v1 file, which is now stale on arrival (phase 2)
+
+Until phase 5 moves `fr init scaffold` to the nested shape, a freshly scaffolded
+repo's fr-profiles.yaml is version 1 and the CLI-entry gate will want to migrate
+it. The suite skips the gate (conftest), so nothing here goes red.
+
+<!-- fr:journal kind=finding scope=plan id=p1r-later-tests-resolved-2 created=2026-09-28T21:23:14+00:00 phase=2 state=fixed resolves=p1r-later-tests -->
+### p1r-later-tests-resolved-2 · finding [fixed] · resolves p1r-later-tests: Test Plan items owned by the migration phase: exempt commands on an unmigrated v1 file (source legacy), legacy ci == migrated ci (phase 2)
+
+tests/unit/test_migration_profiles_services.py: test_the_exempt_commands_run_over_an_unmigrated_v1_file
+(services --json / status / isolation status with the gate live and non-interactive:
+no refusal, file byte-identical, services shows forge+ci source legacy),
+test_a_gated_command_refuses_over_an_unmigrated_v1_file, and
+test_the_legacy_resolved_ci_is_what_the_migration_writes (5 repos: legacy ci ==
+migrated ci; resolution unchanged across the migration).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-28T21:23:14+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+validate_profiles reuses _load_mapping/_loc and the live service models + validate_services; the only duplication left (pydantic error formatting) mirrors _model_problems but needs the service-name prefix, so there was nothing worth extracting
