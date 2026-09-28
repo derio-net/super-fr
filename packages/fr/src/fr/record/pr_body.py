@@ -128,29 +128,66 @@ def _run_spec(state: RunState) -> str | None:
     )
 
 
-def _input_coverage(repo_root: Path, state: RunState) -> str:
-    """The spec review's `input-coverage` block inside `<details>` (it can be
-    long), read from the review entry the unit that recorded `coverage` names —
-    or the predates line for a run §G covers."""
-    from fr.requirements import REQUIREMENTS_PREDATES, coverage_block
+def _predates_gate(state: RunState) -> bool:
+    """§G, as the run records it: no step recorded the run's spec, the one
+    that did carries no `requirements` evidence, or a unit stored the
+    predates line for `requirements`/`coverage`."""
+    from fr.requirements import REQUIREMENTS_PREDATES
     from fr.run import units
 
+    emitter = next(
+        ((sid, r) for sid, r in state.steps.items() if r.emitted and "spec" in r.emitted), None
+    )
+    if emitter is None:
+        return True
+    sid, record = emitter
+    if "requirements" not in units.evidence_of(record, f"step/{sid}"):
+        return True
+    return any(
+        units.evidence_of(r, f"step/{step_id}").get(name) == REQUIREMENTS_PREDATES
+        for step_id, r in state.steps.items()
+        for name in ("requirements", "coverage")
+    )
+
+
+def _input_coverage(repo_root: Path, state: RunState) -> str:
+    """The spec review's `input-coverage` block inside `<details>` (it can be
+    long), read from the review entry the unit that recorded `coverage` names.
+    The predates line only for a run §G covers; any other miss says why it is
+    `Not available` — a lookup failure is not a run from before the gate."""
+    from fr.requirements import coverage_block
+    from fr.run import units
+
+    if _predates_gate(state):
+        return PREDATES_LINE
     spec_rel = _run_spec(state)
-    for step_id, record in state.steps.items():
-        evidence = units.evidence_of(record, f"step/{step_id}")
-        if "coverage" not in evidence or "review" not in evidence or spec_rel is None:
-            continue
-        if evidence["coverage"] == REQUIREMENTS_PREDATES:
-            continue
-        for scope, entries in _journals(repo_root, state):
-            review = next((e for e in entries if e.id == evidence["review"]), None)
-            if scope != "spec" or review is None:
-                continue
-            block = coverage_block(review.body)
-            if block is not None:
-                summary = f"{evidence['coverage']} (review `{review.id}`)"
-                return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
-    return PREDATES_LINE
+    assert spec_rel is not None  # _predates_gate is True without one
+    recorded = next(
+        (
+            ev
+            for step_id, r in state.steps.items()
+            if "coverage" in (ev := units.evidence_of(r, f"step/{step_id}"))
+        ),
+        None,
+    )
+    if recorded is None:
+        return "Not available: no step of this run recorded `coverage` evidence."
+    if "review" not in recorded:
+        return "Not available: the step that recorded `coverage` names no `review` entry."
+    slug = spec_journal_slug(Path(spec_rel).stem)
+    path = resolve_journal_read_path(repo_root, "spec", slug)
+    try:
+        entries = parse_journal(path.read_text())
+    except (JournalParseError, OSError) as e:
+        return f"Not available: spec journal {path.name} is unreadable: {e}"
+    review = next((e for e in entries if e.id == recorded["review"]), None)
+    if review is None:
+        return f"Not available: review entry `{recorded['review']}` is not in the spec journal."
+    block = coverage_block(review.body)
+    if block is None:
+        return f"Not available: review entry `{review.id}` carries no input-coverage block."
+    summary = f"{recorded['coverage']} (review `{review.id}`)"
+    return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
 
 
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:

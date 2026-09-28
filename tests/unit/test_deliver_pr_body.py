@@ -290,3 +290,38 @@ def test_a_run_predating_the_gate_renders_the_predates_line_and_nones(tmp_path: 
     assert coverage.strip() == "Not recorded (predates the requirements gate)."
     owed = after.split("## Post-merge verification owed")[1].split("## Proportionality")[0]
     assert owed.strip() == "None."
+
+
+def _coverage_section(body: str) -> str:
+    return body.split("## Input coverage")[1].split("## Post-merge verification owed")[0].strip()
+
+
+def test_a_gated_run_whose_shape_records_no_coverage_is_not_available(tmp_path: Path) -> None:
+    """e3: brainstorm carries `requirements`, so the run does NOT predate the
+    gate — a missing `coverage` (a repo manifest that never declared it) is
+    reported as unavailable, not as predating."""
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import _at_deliver
+
+    repo, _ = _at_deliver(tmp_path)
+
+    coverage = _coverage_section(render_pr_body(repo, load_run_state(repo, "r1")))
+
+    assert coverage.startswith("Not available:"), coverage
+    assert "predates" not in coverage
+
+
+def test_an_unreadable_spec_journal_is_not_available_not_predates(tmp_path: Path) -> None:
+    from fr.journal.model import journal_path
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import SLUG
+
+    repo = _traced_run_at_deliver(tmp_path)
+    journal_path(repo, "spec", SLUG).write_text("this is not a journal\n")
+
+    coverage = _coverage_section(render_pr_body(repo, load_run_state(repo, "r1")))
+
+    assert coverage.startswith("Not available:"), coverage
+    assert "predates" not in coverage
