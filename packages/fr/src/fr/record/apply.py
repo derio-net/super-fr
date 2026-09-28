@@ -243,6 +243,38 @@ _STAMP = frozenset({"created"})
 _STAMP_AND_ID = frozenset({"created", "id"})
 
 
+_CARRIED_OPEN = frozenset({"deferred", "out-of-scope", "unconfirmed"})
+"""Resolution states written `state=open` plus a header token, so an older fr
+reads the finding as open (fail closed) rather than failing to parse."""
+
+
+def unconfirmed_refusal(finding_id: str, target: JournalEntry, scope: str | None) -> str | None:
+    """Why `unconfirmed` may not close `target`, or None (spec 2026-09-28 §D).
+
+    The ONE statement of the two rules, shared by `fr journal resolve` and a
+    step record: `unconfirmed` is a spec-capture state, and a finding the
+    reviewer tagged `out` is not the input's to confirm. The model validator
+    also refuses a non-spec record, but only this check can see the TARGET."""
+    if scope != "spec":
+        return (
+            f"`unconfirmed` is only valid on a spec-scope finding, and {finding_id!r} is in "
+            f"a {scope} journal — it records behaviour built without operator confirmation"
+        )
+    if target.review_scope == "out":
+        return (
+            f"{finding_id!r} was tagged review_scope: out by the reviewer — `unconfirmed` "
+            "is for behaviour this spec builds; resolve an out-of-scope finding "
+            "`out-of-scope` or `deferred`"
+        )
+    return None
+
+
+def _refuse_unconfirmed(finding_id: str, target: JournalEntry, scope: str | None) -> None:
+    reason = unconfirmed_refusal(finding_id, target, scope)
+    if reason is not None:
+        raise RecordRefusedError(reason)
+
+
 def _journal_writes(
     ctx: _Context, record: StepRecord, overlay: _Overlay, repo_root: Path
 ) -> tuple[list[JournalEntry], dict[str, int], list[str]]:
@@ -340,6 +372,7 @@ def _journal_writes(
                 answered_by=item.answered_by,
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
+                input=item.input,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
@@ -351,6 +384,8 @@ def _journal_writes(
 
     for res in record.resolves:
         target_entry = finding(res.id)
+        if res.state == "unconfirmed":
+            _refuse_unconfirmed(res.id, target_entry, scope)
         try:
             entry = JournalEntry(
                 kind="finding",
@@ -360,10 +395,11 @@ def _journal_writes(
                 phase=res.phase if res.phase is not None else ctx.phase,
                 title=f"resolves {res.id}: {target_entry.title}",
                 body=res.body,
-                state="open" if res.state in ("deferred", "out-of-scope") else res.state,  # type: ignore[arg-type]
+                state="open" if res.state in _CARRIED_OPEN else res.state,  # type: ignore[arg-type]
                 resolves=res.id,
                 tracked_by=res.tracked_by,
                 out_of_scope=res.state == "out-of-scope",
+                unconfirmed=res.state == "unconfirmed",
                 answered_by=res.answered_by,
             )
         except ValueError as e:

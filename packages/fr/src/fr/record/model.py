@@ -57,7 +57,7 @@ RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
 Outcome = Literal["done", "failed", "blocked"]
-ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope"]
+ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope", "unconfirmed"]
 
 _TICK_ID_RE = re.compile(r"^P\d+\.T\d+\.S\d+$")
 _TASK_ID_RE = re.compile(r"^P\d+\.T\d+$")
@@ -112,6 +112,9 @@ class JournalItem(_Strict):
     answered_by: AnsweredBy | None = None
     tracked_by: StrictStr | None = None
     out_of_scope: bool = False
+    input: bool = False
+    """A spec-journal `discovery` holding the operator's input (spec
+    2026-09-28 §A); `JournalEntry`'s validator refuses it anywhere else."""
 
 
 class Resolution(_Strict):

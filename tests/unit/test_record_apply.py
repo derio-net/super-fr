@@ -421,3 +421,162 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
         apply_record(root, None, StepRecord(acceptance=(item, item)), target=target)
 
     assert (head(root), snapshot(root)) == (sha, files)
+
+
+# --- spec 2026-09-28 §A, §D: `input` and `unconfirmed` through a record ------
+#
+# The verb tests (test_journal_cmd.py::TestAddInput / TestResolveUnconfirmed)
+# drive `fr journal add/resolve`; these drive a whole step's record through
+# `fr run resolve --record`, where the journal scope comes from the step's
+# `emits:` in the manifest, not from a `--scope` flag.
+
+
+def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
+    """A run whose `spec-review` step is open, optionally with an open spec
+    finding `f1` the reviewer tagged `finding_scope`."""
+    from datetime import datetime
+
+    from fr.journal.model import JournalEntry, append_journal_entry
+
+    from tests.integration.test_fr_goal_shape import _workspace
+
+    root = _workspace(tmp_path, "feat/rec")
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "spec.md").write_text("# spec\n")
+    commit_all(root, "spec")
+    for argv in (
+        ["run", "start", "fr-goal", "--branch", "feat/rec", "--run-id", RUN],
+        ["run", "advance", RUN],
+        ["run", "resolve", RUN, "--step", "brainstorm", "--state", "done",
+         "--emitted", "spec=docs/spec.md"],
+        ["run", "advance", RUN],
+    ):  # fmt: skip
+        out = fr(root, argv)
+        assert out.exit_code == 0, (argv, out.output)
+    if finding_scope is not None:
+        append_journal_entry(
+            journal_path(root, "spec", "spec"),
+            "spec",
+            JournalEntry(
+                kind="finding",
+                scope="spec",
+                id="f1",
+                created=datetime.now().replace(microsecond=0).isoformat(),
+                title="invented behaviour",
+                body="the spec builds Y; the input never asked for it",
+                state="open",
+                review_scope=finding_scope,  # type: ignore[arg-type]
+            ),
+        )
+    commit_all(root, "at spec-review")
+    return root
+
+
+def _spec_review_record(**overrides: object) -> dict[str, object]:
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
+    record: dict[str, object] = {
+        "schema_version": RECORD_SCHEMA_VERSION,
+        "run": RUN,
+        "step": "spec-review",
+        "outcome": "done",
+        "journal": [{"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}],
+        "evidence": {"review": "sr-1", "reviewer": "spec-reviewer-1"},
+    }
+    record.update(overrides)
+    return record
+
+
+def _spec_entries(root: Path):
+    return parse_journal(journal_path(root, "spec", "spec").read_text())
+
+
+def test_a_spec_record_writes_an_input_discovery(tmp_path: Path) -> None:
+    root = _at_spec_review(tmp_path)
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}
+    given = {"kind": "discovery", "id": "input-1", "title": "input", "body": "build X"}
+    record = write_record(root, _spec_review_record(journal=[review, {**given, "input": True}]))
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 0, out.output
+    (entry,) = [e for e in _spec_entries(root) if e.id == "input-1"]
+    assert entry.input is True and entry.kind == "discovery"
+
+
+def test_a_spec_record_resolves_a_finding_unconfirmed_and_the_findings_gate_passes(
+    tmp_path: Path,
+) -> None:
+    root = _at_spec_review(tmp_path, finding_scope="in")
+    record = write_record(
+        root,
+        _spec_review_record(resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}]),
+    )
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 0, out.output
+    entries = _spec_entries(root)
+    assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+    (rec,) = [e for e in entries if e.resolves == "f1"]
+    assert rec.state == "open" and rec.unconfirmed is True and rec.body == "builds Y"
+
+
+def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> None:
+    root = _at_spec_review(tmp_path)
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": "b"}
+    bad = {"kind": "decision", "id": "d1", "title": "t", "body": "b", "input": True}
+    record = write_record(root, _spec_review_record(journal=[review, bad]))
+    files = snapshot(root)
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 2, out.output
+    assert "`input` is only valid" in out.output
+    assert snapshot(root) == files
+
+
+def test_a_spec_record_refuses_unconfirmed_on_a_finding_the_reviewer_tagged_out(
+    tmp_path: Path,
+) -> None:
+    root = _at_spec_review(tmp_path, finding_scope="out")
+    record = write_record(
+        root,
+        _spec_review_record(resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}]),
+    )
+    files = snapshot(root)
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 2, out.output
+    assert "f1" in out.output and "out" in out.output
+    assert snapshot(root) == files
+
+
+def test_a_plan_record_refuses_an_input_entry(tmp_path: Path) -> None:
+    root = started_run(tmp_path)
+    given = {"kind": "discovery", "id": "input-1", "title": "t", "body": "b", "input": True}
+    record = write_record(root, implement_record(journal=[given], resolves=None))
+    commit_all(root, "record")
+    files = snapshot(root)
+
+    out = _resolve(root, record)
+
+    assert out.exit_code == 2, out.output
+    assert "`input` is only valid" in out.output
+    assert snapshot(root) == files
+
+
+def test_a_plan_record_refuses_an_unconfirmed_resolution(tmp_path: Path) -> None:
+    root = started_run(tmp_path)
+    record = write_record(
+        root, implement_record(resolves=[{"id": "p1-f1", "state": "unconfirmed", "body": "x"}])
+    )
+    commit_all(root, "record")
+    files = snapshot(root)
+
+    out = _resolve(root, record)
+
+    assert out.exit_code == 2, out.output
+    assert "`unconfirmed` is only valid" in out.output
+    assert snapshot(root) == files

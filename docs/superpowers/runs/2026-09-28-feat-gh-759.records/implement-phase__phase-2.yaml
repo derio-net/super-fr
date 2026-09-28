@@ -6,8 +6,9 @@ run: 2026-09-28-feat-gh-759
 step: implement-phase
 item: phase/2
 outcome: done            # done | failed | blocked
-ticks: [P2.T1.S1, P2.T1.S2]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2]
 refactor:
+  P2.T2: "the one duplicated rule (the verb's and the record's unconfirmed refusals) was extracted into unconfirmed_refusal while going green; nothing further to clean"
   P2.T1: "two model fields, their validators and one fold arm copy the out_of_scope token's existing shape line for line; removing the phase-1 test bridge was the only cleanup and it is done"
 journal:
   - kind: decision
@@ -23,5 +24,20 @@ journal:
       enforced in `fr journal resolve` and `record.apply._journal_writes`.
       `is_input_entry` now reads `JournalEntry.input` directly; the phase-1
       `parse_journal` bridge in test_spec_requirements_cmd.py is removed.
+  - kind: discovery
+    id: p2-unconfirmed-one-refusal-fn
+    title: the verb and the record path share one unconfirmed-refusal function; record fields landed in T2
+    body: |
+      `fr journal resolve` already routes through `apply_record` with a
+      one-entry StepRecord, so the verb and a step record hit `_journal_writes`
+      alike. The two target-dependent rules (spec scope; not a reviewer-`out`
+      finding) are stated once, in `fr.record.apply.unconfirmed_refusal`; the
+      verb also calls it right after the target loads (spec §D point 1) so it
+      refuses with its own message before building a record, and
+      `_journal_writes` calls it with the step's manifest-derived journal scope
+      (point 2). `JournalItem.input` and `ResolutionState` + `unconfirmed`
+      had to land in T2 (the record-path tests need them); T3 carries the
+      stamp bump and migration for them. The record-path tests walk a real
+      run to `spec-review` (spec scope) and to `implement-phase` (plan scope).
 resolves: []
 evidence: {}
