@@ -1,2 +1,0 @@
-bump: minor
-summary: "`fr acceptance init` scaffolds a CI pipeline only when the repo already has CI (or `--with-ci`), edits `.gitignore` by appending one line, and a row can reach `ci` only in a repo with a CI config (gh#775)."
