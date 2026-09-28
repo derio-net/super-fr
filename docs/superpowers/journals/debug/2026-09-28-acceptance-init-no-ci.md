@@ -9,3 +9,8 @@ Scratch repo, origin on gitlab.com (example-org/demo), .gitignore without a trai
 ### 0a8f1bb010d4 · hypothesis · acceptance's CI-shaped outputs key off the forge backend, never off whether CI exists
 
 scaffold.init(backend) picks the CI file from detect_backend (the forge); nothing checks for an existing CI config. set_status_cmd validates only the Status literal. Same missing fact (does this repo have CI?) behind the CI file and the ci status.
+
+<!-- fr:journal kind=root-cause scope=debug id=4b8a243cbdaa created=2026-09-28T19:04:52+00:00 -->
+### 4b8a243cbdaa · root-cause · A: CI outputs key off the forge backend, never off whether the repo has CI
+
+scaffold.init picks the pipeline file from detect_backend (the forge) and writes it unconditionally; the matrix header and rule hard-code .github/workflows. The record engine's _acceptance_writes (the one path behind add/set-status/resolve --record) validates only the Status literal, so any row reaches `ci` in a repo with no CI.
