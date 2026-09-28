@@ -4381,9 +4381,13 @@ rows:
       before anything else
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R9
-    levels: {}
-    status: not-implemented
-    notes: Born at spec-review (d8, d10); target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_spec_reviewer_agent.py
+    status: ci
+    notes: 'Covered by the shipped fr-goal.yaml tripwire (spec-review tier: hard) and
+      the agent-prose pin (traceability checked first).'
   - id: requirements-post-merge-rows
     capability: fr-goal-methodology
     acceptance: A requirement that can only be verified after merge does not block delivery
