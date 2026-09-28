@@ -4459,9 +4459,13 @@ rows:
       serve and names each phase with no ask of its own, without blocking
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_proportionality.py
+    status: ci
+    notes: 'Phase 1 (spec §D, R4): fr plan proportionality gains a ## Phases section,
+      read from HEAD only, counting agentic phases against the requirements they serve
+      and naming each phase with no own ask; report-only, exit 0.'
   - id: phase-sizing-manual-verification
     capability: fr-goal-methodology
     acceptance: 'An operator verification step is steered to a Test Plan line: self-review
