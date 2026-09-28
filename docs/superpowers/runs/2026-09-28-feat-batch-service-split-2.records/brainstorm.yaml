@@ -89,6 +89,47 @@ journal:
   - {kind: decision, id: r2q2-migrated-ci, title: "Migration writes ci as detected: forge's own if a CI config exists that is not solely fr's scaffolded acceptance template, else none", body: "Operator chose 'Detected' and asked: 'aren't ci configs created regardless so far? If so, how can the migration know if the config is active?' Answer recorded in the spec: before #787 fr scaffolded the CI file regardless, so presence alone proves nothing; the offline migration discounts a config that is solely fr's own acceptance template; activity (pipelines actually running) is only knowable from the forge, which the migration does not call."}
   - {kind: decision, id: r2q3-init-flags, title: "fr init scaffold gains --ci/--tracking; both are detected, and when detection is inconclusive the operator is asked", body: "Operator: option 1, 'but both should be detected and if not, the user should be asked'."}
 resolves: []
-acceptance: []
-emitted: {}
+acceptance:
+  - id: profiles-services-schema
+    capability: fr-profiles services
+    acceptance: "fr-profiles declares forge, ci and tracking as nested {type, host} services; jenkins, jira and a cross-forge tracker are refused naming the follow-up issue"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R1']
+    status: not-implemented
+  - id: profiles-services-defaults
+    capability: fr-profiles services
+    acceptance: "An undeclared ci or tracking resolves to the forge's own, hosts default to the forge host for native types, and every forge consumer keeps today's behaviour"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R2']
+    status: not-implemented
+  - id: profiles-services-migration
+    capability: fr-profiles services
+    acceptance: "A flat backend/host fr-profiles.yaml is migrated to the nested services shape at the first fr command (ci detected offline), and an invalid services block fails fr validate artifacts"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R3']
+    status: not-implemented
+  - id: profiles-services-ci-drives-acceptance
+    capability: fr-profiles services
+    acceptance: "acceptance init and the ci status follow the declared ci service: none scaffolds no pipeline and refuses ci; a pipeline type scaffolds its template"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R4']
+    status: not-implemented
+  - id: profiles-services-no-ci-delivery
+    capability: fr-profiles services
+    acceptance: "Under ci: none, fr-goal's Ready checklist and fr-acceptance name the local suite as the gate"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R5']
+    status: not-implemented
+    verify: post-merge
+  - id: profiles-services-no-tracker
+    capability: fr-profiles services
+    acceptance: "Under tracking: none, no issue path fires: closeout prints no filing lines, apply --yes and triage batch dispatch refuse, the pipeline omits the debt issue, findings stay out-of-scope"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R6']
+    status: not-implemented
+  - id: profiles-services-cli
+    capability: fr-profiles services
+    acceptance: "fr services prints each resolved service's type, host and source, plain and --json, without touching any artifact"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R7']
+    status: not-implemented
+  - id: profiles-services-init-detect
+    capability: fr-profiles services
+    acceptance: "fr init scaffold writes the nested services, detecting ci and tracking and refusing with the flag to pass when detection is inconclusive"
+    origin: ['super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R8']
+    status: not-implemented
+emitted: {spec: docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md}
 evidence: {}
