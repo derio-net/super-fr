@@ -19,3 +19,8 @@ check_coverage splits each row on every unescaped `|`, ignoring the `"…"` arou
 ### fix · finding [fixed] · Coverage spans are read as the reviewer writes them; refusals route to the reviewer
 
 requirements.py §D: `_protect_span_pipes` keeps a quoted span's raw `|` in one cell; `_coverage_form` reads `\"`/`\|` as `"`/`|` on both sides of the comparison (so no escape can hide a gap); an unquoted span is a reported problem, not an uncaught raise; table/label/partition refusals end with "re-dispatch the reviewer … never edit its partition". Pinned red-first by tests/unit/test_requirements.py::test_777_* (synthetic input in take 9's shape). Replaying take 9's untouched reviewer block now passes: 94 spans, missing=1. Reviewer brief and fr-goal SKILL updated; both mirrors resynced.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-09-28T19:28:03+00:00 -->
+### review · review · Independent adversarial review: 1 finding, fixed
+
+An independent read-only reviewer attacked the span regex and the decode. One finding, confirmed red first (test_777_escape_never_pairs_across_a_span_boundary): `_coverage_form` decoded `\"` AFTER joining spans, so span `ab\` + span `"cd` passed against input `ab"cd` — a fabricated character. Fixed by decoding each span and each input body before the join. Everything else it tried (pipes/quotes inside spans, empty spans, header/delimiter rows, CRLF, pre-escaped `\|`, quotes in the label cell) held: malformed rows fail closed with the re-dispatch message.
