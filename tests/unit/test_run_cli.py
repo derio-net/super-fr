@@ -25,6 +25,8 @@ from fr.run.model import load_run_state
 from fr_dispatch.work_item import run_item_id
 from typer.testing import CliRunner
 
+from tests.unit.requirements_support import seed_requirements
+
 # --- reading a cursor by MEANING, never by storage ---------------------------
 #
 # These tests were written against three maps (`StepRecord.items`,
@@ -5039,6 +5041,7 @@ def _fr_goal_at_implement(repo: Path, shipped: Path) -> None:
     spec_rel = "docs/superpowers/specs/2026-09-20-fixture-design.md"
     (repo / spec_rel).parent.mkdir(parents=True, exist_ok=True)
     (repo / spec_rel).write_text("# Fixture\n")
+    seed_requirements(repo, spec_rel)
     from tests.unit.skeleton_override import write_skeleton_override
 
     slug = "2026-05-09-fixture-minimal"

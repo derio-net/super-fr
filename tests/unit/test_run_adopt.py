@@ -656,8 +656,10 @@ def _drive_to_plan_step(wt: Path, shipped: Path, plan_dir: Path) -> None:
         ).exit_code
         == 0
     )
+    from tests.unit.requirements_support import seed_requirements
     from tests.unit.spec_review_support import spec_review_evidence
 
+    seed_requirements(wt, SPEC_REL)
     # Since 2026-09-24 spec §E, spec-review is verified against the spec journal
     # of the spec brainstorm emitted, so brainstorm emits it and the review
     # carries its evidence.

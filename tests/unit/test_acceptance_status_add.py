@@ -326,3 +326,54 @@ def test_digest_zero_debt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert result.exit_code == 0
     assert "No open acceptance debt." in result.output
     assert "<!-- fr-acceptance-digest -->" in result.output
+
+
+# ── spec 2026-09-28 §F/§H: `--verify post-merge` ───────────────────────────
+
+
+def test_add_verify_post_merge_writes_it_and_regenerates_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance.model import load_matrix
+
+    root = make_repo(tmp_path, row())
+    d = root / "docs" / "acceptance"
+    result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "post-merge")
+    assert result.exit_code == 0, result.output
+    assert "verify: post-merge" in (d / "matrix.yaml").read_text()
+    (added,) = [r for r in load_matrix(d / "matrix.yaml").rows if r.id == "new-row"]
+    assert added.verify == "post-merge"
+    for f in ("report_local.html", "report_linked.html", "report_linked.md"):
+        assert (d / f).exists(), f
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+def test_add_without_verify_writes_no_verify_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, row())
+    assert _invoke(root, monkeypatch, *ADD_ARGS).exit_code == 0
+    assert "verify" not in (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+
+
+def test_add_refuses_an_unknown_verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_repo(tmp_path, row())
+    before = (root / "docs" / "acceptance" / "matrix.yaml").read_text()
+    result = _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "someday")
+    assert result.exit_code == 2, result.output
+    assert "No such option" not in result.output
+    assert (root / "docs" / "acceptance" / "matrix.yaml").read_text() == before
+
+
+def test_set_status_preserves_verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.acceptance.model import load_matrix
+
+    root = make_repo(tmp_path, row())
+    assert _invoke(root, monkeypatch, *ADD_ARGS, "--verify", "post-merge").exit_code == 0
+    moved = _invoke(
+        root, monkeypatch, "set-status", "--id", "new-row", "--status", "skipped",
+        "--notes", "verified live once",
+    )  # fmt: skip
+    assert moved.exit_code == 0, moved.output
+    (r,) = [r for r in load_matrix(root / "docs/acceptance/matrix.yaml").rows if r.id == "new-row"]
+    assert (r.status, r.verify) == ("skipped", "post-merge")

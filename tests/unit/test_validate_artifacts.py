@@ -114,7 +114,9 @@ steps:
 """
 )
 
-GOOD_MATRIX = """org: derio-net
+GOOD_MATRIX = (
+    f"schema_version: {ARTIFACT_KINDS['matrix'].current_version}\n"  # built, never typed
+    + """org: derio-net
 repo: super-fr
 rows:
   - id: a-row
@@ -128,6 +130,7 @@ rows:
     status: ci
     notes: ''
 """
+)
 
 GOOD_SPEC = """# Thermosiphon rebuild
 

@@ -1,0 +1,162 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — fr/requirements.py (parse, check, coverage) behind `fr spec requirements`
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - requirements-structural-gate
+  - requirements-coverage-partition
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/requirements.py
+  - packages/fr/src/fr/commands/spec_cmd.py
+  - tests/unit/test_requirements.py
+  - tests/unit/test_spec_requirements_cmd.py
+  - tests/fixtures/requirements/*
+  - .changes/feat-gh-759.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Walking skeleton — `fr spec requirements` exits 0 on a minimal sound spec
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_spec_requirements_cmd.py — build in tmp_path a spec with a one-row
+      `## Requirements` table (`| id | requirement | source |`, row `| R1 | x | decision d1 |`),
+      a spec journal (`docs/superpowers/journals/specs/<slug>.md`, written with the journal
+      model's serializer) holding one `kind=decision` entry `d1` and one `kind=discovery`
+      entry whose id starts `input-` (the pre-token form, see T3), and a matrix with one row
+      whose origin is `<repo>:<spec-path>#R1`. Invoke `fr spec requirements <spec>` through
+      the typer CliRunner; assert exit 0 and a one-line summary `1 requirements`. Fails: no
+      such command.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/requirements.py with dataclasses `Requirement(id,
+      text, sources)`, `Source(kind: Literal["input","decision"], value)`, `Deferred(quote,
+      reason)`, `Requirements(items, deferred)`, stub `parse_requirements` /
+      `check_requirements` returning the minimum; add `requirements` to spec_cmd.py's
+      `spec_app` (`--journal` defaults to the spec journal derived with
+      `fr.journal.spec_journal_slug`). Exit 2 and print each problem when the list is
+      non-empty. Add `.changes/feat-gh-759.yaml` (`bump: minor`, summary: "fr-goal checks
+      the spec against the operator's input: traced Requirements, an input-coverage
+      partition, and rows gating deliver (#759)"). Test green; `uv run ruff check` clean.
+- number: 2
+  title: parse_requirements — the §B table grammar
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests/unit/test_requirements.py — parametrised cases from spec Test Plan 1: a
+      well-formed table; `<br>`-separated sources; a quote containing `\|`; an empty source
+      cell; a wrong cell count; a wrong header; a malformed id (`R0`, `r1`, `R1a`); a
+      duplicate id; a stray paragraph beside the table; an unknown source form (`issue
+      "x"`); no `## Requirements` section; a Deferred table with an empty `reason`; Deferred
+      absent is fine. Each malformed case asserts a `RequirementsError` whose message names
+      the line and the rule. Fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement parse_requirements(spec_text) -> Requirements: locate each section by
+      its `## ` heading up to the next `## `; allow only blank lines plus one GFM table;
+      header match case-insensitive with surrounding spaces stripped; split cells on
+      unescaped `|` then unescape `\|`; ids `^R[1-9][0-9]*$`, unique; sources split on
+      `<br>`; `input "…"` takes first to last `"`; `decision <id>`. Pure, no I/O. Green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: extract the GFM row splitter and the section locator into private helpers
+      used by both tables (and later by check_coverage's block); keep error messages naming
+      the 1-based spec line. Suite green.
+- number: 3
+  title: check_requirements — quotes, decisions, row citations
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: Test Plan 2–3 in test_requirements.py: whitespace/newline normalisation matches;
+      `1–20` does not match `1-20`; ` … ` fragments must occur in order and an input that
+      itself contains ` … ` quoted across it matches; a quote spanning two input entries is
+      refused; Deferred quotes are checked; no input entry; an unknown decision id; an id
+      naming a non-decision entry; an uncited requirement; one row citing R1 and R2 covers
+      both; a citation to the spec's `implemented/` archive twin resolves (use
+      `fr.acceptance.model.archive_twin`). Input entries are identified by
+      `fr.requirements.is_input_entry(entry)`: the `input` token when present (phase 2), else
+      — until then — nothing, so tests construct entries via a helper that phase 2 will
+      switch to the token. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: `check_requirements(spec_text, entries, matrix, spec_ref) -> list[str]` per spec
+      §C 1–5, with `normalise(text)` (collapse whitespace, strip) and
+      `quote_matches(quote, body)` (split on ` … `, find fragments in order). `is_input_entry`
+      reads `getattr(entry, "input", False)` so phase 2's field lights it up without an edit
+      here. Wire it into `fr spec requirements`. Green.
+  - id: P1.T3.S3
+    text: |-
+      #759 replay (Test Plan 4): tests/fixtures/requirements/759-input.md holds the issue's
+      quoted brief lines (generic, already public in the issue) and three specs: one quoting
+      "(1–20)" passes; one quoting text absent from the input is refused; one dropping "no
+      unstyled browser defaults" from both tables PASSES — assert it, with a comment that
+      coverage is reviewer territory (d4).
+- number: 4
+  title: check_coverage — the §D partition
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: Test Plan 12 (pure half) in test_requirements.py: an exact partition passes and
+      returns counts; the redacted #759 input (both entries, containing ` … `) partitioned
+      literally passes; a gap (a span that skips text), an overlap, a reordered span, a
+      second ```input-coverage block, no block, an unknown requirement id, `missing s9`
+      naming no finding are each a named problem. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: `check_coverage(review_body, input_entries, requirements, entries) ->
+      (list[str], CoverageCounts)`: extract exactly one fenced `input-coverage` block, parse
+      `| span | coverage |` rows with the shared splitter (spans literal, `…` not special),
+      compare normalise("".join(spans)) with normalise of the input bodies joined in journal
+      order — compare with single-space joins on both sides so span boundaries carry no
+      whitespace ambiguity; validate labels. Green; ruff + mypy clean for the new module.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T08:57:17+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T08:57:17+00:00'
+    note: null
+    observed_prs: []

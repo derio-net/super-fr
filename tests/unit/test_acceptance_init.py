@@ -44,6 +44,11 @@ def test_init_scaffolds_all_artifacts(tmp_path: Path, monkeypatch: pytest.Monkey
     assert matrix.startswith("#")  # schema-comment header
     assert "org: derio-net" in matrix
     assert "repo: own" in matrix
+    from fr.artifacts import artifact_kind
+
+    kind = artifact_kind("matrix")
+    assert f"schema_version: {kind.current_version}\n" in matrix, "born current, never stale"
+    assert matrix.rstrip().endswith("rows:"), "rows: stays the last top-level key"
 
     rule = (root / ".claude" / "rules" / "acceptance-matrix.md").read_text()
     assert "SAME PR" in rule

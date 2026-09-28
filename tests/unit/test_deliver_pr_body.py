@@ -126,6 +126,9 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
 
     assert render_out_of_scope([]) == "None."
     assert missing_sections("## Findings\n## Out-of-scope findings\nNone.\n") == [
+        "## Built without operator confirmation",
+        "## Input coverage",
+        "## Post-merge verification owed",
         "## Proportionality",
         "## Cost",
     ]
@@ -154,3 +157,171 @@ def test_an_unreadable_pr_refuses_and_changes_nothing_but_the_render(
         f"docs/superpowers/runs/{RUN}.records/pr-body.md",
         f"docs/superpowers/runs/{RUN}.records/deliver.yaml",
     }
+
+
+# --- requirements traceability (spec 2026-09-28 §D, §F; Test Plan 11) -------
+
+
+def test_the_three_traceability_sections_are_required_in_order() -> None:
+    from fr.record.pr_body import REQUIRED_SECTIONS
+
+    assert REQUIRED_SECTIONS == (
+        "## Findings",
+        "## Out-of-scope findings",
+        "## Built without operator confirmation",
+        "## Input coverage",
+        "## Post-merge verification owed",
+        "## Proportionality",
+        "## Cost",
+    )
+
+
+@pytest.mark.parametrize(
+    "dropped",
+    [
+        "## Built without operator confirmation",
+        "## Input coverage",
+        "## Post-merge verification owed",
+    ],
+)
+def test_a_live_body_missing_a_traceability_section_is_refused(dropped: str) -> None:
+    from fr.record.pr_body import REQUIRED_SECTIONS, missing_sections
+
+    body = "\n\n".join(h for h in REQUIRED_SECTIONS if h != dropped)
+
+    assert missing_sections(body) == [dropped]
+
+
+def _traced_run_at_deliver(tmp_path: Path) -> Path:
+    """The `traced` shape of test_run_evidence_requirements, walked to an open
+    `deliver`: a spec-review whose review entry carries the coverage block,
+    an unconfirmed spec finding, and a post-merge row."""
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    from tests.unit.requirements_support import COVERAGE_BLOCK, now, row, write_matrix
+    from tests.unit.test_run_evidence_requirements import (
+        _WITH_COVERAGE,
+        SLUG,
+        SPEC,
+        _at_spec_review,
+        _invoke,
+        _review_entry,
+        _spec_review,
+    )
+
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    journal = journal_path(repo, "spec", SLUG)
+    for entry in (
+        JournalEntry(
+            kind="finding", scope="spec", id="s-inv", created=now(),
+            title="invented hover state", body="the design adds a hover state",
+            state="open", review_scope="in",  # type: ignore[arg-type]
+        ),
+        JournalEntry(
+            kind="finding", scope="spec", id="s-inv-resolved", created=now(),
+            title="resolves s-inv", body="builds a hover that lifts the card 2px",
+            state="open", resolves="s-inv", unconfirmed=True,
+        ),
+    ):  # fmt: skip
+        append_journal_entry(journal, SLUG, entry)
+    _review_entry(repo, body="Traceability first.\n\n" + COVERAGE_BLOCK)
+    assert _spec_review(repo, shipped).exit_code == 0
+    write_matrix(
+        repo,
+        [
+            row(SPEC, status="skipped"),
+            row(SPEC, rid="live-run", status="not-implemented", verify="post-merge"),
+        ],
+    )
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    return repo
+
+
+def test_the_body_renders_unconfirmed_coverage_and_post_merge_sections(tmp_path: Path) -> None:
+    from fr.record.pr_body import REQUIRED_SECTIONS, render_pr_body
+
+    repo = _traced_run_at_deliver(tmp_path)
+
+    body = render_pr_body(repo, load_run_state(repo, "r1"))
+
+    positions = [body.index(h) for h in REQUIRED_SECTIONS]
+    assert positions == sorted(positions)
+    findings = body.split("## Findings")[1].split("## Out-of-scope findings")[0]
+    unconfirmed = body.split("## Built without operator confirmation")[1].split(
+        "## Input coverage"
+    )[0]
+    coverage = body.split("## Input coverage")[1].split("## Post-merge verification owed")[0]
+    owed = body.split("## Post-merge verification owed")[1].split("## Proportionality")[0]
+    assert "s-inv" not in findings
+    assert "`s-inv`" in unconfirmed
+    assert "builds a hover that lifts the card 2px" in unconfirmed
+    assert "<details>" in coverage and "</details>" in coverage
+    assert '| "build the widget" | R1 |' in coverage
+    assert "`live-run`" in owed and "live-run acceptance" in owed
+    assert "req-r1" not in owed
+
+
+def test_a_run_predating_the_gate_renders_the_predates_line_and_nones(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import (
+        SPEC,
+        _brainstorm,
+        _invoke,
+        _review_entry,
+        _spec,
+        _spec_review,
+        _started,
+    )
+
+    repo, shipped = _started(tmp_path, brainstorm="[]", spec_review="[review, reviewer]")
+    _spec(repo, "\n## Design\n\nno requirements here\n")
+    assert _brainstorm(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    _review_entry(repo)
+    assert _spec_review(repo, shipped).exit_code == 0
+    assert SPEC  # the run's spec carries no Requirements and no rows cite it
+
+    body = render_pr_body(repo, load_run_state(repo, "r1"))
+
+    after = body.split("## Built without operator confirmation")[1]
+    assert after.split("## Input coverage")[0].strip() == "None."
+    coverage = after.split("## Input coverage")[1].split("## Post-merge verification owed")[0]
+    assert coverage.strip() == "Not recorded (predates the requirements gate)."
+    owed = after.split("## Post-merge verification owed")[1].split("## Proportionality")[0]
+    assert owed.strip() == "None."
+
+
+def _coverage_section(body: str) -> str:
+    return body.split("## Input coverage")[1].split("## Post-merge verification owed")[0].strip()
+
+
+def test_a_gated_run_whose_shape_records_no_coverage_is_not_available(tmp_path: Path) -> None:
+    """e3: brainstorm carries `requirements`, so the run does NOT predate the
+    gate — a missing `coverage` (a repo manifest that never declared it) is
+    reported as unavailable, not as predating."""
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import _at_deliver
+
+    repo, _ = _at_deliver(tmp_path)
+
+    coverage = _coverage_section(render_pr_body(repo, load_run_state(repo, "r1")))
+
+    assert coverage.startswith("Not available:"), coverage
+    assert "predates" not in coverage
+
+
+def test_an_unreadable_spec_journal_is_not_available_not_predates(tmp_path: Path) -> None:
+    from fr.journal.model import journal_path
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import SLUG
+
+    repo = _traced_run_at_deliver(tmp_path)
+    journal_path(repo, "spec", SLUG).write_text("this is not a journal\n")
+
+    coverage = _coverage_section(render_pr_body(repo, load_run_state(repo, "r1")))
+
+    assert coverage.startswith("Not available:"), coverage
+    assert "predates" not in coverage

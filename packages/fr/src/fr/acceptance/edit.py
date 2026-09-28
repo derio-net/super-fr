@@ -49,6 +49,8 @@ def render_row_block(row: Row) -> str:
         "status": row.status,
         "notes": row.notes,
     }
+    if row.verify is not None:  # absent when unset: older rows stay byte-identical
+        data["verify"] = row.verify
     block = yaml.dump([data], default_flow_style=False, sort_keys=False, allow_unicode=True)
     return "".join(
         ("  " + line if line.strip() else line) + "\n" for line in block.rstrip("\n").split("\n")
