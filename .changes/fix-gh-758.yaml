@@ -1,2 +1,0 @@
-bump: patch
-summary: "`deliver`'s `tests=` gate now accepts a suite log written through a symlinked directory (macOS `/tmp` → `/private/tmp`), comparing real paths on both sides (#758)."
