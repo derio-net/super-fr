@@ -1,0 +1,141 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-ui-evidence-2
+step: brainstorm
+outcome: done
+journal:
+- kind: discovery
+  input: true
+  id: input-batch-prompt
+  title: 'Operator input: fr-goal batch prompt (ui-evidence-2)'
+  body: |-
+    UI evidence is visual: screenshots actually opened, and every named interaction exercised
+
+    Batch `ui-evidence-2` of derio-net/super-fr: 1 issues, delivered as ONE pull request.
+
+    ## super-fr#779: Browser check isn't visual: UI evidence is a script's pass/fail; no screenshot is ever opened and named interactions go unexercised
+    Take 9: UI evidence was a Playwright script's pass/fail; no screenshot was ever opened and the named interactions (−, slider drag, the 20 cap, range labels) were never exercised. The scorer found four defects visible in one screenshot or drag; the plain comparison arm opened 6 screenshots.
+    Note: Operator-prioritised. Feature (fr-goal), batch `ui-evidence`: for a user-visible requirement, evidence names the screenshots actually opened (observable in the transcript) and each named control used at its limits.
+
+    ## Why these belong together
+    Retry of the batch cancelled on 2026-09-28 at its question gate (#783): dispatch only after question-order (#783) merges. Wave 6, operator-prioritised. Take 9's browser check was a script's pass/fail: no screenshot opened, -, slider drag, the 20 cap and the range labels never tried, and four defects visible in one screenshot shipped. For a user-visible requirement, evidence at implement/review/deliver names the screenshots the agent opened (observable in the transcript) and the controls it used at their limits. Edits fr-execute and fr-goal prose and possibly an evidence reader; rebase against requirements-gate if both touch fr-goal SKILL.md.
+
+    ## Delivery rules
+    - Work on branch `feat/batch-ui-evidence-2`.
+    - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+      Closes derio-net/super-fr#779
+    - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+- kind: discovery
+  input: true
+  id: input-issue-779
+  title: 'Operator input: super-fr#779 title and body'
+  body: |-
+    Browser check isn't visual: UI evidence is a script's pass/fail; no screenshot is ever opened and named interactions go unexercised
+
+    ## What happened
+
+    The brief of the super-fr-3 feature-C recording asks: "Before delivering, the developer has checked basket mode in a browser (accepted, not accepted, staff check, back to single article) against the single-article view." In take 9 (fr 4.29.2), the executor wrote a Playwright script (`src/test/browser/basket.cjs`, run through `docker exec` because the devcontainer doesn't publish the demo port) and ran it 4 times; the orchestrator ran it again after the review fixes, and the closeout once more. **No screenshot was ever opened**: the only attempt to read one used the wrong directory and wasn't retried. The script never exercised −, the slider drag, the 20 cap, the range labels or any styling.
+
+    The scorer's browser check then found: the card-click side effect, a reading outside the ranges not drawn at all, the chart torn down on every slider move, the stale legend. All visible in one screenshot or one drag.
+
+    The plain comparison arm, given the same brief, opened 6 screenshots before delivering (take 8).
+
+    ## Expected
+
+    When a requirement or acceptance row is user-visible UI, its evidence at `implement-phase` / `review-phase` / `deliver` includes:
+
+    - screenshots the agent actually opened (an image read of the file, observable in the transcript), for each state the requirement names, and
+    - the interactions the requirements name (each control used at least once, including its limits),
+
+    rather than a script's pass/fail alone. fr-execute / fr-goal say so in the browser-check step.
+- kind: discovery
+  input: true
+  id: input-script-preference
+  title: 'Operator input: mid-brainstorm addendum (capture script preferred)'
+  body: add that, if a script can be written to reliably retrieve the screenshots mechanically instead
+    of driving via the agent, it should be preferred. That way the token cost is only paid once and each
+    rerun only costs a script invocation (and viewing the images of course).
+- kind: decision
+  id: d1-visual-row-flag
+  title: A UI requirement is marked on its acceptance row
+  body: 'Q1 answer: flag on the acceptance row (`visual`, beside `verify: post-merge`). Plan phases already
+    link rows, so fr knows which phases and delivery owe visual evidence. Not a Requirements-grammar tag,
+    not agent judgement.'
+- kind: decision
+  id: d2-transcript-verified
+  title: fr verifies from the transcript that screenshots were opened
+  body: 'Q2 answer: evidence names the screenshot files; fr refuses unless each was opened with an image
+    read since the unit opened, in the transcript of the agent that owes it (this session or a subagent
+    it dispatched). Unreadable transcript -> recorded unobserved, like tests=.'
+- kind: decision
+  id: d3-reviewer-drives
+  title: The review-phase reviewer drives the UI itself
+  body: 'Q3 answer: the dispatched reviewer opens its own screenshots and tries the named controls at
+    their limits itself; reading the executor''s screenshots is not enough.'
+- kind: decision
+  id: d4-interactions-on-row
+  title: Interactions are named on the row and covered in the record
+  body: 'Q4 answer: the visual row lists its controls and limits; the evidence record maps each to a screenshot
+    taken after using it; fr refuses a name with no screenshot. Coverage only, not image content.'
+- kind: decision
+  id: d5-fresh-at-deliver
+  title: deliver takes fresh screenshots
+  body: 'Q5 answer: review fixes land after phase screenshots, so the orchestrator opens new ones of the
+    delivered build, as it re-runs the full suite itself.'
+resolves: []
+acceptance:
+- id: visual-evidence-row-flag
+  capability: acceptance-matrix
+  acceptance: An acceptance row can declare `visual` with the states and interactions (limits included)
+    that visual evidence must cover, written by `fr acceptance add` and by a step record, and validated
+    (no empty or duplicate names).
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R1
+  status: not-implemented
+- id: visual-evidence-gate
+  capability: fr-goal-evidence
+  acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver` while a `visual`
+    row they owe lacks a fresh screenshot for any named state or interaction, or any named screenshot
+    was not opened (image read) in the owing agent''s transcript since the unit opened; a script''s pass/fail
+    alone never satisfies it.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
+  status: not-implemented
+- id: visual-evidence-reviewer-own-eyes
+  capability: fr-goal-evidence
+  acceptance: At `review-phase` the screenshots must have been opened in the dispatched reviewer's own
+    transcript; the executor having opened them is refused.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
+  status: not-implemented
+- id: visual-evidence-capture-script
+  capability: fr-goal-evidence
+  acceptance: A capture script named in visual evidence must be tracked on the branch and re-run by the
+    stage that names it; the skills prefer such a script to agent-driven browsing.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
+  status: not-implemented
+- id: visual-evidence-browser-check-prose
+  capability: fr-goal-prose
+  acceptance: 'fr-execute, fr-goal and the phase-executor agent carry a browser-check step: capture every
+    named state and interaction at its limits, prefer a committed script, open every screenshot, fill
+    the record''s `visual:` section.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R6
+  status: not-implemented
+- id: visual-evidence-live-run
+  capability: fr-goal-evidence
+  acceptance: On a live fr-goal run of a UI feature with a `visual` row, the executor, the reviewer and
+    deliver each open their own fresh screenshots and the cursor records the witness.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R2
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R4
+  - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
+  status: not-implemented
+  verify: post-merge
+emitted:
+  spec: docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md
+evidence: {}
