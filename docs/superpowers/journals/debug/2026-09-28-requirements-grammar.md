@@ -14,3 +14,8 @@ Probe against origin/main df7c7bb0 (`parse_requirements` + `quote_matches`, body
 ### quotes-cannot-contain-dquote · ruled-out · Ruled out: "a quote cannot contain a double quote"
 
 `_INPUT_SOURCE_RE` is `^input\s+"(.*)"$` (greedy, DOTALL): the quote runs first `"` to last `"`, so unescaped inner quotes already parse and match (probe above). The truncation in take 9 came from the agent not knowing that: it guessed an escape (`\"`, kept literally, never matches) or cut the quote short. The fault is that the grammar is undocumented, not that the parser rejects the character.
+
+<!-- fr:journal kind=root-cause scope=debug id=root-cause created=2026-09-28T19:00:51+00:00 -->
+### root-cause · root-cause · The source-cell grammar exists only in fr/requirements.py
+
+Every symptom in #776 is one cause: the `source` grammar (`input "<verbatim quote>"`, `decision <id>`, `<br>` between several) is stated nowhere an agent reads: not in fr-brainstorming §2 or fr-goal §1, and not in the gate error (`unknown source form` names none). So agents guess: curly quotes without the keyword, a `\"` escape the parser keeps literally, a quote cut at its first inner `"`. The pre-check wording is the same gap on the journal side: it calls "not written yet" missing, and it never says the resolve writes the entry.
