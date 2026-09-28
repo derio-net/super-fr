@@ -12,7 +12,16 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-09-28-requirements-traceability-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-28T06:23:22+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-28T06:23:22+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-sonnet-5
+          session: a913f2c8-de7e-4aab-99a6-e1bfe2c563de
   plan:
     state: pending
   plan-review:
