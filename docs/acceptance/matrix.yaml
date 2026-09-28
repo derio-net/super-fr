@@ -5189,9 +5189,13 @@ rows:
       and evidence refs to a moved journal still resolve in `fr acceptance check`.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-closeout-always-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_archive_all_debug.py
+      - super-fr:tests/unit/test_acceptance_archive_twin.py
+    status: ci
+    notes: fr archive --all's debug-journal sweep and archive_twin ref resolution are
+      covered by unit tests
   - id: closeout-branch-live-run
     capability: Branch-keyed close-out
     acceptance: This feature's own post-merge close-out, run from its relayed line in
