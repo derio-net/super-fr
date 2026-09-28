@@ -621,6 +621,31 @@ def _fork_point(run: Runner, repo_root: Path, merge_base: str, branch: str, base
         fork, upper = earlier, f"{landing}^1"
 
 
+def _branch_fork_and_changes(
+    run: Runner, repo_root: Path, branch: str, base_ref: str
+) -> tuple[str, list[str]]:
+    """(fork point, changed names) — the one merge-base/fork computation path
+    shared by `branch_changed_paths` and `branch_changes_present`, so the two
+    can never drift (#696/#727/#716 all hardened this diff)."""
+    mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
+    if mb.returncode != 0:
+        raise IsolationError(
+            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
+            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
+        )
+    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
+    changed = _diff_names(run, repo_root, [merge_base, branch])
+    return merge_base, changed
+
+
+def branch_changed_paths(run: Runner, repo_root: Path, branch: str, base_ref: str) -> list[str]:
+    """The paths `branch` added, modified or deleted since its fork from
+    `base_ref` — the same `changed` list `branch_changes_present` diffs
+    (§A, 2026-09-28-closeout-always spec). The first half of that function,
+    lifted out for close-out's "what did the branch touch"."""
+    return _branch_fork_and_changes(run, repo_root, branch, base_ref)[1]
+
+
 def branch_changes_present(
     run: Runner, repo_root: Path, branch: str, base_ref: str
 ) -> MergeVerification:
@@ -647,14 +672,7 @@ def branch_changes_present(
     Conservative: anything it cannot positively confirm reads as missing (a safe
     "STOP and check", never a false "verified").
     """
-    mb = run(["git", "merge-base", base_ref, branch], cwd=repo_root)
-    if mb.returncode != 0:
-        raise IsolationError(
-            f"no merge-base for {base_ref} and {branch} — unrelated histories? "
-            f"If {base_ref!r} is the wrong base, pass --default-branch <branch>."
-        )
-    merge_base = _fork_point(run, repo_root, mb.stdout.strip(), branch, base_ref)
-    changed = _diff_names(run, repo_root, [merge_base, branch])
+    merge_base, changed = _branch_fork_and_changes(run, repo_root, branch, base_ref)
     if not changed:
         return MergeVerification(changed=[], missing=[], changes_present=True)
     differing = _diff_names(run, repo_root, [branch, base_ref, "--", *changed])

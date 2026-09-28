@@ -1,0 +1,43 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-09-28-feat-batch-closeout-always-2 --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-09-28-feat-batch-closeout-always-2.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 3
+run: 2026-09-28-feat-batch-closeout-always-2
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3]
+refactor:
+  P1.T1: "GREEN already lands the shared shape: branch_changed_paths and branch_changes_present both call the new _branch_fork_and_changes helper, so there is exactly one merge-base/fork computation path and nothing left to extract."
+journal:
+  - kind: discovery
+    id: p1-scope-dir-reuse
+    title: "branch_artifacts reuses fr.journal.model._SCOPE_DIR (private) rather than a new literal"
+    body: |
+      §A says to reuse fr.journal.model's scope constants rather than new
+      string literals. `_SCOPE_DIR` (scope -> dir name, e.g. "spec" ->
+      "specs") is the only such mapping and it is module-private (leading
+      underscore) with no `__all__` boundary in that module. `fr.closeout`
+      imports it directly and inverts it once (dir name -> scope) rather
+      than hand-writing {"specs": "spec", "plans": "plan", "debug": "debug"}
+      a second time. ruff's selected rule set (E,F,I,N,W,UP) does not include
+      SLF001, so this does not trip lint; flagged here in case a later phase
+      wants `_SCOPE_DIR` promoted to a public name instead.
+  - kind: discovery
+    id: p1-owner-scope-for-run-usage
+    title: "BranchArtifact.owner is None for spec/run/usage in this phase — §B/§C derive it from cursor content, not path"
+    body: |
+      The spec's BranchArtifact docstring reads "plan dir name / spec slug
+      for followers; journal scope for journals". P1.T2's Test Plan item
+      only exercises plan-dir collapsing and journal scope ownership, so
+      this phase leaves owner=None for spec, run and usage artifacts:
+      a run/usage's owning plan is `emitted.plan` inside the cursor file,
+      which §B/§C (fr archive --branch, owed_artifacts) read once they
+      exist — deriving it from the path alone would be guessing ahead of
+      that data. Left open for phase 2/3 to either confirm this shape or
+      extend BranchArtifact once the real owner-resolution need is in view.
+resolves: []
+evidence:
+  tests: "uv run pytest tests/unit/test_closeout_branch_artifacts.py -q --no-cov (2 passed); uv run pytest tests/ -q --no-cov -n auto -k \"branch_changes or verify_merge or fork_point\" (86 passed)"
+  lint: "uv run ruff format packages/ tests/ (2 files reformatted, clean); uv run ruff check packages/ tests/ (all checks passed)"
+  typecheck: "uv run mypy packages/fr/src (success, 171 source files)"
