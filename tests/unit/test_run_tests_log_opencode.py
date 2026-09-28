@@ -153,6 +153,28 @@ def test_an_unreadable_opencode_database_is_unobservable(tmp_path: Path) -> None
     assert orchestrator_wrote_since(_env(tmp_path / "absent.db"), LOG, SINCE) is None
 
 
+@pytest.mark.parametrize(
+    "parts",
+    [
+        pytest.param([], id="empty"),
+        pytest.param(
+            [("s-top", _bash(f"pytest > {LOG}", _ms(SINCE) - 3_600_000))], id="all-before-the-unit"
+        ),
+    ],
+)
+def test_a_database_that_saw_nothing_since_the_unit_opened_is_unobservable(
+    tmp_path: Path, parts: list[tuple[str, str]]
+) -> None:
+    """gh#740: a READABLE database can still be the wrong one — the operator's
+    global db when OpenCode wrote the run to `$XDG_DATA_HOME`. The calling
+    orchestrator cannot be in a db that recorded no part since the unit opened
+    (its own `fr run resolve` is one), so that is `None` — unobserved — never
+    `[]`, which refuses a valid suite log as "no command of YOURS wrote it"."""
+    db = _db(tmp_path / "o.db", parts)
+
+    assert orchestrator_wrote_since(_env(db), LOG, SINCE) is None
+
+
 def _detached(log: Path, cmd: str = "uv run pytest -n auto") -> str:
     """OpenCode's long-command rule, VERBATIM from the brief it rides
     (`fr.harness.long_commands`), with its `cmd` and `log` filled in — so a
@@ -304,10 +326,10 @@ def _opencode_deliver(repo: Path, shipped: Path, db: Path, *evidence: str):
 def test_on_opencode_an_agent_written_log_is_refused(tmp_path: Path) -> None:
     """The #638 shape: the log exists and is fresh, but no bash command of the
     orchestrator's wrote it (the agent composed it with its edit tool)."""
-    repo, shipped, _ = _at_deliver(tmp_path)
+    repo, shipped, opened = _at_deliver(tmp_path)
     time.sleep(0.01)
     (repo / "full-suite.log").write_text("Result: 5,458 passed, 1 failed\n")
-    db = _db(tmp_path / "o.db", [("s-top", _bash("git status", AFTER))])
+    db = _db(tmp_path / "o.db", [("s-top", _bash("git status", _ms(opened)))])
 
     result = _opencode_deliver(repo, shipped, db, "tests=full-suite.log")
 
@@ -329,6 +351,46 @@ def test_on_opencode_a_log_the_orchestrator_wrote_is_accepted(tmp_path: Path) ->
 
     assert result.exit_code == 0, result.output
     assert "could not verify" not in _squash(result.stderr)
+
+
+def test_on_opencode_the_suite_log_is_found_under_xdg_data_home(tmp_path: Path) -> None:
+    """gh#740's run, end to end: OpenCode started with `XDG_DATA_HOME` set and
+    no `FR_OPENCODE_DB`, so its sessions are in `$XDG_DATA_HOME/opencode/`. The
+    orchestrator's own redirect is found there and `deliver` resolves."""
+    repo, shipped, opened = _at_deliver(tmp_path)
+    log = repo / "full-suite.log"
+    log.write_text("5458 passed\n")
+    start = _ms(opened)
+    data = tmp_path / "xdg-data"
+    (data / "opencode").mkdir(parents=True)
+    _db(data / "opencode" / "opencode.db", [("s-top", _bash(f"uv run pytest > {log}", start))])
+    argv = ["run", "resolve", "r1", "--step", "deliver", "--state", "done"]
+    env = {
+        "FR_HARNESS": "opencode",
+        "FR_OPENCODE_DB": None,
+        "XDG_DATA_HOME": str(data),
+        "HOME": str(tmp_path / "home"),
+    }
+
+    result = _invoke_as_harness(repo, shipped, [*argv, "--evidence", "tests=full-suite.log"], env)
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify" not in _squash(result.stderr)
+
+
+def test_on_opencode_a_database_without_the_run_does_not_refuse_the_log(tmp_path: Path) -> None:
+    """The wrong database (here: one whose last part is an hour before the unit
+    opened) degrades to the fresh-file check with a warning — it is not proof
+    that nobody wrote the log."""
+    repo, shipped, opened = _at_deliver(tmp_path)
+    time.sleep(0.01)
+    (repo / "full-suite.log").write_text("5458 passed\n")
+    db = _db(tmp_path / "o.db", [("s-top", _bash("git status", _ms(opened) - 3_600_000))])
+
+    result = _opencode_deliver(repo, shipped, db, "tests=full-suite.log")
+
+    assert result.exit_code == 0, result.output
+    assert "unverified" in _squash(result.stderr)
 
 
 def test_a_tests_log_inside_the_runs_records_dir_is_refused(tmp_path: Path) -> None:

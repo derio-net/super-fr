@@ -24,6 +24,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
+schema_version: 2
 org: derio-net
 repo: super-fr
 rows:
@@ -4227,9 +4228,10 @@ rows:
   - id: fr-goal-second-round-announced-and-verified
     capability: fr-goal-methodology
     acceptance: 'A brainstorm may take a second question round only when the record
-      declares rounds: 2 with a trigger (design-risk announced as Round 1 of 2, or operator-request);
-      fr run resolve refuses a round count that differs from the declaration, a design-risk
-      round 2 that round 1 never announced, and any third round.'
+      declares rounds: 2 with a trigger (design-risk announced in round 1 as `a 2nd
+      round may follow`, or operator-request); fr run resolve refuses a round count
+      that differs from the declaration, a design-risk round 2 that round 1 never announced,
+      and any third round.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
     levels:
@@ -4240,7 +4242,10 @@ rows:
       checks the declared question rounds against the transcript''s answered rounds
       (spec §3.C verdict table), through both the --record path and the --question-rounds
       flags; every refusal (count mismatch, unannounced design-risk round 2, a third
-      round) is tested byte-identical in CI.'
+      round) is tested byte-identical in CI. gh#766 moved the announcement from the
+      label ''Round 1 of 2'' (a forecast printed as a count) to the phrase ''a 2nd round
+      may follow''; the old token is still accepted for sessions begun under the old
+      prose, and the verdict table pins both plus a split round''s per-dialog labels.'
   - id: fr-goal-contract-prose-two-rounds
     capability: fr-goal-methodology
     acceptance: Every surface stating fr-goal's operator contract (skill, mirrors, explainer,
@@ -4257,12 +4262,13 @@ rows:
       README, OpenCode /fr-goal command) to the sized, at-most-two-round contract. The
       tripwire (normalised, casefolded text) asserts the old fixed-batch phrase list
       is absent from all of them; on the canonical fr-goal skill and both mirrors it
-      asserts the behavioural markers (questions: {rounds, (Round 1 of, (Round 2 of
-      2), design-risk, operator-request, never a round 3, tool-call round separation,
-      announced round 2 as a ceiling, gate-question-rounds journal entry) and that no
-      prose-only cross-examination instruction remains; on fr-brainstorming, the explainer
-      .md, README and index.html it asserts only that a question round is described.
-      It is a wording check, not a behavioural one.'
+      asserts the behavioural markers (questions: {rounds, the (Round 1 · questions
+      / (Round 2 · questions labels and the a 2nd round may follow forecast (gh#766),
+      design-risk, operator-request, never a round 3, tool-call round separation, announced
+      round 2 as a ceiling, gate-question-rounds journal entry), each dialog of a split
+      round naming its part, no (Round N of total label, and that no prose-only cross-examination
+      instruction remains; on fr-brainstorming, the explainer .md, README and index.html
+      it asserts only that a question round is described.'
   - id: deliver-tests-log-background
     capability: fr-goal-methodology
     acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the
@@ -4287,6 +4293,134 @@ rows:
       - super-fr:tests/unit/test_run_telemetry.py
     status: ci
     notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)
+  - id: requirements-input-in-spec-journal
+    capability: fr-goal-methodology
+    acceptance: The operator's raw input is recorded verbatim in the spec journal as
+      an input entry and never reaches a phase executor's handoff
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+    status: ci
+    notes: 'Covered by unit tests: input token round-trip on the model/verb/record paths,
+      and the redaction contract.'
+  - id: requirements-structural-gate
+    capability: fr-goal-methodology
+    acceptance: fr refuses a brainstorm or spec-review whose spec has malformed or unsourced
+      requirements, or quotes text the input does not contain
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_requirements.py
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+      - super-fr:tests/unit/test_spec_requirements_cmd.py
+    status: ci
+    notes: Covered by parse_requirements/check_requirements unit tests, the brainstorm
+      resolve gate, and the fr spec requirements CLI.
+  - id: requirements-always-ask
+    capability: fr-goal-methodology
+    acceptance: fr-goal's question round asks about every user-visible behaviour and
+      ambiguous statement the input leaves open
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R3
+    levels: {}
+    status: skipped
+    notes: 'Live-verified 2026-09-28 (Test Plan item 17, fr 4.29.0, throwaway local
+      repo): a UI brief leaving the 1–20 range semantics and card interactions unstated.
+      The round (8 questions, two dialogs) asked what the total sums given qty never
+      reaches 0, the bounds behaviour, and typed vs buttons-only; every answer became
+      a decision the spec''s requirements cite (fr spec requirements: 7 requirements,
+      exit 0). Card clicks were not asked, and the spec invents none. Dialog labelling
+      confusion filed as #766. Manual run, not in CI; verify: post-merge kept.'
+    verify: post-merge
+  - id: requirements-spec-review-traceability
+    capability: fr-goal-methodology
+    acceptance: fr-spec-reviewer flags dropped, reinterpreted and invented requirements
+      against the raw input
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
+    levels: {}
+    status: skipped
+    notes: 'Live-verified 2026-09-28 (Test Plan item 17): fr-spec-reviewer ran on the
+      hard tier (claude-opus-5-5); coverage partitioned the whole input (7 spans: R=6
+      deferred=1 context=0 missing=0) and the PR body rendered it. It flagged an invented
+      behaviour (s2: a CI workflow no requirement asked for) and a design drift from
+      R6/d-total-bar (s1: sticky vs fixed), both in scope and fixed. No dropped statement
+      existed to catch (missing=0), so that arm is evidenced by unit tests only. The
+      same run showed deliver''s requirement-rows gate refusing a not-implemented row
+      through the real CLI and passing once it moved. Manual run, not in CI.'
+    verify: post-merge
+  - id: requirements-unconfirmed-in-pr
+    capability: fr-goal-methodology
+    acceptance: Behaviour built without operator confirmation is listed in its own required
+      PR-body section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: Covered by the unconfirmed resolution-state tests (verb, record path, fold),
+      the required PR-body section, and journal check treating it as closed.
+  - id: requirements-rows-deliver-gate
+    capability: fr-goal-methodology
+    acceptance: Every requirement is cited by an acceptance row, and deliver refuses
+      while a row citing the spec is not-implemented
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+    status: ci
+    notes: 'Covered by deliver''s requirement-rows unit tests: refuses a not-implemented
+      row citing the spec, passes on skipped/ci/scheduled, counts rows the record itself
+      moves.'
+  - id: requirements-coverage-partition
+    capability: fr-goal-methodology
+    acceptance: fr refuses a spec review whose input-coverage table leaves any part
+      of the input unclassified
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_requirements.py
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+    status: ci
+    notes: Covered by check_coverage unit tests (partition, gap/overlap/reordering)
+      and the spec-review coverage-derivation gate.
+  - id: requirements-spec-review-hard-first
+    capability: fr-goal-methodology
+    acceptance: Spec review runs on the hard tier and checks traceability to the input
+      before anything else
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_spec_reviewer_agent.py
+    status: ci
+    notes: 'Covered by the shipped fr-goal.yaml tripwire (spec-review tier: hard) and
+      the agent-prose pin (traceability checked first).'
+  - id: requirements-post-merge-rows
+    capability: fr-goal-methodology
+    acceptance: A requirement that can only be verified after merge does not block delivery
+      and stays visibly owed in the PR body
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: Covered by deliver's post-merge-row skip/count unit test and the PR body's
+      Post-merge verification owed section.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged

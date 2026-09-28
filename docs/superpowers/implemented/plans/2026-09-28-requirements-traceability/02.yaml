@@ -1,0 +1,164 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Artifact shapes — journal tokens, record 2→3, matrix 1→2, verbs
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - requirements-input-in-spec-journal
+  - requirements-post-merge-rows
+  tier: hard
+  files:
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/acceptance/model.py
+  - packages/fr/src/fr/acceptance/edit.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/record_input_unconfirmed.py
+  - packages/fr/src/fr/artifacts/matrix_verify.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/requirements.py
+  - docs/acceptance/*
+  - docs/superpowers/runs/*.records/*
+  - tests/unit/test_journal_model.py
+  - tests/unit/test_journal_cmd.py
+  - tests/unit/test_record_apply.py
+  - tests/unit/test_record_schema.py
+  - tests/unit/test_acceptance_model.py
+  - tests/unit/test_acceptance_status_add.py
+  - tests/unit/test_migration_record_input_unconfirmed.py
+  - tests/unit/test_migration_matrix_verify.py
+  - tests/unit/test_migration_record_questions.py
+  - tests/unit/test_requirements.py
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Journal tokens `input` and `unconfirmed` (model, fold, validator)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: test_journal_model.py — `input=true` and `unconfirmed=true` round-trip through
+      serialize/parse, serialized only when set; a parse with both tokens stripped from the
+      header reads a plain discovery and an open finding (older-reader simulation, as the
+      out_of_scope tests do); `effective_finding_states` folds an `open` resolution carrying
+      `unconfirmed=true` to `unconfirmed`; the JournalEntry validator refuses `input` on a
+      non-discovery kind and on a non-spec scope, and `unconfirmed` anywhere but an `open`
+      resolution record. Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: journal/model.py — `input: bool = False`, `unconfirmed: bool = False` beside
+      `out_of_scope` (:112), both in `_HEADER_FIELDS`, parsed by name in parse_journal;
+      `EffectiveFindingState` + "unconfirmed"; `_record_state` fold arm; validators next to
+      out_of_scope's (:157-161). The scope check needs the scope: pass it where the model
+      already knows it, else enforce in the two writers (T2) and say which in a code comment.
+      Switch requirements.is_input_entry's test helper to the real token. Green.
+- number: 2
+  title: Verbs and the record path share the rules
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: test_journal_cmd.py — `fr journal add --scope spec --kind discovery --input`
+      writes the token; `--input` with `--kind decision` or `--scope plan` exits 2;
+      `fr journal resolve --state unconfirmed --note "…"` on an in-scope spec finding
+      appends the open+token record; refused (exit 2) on a `review_scope: out` finding and on
+      `--scope plan`. test_record_apply.py — the same four refusals and two successes through
+      a record (`journal: [{kind: discovery, input: true, …}]`, `resolves: [{state:
+      unconfirmed, …}]`), each separately. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: journal_cmd.py — `--input` flag on add; `RESOLUTION_STATES` (:297) +
+      "unconfirmed", refusals after the target loads (:396). record/apply.py
+      `_journal_writes` (:352-374) — `state="open"` for unconfirmed (:363),
+      `unconfirmed=res.state == "unconfirmed"` beside `out_of_scope=` (:366), and the same
+      two refusals using the step's journal scope from the manifest. Green.
+- number: 3
+  title: Record 2→3 (JournalItem.input, AcceptanceItem.verify, ResolutionState)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_migration_record_input_unconfirmed.py modelled on
+      test_migration_record_questions.py: record current_version is 3; a 2→3 migration is
+      registered; a v2 record is stamped with no body rewrite; idempotent; unreadable/empty
+      records refused byte-identical; the chain from 1 reaches 3 hop by hop ([2, 3]); this
+      repo's live records are current. test_record_schema.py — a record with `input: true`,
+      `verify: post-merge` and an `unconfirmed` resolution parses; `verify: other` refused.
+      Update test_migration_record_questions.py's "current is 2" pins to the chain. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: record/model.py — `JournalItem.input`, `AcceptanceItem.verify:
+      Literal["post-merge"] | None = None`, ResolutionState + "unconfirmed",
+      RECORD_SCHEMA_VERSION = 3; registry.py record current_version 3 with a comment line;
+      fr/artifacts/record_input_unconfirmed.py stamp-only SchemaMigration registered via
+      fr/artifacts/__init__.py; template.py's comment lines mention the new keys. Green.
+- number: 4
+  title: Matrix 1→2 (Row.verify, Matrix.schema_version, `fr acceptance add --verify`)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_migration_matrix_verify.py — matrix current_version 2, a 1→2
+      stamp-only migration registered, a v1 matrix stamped without body rewrite, idempotent,
+      chain [2]; test_acceptance_model.py — `Row.verify` accepts `post-merge` only, a
+      `Matrix` with `schema_version: 2` parses; test_acceptance_status_add.py —
+      `fr acceptance add … --verify post-merge` writes `verify: post-merge` and the three
+      reports regenerate; `set-status` preserves it. Also re-run
+      test_migration_runner.py::test_the_shipped_registry_registers_nothing_for_the_version_one_kinds
+      and adjust its kind list (matrix leaves the version-one set). Fails.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: acceptance/model.py `Row.verify`, `Matrix.schema_version: int = 1`; edit.py and
+      acceptance_cmd.py `--verify`; registry.py matrix current_version 2;
+      fr/artifacts/matrix_verify.py registered; structure.validate_matrix accepts the stamp.
+      Reports render `verify` in the notes column only if the report tests demand no layout
+      change — otherwise leave reports untouched. Green.
+  - id: P2.T4.S3
+    text: |-
+      Dogfood (artifact-versioning rule): `uv run fr migrate artifacts --yes` in the
+      workspace; commit the stamped matrix and records; `uv run fr validate artifacts` and
+      `uv run fr acceptance check` exit 0. Full `uv run pytest -q --no-cov -n auto` green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-09-28T10:42:24+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T10:42:24+00:00'
+    note: null
+    observed_prs: []

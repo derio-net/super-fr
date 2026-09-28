@@ -33,6 +33,7 @@ from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
 
+from tests.unit.requirements_support import seed_requirements
 from tests.unit.spec_review_support import spec_review_evidence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -275,6 +276,7 @@ def test_the_shipped_shape_walks_from_start_past_the_gated_brainstorm(tmp_path: 
     spec = root / "docs" / "superpowers" / "specs" / "2026-08-27-x-design.md"
     spec.parent.mkdir(parents=True, exist_ok=True)
     spec.write_text("# x design\n")
+    seed_requirements(root, "docs/superpowers/specs/2026-08-27-x-design.md")
 
     resolved = _fr(
         root,
@@ -311,6 +313,7 @@ def test_the_implement_steps_brief_tells_a_harness_to_fan_out_per_phase(tmp_path
     # (review r5-e2).
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "spec.md").write_text("# spec\n")
+    seed_requirements(root, "docs/spec.md")
     (root / "docs" / "superpowers" / "plans" / "2026-08-27-x").mkdir(parents=True, exist_ok=True)
     for step, emitted in (
         ("brainstorm", "spec=docs/spec.md"),
@@ -385,6 +388,7 @@ def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, pla
     """
     assert _fr(root, ["run", "start", "fr-goal", "--branch", branch, "--run-id", run_id])
     _fr(root, ["run", "advance", run_id])  # brainstorm: gate + brief
+    seed_requirements(root, spec_rel)  # what `requirements` derives (2026-09-28 §C)
     assert (
         _fr(
             root,
@@ -464,6 +468,7 @@ def test_journal_check_blocks_delivery_until_the_completed_phase_is_reviewed(
     plan_rel = _toy_plan(root)
     slug = Path(plan_rel).name
 
+    seed_requirements(root, "docs/spec.md")
     _fr(root, ["run", "start", "fr-goal", "--branch", "feat/gate", "--run-id", "g1"])
     _fr(root, ["run", "advance", "g1"])
     _fr(root, ["run", "resolve", "g1", "--step", "brainstorm", "--state", "done",

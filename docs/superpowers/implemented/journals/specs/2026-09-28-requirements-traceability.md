@@ -1,0 +1,366 @@
+# Journal: 2026-09-28-requirements-traceability
+
+<!-- fr:journal kind=discovery scope=spec id=input-issue-759 created=2026-09-28T06:22:57+00:00 -->
+### input-issue-759 · discovery · Raw input: issue #759 title and body (verbatim)
+
+fr-goal is a lossy relay: the brief is paraphrased into the spec, executors and reviewers never see it, and nothing checks the spec against it
+
+## Problem
+
+fr-goal loses the operator's requirements on the way from the brief to the code, and no stage checks the result against the brief. The pipeline works as a relay: every step works from the previous step's paraphrase.
+
+- **brief → spec:** the orchestrator paraphrases the brief into a spec, adding its own design decisions and dropping constraints.
+- **spec review:** `fr-spec-reviewer` checks the spec "against the operator's recorded decisions, against the codebase it names, and against itself" (its agent description). Not against the brief. An invented behaviour or a dropped acceptance criterion passes.
+- **spec → plan:** the plan compresses the work further into steps.
+- **plan → executor:** the phase executor is dispatched with the spec and plan only. It never sees the brief.
+- **review-phase:** checks the code against spec + plan, so it confirms conformance to the paraphrase.
+- **deliver:** gates evidence of what was *planned*: tests, reviews, acceptance rows the run wrote itself.
+
+So fr is rigorous about "did we do what we planned", and nothing checks "did we plan what was asked". Detail an operator writes into a brief can only survive if the orchestrator happens to carry it into the spec.
+
+## Evidence (one run; generic brief/spec lines quoted)
+
+A feature brief with an explicit UI acceptance-criteria list, run end to end with `/fr-goal` (fr 4.28.0, OpenCode, single phase).
+
+- **The brief:**
+  > Quantities: − / + on each article card (1–20), styled like the cards; the card shows its quantity. … Every new control uses the page's colours, font and radius — no unstyled browser defaults.
+- **The spec the orchestrator wrote** (`docs/superpowers/specs/…-design.md`, UI section):
+  > In basket mode **cards toggle membership**, with styled minus/plus controls **(1–20)** and displayed quantity …
+  - "cards toggle membership" is **invented**. The brief says nothing about card clicks.
+  - "(1–20)" became a lower bound on the − control, so a quantity can't reach 0.
+  - "page font / no unstyled browser defaults" is **dropped**.
+- **The plan** (`01.yaml`): the whole UI is one step, "implement styled mode buttons, card quantities and number input".
+- **The executor's dispatch** (task input, 1,457 characters): "read spec … and fr journal handoff … Implement basket logic, API, UI; browser-check accepted, rejected, staff check and back to article …". The brief is neither included nor referenced.
+- **Transcript check:** zero parts in the executor's and the reviewer's sessions contain any of the brief's UI acceptance wording.
+- **Result:** the delivered UI implements the spec faithfully, including the invented and dropped items:
+  - the card click toggles the article and resets its quantity;
+  - − stops at 1;
+  - − / + are hidden until the card is clicked;
+  - the new controls fall back to the browser's default font.
+
+  The executor's browser check photographed the four states the *spec* listed, so it couldn't catch these.
+- **Control:** a plain single-context agent given the same brief met every one of those criteria. The agent that wrote the code had read the brief. Same model.
+- **Across repeated runs of the same brief,** fr's divergences cluster at the brief → spec step. It reinterprets limits, adds interaction designs, and loses constraints, while its implementation and gates are sound.
+
+## Proposed
+
+1. **Carry the source brief verbatim through the run.** Store it as a run artifact at `start` (the goal text the operator gave, or the issue body). Pass it in every executor and reviewer dispatch as **the source of truth**, with the spec as the design built on it.
+2. **Make spec review a traceability check.** `fr-spec-reviewer` gets the brief. Every acceptance criterion / business rule in the brief must map to a spec section. Findings for **invented behaviour** (spec says X, brief doesn't) and **dropped constraints** (brief says X, spec doesn't) are in scope by default.
+3. **Seed the acceptance matrix from the brief's criteria, word for word.** Seed rows from the brief's own criteria at brainstorm, so `deliver` can't pass while one is unmet or unevidenced. The rows shouldn't be only the run's own restatements.
+4. **Quote acceptance criteria verbatim in the spec** (an "Acceptance criteria (from the brief)" block). Paraphrase only in the design sections.
+5. **Review phases against the brief's criteria too:** review-phase's brief includes the criteria the phase claims to satisfy.
+
+## Related
+
+- #690: operator-gate provenance.
+- #745: phase sizing. Fewer, larger phases make the plan an even lossier summary without (1).
+
+<!-- fr:journal kind=discovery scope=spec id=input-issue-759-comment created=2026-09-28T06:22:57+00:00 -->
+### input-issue-759-comment · discovery · Raw input: issue #759 follow-up comment (verbatim)
+
+Two follow-ups to the issue text.
+
+**1. A correction: phase count isn't the cause.** The "Related" line above says fewer, larger phases make the plan lossier. That claims more than the evidence shows.
+
+- **Nothing in fr limits a plan's size:** no cap on phases or steps, and no truncation of the executor's handoff. The only truncation is `render.py`'s 55k budget for GitHub Issue bodies.
+- **What happened was the planner's choice:** told "single phase", it compressed. The whole UI became one step ("implement styled mode buttons, card quantities and number input"; the plan had 3 tasks, 9 steps, 98 lines), and the detail lived only in the spec.
+- **fr-plan's own guidance pulls both ways:** "Prefer 4–6 phases … cost grows superlinearly with phase count" sits next to "one agentic phase is first-class" and "bite-sized steps: 2–5 minutes". "Prefer 4–6" also contradicts #745's measurements (one-phase plans cheaper). Worth reconciling there.
+
+**2. A reframing: the spec IS the requirements carrier.** In general the input isn't a carefully written brief. It can be a user's one-line request. So "carry the brief verbatim" (proposal 1) can't be the main fix. The spec has to capture the requirements, and the defect this run shows is that nothing checks the capture:
+
+- **Invented requirements pass silently.** The spec introduced user-visible behaviour nobody asked for ("cards toggle membership") and reinterpreted a stated range (1–20 as a lower bound on −). Those are design decisions dressed as requirements.
+- **Dropped requirements pass silently.** A stated constraint ("no unstyled browser defaults") vanished between input and spec.
+- **Spec review can't see either.** It checks the spec against itself, the codebase, and the recorded answers, but not against what the operator actually said.
+
+Directions that work whatever the input's quality:
+
+- **Split the spec into Requirements and Design.** *Requirements, as captured* holds each item traced to its source: the goal text or issue, or an answered question. *Design* holds fr's own decisions. Any user-visible behaviour in Design that no requirement asks for gets surfaced as a question in the (single) question round, or flagged as an assumption in the PR, never silently promoted.
+- **Spec review traces Requirements back to the raw input,** however short. Its findings: each input statement is covered or explicitly deferred; every requirement has a source. This is the one place the original wording is needed. It stays a review input, not something dispatched downstream.
+- **Seed acceptance rows from Requirements,** so `deliver` gates on the captured requirements rather than the plan's restatement of them.
+
+With that in place, executors and reviewers working from the spec is fine, because the spec is checked to be a faithful capture.
+
+<!-- fr:journal kind=decision scope=spec id=d0-spec-is-the-carrier created=2026-09-28T06:22:57+00:00 -->
+### d0-spec-is-the-carrier · decision · The raw input is not carried downstream; improve spec creation and review instead
+
+Operator: the input has no quality control (one line to spec-shaped), brainstorming may depart from it for good reason, and carrying it to executors/reviewers would confuse them. Proposals 1 and 5 of #759 are dropped; the spec is the requirements carrier, checked once against the input.
+
+<!-- fr:journal kind=decision scope=spec id=d1-input-in-spec-journal created=2026-09-28T06:22:57+00:00 -->
+### d1-input-in-spec-journal · decision · Raw input preserved verbatim as a spec-journal entry
+
+Chosen over a verbatim spec section (every executor would read it) and a sibling run file (no run id for standalone brainstorms). The reviewer already reads the spec journal; executors never get it.
+
+<!-- fr:journal kind=decision scope=spec id=d2-always-ask created=2026-09-28T06:22:57+00:00 -->
+### d2-always-ask · decision · Unasked user-visible behaviour is always a round question
+
+Chosen over 'ask or list as assumption' and 'always assumption'. Also covers every ambiguous input statement. No assumption list at brainstorm time.
+
+<!-- fr:journal kind=decision scope=spec id=d3-late-unconfirmed created=2026-09-28T06:22:57+00:00 -->
+### d3-late-unconfirmed · decision · Late spec-review findings of invented behaviour are kept and flagged in the PR
+
+Chosen over reopening the gate and over stripping to a minimal reading. Resolved 'unconfirmed', rendered under 'Built without operator confirmation'.
+
+<!-- fr:journal kind=decision scope=spec id=d4-structural-gate created=2026-09-28T06:22:57+00:00 -->
+### d4-structural-gate · decision · Structural gate plus reviewer judgement
+
+fr machine-checks Requirements form, sources, quotes and row citations as derived evidence; coverage stays with fr-spec-reviewer.
+
+<!-- fr:journal kind=decision scope=spec id=d5-rows-gate-deliver created=2026-09-28T06:22:57+00:00 -->
+### d5-rows-gate-deliver · decision · Every requirement cited by a row; deliver refuses not-implemented rows
+
+Chosen over report-only and rows-by-judgement. skipped passes.
+
+<!-- fr:journal kind=decision scope=spec id=d6-approach-a created=2026-09-28T06:22:57+00:00 -->
+### d6-approach-a · decision · Requirements as a spec section with a fixed grammar, parsed by fr/requirements.py
+
+Chosen over a YAML sidecar (new artifact kind) and front matter.
+
+<!-- fr:journal kind=decision scope=spec id=d7-requirements-table created=2026-09-28T06:22:57+00:00 -->
+### d7-requirements-table · decision · Requirements and Deferred from input are Markdown tables
+
+Operator at spec review: the Requirements section should be a table, like Decisions. Sources in one cell, separated by <br>; a literal | is escaped as \|.
+
+<!-- fr:journal kind=discovery scope=spec id=gate-opened-after-answers created=2026-09-28T06:22:57+00:00 -->
+### gate-opened-after-answers · discovery · Design answers d0-d7 predate the brainstorm gate opening
+
+Standalone fr-brainstorming: the cursor was started at section 0 but `fr run advance` (which opens the operator gate) ran only after the operator had answered the five design questions and reviewed the spec. The gate is cleared by the operator's answer to the gate-clearing question itself; d0-d7 were decided interactively before it. Skill gap filed separately.
+
+<!-- fr:journal kind=decision scope=spec id=d8-spec-review-hard created=2026-09-28T06:38:53+00:00 -->
+### d8-spec-review-hard · decision · spec-review runs at the hard tier
+
+Operator, after discussing reviewer strength: the spec is written by the orchestrator (usually Opus) and was reviewed at standard (Sonnet). Spec review is the one point the input is consulted again, so it moves to hard.
+
+<!-- fr:journal kind=decision scope=spec id=d9-coverage-partition created=2026-09-28T06:38:54+00:00 -->
+### d9-coverage-partition · decision · Spec review returns an input-coverage partition fr verifies
+
+Every span of the input labelled R<n>/deferred/context/missing <finding>; fr verifies the spans concatenate to the whole input. Makes skimming a refusal.
+
+<!-- fr:journal kind=decision scope=spec id=d10-traceability-first created=2026-09-28T06:38:54+00:00 -->
+### d10-traceability-first · decision · fr-spec-reviewer checks traceability first
+
+Before the codebase lookups that otherwise consume its attention.
+
+<!-- fr:journal kind=decision scope=spec id=d11-post-merge-rows created=2026-09-28T07:00:08+00:00 -->
+### d11-post-merge-rows · decision · Rows may declare verify: post-merge; deliver skips them, PR lists them
+
+Operator, on review finding o3: chosen over marking post-merge requirements in the spec Test Plan, and over relabelling such rows skipped. Matrix 1->2.
+
+<!-- fr:journal kind=decision scope=spec id=d12-coverage-in-pr created=2026-09-28T07:00:09+00:00 -->
+### d12-coverage-in-pr · decision · The input-coverage table is rendered in the PR body
+
+Part of the option the operator selected for d9 ('Rendered in the PR body'), missing from d9's entry; caught by spec-review finding r7.
+
+<!-- fr:journal kind=decision scope=spec id=d13-paraphrase-cell created=2026-09-28T07:00:10+00:00 -->
+### d13-paraphrase-cell · decision · Requirement cell paraphrases; verbatim quote in the source cell
+
+Operator, on review findings r1/o4: keep the paraphrase cell rather than require input-only rows to equal their quote. The input's 'Paraphrase only in the design sections' is deferred citing this.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · The unconfirmed state is gated in three places; the spec named one
+
+Raised by: Sonnet (standard tier), first review of the tables revision.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · R3 captured only half of d2-always-ask (ambiguous statements missing)
+
+Raised by: Sonnet (standard tier), first review of the tables revision.
+
+<!-- fr:journal kind=finding scope=spec id=o1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o1 · finding [open] (reviewer: in scope) · requirement-rows never wired into the evidence tuples or deliver's manifest
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o2 · finding [open] (reviewer: in scope) · spec-review cannot stage the row its dropped-finding fix needs
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o3 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o3 · finding [open] (reviewer: in scope) · deliver's not-implemented refusal blocks every spec with post-merge rows
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o4 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o4 · finding [open] (reviewer: in scope) · 'Paraphrase only in the design sections' reinterpreted
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o5 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o5 · finding [open] (reviewer: in scope) · Three input statements neither covered nor deferred
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o6 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o6 · finding [open] (reviewer: in scope) · Verbatim input capture ignores the third-party-privacy rule
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o7 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o7 · finding [open] (reviewer: in scope) · unconfirmed findings would also render under ## Findings
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o8 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o8 · finding [open] (reviewer: in scope) · Test Plan misses scope refusal, empty Deferred reason, status rendering
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=r1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r1 · finding [open] (reviewer: in scope) · Proposals 3 and 4's verbatim-capture statements neither required nor deferred
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r2 · finding [open] (reviewer: in scope) · 'Worth reconciling there.' (fr-plan contradiction) has no Deferred row
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r3 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r3 · finding [open] (reviewer: in scope) · The coverage grammar's elision ban makes #759's own input unpartitionable
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r4 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r4 · finding [open] (reviewer: in scope) · The input token's kind/scope refusal is specified for the verb only
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r5 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r5 · finding [open] (reviewer: in scope) · coverage and requirement-rows never wired into the evidence tuples
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r6 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r6 · finding [open] (reviewer: in scope) · On brainstorm's own resolve the spec is not yet in the cursor
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r7 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r7 · finding [open] (reviewer: in scope) · Invented: ## Input coverage PR section had no requirement behind it
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r8 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r8 · finding [open] (reviewer: in scope) · Unconfirmed findings would also be listed under ## Findings
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r9 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r9 · finding [open] (reviewer: in scope) · fr-spec-reviewer's description still lists only three checks
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=review scope=spec id=spec-review-sonnet created=2026-09-28T07:00:41+00:00 -->
+### spec-review-sonnet · review · spec review (Sonnet, standard): 2 findings
+
+Findings s1, s2. Did not report the requested quote verification.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus-snapshot created=2026-09-28T07:00:41+00:00 -->
+### spec-review-opus-snapshot · review · spec review (Opus, hard, same snapshot as Sonnet): 8 findings
+
+Findings o1-o8. Verified all 10 quotes explicitly. Zero overlap with the Sonnet review's findings.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-09-28T07:00:41+00:00 -->
+### spec-review · review · independent spec review (Opus, hard, revised spec): 9 findings
+
+Findings r1-r9, traceability first per d10. All 9 quotes verified. Input-coverage dry run (d9): 29 spans — R=11 deferred=4 context=10 missing=4 (r1 x3, r2); three spans contain the input's own ' … ' (finding r3). Full table in the reviewer's return; not re-typed here since the coverage gate does not exist yet.
+
+<!-- fr:journal kind=discovery scope=spec id=reviewer-comparison created=2026-09-28T07:00:41+00:00 -->
+### reviewer-comparison · discovery · Sonnet vs Opus on the same snapshot: disjoint findings
+
+Same prompt and snapshot: Sonnet 2 findings (code completeness s1, decision coverage s2), Opus 8 (traceability gaps o4/o5, cross-cutting conflicts o2/o3/o6, wiring o1/o7). No overlap. Opus was clearly stronger on traceability to the input (basis for d8); the disjointness suggests reviewers complement rather than dominate. Candidate follow-up: a second, cross-family reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: The unconfirmed state is gated in three places; the spec named one
+
+Fixed: §D names journal_cmd.py RESOLUTION_STATES (:297/:366/:396), record/apply.py _journal_writes (:352-374), record/model.py ResolutionState; Test Plan 9 exercises verb and record path separately.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: R3 captured only half of d2-always-ask (ambiguous statements missing)
+
+Fixed: R3 now names the interpretation of ambiguous input statements.
+
+<!-- fr:journal kind=finding scope=spec id=o1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o1 -->
+### o1-resolved · finding [fixed] · resolves o1: requirement-rows never wired into the evidence tuples or deliver's manifest
+
+Fixed: §C wires all three new names into _VERIFIABLE/_DERIVED_EVIDENCE/_DERIVED_FROM; §F names deliver's evidence line; §G is per evidence name.
+
+<!-- fr:journal kind=finding scope=spec id=o2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o2 -->
+### o2-resolved · finding [fixed] · resolves o2: spec-review cannot stage the row its dropped-finding fix needs
+
+Fixed: spec-review gains `acceptance` in emits (§C); Test Plan 6.
+
+<!-- fr:journal kind=finding scope=spec id=o3-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o3 -->
+### o3-resolved · finding [fixed] · resolves o3: deliver's not-implemented refusal blocks every spec with post-merge rows
+
+Fixed by operator decision d11-post-merge-rows: `verify: post-merge` rows (matrix 1->2), skipped by the gate, listed in a required PR section; R10.
+
+<!-- fr:journal kind=finding scope=spec id=o4-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o4 -->
+### o4-resolved · finding [fixed] · resolves o4: 'Paraphrase only in the design sections' reinterpreted
+
+Fixed by operator decision d13-paraphrase-cell; the input line is deferred citing it.
+
+<!-- fr:journal kind=finding scope=spec id=o5-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o5 -->
+### o5-resolved · finding [fixed] · resolves o5: Three input statements neither covered nor deferred
+
+Fixed: 'are in scope by default.' cited under R4; 'Store it as a run artifact at `start`' and the word-for-word seeding statements deferred with reasons.
+
+<!-- fr:journal kind=finding scope=spec id=o6-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o6 -->
+### o6-resolved · finding [fixed] · resolves o6: Verbatim input capture ignores the third-party-privacy rule
+
+Fixed: §A redacts at capture per the rule and states it; quotes match the redacted text; Test Plan 9.
+
+<!-- fr:journal kind=finding scope=spec id=o7-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o7 -->
+### o7-resolved · finding [fixed] · resolves o7: unconfirmed findings would also render under ## Findings
+
+Fixed: §D makes unconfirmed a third bucket beside _CLOSED_OUT and renders the resolution record's note; Test Plan 11.
+
+<!-- fr:journal kind=finding scope=spec id=o8-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o8 -->
+### o8-resolved · finding [fixed] · resolves o8: Test Plan misses scope refusal, empty Deferred reason, status rendering
+
+Fixed: Test Plan 1, 8, 9.
+
+<!-- fr:journal kind=finding scope=spec id=r1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r1 -->
+### r1-resolved · finding [fixed] · resolves r1: Proposals 3 and 4's verbatim-capture statements neither required nor deferred
+
+Fixed: three Deferred rows (superseded by the comment / met by R7 / d13).
+
+<!-- fr:journal kind=finding scope=spec id=r2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r2 -->
+### r2-resolved · finding [fixed] · resolves r2: 'Worth reconciling there.' (fr-plan contradiction) has no Deferred row
+
+Fixed: Deferred row citing super-fr#760.
+
+<!-- fr:journal kind=finding scope=spec id=r3-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r3 -->
+### r3-resolved · finding [fixed] · resolves r3: The coverage grammar's elision ban makes #759's own input unpartitionable
+
+Fixed: spans are literal (… is the input's character); a skipped stretch is refused by the concatenation check; Test Plan 12 partitions the #759 input itself.
+
+<!-- fr:journal kind=finding scope=spec id=r4-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r4 -->
+### r4-resolved · finding [fixed] · resolves r4: The input token's kind/scope refusal is specified for the verb only
+
+Fixed: the rule lives in the JournalEntry validator beside out_of_scope's; Test Plan 9.
+
+<!-- fr:journal kind=finding scope=spec id=r5-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r5 -->
+### r5-resolved · finding [fixed] · resolves r5: coverage and requirement-rows never wired into the evidence tuples
+
+Fixed with o1 (§C, §F).
+
+<!-- fr:journal kind=finding scope=spec id=r6-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r6 -->
+### r6-resolved · finding [fixed] · resolves r6: On brainstorm's own resolve the spec is not yet in the cursor
+
+Fixed: §C uses this resolve's own emitted map on brainstorm, the stored one on spec-review; Test Plan 5.
+
+<!-- fr:journal kind=finding scope=spec id=r7-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r7 -->
+### r7-resolved · finding [fixed] · resolves r7: Invented: ## Input coverage PR section had no requirement behind it
+
+Fixed: traced to operator decision d12-coverage-in-pr (the option selected for d9 said 'Rendered in the PR body'); R8 cites it.
+
+<!-- fr:journal kind=finding scope=spec id=r8-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r8 -->
+### r8-resolved · finding [fixed] · resolves r8: Unconfirmed findings would also be listed under ## Findings
+
+Fixed with o7.
+
+<!-- fr:journal kind=finding scope=spec id=r9-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r9 -->
+### r9-resolved · finding [fixed] · resolves r9: fr-spec-reviewer's description still lists only three checks
+
+Fixed: §D names the description and heading; Test Plan 15.

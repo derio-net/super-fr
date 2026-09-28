@@ -42,6 +42,7 @@ MATRIX_TEMPLATE = """\
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
+schema_version: {schema_version}
 org: {org}
 repo: {repo}
 rows:
@@ -370,7 +371,14 @@ def init(root: Path, org: str, repo: str, backend: HostBackend = "github") -> In
         path.write_text(content)
         created.append(rel)
 
-    write_if_missing("docs/acceptance/matrix.yaml", MATRIX_TEMPLATE.format(org=org, repo=repo))
+    from fr.artifacts.registry import artifact_kind
+
+    # Born at the kind's current version, so a fresh matrix is never stale.
+    stamp = artifact_kind("matrix").current_version
+    write_if_missing(
+        "docs/acceptance/matrix.yaml",
+        MATRIX_TEMPLATE.format(org=org, repo=repo, schema_version=stamp),
+    )
     write_if_missing(".claude/rules/acceptance-matrix.md", RULE_TEMPLATE)
     # Template + destination path both vary by backend — see
     # WORKFLOW_TEMPLATE_GITEA/WORKFLOW_TEMPLATE_GITLAB's module-level

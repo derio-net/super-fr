@@ -1,4 +1,6 @@
-"""OpenCode: `~/.local/share/opencode/opencode.db` (`session`, `message`, `part`).
+"""OpenCode: `opencode.db` (`session`, `message`, `part`) — located by
+`fr.run.telemetry.OpenCodeReader.database` (`$XDG_DATA_HOME/opencode/`, else
+`~/.local/share/opencode/`).
 
 Opened read-only (`mode=ro` URI), so a missing database is an error — never a
 new empty file — and nothing here can write the harness's own store. One

@@ -512,3 +512,97 @@ def test_dropping_the_only_ref_of_a_ci_row_succeeds(
     target = _row(root, "target")
     assert not target.levels.get("unit")
     assert target.status == "ci"
+
+
+# --- set-status --verify (phase 4 review g2) ---------------------------------
+#
+# Before this, a row created before it was known to be live-only had no way to
+# be marked `verify: post-merge` after the fact: `add` is create-only, there is
+# no delete verb, and matrix.yaml must never be hand-edited.
+
+
+def test_set_status_verify_post_merge_sets_it_on_an_existing_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, TWO_ROWS)
+    result = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "--id",
+        "target",
+        "--status",
+        "not-implemented",
+        "--notes",
+        "live-only, marked post-merge",
+        "--verify",
+        "post-merge",
+    )
+    assert result.exit_code == 0, result.output
+    assert _row(root, "target").verify == "post-merge"
+    # the report set regenerates in the same call, as every other flip does
+    d = root / "docs" / "acceptance"
+    for name in ("report_local.html", "report_linked.html", "report_linked.md"):
+        assert (d / name).exists()
+    assert _invoke(root, monkeypatch, "report", "--check").exit_code == 0
+
+
+def test_set_status_without_verify_preserves_the_existing_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, TWO_ROWS)
+    assert (
+        _invoke(
+            root,
+            monkeypatch,
+            "set-status",
+            "--id",
+            "target",
+            "--status",
+            "not-implemented",
+            "--notes",
+            "first, mark post-merge",
+            "--verify",
+            "post-merge",
+        ).exit_code
+        == 0
+    )
+    assert _row(root, "target").verify == "post-merge"
+
+    result = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "--id",
+        "target",
+        "--status",
+        "ci",
+        "--notes",
+        "now proven in CI",
+    )
+    assert result.exit_code == 0, result.output
+    assert _row(root, "target").verify == "post-merge", (
+        "omitting --verify on a later move must preserve the existing value"
+    )
+
+
+def test_set_status_rejects_an_invalid_verify_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = make_repo(tmp_path, TWO_ROWS)
+    before = _matrix(root).read_text()
+    result = _invoke(
+        root,
+        monkeypatch,
+        "set-status",
+        "--id",
+        "target",
+        "--status",
+        "ci",
+        "--notes",
+        "n",
+        "--verify",
+        "pre-merge",
+    )
+    assert result.exit_code == 2, result.output
+    assert _matrix(root).read_text() == before

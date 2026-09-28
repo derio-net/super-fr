@@ -48,7 +48,7 @@ def test_a_migration_off_version_one_is_registered_for_the_record_kind() -> None
     kind = artifact_kind("record")
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
     assert chain, "no registered migration moves a pre-framework record file"
-    assert [step.to_version for step in chain] == [2]
+    assert [step.to_version for step in chain] == [2, 3]  # every hop, not just the end
     assert chain[-1].to_version == kind.current_version
 
 
@@ -71,13 +71,15 @@ def test_migrating_a_v1_record_stamps_it_and_rewrites_no_body(
     kind = artifact_kind("record")
     assert kind.read_version(path) == kind.current_version
     if stamped:
-        assert after == before.replace("schema_version: 1\n", "schema_version: 2\n")
+        assert after == before.replace(
+            "schema_version: 1\n", f"schema_version: {kind.current_version}\n"
+        )
     else:
         assert (
             after.splitlines()[1:] == before.splitlines()
             or after.splitlines()[:-1] == before.splitlines()
         ), after
-        assert "schema_version: 2" in after
+        assert f"schema_version: {kind.current_version}" in after
     record = parse_record(after)
     assert record.schema_version == kind.current_version
     assert record.questions is None

@@ -486,7 +486,7 @@ class Round:
     (`ROUND_NEUTRAL_TOOLS` excepted). Only answered rounds are ever built.
 
     `question_texts` holds every `questions[].question` and `header` of its
-    calls, in order — where a `Round 1 of 2` announcement is looked for.
+    calls, in order — where an `a 2nd round may follow` announcement is looked for.
     """
 
     question_texts: tuple[str, ...]
@@ -966,7 +966,7 @@ OPENCODE_DB_ENV = "FR_OPENCODE_DB"
 operator's own sessions."""
 
 OPENCODE_DB = Path(".local") / "share" / "opencode" / "opencode.db"
-"""Where OpenCode keeps its sessions, under `$HOME`."""
+"""Where OpenCode keeps its sessions, under `$HOME`, when `XDG_DATA_HOME` is unset."""
 
 
 class OpenCodeReader:
@@ -976,8 +976,18 @@ class OpenCodeReader:
     harness = "opencode"
 
     def database(self, env: Mapping[str, str]) -> Path:
+        """`FR_OPENCODE_DB`, else `$XDG_DATA_HOME/opencode/opencode.db`, else
+        `~/.local/share/opencode/opencode.db` — OpenCode's own order (its
+        xdg-basedir takes `XDG_DATA_HOME` when set and non-empty). OpenCode's
+        bash tool passes its environment through, so fr sees the same value.
+        Ignoring it read the operator's global database instead (gh#740)."""
         override = env.get(OPENCODE_DB_ENV)
-        return Path(override) if override else Path.home() / OPENCODE_DB
+        if override:
+            return Path(override)
+        data = env.get("XDG_DATA_HOME")
+        if data:
+            return Path(data) / "opencode" / OPENCODE_DB.name
+        return Path.home() / OPENCODE_DB
 
 
 def _ms_to_dt(value: object) -> _dt.datetime | None:
@@ -1004,6 +1014,14 @@ def _opencode_wrote_since(
     orchestrator's own shell command produced the bytes — which is the drift
     this gate closes. Exit 0 stands in for Claude Code's `is_error`, which a
     non-zero exit sets.
+
+    A READABLE database is not necessarily the right one (gh#740: OpenCode ran
+    under `XDG_DATA_HOME`, fr read `~/.local/share`). The orchestrator calling
+    this is itself mid-`bash`, a part of its session, so a database that
+    recorded no part at all since the unit opened cannot hold it: that is
+    `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
+    Activity is read from `part`, not `session.time_updated`, which nothing
+    shows OpenCode bumps per part.
     """
     import sqlite3
     from contextlib import closing
@@ -1013,12 +1031,17 @@ def _opencode_wrote_since(
     since_ms = int(start.timestamp() * 1000)
     try:
         with closing(open_ro(OpenCodeReader().database(env))) as con:
+            (active,) = con.execute(
+                "SELECT EXISTS (SELECT 1 FROM part WHERE time_updated >= ?)", (since_ms,)
+            ).fetchone()
             rows = con.execute(
                 "SELECT p.data FROM part p JOIN session s ON s.id = p.session_id "
                 "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
                 (since_ms,),
             ).fetchall()
     except sqlite3.Error:
+        return None
+    if not active:
         return None
     calls: list[_BashCall] = []
     for (raw,) in rows:

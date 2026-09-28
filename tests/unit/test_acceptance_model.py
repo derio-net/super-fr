@@ -143,3 +143,29 @@ def test_load_bool_id_rejected(tmp_path: Path) -> None:
 def test_load_missing_file(tmp_path: Path) -> None:
     with pytest.raises(AcceptanceError, match="matrix"):
         load_matrix(tmp_path / "nope.yaml")
+
+
+# ── matrix 1 -> 2 (spec 2026-09-28 §H): Row.verify, Matrix.schema_version ──
+
+
+def test_row_verify_accepts_post_merge(tmp_path: Path) -> None:
+    text = HEADER + ROW.format(id="a", status="ci") + "    verify: post-merge\n"
+    (row,) = load_matrix(_write_matrix(tmp_path, text)).rows
+    assert row.verify == "post-merge"
+
+
+def test_row_verify_defaults_to_none(tmp_path: Path) -> None:
+    (row,) = load_matrix(_write_matrix(tmp_path, HEADER + ROW.format(id="a", status="ci"))).rows
+    assert row.verify is None
+
+
+def test_row_verify_refuses_anything_else(tmp_path: Path) -> None:
+    text = HEADER + ROW.format(id="a", status="ci") + "    verify: someday\n"
+    with pytest.raises(AcceptanceError, match="post-merge"):
+        load_matrix(_write_matrix(tmp_path, text))
+
+
+def test_a_matrix_carrying_its_schema_version_parses(tmp_path: Path) -> None:
+    text = "schema_version: 2\n" + HEADER + ROW.format(id="a", status="ci")
+    m = load_matrix(_write_matrix(tmp_path, text))
+    assert m.schema_version == 2 and len(m.rows) == 1
