@@ -299,6 +299,43 @@ def quote_matches(quote: str, body: str) -> bool:
     return True
 
 
+# --- §C/§F: which matrix origins name a spec ------------------------------------
+
+
+def origin_fragment(origin: str, spec_ref: str) -> str | None:
+    """The fragment (`""` for none) of `origin` when it names the spec
+    `spec_ref` (`<repo>:<spec-path>`), else `None`. Twin-aware, so a citation
+    survives `fr archive` (§C.5); the one rule `check_requirements` and the
+    `requirement-rows` gate (§F) both read."""
+    try:
+        repo, path, frag = split_ref(origin)
+    except AcceptanceError:
+        return None
+    ref_repo, _, ref_path = spec_ref.partition(":")
+    if repo != ref_repo:
+        return None
+    if path == ref_path or archive_twin(path) == ref_path or path == archive_twin(ref_path):
+        return frag
+    return None
+
+
+# --- §C: the witness ---------------------------------------------------------
+
+
+def requirements_digest(spec_text: str) -> str:
+    """sha256 of the spec's normalised `## Requirements` and `## Deferred from
+    input` sections (§C) — what `requirements` evidence records beside the
+    count, so a spec-review that edits the capture records a new hash while a
+    whitespace-only reflow does not. An absent section hashes as empty."""
+    import hashlib
+
+    parts = []
+    for heading in (_REQUIREMENTS_HEADING, _DEFERRED_HEADING):
+        section = _locate_section(spec_text, heading)
+        parts.append(normalise("\n".join(section[0])) if section is not None else "")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
 # --- §C: check_requirements --------------------------------------------------
 
 
@@ -331,20 +368,12 @@ def check_requirements(
     if not parsed.items:
         problems.append(f"`{_REQUIREMENTS_HEADING}` has no items")
 
-    ref_repo, _, ref_path = spec_ref.partition(":")
-
     def _cited(req_id: str) -> bool:
-        for row in matrix.rows:
-            for origin in row.origin:
-                try:
-                    r, p, frag = split_ref(origin)
-                except AcceptanceError:
-                    continue
-                if r != ref_repo or frag != req_id:
-                    continue
-                if p == ref_path or archive_twin(p) == ref_path or p == archive_twin(ref_path):
-                    return True
-        return False
+        return any(
+            origin_fragment(origin, spec_ref) == req_id
+            for row in matrix.rows
+            for origin in row.origin
+        )
 
     def _quote_ok(quote: str) -> bool:
         return any(quote_matches(quote, ie.body) for ie in input_entries)
