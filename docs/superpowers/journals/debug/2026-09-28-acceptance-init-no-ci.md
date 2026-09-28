@@ -24,3 +24,8 @@ splitlines()+join+'\n' normalises the final newline and CRLF→LF, so the diff i
 ### 1ba19b3ddc46 · finding [fixed] · init scaffolds CI only beside existing CI; `ci` needs a CI config; .gitignore append-only
 
 fr/acceptance/ci.py (ci_config, one detector); scaffold.init(with_ci=) + templates parametrised on the CI line; record/apply.py refuses a move INTO `ci` without CI (rows already ci untouched); _append_gitignore_line byte-exact. Failing-test-first: tests/unit/test_acceptance_init_no_ci.py (7 red → 15 green). Existing init tests now pass --with-ci where they pin the workflow's shape; make_repo gains ci=True.
+
+<!-- fr:journal kind=review scope=debug id=010adc6378c9 created=2026-09-28T19:32:50+00:00 -->
+### 010adc6378c9 · review · Independent adversarial review: no findings at the fix-now bar
+
+Verified: _acceptance_writes is the only production caller of insert_row/replace_row (no gate bypass); refusal fires before any overlay write; GitHub-with-CI templates byte-identical to origin/main; tests fail on revert. Below the bar, not fixed: CR-only .gitignore files and a trailing-space variant of the line are not recognised as present (a harmless duplicate line); ci_config accepts any workflow, not specifically the acceptance job — the known simplification gh#774's declared ci service replaces.
