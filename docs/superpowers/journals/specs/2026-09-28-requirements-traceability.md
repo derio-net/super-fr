@@ -154,3 +154,213 @@ Part of the option the operator selected for d9 ('Rendered in the PR body'), mis
 ### d13-paraphrase-cell · decision · Requirement cell paraphrases; verbatim quote in the source cell
 
 Operator, on review findings r1/o4: keep the paraphrase cell rather than require input-only rows to equal their quote. The input's 'Paraphrase only in the design sections' is deferred citing this.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · The unconfirmed state is gated in three places; the spec named one
+
+Raised by: Sonnet (standard tier), first review of the tables revision.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · R3 captured only half of d2-always-ask (ambiguous statements missing)
+
+Raised by: Sonnet (standard tier), first review of the tables revision.
+
+<!-- fr:journal kind=finding scope=spec id=o1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o1 · finding [open] (reviewer: in scope) · requirement-rows never wired into the evidence tuples or deliver's manifest
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o2 · finding [open] (reviewer: in scope) · spec-review cannot stage the row its dropped-finding fix needs
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o3 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o3 · finding [open] (reviewer: in scope) · deliver's not-implemented refusal blocks every spec with post-merge rows
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o4 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o4 · finding [open] (reviewer: in scope) · 'Paraphrase only in the design sections' reinterpreted
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o5 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o5 · finding [open] (reviewer: in scope) · Three input statements neither covered nor deferred
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o6 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o6 · finding [open] (reviewer: in scope) · Verbatim input capture ignores the third-party-privacy rule
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o7 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o7 · finding [open] (reviewer: in scope) · unconfirmed findings would also render under ## Findings
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=o8 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### o8 · finding [open] (reviewer: in scope) · Test Plan misses scope refusal, empty Deferred reason, status rendering
+
+Raised by: Opus (hard tier), same snapshot and prompt as the Sonnet review, for comparison.
+
+<!-- fr:journal kind=finding scope=spec id=r1 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r1 · finding [open] (reviewer: in scope) · Proposals 3 and 4's verbatim-capture statements neither required nor deferred
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r2 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r2 · finding [open] (reviewer: in scope) · 'Worth reconciling there.' (fr-plan contradiction) has no Deferred row
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r3 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r3 · finding [open] (reviewer: in scope) · The coverage grammar's elision ban makes #759's own input unpartitionable
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r4 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r4 · finding [open] (reviewer: in scope) · The input token's kind/scope refusal is specified for the verb only
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r5 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r5 · finding [open] (reviewer: in scope) · coverage and requirement-rows never wired into the evidence tuples
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r6 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r6 · finding [open] (reviewer: in scope) · On brainstorm's own resolve the spec is not yet in the cursor
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r7 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r7 · finding [open] (reviewer: in scope) · Invented: ## Input coverage PR section had no requirement behind it
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r8 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r8 · finding [open] (reviewer: in scope) · Unconfirmed findings would also be listed under ## Findings
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=finding scope=spec id=r9 created=2026-09-28T07:00:41+00:00 state=open review_scope=in -->
+### r9 · finding [open] (reviewer: in scope) · fr-spec-reviewer's description still lists only three checks
+
+Raised by: Opus (hard tier), review of record of the revised spec (d8-d10).
+
+<!-- fr:journal kind=review scope=spec id=spec-review-sonnet created=2026-09-28T07:00:41+00:00 -->
+### spec-review-sonnet · review · spec review (Sonnet, standard): 2 findings
+
+Findings s1, s2. Did not report the requested quote verification.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-opus-snapshot created=2026-09-28T07:00:41+00:00 -->
+### spec-review-opus-snapshot · review · spec review (Opus, hard, same snapshot as Sonnet): 8 findings
+
+Findings o1-o8. Verified all 10 quotes explicitly. Zero overlap with the Sonnet review's findings.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-09-28T07:00:41+00:00 -->
+### spec-review · review · independent spec review (Opus, hard, revised spec): 9 findings
+
+Findings r1-r9, traceability first per d10. All 9 quotes verified. Input-coverage dry run (d9): 29 spans — R=11 deferred=4 context=10 missing=4 (r1 x3, r2); three spans contain the input's own ' … ' (finding r3). Full table in the reviewer's return; not re-typed here since the coverage gate does not exist yet.
+
+<!-- fr:journal kind=discovery scope=spec id=reviewer-comparison created=2026-09-28T07:00:41+00:00 -->
+### reviewer-comparison · discovery · Sonnet vs Opus on the same snapshot: disjoint findings
+
+Same prompt and snapshot: Sonnet 2 findings (code completeness s1, decision coverage s2), Opus 8 (traceability gaps o4/o5, cross-cutting conflicts o2/o3/o6, wiring o1/o7). No overlap. Opus was clearly stronger on traceability to the input (basis for d8); the disjointness suggests reviewers complement rather than dominate. Candidate follow-up: a second, cross-family reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: The unconfirmed state is gated in three places; the spec named one
+
+Fixed: §D names journal_cmd.py RESOLUTION_STATES (:297/:366/:396), record/apply.py _journal_writes (:352-374), record/model.py ResolutionState; Test Plan 9 exercises verb and record path separately.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: R3 captured only half of d2-always-ask (ambiguous statements missing)
+
+Fixed: R3 now names the interpretation of ambiguous input statements.
+
+<!-- fr:journal kind=finding scope=spec id=o1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o1 -->
+### o1-resolved · finding [fixed] · resolves o1: requirement-rows never wired into the evidence tuples or deliver's manifest
+
+Fixed: §C wires all three new names into _VERIFIABLE/_DERIVED_EVIDENCE/_DERIVED_FROM; §F names deliver's evidence line; §G is per evidence name.
+
+<!-- fr:journal kind=finding scope=spec id=o2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o2 -->
+### o2-resolved · finding [fixed] · resolves o2: spec-review cannot stage the row its dropped-finding fix needs
+
+Fixed: spec-review gains `acceptance` in emits (§C); Test Plan 6.
+
+<!-- fr:journal kind=finding scope=spec id=o3-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o3 -->
+### o3-resolved · finding [fixed] · resolves o3: deliver's not-implemented refusal blocks every spec with post-merge rows
+
+Fixed by operator decision d11-post-merge-rows: `verify: post-merge` rows (matrix 1->2), skipped by the gate, listed in a required PR section; R10.
+
+<!-- fr:journal kind=finding scope=spec id=o4-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o4 -->
+### o4-resolved · finding [fixed] · resolves o4: 'Paraphrase only in the design sections' reinterpreted
+
+Fixed by operator decision d13-paraphrase-cell; the input line is deferred citing it.
+
+<!-- fr:journal kind=finding scope=spec id=o5-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o5 -->
+### o5-resolved · finding [fixed] · resolves o5: Three input statements neither covered nor deferred
+
+Fixed: 'are in scope by default.' cited under R4; 'Store it as a run artifact at `start`' and the word-for-word seeding statements deferred with reasons.
+
+<!-- fr:journal kind=finding scope=spec id=o6-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o6 -->
+### o6-resolved · finding [fixed] · resolves o6: Verbatim input capture ignores the third-party-privacy rule
+
+Fixed: §A redacts at capture per the rule and states it; quotes match the redacted text; Test Plan 9.
+
+<!-- fr:journal kind=finding scope=spec id=o7-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o7 -->
+### o7-resolved · finding [fixed] · resolves o7: unconfirmed findings would also render under ## Findings
+
+Fixed: §D makes unconfirmed a third bucket beside _CLOSED_OUT and renders the resolution record's note; Test Plan 11.
+
+<!-- fr:journal kind=finding scope=spec id=o8-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=o8 -->
+### o8-resolved · finding [fixed] · resolves o8: Test Plan misses scope refusal, empty Deferred reason, status rendering
+
+Fixed: Test Plan 1, 8, 9.
+
+<!-- fr:journal kind=finding scope=spec id=r1-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r1 -->
+### r1-resolved · finding [fixed] · resolves r1: Proposals 3 and 4's verbatim-capture statements neither required nor deferred
+
+Fixed: three Deferred rows (superseded by the comment / met by R7 / d13).
+
+<!-- fr:journal kind=finding scope=spec id=r2-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r2 -->
+### r2-resolved · finding [fixed] · resolves r2: 'Worth reconciling there.' (fr-plan contradiction) has no Deferred row
+
+Fixed: Deferred row citing super-fr#760.
+
+<!-- fr:journal kind=finding scope=spec id=r3-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r3 -->
+### r3-resolved · finding [fixed] · resolves r3: The coverage grammar's elision ban makes #759's own input unpartitionable
+
+Fixed: spans are literal (… is the input's character); a skipped stretch is refused by the concatenation check; Test Plan 12 partitions the #759 input itself.
+
+<!-- fr:journal kind=finding scope=spec id=r4-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r4 -->
+### r4-resolved · finding [fixed] · resolves r4: The input token's kind/scope refusal is specified for the verb only
+
+Fixed: the rule lives in the JournalEntry validator beside out_of_scope's; Test Plan 9.
+
+<!-- fr:journal kind=finding scope=spec id=r5-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r5 -->
+### r5-resolved · finding [fixed] · resolves r5: coverage and requirement-rows never wired into the evidence tuples
+
+Fixed with o1 (§C, §F).
+
+<!-- fr:journal kind=finding scope=spec id=r6-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r6 -->
+### r6-resolved · finding [fixed] · resolves r6: On brainstorm's own resolve the spec is not yet in the cursor
+
+Fixed: §C uses this resolve's own emitted map on brainstorm, the stored one on spec-review; Test Plan 5.
+
+<!-- fr:journal kind=finding scope=spec id=r7-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r7 -->
+### r7-resolved · finding [fixed] · resolves r7: Invented: ## Input coverage PR section had no requirement behind it
+
+Fixed: traced to operator decision d12-coverage-in-pr (the option selected for d9 said 'Rendered in the PR body'); R8 cites it.
+
+<!-- fr:journal kind=finding scope=spec id=r8-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r8 -->
+### r8-resolved · finding [fixed] · resolves r8: Unconfirmed findings would also be listed under ## Findings
+
+Fixed with o7.
+
+<!-- fr:journal kind=finding scope=spec id=r9-resolved created=2026-09-28T07:00:41+00:00 state=fixed resolves=r9 -->
+### r9-resolved · finding [fixed] · resolves r9: fr-spec-reviewer's description still lists only three checks
+
+Fixed: §D names the description and heading; Test Plan 15.
