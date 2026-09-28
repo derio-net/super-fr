@@ -1,0 +1,45 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-09-28-feat-batch-closeout-always-2 --step implement-phase --item phase/6 --record docs/superpowers/runs/2026-09-28-feat-batch-closeout-always-2.records/implement-phase__phase-6.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 3
+run: 2026-09-28-feat-batch-closeout-always-2
+step: implement-phase
+item: phase/6
+outcome: done            # done | failed | blocked
+ticks: [P6.T1.S1, P6.T1.S2, P6.T1.S3]
+refactor:
+  P6.T1: "a one-time sweep of owed artifacts (journal moves + four prose path
+    updates + acceptance flips); there is no new code path to refactor, only
+    data/doc moves and matrix status flips"
+journal:
+  - kind: discovery
+    id: p6-sweep-owed-set-matched-exactly
+    title: "fr status's owed set and fr archive --all's moves matched exactly: 36 debug journals, no extra move"
+    body: |
+      Ran `uv run fr status` first and recorded its 36-line owed set (all
+      `docs/superpowers/journals/debug/*.md`, each with `fr archive --all`
+      as the clearing command). Ran `uv run fr archive --all` and it moved
+      exactly those 36 files to `docs/superpowers/implemented/journals/debug/`
+      and nothing else — the merged-but-manual-phase plan
+      (`2026-07-09-multi-backend-git-host-adapters`, phase 9 incomplete) and
+      this run's own plan/spec (phase 6 still undispatched, not yet on
+      `origin/main`) were both correctly skipped with printed reasons. No
+      move fell outside the recorded owed set, so no finding was needed for
+      this step.
+  - kind: discovery
+    id: p6-four-prose-mentions-were-exactly-four
+    title: "Repo-wide grep confirmed exactly the four named prose mentions of the moved marketplace-config-clobber journal, plus only allowed exceptions"
+    body: |
+      Grepped the whole tree (excluding
+      `docs/superpowers/implemented/`) for every one of the 36 moved
+      journals' `journals/debug/<name>` path. The
+      2026-07-23-marketplace-config-clobber.md hits were exactly the four
+      named files (AGENTS.md, scripts/install.sh, the two test docstrings) —
+      all four now point at `docs/superpowers/implemented/journals/debug/`.
+      Every other hit across the 36 files was a matrix-ref
+      (`docs/acceptance/matrix.yaml` + its three generated reports, which
+      `fr acceptance check` resolves through `archive_twin` and which the
+      brief says must NOT be rewritten) or the `tests/fixtures/triage/`
+      fixture / triage anchor code, both explicitly out of scope. No
+      unexpected fifth mention turned up.
+evidence: {}
