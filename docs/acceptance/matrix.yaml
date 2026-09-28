@@ -5521,9 +5521,13 @@ rows:
       issue, findings stay out-of-scope'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tracking_none.py
+      - super-fr:tests/unit/test_skill_services_prose.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-cli
     capability: fr-profiles services
     acceptance: fr services prints each resolved service's type, host and source, plain
