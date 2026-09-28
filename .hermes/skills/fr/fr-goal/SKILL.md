@@ -60,12 +60,16 @@ Never review the spec yourself: dispatch the read-only `fr-spec-reviewer` (the b
 ### 3. plan — fr-plan, then review it
 Invoke `fr-plan`, skipping section-by-section approval (the spec encodes the design). Keep
 TDD-shaped steps (red → green → refactor, or a `refactor:` reason in the phase's step record — an older run's `no-refactor-because:` journal entry still counts);
-fr-plan tags each phase a `tier`. Size phases to the change: a one-agentic-phase plan is first-class
-(no skeleton marker, no override). With two or more agentic phases the first is the marked walking
-skeleton — CI green on a trivial test, minimum runtime exercised, external fixtures captured never
-constructed. `fr plan self-review`
-must pass and phases must read back against the spec. fr-plan's agentic-purity gate collects manual
-work into `[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
+fr-plan tags each phase a `tier`. Size phases to the asks: one agentic phase per independently
+reviewable ask, so a one-agentic-phase plan is first-class (no skeleton marker, no override) and
+usually right. Every phase after the first records a `phase-split-<plan>-p<N>` spec-journal
+decision — `ask:` for its own ask, else `tier:`, `risk-first:` or `review-size:`. With two or more
+agentic phases the skeleton is the first ask's phase, marked, its first task the smoke — CI green on
+a trivial test, minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
+must pass and phases must read back against the spec. An operator verification step is a Test Plan
+line or a `verify: post-merge` row, never a phase. fr-plan's agentic-purity gate collects the rest of
+the manual work — a prerequisite agentic work depends on, or a real dispatch/deploy — into
+`[manual]` phases; **back-load by default** (last phase, no dependent agentic phase —
 PR ships it unimplemented, operator pushes to the same PR); **front-load only when agentic work
 depends on it** (spec+plan PR, pause for the go). Multi-repo `depends_on` is within-plan only. The record carries `emitted: {plan: <path>}`.
 
