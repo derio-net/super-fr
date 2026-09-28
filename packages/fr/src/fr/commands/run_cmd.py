@@ -1952,13 +1952,44 @@ def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:
     only a live run after merge can move it."""
     from collections import Counter
 
-    from fr.requirements import origin_fragment
+    from fr.requirements import (
+        RequirementsError,
+        is_cited,
+        origin_fragment,
+        parse_requirements,
+        uncited_problem,
+    )
 
     rows = [
         r
         for r in capture.matrix.rows
         if any(origin_fragment(o, capture.spec_ref) is not None for o in r.origin)
     ]
+    # Re-apply §C's citation rule: a row deleted after spec-review, or a spec
+    # amended to another, must not pass on whatever rows happen to remain.
+    try:
+        requirements = parse_requirements(capture.spec_text)
+    except RequirementsError as e:
+        _requirements_refusal(
+            key, [f"cannot derive requirement-rows evidence — {capture.spec_rel}: {e}"]
+        )
+    uncited = [
+        q.id for q in requirements.items if not is_cited(q.id, capture.matrix, capture.spec_ref)
+    ]
+    if not rows or uncited:
+        head = (
+            f"refused — no acceptance row cites {capture.spec_rel}"
+            if not rows
+            else f"refused — {len(uncited)} requirement(s) of {capture.spec_rel} have no "
+            "citing acceptance row"
+        )
+        _requirements_refusal(
+            key,
+            [
+                f"{head} (add one with `fr acceptance add --origin {capture.spec_ref}#R<n> …`):",
+                *(f"- {uncited_problem(rid, capture.spec_ref)}" for rid in uncited),
+            ],
+        )
     gated = [r for r in rows if r.verify != "post-merge"]
     owed = [r for r in gated if r.status == "not-implemented"]
     if owed:

@@ -325,6 +325,19 @@ def origin_fragment(origin: str, spec_ref: str) -> str | None:
     return None
 
 
+def is_cited(req_id: str, matrix: Matrix, spec_ref: str) -> bool:
+    """True when some matrix row's `origin` names `spec_ref#<req_id>` (its
+    archive twin resolves too) — the §C citation rule, which the
+    `requirement-rows` gate (§F) re-applies at deliver."""
+    return any(
+        origin_fragment(origin, spec_ref) == req_id for row in matrix.rows for origin in row.origin
+    )
+
+
+def uncited_problem(req_id: str, spec_ref: str) -> str:
+    return f"requirement {req_id}: not cited by any matrix row origin ({spec_ref}#{req_id})"
+
+
 # --- §C: the witness ---------------------------------------------------------
 
 
@@ -374,13 +387,6 @@ def check_requirements(
     if not parsed.items:
         problems.append(f"`{_REQUIREMENTS_HEADING}` has no items")
 
-    def _cited(req_id: str) -> bool:
-        return any(
-            origin_fragment(origin, spec_ref) == req_id
-            for row in matrix.rows
-            for origin in row.origin
-        )
-
     def _quote_ok(quote: str) -> bool:
         return any(quote_matches(quote, ie.body) for ie in input_entries)
 
@@ -398,10 +404,8 @@ def check_requirements(
                         f"requirement {req.id}: source cites decision {src.value!r}, which "
                         "is not a `kind=decision` entry in the spec journal"
                     )
-        if not _cited(req.id):
-            problems.append(
-                f"requirement {req.id}: not cited by any matrix row origin ({spec_ref}#{req.id})"
-            )
+        if not is_cited(req.id, matrix, spec_ref):
+            problems.append(uncited_problem(req.id, spec_ref))
 
     for d in parsed.deferred:
         if not _quote_ok(d.quote):

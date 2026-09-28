@@ -651,3 +651,38 @@ def test_no_recorded_spec_on_the_emitting_step_names_the_amend_form(tmp_path: Pa
     assert "fr run resolve r1 --step brainstorm --state done --emitted spec=<path>" in _squash(
         out.output
     )
+
+
+def test_deliver_refuses_a_requirement_whose_row_was_deleted(tmp_path: Path) -> None:
+    """e2: a row deleted after spec-review leaves R2 uncited; deliver re-checks
+    the §C citation rule rather than counting whatever rows remain."""
+    repo, shipped = _at_spec_review(tmp_path)
+    (repo / SPEC).write_text(
+        (repo / SPEC).read_text().rstrip("\n")
+        + '\n| R2 | It counts. | input "counts from 1–20" |\n'
+    )
+    write_matrix(repo, [row(SPEC), row(SPEC, rid="req-r2", fragment="R2")])
+    _review_entry(repo)
+    assert _spec_review(repo, shipped).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    write_matrix(repo, [row(SPEC)])  # req-r2 deleted
+
+    out = _deliver(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "R2" in text and "not cited" in text
+    assert "R1:" not in text
+    assert load_run_state(repo, "r1").steps["deliver"].state != "done"
+
+
+def test_deliver_refuses_when_no_row_cites_the_spec(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver(tmp_path)
+    write_matrix(repo, [row("docs/other.md", rid="elsewhere")])
+
+    out = _deliver(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    text = _squash(out.output)
+    assert "no acceptance row cites" in text
+    assert "R1" in text
