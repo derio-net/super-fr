@@ -189,7 +189,7 @@ def test_unknown_source_form_error_names_the_valid_forms_and_the_row() -> None:
     named no valid form — the agent had to read this module to pass."""
     text = (
         "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
-        "| R1 | a basket | \u201cA basket is a list\u201d |\n"
+        "| R1 | a \\| basket | \u201cA basket is a list\u201d |\n"
     )
     with pytest.raises(RequirementsError) as exc:
         parse_requirements(text)
@@ -197,7 +197,7 @@ def test_unknown_source_form_error_names_the_valid_forms_and_the_row() -> None:
     assert 'input "<verbatim quote>"' in msg
     assert "decision <id>" in msg
     assert "<br>" in msg
-    assert "| R1 | a basket | \u201cA basket is a list\u201d |" in msg
+    assert "| R1 | a \\| basket | \u201cA basket is a list\u201d |" in msg
 
 
 def test_unescaped_double_quote_inside_a_quote_parses_and_matches() -> None:

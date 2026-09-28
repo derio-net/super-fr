@@ -273,7 +273,8 @@ def parse_requirements(spec_text: str) -> Requirements:
         seen_ids[rid] = line_no
         if not req_text:
             raise RequirementsError(f"line {line_no}: requirement {rid} has an empty cell")
-        sources = _parse_sources(source_cell, line_no, "| " + " | ".join(cells) + " |")
+        row = "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
+        sources = _parse_sources(source_cell, line_no, row)
         items.append(Requirement(id=rid, text=req_text, sources=sources))
 
     deferred: list[Deferred] = []
