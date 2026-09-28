@@ -152,8 +152,9 @@ state:
       note: null
     P1.T4.S3:
       state: x
-      ticked_at: '2026-09-28T20:00:54+00:00'
-      note: null
+      ticked_at: '2026-09-28T20:04:24+00:00'
+      note: 'targeted unit run: 1073 passed, 8 skipped; full suite 6933 passed, 97
+        skipped (executor-reported)'
   completion:
     at: '2026-09-28T20:00:54+00:00'
     note: null
