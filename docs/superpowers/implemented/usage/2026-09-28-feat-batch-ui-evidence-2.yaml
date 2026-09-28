@@ -1,0 +1,98 @@
+schema_version: 1
+run: 2026-09-28-feat-batch-ui-evidence-2
+captures:
+- host: h-c7991db3
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-09-28T22:19:56+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 73b7844b-eec2-42cb-bf0d-d0f4e47b042c
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 714
+        cache_write: 982132
+        cache_read: 60119323
+        output: 122734
+        usd: 26.947170000000053
+        usd_source: exact
+      claude-sonnet-5:
+        input: 766
+        cache_write: 885763
+        cache_read: 56742466
+        output: 5682
+        usd: 18.566476600000016
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.0014429999999999998
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 21.935177914393066
+        turns: 433
+      other:
+        usd: 11.669006132744071
+        turns: 149
+      paperwork:
+        usd: 11.910905552863003
+        turns: 155
+    steps:
+      (outside run):
+        usd: 1.6911469066991844
+        turns: 11
+      brainstorm:
+        usd: 2.3087814201185446
+        turns: 32
+      spec-review:
+        usd: 2.3783854091749057
+        turns: 37
+      plan:
+        usd: 1.1886906570568723
+        turns: 10
+      implement:
+        usd: 35.18480664238533
+        turns: 618
+      deliver:
+        usd: 2.7632785645652986
+        turns: 23
+    briefs:
+      step/spec-review: 1159
+      phase/1/implement-phase: 2390
+      phase/1/review-phase: 1837
+      phase/2/implement-phase: 3587
+      phase/2/review-phase: 2437
+      a98b0d757518482b9: 4471
+      phase/3/implement-phase: 3438
+      phase/3/review-phase: 2979
+  - session: 0b8a20d8-af69-479a-81c8-5b5c403414c7
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 18
+        cache_write: 72369
+        cache_read: 798624
+        output: 2918
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 1
+      other:
+        usd: null
+        turns: 3
+      paperwork:
+        usd: null
+        turns: 5
+    steps:
+      (outside run):
+        usd: null
+        turns: 9
