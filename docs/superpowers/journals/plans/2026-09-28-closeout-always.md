@@ -55,3 +55,59 @@ closeout.py:21 coupled to a private name nothing lints. Fixed by promoting it to
 ### p1-r2 · finding [refuted] (reviewer: in scope) · BranchArtifact.owner is None for a spec artifact (phase 1)
 
 Refuted: spec §A defines `owner` as "plan dir name / spec slug for followers", and a spec is an owner, not a follower (followers are its spec journal, plus runs/usage for plans). Run/usage owners come from the cursor's `emitted.plan`, which phase 2 (§B) reads. That is planned work in a later phase, not a defect here.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-branch-refs-lift created=2026-09-28T20:07:16+00:00 phase=2 -->
+### p2-branch-refs-lift · discovery · verify-merge's ref resolution lifted to fr.isolation.local.resolve_branch_refs (phase 2) (phase 2)
+
+`_branch_refs` was bound to the workspace ops object (it used
+`self._run_network`, whose env came from `self._network_env`). It is
+now a module-level `resolve_branch_refs(run, repo_root, branch, remote)`
+returning `(refs, branch_fetched)` with an EMPTY list when neither ref
+resolves; `network_env`/`run_network` moved beside it. The method keeps
+its IsolationError on no refs, so verify-merge's behaviour is unchanged
+(234 isolation tests green). `fr archive --branch` calls the helper with
+`subprocess_runner` and ignores `branch_fetched`: the §B.3 content check
+over every resolving ref is its guard, and the brief still runs
+verify-merge (PR state included) first.
+
+<!-- fr:journal kind=decision scope=plan id=p2-sweep-report-shape created=2026-09-28T20:07:16+00:00 phase=2 -->
+### p2-sweep-report-shape · decision · --branch prints every sweep move but only the branch's own specs' notes, as held lines (phase 2) (phase 2)
+
+§B.4 says "report only its moves" and "a branch spec that stays live
+prints held: <spec> — <note>". Every move the sweep makes is staged, so
+hiding one would leave an unexplained rename in the operator's commit:
+all moves print as `archived:`. The sweep's notes for specs the branch
+did NOT touch are dropped (that is the "only"); a branch spec left live
+takes its note by `<spec-name>: ` prefix, else the fallback "not every
+Implementation Plans row is archived yet" (an active local row yields
+no note). The sweep runs when the branch touched a spec or a plan moved,
+matching single-plan archive's "sweep after a move".
+
+<!-- fr:journal kind=discovery scope=plan id=p2-emitted-plan-and-private-journal-mover created=2026-09-28T20:07:16+00:00 phase=2 -->
+### p2-emitted-plan-and-private-journal-mover · discovery · New public fr.archive.emitted_plan; archive_cmd imports the private _archive_journal the spec names (phase 2) (phase 2)
+
+A held run/usage names its plan from the cursor's `emitted.plan`
+(p1-owner-scope-for-run-usage's open question): `emitted_plan(cursor)`
+is the reverse of `find_run_for_plan`, reading any cursor version via
+`_read_any_version`; usage finds its cursor live, else archived.
+BranchArtifact's shape is left as phase 1 made it — the owner is read
+at the point of use, no extension needed. `archive_cmd` imports
+`fr.archive._archive_journal` because §B.4 names it for debug journals;
+it is the same private-import smell review p1-r1 fixed for
+`_SCOPE_DIR`, left as is here since promoting it renames six call
+sites. Phase 3 (§C's --all debug/orphan journals) will call it too and
+may want the public name.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-run-held-even-when-plan-archived created=2026-09-28T20:07:16+00:00 phase=2 -->
+### p2-run-held-even-when-plan-archived · discovery · A branch run/usage whose plan is already archived is held, not moved, by --branch (phase 2) (phase 2)
+
+§B.4 says an unmoved run/usage is held naming its plan, with no orphan
+exception (unlike plan/spec journals, which follow an already-archived
+owner). Implemented literally, with a reason true in both cases:
+"follows plan <p>, which did not move in this run". §C's orphan rule (`fr archive --all`, phase 3) is what
+clears such a cursor; phase 3 may want --branch to share it.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-28T20:07:16+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+GREEN was itself the extraction: verify-merge's bound _branch_refs/_network_env/_run_network became module-level resolve_branch_refs/network_env/run_network with the methods delegating, so there is one ref-resolution path and nothing left to clean; the one duplication T1 introduced (IsolationError -> exit 2) was folded into _refuse_on_isolation_error in P2.T2.S3.
