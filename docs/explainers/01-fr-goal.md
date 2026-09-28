@@ -513,11 +513,23 @@ documented escapes and fail-open cases, not a security boundary.
 ### 2. Explore first, then ask a round sized to the decisions (`brainstorm`)
 
 The agent does not begin by asking questions it could answer from the project.
-It first studies how the current system works and compares possible approaches.
+It first records what you actually said — your goal text, or an issue's title,
+body, and any comments you pointed at — verbatim, as an entry in the spec's
+journal, before it explores anything (redacted first if it names a third-party
+host, org, repo, or person, with the entry saying so). That entry is the
+anchor everything downstream traces back to: a requirement it produces later
+must quote it, and a reviewer checks that quote against it.
+
+It then studies how the current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into a single
 question round, sized to those decisions, recommended choices first — a
 second round follows only when it was announced before the first question,
-or you ask for one, and there is never a third. A deployed change may include
+or you ask for one, and there is never a third. Before that round, it lists
+every user-visible behavior the design needs and every statement in your
+input that could reasonably be read more than one way; anything neither of
+those settles becomes a question in the round rather than a silent
+assumption — there is no separate "assumptions" list, because an unsettled
+point is asked, not guessed. A deployed change may include
 a question about how you will verify it in the real environment
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
 
@@ -562,17 +574,40 @@ and why. The next step checks that document against both your answers and the
 existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning.
 
+The specification itself carries a **Requirements table** — one row per
+requirement, each quoting the recorded input verbatim (paraphrase is allowed
+only in the requirement's own text) — plus an optional **Deferred from
+input** table for anything the input mentioned that is deliberately not part
+of this change, each with a reason. Together they trace every requirement
+back to what you actually said, rather than to what the agent inferred you
+meant.
+
 That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they
 wrote, so `spec-review` dispatches a separate, read-only reviewer,
 `fr-spec-reviewer`. It can read and search the project and nothing else. It
-checks the specification against the decisions you gave, cites a file and line
-for every name the document relies on, looks for sections that disagree with
-each other, and hands back a list of findings; it changes nothing itself. The
-step cannot be marked done without that review on record: a review entry
-written after the step began, the reviewer's own identifier — which, where the
-harness lets `fr` read the conversation, must be a reviewer this session really
-dispatched — and no finding left open. The file lives at
+checks **traceability to your input first**, before anything else: every
+statement of your input must map to a requirement or an explicit deferral (a
+**dropped** finding otherwise), a requirement must say no more and no less
+than its quotes (a **reinterpreted** finding otherwise), and no user-visible
+behavior in the design may appear with no requirement behind it (an
+**invented** finding otherwise). It returns its full partition of the input —
+a table of spans, each labeled with the requirement it satisfies, `deferred`,
+`context`, or the finding that flags it missing — so "nothing was missed" is
+something fr can check mechanically, not something the reviewer merely
+claims. A dropped requirement is simply added or deferred; an invented or
+reinterpreted one cannot be waved through by the agent that built it — the
+orchestrator marks it `unconfirmed` with a note on what will actually ship, or
+removes the behavior, and that note is what the pull request later shows you
+under a section named for exactly that: behavior built without your
+confirmation. Only then does the reviewer check the specification against the
+decisions you gave, cite a file and line for every name the document relies
+on, and look for sections that disagree with each other. The step cannot be
+marked done without that review on record: a review entry written after the
+step began, the reviewer's own identifier — which, where the harness lets
+`fr` read the conversation, must be a reviewer this session really dispatched
+— an input partition that covers the input with no gap or overlap, and no
+finding left open. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
@@ -839,6 +874,17 @@ description back and refuses to finish while any of those sections is missing.
 That refusal exists because one pull request did ship without its out-of-scope
 section, and a section that must be remembered is a section that will
 eventually be forgotten.
+
+`deliver` also refuses while any acceptance row citing this specification is
+still not implemented, unless that row is explicitly marked as needing a live,
+operator-driven run to prove — the kind of claim no unit test can settle. Such
+a row keeps nagging you after merge rather than blocking delivery, and the PR
+body lists it under its own heading so it is not forgotten either. Two more
+sections come from the same traceability work as `spec-review`: the input
+partition the reviewer returned, so you can see the whole input accounted for
+in one place, and behavior that shipped without your confirmation — an
+invented or reinterpreted requirement the orchestrator resolved on its own
+judgment — listed with the note explaining what was actually built.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files

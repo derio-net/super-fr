@@ -1836,6 +1836,114 @@ class TestResolveOutOfScope:
         assert res.exit_code == 0, res.output
 
 
+def _spec_file(root: Path, slug: str) -> Path:
+    return root / "docs/superpowers/journals/specs" / f"{slug}.md"
+
+
+class TestAddInput:
+    """`fr journal add --input` (spec 2026-09-28 §A): the operator's input, in
+    the spec journal, as a `discovery` carrying `input=true`."""
+
+    def test_it_writes_the_token_on_a_spec_discovery(self, tmp_path: Path, monkeypatch) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "spec", "--slug", "S", "--kind", "discovery", "--input"),
+            *("--id", "input-1", "--title", "operator input", "--body", "build X"),
+        )
+        assert res.exit_code == 0, res.output
+        text = _spec_file(root, "S").read_text()
+        assert "input=true" in text
+        assert parse_journal(text)[0].input is True
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("--scope", "spec", "--kind", "decision"),
+            ("--scope", "plan", "--kind", "discovery", "--phase", "1"),
+        ],
+        ids=["decision-kind", "plan-scope"],
+    )
+    def test_it_is_refused_off_a_spec_discovery(
+        self, tmp_path: Path, monkeypatch, args: tuple[str, ...]
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(root, *args, "--slug", "S", "--input", "--title", "t", "--body", "b")
+        assert res.exit_code == 2, res.output
+        assert "No such option" not in res.output
+        assert "`input` is only valid" in res.output
+        assert not (root / "docs/superpowers/journals").exists()
+
+
+class TestResolveUnconfirmed:
+    """`--state unconfirmed` (spec 2026-09-28 §D): built without the operator
+    confirming it. Written `open` + `unconfirmed=true`, like out-of-scope."""
+
+    def _open_spec_finding(self, root: Path, monkeypatch, review_scope: str = "in") -> None:
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "spec", "--slug", "S", "--kind", "finding", "--state", "open"),
+            *("--id", "f1", "--title", "invented", "--body", "b"),
+            *("--review-scope", review_scope),
+        )
+        assert res.exit_code == 0, res.output
+
+    def _resolve(self, scope: str = "spec", *extra: str):
+        return runner.invoke(
+            app,
+            [
+                "journal", "resolve", "--scope", scope, "--slug", "S", "--id", "f1",
+                "--state", "unconfirmed", "--note", "builds X as the literal reading",
+                *extra,
+            ],
+        )  # fmt: skip
+
+    def test_it_appends_an_open_record_with_the_token_and_passes_the_gate(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import effective_finding_states, parse_journal
+
+        root = _init_repo(tmp_path)
+        self._open_spec_finding(root, monkeypatch)
+        res = self._resolve()
+        assert res.exit_code == 0, res.output
+        entries = parse_journal(_spec_file(root, "S").read_text())
+        record = next(e for e in entries if e.resolves == "f1")
+        assert record.state == "open" and record.unconfirmed is True
+        assert record.body == "builds X as the literal reading"
+        assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+        check = runner.invoke(app, ["journal", "check", "--scope", "spec", "--slug", "S"])
+        assert check.exit_code == 0, check.output
+        # Passes, but SAID, never silent — like deferred and out-of-scope
+        # (review d2): the operator must see what was built unasked.
+        assert "1 unconfirmed finding(s): f1" in check.output
+
+    def test_it_is_refused_on_a_finding_the_reviewer_tagged_out(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        self._open_spec_finding(root, monkeypatch, review_scope="out")
+        before = _spec_file(root, "S").read_text()
+        res = self._resolve()
+        assert res.exit_code == 2, res.output
+        assert "review_scope" in res.output or "out of scope" in res.output
+        assert _spec_file(root, "S").read_text() == before
+
+    def test_it_is_refused_on_a_plan_scope_finding(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        TestResolve._open_finding(self, root, monkeypatch)  # type: ignore[arg-type]
+        before = _journal_file(root, "S").read_text()
+        res = self._resolve("plan")
+        assert res.exit_code == 2, res.output
+        assert "spec" in res.output
+        assert _journal_file(root, "S").read_text() == before
+
+
 class TestReviewScope:
     """The reviewer's in/out tag, persisted on the finding (spec 2026-09-24 §A)
     so the PR body can show when the orchestrator moved a finding the reviewer

@@ -48,16 +48,19 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 2
+RECORD_SCHEMA_VERSION = 3
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
-`fr.artifacts.record_questions`."""
+`fr.artifacts.record_questions`. Bumped 2 -> 3 for `JournalItem.input`,
+`AcceptanceItem.verify` and `ResolutionState` + `unconfirmed` (spec
+`2026-09-28-requirements-traceability-design.md` §H). Migration:
+`fr.artifacts.record_input_unconfirmed`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
 Outcome = Literal["done", "failed", "blocked"]
-ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope"]
+ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope", "unconfirmed"]
 
 _TICK_ID_RE = re.compile(r"^P\d+\.T\d+\.S\d+$")
 _TASK_ID_RE = re.compile(r"^P\d+\.T\d+$")
@@ -112,6 +115,9 @@ class JournalItem(_Strict):
     answered_by: AnsweredBy | None = None
     tracked_by: StrictStr | None = None
     out_of_scope: bool = False
+    input: bool = False
+    """A spec-journal `discovery` holding the operator's input (spec
+    2026-09-28 §A); `JournalEntry`'s validator refuses it anywhere else."""
 
 
 class Resolution(_Strict):
@@ -145,6 +151,9 @@ class AcceptanceItem(_Strict):
     levels: dict[str, tuple[StrictStr, ...]] = {}
     status: StrictStr
     notes: StrictStr | None = None
+    verify: Literal["post-merge"] | None = None
+    """A row whose verification can only happen after merge (spec
+    2026-09-28 §F): the PR body lists it as owed."""
 
 
 class QuestionRounds(_Strict):

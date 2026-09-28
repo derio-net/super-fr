@@ -193,3 +193,35 @@ def test_the_record_kind_is_registered_and_validated(tmp_path: Path) -> None:
     assert kind.validate(bad)
     # The records dir never reaches the run kind's own locator.
     assert list(iter_artifact_paths(tmp_path, "run")) == []
+
+
+# --- record 2 -> 3 (spec 2026-09-28 §H) ---------------------------------------
+
+
+def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
+    from fr.record.model import parse_record
+
+    record = parse_record(
+        textwrap.dedent(
+            """\
+            schema_version: 3
+            journal:
+              - {kind: discovery, id: input-1, title: input, body: build X, input: true}
+            resolves:
+              - {id: f1, state: unconfirmed, body: builds X literally}
+            acceptance:
+              - {id: row-1, capability: c, acceptance: a, status: not-implemented,
+                 verify: post-merge}
+            """
+        )
+    )
+    assert record.journal[0].input is True
+    assert record.resolves[0].state == "unconfirmed"
+    assert record.acceptance[0].verify == "post-merge"
+
+
+def test_verify_accepts_post_merge_only() -> None:
+    from fr.record.model import RecordError, parse_record
+
+    with pytest.raises(RecordError, match="post-merge"):
+        parse_record("acceptance: [{id: r, status: ci, notes: n, verify: other}]\n")

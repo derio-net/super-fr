@@ -35,7 +35,12 @@ from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, SchemaMigrat
 
 MIGRATION_NAME = "record-question-rounds"
 
-__all__ = ["MIGRATION_NAME", "RECORD_QUESTIONS_MIGRATION", "UnreadableRecordError"]
+__all__ = [
+    "MIGRATION_NAME",
+    "RECORD_QUESTIONS_MIGRATION",
+    "UnreadableRecordError",
+    "guard_record",
+]
 
 
 class UnreadableRecordError(ArtifactMigrationError):
@@ -43,7 +48,11 @@ class UnreadableRecordError(ArtifactMigrationError):
     as a version-2 `StepRecord`."""
 
 
-def _guard(path: Path) -> None:
+def guard_record(path: Path) -> None:
+    """Refuse to let the runner stamp a record that does not read as the LIVE
+    `StepRecord`. Every record hop so far is additive, so the live model is a
+    superset of every older body; a hop that removes a field must freeze the
+    old shape instead (artifact-versioning rule) and stop using this."""
     from fr.record.model import RECORD_SCHEMA_VERSION, StepRecord
 
     try:
@@ -54,8 +63,9 @@ def _guard(path: Path) -> None:
         data: Any = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise UnreadableRecordError(
-            f"{path}: not valid YAML, so fr will not stamp it as record version "
-            f"{RECORD_SCHEMA_VERSION} ({e})."
+            # No version number: this guard is shared by every record hop
+            # (review d3), so naming the live version misreports the 1 -> 2 one.
+            f"{path}: not valid YAML, so fr will not stamp it ({e})."
         ) from e
     if data is None:
         data = {}  # `parse_record` reads an empty file as `{}`; agree with it (p1-r4)
@@ -68,8 +78,8 @@ def _guard(path: Path) -> None:
         StepRecord.model_validate(candidate)
     except ValidationError as e:
         raise UnreadableRecordError(
-            f"{path}: not a readable record, so fr will not stamp it as version "
-            f"{RECORD_SCHEMA_VERSION} ({e}). Fix the file by hand — it is left on its "
+            f"{path}: not a readable record, so fr will not stamp it ({e}). "
+            "Fix the file by hand — it is left on its "
             "current version and will be retried."
         ) from e
 
@@ -78,7 +88,7 @@ RECORD_QUESTIONS_MIGRATION = SchemaMigration(
     kind="record",
     from_version=1,
     to_version=2,
-    fn=_guard,
+    fn=guard_record,
     description="record: add question-round declaration (`questions`) — stamp only, no body change",
 )
 
