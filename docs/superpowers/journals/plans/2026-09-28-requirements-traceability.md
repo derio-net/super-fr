@@ -384,3 +384,8 @@ One sentence in the traceability section (always in scope, never out, with the r
 ### p4-g2-resolved · finding [fixed] · resolves p4-g2: The spec's own live-only rows (R3, R4) lack verify: post-merge, and no verb can set it on an existing row (phase 4)
 
 fr acceptance set-status --verify post-merge (only value; omitted preserves); spec §F and fr-acceptance skill updated; used on requirements-always-ask and requirements-spec-review-traceability (f1f62749, 2a082542, 8673951a). The reviewer's delete+re-add suggestion was not possible without hand-editing the matrix.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-tmpdir-log created=2026-09-28T13:05:52+00:00 state=open review_scope=out -->
+### deliver-tmpdir-log · finding [open] (reviewer: out of scope) · fr-goal §8's '> $TMPDIR/full-suite.log' is refused by the tests evidence gate
+
+fr-goal SKILL.md §8 tells the orchestrator to log the suite with a shell redirect to $TMPDIR/full-suite.log. On Claude Code the deliver tests= gate refused exactly that ('no command of YOURS wrote it'): it resolves a $VAR log path only when the same command assigns it (#720), and TMPDIR is inherited. This run reran with a literal path. Found at deliver of run 2026-09-28-feat-gh-759.
