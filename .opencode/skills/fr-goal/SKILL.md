@@ -63,7 +63,9 @@ TDD-shaped steps (red → green → refactor, or a `refactor:` reason in the pha
 fr-plan tags each phase a `tier`. Size phases to the asks: one agentic phase per independently
 reviewable ask, so a one-agentic-phase plan is first-class (no skeleton marker, no override) and
 usually right. Every phase after the first records a `phase-split-<plan>-p<N>` spec-journal
-decision — `ask:` for its own ask, else `tier:`, `risk-first:` or `review-size:`. With two or more
+decision (`fr journal add --scope spec --slug <spec-journal-slug>`: the spec file's stem without
+`-design`; supersede one with `phase-split-<plan>-p<N>-<k>`) — `ask:` for its own ask, else
+`tier:`, `risk-first:` or `review-size:`. With two or more
 agentic phases the skeleton is the first ask's phase, marked, its first task the smoke — CI green on
 a trivial test, minimum runtime exercised, external fixtures captured never constructed. `fr plan self-review`
 must pass and phases must read back against the spec. An operator verification step is a Test Plan

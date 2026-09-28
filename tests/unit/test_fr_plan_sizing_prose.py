@@ -69,3 +69,17 @@ def test_fr_goal_section_3_carries_the_same_sizing_rule() -> None:
     assert SIZING_SENTENCE in section.lower()
     assert "phase-split-<plan>-p<N>" in section
     assert "Test Plan line" in section
+
+
+def test_r5_the_split_command_names_the_spec_journal_slug() -> None:
+    """Review r5: `--slug` takes the spec's JOURNAL slug (the stem without
+    `-design`), which `<spec-slug>` did not say."""
+    for text in (_flat(FR_PLAN), _goal_section_3()):
+        assert "--slug <spec-slug>" not in text
+        assert "--slug <spec-journal-slug>" in text
+        assert "without `-design`" in text
+
+
+def test_r1_the_skills_say_how_to_supersede_a_split_decision() -> None:
+    for text in (_flat(FR_PLAN), _goal_section_3()):
+        assert "phase-split-<plan>-p<N>-<k>" in text
