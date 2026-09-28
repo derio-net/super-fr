@@ -149,3 +149,8 @@ Operator, on review finding o3: chosen over marking post-merge requirements in t
 ### d12-coverage-in-pr · decision · The input-coverage table is rendered in the PR body
 
 Part of the option the operator selected for d9 ('Rendered in the PR body'), missing from d9's entry; caught by spec-review finding r7.
+
+<!-- fr:journal kind=decision scope=spec id=d13-paraphrase-cell created=2026-09-28T07:00:10+00:00 -->
+### d13-paraphrase-cell · decision · Requirement cell paraphrases; verbatim quote in the source cell
+
+Operator, on review findings r1/o4: keep the paraphrase cell rather than require input-only rows to equal their quote. The input's 'Paraphrase only in the design sections' is deferred citing this.
