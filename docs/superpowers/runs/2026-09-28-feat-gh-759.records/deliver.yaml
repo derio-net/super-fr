@@ -7,4 +7,4 @@ resolves: []
 acceptance: []
 emitted: {}
 evidence:
-  tests: /var/folders/dr/4tnkgxrd5gv_j0njc75yd9q00000gp/T//full-suite.log
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a913f2c8-de7e-4aab-99a6-e1bfe2c563de/scratchpad/full-suite.log
