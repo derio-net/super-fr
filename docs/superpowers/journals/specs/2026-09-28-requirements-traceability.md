@@ -134,3 +134,8 @@ Operator, after discussing reviewer strength: the spec is written by the orchest
 ### d9-coverage-partition · decision · Spec review returns an input-coverage partition fr verifies
 
 Every span of the input labelled R<n>/deferred/context/missing <finding>; fr verifies the spans concatenate to the whole input. Makes skimming a refusal.
+
+<!-- fr:journal kind=decision scope=spec id=d10-traceability-first created=2026-09-28T06:38:54+00:00 -->
+### d10-traceability-first · decision · fr-spec-reviewer checks traceability first
+
+Before the codebase lookups that otherwise consume its attention.
