@@ -232,3 +232,28 @@ covered by the refactor field above.
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 covered by the refactor field above.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-09-28T21:08:16+00:00 phase=3 -->
+### p3-review · review · Phase 3 review: 4 findings (1 critical, 2 important, 1 minor), all fixed (phase 3)
+
+Independent reviewer (general-purpose, sonnet) over 9f17e751..f809f1d8 against spec §C/§F, including a live `fr status` on this repo's artifacts, which exposed p3-r1. It confirmed the single shared predicate, one merge-evidence read, JSON back-compat, and the archive_twin pairs. Verdict: with fixes. All 4 in-scope findings were fixed in 72f0cd1c. The orchestrator re-verified: 611 passed; ruff and mypy clean; `fr status` exit 0 with owed (36) debug journals, no held block, and this PR's plan only under 'in progress'. Declined to judge: §B internals (phase 2), skill prose (phase 5), fragment/explainers, pre-existing acceptance-check warnings, estimate overrun (the deliver proportionality gate reports it).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-09-28T21:08:16+00:00 phase=3 state=fixed review_scope=in -->
+### p3-r1 · finding [fixed] (reviewer: in scope) · (Critical) held (spec) swallowed every noted spec, incl. the ordinary 'still active under plans/' state and this PR's own unmerged spec (phase 3)
+
+Fixed in 72f0cd1c: a spec is owed/held only if the spec itself is on the default ref; held only for the pending-slice or cross-repo-unresolved notes; an active-plan row is silent (its plan is reported by the plan blocks). Verified live: fr status shows no held block and does not list this PR's spec.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-09-28T21:08:16+00:00 phase=3 state=fixed review_scope=in -->
+### p3-r2 · finding [fixed] (reviewer: in scope) · (Important) owner-archived checks for specs, orphan journals and named-plan runs read the working tree, not the default ref (phase 3)
+
+Fixed in 72f0cd1c: artifact and owner both gated on the ref via _spec_rows_on_ref / _dir_on_ref; a --force archive on an unmerged branch no longer makes anything owed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-09-28T21:08:16+00:00 phase=3 state=fixed review_scope=in -->
+### p3-r3 · finding [fixed] (reviewer: in scope) · (Important) one git ls-tree subprocess per artifact (36+ per fr status) instead of one bulk read (phase 3)
+
+Fixed in 72f0cd1c: _ref_tree does one ls-tree -r of docs/superpowers per owed_artifacts call, reused as a frozenset by every check (the _plans_on_ref pattern); an unreadable ref fails closed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-09-28T21:08:16+00:00 phase=3 state=fixed review_scope=in -->
+### p3-r4 · finding [fixed] (reviewer: in scope) · (Minor) no negative tests with the owner or artifact only on the branch (phase 3)
+
+Fixed in 72f0cd1c: 7 unit cases plus CLI-level equivalents, all written after _publish. This also fixed fixtures whose empty owner dirs were invisible to git.
