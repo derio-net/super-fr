@@ -291,3 +291,48 @@ scaffold.py had no backend-keyed leftovers no caller uses: backend still drives 
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 the debt step was split into fragments as part of the GREEN itself; nothing further to clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-lenient-ci-gate created=2026-09-28T21:58:27+00:00 phase=3 state=open review_scope=in -->
+### p3r-lenient-ci-gate · finding [open] (reviewer: in scope) · A malformed ci: declaration silently allowed `ci` rows (phase 3)
+
+acceptance/ci.py:76 resolved leniently, so an invalid ci: block fell through to the raw ci_config probe; init refused the same file strictly.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-issues-write created=2026-09-28T21:58:27+00:00 phase=3 state=open review_scope=in -->
+### p3r-issues-write · finding [open] (reviewer: in scope) · github-actions template kept `issues: write` with the debt step omitted (least privilege) (phase 3)
+
+scaffold.py:125-127.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-fr-only-message created=2026-09-28T21:58:27+00:00 phase=3 state=open review_scope=in -->
+### p3r-fr-only-message · finding [open] (reviewer: in scope) · Refusal said 'no CI config' when fr's own acceptance scaffold was found and discounted (phase 3)
+
+ci.py:81 / scaffold.py:505. The reviewer tagged this OUT of scope (rare path: gated commands migrate v1 first). Reclassified IN by the orchestrator: the fr-only discount that makes the message false is introduced by this change, and exempt/ungated paths still reach it.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-golden-tests created=2026-09-28T21:58:27+00:00 phase=3 state=open review_scope=in -->
+### p3r-golden-tests · finding [open] (reviewer: in scope) · No byte-equality test for the unchanged debt=True renders; '@@' leakage and the notice assertion unpinned (phase 3)
+
+tests/unit/test_acceptance_services.py:115-139.
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-09-28T21:58:27+00:00 phase=3 -->
+### p3-review · review · Phase 3 review: 4 findings, all fixed in 867e43ab (phase 3)
+
+Independent reviewer over e89b1168 against spec R4 §3.B/§3.E and plan 03.yaml: debt=True renders verified byte-identical to main by hand, no token leaks, #787's no-profiles behaviour unchanged, --with-ci per §3.E, lazy import cycle safe. Findings p3r-lenient-ci-gate, p3r-issues-write, p3r-golden-tests (in) and p3r-fr-only-message (reviewer: out; reclassified in, see its body) fixed in 867e43ab; full suite 7109 passed.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-lenient-ci-gate-resolved created=2026-09-28T21:58:27+00:00 phase=3 state=fixed resolves=p3r-lenient-ci-gate -->
+### p3r-lenient-ci-gate-resolved · finding [fixed] · resolves p3r-lenient-ci-gate: A malformed ci: declaration silently allowed `ci` rows (phase 3)
+
+867e43ab: ci_reason resolves strictly; ServicesError becomes the refusal naming .devcontainer/fr-profiles.yaml; tests for scalar none, unknown type, jenkins.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-issues-write-resolved created=2026-09-28T21:58:27+00:00 phase=3 state=fixed resolves=p3r-issues-write -->
+### p3r-issues-write-resolved · finding [fixed] · resolves p3r-issues-write: github-actions template kept `issues: write` with the debt step omitted (least privilege) (phase 3)
+
+867e43ab: @@DEBT_PERMS@@ token; debt=False grants contents: read only; debt=True byte-identical (golden).
+
+<!-- fr:journal kind=finding scope=plan id=p3r-fr-only-message-resolved created=2026-09-28T21:58:27+00:00 phase=3 state=fixed resolves=p3r-fr-only-message -->
+### p3r-fr-only-message-resolved · finding [fixed] · resolves p3r-fr-only-message: Refusal said 'no CI config' when fr's own acceptance scaffold was found and discounted (phase 3)
+
+867e43ab: ci_none_reason names the discounted fr-only scaffold and points at declaring ci:; tests for refusal and init output.
+
+<!-- fr:journal kind=finding scope=plan id=p3r-golden-tests-resolved created=2026-09-28T21:58:27+00:00 phase=3 state=fixed resolves=p3r-golden-tests -->
+### p3r-golden-tests-resolved · finding [fixed] · resolves p3r-golden-tests: No byte-equality test for the unchanged debt=True renders; '@@' leakage and the notice assertion unpinned (phase 3)
+
+867e43ab: golden fixtures from origin/main for 3 renders + 2 bullets, '@@' absent in all 6 renders, exact notice list.
