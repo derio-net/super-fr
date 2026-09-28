@@ -210,6 +210,18 @@ report it received from a helper. The tool can confirm who wrote that log and
 when; it cannot confirm the command was a real test suite. That check is aimed
 at a relayed "all green", not at deliberate forgery.
 
+A user-visible UI requirement asks for the same kind of evidence, in its own
+shape. Its acceptance row names the states and the controls it has to cover,
+and the executor, the reviewer, and delivery each open their own
+screenshots — never someone else's — which the tool confirms straight from
+the transcript rather than taking on trust. A script's pass or fail is not
+enough by itself. Where a script can drive the interface reliably, it is
+worth writing anyway, because it makes every later rerun cheap: one command,
+then a look at what it produced, instead of paying to re-drive the interface
+by hand each time. What the tool checks is coverage and opening — that every
+named state has a screenshot, and that a real agent actually looked at it —
+never what the picture shows; judging that stays the reviewer's job.
+
 **A step declares what it needs and what it emits.** Artifacts are named —
 `spec`, `plan`, `pr` — so a later step can find the specification an earlier
 step wrote, and so the tool can tell whether the inputs a step depends on

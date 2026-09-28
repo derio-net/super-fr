@@ -122,6 +122,9 @@ re-enters its context:
   `blocked` with the blocker named; with no record, the steps ticked and the
   ids of journal entries you added;
 - the test command run and its pass/fail summary;
+- when the phase's linked acceptance rows carry `visual`, that the record's
+  `visual:` section is filled — screenshots taken, opened, and named by
+  `shows`;
 - files touched.
 
 Keep the prose minimal; the record holds the detail.

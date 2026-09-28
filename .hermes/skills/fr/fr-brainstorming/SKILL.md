@@ -99,12 +99,7 @@ isolation workspace stays up — cleanup belongs to whoever finishes the run
 
 ## 3. Acceptance rows — born with the spec, presented at the close
 
-One acceptance row per requirement, or per closely related group of
-requirements — an `acceptance:` entry of the brainstorm record (`status:
-not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
-post-merge` when only a live run can prove it), or with no run
-`fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
-first if the repo has no matrix). **The brainstorm ENDS by presenting the
+One acceptance row per requirement, or per closely related group of requirements — an `acceptance:` entry of the brainstorm record (`status: not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify: post-merge` when only a live run can prove it), or with no run `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init` first if the repo has no matrix). A row for user-visible UI also carries `visual` (states, interactions, limits included) — an unstated limit is a round question (§1's always-ask rule), never an assumption. **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,
 the target verification level, why it is business-level not implementation
 detail. Silent row creation is not acceptance-of-scope; the presentation is.
