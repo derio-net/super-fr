@@ -9,3 +9,8 @@ Take 9 (fr 4.29.2, OpenCode; input content is a third-party brief, redacted here
 ### h-shape · ruled-out · Blank spans, one-span-per-line and missing labels are not what fr refused
 
 Replaying the raw block with only its pipes escaped and `\"` decoded passes check_coverage (94 spans, missing=1). fr already accepts `""` spans, line-granular spans and `missing <id>`; the paragraph merge and relabelling were never required.
+
+<!-- fr:journal kind=root-cause scope=debug id=root-cause created=2026-09-28T19:05:45+00:00 -->
+### root-cause · root-cause · fr's span-cell decoder does not read a quoted span the way the reviewer writes one
+
+check_coverage splits each row on every unescaped `|`, ignoring the `"…"` around the span, so a span quoting a Markdown table row (`| a | b |`) becomes 6 columns and the whole table is refused. And `\"` inside a span is kept literally, so the concatenation never equals the input. Both are encodings the reviewer brief never forbids (it says "quote it exactly"). With no readable shape and a refusal that names no remedy, the orchestrator's only path to a green gate was to edit the reviewer's block.
