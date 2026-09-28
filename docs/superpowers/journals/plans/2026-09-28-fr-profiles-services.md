@@ -456,3 +456,38 @@ Undefined by the spec; needs a decision on whose tracking a cross-repo plan foll
 ### p4r-other-forge-writes-resolved · finding [out-of-scope] · resolves p4r-other-forge-writes: triage batch cancel/merge and fr undispatch still write labels/comments under tracking none (phase 4)
 
 Outside §3.E's named commands; they only act on pre-existing issues. Offered as a follow-up issue at merge.
+
+<!-- fr:journal kind=decision scope=plan id=p5-issues-enabled-takes-a-slug created=2026-09-28T22:37:45+00:00 phase=5 -->
+### p5-issues-enabled-takes-a-slug · decision · issues_enabled(repo) takes the origin's owner/repo path, not no arguments (phase 5)
+
+The spec writes `issues_enabled() -> bool | None`, but glab needs the project path (`glab api projects/<url-encoded path>`) and gh/glab calls carry no cwd. The clients take an optional `repo` (owner/repo, group/sub/project); None -> None. `fr._hosts.origin_slug` derives it locally from `git remote get-url origin`, so a repo without an origin reads as unknown (inconclusive -> refuse naming --tracking). Never raises; tea always None. JSON shapes are the tools' documented output, not a live capture.
+
+<!-- fr:journal kind=decision scope=plan id=p5-declared-blocks-are-kept created=2026-09-28T22:37:45+00:00 phase=5 -->
+### p5-declared-blocks-are-kept · decision · scaffold keeps an already-declared ci/tracking/forge block unless its flag is explicit (phase 5)
+
+`--ci`/`--tracking` default to `auto`, and `auto` over a file that already carries that block keeps it (so a second profile never re-detects and flips the operator's ci). This includes blocks a v1->v2 migration just derived. `--backend`/`--host` override the forge. With neither flag the forge is declared only for a recognised origin (v1_services), the CLI-install feature stays GitHub's (scaffold's `backend` param is now None by default).
+
+<!-- fr:journal kind=decision scope=plan id=p5-refusals-leave-the-tree-as-found created=2026-09-28T22:37:45+00:00 phase=5 -->
+### p5-refusals-leave-the-tree-as-found · decision · service resolution and the v1 migration settle before the first write (phase 5)
+
+`_prepare_profiles` runs the in-process 1->2 migration, then resolves services, before devcontainer.json is written; a refusal after the migration restores the file's original bytes, so an inconclusive `auto` or bad flag changes nothing. Unmigratable v1 files are refused by the migration itself, untouched. A file stamped newer than this fr is refused.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-yaml-roundtrip-drops-comments created=2026-09-28T22:37:45+00:00 phase=5 -->
+### p5-yaml-roundtrip-drops-comments · discovery · the profile-entry writer still round-trips through yaml.safe_dump (phase 5)
+
+`_update_profiles_yaml` predates this phase and rewrites the non-service keys with safe_dump, dropping comments a text-level migration had kept. The service blocks are rendered as text via render_services. Left as is (pre-existing behaviour; a textual merge of the profiles map is a separate change).
+
+<!-- fr:journal kind=discovery scope=plan id=p5-for-phase-6-flags created=2026-09-28T22:37:45+00:00 phase=5 -->
+### p5-for-phase-6-flags · discovery · what phase 6 must document in the fr-init skill (phase 5)
+
+New `fr init scaffold` flags: `--ci none|github-actions|gitlab-ci|gitea-actions|auto` and `--tracking none|github|gitlab|gitea|auto` (default auto both). Inconclusive auto exits 2 with a message naming `--ci` (only fr's own acceptance pipeline present) or `--tracking` (forge cannot say — tea, no origin, failed call); the skill turns that into a question. jenkins/jira refuse naming derio-net/super-fr#795. `--backend` now defaults to None and writes `forge:`; the file is always `schema_version: 2`. `init` stays in READ_ONLY_COMMANDS.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-09-28T22:37:45+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+one small method per client, each already the narrowest shape; nothing to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-09-28T22:37:45+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+the migrate/restore step and the service resolver already sit in their own helpers (_prepare_profiles, fr.services.init); no duplication left

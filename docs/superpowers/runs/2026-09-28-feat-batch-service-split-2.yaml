@@ -158,7 +158,7 @@ steps:
           reviewer: adedf4b03bf1631ca
           findings: p4r-repair-gate,p4r-empty-housekeeping,p4r-require-scope,p4r-collect-test,p4r-warning-noise,p4r-wording,p4r-cross-repo-tracking,p4r-other-forge-writes
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T22:23:37+00:00'
           agent: a87abb9ae4a9a75c9
@@ -166,6 +166,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: e9365f1f-91dd-4363-a3fb-6ae26061ed1a
+          returned: '2026-09-28T22:37:45+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:
