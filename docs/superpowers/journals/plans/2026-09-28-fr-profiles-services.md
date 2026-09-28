@@ -661,3 +661,8 @@ Filed at closeout as #804.
 ### p5r-comment-roundtrip-resolved-2 · finding [deferred → #805] · resolves p5r-comment-roundtrip: _update_profiles_yaml's safe_dump round trip drops comments in profiles:
 
 Filed at closeout as #805.
+
+<!-- fr:journal kind=finding scope=plan id=p2r-splitlines-resolved-2 created=2026-09-28T23:33:54+00:00 state=open resolves=p2r-splitlines tracked_by=#806 -->
+### p2r-splitlines-resolved-2 · finding [deferred → #806] · resolves p2r-splitlines: str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped
+
+Filed at closeout as #806 (bundled minor follow-ups).
