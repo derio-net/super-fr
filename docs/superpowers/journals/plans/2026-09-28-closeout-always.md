@@ -302,3 +302,18 @@ PR line, `fr isolation down`) is built exactly once, in
 `branch_closeout_brief`, for both modes — confirmed by grep: no other
 module constructs an `fr archive --branch` / `chore: archive` /
 `chore: close out` string.
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-09-28T21:32:15+00:00 phase=4 -->
+### p4-review · review · Phase 4 review: 2 minor findings (1 fixed, 1 refuted) (phase 4)
+
+Independent reviewer (general-purpose, sonnet) over 6706d8a2..59bb80a5 against spec §D. It confirmed every row of the run-mode table, that the brief has a single builder (grep), that no assertion was weakened, and that the brief is self-contained from the base clone (live `fr pickup --branch` runs). The 12 skips are test_skill_validation's fr-execute-only parametrisation and hide no coverage of this change. Verdict: with (optional) fixes. Declined to judge: matrix status flips (phase 6), §E skill prose (phase 5), §B internals, primary_checkout (unchanged), and `--branch main` (no requirement).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-09-28T21:32:15+00:00 phase=4 state=fixed review_scope=in -->
+### p4-r1 · finding [fixed] (reviewer: in scope) · (Minor) _refuse_unresolvable_branch swallowed remote_name's GitRefusal/None and claimed it checked origin/<b> (phase 4)
+
+Fixed in 26d185bd: the local ref is checked first. A GitRefusal (ambiguous remotes) or None (no remote) is refused with its reason instead of a made-up origin label. Test test_pickup_branch_names_the_remote_ambiguity_instead_of_claiming_origin failed first (RED), then passed; 61 passed on -k 'closeout or pickup'; ruff and mypy clean.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-09-28T21:32:15+00:00 phase=4 state=refuted review_scope=in -->
+### p4-r2 · finding [refuted] (reviewer: in scope) · (Minor) plan 04.yaml files: names tests/unit/test_closeout_brief.py, but the touched file is test_run_closeout.py (phase 4)
+
+Refuted as a code defect. The plan's `files:` is a planning estimate that deliver's `fr plan proportionality` compares against the real diff. The mismatch is reported there, where the PR body shows it, and the plan's own metadata is not something this phase's code gets wrong. There is nothing to fix in the change itself.
