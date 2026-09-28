@@ -146,28 +146,36 @@ journal:
 resolves:
   - id: s1
     state: fixed
-    body: Added R8 (every shipped skill whose flow ends at a PR it opens relays a close-out line — fr-goal's `--run` line, fr-debugging and standalone fr-execute `fr pickup --branch`, fr-isolation's cleanup points at it; fr-dispatch's runner PRs are backstopped by R5) with §E prose, Test Plan item 8 and acceptance row `every-pr-flow-relays-closeout`.
+    body: |
+      Added R8 (every shipped skill whose flow ends at a PR it opens relays a close-out line — fr-goal's `--run` line, fr-debugging and standalone fr-execute `fr pickup --branch`, fr-isolation's cleanup points at it; fr-dispatch's runner PRs are backstopped by R5) with §E prose, Test Plan item 8 and acceptance row `every-pr-flow-relays-closeout`.
   - id: s2
     state: unconfirmed
-    body: "§C now covers every kind with its clearing command: debug journals on the default ref (`fr archive --all`), archivable plans with their run/usage/journal (`fr archive <plan-dir>`), fully implemented specs (`fr archive --sweep-only`), orphan plan/spec journals and orphan runs (`fr archive --all`). Merged plans with open manual phases keep today's non-owed block, and held specs get a visible `held live (spec)` block with their reason. Nothing live and merged is silent."
+    body: |
+      §C now covers every kind with its clearing command: debug journals on the default ref (`fr archive --all`), archivable plans with their run/usage/journal (`fr archive <plan-dir>`), fully implemented specs (`fr archive --sweep-only`), orphan plan/spec journals and orphan runs (`fr archive --all`). Merged plans with open manual phases keep today's non-owed block, and held specs get a visible `held live (spec)` block with their reason. Nothing live and merged is silent.
   - id: s3
     state: unconfirmed
-    body: "Dropped. The brief prints no debug-journal finding lines; its only findings lines are today's run-mode out-of-scope ones from the run's spec/plan journals (§D, #458 deferred)."
+    body: |
+      Dropped. The brief prints no debug-journal finding lines; its only findings lines are today's run-mode out-of-scope ones from the run's spec/plan journals (§D, #458 deferred).
   - id: s4
     state: fixed
-    body: §D now carries an explicit before/after table of the run-mode changes (archive line, always-printed housekeeping block, unchanged housekeeping branch naming incl. `chore/closeout-<run-id>`, commit line kept as `chore: archive <plan-slug>` with a plan, `chore: close out <b>` otherwise).
+    body: |
+      §D now carries an explicit before/after table of the run-mode changes (archive line, always-printed housekeeping block, unchanged housekeeping branch naming incl. `chore/closeout-<run-id>`, commit line kept as `chore: archive <plan-slug>` with a plan, `chore: close out <b>` otherwise).
   - id: s5
     state: fixed
-    body: Test Plan gains eight pre-merge unit-level items covering branch-mode pickup, refusals, held paths, modified-only journals, status owed/held listing, --all debug/orphan moves, archive_twin journal pairs with acceptance check, and the skill-relay tripwire.
+    body: |
+      Test Plan gains eight pre-merge unit-level items covering branch-mode pickup, refusals, held paths, modified-only journals, status owed/held listing, --all debug/orphan moves, archive_twin journal pairs with acceptance check, and the skill-relay tripwire.
   - id: s6
     state: fixed
-    body: §B.2-4 now resolve refs as verify-merge does (explicit-refspec fetch of origin/<b>, then every ref that resolves; exit 2 when none), check presence per ref, union the changed paths, and accept --no-spec-sweep (specs then reported held).
+    body: |
+      §B.2-4 now resolve refs as verify-merge does (explicit-refspec fetch of origin/<b>, then every ref that resolves; exit 2 when none), check presence per ref, union the changed paths, and accept --no-spec-sweep (specs then reported held).
   - id: s7
     state: fixed
-    body: §G now records `fr status`'s owed set first, runs `fr archive --all`, treats any move outside that set as a finding, commits all moves as `chore: sweep owed artifacts (#733)`, confirms `fr acceptance check`, and lists every move by kind in the PR body.
+    body: |
+      §G now records `fr status`'s owed set first, runs `fr archive --all`, treats any move outside that set as a finding, commits all moves as `chore: sweep owed artifacts (#733)`, confirms `fr acceptance check`, and lists every move by kind in the PR body.
   - id: s8
     state: fixed
-    body: Background citations corrected to pickup_cmd.py:24/:48 and closeout.py:118; §C uses `fr.migrate._spec_fully_implemented(...)[0]` and feeds its note into the held block.
+    body: |
+      Background citations corrected to pickup_cmd.py:24/:48 and closeout.py:118; §C uses `fr.migrate._spec_fully_implemented(...)[0]` and feeds its note into the held block.
 acceptance:
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
