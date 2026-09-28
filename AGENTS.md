@@ -415,7 +415,7 @@ id, all dangling once no repo owns the name). Retiring beat awarding it to a
 winner: no repo owns an org-level namespace, so the same trap is closed for
 `optionality-fr` and any future derio-net plugin, and `<org>--<repo>` makes
 the 1:1 rule self-documenting. Root cause in
-`docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md`.
+`docs/superpowers/implemented/journals/debug/2026-07-23-marketplace-config-clobber.md`.
 
 Invariants for any installer touching `~/.claude/plugins`, pinned by
 `tests/integration/test_install_marketplace_namespace.py`:

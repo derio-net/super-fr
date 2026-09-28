@@ -45,7 +45,7 @@ VK_MCP_BINARY="$HOME/bin/vibe-kanban-mcp"
 # repo also claimed; both installers rsync'd their own repo root into the same
 # directory and evicted each other. The bare name is now RETIRED — no repo owns
 # an org-level namespace — and both installers purge it on sight. See
-# docs/superpowers/journals/debug/2026-07-23-marketplace-config-clobber.md.
+# docs/superpowers/implemented/journals/debug/2026-07-23-marketplace-config-clobber.md.
 MARKETPLACE_NAME="derio-net--super-fr"
 MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/$MARKETPLACE_NAME"
 CACHE_BASE="$CLAUDE_DIR/plugins/cache/$MARKETPLACE_NAME"
