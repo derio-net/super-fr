@@ -5135,9 +5135,14 @@ rows:
       and by a step record, and validated (no empty or duplicate names).
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_visual.py
+      - super-fr:tests/unit/test_record_visual.py
+    status: ci
+    notes: 'Implemented in phase 1 of plan 2026-09-28-ui-visual-evidence: Visual model
+      and validation, fr acceptance add --visual-*, set-status preserving it, record
+      AcceptanceItem.visual; unit tests run in CI.'
   - id: visual-evidence-gate
     capability: fr-goal-evidence
     acceptance: '`fr run resolve` refuses `implement-phase`, `review-phase` and `deliver`
