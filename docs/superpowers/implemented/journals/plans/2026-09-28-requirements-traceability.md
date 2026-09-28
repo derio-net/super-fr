@@ -394,3 +394,18 @@ fr-goal SKILL.md §8 tells the orchestrator to log the suite with a shell redire
 ### deliver-tmpdir-log-resolved · finding [out-of-scope] · resolves deliver-tmpdir-log: fr-goal §8's '> $TMPDIR/full-suite.log' is refused by the tests evidence gate
 
 Not caused by this change: the §8 prose and the #720 gate predate it. Either the gate learns inherited env vars (expand TMPDIR from the command's environment) or §8 names a literal path.
+
+<!-- fr:journal kind=finding scope=plan id=p2-d5-resolved-2 created=2026-09-28T14:29:41+00:00 state=open resolves=p2-d5 tracked_by=#763 -->
+### p2-d5-resolved-2 · finding [deferred → #763] · resolves p2-d5: parse_journal catches only KeyError; a hand-edited token invalid for its scope raises raw ValueError
+
+Filed at closeout as #763.
+
+<!-- fr:journal kind=finding scope=plan id=p3-e6-resolved-2 created=2026-09-28T14:29:42+00:00 state=open resolves=p3-e6 tracked_by=#764 -->
+### p3-e6-resolved-2 · finding [deferred → #764] · resolves p3-e6: fr run adopt on a brand-new spec switches all three gates off
+
+Filed at closeout as #764.
+
+<!-- fr:journal kind=finding scope=plan id=deliver-tmpdir-log-resolved-2 created=2026-09-28T14:29:43+00:00 state=open resolves=deliver-tmpdir-log tracked_by=#765 -->
+### deliver-tmpdir-log-resolved-2 · finding [deferred → #765] · resolves deliver-tmpdir-log: fr-goal §8's '> $TMPDIR/full-suite.log' is refused by the tests evidence gate
+
+Filed at closeout as #765.

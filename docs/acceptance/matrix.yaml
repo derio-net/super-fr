@@ -4324,9 +4324,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R3
     levels: {}
-    status: not-implemented
-    notes: 'Live-only: proven by the post-merge Test Plan item 17 run; marked post-merge
-      (phase 4 review g2).'
+    status: skipped
+    notes: 'Live-verified 2026-09-28 (Test Plan item 17, fr 4.29.0, throwaway local
+      repo): a UI brief leaving the 1–20 range semantics and card interactions unstated.
+      The round (8 questions, two dialogs) asked what the total sums given qty never
+      reaches 0, the bounds behaviour, and typed vs buttons-only; every answer became
+      a decision the spec''s requirements cite (fr spec requirements: 7 requirements,
+      exit 0). Card clicks were not asked, and the spec invents none. Dialog labelling
+      confusion filed as #766. Manual run, not in CI; verify: post-merge kept.'
     verify: post-merge
   - id: requirements-spec-review-traceability
     capability: fr-goal-methodology
@@ -4335,9 +4340,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
     levels: {}
-    status: not-implemented
-    notes: 'Live-only: proven by the post-merge Test Plan item 17 run; marked post-merge
-      (phase 4 review g2).'
+    status: skipped
+    notes: 'Live-verified 2026-09-28 (Test Plan item 17): fr-spec-reviewer ran on the
+      hard tier (claude-opus-5-5); coverage partitioned the whole input (7 spans: R=6
+      deferred=1 context=0 missing=0) and the PR body rendered it. It flagged an invented
+      behaviour (s2: a CI workflow no requirement asked for) and a design drift from
+      R6/d-total-bar (s1: sticky vs fixed), both in scope and fixed. No dropped statement
+      existed to catch (missing=0), so that arm is evidenced by unit tests only. The
+      same run showed deliver''s requirement-rows gate refusing a not-implemented row
+      through the real CLI and passing once it moved. Manual run, not in CI.'
     verify: post-merge
   - id: requirements-unconfirmed-in-pr
     capability: fr-goal-methodology
