@@ -5,6 +5,6 @@ outcome: done
 journal: []
 resolves: []
 acceptance: []
-emitted: {}
+emitted: {pr: "https://github.com/derio-net/super-fr/pull/762"}
 evidence:
   tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/a913f2c8-de7e-4aab-99a6-e1bfe2c563de/scratchpad/full-suite.log
