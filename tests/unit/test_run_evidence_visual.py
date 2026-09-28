@@ -236,3 +236,598 @@ def test_every_image_suffix_is_accepted(tmp_path: Path, suffix: str) -> None:
     result = _check(tmp_path, [_row()], [_entry("ui-row", (shot, ("accepted", "20 cap")))])
 
     assert result.problems == ()
+
+
+# =============================================================================
+# Part 2 — through `fr run resolve` (checks 4–5, the witness transcript, the
+# refusals). Transcripts are COPIES of captured records (transcript_sessions).
+# =============================================================================
+
+EXEC_ID = "a0exec0000000001"
+REV_ID = "a0rev00000000002"
+SPEC_REL = "docs/superpowers/specs/2026-09-28-widget-design.md"
+
+_VISUAL_SHAPE = """
+workflow: visual
+schema: 1
+unit: run
+steps:
+  - id: plan
+    kind: agent
+    emits: [plan, spec]
+  - id: implement
+    kind: agent
+    needs: [plan]
+    for_each: phase
+    emits: [journal:plan]
+    steps:
+      - id: code
+        kind: agent
+        agent: super-fr:fr-phase-executor
+        needs: [plan]
+        emits: [journal:plan]
+        evidence: [visual]
+      - id: peer-review
+        kind: agent
+        needs: [journal:plan]
+        emits: [journal:plan]
+        evidence: [review, reviewer, visual]
+  - id: deliver
+    kind: agent
+    needs: [journal:plan]
+    evidence: [visual]
+"""
+
+
+def _visual_row(*, phase_linked: bool = True) -> dict[str, object]:
+    from tests.unit.requirements_support import row
+
+    out = row(SPEC_REL, rid="ui-row", status="ci")
+    out["visual"] = {"states": ["accepted"], "interactions": ["20 cap"]}
+    return out
+
+
+def _setup(tmp_path: Path, *, link_row: bool = True) -> tuple[Path, Path]:
+    """Run `r1` of the `visual` shape: plan (and spec) recorded, `phase/1/code`
+    not yet opened. The plan's phase 1 links `ui-row` when `link_row`."""
+    import shutil
+    import subprocess
+
+    from tests.unit.requirements_support import write_matrix
+    from tests.unit.skeleton_override import write_skeleton_override
+    from tests.unit.test_run_cli import _FIXTURE_PLAN, _invoke, _repo, _write_shape
+    from tests.unit.test_run_evidence import PLAN_SLUG, _journal
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "visual", _VISUAL_SHAPE)
+    plan_dir = repo / "docs" / "superpowers" / "plans" / PLAN_SLUG
+    shutil.copytree(_FIXTURE_PLAN, plan_dir)
+    write_skeleton_override(repo)
+    if link_row:
+        phase = plan_dir / "01.yaml"
+        lines = phase.read_text().split("\n")
+        lines.insert(lines.index("  tag: agentic") + 1, "  acceptance:\n    - ui-row")
+        phase.write_text("\n".join(lines))
+    (repo / SPEC_REL).parent.mkdir(parents=True, exist_ok=True)
+    (repo / SPEC_REL).write_text("# Widget\n")
+    write_matrix(repo, [_visual_row()])
+    _journal(repo)
+    (repo / ".gitignore").write_text("shots/\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "setup", "--no-verify"],
+        check=True,
+        capture_output=True,
+    )
+    out = _invoke(repo, shipped, ["run", "start", "visual", "--branch", "b", "--run-id", "r1"])
+    assert out.exit_code == 0, out.output
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    out = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "plan", "--state", "done",
+         "--emitted", f"plan=docs/superpowers/plans/{PLAN_SLUG}",
+         "--emitted", f"spec={SPEC_REL}"],
+    )  # fmt: skip
+    assert out.exit_code == 0, out.output
+    return repo, shipped
+
+
+def _run(repo: Path, shipped: Path, argv: list[str], root: Path | None = None):
+    from tests.unit.test_run_cli import _invoke, _invoke_measurable
+
+    if root is None:
+        return _invoke(repo, shipped, argv)
+    return _invoke_measurable(repo, shipped, argv, root, "s-v")
+
+
+def _advance(repo: Path, shipped: Path, key: str) -> str:
+    """Open the next unit; return when it opened (the cursor's `dispatched`)."""
+    from fr.run import units
+    from fr.run.model import load_run_state
+
+    out = _run(repo, shipped, ["run", "advance", "r1"])
+    assert out.exit_code == 0, out.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), key)
+    assert attempt is not None
+    return attempt.dispatched
+
+
+def _stamp(at: str, seconds: int = 1) -> str:
+    """A transcript stamp `seconds` after (negative: before) a cursor stamp."""
+    from fr.run.telemetry import parse_timestamp
+
+    parsed = parse_timestamp(at)
+    assert parsed is not None
+    moved = parsed + _dt.timedelta(seconds=seconds)
+    return moved.strftime("%Y-%m-%dT%H:%M:%S") + ".500Z"
+
+
+def _read(timestamp: str, path: Path, n: int, *, tool: str = "Read") -> dict[str, object]:
+    from tests.unit.transcript_sessions import bash_rows
+
+    call, _ = bash_rows(timestamp, tool_use_id=f"toolu_read{n}")
+    block = call["message"]["content"][0]
+    block["name"] = tool
+    block["input"] = {"file_path": str(path)}
+    return call
+
+
+def _bash(timestamp: str, command: str, n: int) -> dict[str, object]:
+    from tests.unit.transcript_sessions import bash_rows
+
+    call, _ = bash_rows(timestamp, tool_use_id=f"toolu_bash{n}")
+    call["message"]["content"][0]["input"] = {"command": command}
+    return call
+
+
+def _dispatch(timestamp: str, tool_use_id: str) -> dict[str, object]:
+    from tests.unit.transcript_sessions import AGENT_TOOL_USE_LINE, ORCHESTRATOR, copy_of, records
+
+    row = copy_of(records(ORCHESTRATOR)[AGENT_TOOL_USE_LINE])
+    row["timestamp"] = timestamp
+    row["uuid"] = f"uuid-{tool_use_id}"
+    row["message"]["content"][0]["id"] = tool_use_id
+    return row
+
+
+def _session(
+    root: Path,
+    *,
+    orchestrator: list[dict[str, object]] = (),  # type: ignore[assignment]
+    agents: dict[str, tuple[str, str, str, list[dict[str, object]]]] | None = None,
+) -> None:
+    """`s-v`: the captured orchestrator prelude plus `orchestrator` rows, and for
+    each `agent_id: (dispatched_at, tool_use_id, agent_type, rows)` its Agent
+    tool_use in the orchestrator stream and its own transcript."""
+    import json
+
+    from tests.unit.transcript_sessions import (
+        ORCHESTRATOR,
+        SUBAGENT,
+        SUBAGENT_META,
+        copy_of,
+        records,
+        write_agent,
+        write_session,
+    )
+
+    agents = agents or {}
+    rows = [*records(ORCHESTRATOR)]
+    rows += [_dispatch(at, tid) for at, tid, _t, _r in agents.values()]
+    rows += list(orchestrator)
+    session = write_session(root, session_id="s-v", rows=rows)
+    for agent_id, (at, tid, agent_type, extra) in agents.items():
+        sub = copy_of(records(SUBAGENT))
+        for r in sub:
+            r["timestamp"] = at
+        meta = json.loads(SUBAGENT_META.read_text())
+        meta["agentType"] = agent_type
+        write_agent(session, agent_id, tool_use_id=tid, rows=[*sub, *extra], meta=meta)
+
+
+def _record(repo: Path, step: str, item: str | None, **body: object) -> Path:
+    import yaml
+    from fr.record.model import RECORD_SCHEMA_VERSION, record_path
+
+    path = record_path(repo, "r1", step, item)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data: dict[str, object] = {
+        "schema_version": RECORD_SCHEMA_VERSION,
+        "run": "r1",
+        "step": step,
+        **({"item": item} if item else {}),
+        "outcome": "done",
+        **body,
+    }
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    return path
+
+
+def _resolve(repo: Path, shipped: Path, step: str, item: str | None, record: Path, root=None):
+    argv = ["run", "resolve", "r1", "--step", step]
+    if item:
+        argv += ["--item", item]
+    return _run(repo, shipped, [*argv, "--record", str(record)], root)
+
+
+def _fresh_shot(tmp_path: Path, name: str = "all.png", data: bytes = b"\x89PNG one") -> Path:
+    path = tmp_path / "scratch" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def _visual(shot: Path, script: str | None = None) -> list[dict[str, object]]:
+    entry: dict[str, object] = {
+        "row": "ui-row",
+        "shots": [{"path": str(shot), "shows": ["accepted", "20 cap"]}],
+    }
+    if script is not None:
+        entry["script"] = script
+    return [entry]
+
+
+def _unit_evidence(repo: Path, step: str, key: str) -> dict[str, str]:
+    from fr.run import units
+    from fr.run.model import load_run_state
+
+    return units.evidence_of(load_run_state(repo, "r1").steps[step], key)
+
+
+def _witness(data: bytes) -> str:
+    return f"ui-row:1:{hashlib.sha256(data).hexdigest()[:12]}"
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split())
+
+
+# --- no owed row: the path every existing run takes -------------------------------
+
+
+def test_a_step_declaring_visual_with_no_visual_row_records_none(tmp_path: Path) -> None:
+    repo, shipped = _setup(tmp_path, link_row=False)
+    _advance(repo, shipped, "phase/1/code")
+
+    out = _run(
+        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
+                        "--state", "done"],
+    )  # fmt: skip
+
+    assert out.exit_code == 0, out.output
+    assert _unit_evidence(repo, "implement", "phase/1/code")["visual"] == "none"
+
+
+# --- implement-phase: the holder's transcript --------------------------------------
+
+
+def test_dispatched_implement_phase_reads_in_the_holders_transcript_pass(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        agents={
+            EXEC_ID: (
+                _stamp(opened),
+                "toolu_exec",
+                "super-fr:fr-phase-executor",
+                [_read(_stamp(opened, 2), shot, 1)],
+            )
+        },
+    )
+    record = _record(repo, "code", "phase/1", evidence={"agent": EXEC_ID}, visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+    assert _unit_evidence(repo, "implement", "phase/1/code")["visual"] == _witness(
+        shot.read_bytes()
+    )
+
+
+def test_dispatched_implement_phase_reads_only_in_the_orchestrator_are_refused(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(
+        root,
+        orchestrator=[_read(_stamp(opened, 3), shot, 1)],
+        agents={EXEC_ID: (_stamp(opened), "toolu_exec", "super-fr:fr-phase-executor", [])},
+    )
+    record = _record(repo, "code", "phase/1", evidence={"agent": EXEC_ID}, visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "was not opened" in _squash(out.output)
+    assert "visual" not in _unit_evidence(repo, "implement", "phase/1/code")
+
+
+def test_inline_implement_phase_reads_in_the_orchestrator_pass(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1, tool="read_file")])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+    assert _unit_evidence(repo, "implement", "phase/1/code")["visual"] == _witness(
+        shot.read_bytes()
+    )
+
+
+def test_a_read_before_the_unit_opened_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(root, orchestrator=[_read(_stamp(opened, -30), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "was not opened" in _squash(out.output)
+
+
+def test_a_stale_shot_at_implement_phase_is_accepted(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    os.utime(shot, (0, 0))
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+
+
+# --- check 5: the capture script ---------------------------------------------------
+
+
+def test_a_named_script_that_does_not_exist_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "does not exist" in _squash(out.output)
+
+
+def test_a_named_script_no_shell_call_named_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    (repo / "shots.cjs").write_text("// capture\n")
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 2, out.output
+    assert "no shell call" in _squash(out.output)
+
+
+def test_a_named_script_that_was_run_passes(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped = _setup(tmp_path)
+    opened = _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    (repo / "shots.cjs").write_text("// capture\n")
+    _session(
+        root,
+        orchestrator=[
+            _bash(_stamp(opened, 1), f"cd {repo} && node shots.cjs", 1),
+            _read(_stamp(opened, 2), shot, 1),
+        ],
+    )
+    record = _record(repo, "code", "phase/1", visual=_visual(shot, script="shots.cjs"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record, root)
+
+    assert out.exit_code == 0, out.output
+
+
+# --- unobserved ----------------------------------------------------------------------
+
+
+def test_an_unreadable_transcript_records_unobserved_and_warns(tmp_path: Path) -> None:
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path)
+    record = _record(repo, "code", "phase/1", visual=_visual(shot))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record)
+
+    assert out.exit_code == 0, out.output
+    evidence = _unit_evidence(repo, "implement", "phase/1/code")
+    assert evidence["visual"] == _witness(shot.read_bytes()) + ":unobserved"
+    assert "visual" in evidence["unobserved"]
+    assert "could not verify" in _squash(out.stderr)
+
+
+def test_checks_1_to_3_still_apply_when_unobserved(tmp_path: Path) -> None:
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+    record = _record(repo, "code", "phase/1", visual=_visual(tmp_path / "nope.png"))
+
+    out = _resolve(repo, shipped, "code", "phase/1", record)
+
+    assert out.exit_code == 2, out.output
+    assert "missing or empty" in _squash(out.output)
+
+
+# --- refusals of the flag form -------------------------------------------------------
+
+
+def test_evidence_visual_is_refused_as_derived(tmp_path: Path) -> None:
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+
+    out = _run(
+        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
+                        "--state", "done", "--evidence", "visual=x"],
+    )  # fmt: skip
+
+    assert out.exit_code == 2, out.output
+    assert "not yours to pass" in _squash(out.output)
+
+
+def test_a_flag_form_resolve_owing_visual_rows_points_at_record(tmp_path: Path) -> None:
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+
+    out = _run(
+        repo, shipped, ["run", "resolve", "r1", "--step", "code", "--item", "phase/1",
+                        "--state", "done"],
+    )  # fmt: skip
+
+    assert out.exit_code == 2, out.output
+    assert "--record" in _squash(out.output)
+    assert "ui-row" in _squash(out.output)
+
+
+# --- review-phase: the reviewer's own transcript -------------------------------------
+
+
+def _to_review(tmp_path: Path, root: Path) -> tuple[Path, Path, str, str]:
+    """`phase/1/code` done by EXEC_ID (unobserved), `phase/1/peer-review` open.
+    Returns (repo, shipped, code opened, review opened)."""
+    repo, shipped = _setup(tmp_path)
+    code_opened = _advance(repo, shipped, "phase/1/code")
+    old = _fresh_shot(tmp_path, "exec.png", b"\x89PNG exec")
+    record = _record(repo, "code", "phase/1", evidence={"agent": EXEC_ID}, visual=_visual(old))
+    out = _resolve(repo, shipped, "code", "phase/1", record)
+    assert out.exit_code == 0, out.output
+    review_opened = _advance(repo, shipped, "phase/1/peer-review")
+    return repo, shipped, code_opened, review_opened
+
+
+def _review_record(repo: Path, shot: Path) -> Path:
+    return _record(
+        repo,
+        "peer-review",
+        "phase/1",
+        evidence={"review": "rev-p1", "reviewer": REV_ID},
+        visual=_visual(shot),
+    )
+
+
+def test_review_reads_only_in_the_executors_transcript_are_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, code_opened, opened = _to_review(tmp_path, root)
+    shot = _fresh_shot(tmp_path, "rev.png", b"\x89PNG rev")
+    _session(
+        root,
+        agents={
+            EXEC_ID: (_stamp(code_opened), "toolu_exec", "super-fr:fr-phase-executor",
+                      [_read(_stamp(opened, 2), shot, 1)]),
+            REV_ID: (_stamp(opened), "toolu_rev", "general-purpose", []),
+        },
+    )  # fmt: skip
+
+    out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot), root)
+
+    assert out.exit_code == 2, out.output
+    assert "was not opened" in _squash(out.output)
+
+
+def test_review_reads_in_the_reviewers_transcript_pass(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, code_opened, opened = _to_review(tmp_path, root)
+    shot = _fresh_shot(tmp_path, "rev.png", b"\x89PNG rev")
+    _session(
+        root,
+        agents={
+            EXEC_ID: (_stamp(code_opened), "toolu_exec", "super-fr:fr-phase-executor", []),
+            REV_ID: (_stamp(opened), "toolu_rev", "general-purpose",
+                     [_read(_stamp(opened, 2), shot, 1)]),
+        },
+    )  # fmt: skip
+
+    out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot), root)
+
+    assert out.exit_code == 0, out.output
+    evidence = _unit_evidence(repo, "implement", "phase/1/peer-review")
+    assert evidence["visual"] == _witness(shot.read_bytes())
+
+
+def test_a_stale_shot_at_review_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, code_opened, opened = _to_review(tmp_path, root)
+    shot = _fresh_shot(tmp_path, "rev.png", b"\x89PNG rev")
+    os.utime(shot, (0, 0))
+    _session(
+        root,
+        agents={
+            REV_ID: (_stamp(opened), "toolu_rev", "general-purpose",
+                     [_read(_stamp(opened, 2), shot, 1)]),
+        },
+    )  # fmt: skip
+
+    out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot), root)
+
+    assert out.exit_code == 2, out.output
+    assert "predates this unit" in _squash(out.output)
+
+
+# --- deliver: the orchestrator's own stream ------------------------------------------
+
+
+def _to_deliver(tmp_path: Path) -> tuple[Path, Path, str]:
+    repo, shipped = _setup(tmp_path)
+    _advance(repo, shipped, "phase/1/code")
+    shot = _fresh_shot(tmp_path, "exec.png", b"\x89PNG exec")
+    out = _resolve(repo, shipped, "code", "phase/1", _record(repo, "code", "phase/1",
+                   visual=_visual(shot)))  # fmt: skip
+    assert out.exit_code == 0, out.output
+    _advance(repo, shipped, "phase/1/peer-review")
+    out = _resolve(repo, shipped, "peer-review", "phase/1", _review_record(repo, shot))
+    assert out.exit_code == 0, out.output
+    return repo, shipped, _advance(repo, shipped, "step/deliver")
+
+
+def test_deliver_orchestrator_reads_of_fresh_shots_pass(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, opened = _to_deliver(tmp_path)
+    shot = _fresh_shot(tmp_path, "deliver.png", b"\x89PNG deliver")
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+
+    out = _resolve(repo, shipped, "deliver", None, _record(repo, "deliver", None,
+                   visual=_visual(shot)), root)  # fmt: skip
+
+    assert out.exit_code == 0, out.output
+    evidence = _unit_evidence(repo, "deliver", "step/deliver")
+    assert evidence["visual"] == _witness(shot.read_bytes())
+
+
+def test_deliver_stale_shots_are_refused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    repo, shipped, opened = _to_deliver(tmp_path)
+    shot = _fresh_shot(tmp_path, "deliver.png", b"\x89PNG deliver")
+    os.utime(shot, (0, 0))
+    _session(root, orchestrator=[_read(_stamp(opened, 2), shot, 1)])
+
+    out = _resolve(repo, shipped, "deliver", None, _record(repo, "deliver", None,
+                   visual=_visual(shot)), root)  # fmt: skip
+
+    assert out.exit_code == 2, out.output
+    assert "predates this unit" in _squash(out.output)

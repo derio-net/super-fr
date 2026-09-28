@@ -909,6 +909,7 @@ def apply_record(
             questions=record.questions,
             also_commit=commit_paths,
             guard=guard,
+            visual=record.visual,
         )
     except BaseException:
         if not guard.landed:
