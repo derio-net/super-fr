@@ -29,7 +29,7 @@ import yaml
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.journal.model import journal_path
+from fr.journal.model import JournalEntry, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, parse
 from fr.plan_validator_wrapper import (
@@ -1383,6 +1383,10 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # agentic phase is the delivery-infrastructure smoke.
     issues.extend(_skeleton_issues(plan))
 
+    # Phase sizing (2026-09-28 phase-sizing spec §B/§C): one agentic phase per
+    # ask of the spec's Requirements table, a recorded reason for any other.
+    issues.extend(_phase_sizing_issues(plan))
+
     # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
     # fr_version floor probe for `tier`, and the untiered-agentic-phase nudge.
     issues.extend(_tier_issues(plan))
@@ -1770,35 +1774,228 @@ def _skeleton_overridden(plan: Plan) -> bool:
     plan. Missing/unparseable journal (or a repo-less plan) is not an override
     — the gate fails closed toward marking the skeleton; the journal's own
     `fr journal check` owns malformed files."""
-    from fr.journal.model import (
-        JournalParseError,
-        parse_journal,
-        resolve_journal_read_path,
-        spec_journal_slug,
+    want = f"skeleton-override-{plan.meta.plan}"
+    return any(e.kind == "decision" and e.id == want for e in _spec_journal_entries(plan))
+
+
+def _spec_journal_slug(plan: Plan) -> str | None:
+    """The slug of the plan's same-repo spec journal, or None (no repo, no
+    spec, a cross-repo spec — whose journal lives in its own repo — or a
+    spec ref that is not a `.md` path)."""
+    from fr.journal.model import spec_journal_slug
+
+    spec = plan.meta.spec
+    if plan.repo_root is None or not spec or spec in ("none", "null", "—", "-"):
+        return None
+    if is_cross_repo_spec(spec):
+        return None
+    stem = spec.rsplit("/", 1)[-1]
+    if not stem.endswith(".md"):
+        return None
+    return spec_journal_slug(stem[: -len(".md")])
+
+
+def _spec_journal_entries(plan: Plan) -> list[JournalEntry]:
+    """The plan's spec-journal entries, read-resolved (active else archived,
+    like `render`/`check`: a decision outlives the spec it was logged
+    against). A missing or unparseable journal holds no entries — its own
+    `fr journal check` owns malformed files. Shared by the skeleton override
+    and the phase-split decisions, so the two read the journal one way."""
+    from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
+
+    slug = _spec_journal_slug(plan)
+    if slug is None or plan.repo_root is None:
+        return []
+    path = resolve_journal_read_path(plan.repo_root, "spec", slug)
+    if not path.is_file():
+        return []
+    try:
+        return parse_journal(path.read_text())
+    except JournalParseError:
+        return []
+
+
+_SPLIT_WAIVERS_HINT = "tier:, risk-first:, review-size:"
+_SPLIT_ALL_HINT = "ask: (it serves an ask of its own), tier:, risk-first:, review-size:"
+
+
+def _split_record_hint(plan: Plan, number: int, reasons: str) -> str:
+    slug = _spec_journal_slug(plan) or "<spec-slug>"
+    return (
+        f"`fr journal add --scope spec --slug {slug} --kind decision "
+        f'--id phase-split-{plan.meta.plan}-p{number} --title "<reason>: …"` '
+        f"with <reason> one of {reasons}"
+    )
+
+
+def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
+    """Size phases to the spec's asks (2026-09-28 phase-sizing spec §B/§C).
+
+    Silent unless the plan's spec is same-repo, exists, and carries a
+    `## Requirements` table that parses — a spec without one predates asks,
+    which exempts every in-flight plan without an fr_version probe. A
+    `| id | requirement | source |` table that does NOT parse gets one
+    warning (review s4: a standalone fr-plan never passed the requirements
+    gate); a legacy prose section stays silent.
+
+    Per agentic phase, with S its `phase-split-<plan>-p<N>` spec-journal
+    decision (§B's table): the **floor** (d1, R2) — a phase with no S, or
+    S = `ask:`, must serve an ask of its own (`fr.phase_sizing.phase_asks`);
+    the **ceiling** (d1, R3) — every agentic phase after the first needs an
+    S. `tier:`/`risk-first:`/`review-size:` waive the floor. Both failures
+    are errors cleared by a recorded decision (d5, the `skeleton-override-*`
+    pattern); a malformed S is an error, never read as absent. The floor
+    message offers only the three waivers (review s1): `ask:` is the claim
+    it just disproved. With no matrix the floor cannot be derived, so it is
+    skipped and an `ask:` S is accepted with a warning. The walking skeleton
+    needs no code here (d6, R6): a standalone skeleton with no rows fails
+    the floor, and folding it into the first ask's phase is the fix.
+
+    §C (R5): a warning on each one-step manual phase in the trailing manual
+    block — fr cannot tell a deploy step from a screenshot step.
+    """
+    from fr.acceptance.model import AcceptanceError, Matrix
+    from fr.phase_sizing import WAIVING, SplitDecision, phase_asks, split_decisions
+    from fr.requirements import (
+        RequirementsError,
+        has_requirements_table,
+        load_spec_matrix,
+        parse_requirements,
     )
 
     root = plan.repo_root
-    spec = plan.meta.spec
-    if root is None or not spec or spec in ("none", "null", "—", "-"):
-        return False
-    if is_cross_repo_spec(spec):
-        # A cross-repo spec keeps its journal in its own repo — nothing local
-        # to consult, so no local override.
-        return False
-    stem = spec.rsplit("/", 1)[-1]
-    if not stem.endswith(".md"):
-        return False
-    # Read-resolve (active else archived), like `render`/`check`: the override
-    # outlives the spec it was logged against.
-    path = resolve_journal_read_path(root, "spec", spec_journal_slug(stem[: -len(".md")]))
-    if not path.is_file():
-        return False
+    spec_rel = plan.spec_path or plan.meta.spec
+    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+    spec_file = root / spec_rel
+    if not spec_file.is_file():
+        return []
+    spec_text = spec_file.read_text()
     try:
-        entries = parse_journal(path.read_text())
-    except JournalParseError:
-        return False
-    want = f"skeleton-override-{plan.meta.plan}"
-    return any(e.kind == "decision" and e.id == want for e in entries)
+        parse_requirements(spec_text)
+    except RequirementsError as e:
+        if not has_requirements_table(spec_text):
+            return []
+        return [
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"spec {spec_rel}'s Requirements table does not parse ({e}), so "
+                    "phase sizing was not checked — fix the table (`fr spec "
+                    "requirements <spec>`) and re-run self-review."
+                ),
+            )
+        ]
+
+    matrix: Matrix | None = None
+    spec_ref = ""
+    if (root / "docs" / "acceptance" / "matrix.yaml").is_file():
+        try:
+            matrix, spec_ref = load_spec_matrix(root, spec_rel)
+        except AcceptanceError:
+            matrix = None  # `_acceptance_link_issues` already warns on it
+
+    decisions = split_decisions(_spec_journal_entries(plan), plan.meta.plan)
+    ordered = sorted(plan.phases, key=lambda p: p.phase.number)
+    headers = [p.phase for p in ordered]
+    asks = (
+        {pa.number: pa for pa in phase_asks(headers, matrix, spec_ref, decisions)}
+        if matrix is not None
+        else {}
+    )
+
+    out: list[ReviewIssue] = []
+    for bad in sorted(decisions.values(), key=lambda d: d.number):
+        if bad.malformed:
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"split decision phase-split-{plan.meta.plan}-p{bad.number} has "
+                        f"title {bad.title!r}, which starts with no reason token — "
+                        f"start it with one of {_SPLIT_ALL_HINT}."
+                    ),
+                )
+            )
+
+    def _waives(d: SplitDecision | None) -> bool:
+        return d is not None and d.reason in WAIVING
+
+    agentic = [h for h in headers if h.tag == "agentic"]
+    for k, h in enumerate(agentic, start=1):
+        n = h.number
+        d = decisions.get(n)
+        if d is not None and d.malformed:
+            continue  # reported above; never read as absent
+        if _waives(d):
+            continue  # tier / risk-first / review-size waive the floor
+        if d is None and k > 1:
+            out.append(
+                ReviewIssue(
+                    severity="error",
+                    message=(
+                        f"phase {n} is agentic phase #{k}; a phase after the first "
+                        f"needs a recorded split reason — record it: "
+                        f"{_split_record_hint(plan, n, _SPLIT_ALL_HINT)}."
+                    ),
+                )
+            )
+            continue
+        if matrix is None:
+            if d is not None:
+                out.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"phase {n}'s ask split reason is accepted as recorded but "
+                            "is unverifiable without docs/acceptance/matrix.yaml."
+                        ),
+                    )
+                )
+            continue
+        pa = asks[n]
+        if pa.own:
+            continue
+        fixes = (
+            "link the rows of the ask it serves, fold its work into the phase "
+            "that serves that ask, or record why it exists: "
+            f"{_split_record_hint(plan, n, _SPLIT_WAIVERS_HINT)}"
+        )
+        if pa.asks:
+            sharers = sorted(
+                a.number
+                for a in asks.values()
+                if a.number != n and a.asks & pa.asks and not _waives(decisions.get(a.number))
+            )
+            what = (
+                f"phase {n} serves no ask of its own — its asks "
+                f"{', '.join(sorted(pa.asks))} are all also served by phase(s) "
+                f"{', '.join(str(s) for s in sharers)}"
+            )
+        else:
+            what = (
+                f"phase {n} serves no ask — none of its acceptance rows cites a "
+                f"requirement of {spec_rel}"
+            )
+        out.append(ReviewIssue(severity="error", message=f"{what}. Fix: {fixes}."))
+
+    for ph in ordered:
+        if ph.phase.number not in _trailing_manual_block(plan):
+            continue
+        if sum(len(t.steps) for t in ph.tasks) != 1:
+            continue
+        out.append(
+            ReviewIssue(
+                severity="warn",
+                message=(
+                    f"phase {ph.phase.number} is a single operator step — if it "
+                    "verifies (screenshot, live check, post-merge run), make it a "
+                    "Test Plan line or a `verify: post-merge` acceptance row; keep a "
+                    "[manual] phase only for a prerequisite or a real dispatch/deploy."
+                ),
+            )
+        )
+    return out
 
 
 def _tier_issues(plan: Plan) -> list[ReviewIssue]:
