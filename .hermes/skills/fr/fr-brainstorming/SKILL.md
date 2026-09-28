@@ -87,7 +87,7 @@ The brainstorm's design document becomes the spec
 worktree), written in this shape, in order: `## Requirements` (one row per
 requirement, quoting the input verbatim in `source` — paraphrase only in the
 requirement's own text), `## Deferred from input` (optional, one-line reason),
-then `## Design`. **Standalone:** resolve the cursor §0 started with its step
+then `## Design`. A `source` cell is one or more forms joined by `<br>`: `input "<verbatim quote>"` (straight quotes; a `"` inside stays as-is, since the quote runs from the first `"` to the last, so never cut a quote short to dodge one; ` … ` elides between in-order fragments; a `|` is `\|`; no `<br>` inside) or `decision <id>` (a `kind=decision` spec-journal entry), e.g. `input "labelled "✓ 680–720 g" when in range"<br>decision d-scan`; `fr spec requirements <spec>` checks the table before you resolve, reporting the input entry as pending until the resolve writes it. **Standalone:** resolve the cursor §0 started with its step
 record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
 the input entry from §1, each §3 row in `acceptance:` — in ONE `fr run
 resolve <run-id> --step brainstorm --record <file>`, then `fr run advance

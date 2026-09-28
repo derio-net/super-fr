@@ -672,6 +672,7 @@ def compose_handoff(
     scope: str,
     slug: str,
     depends_on: tuple[int, ...] = (),
+    operator_input: str | None = None,
 ) -> str:
     """Compose the curated executor handoff for `phase` from parsed `entries`.
 
@@ -718,6 +719,11 @@ def compose_handoff(
 
     Empty sections are omitted; the raw-render pointer is always present, so the
     full file is one command away.
+
+    `operator_input` (gh#778) is the already-rendered read-only section holding
+    the operator's raw input, recorded answers and the spec-governs rule
+    (`fr.operator_input.to_markdown`). It renders FIRST, before open findings;
+    None leaves the output byte-identical.
 
     Pure — no I/O. `fr journal handoff` resolves the journal and the plan's
     `depends_on`, then calls this.
@@ -776,6 +782,8 @@ def compose_handoff(
         else:
             collapsed.append(_handoff_line(e))
     parts = [f"# Handoff (phase {phase})"]
+    if operator_input:
+        parts.append(operator_input)
     if open_findings:
         parts.append("## Open findings\n\n" + "\n".join(open_findings))
     if context:

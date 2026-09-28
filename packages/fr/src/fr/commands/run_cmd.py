@@ -2937,6 +2937,7 @@ def _build_member_brief(
     state: RunState,
     resolved_tier: str | None,
     harness: str | None = None,
+    operator_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -2961,6 +2962,12 @@ def _build_member_brief(
     because the executor reads its task prompt when it acts, and the same
     rule in its agent file alone did not stop OpenCode killing a full suite
     at 120 s. fr-goal §5 relays it verbatim.
+
+    `operator_input` (gh#778, spec 2026-09-28 §B) is the spec journal's raw
+    input, recorded answers and the spec-governs rule, or None. It is loaded
+    by `_advance_group` BEFORE the unit is claimed (this builder stays pure)
+    and rides every member brief so the executor and the reviewer can catch
+    what the requirement relay lost.
     """
     return {
         "run": state.run,
@@ -2968,6 +2975,7 @@ def _build_member_brief(
         "step": member.id,
         "group": group.id,
         "long_commands": long_command_rule(harness),
+        "operator_input": operator_input,
         "item": item,
         "kind": member.kind,
         "skill": _brief_skill(member),
@@ -3183,7 +3191,12 @@ def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) 
 
 
 def _print_member_dispatch(
-    step: Step, member: Step, item: str, state: RunState, resolved_tier: str | None
+    step: Step,
+    member: Step,
+    item: str,
+    state: RunState,
+    resolved_tier: str | None,
+    operator_input: dict[str, Any] | None = None,
 ) -> None:
     """The three stdout lines a dispatched grouped unit produces, in the one
     order that is safe to print them.
@@ -3220,12 +3233,40 @@ def _print_member_dispatch(
     console.print(
         json.dumps(
             _build_member_brief(
-                member, step, item, state, resolved_tier, harness=detect_harness(os.environ)
+                member,
+                step,
+                item,
+                state,
+                resolved_tier,
+                harness=detect_harness(os.environ),
+                operator_input=operator_input,
             ),
             sort_keys=True,
         ),
         soft_wrap=True,
     )
+
+
+def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | None:
+    """The run spec's operator-input brief payload (gh#778), or None.
+
+    An unparseable spec journal is a refusal (exit 2, naming it): silently
+    dropping the input is the defect the relay exists to close.
+    """
+    from fr import operator_input
+    from fr.requirements import run_spec
+
+    spec_rel = run_spec(state)
+    if spec_rel is None:
+        return None
+    from rich.markup import escape
+
+    try:
+        oi = operator_input.load(repo_root, spec_rel)
+    except operator_input.OperatorInputUnreadableError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    return operator_input.to_brief(oi) if oi is not None else None
 
 
 def _advance_group(
@@ -3325,6 +3366,10 @@ def _advance_group(
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
     dispatched_at = _now()
+    # gh#778: the operator's raw input, loaded BEFORE the write-claim so an
+    # unparseable spec journal refuses with nothing claimed (never a brief-less
+    # `running` unit that only `--redispatch` clears).
+    operator_input = _load_operator_input(repo_root, state)
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -3360,7 +3405,7 @@ def _advance_group(
         )
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
-    _print_member_dispatch(step, member, item, state, resolved_tier)
+    _print_member_dispatch(step, member, item, state, resolved_tier, operator_input)
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:

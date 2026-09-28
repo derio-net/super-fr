@@ -1319,6 +1319,146 @@ class TestHandoff:
         assert res.exit_code == 0, res.output
         assert res.output.strip() == ""
 
+    # --- gh#778: the operator-input section leads the handoff ---------------
+
+    _SPEC = "docs/superpowers/specs/2026-01-01-x-design.md"
+
+    def _plan_with_spec(self, root: Path, journal: str | None) -> None:
+        from fr.plan_ops import PhaseSpec, create
+
+        specs = root / "docs" / "superpowers" / "specs"
+        specs.mkdir(parents=True, exist_ok=True)
+        (root / self._SPEC).write_text("# spec\n")
+        create(
+            repo_root=root,
+            slug="H",
+            spec=self._SPEC,
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=[PhaseSpec(number=1, title="One", tasks=())],
+            prose="# x\n",
+        )
+        if journal is not None:
+            p = root / "docs/superpowers/journals/specs/2026-01-01-x.md"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(journal)
+
+    @staticmethod
+    def _input_journal(body: str = "## Brief\n\n```\nfenced\n```\nsame style") -> str:
+        from fr.journal.model import JournalEntry, serialize_entry
+
+        e = JournalEntry(
+            kind="discovery",
+            scope="spec",
+            id="i1",
+            created="2026-09-28T00:00:00",
+            title="raw",
+            body=body,
+            input=True,
+        )
+        return serialize_entry(e)
+
+    def test_handoff_opens_with_the_operator_input_section(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        body = "## Brief\n\n```\nfenced\n```\nsame style"
+        self._plan_with_spec(root, self._input_journal(body))
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        lines = res.output.splitlines()
+        assert lines[0] == "# Handoff (phase 1)"
+        assert lines[2] == "## Operator input (read-only — the spec governs)"
+        assert body in res.output
+        assert res.output.index("Operator input") < res.output.index("## Full journal")
+        # the body's ``` run is 3 long -> its fence is longer
+        assert "````\n" + body in res.output
+
+    def test_handoff_with_no_plan_journal_is_the_operator_input_alone(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._plan_with_spec(root, self._input_journal())
+        journal_path(root, "plan", "H").unlink()
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert res.output.startswith("## Operator input (read-only — the spec governs)")
+        assert "## Open findings" not in res.output
+
+    def test_handoff_without_input_entry_has_no_section(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._plan_with_spec(root, None)
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert "Operator input" not in res.output
+
+    def test_handoff_unparseable_spec_journal_exits_2(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._plan_with_spec(root, "<!-- fr:journal broken header -->\n")
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 2
+        assert "2026-01-01-x.md" in res.output
+        # One refusal, worded once (review r1-f1): the brief path prints the same.
+        assert "cannot relay the operator input" in res.output
+
+    def test_handoff_cross_repo_spec_has_no_section(self, tmp_path: Path, monkeypatch) -> None:
+        """A cross-repo spec leaves `spec_path` unset: its journal lives in
+        another repo, so there is nothing here to relay (spec §C)."""
+        from fr.plan_ops import PhaseSpec, create
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        create(
+            repo_root=root,
+            slug="H",
+            spec="derio-net/other:docs/superpowers/specs/2026-01-01-x-design.md",
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=[PhaseSpec(number=1, title="One", tasks=())],
+            prose="# x\n",
+        )
+        # A same-named local spec journal WITH input must not be picked up.
+        p = root / "docs/superpowers/journals/specs/2026-01-01-x.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(self._input_journal())
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert "Operator input" not in res.output
+
+    def test_handoff_no_plan_journal_and_unparseable_plan_stays_fail_open(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Parsing the plan first (sr-3) must not turn today's fail-open case —
+        no journal written yet — into a refusal when the plan is also broken."""
+        from fr.journal.model import journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._plan_with_spec(root, self._input_journal())
+        journal_path(root, "plan", "H").unlink()
+        (root / "docs/superpowers/plans/H/_meta.yaml").write_text("not: [valid\n")
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert res.output.strip() == ""
+
     def test_handoff_malformed_journal_fails_closed(self, tmp_path: Path, monkeypatch) -> None:
         """Unlike `render` (PR-body feed, fail-open), the handoff feeds an
         executor brief — a silently-empty handoff makes the executor guess."""

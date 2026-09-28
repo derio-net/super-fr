@@ -34,8 +34,12 @@ def make_repo(
     name: str = "own",
     git: bool = True,
     header: str = MATRIX_HEADER,
+    ci: bool = True,
 ) -> Path:
-    """A minimal fr-shaped repo: matrix, one Test-Plan spec, one test file."""
+    """A minimal fr-shaped repo: matrix, one Test-Plan spec, one test file.
+
+    ``ci`` adds a GitHub Actions workflow, so a row may move to `ci` (gh#775:
+    a repo with no CI config refuses that status)."""
     root = tmp_path / name
     (root / "docs" / "acceptance").mkdir(parents=True)
     (root / "docs" / "superpowers" / "specs").mkdir(parents=True)
@@ -46,4 +50,7 @@ def make_repo(
     (root / "docs" / "acceptance" / "matrix.yaml").write_text(header + matrix_rows)
     if git:
         (root / ".git").mkdir()
+    if ci:
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "workflows" / "ci.yml").write_text("on: push\n")
     return root
