@@ -4287,6 +4287,61 @@ rows:
       - super-fr:tests/unit/test_run_telemetry.py
     status: ci
     notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)
+  - id: requirements-input-in-spec-journal
+    capability: fr-goal-methodology
+    acceptance: The operator's raw input is recorded verbatim in the spec journal as
+      an input entry and never reaches a phase executor's handoff
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level unit.
+  - id: requirements-structural-gate
+    capability: fr-goal-methodology
+    acceptance: fr refuses a brainstorm or spec-review whose spec has malformed or unsourced
+      requirements, or quotes text the input does not contain
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level unit.
+  - id: requirements-always-ask
+    capability: fr-goal-methodology
+    acceptance: fr-goal's question round asks about every user-visible behaviour and
+      ambiguous statement the input leaves open
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level live.
+  - id: requirements-spec-review-traceability
+    capability: fr-goal-methodology
+    acceptance: fr-spec-reviewer flags dropped, reinterpreted and invented requirements
+      against the raw input
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level live.
+  - id: requirements-unconfirmed-in-pr
+    capability: fr-goal-methodology
+    acceptance: Behaviour built without operator confirmation is listed in its own required
+      PR-body section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level unit.
+  - id: requirements-rows-deliver-gate
+    capability: fr-goal-methodology
+    acceptance: Every requirement is cited by an acceptance row, and deliver refuses
+      while a row citing the spec is not-implemented
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: Born at brainstorm; target level unit.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
