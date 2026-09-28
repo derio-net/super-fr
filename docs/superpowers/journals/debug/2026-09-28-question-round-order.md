@@ -19,3 +19,8 @@ answered_rounds_since (fr/run/telemetry.py) groups consecutive QUESTION_TOOL too
 ### 8d7e4b916051 · finding [fixed] · fr-goal §1 rewritten: sequential, evenly split calls; one label per question
 
 plugins/super-fr/skills/fr-goal/SKILL.md §1 + both mirrors: calls are SEQUENTIAL (never more than one question call per message, each only after the previous call is answered), split evenly (5 → 3 + 2), labelled (Round K · question i of N) per question; the Hermes/OpenCode prose fallback uses the same label. Pinned red-first by tests/unit/test_tripwire_fr_goal_question_rounds.py (test_fr_goal_asks_a_split_round_in_order, test_fr_goal_drops_the_parallel_split_wording — 33 failures before the fix). resolve unchanged; the new label and sequential transcript shape are pinned by test_run_question_rounds.py::test_the_verdict_table (gh#783 cases) and test_run_telemetry.py::test_sequential_question_calls_each_answered_before_the_next_are_one_round. fr-brainstorming defers to fr-goal and states no split rule, so it is untouched.
+
+<!-- fr:journal kind=review scope=debug id=6304cfb53f37 created=2026-09-28T18:57:00+00:00 -->
+### 6304cfb53f37 · review · Independent review: no findings
+
+A separate reviewer agent checked the prose for residual parallel-call or per-call-i readings, agreement with answered_rounds_since / question_rounds_refusal, mirror consistency and tripwire strength: no findings at its reporting threshold. One sub-threshold note (the absolute-sounding "any other tool call starts a new round" beside the progress-tracker exception) is pre-existing wording, reconciled in the same paragraph; not changed.
