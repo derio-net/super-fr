@@ -1819,11 +1819,15 @@ _SPLIT_WAIVERS_HINT = "tier:, risk-first:, review-size:"
 _SPLIT_ALL_HINT = "ask: (it serves an ask of its own), tier:, risk-first:, review-size:"
 
 
-def _split_record_hint(plan: Plan, number: int, reasons: str) -> str:
-    slug = _spec_journal_slug(plan) or "<spec-slug>"
+def _split_record_hint(plan: Plan, split_id: str, reasons: str) -> str:
+    """The `fr journal add` line that records a split decision. `split_id` is
+    the NEXT FREE id (`fr.phase_sizing.next_split_id`): `journal add` refuses
+    a taken one, so naming the bare id after a decision exists would wedge
+    plan-review (review r1)."""
+    slug = _spec_journal_slug(plan) or "<spec-journal-slug>"
     return (
         f"`fr journal add --scope spec --slug {slug} --kind decision "
-        f'--id phase-split-{plan.meta.plan}-p{number} --title "<reason>: …"` '
+        f'--id {split_id} --title "<reason>: …"` '
         f"with <reason> one of {reasons}"
     )
 
@@ -1844,10 +1848,16 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     the **ceiling** (d1, R3) — every agentic phase after the first needs an
     S. `tier:`/`risk-first:`/`review-size:` waive the floor. Both failures
     are errors cleared by a recorded decision (d5, the `skeleton-override-*`
-    pattern); a malformed S is an error, never read as absent. The floor
+    pattern); a malformed S is an error, never read as absent. S is the
+    winning decision for the phase — `phase-split-<plan>-p<N>-<k>` supersedes
+    a lower `k` — and every fix names the next free id (review r1). A
+    decision naming no agentic phase of this plan is an orphan: a warning,
+    since it waives nothing (review r6). The floor
     message offers only the three waivers (review s1): `ask:` is the claim
     it just disproved. With no matrix the floor cannot be derived, so it is
-    skipped and an `ask:` S is accepted with a warning. The walking skeleton
+    skipped and an `ask:` S is accepted with a warning; a matrix that exists
+    but cannot be loaded (or whose repo identity cannot be resolved) is one
+    warning of its own, never read as absent (review r3). The walking skeleton
     needs no code here (d6, R6): a standalone skeleton with no rows fails
     the floor, and folding it into the first ask's phase is the fix.
 
@@ -1855,7 +1865,13 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     block — fr cannot tell a deploy step from a screenshot step.
     """
     from fr.acceptance.model import AcceptanceError, Matrix
-    from fr.phase_sizing import WAIVING, SplitDecision, phase_asks, split_decisions
+    from fr.phase_sizing import (
+        WAIVING,
+        SplitDecision,
+        next_split_id,
+        phase_asks,
+        split_decisions,
+    )
     from fr.requirements import (
         RequirementsError,
         has_requirements_table,
@@ -1880,22 +1896,31 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
             ReviewIssue(
                 severity="warn",
                 message=(
-                    f"spec {spec_rel}'s Requirements table does not parse ({e}), so "
-                    "phase sizing was not checked — fix the table (`fr spec "
+                    f"spec {spec_rel}'s Requirements/Deferred tables do not parse ({e}), "
+                    "so phase sizing was not checked — fix them (`fr spec "
                     "requirements <spec>`) and re-run self-review."
                 ),
             )
         ]
 
+    out: list[ReviewIssue] = []
     matrix: Matrix | None = None
+    matrix_unreadable = False
     spec_ref = ""
     if (root / "docs" / "acceptance" / "matrix.yaml").is_file():
         try:
             matrix, spec_ref = load_spec_matrix(root, spec_rel)
-        except AcceptanceError:
-            matrix = None  # `_acceptance_link_issues` already warns on it
+        except AcceptanceError as e:
+            matrix_unreadable = True
+            out.append(
+                ReviewIssue(
+                    severity="warn",
+                    message=f"acceptance matrix unreadable ({e}); ask floor not checked.",
+                )
+            )
 
-    decisions = split_decisions(_spec_journal_entries(plan), plan.meta.plan)
+    entries = _spec_journal_entries(plan)
+    decisions = split_decisions(entries, plan.meta.plan)
     ordered = sorted(plan.phases, key=lambda p: p.phase.number)
     headers = [p.phase for p in ordered]
     asks = (
@@ -1903,17 +1928,31 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
         if matrix is not None
         else {}
     )
+    agentic = [h for h in headers if h.tag == "agentic"]
+    agentic_numbers = {h.number for h in agentic}
 
-    out: list[ReviewIssue] = []
-    for bad in sorted(decisions.values(), key=lambda d: d.number):
-        if bad.malformed:
+    def _hint(n: int, reasons: str) -> str:
+        return _split_record_hint(plan, next_split_id(entries, plan.meta.plan, n), reasons)
+
+    for dec in sorted(decisions.values(), key=lambda d: d.number):
+        if dec.number not in agentic_numbers:
+            out.append(
+                ReviewIssue(
+                    severity="warn",
+                    message=(
+                        f"orphan phase-split decision {dec.id} names no agentic phase; "
+                        "it waives nothing."
+                    ),
+                )
+            )
+        elif dec.malformed:
             out.append(
                 ReviewIssue(
                     severity="error",
                     message=(
-                        f"split decision phase-split-{plan.meta.plan}-p{bad.number} has "
-                        f"title {bad.title!r}, which starts with no reason token — "
-                        f"start it with one of {_SPLIT_ALL_HINT}."
+                        f"split decision {dec.id} has title {dec.title!r}, which starts "
+                        "with no reason token — supersede it: "
+                        f"{_hint(dec.number, _SPLIT_ALL_HINT)}."
                     ),
                 )
             )
@@ -1921,7 +1960,6 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     def _waives(d: SplitDecision | None) -> bool:
         return d is not None and d.reason in WAIVING
 
-    agentic = [h for h in headers if h.tag == "agentic"]
     for k, h in enumerate(agentic, start=1):
         n = h.number
         d = decisions.get(n)
@@ -1936,13 +1974,13 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
                     message=(
                         f"phase {n} is agentic phase #{k}; a phase after the first "
                         f"needs a recorded split reason — record it: "
-                        f"{_split_record_hint(plan, n, _SPLIT_ALL_HINT)}."
+                        f"{_hint(n, _SPLIT_ALL_HINT)}."
                     ),
                 )
             )
             continue
         if matrix is None:
-            if d is not None:
+            if d is not None and not matrix_unreadable:
                 out.append(
                     ReviewIssue(
                         severity="warn",
@@ -1959,13 +1997,18 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
         fixes = (
             "link the rows of the ask it serves, fold its work into the phase "
             "that serves that ask, or record why it exists: "
-            f"{_split_record_hint(plan, n, _SPLIT_WAIVERS_HINT)}"
+            f"{_hint(n, _SPLIT_WAIVERS_HINT)}"
         )
         if pa.asks:
+            # An `ask:` phase's own asks subtract every other phase (review
+            # r8); otherwise waived phases are left out (review s2).
+            claims = d is not None and d.reason == "ask"
             sharers = sorted(
                 a.number
                 for a in asks.values()
-                if a.number != n and a.asks & pa.asks and not _waives(decisions.get(a.number))
+                if a.number != n
+                and a.asks & pa.asks
+                and (claims or not _waives(decisions.get(a.number)))
             )
             what = (
                 f"phase {n} serves no ask of its own — its asks "

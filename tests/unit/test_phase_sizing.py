@@ -9,6 +9,7 @@ from fr.phase_sizing import (
     WAIVING,
     PhaseAsks,
     SplitDecision,
+    next_split_id,
     phase_asks,
     split_decisions,
 )
@@ -177,3 +178,73 @@ def test_a_plan_slug_prefix_of_another_does_not_match() -> None:
     """`phase-split-<plan>-p2` of plan `x-2` must not be read for plan `x`."""
     entries = [_decision(2, "ask: x", plan=f"{PLAN}-2")]
     assert split_decisions(entries, PLAN) == {}
+
+
+# ── review r1: superseding ids; r8: an ask: phase subtracts every other phase ──
+
+
+def _entry(entry_id: str, title: str) -> JournalEntry:
+    return JournalEntry(
+        kind="decision",
+        scope="spec",
+        id=entry_id,
+        created="2026-09-28T00:00:00+00:00",
+        title=title,
+    )
+
+
+def test_a_superseding_id_with_the_highest_k_wins() -> None:
+    entries = [
+        _entry(f"phase-split-{PLAN}-p2-2", "tier: last"),
+        _entry(f"phase-split-{PLAN}-p2", "ask: first"),
+        _entry(f"phase-split-{PLAN}-p2-1", "because: malformed middle"),
+    ]
+    got = split_decisions(entries, PLAN)
+    assert got[2].reason == "tier"
+    assert got[2].title == "tier: last"
+    assert got[2].id == f"phase-split-{PLAN}-p2-2"
+
+
+def test_a_malformed_decision_superseded_by_a_valid_one_is_not_malformed() -> None:
+    entries = [
+        _entry(f"phase-split-{PLAN}-p2", "because: no token"),
+        _entry(f"phase-split-{PLAN}-p2-1", "review-size: big"),
+    ]
+    assert split_decisions(entries, PLAN)[2].malformed is False
+
+
+def test_k_zero_and_leading_zero_suffixes_are_not_superseding_ids() -> None:
+    entries = [
+        _entry(f"phase-split-{PLAN}-p2-0", "ask: x"),
+        _entry(f"phase-split-{PLAN}-p2-01", "ask: y"),
+    ]
+    assert split_decisions(entries, PLAN) == {}
+
+
+def test_the_next_free_split_id_counts_past_every_existing_one() -> None:
+    assert next_split_id([], PLAN, 2) == f"phase-split-{PLAN}-p2"
+    entries = [_entry(f"phase-split-{PLAN}-p2", "ask: x")]
+    assert next_split_id(entries, PLAN, 2) == f"phase-split-{PLAN}-p2-1"
+    entries.append(_entry(f"phase-split-{PLAN}-p2-1", "tier: y"))
+    assert next_split_id(entries, PLAN, 2) == f"phase-split-{PLAN}-p2-2"
+    # another phase's ids do not count
+    assert next_split_id(entries, PLAN, 3) == f"phase-split-{PLAN}-p3"
+
+
+def test_an_ask_phase_subtracts_a_waived_phases_asks() -> None:
+    """Review r8: p1 `tier:` citing R1, p2 `ask:` citing only R1 — p2 claims
+    R1 as its own, but p1 serves it too, so p2 owns nothing."""
+    m = _matrix({"a": ["R1"], "b": ["R1"]})
+    decisions = {
+        1: SplitDecision(number=1, reason="tier", title="tier: t", malformed=False),
+        2: SplitDecision(number=2, reason="ask", title="ask: a", malformed=False),
+    }
+    got = _by_number(phase_asks([_phase(1, "a"), _phase(2, "b")], m, SPEC_REF, decisions))
+    assert got[2].own == frozenset()
+
+
+def test_the_s2_pair_still_passes_without_an_ask_decision() -> None:
+    m = _matrix({"a": ["R1"], "b": ["R1"]})
+    decisions = {2: SplitDecision(number=2, reason="tier", title="tier: t", malformed=False)}
+    got = _by_number(phase_asks([_phase(1, "a"), _phase(2, "b")], m, SPEC_REF, decisions))
+    assert got[1].own == {"R1"}

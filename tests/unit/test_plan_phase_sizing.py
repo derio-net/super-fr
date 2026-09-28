@@ -6,10 +6,13 @@ Every repo is a `tmp_path` sandbox; nothing here touches the checkout.
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
 from fr.cli import app
 from fr.journal.model import (
     JournalEntry,
@@ -108,7 +111,7 @@ def _plan(repo: Path, *phases: P, spec: str = SPEC_REL) -> Plan:
     return parse_plan(plan.dir)
 
 
-def _decide(repo: Path, n: int, title: str, *, archived: bool = False) -> None:
+def _decide(repo: Path, n: int, title: str, *, archived: bool = False, k: int = 0) -> None:
     path = (archived_journal_path if archived else journal_path)(repo, "spec", SPEC_SLUG)
     path.parent.mkdir(parents=True, exist_ok=True)
     append_journal_entry(
@@ -117,7 +120,7 @@ def _decide(repo: Path, n: int, title: str, *, archived: bool = False) -> None:
         JournalEntry(
             kind="decision",
             scope="spec",
-            id=f"phase-split-{PLAN}-p{n}",
+            id=f"phase-split-{PLAN}-p{n}" + (f"-{k}" if k else ""),
             created="2026-09-28T00:00:00+00:00",
             title=title,
         ),
@@ -328,3 +331,107 @@ def test_cli_self_review_passes_the_folded_shape(tmp_path: Path) -> None:
     plan = _folded(repo)
     result = runner.invoke(app, ["plan", "self-review", str(plan.dir)])
     assert result.exit_code == 0, result.output
+
+
+# ── review fixes r1, r3, r4, r6, r8 ─────────────────────────────────────────
+
+
+def test_r1_the_floor_fix_names_the_next_free_id_and_running_it_clears_the_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fr journal add` refuses a taken id, so the suggested command must name
+    one past the decision that already exists — and running it must work."""
+    repo = _repo(tmp_path)
+    plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-none",)))
+    _decide(repo, 2, "ask: it is its own ask")
+    errors = _errors(_phase_sizing_issues(plan))
+    assert len(errors) == 1
+    m = re.search(r"`(fr journal add [^`]*)`", errors[0])
+    assert m is not None, errors[0]
+    assert f"--id phase-split-{PLAN}-p2-1 " in m.group(1)
+    argv = shlex.split(m.group(1).replace("<reason>: …", "review-size: too large to review"))
+    monkeypatch.chdir(repo)
+    added = runner.invoke(app, argv[1:])
+    assert added.exit_code == 0, added.output
+    assert _phase_sizing_issues(parse_plan(plan.dir)) == []
+
+
+def test_r1_the_malformed_error_names_the_next_free_id(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _decide(repo, 2, "because: I said so")
+    errors = _errors(_phase_sizing_issues(_folded(repo)))
+    assert len(errors) == 1
+    assert f"--id phase-split-{PLAN}-p2-1 " in errors[0]
+
+
+def test_r1_a_malformed_decision_superseded_by_a_valid_one_no_longer_errors(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    _decide(repo, 2, "because: I said so")
+    _decide(repo, 2, "ask: the second ask", k=1)
+    assert _phase_sizing_issues(_folded(repo)) == []
+
+
+def test_r3_an_unloadable_matrix_warns_instead_of_reading_as_absent(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "docs" / "acceptance" / "matrix.yaml").write_text("rows: [unclosed\n")
+    plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-none",)))
+    _decide(repo, 2, "ask: cannot be checked")
+    issues = _phase_sizing_issues(plan)
+    assert _errors(issues) == []
+    warns = _warns(issues)
+    assert len(warns) == 1
+    assert warns[0].startswith("acceptance matrix unreadable (")
+    assert warns[0].endswith("ask floor not checked.")
+    assert "without docs/acceptance/matrix.yaml" not in warns[0]
+
+
+def test_r3_a_matrix_whose_repo_identity_cannot_be_resolved_warns(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    matrix = repo / "docs" / "acceptance" / "matrix.yaml"
+    matrix.write_text(matrix.read_text().replace("org: derio-net\nrepo: own\n", ""))
+    plan = _plan(repo, P(("row-r1",)))
+    warns = _warns(_phase_sizing_issues(plan))
+    assert len(warns) == 1
+    assert warns[0].startswith("acceptance matrix unreadable (")
+    assert "cannot resolve repo identity" in warns[0]
+
+
+def test_r4_a_broken_deferred_table_names_both_tables(tmp_path: Path) -> None:
+    broken = (
+        REQUIREMENTS
+        + "\n## Deferred from input\n\n| input | reason |\n|---|---|\n| no quote | x |\n"
+    )
+    repo = _repo(tmp_path, requirements=broken)
+    plan = _plan(repo, P(("row-r1",)))
+    issues = _phase_sizing_issues(plan)
+    assert len(issues) == 1
+    assert issues[0].severity == "warn"
+    assert "Requirements/Deferred tables do not parse (" in issues[0].message
+
+
+def test_r6_a_decision_naming_no_agentic_phase_is_an_orphan_warning(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-r2",)), P(tag="manual", steps=2))
+    _decide(repo, 2, "ask: the second ask")
+    _decide(repo, 3, "tier: a manual phase")
+    _decide(repo, 7, "because: malformed and orphaned")
+    issues = _phase_sizing_issues(plan)
+    assert _errors(issues) == []
+    warns = _warns(issues)
+    assert len(warns) == 2
+    assert all("names no agentic phase; it waives nothing" in w for w in warns)
+    assert any(f"phase-split-{PLAN}-p3" in w for w in warns)
+    assert any(f"phase-split-{PLAN}-p7" in w for w in warns)
+
+
+def test_r8_an_ask_phase_sharing_its_only_ask_with_a_waived_phase_fails(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plan = _plan(repo, P(("row-r1",), skeleton=True), P(("row-r1b",)))
+    _decide(repo, 1, "tier: the parser needs the hard tier")
+    _decide(repo, 2, "ask: claims R1")
+    errors = _errors(_phase_sizing_issues(plan))
+    assert len(errors) == 1
+    assert errors[0].startswith("phase 2 serves no ask of its own")
+    assert "also served by phase(s) 1" in errors[0]

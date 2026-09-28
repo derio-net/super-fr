@@ -97,7 +97,10 @@ def split_decisions(entries, plan_slug) -> dict[int, SplitDecision]
   others' own asks are computed (review s2). R1 names splitting one ask by tier
   as legitimate. Take ask R1 split into p1 (standard) and p2 (hard,
   `tier:`): p1 keeps R1 as its own ask, and p2 passes by its waiver. Without
-  the exclusion, p1 would fail the floor for a split that only p2 made.
+  the exclusion, p1 would fail the floor for a split that only p2 made. The
+  exclusion does not apply to a phase whose own decision is `ask:` (review r8):
+  that phase claims the ask as its own, so its own asks subtract every other
+  agentic phase, waived ones included.
 - **Split decision:** a spec-journal `decision` whose id is
   `phase-split-<plan-slug>-p<N>` and whose title starts with one reason token:
   `ask:`, `tier:`, `risk-first:` or `review-size:` (the reasons #745 names, plus
