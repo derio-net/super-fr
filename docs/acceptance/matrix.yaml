@@ -4359,9 +4359,13 @@ rows:
       of the input unclassified
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: Born at spec-review (d9); target level unit.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_requirements.py
+      - super-fr:tests/unit/test_run_evidence_requirements.py
+    status: ci
+    notes: Covered by check_coverage unit tests (partition, gap/overlap/reordering)
+      and the spec-review coverage-derivation gate.
   - id: requirements-spec-review-hard-first
     capability: fr-goal-methodology
     acceptance: Spec review runs on the hard tier and checks traceability to the input
