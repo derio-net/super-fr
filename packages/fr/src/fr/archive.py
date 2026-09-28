@@ -49,6 +49,7 @@ __all__ = [
     "FETCH_TIMEOUT_SECONDS",
     "ArchiveError",
     "archive_blockers",
+    "archive_journal",
     "DefaultRef",
     "MergeEvidence",
     "SpecSweepResult",
@@ -530,7 +531,7 @@ def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
     _git_mv(repo_root, rel, dst.relative_to(repo_root))
 
 
-def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
+def archive_journal(repo_root: Path, scope: str, slug: str) -> None:
     """Move a scoped journal to implemented/journals/<scope-dir>/.
 
     A no-op when no journal exists (back-compat with pre-journal plans/specs)
@@ -546,6 +547,11 @@ def _archive_journal(repo_root: Path, scope: str, slug: str) -> None:
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
+
+
+# The internal name every existing caller uses; `archive_journal` is the
+# public one for callers outside this module (review p2 #5).
+_archive_journal = archive_journal
 
 
 def spec_archive_sweep(repo_root: Path, gh: GhClient | None) -> SpecSweepResult:

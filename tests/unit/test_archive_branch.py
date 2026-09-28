@@ -386,3 +386,14 @@ def test_branch_refuses_when_the_remote_branch_state_is_unknown(tmp_path, monkey
     assert f"fr isolation verify-merge --branch {BRANCH}" in result.output
     assert (repo / SP / "journals" / "debug" / "2026-09-28-bug.md").exists()
     assert _status(repo) == ""
+
+
+def test_archive_cmd_uses_the_public_journal_mover():
+    """review p2 #5: the command layer imports no private fr.archive name."""
+    import inspect
+
+    import fr.archive as archive_mod
+
+    assert "archive_journal" in archive_mod.__all__
+    assert archive_mod._archive_journal is archive_mod.archive_journal
+    assert "_archive_journal" not in inspect.getsource(archive_cmd)

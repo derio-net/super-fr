@@ -31,8 +31,8 @@ from fr.archive import (
     ArchiveError,
     MergeEvidence,
     SpecSweepResult,
-    _archive_journal,
     archive_blockers,
+    archive_journal,
     archive_plan_dir,
     emitted_plan,
     merge_evidence,
@@ -340,7 +340,7 @@ def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> Path | str:
         owner_archived, owner = True, ""
     if not owner_archived:
         return f"follows {owner}, still live or missing"
-    _archive_journal(repo_root, scope, slug)
+    archive_journal(repo_root, scope, slug)
     if journal_path(repo_root, scope, slug).exists():
         return f"destination {dst.relative_to(repo_root)} already exists"
     return dst.relative_to(repo_root)
