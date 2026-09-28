@@ -180,6 +180,11 @@ _BEFORE_THE_GATES = (
         "    evidence: [tests, proportionality, requirement-rows, visual]\n",
         "    evidence: [tests, proportionality]\n",
     ),
+    ("        evidence: [visual]\n", ""),
+    (
+        "        evidence: [review, reviewer, findings, visual]\n",
+        "        evidence: [review, reviewer, findings]\n",
+    ),
 )
 
 
