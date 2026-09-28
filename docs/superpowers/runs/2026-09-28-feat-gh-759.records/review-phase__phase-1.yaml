@@ -1,0 +1,28 @@
+schema_version: 2
+run: 2026-09-28-feat-gh-759
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-c1
+    title: check_coverage's single-space join falsely refuses a partition cut with no whitespace at the boundary
+    body: |-
+      requirements.py:458-459 joined spans and entries with " ", so a sound cut right after `)` rebuilt as `range(1-20) ,done`. Root cause: the plan's P1.T4.S2 wording ("single-space joins"), not the spec. The reviewer's suggested bare join fails the other case (trimmed cells rebuild `alphabeta`). Fixed by comparing with all whitespace removed; spec §D check 2 reworded.
+    review_scope: in
+    phase: 1
+  - kind: review
+    id: review-phase-1
+    title: "phase 1 code review: 1 finding (c1, in scope, fixed)"
+    body: |-
+      Independent reviewer (dispatched code-reviewer, standard tier) over eac98902..9df2e0f4 against spec §B-§D and Test Plan 1-4, 12, 13. One finding: p1-c1. Checked clean: grammar hard-errors, whitespace-only quote normalisation, literal dashes, in-order ellipsis fragments, one-entry quote rule, literal spans, archive twins both directions, complexity. Executor choice 2 (test-only parse_journal bridge for the phase-2 input token) judged acceptable. Test Plan 13 exercised by two CLI cases rather than every fixture: below the reviewer's threshold, noted.
+    phase: 1
+resolves:
+  - id: p1-c1
+    state: fixed
+    body: Whitespace-insensitive comparison in check_coverage; three boundary tests (no-space cut, cut at a space, entries with no separator); spec §D check 2 reworded.
+    phase: 1
+evidence:
+  review: review-phase-1
+  reviewer: aa56ea0fbf339eacb
+  model: claude-opus-5-5
