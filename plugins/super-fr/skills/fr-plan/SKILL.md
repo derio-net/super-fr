@@ -65,13 +65,8 @@ number). The renderer / observer / diff / apply chain depends on this shape.
 - **Refactor step shape:** trailing `P<n>.T<n>.S3` after red→green for small cleanups, a separate
   `REFACTOR + quality gate` **task** for larger ones. Omit only with a reason; the phase's `fr run
   resolve` enforces it (single-step tasks, manual phases exempt), not self-review — at plan time it's a guess.
-- **Size phases to the change:** one agentic phase is first-class (no marker, no override). With
-  two or more, the first smokes delivery (CI green on a trivial test, fixtures captured never
-  constructed), marked `skeleton: true`; self-review errors without it (override: `skeleton-override-*`).
-- **Pure agentic phases:** an agentic phase must be fully agent-completable end-to-end. Collect
-  ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a
-  dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer
-  it. `fr plan self-review` enforces this with error severity (#252).
+- **Size phases to the asks:** one agentic phase per independently reviewable ask — usually one per group of the spec's requirements, never one per acceptance row. Every phase costs a fixed round trip (an executor, a reviewer, the orchestrator's resolve turns) that does not shrink with its size (#745; `fr run cost` shows it per step), so a one-agentic-phase plan is first-class and usually right. Every phase after the first records a `phase-split-<plan>-p<N>` spec-journal decision (`fr journal add --scope spec --slug <spec-journal-slug> --kind decision --id phase-split-<plan>-p<N> --title "<reason>: …"`, the slug being the spec file's stem without `-design`, as `fr journal` uses it; a later decision for the same phase supersedes it as `phase-split-<plan>-p<N>-<k>`, highest `k` wins): `ask:` when it serves an ask of its own, otherwise `tier:` (needs another tier), `risk-first:` (a risky piece lands before the rest) or `review-size:` (the diff is too large for one review). With a Requirements table in the spec, `fr plan self-review` errors on an agentic phase whose rows cite no requirement of its own and on a later phase with no recorded reason. With two or more agentic phases, the skeleton is the first ask's phase, marked `skeleton: true`, with the smoke (CI green on a trivial test, fixtures captured never constructed) as its first task — never a phase of its own; self-review errors without the marker (override: `skeleton-override-*`).
+- **Pure agentic phases:** an agentic phase must be fully agent-completable end-to-end. Collect ALL manual work (secrets, UI operations, deploy actions, cluster-dependent config) into a dedicated `[manual]` phase — never author a manual step into an agentic phase planning to defer it. `fr plan self-review` enforces this with error severity (#252). An operator *verification* step (a screenshot, a live check, a post-merge run) is a Test Plan line or a `verify: post-merge` acceptance row, not a `[manual]` phase; keep `[manual]` phases for a prerequisite agentic work depends on or a real dispatch/deploy. Self-review warns on a single-step trailing manual phase.
 - **Steps name outcomes, not mechanisms:** "gather file:line-cited evidence following
   `<protocol>`", never "dispatch `<agent>`". A step naming the actor or the tool rots *silently*
   the moment either changes — the phase executor is a leaf, not an orchestrator, so it does the
@@ -86,8 +81,8 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
   dispatch is untiered, inheriting the session model — self-review warns when missing. It also declares `files:` (repo-relative globs it will touch; `*` spans `/`) and `estimate_lines:` (added + deleted) — `fr plan proportionality` reports touches outside them and size above 2× at deliver; self-review warns on no `files`.
 - No placeholders: every step has actual code, commands, expected output.
-- Bite-sized steps: 2-5 minutes each. Prefer 4–6 phases: every additional phase re-reads the accumulated
-  handoff, so cost grows superlinearly with phase count (`fr run status` shows the per-phase accounting).
+- Bite-sized steps: 2-5 minutes each, sized within the phase — a one-phase plan still keeps one or
+  more steps per spec design section, never one step for a whole section.
 - Use BEGIN/END markers for full-file embeds, not nested fences.
 - **Cross-repo completeness:** If the spec lists multiple plans across repos, write ALL of them
   before offering the execution handoff. For each target repo: scaffold the plan in that repo's

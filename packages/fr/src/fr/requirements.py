@@ -246,6 +246,27 @@ def _parse_sources(cell: str, line_no: int, row: str) -> tuple[Source, ...]:
     return tuple(sources)
 
 
+def has_requirements_table(spec_text: str) -> bool:
+    """Does the spec's `## Requirements` section hold a `| id | requirement |
+    source |` header row — whether or not the table under it parses? What
+    tells a broken §B table (worth a warning) from a legacy prose section
+    (silent) — spec 2026-09-28-phase-sizing-design.md §B, review s4."""
+    section = _locate_section(spec_text, _REQUIREMENTS_HEADING)
+    if section is None:
+        return False
+    for line in section[0]:
+        s = line.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        try:
+            cells = [c.lower() for c in _split_row(s, 0)]
+        except RequirementsError:
+            continue
+        if cells == _REQUIREMENTS_HEADER:
+            return True
+    return False
+
+
 def parse_requirements(spec_text: str) -> Requirements:
     """Parse a spec's `## Requirements` (+ optional `## Deferred from
     input`) tables (§B). Pure, no I/O. Raises `RequirementsError` on any
