@@ -243,11 +243,21 @@ def test_branch_archives_every_kind_a_merged_branch_added(tmp_path, monkeypatch)
         _plan(r, PLAN, ticked=True, spec=SPEC)
         _spec(r, SPEC, [PLAN])
         _run_file(r, RUN, PLAN)
+        _write(r, SP / "usage" / f"{RUN}.yaml", "schema_version: 1\n")
         _journal(r, "plans", PLAN)
         _journal(r, "specs", "2026-09-28-thing")
         _journal(r, "debug", "2026-09-28-bug")
 
     _merged(repo, build)
+    from fr.repair import RepairResult
+
+    repairs: list[frozenset[str] | None] = []
+
+    def fake_repair_repo(repo_root, *, write, only_plans=None):
+        repairs.append(only_plans)
+        return RepairResult(rewrites=[], warnings=[])
+
+    monkeypatch.setattr(archive_cmd, "repair_repo", fake_repair_repo)
     result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
     assert result.exit_code == 0, result.output
     assert "held:" not in result.output
@@ -255,6 +265,7 @@ def test_branch_archives_every_kind_a_merged_branch_added(tmp_path, monkeypatch)
         (SP / "plans" / PLAN, IMPL / "plans" / PLAN),
         (SP / "specs" / SPEC, IMPL / "specs" / SPEC),
         (SP / "runs" / f"{RUN}.yaml", IMPL / "runs" / f"{RUN}.yaml"),
+        (SP / "usage" / f"{RUN}.yaml", IMPL / "usage" / f"{RUN}.yaml"),
         (SP / "journals/plans" / f"{PLAN}.md", IMPL / "journals/plans" / f"{PLAN}.md"),
         (
             SP / "journals/specs/2026-09-28-thing.md",
@@ -266,6 +277,10 @@ def test_branch_archives_every_kind_a_merged_branch_added(tmp_path, monkeypatch)
         assert (repo / archived).exists(), archived
         assert f"archived: {live}" in result.output, live
     assert "moves staged via git mv" in result.output
+    # Repair in passing runs exactly once for the whole invocation (§B.5),
+    # scoped to the moved plan (and any plan citing a moved spec).
+    assert len(repairs) == 1
+    assert repairs[0] is not None and PLAN in repairs[0]
 
 
 def test_branch_archives_a_debug_journal_it_only_modified(tmp_path, monkeypatch):
@@ -482,3 +497,20 @@ def test_branch_holds_a_dirty_follower(tmp_path, monkeypatch):
     ) in result.output
     assert (repo / SP / "journals/debug/2026-09-28-bug.md").is_file()
     assert not (repo / IMPL / "journals/debug/2026-09-28-bug.md").exists()
+
+
+def test_branch_holds_a_dirty_plan(tmp_path, monkeypatch):
+    """review p2 #6: the single-plan dirty refusal becomes a held line."""
+    repo = _base(tmp_path)
+    _merged(repo, lambda r: _plan(r, PLAN, ticked=True))
+    prose = repo / SP / "plans" / PLAN / "_prose.md"
+    prose.write_text(prose.read_text() + "\nlocal edit\n")
+
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert (
+        f"held: docs/superpowers/plans/{PLAN} — worktree dirty at the plan path — "
+        "commit or stash first"
+    ) in result.output
+    assert (repo / SP / "plans" / PLAN).is_dir()
+    assert not (repo / IMPL / "plans" / PLAN).exists()
