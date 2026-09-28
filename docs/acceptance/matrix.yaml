@@ -4444,9 +4444,14 @@ rows:
       the orchestrator's relay drops them
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_journal_model.py
+      - super-fr:tests/unit/test_operator_input.py
+    status: ci
+    notes: 'Unit-pinned: handoff opens with the fenced operator-input section, also
+      with no plan journal; cross-repo/no-input omit it (#778).'
   - id: raw-input-relay-prose
     capability: fr-goal-methodology
     acceptance: fr-goal relays the operator input into both the executor's and the reviewer's
