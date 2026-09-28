@@ -22,18 +22,30 @@ from rich.console import Console
 
 from fr.archive import (
     ArchiveError,
+    MergeEvidence,
     SpecSweepResult,
+    _archive_journal,
     archive_blockers,
     archive_plan_dir,
+    emitted_plan,
     merge_evidence,
     paths_dirty,
     spec_archive_sweep,
 )
+from fr.closeout import BranchArtifact, branch_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
-from fr.isolation.local import branch_changes_present, resolve_branch_refs, subprocess_runner
+from fr.isolation.local import (
+    branch_changed_paths,
+    branch_changes_present,
+    resolve_branch_refs,
+    subprocess_runner,
+)
 from fr.isolation.types import IsolationError
+from fr.journal.model import archived_journal_path, journal_path
 from fr.parser import PlanSchemaError
 from fr.repair import plans_referencing_specs, repair_repo
+from fr.run.model import archived_run_path, run_path
+from fr.usage.file import archived_usage_path
 
 if TYPE_CHECKING:
     from fr.ghclient import GhClient
@@ -125,7 +137,177 @@ def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> Non
     remote = base_ref.split("/", 1)[0]
     refs = _branch_refs_or_exit(repo_root, branch, remote)
     _require_landed(repo_root, branch, refs, base_ref)
-    typer.echo(f"nothing to archive for {branch}")
+    _note_fetch_error(evidence)
+
+    changed = sorted({p for ref in refs for p in _changed(repo_root, ref, base_ref)})
+    artifacts = branch_artifacts(repo_root, changed)
+    if not artifacts:
+        typer.echo(f"nothing to archive for {branch}")
+        return
+
+    gh = _make_gh_client()
+    moved_plans: list[str] = []
+    for a in _of_kind(artifacts, "plan"):
+        reason = _archive_branch_plan(repo_root, a.path, gh, evidence)
+        if reason is None:
+            moved_plans.append(a.path.name)
+            _echo_archived(a.path, IMPLEMENTED_REL / "plans" / a.path.name)
+        else:
+            _echo_held(a.path, reason)
+
+    spec_dsts = _archive_branch_specs(
+        repo_root,
+        _of_kind(artifacts, "spec"),
+        gh,
+        no_spec_sweep=no_spec_sweep,
+        run_sweep=bool(moved_plans),
+    )
+
+    moved_followers = False
+    for a in artifacts:
+        if a.kind in ("plan", "spec"):
+            continue
+        dst, reason = _archive_follower(repo_root, a)
+        if dst is not None:
+            moved_followers = True
+            _echo_archived(a.path, dst)
+        else:
+            _echo_held(a.path, reason or "not moved")
+
+    if moved_plans or spec_dsts or moved_followers:
+        only_plans = frozenset(moved_plans) | plans_referencing_specs(repo_root, spec_dsts)
+        _repair_in_passing(repo_root, only_plans)
+        typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
+
+
+IMPLEMENTED_REL = Path("docs/superpowers/implemented")
+
+
+def _note_fetch_error(evidence: MergeEvidence) -> None:
+    if evidence.fetch_error:
+        err_console.print(
+            f"note: {evidence.fetch_error} — judging merge state from the local "
+            f"{evidence.ref.ref if evidence.ref else 'remote-tracking refs'}",
+            soft_wrap=True,
+        )
+
+
+def _changed(repo_root: Path, ref: str, base_ref: str) -> list[str]:
+    try:
+        return branch_changed_paths(subprocess_runner, repo_root, ref, base_ref)
+    except IsolationError as e:
+        err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
+def _of_kind(artifacts: list[BranchArtifact], kind: str) -> list[BranchArtifact]:
+    return [a for a in artifacts if a.kind == kind]
+
+
+def _echo_archived(src: Path, dst: Path) -> None:
+    typer.echo(f"  archived: {src} -> {dst}")
+
+
+def _echo_held(path: Path, reason: str) -> None:
+    typer.echo(f"  held: {path} — {reason}")
+
+
+def _archive_branch_plan(
+    repo_root: Path, plan_rel: Path, gh: GhClient, evidence: MergeEvidence
+) -> str | None:
+    """The single-plan path (gate, dirty check, move — which carries the
+    plan's run, usage and plan journal), with every refusal turned into a
+    held reason. `None` means the plan moved."""
+    target = repo_root / plan_rel
+    try:
+        report = build_plan_report(target, gh)
+    except PlanSchemaError as e:
+        return f"parse error: {e}"
+    blockers = archive_blockers(report.plan, report.observed, evidence)
+    if blockers:
+        return "; ".join(blockers)
+    if paths_dirty(repo_root, target):
+        return "worktree dirty at the plan path — commit or stash first"
+    try:
+        archive_plan_dir(repo_root, target)
+    except ArchiveError as e:
+        return str(e)
+    return None
+
+
+def _archive_branch_specs(
+    repo_root: Path,
+    specs: list[BranchArtifact],
+    gh: GhClient,
+    *,
+    no_spec_sweep: bool,
+    run_sweep: bool,
+) -> list[Path]:
+    """Run `spec_archive_sweep` once (§B.4 spec), print its moves, and hold
+    each branch spec it left live. Returns the moved specs' destinations."""
+    if no_spec_sweep:
+        for a in specs:
+            _echo_held(a.path, "spec sweep skipped")
+        return []
+    if not (specs or run_sweep):
+        return []
+    sweep = spec_archive_sweep(repo_root, gh)
+    for m in sweep.moves:
+        _echo_archived(m.src, m.dst)
+    for a in specs:
+        if (repo_root / a.path).exists():
+            prefix = f"{a.path.name}: "
+            note = next(
+                (n[len(prefix) :] for n in sweep.notes if n.startswith(prefix)),
+                "not every Implementation Plans row is archived yet",
+            )
+            _echo_held(a.path, note)
+    return [repo_root / m.dst for m in sweep.moves]
+
+
+def _archive_follower(repo_root: Path, a: BranchArtifact) -> tuple[Path | None, str | None]:
+    """(destination, None) when a journal/run/usage artifact is archived —
+    by its owner's move earlier in this run, or here — else (None, reason)."""
+    if a.kind == "journal":
+        return _archive_branch_journal(repo_root, a)
+    run_id = a.path.stem
+    dst = (
+        archived_run_path(repo_root, run_id)
+        if a.kind == "run"
+        else archived_usage_path(repo_root, run_id)
+    )
+    if not (repo_root / a.path).exists():
+        return dst.relative_to(repo_root), None
+    cursor = run_path(repo_root, run_id)
+    if not cursor.exists():
+        cursor = archived_run_path(repo_root, run_id)
+    plan = emitted_plan(cursor)
+    return None, (f"follows plan {plan}, still live" if plan else "follows no recorded plan")
+
+
+def _archive_branch_journal(repo_root: Path, a: BranchArtifact) -> tuple[Path | None, str | None]:
+    scope = a.owner or ""
+    slug = a.path.stem
+    dst = archived_journal_path(repo_root, scope, slug)  # type: ignore[arg-type]
+    if not (repo_root / a.path).exists():  # its owner's move carried it
+        return dst.relative_to(repo_root), None
+    if scope == "plan":
+        owner_archived = (repo_root / IMPLEMENTED_REL / "plans" / slug).is_dir()
+        owner = f"plan {slug}"
+    elif scope == "spec":
+        owner_archived = any(
+            (repo_root / IMPLEMENTED_REL / "specs" / name).is_file()
+            for name in (f"{slug}-design.md", f"{slug}.md")
+        )
+        owner = f"spec {slug}"
+    else:  # debug: on the default ref (§B.3 proved it) means done (d2/d3)
+        owner_archived, owner = True, ""
+    if not owner_archived:
+        return None, f"follows {owner}, still live or missing"
+    _archive_journal(repo_root, scope, slug)
+    if journal_path(repo_root, scope, slug).exists():  # type: ignore[arg-type]
+        return None, f"destination {dst.relative_to(repo_root)} already exists"
+    return dst.relative_to(repo_root), None
 
 
 def archive_command(

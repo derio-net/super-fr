@@ -435,6 +435,26 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
     return None
 
 
+def emitted_plan(cursor: Path) -> str | None:
+    """The plan path a run cursor's steps recorded as `emitted.plan`, or
+    `None` when the file is unreadable, not a cursor of any version, or names
+    no plan. The reverse question of `find_run_for_plan`, read the same way —
+    by data, never by a name convention — so `fr archive --branch` can say
+    which plan an unmoved run or usage file follows (2026-09-28-closeout-always
+    §B.4)."""
+    try:
+        state = _read_any_version(cursor.read_text())
+    except OSError:
+        return None
+    if state is None:
+        return None
+    for record in state.steps.values():
+        plan = (record.emitted or {}).get("plan")
+        if plan:
+            return str(plan).rstrip("/")
+    return None
+
+
 def _read_any_version(text: str) -> RunState | RunStateV6 | RunStateV4 | None:
     """`text` as a run cursor of ANY version, or `None` if it is not one.
 

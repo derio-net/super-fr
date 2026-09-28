@@ -100,7 +100,7 @@ def _spec(repo: Path, name: str, plan_rows: list[str]) -> Path:
         "|---|---|---|---|",
     ]
     for slug in plan_rows:
-        lines.append(f"| {slug} | this | `docs/superpowers/plans/{slug}/` | — |")
+        lines.append(f"| {slug} | derio-net/test | `docs/superpowers/plans/{slug}` | — |")
     return _write(repo, SP / "specs" / name, "\n".join(lines) + "\n")
 
 
@@ -215,4 +215,150 @@ def test_branch_checks_the_remote_ref_even_when_local_is_merged(tmp_path, monkey
     result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
     assert result.exit_code == 2, result.output
     assert "late.txt" in result.output
+    assert _status(repo) == ""
+
+
+# --- Task 2: per-kind archiving with held lines --------------------------------
+
+IMPL = SP / "implemented"
+PLAN = "2026-09-28-thing"
+SPEC = "2026-09-28-thing-design.md"
+RUN = "2026-09-28-feat-thing"
+
+
+def _merged(repo: Path, build) -> None:
+    """Branch off main, let `build` write the branch's artifacts, commit,
+    push, squash-merge, and stand in the housekeeping branch."""
+    _branch(repo)
+    build(repo)
+    _commit(repo, "work")
+    _push_branch(repo)
+    _squash_merge(repo)
+
+
+def test_branch_archives_every_kind_a_merged_branch_added(tmp_path, monkeypatch):
+    repo = _base(tmp_path)
+
+    def build(r: Path) -> None:
+        _plan(r, PLAN, ticked=True, spec=SPEC)
+        _spec(r, SPEC, [PLAN])
+        _run_file(r, RUN, PLAN)
+        _journal(r, "plans", PLAN)
+        _journal(r, "specs", "2026-09-28-thing")
+        _journal(r, "debug", "2026-09-28-bug")
+
+    _merged(repo, build)
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert "held:" not in result.output
+    for live, archived in (
+        (SP / "plans" / PLAN, IMPL / "plans" / PLAN),
+        (SP / "specs" / SPEC, IMPL / "specs" / SPEC),
+        (SP / "runs" / f"{RUN}.yaml", IMPL / "runs" / f"{RUN}.yaml"),
+        (SP / "journals/plans" / f"{PLAN}.md", IMPL / "journals/plans" / f"{PLAN}.md"),
+        (
+            SP / "journals/specs/2026-09-28-thing.md",
+            IMPL / "journals/specs/2026-09-28-thing.md",
+        ),
+        (SP / "journals/debug/2026-09-28-bug.md", IMPL / "journals/debug/2026-09-28-bug.md"),
+    ):
+        assert not (repo / live).exists(), live
+        assert (repo / archived).exists(), archived
+        assert f"archived: {live}" in result.output, live
+    assert "moves staged via git mv" in result.output
+
+
+def test_branch_archives_a_debug_journal_it_only_modified(tmp_path, monkeypatch):
+    """d2: added and modified are alike — a debug journal that predates the
+    branch is still the branch's to close out."""
+    repo = _base(tmp_path, remote=False)
+    _journal(repo, "debug", "2026-09-01-old", "# old\n")
+    _commit(repo, "old journal")
+    _add_remote(repo, tmp_path / "origin.git")
+    _publish(repo)
+
+    _merged(
+        repo,
+        lambda r: _write(r, SP / "journals/debug/2026-09-01-old.md", "# old\n\nmore\n"),
+    )
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert (repo / IMPL / "journals/debug/2026-09-01-old.md").is_file()
+    assert "archived: docs/superpowers/journals/debug/2026-09-01-old.md" in result.output
+
+
+def test_branch_holds_an_incomplete_plan_and_everything_following_it(tmp_path, monkeypatch):
+    repo = _base(tmp_path)
+
+    def build(r: Path) -> None:
+        _plan(r, PLAN, ticked=False, spec=SPEC)
+        _spec(r, SPEC, [PLAN])
+        _run_file(r, RUN, PLAN)
+        _write(r, SP / "usage" / f"{RUN}.yaml", "schema_version: 1\n")
+        _journal(r, "plans", PLAN)
+        _journal(r, "specs", "2026-09-28-thing")
+
+    _merged(repo, build)
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert f"held: docs/superpowers/plans/{PLAN} — " in out
+    assert "Phase 1" in out
+    assert f"held: docs/superpowers/specs/{SPEC} — " in out
+    assert (
+        f"held: docs/superpowers/runs/{RUN}.yaml — follows plan docs/superpowers/plans/{PLAN}"
+        in out
+    )
+    assert (
+        f"held: docs/superpowers/usage/{RUN}.yaml — follows plan docs/superpowers/plans/{PLAN}"
+        in out
+    )
+    assert f"held: docs/superpowers/journals/plans/{PLAN}.md — follows plan {PLAN}" in out
+    assert (
+        "held: docs/superpowers/journals/specs/2026-09-28-thing.md — follows spec "
+        "2026-09-28-thing" in out
+    )
+    assert "archived:" not in out
+    assert "moves staged" not in out
+    assert _status(repo) == ""
+
+
+def test_branch_no_spec_sweep_holds_the_spec(tmp_path, monkeypatch):
+    repo = _base(tmp_path)
+
+    def build(r: Path) -> None:
+        _plan(r, PLAN, ticked=True, spec=SPEC)
+        _spec(r, SPEC, [PLAN])
+
+    _merged(repo, build)
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH, "--no-spec-sweep"])
+    assert result.exit_code == 0, result.output
+    assert (repo / IMPL / "plans" / PLAN).is_dir()
+    assert f"held: docs/superpowers/specs/{SPEC} — spec sweep skipped" in result.output
+    assert (repo / SP / "specs" / SPEC).is_file()
+
+
+def test_branch_moves_a_plan_journal_whose_plan_is_already_archived(tmp_path, monkeypatch):
+    repo = _base(tmp_path, remote=False)
+    _plan(repo, PLAN, ticked=True)
+    _commit(repo, "plan")
+    (repo / IMPL / "plans").mkdir(parents=True)
+    _git(repo, "mv", str(SP / "plans" / PLAN), str(IMPL / "plans" / PLAN))
+    _commit(repo, "archive plan")
+    _add_remote(repo, tmp_path / "origin.git")
+    _publish(repo)
+
+    _merged(repo, lambda r: _journal(r, "plans", PLAN))
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert (repo / IMPL / "journals/plans" / f"{PLAN}.md").is_file()
+    assert f"archived: docs/superpowers/journals/plans/{PLAN}.md" in result.output
+
+
+def test_branch_that_touched_no_artifact_is_a_clean_no_op(tmp_path, monkeypatch):
+    repo = _base(tmp_path)
+    _merged(repo, lambda r: _write(r, "src.txt", "code\n"))
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 0, result.output
+    assert f"nothing to archive for {BRANCH}" in result.output
     assert _status(repo) == ""
