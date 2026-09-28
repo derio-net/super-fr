@@ -41,6 +41,8 @@ __all__ = [
     "Resolution",
     "StepRecord",
     "TickItem",
+    "VisualEvidence",
+    "VisualShot",
     "allowed_sections",
     "load_record",
     "parse_record",
@@ -49,14 +51,17 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 3
+RECORD_SCHEMA_VERSION = 4
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
 `fr.artifacts.record_questions`. Bumped 2 -> 3 for `JournalItem.input`,
 `AcceptanceItem.verify` and `ResolutionState` + `unconfirmed` (spec
 `2026-09-28-requirements-traceability-design.md` §H). Migration:
-`fr.artifacts.record_input_unconfirmed`."""
+`fr.artifacts.record_input_unconfirmed`. Bumped 3 -> 4 for
+`AcceptanceItem.visual` and `StepRecord.visual` (spec
+`2026-09-28-ui-visual-evidence-design.md` §G). Migration:
+`fr.artifacts.record_visual`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -161,6 +166,24 @@ class AcceptanceItem(_Strict):
     never sets this — it is create-only, like `capability`/`acceptance`."""
 
 
+class VisualShot(_Strict):
+    """One screenshot: what it shows, of the row's named states/interactions
+    (spec 2026-09-28-ui-visual-evidence-design.md §B)."""
+
+    path: StrictStr
+    shows: tuple[StrictStr, ...] = Field(min_length=1)
+
+
+class VisualEvidence(_Strict):
+    """One row's visual evidence for this step: the (optional) capture script
+    and the shots taken, each naming what it shows (spec 2026-09-28
+    §B/§D)."""
+
+    row: StrictStr
+    script: StrictStr | None = None
+    shots: tuple[VisualShot, ...] = Field(min_length=1)
+
+
 class QuestionRounds(_Strict):
     """How many operator question rounds a cleared gate took (spec
     `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B).
@@ -216,6 +239,10 @@ class StepRecord(_Strict):
     journal: tuple[JournalItem, ...] = ()
     resolves: tuple[Resolution, ...] = ()
     acceptance: tuple[AcceptanceItem, ...] = ()
+    visual: tuple[VisualEvidence, ...] = ()
+    """Per-row visual evidence for this step (spec 2026-09-28-ui-visual-
+    evidence-design.md §B): which screenshots were taken and what each shows.
+    Sits in the `evidence` section group, like `evidence`/`emitted`."""
     emitted: dict[StrictStr, StrictStr] = {}
     evidence: dict[StrictStr, StrictStr] = {}
 
@@ -251,7 +278,7 @@ _SECTION_FIELDS: dict[str, tuple[str, ...]] = {
     "resolves": ("resolves",),
     "acceptance": ("acceptance",),
     "outcome": ("outcome", "no_questions", "reason", "questions"),
-    "evidence": ("evidence", "emitted"),
+    "evidence": ("evidence", "emitted", "visual"),
 }
 
 
