@@ -14,3 +14,8 @@ gh#758. `mvn -q test > /tmp/x.log 2>&1` then `fr run resolve --step deliver --ev
 ### 6db98a501310 · finding [fixed] · _is_log compares real paths on both sides
 
 Fix: `os.path.realpath(target) == os.path.realpath(log)` for an absolute target (realpath, not Path.resolve: never raises on a loop, and every transcript word reaches it). Failing test first: `test_a_suite_logged_through_a_symlinked_dir_is_accepted` (tests/unit/test_run_evidence_separate_context.py) refused with the production message before the fix, passes after. Full suite 6860 passed. Not covered: a RELATIVE target through a symlinked dir is still suffix-matched, since the command cwd is unknowable from the transcript.
+
+<!-- fr:journal kind=review scope=debug id=3401fe67a609 created=2026-09-28T16:38:35+00:00 -->
+### 3401fe67a609 · review · Self-review of the 3-line fix: no findings
+
+Self-review only (no independent reviewer dispatched — the diff is one comparison). Checked: (1) the only caller passes an already-resolved log, so realpath on it is a no-op there and a guard for any other caller; (2) the OpenCode path shares _writes/_names, so it is fixed too; (3) a nonexistent absolute target realpaths to itself and cannot spuriously match; (4) the gate's mtime-in-window check is unchanged, so resolving paths loosens nothing about WHO wrote the bytes. No findings raised.
