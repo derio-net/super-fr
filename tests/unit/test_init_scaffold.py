@@ -15,8 +15,8 @@ from fr.isolation.scaffold import (
     HOST_CLI_FEATURE,
     HOST_CLI_PINS,
     KNOWN_TOOLS,
-    scaffold_profile,
 )
+from fr.isolation.scaffold import scaffold_profile as _scaffold_profile
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -60,7 +60,17 @@ def _tracked(repo: Path) -> list[str]:
     return _git(repo, "ls-files").stdout.splitlines()
 
 
+def scaffold_profile(*args, **kwargs):
+    """Tracking `auto` asks the forge, and refuses when the forge is unknown —
+    most tests here are about something else, so they say `none` unless the
+    test passes `tracking=` itself."""
+    kwargs.setdefault("tracking", "none")
+    return _scaffold_profile(*args, **kwargs)
+
+
 def scaffold(repo: Path, *extra: str):
+    if "--tracking" not in extra:
+        extra = (*extra, "--tracking", "none")
     return runner.invoke(
         app,
         [
@@ -529,6 +539,8 @@ def test_scaffold_purpose_non_ascii_written_literally(repo: Path) -> None:
             "dev",
             "--purpose",
             "day-to-day — checks: pytest",
+            "--tracking",
+            "none",
         ],
     )
     assert res.exit_code == 0, res.output
@@ -768,7 +780,7 @@ def test_tracking_auto_follows_issues_enabled(
 ) -> None:
     _initial_commit(repo)
     monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: answer)
-    res = scaffold(repo, "--backend", "github", "--ci", "none")
+    res = scaffold(repo, "--backend", "github", "--ci", "none", "--tracking", "auto")
     assert res.exit_code == 0, res.output
     assert _profiles(repo)["tracking"] == {"type": expected}
 
@@ -776,7 +788,7 @@ def test_tracking_auto_follows_issues_enabled(
 def test_tracking_auto_unknown_is_inconclusive(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _initial_commit(repo)
     monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: None)
-    res = scaffold(repo, "--backend", "github", "--ci", "none")
+    res = scaffold(repo, "--backend", "github", "--ci", "none", "--tracking", "auto")
     assert res.exit_code == 2
     assert "--tracking" in res.output
     assert not (repo / PROFILES).exists()
@@ -857,3 +869,166 @@ def test_a_declared_block_survives_a_second_profile(repo: Path) -> None:
     data = _profiles(repo)
     assert set(data["profiles"]) == {"dev", "admin"}
     assert data["ci"] == {"type": "none"} and data["forge"] == {"type": "github"}
+
+
+# --- phase 5 review fixes ---
+
+
+def _origin(repo: Path, url: str) -> None:
+    _git(repo, "remote", "add", "origin", url)
+
+
+def test_a_missing_forge_binary_is_a_refusal_naming_tracking(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr import gh as _gh
+
+    monkeypatch.undo()  # drop the autouse fake: exercise the real client path
+    monkeypatch.setenv("HOME", str(repo.parent / "home"))
+
+    def gone(args: list[str]) -> str:
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(_gh, "_run_gh", gone)
+    _initial_commit(repo)
+    _origin(repo, "https://github.com/acme/widgets.git")
+    res = scaffold(repo, "--ci", "none", "--tracking", "auto")
+    assert res.exit_code == 2 and "--tracking" in res.output
+    assert not (repo / PROFILES).exists()
+
+
+def test_an_unexpected_exception_restores_the_v1_file(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    body = "profiles: {}\nbackend: github\n"
+    (repo / PROFILES).write_text(body)
+
+    def boom(*a: object, **k: object) -> bool:
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", boom)
+    with pytest.raises(RuntimeError):
+        scaffold_profile(
+            repo, "dev", "p", tools=[], secrets=[], ci="none", tracking="auto", backend="github"
+        )
+    assert (repo / PROFILES).read_text() == body
+
+
+def test_an_unrecognised_forge_is_never_asked(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _initial_commit(repo)
+    _origin(repo, "https://code.example.invalid/acme/widgets.git")
+
+    def boom(*a: object, **k: object) -> bool:
+        raise AssertionError("no forge call expected")
+
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", boom)
+    res = scaffold(repo, "--ci", "none", "--tracking", "auto")
+    assert res.exit_code == 2 and "--backend" in res.output and "--tracking" in res.output
+    assert not (repo / PROFILES).exists()
+
+
+def test_a_self_hosted_gitlab_is_asked_on_its_own_host(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr import glab as _glab
+
+    monkeypatch.undo()
+    monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    seen: list[tuple[list[str], str | None]] = []
+
+    def run(args: list[str], *, host: str | None = None, cwd: object = None) -> str:
+        seen.append((args, host))
+        return '{"issues_enabled": true}'
+
+    monkeypatch.setattr(_glab, "_run_glab", run)
+    _initial_commit(repo)
+    _origin(repo, "https://gl.example.invalid/grp/proj.git")
+    res = scaffold(repo, "--backend", "gitlab", "--ci", "none", "--tracking", "auto")
+    assert res.exit_code == 0, res.output
+    assert seen == [(["api", "projects/grp%2Fproj"], "gl.example.invalid")]
+    assert _profiles(repo)["tracking"] == {"type": "gitlab"}
+
+
+def test_github_enterprise_is_asked_as_host_owner_repo(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr import gh as _gh
+
+    monkeypatch.undo()
+    monkeypatch.setenv("HOME", str(repo.parent / "home"))
+    seen: list[list[str]] = []
+
+    def run(args: list[str]) -> str:
+        seen.append(args)
+        return '{"hasIssuesEnabled": false}'
+
+    monkeypatch.setattr(_gh, "_run_gh", run)
+    _initial_commit(repo)
+    _origin(repo, "https://ghe.example.invalid/acme/widgets.git")
+    res = scaffold(
+        repo,
+        "--backend",
+        "github",
+        "--host",
+        "ghe.example.invalid",
+        "--ci",
+        "none",
+        "--tracking",
+        "auto",
+    )
+    assert res.exit_code == 0, res.output
+    assert seen == [
+        ["repo", "view", "ghe.example.invalid/acme/widgets", "--json", "hasIssuesEnabled"]
+    ]
+
+
+def test_over_a_v1_file_auto_detects_what_the_migration_derived(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _initial_commit(repo)
+    (repo / ".devcontainer").mkdir()
+    (repo / PROFILES).write_text("profiles: {}\nbackend: github\n")
+    monkeypatch.setattr("fr.services.init.issues_enabled_for", lambda *a, **k: True)
+    res = scaffold(repo, "--ci", "none", "--tracking", "auto")
+    assert res.exit_code == 0, res.output
+    assert _profiles(repo)["tracking"] == {"type": "github"}  # asked, not assumed
+    # ...and an fr-only CI is inconclusive rather than silently `none`
+    _fr_only_ci(repo)
+    (repo / PROFILES).write_text("profiles: {}\nbackend: github\n")
+    res = scaffold(repo, "--force")
+    assert res.exit_code == 2 and "--ci" in res.output
+    assert (repo / PROFILES).read_text() == "profiles: {}\nbackend: github\n"
+
+
+def test_a_forge_change_redetects_blocks_the_new_forge_rejects(repo: Path) -> None:
+    _initial_commit(repo)
+    assert (
+        scaffold(
+            repo, "--backend", "github", "--ci", "github-actions", "--tracking", "github"
+        ).exit_code
+        == 0
+    )
+    res = runner.invoke(
+        app,
+        [
+            "init",
+            "scaffold",
+            "--repo",
+            str(repo),
+            "--profile",
+            "admin",
+            "--purpose",
+            "x",
+            "--backend",
+            "gitlab",
+            "--host",
+            "gl.example.invalid",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    data = _profiles(repo)
+    assert data["forge"]["type"] == "gitlab"
+    assert data["ci"] == {"type": "none"}  # github-actions no longer fits; no CI files
+    assert data["tracking"] == {"type": "none"}  # autouse fake: issues off

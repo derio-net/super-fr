@@ -40,7 +40,10 @@ def issues_enabled_for(repo_root: Path, forge_type: str, host: str | None) -> bo
     slug = origin_slug(repo_root)
     if slug is None or forge_type not in FORGE_TYPES:
         return None
-    return client_for_backend(forge_type, host=host).issues_enabled(slug)  # type: ignore[arg-type]
+    repo = slug
+    if forge_type == "github" and host and host != "github.com":
+        repo = f"{host}/{slug}"  # GitHub Enterprise: gh takes HOST/OWNER/REPO
+    return client_for_backend(forge_type, host=host).issues_enabled(repo)  # type: ignore[arg-type]
 
 
 def _check_type(service: str, value: str, allowed: tuple[str, ...], flag: str) -> None:
@@ -87,11 +90,32 @@ def resolve_init_services(
     forge_type = forge["type"] if forge else "github"
     if forge_type not in FORGE_TYPES:
         raise ServicesError(f"forge type {forge_type!r} is not one of {', '.join(FORGE_TYPES)}")
-    forge_host = forge.get("host") if forge else None
+    from fr._hosts import origin_hostname, self_hosted_hostname
+
+    forge_host = (forge.get("host") if forge else None) or self_hosted_hostname(
+        origin_hostname(repo_root)
+    )
 
     def kept(name: str) -> dict[str, str] | None:
+        """An already-declared block — unless the forge now in force no longer
+        accepts it (a `--backend` change), in which case `auto` re-detects."""
         block = existing.get(name)
-        return {str(k): str(v) for k, v in block.items()} if isinstance(block, dict) else None
+        if not isinstance(block, dict):
+            return None
+        block = {str(k): str(v) for k, v in block.items()}
+        try:
+            if name == "ci":
+                model: CiService | TrackingService = CiService(**block)
+            else:
+                model = TrackingService(**block)
+            validate_services(
+                ForgeService(**(forge or {"type": forge_type})),
+                model if name == "ci" else CiService(type="none"),
+                model if name == "tracking" else TrackingService(type="none"),
+            )
+        except (ServicesError, ValidationError):
+            return None
+        return block
 
     ci_block: dict[str, str] | None
     if ci != AUTO:
@@ -110,6 +134,14 @@ def resolve_init_services(
     if tracking != AUTO:
         tracking_block = {"type": tracking}
     elif (tracking_block := kept("tracking")) is None:
+        if forge is None:
+            # Only the `github` fallback: asking github.com about a project that
+            # may live elsewhere could even answer for a same-named repo there.
+            raise ServicesError(
+                "cannot tell which forge this repo is on (its origin is not a "
+                "recognised one) — pass `--backend <github|gitlab|gitea>` "
+                f"(and `--host`), or `--tracking none` / `--tracking {forge_type}`"
+            )
         enabled = issues_enabled_for(repo_root, forge_type, forge_host)
         if enabled is None:
             raise ServicesError(

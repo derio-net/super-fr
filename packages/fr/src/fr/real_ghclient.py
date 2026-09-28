@@ -382,7 +382,7 @@ class RealGhClient:
             return None
         try:
             raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "hasIssuesEnabled"]))
-        except (_gh.GhError, ValueError):
+        except (_gh.GhError, ValueError, OSError):
             return None
         value = raw.get("hasIssuesEnabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None

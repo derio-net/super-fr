@@ -252,7 +252,7 @@ class RealGlabClient(UnsupportedBatchOps):
             return None
         try:
             raw = json.loads(self._api(f"projects/{quote(repo, safe='')}"))
-        except (_glab.GlabError, ValueError):
+        except (_glab.GlabError, ValueError, OSError):
             return None
         value = raw.get("issues_enabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None

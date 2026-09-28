@@ -125,11 +125,13 @@ cursor is stale: reporting what an old run cost is exactly the audit's job.
 `fr services` (2026-09-28 fr-profiles-services, spec §3.F) only READS
 `.devcontainer/fr-profiles.yaml` and the repo's CI files and writes nothing; it
 must keep working on an unmigrated repo, whose version-1 file it reports as
-`source: legacy`. `fr init` (scaffold) stays exempt while it writes: it touches
+`source: legacy`. `fr init` stays exempt: `fr init scaffold` touches
 only the fr-profiles artifact, always at that kind's current version, and runs
 the 1 -> 2 migration in process over an existing version-1 file first (refusing,
 untouched, one it cannot migrate) — it never leaves, or proceeds over, a stale
-one (spec 2026-09-28 fr-profiles-services §3.E.1)."""
+one (spec 2026-09-28 fr-profiles-services §3.E.1). `fr init migrate` renames
+vk-profiles.yaml to fr-profiles.yaml and so can leave a version-1 file, which the
+next gated command migrates."""
 
 EXEMPT_COMMANDS: Final[frozenset[str]] = frozenset({"migrate", *READ_ONLY_COMMANDS})
 """`fr migrate` cannot require itself — and `fr migrate artifacts` (dry-run by

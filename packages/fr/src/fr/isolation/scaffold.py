@@ -639,6 +639,7 @@ def _prepare_profiles(
     path = repo_root / ".devcontainer" / "fr-profiles.yaml"
     kind = artifact_kind("profiles")
     original: bytes | None = path.read_bytes() if path.is_file() else None
+    migrated = False
     try:
         if original is not None:
             version = kind.read_version(path)
@@ -650,16 +651,23 @@ def _prepare_profiles(
             if version < kind.current_version:
                 rewrite_to_services(path)
                 kind.write_version(path, kind.current_version)
+                migrated = True
         existing = (yaml.safe_load(path.read_text()) if path.is_file() else None) or {}
+        if migrated:
+            # What the migration just derived is not the operator's declaration:
+            # `auto` detects those again (and asks, when it cannot).
+            existing.pop("ci", None)
+            existing.pop("tracking", None)
         return resolve_init_services(
             repo_root, existing, backend=backend, host=host, ci=ci, tracking=tracking
         )
-    except (ArtifactMigrationError, ServicesError, IsolationError) as err:
+    except BaseException as err:
+        # ANY failure leaves the file as found — an unexpected one included.
         if original is not None and path.read_bytes() != original:
             path.write_bytes(original)
-        if isinstance(err, IsolationError):
-            raise
-        raise IsolationError(str(err)) from err
+        if isinstance(err, ArtifactMigrationError | ServicesError):
+            raise IsolationError(str(err)) from err
+        raise
 
 
 def _update_profiles_yaml(
