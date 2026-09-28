@@ -156,7 +156,8 @@ def test_add_visual_state_and_interaction_writes_the_field(
     )
     assert result.exit_code == 0, result.output
     (added,) = [
-        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        r
+        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
         if r.id == "new-row"
     ]
     assert added.visual is not None
@@ -179,7 +180,8 @@ def test_add_visual_state_repeatable(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
     assert result.exit_code == 0, result.output
     (added,) = [
-        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        r
+        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
         if r.id == "new-row"
     ]
     assert added.visual is not None
@@ -216,9 +218,7 @@ def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyP
     from fr.acceptance.model import load_matrix
 
     root = make_repo(tmp_path, row())
-    assert (
-        _invoke(root, monkeypatch, *ADD_ARGS, "--visual-state", "a").exit_code == 0
-    )
+    assert _invoke(root, monkeypatch, *ADD_ARGS, "--visual-state", "a").exit_code == 0
     moved = _invoke(
         root,
         monkeypatch,
@@ -232,7 +232,8 @@ def test_set_status_preserves_visual(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
     assert moved.exit_code == 0, moved.output
     (row_after,) = [
-        r for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
+        r
+        for r in load_matrix(root / "docs" / "acceptance" / "matrix.yaml").rows
         if r.id == "new-row"
     ]
     assert row_after.visual is not None

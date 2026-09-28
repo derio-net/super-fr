@@ -25,8 +25,7 @@ RECORD_VISUAL_MIGRATION = SchemaMigration(
     to_version=4,
     fn=guard_record,
     description=(
-        "record: add `AcceptanceItem.visual` and `StepRecord.visual` — stamp only, "
-        "no body change"
+        "record: add `AcceptanceItem.visual` and `StepRecord.visual` — stamp only, no body change"
     ),
 )
 
