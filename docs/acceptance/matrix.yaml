@@ -5179,13 +5179,18 @@ rows:
       CI.'
   - id: visual-evidence-capture-script
     capability: fr-goal-evidence
-    acceptance: A capture script named in visual evidence must exist and be re-run by the
-      stage that names it; the skills prefer such a script to agent-driven browsing.
+    acceptance: A capture script named in visual evidence must exist and be re-run by
+      the stage that names it; the skills prefer such a script to agent-driven browsing.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_visual.py
+      - super-fr:tests/unit/test_skill_visual_evidence.py
+    status: ci
+    notes: 'Phase 3: gate half already required a named, executed script (test_a_named_script_*
+      in test_run_evidence_visual.py, phase 2); the skills-prefer-a-script prose half
+      lands here (test_skill_visual_evidence.py).'
   - id: visual-evidence-live-run
     capability: fr-goal-evidence
     acceptance: On a live fr-goal run of a UI feature with a `visual` row, the executor,
