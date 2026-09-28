@@ -3,7 +3,7 @@ run: 2026-09-28-feat-batch-service-split-2
 workflow: fr-goal@1
 branch: feat/batch-service-split-2
 started: '2026-09-28T19:14:10+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -207,9 +207,9 @@ steps:
           visual: none
           findings: input-r6-no-issue-filing-skill-prose,p6r-explainer-reason,p6r-fragment-mitigation
   journal-check:
-    state: failed
-    at: '2026-09-28T23:15:28+00:00'
-    exit: 1
+    state: done
+    at: '2026-09-28T23:16:06+00:00'
+    exit: 0
     stdout: "7 out-of-scope finding(s): p2r-splitlines, p4r-cross-repo-tracking, \n\
       p4r-other-forge-writes, p5r-skill-doc, p5r-local-hint, p5r-comment-roundtrip,\
       \ \np5r-test-docstring\n"
