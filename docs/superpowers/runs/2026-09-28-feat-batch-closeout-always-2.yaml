@@ -158,7 +158,7 @@ steps:
           reviewer: acc2b9b364a594aab
           findings: p4-r1,p4-r2
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-09-28T21:32:17+00:00'
           agent: aeecfac05770a8eed
@@ -166,6 +166,8 @@ steps:
           harness: claude-code
           model: claude-sonnet-5
           session: 3fb23231-6b20-4e17-8549-56b4ab43f7b5
+          returned: '2026-09-28T21:44:39+00:00'
+          outcome: done
   journal-check:
     state: pending
   deliver:

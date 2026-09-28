@@ -317,3 +317,39 @@ Fixed in 26d185bd: the local ref is checked first. A GitRefusal (ambiguous remot
 ### p4-r2 · finding [refuted] (reviewer: in scope) · (Minor) plan 04.yaml files: names tests/unit/test_closeout_brief.py, but the touched file is test_run_closeout.py (phase 4)
 
 Refuted as a code defect. The plan's `files:` is a planning estimate that deliver's `fr plan proportionality` compares against the real diff. The mismatch is reported there, where the PR body shows it, and the plan's own metadata is not something this phase's code gets wrong. There is nothing to fix in the change itself.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-explainer-names-no-literal-archive-command created=2026-09-28T21:44:39+00:00 phase=5 -->
+### p5-explainer-names-no-literal-archive-command · discovery · docs/explainers/01-fr-goal.md never named `fr archive <plan-dir>` as the close-out (phase 5)
+
+Grepped `docs/explainers/*.md` and `*.html` for `fr archive` /
+close-out prose (spec "Change fragment and explainers", §E). The only
+hit is `01-fr-goal.md`'s "Post-merge close-out" section (§9), and it
+describes the step only descriptively — "the exact commands to archive
+the plan, its journal, and its run record through a housekeeping PR" —
+never spelling out `fr archive <plan-dir>` literally. `index.html` and
+`fr-isolation.html` (hand-authored, no `.md` source per
+explainers-currency.md's known gap 1) have no `fr archive` mention
+either. Per the spec's own fallback, no explainer edit or re-render was
+needed; this replaces the PR-body note the spec asks for.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-skill-line-budget-forced-relay-prose-into-existing-bullets created=2026-09-28T21:44:39+00:00 phase=5 -->
+### p5-skill-line-budget-forced-relay-prose-into-existing-bullets · discovery · The 120-line skill cap (test_skill_validation.py) meant the new relay sentences had to be folded into existing lines, not appended as new ones (phase 5)
+
+fr-debugging, fr-execute and fr-isolation were each already at or near
+the 120-line `SKILL.md` ceiling `TestSkillValidation.test_under_120_lines`
+enforces. A naive addition of the close-out relay sentence as new
+lines pushed all three over (123/125/124 lines) on the first pass.
+Fixed by merging the new prose into the existing Deliver/step-5/Cleanup
+sentences (fr-debugging), tightening the step-5 caveat paragraph
+(fr-execute), and folding the new bullet into the existing `down`
+bullet in fr-isolation's Cleanup contract, rather than adding a
+standalone bullet. No content was dropped, only re-wrapped — worth
+flagging because a line-wrap edit like this can silently break a
+substring a tripwire greps for (which happened once here: a mid-phrase
+wrap split `fr pickup` across two lines in fr-execute and failed
+`test_tripwire_closeout_relay.py` on the mirrors until re-wrapped).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-09-28T21:44:39+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+covered by the refactor field above.
