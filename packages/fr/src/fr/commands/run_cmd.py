@@ -2108,14 +2108,19 @@ def _same_agent(observed: str | None, expected: str) -> bool:
     return observed in (expected, bare)
 
 
-def _wrote_before(log: Path, opened: str | None) -> bool:
+def _wrote_before(
+    log: Path, opened: str | None, modified: _dt.datetime, slack: _dt.timedelta
+) -> bool:
     """Did a command of the orchestrator's that wrote `log` start BEFORE the unit
-    opened and end after it? Only chooses the refusal's wording (gh#765)."""
+    opened, end after it, and write the bytes on disk? Only chooses the
+    refusal's wording (gh#765)."""
     from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
     opened_at = parse_timestamp(opened)
     earlier = orchestrator_wrote_since(os.environ, log, "1970-01-01T00:00:00+00:00")
-    return opened_at is not None and any(e >= opened_at for _, e in earlier or ())
+    return opened_at is not None and any(
+        e >= opened_at and s - slack <= modified <= e + slack for s, e in earlier or ()
+    )
 
 
 def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
@@ -2170,7 +2175,7 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     # and a filesystem's mtime may round (review r1-1).
     slack = _dt.timedelta(seconds=1)
     if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
-        if not windows and _wrote_before(path, opened):
+        if not windows and _wrote_before(path, opened, modified, slack):
             # gh#765: the suite shared one call with the `fr run advance` that
             # opened this unit, so that call predates it. Still refused — the
             # suite must run during delivery — but "nobody wrote it" misled.
