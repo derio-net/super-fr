@@ -5208,6 +5208,10 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_visual_evidence.py
+    status: ci
+    notes: 'Phase 3: fr-execute''s Browser check step, fr-phase-executor''s return contract,
+      and fr-goal/fr-brainstorming/fr-plan''s visual mentions land; test_skill_visual_evidence.py
+      pins them.'
