@@ -100,11 +100,26 @@ def _repair_in_passing(repo_root: Path, only_plans: frozenset[str] | None) -> No
 
 def _branch_refs_or_exit(repo_root: Path, branch: str, remote: str) -> list[str]:
     """Every ref of `branch` that resolves, fetched the way verify-merge does
-    (§B.2) — or exit 2 when neither `<remote>/<b>` nor the local `<b>` does."""
-    refs, _fetched = resolve_branch_refs(subprocess_runner, repo_root, branch, remote)
+    (§B.2) — or exit 2 when neither `<remote>/<b>` nor the local `<b>` does,
+    or when the remote branch's state is unknown.
+
+    Unknown is verify-merge's `branch_fetched=False`: the fetch failed and
+    `ls-remote` did not confirm the branch was deleted. The refs this clone
+    holds may then be stale — a post-merge push from another clone would be
+    invisible — so the mutating step refuses exactly where verify-merge would
+    not verify (review p2 #1)."""
+    refs, branch_fetched = resolve_branch_refs(subprocess_runner, repo_root, branch, remote)
     if not refs:
         err_console.print(
             f"branch {branch} resolves neither locally nor as {remote}/{branch} — nothing to diff",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if not branch_fetched:
+        err_console.print(
+            f"refusing to archive — could not fetch {remote}/{branch}, and {remote} did not "
+            f"confirm the branch was deleted, so its remote state is unknown; check it with "
+            f"`fr isolation verify-merge --branch {branch}`",
             soft_wrap=True,
         )
         raise typer.Exit(2)

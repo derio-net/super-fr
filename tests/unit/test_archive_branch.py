@@ -362,3 +362,27 @@ def test_branch_that_touched_no_artifact_is_a_clean_no_op(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
     assert f"nothing to archive for {BRANCH}" in result.output
     assert _status(repo) == ""
+
+
+# --- Phase 2 review fixes -------------------------------------------------------
+
+
+def test_branch_refuses_when_the_remote_branch_state_is_unknown(tmp_path, monkeypatch):
+    """review p2 #1: the branch fetch fails and ls-remote cannot confirm the
+    branch was deleted — only the local ref resolves, and a post-merge push
+    from another clone could be hiding on the remote. verify-merge would not
+    verify here; neither may the mutating step."""
+    repo = _base(tmp_path)
+    _branch(repo)
+    _journal(repo, "debug", "2026-09-28-bug")
+    _commit(repo, "journal")
+    _push_branch(repo)
+    _squash_merge(repo)
+    _git(repo, "remote", "set-url", "origin", str(tmp_path / "moved-away.git"))
+
+    result = _invoke(monkeypatch, repo, ["archive", "--branch", BRANCH])
+    assert result.exit_code == 2, result.output
+    assert f"origin/{BRANCH}" in result.output
+    assert f"fr isolation verify-merge --branch {BRANCH}" in result.output
+    assert (repo / SP / "journals" / "debug" / "2026-09-28-bug.md").exists()
+    assert _status(repo) == ""
