@@ -258,7 +258,11 @@ def test_f1_repair_yes_in_a_clone_of_another_repo_refuses(
     assert gh.calls == []
 
 
-def test_f2_no_plan_and_no_work_opens_no_housekeeping_block(tmp_path: Path) -> None:
+def test_no_plan_under_tracking_none_files_nothing_but_still_closes_out(tmp_path: Path) -> None:
+    """With no plan, tracking none removes only the issue-filing lines. The
+    housekeeping block stays: close-out is an always condition keyed on the
+    branch (#733/#790), which superseded this phase's earlier "no block when
+    there is nothing to commit" rule."""
     closeout_fixtures._spec_file(tmp_path, with_test_plan=False)
     closeout_fixtures._spec_out_of_scope_finding(tmp_path)
     _profiles(tmp_path, NONE)
@@ -266,8 +270,9 @@ def test_f2_no_plan_and_no_work_opens_no_housekeeping_block(tmp_path: Path) -> N
     del state.steps["plan"]
     brief = closeout_brief(tmp_path, state)
     assert "stay recorded in the journal and PR body; no tracker is configured" in brief
-    assert "fr isolation up --branch" not in brief
-    assert "housekeeping PR" not in brief
+    assert "file an issue" not in brief
+    assert "--tracked-by" not in brief
+    assert f"fr isolation up --branch chore/closeout-{state.run}" in brief
 
 
 def test_f3_a_deferred_ci_does_not_refuse_apply_when_tracking_is_valid(tmp_path: Path) -> None:
