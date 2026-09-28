@@ -22,10 +22,9 @@ This skill drives the agent-side work; the mechanics live in the CLI.
 `ci` / `scheduled` = automated, cannot drift · `skipped` = verification exists
 but not in CI (warning, backfill owed) · `not-implemented` = nothing yet
 (warning) · `failing` = known red, `fr acceptance check` exits 2 and CI fails.
-Statuses move **explicitly, never silently** — with `fr acceptance set-status`,
-never a hand-edit. The drift channel is precisely
-the hand-tracked claims — when in doubt between ci and skipped, **choose skipped**.
-Do not inflate coverage; the operator audits statuses at review.
+Statuses move **explicitly, never silently** — with `fr acceptance
+set-status`, never a hand-edit; when in doubt between ci and skipped,
+**choose skipped**. Do not inflate coverage; the operator audits at review.
 
 ## Backfill an existing repo
 
@@ -56,16 +55,14 @@ warns on unflipped rows — fix or record why in the completion note.
 ## Live verification on another harness
 
 Some claims are owed a **live** run: a real binary with a real model, not a
-unit test that sets the harness by hand. You can pay that debt without being on
-the harness in question. The session doing the work (the **driver**) steers
-a second agent session (the **target**) in a neighbouring terminal. Driver
-and target can be any two harnesses. Nothing below depends on which one you
-are.
-
-This needs a terminal multiplexer that lets one session start, prompt and
-read another. herdr does this today when the driver runs inside it
-(`HERDR_ENV=1`). Learn its current CLI from `herdr --skill` rather than from
-memory. Any multiplexer with the same abilities works.
+unit test that sets the harness by hand. You can pay that debt without being
+on the harness in question — the session doing the work (the **driver**)
+steers a second agent session (the **target**) in a neighbouring terminal.
+Driver and target can be any two harnesses; nothing below depends on which.
+This needs a terminal multiplexer that lets one session start, prompt and read
+another — herdr does this today when the driver runs inside it (`HERDR_ENV=1`,
+CLI from `herdr --skill`, not memory); any multiplexer with the same abilities
+works.
 
 1. **Build a scratch fixture from real artifacts.** Make a throwaway git repo
    with an fr-isolation linked worktree and its marker, and a run parked just
@@ -93,10 +90,9 @@ memory. Any multiplexer with the same abilities works.
    came from the target's own env. Then close the target's terminal and delete
    the fixture.
 
-A closed command list proves fr behaves correctly under the target harness. It
-does not prove the target follows a skill's prose over a long run. For that,
-prompt the skill itself and wait longer. Everything else stays the same, and
-the notes must say which of the two was proven.
+A closed command list proves fr behaves correctly under the target harness; it
+does not prove the target follows a skill's prose over a long run — for that,
+prompt the skill itself and wait longer. The notes must say which was proven.
 
 ## Mid-flight additions (encouraged, then defended)
 
@@ -106,7 +102,7 @@ load-bearing) — never silently widen or narrow scope. Every addition is
 presented in the PR body ("rows added since brainstorm", generated via
 `fr acceptance check --added-since <base-ref>`) with a one-line defense.
 
-## Refs and the gate
+## Refs, requirement origins and post-merge rows
 
 Refs are `<repo>:<path>[#Lline|#anchor]` — own repo by its own name, sibling
 repos verified only where a checkout exists (`--sibling-root`, default `..`).
@@ -115,18 +111,10 @@ never errors, on a moved ref. `fr acceptance report` renders the HTML;
 `fr acceptance status` is the terminal nag; `fr acceptance digest` feeds the
 weekly "Acceptance debt" issue upsert.
 
-## Requirement origins and post-merge rows
-
 A row born from a spec's `## Requirements` table cites the requirement, not
-just the spec: `--origin <repo>:<spec-path>#R<n>` (a row may repeat `--origin`
-to cover several ids). `deliver`'s `requirement-rows` gate matches on this
-`#R<n>` fragment, so a row missing it still counts toward "any row citing this
-spec" but cites nothing more precisely than the whole spec.
-
-A row a live, operator-driven run alone can prove — never a unit test —
-carries `--verify post-merge` (`fr acceptance add --verify post-merge …`).
-`deliver`'s `requirement-rows` gate skips it whatever its status; it stays
-`not-implemented`, keeps nagging in `fr acceptance status`, and the PR body
-lists it under `## Post-merge verification owed`. `set-status` never touches
-`verify` — moving the row off `not-implemented` after the live run is the
-ordinary transition once the evidence exists.
+just the spec: `--origin <repo>:<spec-path>#R<n>` (repeat `--origin` for
+several ids). A row only a live, operator-driven run can prove — never a
+unit test — carries `--verify post-merge`; `deliver`'s `requirement-rows`
+gate then skips it whatever its status, it keeps nagging in `fr acceptance
+status`, and the PR body lists it under `## Post-merge verification owed`.
+`set-status` never touches `verify`.
