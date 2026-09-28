@@ -4351,6 +4351,15 @@ rows:
     levels: {}
     status: not-implemented
     notes: Born at spec-review (d9); target level unit.
+  - id: requirements-spec-review-hard-first
+    capability: fr-goal-methodology
+    acceptance: Spec review runs on the hard tier and checks traceability to the input
+      before anything else
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: Born at spec-review (d8, d10); target level unit.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
