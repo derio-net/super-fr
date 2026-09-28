@@ -405,6 +405,26 @@ class TestHandoff:
             ),
         ]
 
+    def test_operator_input_none_is_byte_identical_and_a_string_renders_first(self) -> None:
+        """gh#778: the operator-input section leads the handoff; None changes nothing."""
+        from fr.journal.model import compose_handoff
+
+        base = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
+        none = compose_handoff(
+            self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s", operator_input=None
+        )
+        assert none == base
+        out = compose_handoff(
+            self._entries(),
+            phase=2,
+            depends_on=(1,),
+            scope="plan",
+            slug="s",
+            operator_input="## Operator input (x)\n\nbody",
+        )
+        assert out.index("## Operator input (x)") < out.index("## Open findings")
+        assert out.index("# Handoff (phase 2)") < out.index("## Operator input (x)")
+
     def test_open_findings_render_in_full(self) -> None:
         from fr.journal.model import compose_handoff
 

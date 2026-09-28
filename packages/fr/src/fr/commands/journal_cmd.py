@@ -35,8 +35,10 @@ from fr.journal.model import (
     resolution_record_id,
     resolve_journal_read_path,
     serialize_entry,
+    spec_journal_slug,
     unauthorized_fixes,
 )
+from fr.operator_input import OperatorInput
 from fr.run.model import AnsweredBy
 
 console = Console(highlight=False)
@@ -712,6 +714,18 @@ def check(
         raise typer.Exit(1)
 
 
+def _load_operator_input(root: Path, spec_rel: str) -> OperatorInput | None:
+    """The spec journal's operator input (gh#778); an unparseable journal is exit 2."""
+    from fr.operator_input import load
+
+    try:
+        return load(root, spec_rel)
+    except JournalParseError as e:
+        spec_path = resolve_journal_read_path(root, "spec", spec_journal_slug(Path(spec_rel).stem))
+        err_console.print(f"[red]spec journal {spec_path} is not parseable:[/red] {e}")
+        raise typer.Exit(2) from e
+
+
 @journal_app.command("handoff")
 def handoff(
     scope: str = typer.Option(..., "--scope", help="plan (only plan journals have phases)."),
@@ -733,6 +747,7 @@ def handoff(
     there is nothing to curate yet.
     """
     from fr.journal.model import compose_handoff
+    from fr.operator_input import to_markdown
     from fr.parser import PlanSchemaError, parse
 
     _validate_scope(scope)
@@ -746,22 +761,33 @@ def handoff(
     # Read-resolve so a handoff still composes after the journal was archived
     # alongside its spec/plan.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
+    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
+    # The plan is parsed BEFORE the missing-journal return (gh#778): phase 1 of
+    # a fresh plan has no journal yet and must still get the operator input.
+    plan_error: Exception | None = None
+    plan = None
+    try:
+        plan = parse(plan_path)
+    except (PlanSchemaError, OSError) as e:
+        plan_error = e
     if not path.exists():
-        return  # fail-open: nothing written yet, nothing to curate
+        if plan is None or plan.spec_path is None:
+            return  # fail-open: nothing written yet, nothing to curate
+        oi = _load_operator_input(root, plan.spec_path)
+        if oi is not None:
+            typer.echo(to_markdown(oi) + "\n")
+        return
     try:
         entries = _load(path)
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
-    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
-    try:
-        plan = parse(plan_path)
-    except (PlanSchemaError, OSError) as e:
+    if plan is None:
         err_console.print(
             f"[red]cannot compose a dependency-scoped handoff: plan {plan_path} "
-            f"is not parseable ({e})[/red]"
+            f"is not parseable ({plan_error})[/red]"
         )
-        raise typer.Exit(2) from e
+        raise typer.Exit(2) from plan_error
     headers = [p.phase for p in plan.phases if p.phase.number == phase]
     if not headers:
         known = sorted(p.phase.number for p in plan.phases)
@@ -773,4 +799,14 @@ def handoff(
     # Emit RAW — this feeds a dispatch brief. A Rich console would treat `[...]`
     # in a title/body (Markdown links, `[PR #12]`) as markup and drop it, same
     # reason `render` echoes raw.
-    typer.echo(compose_handoff(entries, phase=phase, scope=scope, slug=slug, depends_on=depends_on))
+    oi = _load_operator_input(root, plan.spec_path) if plan.spec_path else None
+    typer.echo(
+        compose_handoff(
+            entries,
+            phase=phase,
+            scope=scope,
+            slug=slug,
+            depends_on=depends_on,
+            operator_input=to_markdown(oi) if oi is not None else None,
+        )
+    )

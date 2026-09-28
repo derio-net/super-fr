@@ -6477,3 +6477,109 @@ def test_a_gate_on_a_harness_with_no_question_reader_records_unobserved(
     assert "unobserved=operator-gate" in flat and harness in flat
     record = load_run_state(repo, "r1").steps["brainstorm"]
     assert units.evidence_of(record, "step/brainstorm").get("unobserved") == "operator-gate"
+
+
+# --- gh#778: the operator's raw input rides the member briefs ---------------
+
+_OI_SPEC = "docs/superpowers/specs/2026-09-28-x-design.md"
+
+
+def _seed_spec_journal(repo: Path, text: str) -> None:
+    p = repo / "docs/superpowers/journals/specs/2026-09-28-x.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text)
+
+
+def _emit_spec_on_plan(repo: Path) -> None:
+    from fr.run.model import save_run_state
+
+    state = load_run_state(repo, "r1")
+    plan = state.steps["plan"]
+    emitted = {**(plan.emitted or {}), "spec": _OI_SPEC}
+    save_run_state(
+        repo,
+        state.model_copy(
+            update={"steps": {**state.steps, "plan": plan.model_copy(update={"emitted": emitted})}}
+        ),
+    )
+
+
+def _oi_journal() -> str:
+    from fr.journal.model import JournalEntry, serialize_entry
+
+    def e(**kw: object) -> JournalEntry:
+        base: dict[str, object] = dict(scope="spec", created="2026-09-28T00:00:00")
+        return JournalEntry(**{**base, **kw})  # type: ignore[arg-type]
+
+    entries = [
+        e(
+            kind="discovery",
+            id="i1",
+            title="raw",
+            body="## Brief\n\nsame style, 680-720",
+            input=True,
+        ),
+        e(kind="decision", id="d1", title="one", body="answer one"),
+        e(kind="decision", id="d2", title="two", body="answer two"),
+    ]
+    return "\n".join(serialize_entry(x) for x in entries)
+
+
+def _grouped_oi_repo(tmp_path: Path, journal: str | None) -> tuple[Path, Path]:
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _emit_spec_on_plan(repo)
+    if journal is not None:
+        _seed_spec_journal(repo, journal)
+    return repo, shipped
+
+
+def test_member_briefs_carry_the_operator_input(tmp_path: Path) -> None:
+    from fr.journal.model import parse_journal
+    from fr.operator_input import from_entries, to_brief
+
+    journal = _oi_journal()
+    repo, shipped = _grouped_oi_repo(tmp_path, journal)
+    oi = from_entries(parse_journal(journal))
+    assert oi is not None
+    want = to_brief(oi)
+
+    first = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert first.exit_code == 0, first.output
+    brief = _brief_of(first.output)
+    assert brief["step"] == "code"
+    assert brief["operator_input"] == want
+    assert brief["operator_input"]["input"][0]["body"] == "## Brief\n\nsame style, 680-720"
+
+    resolved = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"],
+    )
+    assert resolved.exit_code == 0, resolved.output
+    second = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert second.exit_code == 0, second.output
+    brief2 = _brief_of(second.output)
+    assert brief2["step"] == "peer-review"
+    assert brief2["operator_input"] == want
+
+
+def test_member_brief_operator_input_is_null_without_an_input_entry(tmp_path: Path) -> None:
+    repo, shipped = _grouped_oi_repo(tmp_path, None)
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["operator_input"] is None
+
+
+def test_unparseable_spec_journal_refuses_before_claiming_the_unit(tmp_path: Path) -> None:
+    repo, shipped = _grouped_oi_repo(tmp_path, "<!-- fr:journal kind=nonsense -->\n")
+    result = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert result.exit_code == 2, result.output
+    assert "journals/specs/2026-09-28-x.md" in result.output
+    state = load_run_state(repo, "r1")
+    assert units.unit_states(state.steps["implement"]).get("phase/1/code") != "running"
+    from fr.commands.run_cmd import _held_record
+
+    assert _held_record(state.steps["implement"], "phase/1/code") is None
