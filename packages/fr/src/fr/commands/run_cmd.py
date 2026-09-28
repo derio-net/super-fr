@@ -969,10 +969,13 @@ def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
     return step.gate == "operator" and record.state == "blocked" and outcome == "done"
 
 
-ANNOUNCEMENT = "round 1 of 2"
+ANNOUNCEMENTS = ("a 2nd round may follow", "round 1 of 2")
 """What a design-risk second round's first round must say, case-insensitively,
 in one of its question texts (spec 2026-09-26 §3.C): the operator is told a
-second round will follow before answering the first."""
+second round may follow before answering the first. The first is the label fr-goal
+prints (gh#766: a round's total is a forecast, so the label no longer counts it);
+the second is the pre-gh#766 label, still accepted so a session that asked round 1
+under the old prose is not refused by the fr it upgraded to."""
 
 
 def question_rounds_refusal(
@@ -1012,11 +1015,15 @@ def question_rounds_refusal(
         questions is not None
         and questions.rounds == 2
         and questions.trigger == "design-risk"
-        and not any(ANNOUNCEMENT in text.lower() for text in rounds[0].question_texts)
+        and not any(
+            announcement in text.lower()
+            for text in rounds[0].question_texts
+            for announcement in ANNOUNCEMENTS
+        )
     ):
         return (
             "the operator was not told a second round would follow: no round-1 question "
-            "says `Round 1 of 2`. A design-risk second round is announced in round 1, "
+            "says `a 2nd round may follow`. A design-risk second round is announced in round 1, "
             "before the operator answers it."
         )
     return None
@@ -4248,7 +4255,7 @@ def resolve_cmd(
         None,
         "--round-two-trigger",
         help="design-risk | operator-request — why a second round was asked "
-        "(with --question-rounds 2). A design-risk round 1 must announce `Round 1 of 2`.",
+        "(with --question-rounds 2). A design-risk round 1 must announce `a 2nd round may follow`.",
     ),
     round_two_reason: str | None = typer.Option(
         None,

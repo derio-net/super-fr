@@ -4228,9 +4228,10 @@ rows:
   - id: fr-goal-second-round-announced-and-verified
     capability: fr-goal-methodology
     acceptance: 'A brainstorm may take a second question round only when the record
-      declares rounds: 2 with a trigger (design-risk announced as Round 1 of 2, or operator-request);
-      fr run resolve refuses a round count that differs from the declaration, a design-risk
-      round 2 that round 1 never announced, and any third round.'
+      declares rounds: 2 with a trigger (design-risk announced in round 1 as `a 2nd
+      round may follow`, or operator-request); fr run resolve refuses a round count
+      that differs from the declaration, a design-risk round 2 that round 1 never announced,
+      and any third round.'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-26-dynamic-brainstorm-question-rounds-design.md
     levels:
@@ -4241,7 +4242,10 @@ rows:
       checks the declared question rounds against the transcript''s answered rounds
       (spec §3.C verdict table), through both the --record path and the --question-rounds
       flags; every refusal (count mismatch, unannounced design-risk round 2, a third
-      round) is tested byte-identical in CI.'
+      round) is tested byte-identical in CI. gh#766 moved the announcement from the
+      label ''Round 1 of 2'' (a forecast printed as a count) to the phrase ''a 2nd round
+      may follow''; the old token is still accepted for sessions begun under the old
+      prose, and the verdict table pins both plus a split round''s per-dialog labels.'
   - id: fr-goal-contract-prose-two-rounds
     capability: fr-goal-methodology
     acceptance: Every surface stating fr-goal's operator contract (skill, mirrors, explainer,
@@ -4258,12 +4262,13 @@ rows:
       README, OpenCode /fr-goal command) to the sized, at-most-two-round contract. The
       tripwire (normalised, casefolded text) asserts the old fixed-batch phrase list
       is absent from all of them; on the canonical fr-goal skill and both mirrors it
-      asserts the behavioural markers (questions: {rounds, (Round 1 of, (Round 2 of
-      2), design-risk, operator-request, never a round 3, tool-call round separation,
-      announced round 2 as a ceiling, gate-question-rounds journal entry) and that no
-      prose-only cross-examination instruction remains; on fr-brainstorming, the explainer
-      .md, README and index.html it asserts only that a question round is described.
-      It is a wording check, not a behavioural one.'
+      asserts the behavioural markers (questions: {rounds, the (Round 1 · questions
+      / (Round 2 · questions labels and the a 2nd round may follow forecast (gh#766),
+      design-risk, operator-request, never a round 3, tool-call round separation, announced
+      round 2 as a ceiling, gate-question-rounds journal entry), each dialog of a split
+      round naming its part, no (Round N of total label, and that no prose-only cross-examination
+      instruction remains; on fr-brainstorming, the explainer .md, README and index.html
+      it asserts only that a question round is described.'
   - id: deliver-tests-log-background
     capability: fr-goal-methodology
     acceptance: deliver's tests=<log> gate accepts a suite the orchestrator ran in the

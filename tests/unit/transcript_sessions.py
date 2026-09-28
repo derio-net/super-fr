@@ -261,7 +261,7 @@ def question_rows(
     """The captured `AskUserQuestion` exchange (call + result), re-keyed to
     `tool_use_id` and moved to `timestamp` — the building block of a question
     ROUND (spec 2026-09-26 §3.C). `first_question` replaces the text of the
-    call's first question (where a `Round 1 of 2` announcement would sit);
+    call's first question (where an `a 2nd round may follow` announcement would sit);
     `answered=False` swaps in the declined string form, as `asked_at` does;
     `sidechain=True` marks both records as a subagent's."""
     question, answer = copy_of(records(QUESTION))

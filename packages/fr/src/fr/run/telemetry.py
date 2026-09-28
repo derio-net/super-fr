@@ -486,7 +486,7 @@ class Round:
     (`ROUND_NEUTRAL_TOOLS` excepted). Only answered rounds are ever built.
 
     `question_texts` holds every `questions[].question` and `header` of its
-    calls, in order — where a `Round 1 of 2` announcement is looked for.
+    calls, in order — where an `a 2nd round may follow` announcement is looked for.
     """
 
     question_texts: tuple[str, ...]
