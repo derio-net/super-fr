@@ -4460,9 +4460,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R5
     - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_operator_input_prose.py
+    status: ci
+    notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
+      in the phase-executor agent (#778); d5: unit tests suffice, no live row.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
