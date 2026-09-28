@@ -460,6 +460,7 @@ def validate_spec(path: Path) -> list[str]:
 
 _PROFILES_SERVICE_KEYS = ("forge", "ci", "tracking")
 _PROFILES_LEGACY_KEYS = ("backend", "host")
+_PROFILES_V2_KEYS = ("schema_version", "profiles", "default", "forge", "ci", "tracking")
 
 
 def validate_profiles(path: Path) -> list[str]:
@@ -471,7 +472,10 @@ def validate_profiles(path: Path) -> list[str]:
     service models: an unknown or deferred type (`jenkins`/`jira` name the
     follow-up), a cross-forge tracker and a missing required host all fail, and
     so does a leftover top-level `backend:`/`host:`, which the resolver would
-    silently ignore. A version-1 file is checked through the frozen
+    silently ignore, and any other top-level key outside the v2 shape (a typo
+    such as `trackng:` would otherwise fall back to the forge's own tracker).
+    With no `forge:` the cross-service rules run against the forge derived
+    offline, as the resolver derives it. A version-1 file is checked through the frozen
     `fr.services.legacy.ProfilesV1` — the only reader of that shape; that it is
     stale is the stamp check's business, not this one's.
     """
@@ -485,7 +489,7 @@ def validate_profiles(path: Path) -> list[str]:
         TrackingService,
         validate_services,
     )
-    from fr.services.resolve import is_version_two
+    from fr.services.resolve import is_version_two, resolve_forge
 
     data, problems = _load_mapping(path)
     if problems or data is None:
@@ -498,6 +502,12 @@ def validate_profiles(path: Path) -> list[str]:
         f"`forge: {{type: ..., host: ...}}` and `{key}:` is ignored"
         for key in _PROFILES_LEGACY_KEYS
         if key in data
+    ]
+    problems += [
+        f"unknown top-level key `{key}:` (expected one of "
+        f"{', '.join(_PROFILES_V2_KEYS)}) — a misspelt service falls back to its default"
+        for key in data
+        if key not in _PROFILES_V2_KEYS and key not in _PROFILES_LEGACY_KEYS
     ]
     models: dict[str, Any] = {"forge": ForgeService, "ci": CiService, "tracking": TrackingService}
     parsed: dict[str, Any] = {}
@@ -517,10 +527,16 @@ def validate_profiles(path: Path) -> list[str]:
                 else:
                     msg = str(err["msg"]).removeprefix("Value error, ")
                     problems.append(f"invalid field `{field}`: {msg}")
-    forge = parsed.get("forge")
-    if forge is not None and len(parsed) == len([k for k in models if k in data]):
-        # The cross-service rules need the forge's type; an undeclared ci or
-        # tracking is the forge's own, which those rules always accept.
+    if len(parsed) == len([k for k in models if k in data]):
+        # The cross-service rules need the forge. An undeclared one is derived
+        # offline exactly as the resolver derives it (origin remote, leniently —
+        # phase-2 review r2), so a file `resolve_services` would refuse cannot
+        # pass here. An undeclared ci or tracking is the forge's own, which
+        # those rules always accept.
+        forge = parsed.get("forge")
+        if forge is None:
+            derived = resolve_forge(path.parent.parent, lenient=True)
+            forge = ForgeService(type=derived.type, host=derived.host)
         try:
             validate_services(
                 forge,

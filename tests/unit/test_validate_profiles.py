@@ -94,3 +94,25 @@ def test_a_valid_v1_file_passes_structure(tmp_path: Path) -> None:
 def test_an_invalid_v1_file_fails(tmp_path: Path, text: str) -> None:
     problems = _v1(tmp_path, text)
     assert any(text.split(":")[0] in p for p in problems), problems
+
+
+# --- phase-2 review --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "block",
+    ["tracking:\n  type: gitlab\n", "ci:\n  type: gitlab-ci\n"],
+    ids=["cross-forge-tracker", "hostless-foreign-ci"],
+)
+def test_an_undeclared_forge_is_derived_for_the_cross_service_rules(
+    tmp_path: Path, block: str
+) -> None:
+    """r2: with no `forge:` the forge is derived offline (no origin here, so
+    github) and the rules still run — fail closed, as `resolve_services` does."""
+    assert _problems(tmp_path, HEAD + block)
+
+
+def test_an_unknown_top_level_key_fails(tmp_path: Path) -> None:
+    """r3: a typo would silently fall back to the forge's own tracker."""
+    problems = _problems(tmp_path, HEAD + "forge:\n  type: github\ntrackng:\n  type: none\n")
+    assert any("trackng" in p for p in problems), problems

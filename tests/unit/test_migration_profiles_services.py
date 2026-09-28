@@ -309,3 +309,130 @@ def test_a_gated_command_refuses_over_an_unmigrated_v1_file(
     assert code != 0
     assert GATE_REFUSAL in out
     assert (repo / PROFILES_REL).read_bytes() == before
+
+
+# --- phase-2 review --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "remote",
+    ["https://forge.unknown-host.example/o/r.git", None],
+    ids=["unknown-origin", "no-origin"],
+)
+def test_an_unknown_forge_is_not_locked_in_as_declared(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    remote: str | None,
+) -> None:
+    """r1: the `github` FALLBACK is not a declaration. With no `backend:`, no
+    `host:` and an origin fr does not recognise, `forge:`/`tracking:` stay
+    undeclared, so the source stays `default` and the warning keeps firing."""
+    from fr import _hosts
+
+    repo = _repo(tmp_path, remote=remote, profiles=BODY)
+    data = _migrate(repo)
+    assert data["schema_version"] == 2
+    assert "forge" not in data and "tracking" not in data and "ci" not in data
+    services = resolve_services(repo)
+    assert services.forge.source == "default" and services.tracking.source == "default"
+    if remote:
+        _hosts._WARNED_UNKNOWN_HOSTS.discard("forge.unknown-host.example")
+        _hosts.detect_backend(repo)
+        assert "not a recognized forge" in capsys.readouterr().err
+
+
+def test_an_unknown_forge_with_fr_only_ci_still_declares_ci_none(tmp_path: Path) -> None:
+    """r1: detection that IS conclusive for the fallback type is written, so the
+    value `fr services` showed before migrating (fr's scaffold discounted) holds."""
+    repo = _repo(
+        tmp_path,
+        remote="https://forge.unknown-host.example/o/r.git",
+        profiles=BODY,
+        files={".github/workflows/acceptance-report.yml": "on: push\n"},
+    )
+    before = resolve_services(repo).ci.type
+    data = _migrate(repo)
+    assert "forge" not in data
+    assert data["ci"] == {"type": "none"} and before == "none"
+    assert resolve_services(repo).ci.type == "none"
+
+
+def test_a_host_without_backend_is_scaffolds_github(tmp_path: Path) -> None:
+    """`fr init scaffold --host ghe.example.com` (backend github, the default)
+    wrote `host:` alone — so the pair declares a GitHub Enterprise forge."""
+    repo = _repo(
+        tmp_path,
+        remote="https://ghe.example.com/o/r.git",
+        profiles="host: ghe.example.com\n" + BODY,
+    )
+    before = resolve_services(repo).forge
+    data = _migrate(repo)
+    assert data["forge"] == {"type": "github", "host": "ghe.example.com"}
+    assert before.type == "github" and before.host == "ghe.example.com"
+
+
+def test_an_invalid_service_block_is_refused_naming_the_block(tmp_path: Path) -> None:
+    """r5: no legacy key is present, so the refusal must not say "mixes"."""
+    repo = _repo(tmp_path, remote=None, profiles=BODY + "ci:\n  type: travis\n")
+    before = (repo / PROFILES_REL).read_bytes()
+    report = run_migrations(repo, dry_run=False)
+    [failure] = report.failed
+    assert "mixes" not in str(failure.error)
+    assert "travis" in str(failure.error)
+    assert (repo / PROFILES_REL).read_bytes() == before
+
+
+def test_a_bom_round_trips(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, remote=None, profiles=b"\xef\xbb\xbfbackend: github\n" + BODY.encode())
+    _migrate(repo)
+    raw = (repo / PROFILES_REL).read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf") and raw.count(b"\xef\xbb\xbf") == 1
+    assert b"backend" not in raw
+
+
+def test_a_host_nested_under_a_profile_is_kept(tmp_path: Path) -> None:
+    text = "backend: gitlab\nprofiles:\n  dev:\n    host: db.example.com\n    secrets: []\n"
+    repo = _repo(tmp_path, remote=None, profiles=text)
+    data = _migrate(repo)
+    assert data["profiles"] == {"dev": {"host": "db.example.com", "secrets": []}}
+    assert data["forge"] == {"type": "gitlab"}
+
+
+def test_a_legacy_key_with_a_continuation_line(tmp_path: Path) -> None:
+    text = "backend: gitlab\nhost:\n  gitlab.example.com\n" + BODY
+    repo = _repo(tmp_path, remote=None, profiles=text)
+    data = _migrate(repo)
+    assert data["forge"] == {"type": "gitlab", "host": "gitlab.example.com"}
+    assert (repo / PROFILES_REL).read_text().count("gitlab.example.com") == 1
+
+
+def test_an_empty_file(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, remote="https://github.com/o/r.git", profiles="")
+    data = _migrate(repo)
+    assert data == {
+        "schema_version": 2,
+        "forge": {"type": "github"},
+        "ci": {"type": "none"},
+        "tracking": {"type": "github"},
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '"backend": github\n' + BODY,
+        "  backend: github\n  default: dev\n",
+        "{backend: github, default: dev}\n",
+    ],
+    ids=["quoted-key", "indented-document", "flow-style"],
+)
+def test_a_layout_the_line_rewrite_cannot_handle_is_refused_byte_identical(
+    tmp_path: Path, text: str
+) -> None:
+    """r4/r6: refused — with a message about the layout — and left untouched."""
+    repo = _repo(tmp_path, remote=None, profiles=text)
+    before = (repo / PROFILES_REL).read_bytes()
+    report = run_migrations(repo, dry_run=False)
+    [failure] = report.failed
+    assert "layout" in str(failure.error)
+    assert (repo / PROFILES_REL).read_bytes() == before

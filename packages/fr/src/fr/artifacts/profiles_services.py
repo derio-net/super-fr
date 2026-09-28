@@ -16,8 +16,10 @@ top-level `backend:`/`host:`; version 2 nests it under `forge:` beside `ci:` and
    (`fr.services.render.render_services`, shared with `fr init scaffold`), and
    every other byte — comments, blank lines, ordering, a BOM — is kept. Before
    writing, the new text is parsed back and must say exactly what was intended;
-   a file whose layout defeats the line surgery (a flow-style document, say) is
-   refused instead. Every refusal fires before a byte moves, so a refused file
+   a file whose layout defeats the line surgery — a flow-style or indented
+   top-level mapping, a quoted key, a `...` document end — is refused instead,
+   whether the rewritten text then fails to parse or parses to the wrong thing.
+   Every refusal fires before a byte moves, so a refused file
    is left byte-identical and reported as that one artifact's failure.
 3. **It survives its own crash window.** `fn` writes the body; the runner writes
    the stamp. A body that is already wholly version 2 — service blocks that the
@@ -25,11 +27,12 @@ top-level `backend:`/`host:`; version 2 nests it under `forge:` beside `ci:` and
    wrote before dying, so `fn` returns and lets the runner stamp it. Answering
    "is this already v2?" is the one legitimate use of the live models here.
 
-What it writes (§3.D.3): `forge` from `backend` (else the origin remote's
-inference) with `host` only when one was declared; `ci` as detected offline
+What it writes (§3.D.3): `forge` from `backend` (else a RECOGNISED origin, see
+`v1_services`) with `host` only when one was declared; `ci` as detected offline
 (`fr.services.detect.detected_ci_type` — fr's own acceptance scaffold is not
 CI), the same function the resolver's legacy branch uses, so `fr services` shows
-the same value before and after; `tracking` as the forge's own.
+the same value before and after; `tracking` as the forge's own. A forge whose
+type is only the `github` fallback is NOT declared (phase-2 review r1).
 
 No network: this runs at the CLI-entry gate, often offline or in a pod. The
 origin remote is read with `git remote get-url`, which is local.
@@ -93,15 +96,60 @@ def _is_wholly_v2(data: dict[str, Any]) -> bool:
     return True
 
 
+def _service_problems(data: dict[str, Any]) -> str:
+    """Why the service blocks in `data` do not read through the live models."""
+    from pydantic import ValidationError
+
+    from fr.services.model import CiService, ForgeService, TrackingService
+
+    models = {"forge": ForgeService, "ci": CiService, "tracking": TrackingService}
+    reasons: list[str] = []
+    for key, model in models.items():
+        if key not in data:
+            continue
+        try:
+            model.model_validate(data[key])
+        except ValidationError as e:
+            reasons += [
+                f"`{key}`: " + str(err["msg"]).removeprefix("Value error, ") for err in e.errors()
+            ]
+    return "; ".join(reasons)
+
+
 def v1_services(
     repo_root: Path, backend: str | None, host: str | None
 ) -> dict[str, dict[str, str]]:
-    """The three service blocks a version-1 `backend:`/`host:` pair stands for
-    in `repo_root` — what the migration writes."""
-    from fr._hosts import backend_for_hostname, origin_hostname
-    from fr.services.detect import detected_ci_type
+    """The service blocks a version-1 `backend:`/`host:` pair stands for in
+    `repo_root` — what the migration writes.
 
-    forge_type = backend or backend_for_hostname(origin_hostname(repo_root))
+    `forge:` (and with it `tracking:`) is declared only when its type is
+    KNOWN (phase-2 review r1): from `backend:`; else from an origin (or a
+    declared `host:`) that `DEFAULT_HOST_BACKENDS` recognises; else, for a
+    `host:` with no `backend:`, `github` — `fr init scaffold` never wrote
+    `backend: github` (it was the default), so that pair IS a declared GitHub
+    Enterprise forge. With neither key and an unrecognised or missing origin,
+    the type is only `detect_backend`'s `github` FALLBACK: declaring it would
+    lock a possibly wrong forge in and silence the "not a recognized forge"
+    warning, so both blocks are left out and resolve as `default`, exactly as
+    before. `ci:` is then written only when the files decide it for the
+    fallback type (real CI, or fr's own scaffold alone); with no CI config at
+    all it is left to the resolver's own default, which says the same.
+    """
+    from fr._hosts import DEFAULT_HOST_BACKENDS, origin_hostname
+    from fr.services.detect import detect_ci, detected_ci_type
+
+    origin = origin_hostname(repo_root)
+    forge_type = (
+        backend
+        or (DEFAULT_HOST_BACKENDS.get(origin) if origin else None)
+        or (DEFAULT_HOST_BACKENDS.get(host) if host else None)
+        or ("github" if host else None)
+    )
+    if forge_type is None:
+        fallback = "github"
+        if detect_ci(repo_root, fallback) == "absent":
+            return {}
+        return {"ci": {"type": detected_ci_type(repo_root, fallback)}}
     forge = {"type": forge_type}
     if host:
         forge["host"] = host
@@ -149,7 +197,11 @@ def rewrite_to_services(path: Path) -> None:
     if _is_wholly_v2(data):
         return
     if any(key in data for key in ("forge", "ci", "tracking")):
-        raise _refuse(path, "it mixes version-1 `backend:`/`host:` with version-2 service blocks")
+        if any(key in data for key in _LEGACY_KEYS):
+            raise _refuse(
+                path, "it mixes version-1 `backend:`/`host:` with version-2 service blocks"
+            )
+        raise _refuse(path, f"a service block is invalid ({_service_problems(data)})")
     try:
         v1 = ProfilesV1.model_validate(data)
     except ValidationError as e:
@@ -165,12 +217,16 @@ def rewrite_to_services(path: Path) -> None:
     new_text = body + render_services(services, newline=newline)
 
     expected = {k: v for k, v in data.items() if k not in _LEGACY_KEYS} | services
+    layout = (
+        "its layout defeats a line-level rewrite (a flow-style or indented top-level "
+        "mapping, a quoted key, an anchor or a `...` document end?)"
+    )
     try:
         reread = yaml.safe_load(new_text)
-    except yaml.YAMLError as e:  # pragma: no cover — the self-check below is the guard
-        raise _refuse(path, f"the rewritten text does not parse ({e})") from e
+    except yaml.YAMLError as e:
+        raise _refuse(path, f"{layout}: the rewritten text does not parse ({e})") from e
     if reread != expected:
-        raise _refuse(path, "its layout defeats a line-level rewrite (a flow-style mapping?)")
+        raise _refuse(path, f"{layout}: the rewritten text does not say what was intended")
     write_text_atomic(path, bom + new_text)
 
 
