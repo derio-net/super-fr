@@ -75,6 +75,27 @@ def test_pickup_branch_refuses_an_unresolvable_branch(tmp_path: Path) -> None:
     assert "does-not-exist" in output
 
 
+def test_pickup_branch_names_the_remote_ambiguity_instead_of_claiming_origin(
+    tmp_path: Path,
+) -> None:
+    """Two remotes, neither `origin`: fr cannot tell which remote-tracking ref
+    to consult, so the refusal says why rather than claiming it checked a
+    nonexistent `origin/<b>` (review p4-r1)."""
+    repo = _repo_with_branch(tmp_path, "feat/x")
+    for name in ("upstream", "fork"):
+        subprocess.run(
+            [*GIT, "-C", str(repo), "remote", "add", name, f"https://example.invalid/{name}.git"],
+            check=True,
+        )
+
+    result = _invoke(repo, ["pickup", "--branch", "gone"])
+
+    assert result.exit_code == 2
+    output = " ".join((result.output or "").split()) + " ".join((result.stderr or "").split())
+    assert "origin/gone" not in output
+    assert "remote" in output and "gone" in output
+
+
 def test_pickup_branch_refuses_combination_with_plan_dir(tmp_path: Path) -> None:
     repo = _repo_with_branch(tmp_path, "feat/x")
 

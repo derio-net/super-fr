@@ -154,14 +154,23 @@ def _refuse_unresolvable_branch(repo_root: Path, branch: str) -> None:
     `fr archive --branch`'s `resolve_branch_refs`: this only decides whether
     to print a brief, never whether to move anything, so a network round trip
     buys nothing here."""
-    remote = remote_name(repo_root)
-    remote_label = remote if isinstance(remote, str) else "origin"
     if ref_exists(repo_root, branch):
         return
-    if isinstance(remote, str) and ref_exists(repo_root, f"{remote}/{branch}"):
+    remote = remote_name(repo_root)
+    if not isinstance(remote, str):
+        # Never guess a remote the repo may not have (review p4-r1): say why
+        # the remote-tracking ref could not be consulted.
+        why = "this repo has no remote" if remote is None else remote.reason
+        err_console.print(
+            f"branch {branch} does not resolve locally, and no remote-tracking ref "
+            f"could be checked: {why}",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if ref_exists(repo_root, f"{remote}/{branch}"):
         return
     err_console.print(
-        f"branch {branch} resolves neither locally nor as {remote_label}/{branch}",
+        f"branch {branch} resolves neither locally nor as {remote}/{branch}",
         soft_wrap=True,
     )
     raise typer.Exit(2)
