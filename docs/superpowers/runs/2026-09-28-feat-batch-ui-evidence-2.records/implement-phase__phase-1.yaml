@@ -45,7 +45,6 @@ journal:
       different code path, `fr.record.apply` directly rather than the CLI)
       — but a reader diffing task boundaries against the plan should know
       this before assuming P1.T3's diff is self-contained.
-    review_scope: out
   - kind: discovery
     title: "render_row_block did not emit verify-style optional fields generically"
     body: >-
@@ -56,7 +55,6 @@ journal:
       needs the same one-line addition here or it round-trips as `None`
       silently (caught in this phase only because the CLI round-trip test
       exercises it explicitly).
-    review_scope: out
   - kind: discovery
     title: "Shape for phase 2/3: where the visual vocabulary now lives"
     body: >-
@@ -73,6 +71,5 @@ journal:
       predicates (spec §C), the `fr-goal.yaml` manifest's `visual` evidence
       name, or the skills/agent prose (spec §E) — all still owed by a later
       phase.
-    review_scope: out
 resolves: []
 evidence: {}
