@@ -738,11 +738,14 @@ def _resolve_target(target: str, assignments: list[tuple[int, str, str]], at: in
 
 def _is_log(target: str | None, log: Path) -> bool:
     """Does the resolved path `target` name `log` (see `_WRITE_TARGET` for how a
-    relative one is compared)?"""
+    relative one is compared)? An absolute one is compared as a real path on
+    both sides: through a symlinked directory (macOS `/tmp` → `/private/tmp`)
+    the literal target never equals the resolved log (gh#758). `realpath`,
+    not `Path.resolve`: it never raises, and every transcript word lands here."""
     if target is None:
         return False
     if Path(target).is_absolute():
-        return Path(target) == log
+        return os.path.realpath(target) == os.path.realpath(log)
     parts = PurePosixPath(target).parts
     while parts and parts[0] == "..":
         parts = parts[1:]
