@@ -457,9 +457,13 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
     # named. For the run cursor this is now the load-bearing assertion: it WAS
     # written to, and it must still parse afterwards.
     parse_run_state(paths["run"].read_text())
-    assert load_matrix(paths["matrix"]).schema_version == 2
+    from fr.artifacts import artifact_kind
+
+    matrix_current = artifact_kind("matrix").current_version
+    assert load_matrix(paths["matrix"]).schema_version == matrix_current
     stamped = paths["matrix"].read_text().splitlines(keepends=True)
-    assert [ln for ln in stamped if ln != "schema_version: 2\n"] == [
+    stamp_line = f"schema_version: {matrix_current}\n"
+    assert [ln for ln in stamped if ln != stamp_line] == [
         "org: derio-net\n",
         "repo: super-fr\n",
         "rows:\n",
@@ -467,7 +471,11 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
-    for name in ("journal", "spec", "usage"):  # matrix left at 1 -> 2 (spec 2026-09-28 §H)
+    for name in (
+        "journal",
+        "spec",
+        "usage",
+    ):  # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H)
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"

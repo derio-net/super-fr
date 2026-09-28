@@ -58,6 +58,13 @@ the same capability boundary as #420, read from the other side).
   `fr journal render` is the escape hatch, not the default: if the handoff is missing
   anything you need to implement the phase, STOP and say so — do not guess (the
   completeness of that handoff is the contract).
+- the **operator input** — the operator's raw input and recorded answers, verbatim,
+  read-only, in your task prompt and as the first section of the handoff.
+  The spec governs: build against the spec, never against this text. Where the raw
+  input says something that neither the spec nor a recorded answer covers, do not
+  silently implement it or ignore it — record a `finding` against this phase whose
+  id starts `input-`, with `review_scope: in`. A recorded answer that overrides the
+  input is not a finding.
 
 ## What you do
 
@@ -122,6 +129,9 @@ re-enters its context:
   `blocked` with the blocker named; with no record, the steps ticked and the
   ids of journal entries you added;
 - the test command run and its pass/fail summary;
+- when the phase's linked acceptance rows carry `visual`, that the record's
+  `visual:` section is filled — screenshots taken, opened, and named by
+  `shows`;
 - files touched.
 
 Keep the prose minimal; the record holds the detail.

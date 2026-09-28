@@ -210,6 +210,19 @@ report it received from a helper. The tool can confirm who wrote that log and
 when; it cannot confirm the command was a real test suite. That check is aimed
 at a relayed "all green", not at deliberate forgery.
 
+A user-visible UI requirement asks for the same kind of evidence, in its own
+shape. Its acceptance row names the states and the controls it has to cover,
+and the executor, the reviewer, and delivery each open their own
+screenshots — never someone else's — which the tool confirms straight from
+the transcript rather than taking on trust. A script's pass or fail is not
+enough by itself. Where a script can drive the interface reliably, it is
+worth writing anyway, because it makes every later rerun cheap: one command,
+then a look at what it produced, instead of paying to re-drive the interface
+by hand each time. What the tool checks is coverage and opening — that every
+named state and interaction has a screenshot, and that a real agent actually
+looked at it —
+never what the picture shows; judging that stays the reviewer's job.
+
 **A step declares what it needs and what it emits.** Artifacts are named —
 `spec`, `plan`, `pr` — so a later step can find the specification an earlier
 step wrote, and so the tool can tell whether the inputs a step depends on
@@ -582,6 +595,12 @@ of this change, each with a reason. Together they trace every requirement
 back to what you actually said, rather than to what the agent inferred you
 meant.
 
+Your raw input does not stop at the specification. It stays recorded, verbatim,
+in the specification's journal, and later — when the code is built and
+reviewed — it travels on beside your recorded answers as a read-only reference.
+The specification still governs; the input is there only so a clause the
+requirements lost along the way can be caught.
+
 That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they
 wrote, so `spec-review` dispatches a separate, read-only reviewer,
@@ -642,6 +661,21 @@ dependencies, and links to the acceptance criteria it advances
 (`plugins/super-fr/skills/fr-plan/SKILL.md:15-38`,
 `plugins/super-fr/skills/fr-plan/SKILL.md:61-95`).
 
+How many phases is a question with a default answer: one agentic phase per
+independently reviewable ask. The reason is cost, not taste. Every phase pays a
+fixed round trip — an executor dispatched, a reviewer dispatched, and the
+orchestrator's own turns to resolve and record both — and that price does not
+shrink when the phase does. One measured run split a two-ask feature into four
+phases, and the orchestrator's bookkeeping cost five times what the code did.
+So a one-phase plan is not a shortcut; for most features it is the right shape.
+A second phase has to say why it exists: `fr-plan` records a
+`phase-split-<plan>-p<N>` decision in the spec's journal, naming either the ask
+the phase serves on its own or one of three other reasons — it needs a different
+model tier, a risky piece should land before the rest, or the diff is too large
+for one review. The walking skeleton, which smokes the delivery path before the
+expensive work starts, is folded into the first ask's phase as its first task
+rather than standing as a phase with nothing to deliver.
+
 Reviewing that plan is the shape's one command step, and a good illustration of
 why the distinction between kinds matters. `fr plan self-review` runs against
 the plan the previous step emitted, and its exit code decides whether the run
@@ -649,7 +683,11 @@ moves on; nobody has to judge whether the output "looks fine." The CLI errors on
 defects such as dependency cycles and manual work hidden inside an agentic
 phase; when a local Test Plan and readable acceptance matrix are present, it
 also errors on unknown acceptance IDs, and it checks that a plan naming its own
-workflow shape names one that actually resolves.
+workflow shape names one that actually resolves. When the spec carries a
+Requirements table, it follows each phase's acceptance rows back to the
+requirements they cite, and errors on a phase that serves no ask of its own or
+on a later phase with no recorded reason for existing — so the sizing rule above
+is checked, not merely suggested.
 
 Hidden manual work is worth dwelling on, because it has a twin. The agent that
 carries out an agentic phase — the phase executor of step 6 below — is a
@@ -692,6 +730,15 @@ Front-loading is reserved for genuine prerequisites; then the manual
 instructions are themselves the first deliverable
 (`plugins/super-fr/skills/fr-goal/SKILL.md:62-70`).
 
+Not everything a human does deserves a phase, though. A manual phase is for a
+prerequisite the agentic work depends on, or for a real dispatch or deploy. An
+operator *verification* step — take a screenshot, check the live page, watch the
+next real run — is a line in the spec's Test Plan, or an acceptance row marked
+`verify: post-merge`, not a phase: it proves the work rather than being part of
+it, and a phase built around it only adds the round trip described in step 4.
+`fr plan self-review` warns when the plan ends in a manual phase of a single
+step, because that is almost always a verification step in a phase's clothing.
+
 Where a manual phase may sit is a rule the tooling checks, not a convention you
 are trusted to keep: a manual phase must be in the plan's trailing block, or
 already complete. Turned around, that reads as the reason it exists — no manual
@@ -724,8 +771,11 @@ there waiting for you.
 Now the central loop from the opening diagram begins. The shape says this step
 runs once per plan phase, so the phases are worked through in dependency order,
 one at a time. Each one goes to a dedicated phase executor, which is given the
-phase's scope, the specification, and the running journal of what earlier phases
-discovered. It writes a failing test, implements the behavior, and cleans up
+phase's scope, the specification, the running journal of what earlier phases
+discovered, and — read-only — your original input together with the answers you
+gave. The specification governs: if that input asks for something neither the
+specification nor your answers cover, the executor (and later the reviewer)
+reports it as a finding rather than silently building it or ignoring it. It writes a failing test, implements the behavior, and cleans up
 without changing that behavior. This test-first cycle is commonly called
 **TDD**, or test-driven development.
 
@@ -888,8 +938,10 @@ judgment — listed with the note explaining what was actually built.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files
-changed that no phase said it would touch, and the diff's size against the
-plan's own estimate, flagged when it runs past twice that. It exists because an
+changed that no phase said it would touch, the diff's size against the
+plan's own estimate, flagged when it runs past twice that, and how many agentic
+phases the plan used against the requirements they serve, naming any phase with
+no ask of its own. It exists because an
 autonomous run's usual failure is not a wrong change but a larger one than
 asked for, and a reviewer looking at a green diff has no easy way to see what
 was not supposed to be there. It is a report, not a gate — nothing in it blocks

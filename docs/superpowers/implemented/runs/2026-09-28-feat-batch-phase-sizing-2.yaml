@@ -1,0 +1,111 @@
+schema_version: 7
+run: 2026-09-28-feat-batch-phase-sizing-2
+workflow: fr-goal@1
+branch: feat/batch-phase-sizing-2
+started: '2026-09-28T19:13:49+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-09-28T20:09:05+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-28-phase-sizing-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 7 requirements:4b3b9e3e05c4a071d1c8c7949428a6b5a45a65d53e717b0a7bef34add59bf34a
+  spec-review:
+    state: done
+    at: '2026-09-28T20:17:02+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-28T20:09:23+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 6abc4931-7695-498d-b6b0-6bfc92730400
+          returned: '2026-09-28T20:17:02+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: acb4099ba44a19249
+          requirements: 7 requirements:4b3b9e3e05c4a071d1c8c7949428a6b5a45a65d53e717b0a7bef34add59bf34a
+          coverage: '32 spans: R=16 deferred=4 context=12 missing=0'
+          findings: s1,s2,s3,s4,s5,s6
+  plan:
+    state: done
+    at: '2026-09-28T20:19:10+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-09-28-phase-sizing
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-28T20:17:09+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 6abc4931-7695-498d-b6b0-6bfc92730400
+          returned: '2026-09-28T20:19:10+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-09-28T20:19:15+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-09-28T21:20:39+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T20:19:24+00:00'
+          agent: a103c7ecd4ae3c042
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 6abc4931-7695-498d-b6b0-6bfc92730400
+          returned: '2026-09-28T21:00:17+00:00'
+          outcome: done
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-09-28T21:00:17+00:00'
+          agent: a9c9326542c951883
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 6abc4931-7695-498d-b6b0-6bfc92730400
+          returned: '2026-09-28T21:20:39+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: a9c9326542c951883
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
+  journal-check:
+    state: done
+    at: '2026-09-28T21:20:49+00:00'
+    exit: 0
+    stdout: ''
+  deliver:
+    state: done
+    at: '2026-09-28T21:27:15+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/792
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-09-28T21:20:50+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 6abc4931-7695-498d-b6b0-6bfc92730400
+          returned: '2026-09-28T21:27:14+00:00'
+          outcome: done
+        evidence:
+          tests: full-suite.log@0d1a3eae577f
+          proportionality: 1f31d2e606d5409236cd105cd96be0979b5be61f:f3a893ae3a6419c4bbd59eea93addac4ce7bf113ff5c54edc113288cd1c5fc1c
+          requirement-rows: '5 rows: ci=5; post-merge=0'

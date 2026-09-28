@@ -48,7 +48,7 @@ def test_fr_debugging_deliver_relays_pickup_branch(skill: Path) -> None:
 def test_fr_execute_step5_relays_pickup_branch(skill: Path) -> None:
     text = skill.read_text()
     assert "fr pickup --branch" in text, (
-        f"{skill.relative_to(REPO_ROOT)} step 5 no longer relays `fr pickup --branch "
+        f"{skill.relative_to(REPO_ROOT)} step 6 no longer relays `fr pickup --branch "
         "<phase-branch>` for the standalone dispatched flow (spec §E, R8). Restore it "
         "in the canonical skill and re-sync both mirrors."
     )

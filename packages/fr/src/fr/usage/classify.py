@@ -210,9 +210,16 @@ def _bash(command: str) -> Classification:
     return _of("shell_other")
 
 
+def canonical_tool(name: str) -> str:
+    """`name` normalised to its Claude Code spelling (`read_file`/`view` ->
+    `Read`, `terminal` -> `Bash`, ...) — the ONE alias table, also read by the
+    `visual` evidence transcript predicates (`fr.run.telemetry`)."""
+    return _ALIASES.get(name, name)
+
+
 def classify(name: str, target: str = "") -> Classification:
     """What the tool call `name(target)` was for. Pure; never raises."""
-    tool = _ALIASES.get(name, name)
+    tool = canonical_tool(name)
     if tool == "Bash":
         return _bash(target or "")
     if tool in ("Edit", "Write"):

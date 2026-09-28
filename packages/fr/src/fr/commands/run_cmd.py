@@ -85,7 +85,7 @@ from fr.run.model import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from fr.record.model import QuestionRounds
+    from fr.record.model import QuestionRounds, VisualEvidence
     from fr.run.telemetry import Round
 from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
@@ -1395,6 +1395,7 @@ _VERIFIABLE_EVIDENCE = (
     "requirements",
     "coverage",
     "requirement-rows",
+    "visual",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1402,8 +1403,10 @@ _VERIFIABLE_EVIDENCE = (
 # are the requirements-traceability witnesses: all three in all three tables,
 # or resolve refuses the step as unverifiable or demands `--evidence <name>=`.
 _DERIVED_EVIDENCE = frozenset(
-    {"findings", "proportionality", "requirements", "coverage", "requirement-rows"}
+    {"findings", "proportionality", "requirements", "coverage", "requirement-rows", "visual"}
 )
+# `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
+# `visual:` section and the witness transcript; the rules live in `fr.run.visual`.
 # Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
 # journal (2026-09-24 spec §E) — verified against an `_EvidenceTarget`. A flat
 # `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
@@ -1422,6 +1425,9 @@ _DERIVED_FROM = {
     "`review`, checked as an exact partition of the spec journal's input",
     "requirement-rows": "from the acceptance rows citing the run's spec: none may be "
     "`not-implemented` unless it declares `verify: post-merge`",
+    "visual": "from the step record's `visual:` section — every owed row's screenshots "
+    "cover its named states and interactions, and the witness transcript shows each "
+    "one opened since the unit opened",
 }
 
 
@@ -1581,8 +1587,15 @@ def _verified_evidence(
     offered: dict[str, str],
     state_value: str,
     emitted: Mapping[str, str] | None = None,
+    visual: tuple[VisualEvidence, ...] | None = None,
+    holder: str | None = None,
 ) -> dict[str, str]:
     """The evidence `key` may be resolved with — or `typer.Exit(2)`.
+
+    `visual` is the step record's `visual:` section — `None` on the flag form,
+    which can carry none — and `holder` the unit's claimed holder (this
+    resolve's `agent`, else the last attempt's); both feed the derived `visual`
+    witness (2026-09-28-ui-visual-evidence §C).
 
     `emitted` is THIS resolve's emitted map: on `brainstorm`'s own resolve it
     is the only place the run's spec is named (the cursor holds none yet), and
@@ -1709,6 +1722,19 @@ def _verified_evidence(
         _verify_review_entry(
             key, offered["review"], slug=slug, entries=entries, target=target, since=since
         )
+    if state_value == "done" and "visual" in step.evidence:
+        verified["visual"] = _visual_witness(
+            key,
+            repo_root,
+            state,
+            step,
+            phase=phase,
+            entries=visual,
+            holder=holder or (attempt.agent if attempt is not None else None),
+            reviewer=offered.get("reviewer"),
+            since=since or (state.steps[step.id].at if step.id in state.steps else None),
+            dispatched_as=attempt.agent_type if attempt is not None else None,
+        )
     if state_value == "done":
         verified.update(
             _requirements_witnesses(
@@ -1725,6 +1751,59 @@ def _verified_evidence(
     assert review_journal is not None and target is not None
     slug, entries = review_journal
     return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
+
+
+def _visual_witness(
+    key: str,
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    *,
+    phase: int | None,
+    entries: tuple[VisualEvidence, ...] | None,
+    holder: str | None,
+    reviewer: str | None,
+    since: str | None,
+    dispatched_as: str | None = None,
+) -> str:
+    """The derived `visual` witness — or exit 2. A thin call into
+    `fr.run.visual`, which owns every rule and every refusal's wording."""
+    from fr.record.model import records_dir
+    from fr.requirements import run_spec
+    from fr.run.visual import VisualRefusedError, derive_visual, owed_for_unit, role_for
+
+    try:
+        owed = owed_for_unit(
+            repo_root, plan_rel=_emitted_plan(state), phase=phase, spec_rel=run_spec(state)
+        )
+        derived = derive_visual(
+            owed,
+            entries,
+            role=role_for(step.evidence, phase),
+            since=since,
+            holder=holder,
+            reviewer=reviewer,
+            repo_root=repo_root,
+            records_dir=records_dir(repo_root, state.run),
+            env=os.environ,
+            dispatched_as=dispatched_as,
+            claim_hint=(
+                f"fr run claim {state.run} --step {step.id}"
+                + (f" --item phase/{phase}" if phase is not None else "")
+                + " --agent <id>"
+            ),
+        )
+    except VisualRefusedError as e:
+        _requirements_refusal(key, e.lines)
+    if derived.unobserved:
+        _note_unobserved("visual")
+        err_console.print(
+            f"[yellow]{key}: could not verify that the screenshots were opened — "
+            f"{derived.why}; recorded as checked on disk, unverified "
+            "(evidence: unobserved=visual).[/yellow]",
+            soft_wrap=True,
+        )
+    return derived.witness
 
 
 def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
@@ -2858,6 +2937,7 @@ def _build_member_brief(
     state: RunState,
     resolved_tier: str | None,
     harness: str | None = None,
+    operator_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -2882,6 +2962,12 @@ def _build_member_brief(
     because the executor reads its task prompt when it acts, and the same
     rule in its agent file alone did not stop OpenCode killing a full suite
     at 120 s. fr-goal §5 relays it verbatim.
+
+    `operator_input` (gh#778, spec 2026-09-28 §B) is the spec journal's raw
+    input, recorded answers and the spec-governs rule, or None. It is loaded
+    by `_advance_group` BEFORE the unit is claimed (this builder stays pure)
+    and rides every member brief so the executor and the reviewer can catch
+    what the requirement relay lost.
     """
     return {
         "run": state.run,
@@ -2889,6 +2975,7 @@ def _build_member_brief(
         "step": member.id,
         "group": group.id,
         "long_commands": long_command_rule(harness),
+        "operator_input": operator_input,
         "item": item,
         "kind": member.kind,
         "skill": _brief_skill(member),
@@ -3104,7 +3191,12 @@ def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) 
 
 
 def _print_member_dispatch(
-    step: Step, member: Step, item: str, state: RunState, resolved_tier: str | None
+    step: Step,
+    member: Step,
+    item: str,
+    state: RunState,
+    resolved_tier: str | None,
+    operator_input: dict[str, Any] | None = None,
 ) -> None:
     """The three stdout lines a dispatched grouped unit produces, in the one
     order that is safe to print them.
@@ -3141,12 +3233,40 @@ def _print_member_dispatch(
     console.print(
         json.dumps(
             _build_member_brief(
-                member, step, item, state, resolved_tier, harness=detect_harness(os.environ)
+                member,
+                step,
+                item,
+                state,
+                resolved_tier,
+                harness=detect_harness(os.environ),
+                operator_input=operator_input,
             ),
             sort_keys=True,
         ),
         soft_wrap=True,
     )
+
+
+def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | None:
+    """The run spec's operator-input brief payload (gh#778), or None.
+
+    An unparseable spec journal is a refusal (exit 2, naming it): silently
+    dropping the input is the defect the relay exists to close.
+    """
+    from fr import operator_input
+    from fr.requirements import run_spec
+
+    spec_rel = run_spec(state)
+    if spec_rel is None:
+        return None
+    from rich.markup import escape
+
+    try:
+        oi = operator_input.load(repo_root, spec_rel)
+    except operator_input.OperatorInputUnreadableError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+    return operator_input.to_brief(oi) if oi is not None else None
 
 
 def _advance_group(
@@ -3246,6 +3366,10 @@ def _advance_group(
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
     dispatched_at = _now()
+    # gh#778: the operator's raw input, loaded BEFORE the write-claim so an
+    # unparseable spec journal refuses with nothing claimed (never a brief-less
+    # `running` unit that only `--redispatch` clears).
+    operator_input = _load_operator_input(repo_root, state)
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -3281,7 +3405,7 @@ def _advance_group(
         )
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
-    _print_member_dispatch(step, member, item, state, resolved_tier)
+    _print_member_dispatch(step, member, item, state, resolved_tier, operator_input)
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
@@ -4104,6 +4228,7 @@ def _resolve_member(
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
+    visual: tuple[VisualEvidence, ...] | None = None,
 ) -> None:
     """Record one `(phase, member)` outcome on its group's item map.
 
@@ -4200,6 +4325,8 @@ def _resolve_member(
         offered=evidence_map,
         state_value=state_value,
         emitted=emitted_map,
+        visual=visual,
+        holder=agent,
     )
     verified = {**verified, **_take_unobserved()}
     items[key] = state_value
@@ -4497,6 +4624,7 @@ def _resolve_body(
     agent: str | None = None,
     harness: str | None = None,
     model: str | None = None,
+    visual: tuple[VisualEvidence, ...] | None = None,
 ) -> None:
     """`fr run resolve`'s body, callable in process — the flag form and the
     step-record engine (`fr.record.apply`) both run exactly this."""
@@ -4560,6 +4688,7 @@ def _resolve_body(
             agent=agent,
             harness=harness,
             model=model,
+            visual=visual,
         )
         return
     if item is not None:
@@ -4720,6 +4849,7 @@ def _resolve_body(
         offered=evidence_map,
         state_value=state_value,
         emitted=emitted_map,
+        visual=visual,
     )
     verified = {**verified, **_take_unobserved()}
     if verified:
@@ -4846,6 +4976,7 @@ def resolve_in_process(
     reason: str | None = None,
     questions: QuestionRounds | None = None,
     guard: ResolveGuard | None = None,
+    visual: tuple[VisualEvidence, ...] = (),
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
     (every gate included), with the engine's written paths noted into the same
@@ -4887,6 +5018,7 @@ def resolve_in_process(
                 agent=agent,
                 harness=harness,
                 model=model,
+                visual=visual,
             )
             _capture_on_new_host(writes, {"step_id": step_id})
         writes.commit()

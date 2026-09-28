@@ -203,15 +203,15 @@ def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
 
     record = parse_record(
         textwrap.dedent(
-            """\
-            schema_version: 3
+            f"""\
+            schema_version: {RECORD_SCHEMA_VERSION}
             journal:
-              - {kind: discovery, id: input-1, title: input, body: build X, input: true}
+              - {{kind: discovery, id: input-1, title: input, body: build X, input: true}}
             resolves:
-              - {id: f1, state: unconfirmed, body: builds X literally}
+              - {{id: f1, state: unconfirmed, body: builds X literally}}
             acceptance:
-              - {id: row-1, capability: c, acceptance: a, status: not-implemented,
-                 verify: post-merge}
+              - {{id: row-1, capability: c, acceptance: a, status: not-implemented,
+                 verify: post-merge}}
             """
         )
     )

@@ -1,0 +1,273 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Operator input rides the member briefs and the phase handoff, with the spec-governs
+    rule
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - raw-input-relay-member-briefs
+  - raw-input-relay-handoff
+  - raw-input-relay-prose
+  tier: standard
+  files:
+  - packages/fr/src/fr/operator_input.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/journal/model.py
+  - tests/unit/test_operator_input.py
+  - tests/unit/test_operator_input_prose.py
+  - tests/unit/test_run_cli.py
+  - tests/unit/test_journal_cmd.py
+  - tests/unit/test_journal_model.py
+  - tests/unit/test_phase_executor_agent.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.*
+  - docs/acceptance/*
+  - .changes/feat-batch-raw-input-relay-2.yaml
+  - docs/superpowers/*
+  estimate_lines: 520
+tasks:
+- number: 1
+  title: fr.operator_input — the one source of rule, payload and markdown
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create tests/unit/test_operator_input.py covering spec §A
+      (docs/superpowers/specs/2026-09-28-raw-input-relay-design.md):
+      (a) `from_entries` picks every `input=true` spec discovery (via
+      `fr.requirements.is_input_entry`) and every `kind == "decision"`
+      entry, in journal order, and returns None when there is no input
+      entry; (b) `load(repo_root, spec_rel)` resolves the spec journal via
+      `spec_journal_slug(Path(spec_rel).stem)` + `resolve_journal_read_path`
+      (active and archived), returns None for a missing journal and raises
+      `JournalParseError` for an unparseable one; (c) `to_brief` returns
+      `{"rule": OPERATOR_INPUT_RULE, "input": [{id,title,body}],
+      "decisions": [{id,title,body}]}` with bodies byte-verbatim;
+      (d) `to_markdown` starts `## Operator input (read-only — the spec
+      governs)`, contains the rule, `### <id> — <title>` per input,
+      `### Recorded answers` then `#### <id> — <title>` per decision, and
+      every body sits verbatim inside a backtick fence strictly longer
+      than the longest backtick run in that body (min 3) — include a body
+      containing a `## Heading` line and a ``` fence, and assert no line
+      of the rendered output outside a fence starts with `## ` except the
+      section heading. Build journal entries the way the existing tests
+      do (grep tests/unit/test_requirements.py for how input entries are
+      constructed). Run `uv run pytest tests/unit/test_operator_input.py
+      -q --no-cov`; confirm it fails (module missing).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/operator_input.py per spec §A:
+      module docstring citing #778 and the long_commands precedent;
+      `OPERATOR_INPUT_RULE` = the exact rule text quoted in spec §A
+      (one string); frozen dataclass `OperatorInput(inputs, decisions)`
+      of `(id, title, body)` tuples; `from_entries`, `load`, `to_brief`,
+      `to_markdown`. Pure except `load`. Run the T1 tests green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: tidy names/docstrings to match fr.harness.long_commands'
+      style; `uv run ruff check` on both files and `uv run mypy
+      packages/fr/src` clean.
+- number: 2
+  title: Member briefs carry operator_input, loaded before the write-claim
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_run_cli.py (find the existing grouped-advance
+      tests that assert `long_commands` in a member brief and reuse their
+      fixture), add: (a) a run whose spec journal holds an input entry and
+      two decisions — the `implement-phase` brief AND (after resolving it)
+      the `review-phase` brief carry `operator_input` equal to
+      `operator_input.to_brief(...)` of that journal, bodies verbatim;
+      (b) no input entry → `"operator_input": null`; (c) an unparseable
+      spec journal → `fr run advance` exits 2 with a message naming the
+      spec journal path, and the reloaded run state shows the unit NOT
+      running with no open dispatch attempt. Confirm red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py give
+      `_build_member_brief` a keyword `operator_input: dict | None = None`
+      emitted as the `operator_input` key (docstring: #778, spec §B). In
+      `_advance_group`, BEFORE the write-claim that sets the pending unit
+      `running` (the `items[pending] = "running"` line), load
+      `operator_input.load(repo_root, run_spec(state))` (None when
+      run_spec is None); on `JournalParseError` print a red refusal naming
+      the spec journal and `raise typer.Exit(2)`. Thread the payload
+      through `_print_member_dispatch` to `_build_member_brief`.
+      `_build_brief` untouched. Run T2 tests green, then all of
+      `uv run pytest tests/unit/test_run_cli.py -q --no-cov -n auto`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep `_print_member_dispatch`'s ordering invariant (JSON
+      brief last, soft_wrap) intact and its docstring accurate; ruff +
+      mypy clean.
+- number: 3
+  title: The phase handoff opens with the operator-input section
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_journal_model.py — `compose_handoff(...,
+      operator_input=None)` is byte-identical to today's output for an
+      existing fixture, and with a markdown string the string appears
+      FIRST, before `## Open findings`. tests/unit/test_journal_cmd.py
+      (the `_write_plan`/`_handoff` helpers near
+      test_handoff_missing_journal_fails_open): a plan whose `_meta.yaml`
+      `spec` names a spec whose spec journal has an input entry → the
+      handoff output starts with the operator-input section, verbatim,
+      fenced; with the plan journal DELETED the output is the section
+      alone (exit 0); no spec / no input entry → no section (the existing
+      fails-open test keeps passing); unparseable spec journal → exit 2
+      naming it. Confirm red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: `compose_handoff` in packages/fr/src/fr/journal/model.py
+      gains keyword `operator_input: str | None = None`, rendered first;
+      docstring notes it (#778). In `fr journal handoff`
+      (packages/fr/src/fr/commands/journal_cmd.py) parse the plan BEFORE
+      the missing-journal early return; when the plan journal is missing
+      AND the plan cannot be parsed, keep today's behaviour (exit 0, no
+      output). Load `operator_input.load(root, plan.spec_path)` when
+      `spec_path` is set (JournalParseError → exit 2 naming the spec
+      journal); with no plan journal, echo `to_markdown` alone if there
+      is input, else nothing. Pass `to_markdown(oi)` to compose_handoff.
+      Run T3 tests and all of test_journal_cmd.py/test_journal_model.py.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: the plan is parsed once; ruff + mypy clean.
+- number: 4
+  title: Prose — fr-goal relays it, the executor knows it, mirrors and explainer follow
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: new tests/unit/test_operator_input_prose.py, in
+      test_long_command_rule.py's style: plugins/super-fr/skills/fr-goal/SKILL.md
+      names `operator_input` in BOTH its §5 (implement) and §6
+      (review-phase) sections, and plugins/super-fr/agents/fr-phase-executor.md
+      contains the load-bearing tokens of OPERATOR_INPUT_RULE ("The spec
+      governs" and "`input-`"). Confirm red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: fr-goal SKILL.md §5 — beside the long_commands sentence: copy
+      the brief's `operator_input` (rule, input, decisions) VERBATIM into
+      the executor's task prompt; `null` → nothing to relay. §6 — copy the
+      same into the reviewer's prompt; the reviewer applies the rule and
+      tags an `input-` finding in scope; the orchestrator resolves it like
+      any finding (fixed = spec amended and built, refuted = a recorded
+      answer covers it, deferred = tracked). A sentence or two each,
+      harness-neutral (no tool names outside a **Harness —** clause).
+      fr-phase-executor.md "## Inputs": add the operator input + the rule
+      (its two load-bearing sentences) and that it is also the handoff's
+      first section. Run `uv run --no-project python
+      scripts/sync-opencode.py` AND `uv run --no-project python
+      scripts/sync-hermes.py`; T4 tests green, plus the tripwires
+      test_tripwire_opencode_skills_sync.py,
+      test_tripwire_opencode_instructions_sync.py,
+      test_opencode_agent_mirror.py, test_tripwire_hermes_skills_sync.py,
+      test_tripwire_skill_tool_neutrality.py, test_phase_executor_agent.py.
+  - id: P1.T4.S3
+    text: |-
+      docs/explainers/01-fr-goal.md: in the §6 paragraph listing what the
+      executor is given (~line 726, "the phase's scope, the specification,
+      and the running journal…") and §2's input-entry text, add that the
+      executor and reviewer also get the operator's raw input and
+      recorded answers read-only, the spec governing. Regenerate the .html
+      per .claude/rules/explainers-currency.md: FIRST, from `/`, re-render
+      the UNMODIFIED .md with `uv run --isolated --no-project --with
+      markdown --with pyyaml python
+      ~/.claude/plugins/marketplaces/derio-net--blog-craft/tools/render_explainer.py
+      <abs .md> --style broadsheet --embed-fonts -o <scratch>.html` and
+      confirm it is byte-identical to the committed .html; then render the
+      edited .md over the committed .html. If the renderer is unavailable
+      or the check fails, leave the .html unchanged and record a
+      `discovery` in the step record saying the regeneration is owed. Run
+      tests/unit/test_tripwire_explainers_fresh.py.
+- number: 5
+  title: Matrix, change fragment, full gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Reword row `requirements-input-in-spec-journal`'s `acceptance` in
+      docs/acceptance/matrix.yaml to its surviving claim (spec §E): "The
+      operator's raw input is recorded verbatim in the spec journal as an
+      input entry" (text-only edit; status untouched), then
+      `uv run fr acceptance report --deterministic` and `uv run fr
+      acceptance check`. Add `.changes/feat-batch-raw-input-relay-2.yaml`:
+      `bump: minor`, summary "fr-goal: implement-phase and review-phase
+      briefs and the phase handoff carry the operator's verbatim input and
+      recorded answers read-only; the spec governs, a disagreement is an
+      `input-` finding (#778)".
+  - id: P1.T5.S2
+    text: |-
+      Full gate: `uv run ruff format packages/ tests/`, `uv run ruff check
+      packages/ tests/`, mypy (the AGENTS.md command), `uv run fr validate
+      artifacts`, `uv run --no-project python scripts/sync-opencode.py
+      --check`, `uv run --no-project python scripts/sync-hermes.py
+      --check`, and the full suite `uv run pytest -q --no-cov -n auto`
+      into a log (long command — follow the brief's long_commands rule).
+      All green; commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-09-28T19:55:07+00:00'
+      note: null
+  completion:
+    at: '2026-09-28T19:55:07+00:00'
+    note: null
+    observed_prs: []
