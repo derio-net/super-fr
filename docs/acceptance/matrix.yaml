@@ -5468,9 +5468,13 @@ rows:
       to the forge host for native types, and every forge consumer keeps today's behaviour
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-fr-profiles-services-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_services_resolve.py
+      - super-fr:tests/unit/test__hosts.py
+    status: ci
+    notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
+      run in CI.
   - id: profiles-services-migration
     capability: fr-profiles services
     acceptance: A flat backend/host fr-profiles.yaml is migrated to the nested services
