@@ -390,6 +390,32 @@ def test_consecutive_question_calls_with_only_text_between_are_one_round(
     assert rounds is not None and len(rounds) == 1
 
 
+def test_sequential_question_calls_each_answered_before_the_next_are_one_round(
+    tmp_path: Path,
+) -> None:
+    """gh#783: fr-goal asks a split round one call per message, each after the
+    previous is answered, so the operator reads it in order. The answer between
+    the calls is a tool_result, not a tool_use, and must not close the round."""
+    from tests.unit.transcript_sessions import question_rows
+
+    rows = [
+        *question_rows(
+            "2026-09-21T16:05:00.000Z",
+            tool_use_id="toolu_q1",
+            first_question="(Round 1 · question 1 of 5) A?",
+        ),
+        *question_rows(
+            "2026-09-21T16:07:00.000Z",
+            tool_use_id="toolu_q2",
+            first_question="(Round 1 · question 4 of 5) D?",
+        ),
+    ]
+    rounds = _rounds(tmp_path, rows)
+    assert rounds is not None and len(rounds) == 1
+    assert "(Round 1 · question 1 of 5) A?" in rounds[0].question_texts
+    assert "(Round 1 · question 4 of 5) D?" in rounds[0].question_texts
+
+
 def test_a_non_question_tool_use_between_calls_makes_two_rounds(tmp_path: Path) -> None:
     from tests.unit.transcript_sessions import bash_rows, question_rows
 

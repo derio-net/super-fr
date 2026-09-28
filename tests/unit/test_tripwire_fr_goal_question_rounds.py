@@ -94,8 +94,8 @@ NEW_CONTRACT_MARKERS = tuple(
     m.casefold()
     for m in (
         "questions: {rounds",  # the record declaration (§3.B)
-        "(Round 1 · questions",  # the round label (gh#766)
-        "(Round 2 · questions",
+        "(Round 1 · question ",  # the per-question round label (gh#766, gh#783)
+        "(Round 2 · question ",
         "a 2nd round may follow",  # the up-front announcement the gate looks for
         "design-risk",  # the two triggers a second round may carry
         "operator-request",
@@ -113,16 +113,35 @@ NEW_CONTRACT_MARKERS = tuple(
     )
 )
 
-# gh#766: a round of N questions on Claude Code is ceil(N/4) dialogs, and a
+# gh#766: a round of N questions on Claude Code is several dialogs, and a
 # round label alone made every dialog read `(Round 1 of 1)` — a repeat or a
-# miscount to the operator. Each dialog names its part of the round, and the
-# questions the spec's Requirements depend on come first.
+# miscount to the operator. gh#783: the per-DIALOG `a–b` range that replaced it
+# sat on per-QUESTION tabs, so sessions read it two ways (`1–4 of 6` on every
+# tab, or a sliding `1–4`, `2–4`, … `5–5 of 5`). Each question now carries its
+# own position in the round. And "back-to-back" calls went out in parallel in
+# one message, which Claude Code shows last-first, so the interpretation
+# questions meant to come first arrived last: the calls are sequential, each
+# after the previous is answered, and a round is split evenly.
 DIALOG_PART_MARKERS = tuple(
     m.casefold()
     for m in (
-        "(Round 1 · questions 1–4 of 8)",
-        "(Round 1 · questions 5–8 of 8)",
+        "(Round 1 · question 2 of 5)",
+        "only after the previous call is answered",
+        "never more than one question call per message",
+        "split evenly",
+        "5 questions are 3 + 2",
         "interpretations of the input come first",
+    )
+)
+
+# gh#783: the wording that produced parallel calls and the two-way label.
+SPLIT_ROUND_FORBIDDEN_PHRASES = tuple(
+    p.casefold()
+    for p in (
+        "back-to-back",
+        "(Round 1 · questions",
+        "(Round 2 · questions",
+        "names each call's part",
     )
 )
 
@@ -204,11 +223,22 @@ def test_fr_goal_states_the_new_round_contract(skill: Path, marker: str) -> None
 
 @pytest.mark.parametrize("skill", FR_GOAL_COPIES, ids=_rel)
 @pytest.mark.parametrize("marker", DIALOG_PART_MARKERS)
-def test_fr_goal_labels_each_dialog_of_a_split_round(skill: Path, marker: str) -> None:
+def test_fr_goal_asks_a_split_round_in_order(skill: Path, marker: str) -> None:
     assert marker in _surface_text(skill), (
         f"{_rel(skill)} is missing {marker!r} — a round spread over several "
-        "question dialogs must name each dialog's part of the round, after the "
-        "round label, or every dialog reads as the same label (gh#766)."
+        "question dialogs is asked one call at a time, each after the previous "
+        "is answered, split evenly, with every question labelled by its own "
+        "position in the round (gh#766, gh#783)."
+    )
+
+
+@pytest.mark.parametrize("skill", FR_GOAL_COPIES, ids=_rel)
+@pytest.mark.parametrize("phrase", SPLIT_ROUND_FORBIDDEN_PHRASES)
+def test_fr_goal_drops_the_parallel_split_wording(skill: Path, phrase: str) -> None:
+    assert phrase not in _surface_text(skill), (
+        f"{_rel(skill)} still says {phrase!r} — `back-to-back` calls go out in "
+        "parallel and Claude Code shows the last first, and a per-dialog `a–b` "
+        "range on per-question tabs is read two ways (gh#783)."
     )
 
 
