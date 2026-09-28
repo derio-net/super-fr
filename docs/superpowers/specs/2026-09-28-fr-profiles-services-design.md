@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-28
 **Issue:** derio-net/super-fr#774 (step 1 of 2; step 2, the Jenkins and Jira
-adapters, is filed as a follow-up before this PR merges)
+adapters, the cross-forge tracker and per-service credentials, is filed as
+derio-net/super-fr#795, linked from #774)
 **Builds on:** #787 (gh#775, `fr.acceptance.ci.ci_config`), merged as 7e154122
 **Run:** `2026-09-28-feat-batch-service-split-2`
 
@@ -24,6 +25,8 @@ adapters, is filed as a follow-up before this PR merges)
 | input | reason |
 |---|---|
 | "The Jenkins and Jira adapters. A large piece of work, but it's the shape a company on Jira + Jenkins + GitLab needs." | Step 2 of #774; filed as a follow-up issue linked from #774 before this PR merges (brief's delivery rule). |
+| "- the top-level `backend:` + `host:` stay as shorthand for `forge`;" | Superseded by decision q3-shape: the shorthand is migrated to `forge:` at the first fr command rather than kept (R3). |
+| "Each service allows `type: none`." | Step 1 scopes `none` to ci and tracking, as the brief does ("type: none for ci and tracking"); a repo always has a forge for fr to work against, so `forge: none` is not part of this change. |
 | "Credentials stay out of the file: per service, the env var name the devcontainer profile's secrets provide." | Only an adapter that calls a non-forge service needs a credentials key; step 1 adds none, so the key arrives with the adapters. |
 
 ## Design
@@ -55,8 +58,9 @@ separate tracker client, which is exactly the adapter seam step 2 builds. ci
 has no such limit: a pipeline type only selects a template file and allows the
 `ci` status, so a GitLab-CI mirror of a GitHub repo is already expressible.
 
-Refusal messages for `jenkins` / `jira` (and a cross-forge tracker) name the
-follow-up issue number, so the reader learns where the work lives.
+Refusal messages for `jenkins` / `jira` (and a cross-forge tracker) name
+derio-net/super-fr#795, the follow-up, so the reader learns where the work
+lives.
 
 ### 3.B Resolution — `fr/services/resolve.py`
 
@@ -66,10 +70,15 @@ services; `profiles_config` stays the raw reader it is.
 1. **forge** — `forge.type`/`forge.host` when declared; else, for a version-1
    file, `backend:`/`host:` (`source: legacy`); else today's origin-hostname
    inference and `github` fallback (`source: default`).
-2. **ci** — declared, else the forge's own pipeline type **if**
-   `fr.acceptance.ci.ci_config` finds a CI config, else `none` (`source:
-   default`). This keeps #787's behaviour for every repo that declares nothing
-   (including repos with no fr-profiles.yaml at all).
+2. **ci** — declared; else, for a version-1 file, the migration's own
+   detection (§3.C, fr's scaffold discounted — `source: legacy`), so `fr
+   services` shows the same value before and after the migration; else the
+   forge's own pipeline type **if** `fr.acceptance.ci.ci_config` finds a CI
+   config, else `none` (`source: default`). The last branch is #787's
+   behaviour unchanged, and after the migration it is reached only by a repo
+   with no fr-profiles.yaml at all. It keeps the raw probe (no discount) so
+   `fr acceptance init --with-ci` there still yields a repo whose `ci` status
+   is allowed, exactly as #787 shipped it.
 3. **tracking** — declared, else the forge's own type.
 4. **host** — declared, else the forge host when the type is the forge's own;
    a non-native type with no host is a validation error (§3.D).
@@ -79,8 +88,11 @@ A version-1 file is still READ (`source: legacy`): the read-only commands
 must keep working on an unmigrated repo. Reading the old shape is not keeping
 it as a feature — nothing writes it, and the validator refuses it at version 2.
 
-`fr._hosts.detect_backend` and `host_for` become thin wrappers over
-`resolve_services(...).forge` (signatures unchanged, so every caller the
+`fr._hosts.detect_backend`, `declared_host` and `host_for` become thin
+wrappers over `resolve_services(...).forge` — `declared_host` returns
+`forge.host` when its source is `declared` or `legacy` and None otherwise, so
+`client_for`'s declared-host warning (`hostclient.py:125`, gh#486) keeps its
+provenance after the migration removes the top-level `host:` (signatures unchanged, so every caller the
 explorer mapped — `hostclient.py:66,124`, `isolation/local.py:1286,2599,2754`,
 `acceptance_cmd.py` — is untouched). `backend_for_url` is URL-driven and stays
 as is.
@@ -156,12 +168,23 @@ machine) is the mitigation; the release note says so.
 
 | consumer | today | after |
 |---|---|---|
-| `acceptance/scaffold.init` | `ci_config(root, backend)` / `--with-ci` | `ci_active(root)`: `none` → no pipeline + notice naming `fr services`; pipeline type → that type's template. `--with-ci` stays for a repo with no declaration and no CI (it writes `ci:` explicitly on success). |
+| `acceptance/scaffold.init` | `ci_config(root, backend)` / `--with-ci` | `ci_active(root)`: `none` → no pipeline + notice naming `fr services`; pipeline type → that type's template. `--with-ci` never writes fr-profiles.yaml: with a declared `ci: {type: none}` it refuses (the declaration wins, and the message says to change it); with no fr-profiles.yaml it scaffolds as #787 shipped. |
 | `record/apply._no_ci_reason` | disk probe | `ci_active(root).type == "none"` → refuse a move into `ci`, message naming `ci: {type: none}` |
-| scaffolded pipeline's debt-issue step | always | omitted when `tracking.type` is `none` (notice printed) |
+| scaffolded pipeline's debt-issue step (and the rule template's CI bullet that promises it, `scaffold.py:360-366`) | always | kept only when the tracking type is the ci type's own platform (`github-actions`↔`github`, `gitlab-ci`↔`gitlab`, `gitea-actions`↔`gitea`); omitted, with a notice, under `tracking: none` or a ci on another platform — the pipeline never files issues on a system that is not the tracker |
 | `run/closeout.py:93,192-200` | "file an issue for each out-of-scope finding" | under `tracking: none`: "out-of-scope findings stay recorded in the journal and PR body; no tracker is configured" and no `deferred --tracked-by` lines |
 | `fr apply --yes` / `fr triage batch dispatch` | create issues / comments | refuse, exit 2, naming `tracking: {type: none}` in `.devcontainer/fr-profiles.yaml` |
 | `fr triage collect` | reads the forge | unchanged (reads, never files) |
+
+### 3.E.1 `fr init scaffold` and the gate
+
+`init` is in `READ_ONLY_COMMANDS` (`trigger.py:77-86`), so the gate never runs
+before it. `fr init scaffold` therefore owns the profiles file's version
+itself: on an existing version-1 file it runs the same 1 → 2 migration
+function in process first (a v1 file it cannot migrate is refused, untouched),
+then merges its keys into the nested shape, and it always writes
+`schema_version: 2`. `init` stays exempt; the tuple's docstring and the pinned
+exemption test are updated in the same diff to say that `init` writes only the
+fr-profiles artifact, always at its current version, never a stale one.
 
 ### 3.F `fr services`
 
@@ -184,6 +207,12 @@ artifact), with the pinned exemption test updated in the same diff.
   filing, findings stay out-of-scope).
 - `fr-acceptance`: "the local suite is the gate" under `ci: none`; the `ci`
   status needs a declared or detected CI service.
+- `fr-goal`, every passage that assumes CI or an issue tracker, each branched
+  on `fr services`: the walking skeleton's "CI green on a trivial test"
+  (ci none → the local suite on a trivial test), the review-resolution
+  `deferred --tracked-by <issue>` guidance (tracking none → leave it
+  `out-of-scope`), the Ready checklist, and the closeout's "open the issue"
+  step. A prose test pins each branch's wording.
 - `fr-init`: interview asks ci / tracking when `--ci/--tracking auto` refuses
   as inconclusive; documents the nested shape.
 - `README.md` backend/host section rewritten for the services; explainers
@@ -201,7 +230,16 @@ comments preserved, crash-window v2 body, unknown v1 key refused byte-identical)
 the migration chain reachable 1 → 2; validator refusals; `acceptance init` and
 `set-status ci` under each ci type; closeout / apply / triage dispatch under
 `tracking: none`; `fr services` plain and `--json`; `fr init scaffold --ci/--tracking`
-auto and inconclusive paths; this repo's own migrated fr-profiles validating.
+auto and inconclusive paths, including `fr init scaffold` over a v1 file
+(migrated in process, stamped 2); exempt commands (`isolation`, `status`,
+`services`) resolving an unmigrated v1 file with `source: legacy`, and the
+legacy ci value equal to what the migration writes; `issues_enabled` on each
+client (gh, glab, and tea returning None → inconclusive); `declared_host` /
+`client_for`'s declared-host warning after migration; the debt-issue step
+kept or omitted per ci/tracking platform; `acceptance init --with-ci` refused
+under a declared `ci: none`; the fr-goal prose branches (R5 Ready-checklist
+wording, skeleton, `deferred`, closeout); this repo's own migrated
+fr-profiles validating.
 
 Post-merge (operator): on a scratch GitLab project with no CI and issues
 disabled, `fr init scaffold` → `fr services` shows `ci none`, `tracking none`;
