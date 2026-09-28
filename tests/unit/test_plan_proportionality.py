@@ -803,3 +803,33 @@ def test_a_plan_with_no_spec_says_asks_cannot_be_counted(tmp_path: Path) -> None
     repo = _repo(tmp_path)
     report = build_report(repo, _plan(repo), None)
     assert "spec has no Requirements table; asks cannot be counted." in _section(report, "Phases")
+
+
+def test_r2_an_uncommitted_meta_spec_edit_does_not_change_the_report(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
+    before = _phases_report(repo)
+    meta = repo / "docs" / "superpowers" / "plans" / SIZED / "_meta.yaml"
+    meta.write_text(meta.read_text().replace("2026-09-28-sized-design.md", "other-design.md"))
+    _write(repo, "docs/superpowers/specs/other-design.md", "# other\n")
+    assert _phases_report(repo) == before
+
+
+def test_r2_an_uncommitted_archive_move_of_the_spec_does_not_change_the_report(
+    tmp_path: Path,
+) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
+    before = _phases_report(repo)
+    assert "1 agentic phase serves" in before
+    archived = SIZED_SPEC.replace("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
+    (repo / archived).parent.mkdir(parents=True, exist_ok=True)
+    _git(repo, "mv", SIZED_SPEC, archived)
+    assert _phases_report(repo) == before
+
+
+def test_r2_a_spec_archived_at_head_is_found_under_its_archive_root(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
+    archived = SIZED_SPEC.replace("docs/superpowers/specs/", "docs/superpowers/implemented/specs/")
+    (repo / archived).parent.mkdir(parents=True, exist_ok=True)
+    _git(repo, "mv", SIZED_SPEC, archived)
+    _commit_all(repo, "archive spec")
+    assert "1 agentic phase serves 1 of 4 requirements (R1)." in _phases_report(repo)

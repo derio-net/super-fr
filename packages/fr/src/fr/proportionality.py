@@ -30,10 +30,10 @@ Four sections, each naming candidates for a human to judge:
    plan has against the spec's requirements they serve, and every phase with
    no ask of its own (with its recorded split reason, if any). The asks come
    from `fr.phase_sizing`, the same module `fr plan self-review`'s gate reads,
-   but every input — spec, matrix, spec journal — is read at HEAD here, and
-   the spec ref is built from the matrix's own `repo` key only (never the
-   origin-remote fallback, which would render one HEAD differently in two
-   clones).
+   but every input — the plan's `_meta.yaml`, spec, matrix, spec journal —
+   is read at HEAD here (review r2), and the spec ref is built from the
+   matrix's own `repo` key only (never the origin-remote fallback, which
+   would render one HEAD differently in two clones).
 
 fr's own artifacts (`docs/superpowers/**`, `docs/acceptance/**`) are exempt
 everywhere: as candidates, because a plan, journal or run is bookkeeping the
@@ -163,17 +163,19 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
     from fr.phase_sizing import phase_asks, split_decisions
     from fr.requirements import RequirementsError, parse_requirements
 
-    spec_rel = plan.spec_path or plan.meta.spec
-    if spec_rel and is_cross_repo_spec(spec_rel):
+    meta = _meta_at_head(repo_root, plan)
+    spec_ref_value = str(meta.get("spec") or "")
+    plan_slug = str(meta.get("plan") or "")
+    if spec_ref_value and is_cross_repo_spec(spec_ref_value):
         return ["spec lives in another repo; asks cannot be counted."]
-    spec_text = _show_head(repo_root, spec_rel) if spec_rel else None
+    found = _spec_at_head(repo_root, spec_ref_value)
     try:
-        if spec_text is None:
+        if found is None:
             raise RequirementsError("no spec at HEAD")
+        spec_rel, spec_text = found
         requirements = parse_requirements(spec_text)
     except RequirementsError:
         return ["spec has no Requirements table; asks cannot be counted."]
-    assert spec_rel is not None  # spec_text is None without it
 
     matrix_text = _show_head(repo_root, MATRIX_REL)
     if matrix_text is None:
@@ -199,7 +201,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         except (JournalParseError, ValueError):
             entries = []
         break
-    decisions = split_decisions(entries, plan.meta.plan)
+    decisions = split_decisions(entries, plan_slug)
     asks = phase_asks(phases, matrix, f"{matrix.repo}:{spec_rel}", decisions)
 
     served = set().union(*(pa.asks for pa in asks)) & {r.id for r in requirements.items}
@@ -218,6 +220,44 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         why = f"split reason: {d.title}" if d is not None else "no split reason"
         bullets.append(f"phase {pa.number} — no ask of its own; {why}")
     return out + _bullets(bullets)
+
+
+def _meta_at_head(repo_root: Path, plan: Plan) -> dict[str, object]:
+    """The plan's `_meta.yaml` as committed at HEAD (empty when absent or
+    unreadable) — never the parsed working-tree `plan.meta`, so an uncommitted
+    `spec:` edit cannot change the bytes `deliver` hashes (review r2)."""
+    import yaml
+
+    text = _show_head(repo_root, f"{_rel(repo_root, plan.dir)}/_meta.yaml")
+    if text is None:
+        return {}
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _spec_at_head(repo_root: Path, ref: str) -> tuple[str, str] | None:
+    """`(repo-relative path, text)` of the spec `ref` names, probed at HEAD
+    over the spec lifecycle roots in order (active, then archived) and then
+    the literal path — the same order `fr.refs.resolve_spec_ref` walks, but
+    against HEAD's tree instead of the working tree (review r2)."""
+    from fr.refs import SPEC_ROOTS, plan_slug
+
+    if not ref:
+        return None
+    slug = plan_slug(ref)
+    candidates: list[str] = []
+    if slug:
+        name = slug if slug.endswith(".md") else f"{slug}.md"
+        candidates += [f"docs/superpowers/{root}/{name}" for root in SPEC_ROOTS]
+    candidates.append(ref.strip())
+    for rel in candidates:
+        text = _show_head(repo_root, rel)
+        if text is not None:
+            return rel, text
+    return None
 
 
 def _changes(repo_root: Path, merge_base: str) -> list[_Change]:
