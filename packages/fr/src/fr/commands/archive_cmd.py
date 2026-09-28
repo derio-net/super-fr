@@ -30,6 +30,8 @@ from fr.archive import (
     spec_archive_sweep,
 )
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
+from fr.isolation.local import branch_changes_present, resolve_branch_refs, subprocess_runner
+from fr.isolation.types import IsolationError
 from fr.parser import PlanSchemaError
 from fr.repair import plans_referencing_specs, repair_repo
 
@@ -75,6 +77,57 @@ def _repair_in_passing(repo_root: Path, only_plans: frozenset[str] | None) -> No
         err_console.print(f"[yellow]warning:[/yellow] {w}")
 
 
+def _branch_refs_or_exit(repo_root: Path, branch: str, remote: str) -> list[str]:
+    """Every ref of `branch` that resolves, fetched the way verify-merge does
+    (§B.2) — or exit 2 when neither `<remote>/<b>` nor the local `<b>` does."""
+    refs, _fetched = resolve_branch_refs(subprocess_runner, repo_root, branch, remote)
+    if not refs:
+        err_console.print(
+            f"branch {branch} resolves neither locally nor as {remote}/{branch} — nothing to diff",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return refs
+
+
+def _require_landed(repo_root: Path, branch: str, refs: list[str], base_ref: str) -> None:
+    """The mutating step's own guard (§B.3): every resolved ref's changes must
+    be present on `base_ref`, or exit 2 naming the missing paths."""
+    missing: list[str] = []
+    for ref in refs:
+        try:
+            verdict = branch_changes_present(subprocess_runner, repo_root, ref, base_ref)
+        except IsolationError as e:
+            err_console.print(f"refusing to archive — {e}", soft_wrap=True)
+            raise typer.Exit(2) from e
+        missing.extend(p for p in verdict.missing if p not in missing)
+    if missing:
+        err_console.print(
+            f"refusing to archive — {branch} has changes not on {base_ref}:", soft_wrap=True
+        )
+        for path in missing:
+            err_console.print(f"  missing: {path}", soft_wrap=True)
+        err_console.print(
+            f"check it with `fr isolation verify-merge --branch {branch}`", soft_wrap=True
+        )
+        raise typer.Exit(2)
+
+
+def _archive_branch(repo_root: Path, branch: str, *, no_spec_sweep: bool) -> None:
+    """`fr archive --branch <b>` (2026-09-28-closeout-always §B)."""
+    evidence = merge_evidence(repo_root, fetch=True)
+    if evidence.ref is None:
+        err_console.print(
+            f"refusing to archive — no default ref: {evidence.ref_error}", soft_wrap=True
+        )
+        raise typer.Exit(2)
+    base_ref = evidence.ref.ref
+    remote = base_ref.split("/", 1)[0]
+    refs = _branch_refs_or_exit(repo_root, branch, remote)
+    _require_landed(repo_root, branch, refs, base_ref)
+    typer.echo(f"nothing to archive for {branch}")
+
+
 def archive_command(
     plan_dir: Path | None = typer.Argument(None, help="Path to plan folder."),
     all_plans: bool = typer.Option(
@@ -97,6 +150,13 @@ def archive_command(
         "stranded live by an earlier run — e.g. a TBD slice removed after the plan "
         "moved, when no plan path can name the work anymore.",
     ),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        help="Archive every live artifact this MERGED branch added or modified "
+        "(plans with their runs/usage/journals, specs, debug journals); "
+        "anything not ready is printed as `held:`, never a failure.",
+    ),
 ) -> None:
     """Move a finished plan to implemented/plans/ (and its spec when ready).
 
@@ -109,6 +169,18 @@ def archive_command(
     close-out whose plan moves already landed.
     """
     require_migrated_layout()
+    if branch is not None:
+        for conflicting, name in (
+            (plan_dir is not None, "plan_dir"),
+            (all_plans, "--all"),
+            (sweep_only, "--sweep-only"),
+            (force, "--force"),
+        ):
+            if conflicting:
+                err_console.print(f"--branch takes no {name} — it archives what the branch touched")
+                raise typer.Exit(2)
+        _archive_branch(resolve_repo_root(), branch, no_spec_sweep=no_spec_sweep)
+        return
     if sweep_only:
         for conflicting, name in (
             (plan_dir is not None, "plan_dir"),
