@@ -3,7 +3,7 @@ run: 2026-09-28-feat-batch-phase-sizing-2
 workflow: fr-goal@1
 branch: feat/batch-phase-sizing-2
 started: '2026-09-28T19:13:49+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -87,6 +87,9 @@ steps:
           reviewer: a9c9326542c951883
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-28T21:20:49+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
