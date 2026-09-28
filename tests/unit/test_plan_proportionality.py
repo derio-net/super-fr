@@ -620,3 +620,186 @@ def test_a_binary_file_counts_zero_lines(tmp_path: Path) -> None:
     section = _section(build_report(repo, _plan(repo), None), "Size")
 
     assert "0 lines changed (+0 -0" in section
+
+
+# ── ## Phases: agentic phases against the spec's asks (2026-09-28 phase-sizing §D)
+
+SIZED = "2026-09-28-sized"
+SIZED_SPEC = "docs/superpowers/specs/2026-09-28-sized-design.md"
+SIZED_REQUIREMENTS = """\
+## Requirements
+
+| id | requirement | source |
+|---|---|---|
+| R1 | First ask. | decision d1 |
+| R2 | Second ask. | decision d2 |
+| R3 | Third ask. | decision d3 |
+| R4 | Fourth ask. | decision d4 |
+"""
+
+
+def _sized_matrix(*, repo_key: bool = True) -> str:
+    head = "org: derio-net\n" + ("repo: own\n" if repo_key else "") + "rows:\n"
+    rows = ""
+    for rid, reqs in (("row-r1", ["R1"]), ("row-r2", ["R2", "R3"]), ("row-r1b", ["R1"])):
+        origins = "".join(f"    - own:{SIZED_SPEC}#{r}\n" for r in reqs)
+        rows += (
+            f"  - id: {rid}\n    capability: C\n    acceptance: A\n    origin:\n{origins}"
+            "    levels: {}\n    status: not-implemented\n    notes: ''\n"
+        )
+    return head + rows
+
+
+def _sized_repo(
+    tmp_path: Path,
+    phases: list[tuple[tuple[str, ...], str]],
+    *,
+    requirements: str | None = SIZED_REQUIREMENTS,
+    matrix: str | None = None,
+) -> Path:
+    """A committed repo with a spec, a matrix and a plan whose phases are
+    `(rows, tag)` pairs. `matrix=None` writes the default; `""` writes none."""
+    repo = tmp_path / "work"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "T")
+    _write(repo, "README.md", "readme\n")
+    _commit_all(repo, "base")
+    _git(repo, "checkout", "-q", "-b", "feat/x")
+    body = "# Sized\n\n" + (requirements + "\n" if requirements else "")
+    body += "## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|--|--|--|--|\n"
+    _write(repo, SIZED_SPEC, body)
+    if matrix != "":
+        _write(repo, "docs/acceptance/matrix.yaml", matrix or _sized_matrix())
+    (repo / "docs" / "superpowers" / "plans").mkdir(parents=True, exist_ok=True)
+    create(
+        repo_root=repo,
+        slug=SIZED,
+        spec=SIZED_SPEC,
+        target_repo="derio-net/own",
+        fr_version=">=4.20.0,<5.0.0",
+        phases=[
+            PhaseSpec(number=i, title=f"P{i}", tag=tag, acceptance=rows)  # type: ignore[arg-type]
+            for i, (rows, tag) in enumerate(phases, start=1)
+        ],
+        prose="# x\n",
+    )
+    _commit_all(repo, "plan")
+    return repo
+
+
+def _split(repo: Path, n: int, title: str, *, commit: bool = True) -> None:
+    append_journal_entry(
+        journal_path(repo, "spec", SIZED),
+        SIZED,
+        JournalEntry(
+            kind="decision",
+            scope="spec",
+            id=f"phase-split-{SIZED}-p{n}",
+            created="2026-09-28T10:00:00",
+            title=title,
+        ),
+    )
+    if commit:
+        _commit_all(repo, f"split p{n}")
+
+
+def _phases_report(repo: Path) -> str:
+    plan = parse_plan(repo / "docs" / "superpowers" / "plans" / SIZED)
+    return _section(build_report(repo, plan, "main"), "Phases")
+
+
+def test_the_phases_section_follows_size(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
+    plan = parse_plan(repo / "docs" / "superpowers" / "plans" / SIZED)
+    report = build_report(repo, plan, "main")
+    assert report.index("## Size") < report.index("## Phases")
+
+
+def test_the_745_shape_names_the_phase_with_no_ask(tmp_path: Path) -> None:
+    repo = _sized_repo(
+        tmp_path,
+        [((), "agentic"), (("row-r1",), "agentic"), (("row-r2",), "agentic"), ((), "manual")],
+    )
+    body = _phases_report(repo)
+    assert "3 agentic phases serve 3 of 4 requirements (R1, R2, R3)." in body
+    assert "- phase 1 — no ask of its own; no split reason" in body
+    assert "phase 2" not in body
+    assert "phase 4" not in body  # a manual phase is not counted
+
+
+def test_the_folded_shape_has_no_phase_without_an_ask(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic"), (("row-r2",), "agentic")])
+    _split(repo, 2, "ask: the second ask")
+    body = _phases_report(repo)
+    assert "2 agentic phases serve 3 of 4 requirements (R1, R2, R3)." in body
+    assert body.strip().endswith("none.")
+
+
+def test_a_phase_with_no_own_ask_shows_its_split_reason(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic"), (("row-r1b",), "agentic")])
+    _split(repo, 2, "tier: needs the hard tier")
+    body = _phases_report(repo)
+    assert "2 agentic phases serve 1 of 4 requirements (R1)." in body
+    assert "- phase 2 — no ask of its own; split reason: tier: needs the hard tier" in body
+    assert "phase 1 —" not in body  # the waived phase leaves R1 to phase 1
+
+
+def test_one_agentic_phase_reads_in_the_singular(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1", "row-r2"), "agentic")])
+    assert "1 agentic phase serves 3 of 4 requirements (R1, R2, R3)." in _phases_report(repo)
+
+
+def test_an_uncommitted_split_decision_does_not_change_the_report(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic"), (("row-r1b",), "agentic")])
+    before = _phases_report(repo)
+    _split(repo, 2, "tier: uncommitted", commit=False)
+    assert _phases_report(repo) == before
+
+
+def test_an_uncommitted_matrix_edit_does_not_change_the_report(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")])
+    before = _phases_report(repo)
+    _write(repo, "docs/acceptance/matrix.yaml", _sized_matrix().replace("#R1", "#R4"))
+    assert _phases_report(repo) == before
+
+
+def test_an_archived_spec_journal_at_head_is_read(tmp_path: Path) -> None:
+    from fr.journal.model import archived_journal_path
+
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic"), (("row-r1b",), "agentic")])
+    append_journal_entry(
+        archived_journal_path(repo, "spec", SIZED),
+        SIZED,
+        JournalEntry(
+            kind="decision",
+            scope="spec",
+            id=f"phase-split-{SIZED}-p2",
+            created="2026-09-28T10:00:00",
+            title="review-size: archived",
+        ),
+    )
+    _commit_all(repo, "archived journal")
+    assert "split reason: review-size: archived" in _phases_report(repo)
+
+
+def test_no_requirements_table_says_asks_cannot_be_counted(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")], requirements=None)
+    assert "spec has no Requirements table; asks cannot be counted." in _phases_report(repo)
+
+
+def test_no_matrix_says_asks_cannot_be_derived(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [((), "agentic")], matrix="")
+    assert "no acceptance matrix; asks cannot be derived." in _phases_report(repo)
+
+
+def test_a_matrix_naming_no_repo_says_asks_cannot_be_derived(tmp_path: Path) -> None:
+    repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")], matrix=_sized_matrix(repo_key=False))
+    assert "matrix names no repo; asks cannot be derived." in _phases_report(repo)
+
+
+def test_a_plan_with_no_spec_says_asks_cannot_be_counted(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    report = build_report(repo, _plan(repo), None)
+    assert "spec has no Requirements table; asks cannot be counted." in _section(report, "Phases")

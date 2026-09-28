@@ -14,7 +14,7 @@ diff, the plan's phase headers and the plan journal — and the first line
 names only the merge-base SHA, never the base's remote name, so the same
 `HEAD` yields the same bytes in any clone: `deliver` hashes them.
 
-Three sections, each a heuristic that names candidates for a human to judge:
+Four sections, each naming candidates for a human to judge:
 
 1. **Unreferenced new files** — an added file whose repo-relative path, stem
    (at least 4 characters) or branch-created parent directory appears, as a
@@ -26,6 +26,14 @@ Three sections, each a heuristic that names candidates for a human to judge:
    finding or recorded deviation names its path.
 3. **Size** — added plus deleted lines against the summed `estimate_lines`,
    flagged above 2x.
+4. **Phases** (2026-09-28 phase-sizing spec §D) — how many agentic phases the
+   plan has against the spec's requirements they serve, and every phase with
+   no ask of its own (with its recorded split reason, if any). The asks come
+   from `fr.phase_sizing`, the same module `fr plan self-review`'s gate reads,
+   but every input — spec, matrix, spec journal — is read at HEAD here, and
+   the spec ref is built from the matrix's own `repo` key only (never the
+   origin-remote fallback, which would render one HEAD differently in two
+   clones).
 
 fr's own artifacts (`docs/superpowers/**`, `docs/acceptance/**`) are exempt
 everywhere: as candidates, because a plan, journal or run is bookkeeping the
@@ -132,7 +140,84 @@ def _run(repo_root: Path, plan: Plan, base: str | None) -> Report:
         lines += _bullets(_out_of_plan(changes, globs, _justifiers(repo_root, plan)))
     lines += ["", "## Size", ""]
     lines += _size(changes, sum(estimates) if estimates else None)
+    lines += ["", "## Phases", ""]
+    lines += _phases(repo_root, plan, phases)
     return Report(merge_base, "\n".join(lines) + "\n")
+
+
+MATRIX_REL = "docs/acceptance/matrix.yaml"
+
+
+def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]:
+    """The `## Phases` section (§D): agentic phases against the asks they
+    serve, all read at HEAD. Report-only, like every other section."""
+    from fr._urls import is_cross_repo_spec
+    from fr.acceptance.model import AcceptanceError, parse_matrix
+    from fr.journal.model import (
+        JournalParseError,
+        archived_journal_path,
+        journal_path,
+        parse_journal,
+        spec_journal_slug,
+    )
+    from fr.phase_sizing import phase_asks, split_decisions
+    from fr.requirements import RequirementsError, parse_requirements
+
+    spec_rel = plan.spec_path or plan.meta.spec
+    if spec_rel and is_cross_repo_spec(spec_rel):
+        return ["spec lives in another repo; asks cannot be counted."]
+    spec_text = _show_head(repo_root, spec_rel) if spec_rel else None
+    try:
+        if spec_text is None:
+            raise RequirementsError("no spec at HEAD")
+        requirements = parse_requirements(spec_text)
+    except RequirementsError:
+        return ["spec has no Requirements table; asks cannot be counted."]
+    assert spec_rel is not None  # spec_text is None without it
+
+    matrix_text = _show_head(repo_root, MATRIX_REL)
+    if matrix_text is None:
+        return ["no acceptance matrix; asks cannot be derived."]
+    try:
+        matrix = parse_matrix(matrix_text)
+    except AcceptanceError:
+        return ["acceptance matrix unreadable at HEAD; asks cannot be derived."]
+    if not matrix.repo:
+        return ["matrix names no repo; asks cannot be derived."]
+
+    slug = spec_journal_slug(PurePosixPath(spec_rel).stem)
+    entries: list[JournalEntry] = []
+    for path in (
+        journal_path(repo_root, "spec", slug),
+        archived_journal_path(repo_root, "spec", slug),
+    ):
+        text = _show_head(repo_root, _rel(repo_root, path))
+        if text is None:
+            continue
+        try:
+            entries = parse_journal(text)
+        except (JournalParseError, ValueError):
+            entries = []
+        break
+    decisions = split_decisions(entries, plan.meta.plan)
+    asks = phase_asks(phases, matrix, f"{matrix.repo}:{spec_rel}", decisions)
+
+    served = set().union(*(pa.asks for pa in asks)) & {r.id for r in requirements.items}
+    ordered = sorted(served, key=lambda r: int(r[1:]))
+    n = len(asks)
+    count = (
+        f"{n} agentic phase{'' if n == 1 else 's'} serve{'s' if n == 1 else ''} "
+        f"{len(ordered)} of {len(requirements.items)} requirements"
+    )
+    out = [f"{count} ({', '.join(ordered)})." if ordered else f"{count}."]
+    bullets: list[str] = []
+    for pa in asks:
+        if pa.own:
+            continue
+        d = decisions.get(pa.number)
+        why = f"split reason: {d.title}" if d is not None else "no split reason"
+        bullets.append(f"phase {pa.number} — no ask of its own; {why}")
+    return out + _bullets(bullets)
 
 
 def _changes(repo_root: Path, merge_base: str) -> list[_Change]:
