@@ -1,1 +1,31 @@
 # Journal: 2026-09-28-ui-visual-evidence
+
+<!-- fr:journal kind=discovery scope=plan id=d7b368d68bb3 created=2026-09-28T20:00:54+00:00 phase=1 -->
+### d7b368d68bb3 · discovery · AcceptanceItem.visual lands in P1.T2, not P1.T3 (phase 1)
+
+The plan assigns `AcceptanceItem.visual` to P1.T3 ("record sections"), but `fr acceptance add --visual-state/--visual-interaction` (P1.T2) writes through `fr.record.apply`'s `_apply_rows` -> `apply_record`, which builds the matrix `Row` from an `AcceptanceItem`. The CLI cannot thread `visual` to the writer without the field existing on `AcceptanceItem`, so it was added in P1.T2 as necessary plumbing. P1.T3 then adds the record's own evidence section (`StepRecord.visual`: `VisualEvidence`/`VisualShot`) on top of it. No behavior gap — both tasks' RED tests are still real (P1.T3's record-apply test exercises a different code path, `fr.record.apply` directly rather than the CLI) — but a reader diffing task boundaries against the plan should know this before assuming P1.T3's diff is self-contained.
+
+<!-- fr:journal kind=discovery scope=plan id=1eb2269f669e created=2026-09-28T20:00:54+00:00 phase=1 -->
+### 1eb2269f669e · discovery · render_row_block did not emit verify-style optional fields generically (phase 1)
+
+`fr.acceptance.edit.render_row_block` (the ONE place that renders a row block into matrix.yaml) had to be extended by hand for `visual`, the same way `verify` was added before it — there is no generic "render every optional field" loop, so a future optional `Row` field needs the same one-line addition here or it round-trips as `None` silently (caught in this phase only because the CLI round-trip test exercises it explicitly).
+
+<!-- fr:journal kind=discovery scope=plan id=aaa7162b7a97 created=2026-09-28T20:00:54+00:00 phase=1 -->
+### aaa7162b7a97 · discovery · Shape for phase 2/3: where the visual vocabulary now lives (phase 1)
+
+`fr.acceptance.model.Visual` (states/interactions StrictStr tuples, `check_visual_names` the shared non-empty/no-duplicate validator) and `Row.visual: Visual | None`. `fr.record.model.VisualShot` (path, shows — min_length=1), `VisualEvidence` (row, optional script, shots — min_length=1), `StepRecord.visual: tuple[VisualEvidence, ...]` in the `evidence` section group (`_SECTION_FIELDS["evidence"]` now: `evidence`, `emitted`, `visual`). Matrix kind is now version 3, record kind version 4 (`RECORD_SCHEMA_VERSION`). None of this phase touches `_VERIFIABLE_EVIDENCE`/`_DERIVED_EVIDENCE` in `run_cmd.py`, the `witness_transcript`/`read_file_since`/`shell_named_since` telemetry predicates (spec §C), the `fr-goal.yaml` manifest's `visual` evidence name, or the skills/agent prose (spec §E) — all still owed by a later phase.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-09-28T20:00:54+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+no separate refactor pass — Visual + check_visual_names were designed as the shared helper from the start (T2.S3's job), so T1 itself has nothing left to extract: one small closed model plus one field on Row.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t3 created=2026-09-28T20:00:54+00:00 phase=1 -->
+### no-refactor-p1-t3 · discovery · no-refactor-because P1.T3 (phase 1)
+
+VisualShot/VisualEvidence mirror existing closed-model patterns (TickItem, AcceptanceItem) exactly; two small models with no shared logic between them to extract.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-09-28T20:00:54+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+matrix_visual.py/record_visual.py are built directly from matrix_verify.py/record_input_unconfirmed.py's own shape (the established pattern for a stamp-only hop); the one piece of duplication that did exist — the matrix guard — was extracted to guard_matrix (shared by both matrix hops) as part of writing T4.S2, not after.
