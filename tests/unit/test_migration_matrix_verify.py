@@ -36,25 +36,26 @@ def _matrix(root: Path, text: str = _V1_MATRIX) -> Path:
     return path
 
 
-def test_the_matrix_kind_is_at_version_two() -> None:
-    assert artifact_kind("matrix").current_version == 2
-
-
-def test_the_chain_from_one_is_one_hop_to_two() -> None:
+def test_a_one_to_two_hop_exists() -> None:
     chain = MIGRATIONS.chain("matrix", PRE_FRAMEWORK_VERSION)
-    assert [(s.from_version, s.to_version) for s in chain] == [(1, 2)]
+    assert chain[0].from_version == 1 and chain[0].to_version == 2
 
 
 def test_a_v1_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
+    """A v1 matrix now chains all the way to the current version (spec
+    2026-09-28-ui-visual-evidence-design.md §G added a 2 -> 3 hop after this
+    one); what this pins is that the body is untouched throughout."""
     path = _matrix(tmp_path)
     before = path.read_text().splitlines(keepends=True)
+    kind = artifact_kind("matrix")
 
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
     after = path.read_text().splitlines(keepends=True)
-    assert "schema_version: 2\n" in after
-    assert [ln for ln in after if ln != "schema_version: 2\n"] == before
+    stamp_line = f"schema_version: {kind.current_version}\n"
+    assert stamp_line in after
+    assert [ln for ln in after if ln != stamp_line] == before
     rows_at = after.index("rows:\n")
     trailing_top_level_keys = [
         ln for ln in after[rows_at + 1 :] if ln and not ln[0].isspace() and ":" in ln
@@ -64,7 +65,7 @@ def test_a_v1_matrix_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
         "rows: must stay the last top-level key"
     )
     m = load_matrix(path)
-    assert m.schema_version == 2 and [r.id for r in m.rows] == ["a"]
+    assert m.schema_version == kind.current_version and [r.id for r in m.rows] == ["a"]
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -90,4 +91,6 @@ def test_an_unreadable_v1_matrix_is_refused_byte_identical(tmp_path: Path) -> No
 
 def test_this_repos_own_matrix_is_current(repo_root: Path) -> None:
     kind = artifact_kind("matrix")
-    assert kind.read_version(repo_root / "docs" / "acceptance" / "matrix.yaml") == 2
+    assert (
+        kind.read_version(repo_root / "docs" / "acceptance" / "matrix.yaml") == kind.current_version
+    )

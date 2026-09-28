@@ -11,8 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
-from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
-from fr.record.model import RECORD_SCHEMA_VERSION, parse_record
+from fr.record.model import parse_record
 
 _V2_RECORD = """\
 schema_version: 2
@@ -31,30 +30,31 @@ def _record_file(root: Path, text: str = _V2_RECORD, stem: str = "implement-phas
     return path
 
 
-def test_the_record_kind_is_at_version_three() -> None:
-    assert RECORD_SCHEMA_VERSION == 3
-    assert artifact_kind("record").current_version == 3
-
-
 def test_a_two_to_three_migration_is_registered() -> None:
-    (hop,) = MIGRATIONS.chain("record", 2)
+    (hop,) = [s for s in MIGRATIONS.chain("record", 2) if s.from_version == 2]
     assert (hop.from_version, hop.to_version) == (2, 3)
 
 
-def test_the_chain_from_one_reaches_three_hop_by_hop() -> None:
-    chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [(s.from_version, s.to_version) for s in chain] == [(1, 2), (2, 3)]
+def test_the_chain_from_two_reaches_three_before_anything_later() -> None:
+    chain = MIGRATIONS.chain("record", 2)
+    assert chain[0].from_version == 2 and chain[0].to_version == 3
 
 
 def test_a_v2_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
+    """A v2 record now chains all the way to the current version (spec
+    2026-09-28-ui-visual-evidence-design.md §G added a 3 -> 4 hop after this
+    one); what this pins is that the body is untouched throughout."""
     path = _record_file(tmp_path)
     before = path.read_text()
+    kind = artifact_kind("record")
 
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == before.replace("schema_version: 2\n", "schema_version: 3\n")
-    assert parse_record(path.read_text()).schema_version == 3
+    assert path.read_text() == before.replace(
+        "schema_version: 2\n", f"schema_version: {kind.current_version}\n"
+    )
+    assert parse_record(path.read_text()).schema_version == kind.current_version
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -77,7 +77,8 @@ def test_an_unreadable_v2_record_is_refused_byte_identical(tmp_path: Path) -> No
 
     assert [f.path for f in report.failed] == [broken]
     assert broken.read_bytes() == before
-    assert artifact_kind("record").read_version(healthy) == 3
+    kind = artifact_kind("record")
+    assert kind.read_version(healthy) == kind.current_version
 
 
 def test_a_truncated_v2_record_is_refused_byte_identical(tmp_path: Path) -> None:
@@ -96,7 +97,8 @@ def test_an_empty_v2_record_is_stamped(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert artifact_kind("record").read_version(path) == 3
+    kind = artifact_kind("record")
+    assert kind.read_version(path) == kind.current_version
 
 
 def test_this_repos_own_live_records_are_current(repo_root: Path) -> None:
@@ -143,8 +145,9 @@ def test_a_migrated_v2_record_applies_through_the_record_engine(tmp_path: Path) 
     report = run_migrations(root, dry_run=False)
 
     assert report.ok, report.failed
-    assert parse_record(record_path.read_text()).schema_version == 3
-    commit_all(root, "migrate record to schema_version 3")
+    kind = artifact_kind("record")
+    assert parse_record(record_path.read_text()).schema_version == kind.current_version
+    commit_all(root, "migrate record to current schema_version")
 
     out = fr(
         root,

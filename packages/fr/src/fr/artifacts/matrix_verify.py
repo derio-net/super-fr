@@ -21,21 +21,30 @@ from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, SchemaMigrat
 
 MIGRATION_NAME = "matrix-verify"
 
-__all__ = ["MATRIX_VERIFY_MIGRATION", "MIGRATION_NAME", "UnreadableMatrixError"]
+__all__ = [
+    "MATRIX_VERIFY_MIGRATION",
+    "MIGRATION_NAME",
+    "UnreadableMatrixError",
+    "guard_matrix",
+]
 
 
 class UnreadableMatrixError(ArtifactMigrationError):
     """A matrix the migration will not stamp, because it does not parse."""
 
 
-def _guard(path: Path) -> None:
+def guard_matrix(path: Path) -> None:
+    """Refuse to let the runner stamp a matrix that does not parse. Shared by
+    every stamp-only matrix hop (`fr.artifacts.matrix_visual`, spec
+    2026-09-28-ui-visual-evidence-design.md §G) — no version number in the
+    message, since naming one would misreport whichever other hop uses it."""
     from fr.acceptance.model import AcceptanceError, parse_matrix
 
     try:
         parse_matrix(path.read_text())
     except (OSError, AcceptanceError) as e:
         raise UnreadableMatrixError(
-            f"{path}: not a readable matrix, so fr will not stamp it as version 2 ({e}). "
+            f"{path}: not a readable matrix, so fr will not stamp it ({e}). "
             "Fix the file by hand — it is left on its current version and will be retried."
         ) from e
 
@@ -44,7 +53,7 @@ MATRIX_VERIFY_MIGRATION = SchemaMigration(
     kind="matrix",
     from_version=1,
     to_version=2,
-    fn=_guard,
+    fn=guard_matrix,
     description="matrix: add `verify` on a row — stamp only, no body change",
 )
 

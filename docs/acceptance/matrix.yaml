@@ -24,7 +24,7 @@
 # the last row of the same capability, and appends to the end of this file only
 # for a new capability — so keep `rows:` as the LAST top-level key.
 
-schema_version: 2
+schema_version: 3
 org: derio-net
 repo: super-fr
 rows:
