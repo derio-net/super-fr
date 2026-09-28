@@ -4296,7 +4296,7 @@ rows:
   - id: requirements-input-in-spec-journal
     capability: fr-goal-methodology
     acceptance: The operator's raw input is recorded verbatim in the spec journal as
-      an input entry and never reaches a phase executor's handoff
+      an input entry
     origin:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
     levels:
