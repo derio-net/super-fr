@@ -156,6 +156,13 @@ journal:
   title: Requirements and Deferred from input are Markdown tables
   body: 'Operator at spec review: the Requirements section should be a table, like Decisions. Sources
     in one cell, separated by <br>; a literal | is escaped as \|.'
+- kind: discovery
+  id: gate-opened-after-answers
+  title: Design answers d0-d7 predate the brainstorm gate opening
+  body: 'Standalone fr-brainstorming: the cursor was started at section 0 but `fr run advance` (which
+    opens the operator gate) ran only after the operator had answered the five design questions and reviewed
+    the spec. The gate is cleared by the operator''s answer to the gate-clearing question itself; d0-d7
+    were decided interactively before it. Skill gap filed separately.'
 resolves: []
 acceptance:
 - id: requirements-input-in-spec-journal
