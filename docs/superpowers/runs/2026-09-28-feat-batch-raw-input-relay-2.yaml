@@ -3,7 +3,7 @@ run: 2026-09-28-feat-batch-raw-input-relay-2
 workflow: fr-goal@1
 branch: feat/batch-raw-input-relay-2
 started: '2026-09-28T19:14:11+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -87,6 +87,9 @@ steps:
           reviewer: a33e43d9112f412ed
           findings: r1-f1,r1-f2,r1-f3
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-28T20:01:58+00:00'
+    exit: 0
+    stdout: ''
   deliver:
     state: pending
