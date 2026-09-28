@@ -19,3 +19,8 @@ The issue's diagnosis. `_resolve_target` drops an unresolved LEADING variable an
 ### fix · finding [fixed] · Refusal names a pre-open writer; §8 says to run the suite as its own command after the advance
 
 `run_cmd._wrote_before` re-reads the orchestrator's writers with no lower bound when the in-unit window list is empty; if one straddles `opened`, deliver refuses with 'issued before this unit opened … run the suite again as its own command' instead of 'no command of YOURS'. The gate is unchanged: it still refuses. fr-goal SKILL.md §8 (and both mirrors) now says to run the suite AFTER the `fr run advance` that opens deliver. Pinned by `test_a_suite_issued_before_the_unit_opened_is_refused_and_says_so` (red before: the old wording). Full suite: 6818 passed.
+
+<!-- fr:journal kind=review scope=debug id=review created=2026-09-28T14:38:12+00:00 -->
+### review · review · Independent review: no high-confidence findings; one sub-threshold note fixed
+
+A separate-context code reviewer checked _wrote_before (epoch since on both harness branches, UTC comparisons, None handling), the test's control flow, the mirrors and the fragment, and endorsed keeping the gate strict. Sub-threshold note (~50): the reworded refusal did not check the log's mtime against the straddling window, so a stale earlier write could earn it. Fixed: _wrote_before now applies the same mtime-in-window check as the acceptance path.
