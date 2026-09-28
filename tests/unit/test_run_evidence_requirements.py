@@ -376,4 +376,98 @@ def test_a_spec_review_record_adding_a_requirement_and_its_row_applies(tmp_path:
     assert "req-r2" in (repo / MATRIX_REL).read_text()
 
 
-__all__ = ["COVERAGE_BLOCK"]
+
+# --- Task 2: `coverage` on spec-review ----------------------------------------
+
+_WITH_COVERAGE = "[review, reviewer, findings, requirements, coverage]"
+
+
+def _spec_finding(repo: Path, fid: str, *, state: str = "open") -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    append_journal_entry(
+        journal_path(repo, "spec", SLUG),
+        SLUG,
+        JournalEntry(
+            kind="finding",
+            scope="spec",
+            id=fid,
+            created=now(),
+            title="dropped statement",
+            body="the input asks for a count the spec omits",
+            state=state,  # type: ignore[arg-type]
+            review_scope="in",  # type: ignore[arg-type]
+        ),
+    )
+
+
+def test_spec_review_derives_and_stores_the_coverage_counts(tmp_path: Path) -> None:
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _review_entry(repo, body="Traceability first.\n\n" + COVERAGE_BLOCK)
+
+    out = _spec_review(repo, shipped)
+
+    assert out.exit_code == 0, out.output
+    assert _evidence(repo, "spec-review")["coverage"] == (
+        "2 spans: R=1 deferred=0 context=1 missing=0"
+    )
+
+
+def test_spec_review_refuses_a_coverage_gap(tmp_path: Path) -> None:
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    gap = COVERAGE_BLOCK.replace('| "so it counts from 1–20" | context |\n', "")
+    _review_entry(repo, body=gap)
+
+    out = _spec_review(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    assert "do not partition the input" in _squash(out.output)
+    assert load_run_state(repo, "r1").steps["spec-review"].state != "done"
+
+
+def test_spec_review_refuses_a_review_with_no_coverage_block(tmp_path: Path) -> None:
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _review_entry(repo, body="no findings")
+
+    out = _spec_review(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    assert "no `input-coverage` block" in _squash(out.output)
+
+
+def test_a_missing_span_naming_an_open_finding_is_held_by_the_findings_gate(
+    tmp_path: Path,
+) -> None:
+    """`missing s1` is a well-formed partition — coverage passes — and the
+    existing `findings` gate holds the resolve until s1 is closed (§D.4)."""
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _spec_finding(repo, "s1")
+    block = COVERAGE_BLOCK.replace("| context |", "| missing s1 |")
+    _review_entry(repo, body=block)
+
+    held = _spec_review(repo, shipped)
+
+    assert held.exit_code == 2, held.output
+    assert "s1" in _squash(held.output)
+    assert "do not partition" not in _squash(held.output)
+    assert load_run_state(repo, "r1").steps["spec-review"].state != "done"
+
+
+def test_a_missing_span_naming_no_finding_is_refused(tmp_path: Path) -> None:
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _review_entry(repo, body=COVERAGE_BLOCK.replace("| context |", "| missing s9 |"))
+
+    out = _spec_review(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    assert "`missing s9` names no `kind=finding`" in _squash(out.output)
+
+
+def test_a_caller_supplied_coverage_is_refused_as_derived(tmp_path: Path) -> None:
+    repo, shipped = _at_spec_review(tmp_path, spec_review=_WITH_COVERAGE)
+    _review_entry(repo, body=COVERAGE_BLOCK)
+
+    out = _spec_review(repo, shipped, "--evidence", "coverage=2 spans")
+
+    assert out.exit_code == 2, out.output
+    assert "not yours to pass" in _squash(out.output)

@@ -1871,6 +1871,8 @@ def _requirements_witnesses(
     out: dict[str, str] = {}
     if "requirements" in wanted:
         out["requirements"] = _requirements_witness(key, capture)
+    if "coverage" in wanted:
+        out["coverage"] = _coverage_witness(key, capture, review_id)
     return out
 
 
@@ -1892,6 +1894,49 @@ def _requirements_witness(key: str, capture: _RequirementsCapture) -> str:
         )
     n = len(parse_requirements(capture.spec_text).items)
     return f"{n} requirements:{requirements_digest(capture.spec_text)}"
+
+
+def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | None) -> str:
+    """`<n> spans: R=… deferred=… context=… missing=…` from the `input-coverage`
+    block of the review entry `review` names (§D) — or exit 2. A `missing <id>`
+    span is well-formed here; the `findings` gate holds it while it is open."""
+    from fr.requirements import (
+        RequirementsError,
+        check_coverage,
+        is_input_entry,
+        parse_requirements,
+    )
+
+    why = "cannot derive coverage evidence"
+    review = next(
+        (e for e in capture.entries if e.id == review_id and e.kind == "review"), None
+    )
+    if review is None:
+        _requirements_refusal(
+            key,
+            [
+                f"{why} — no `kind=review` spec-journal entry named by `review` "
+                f"({review_id!r}) carries the input-coverage block"
+            ],
+        )
+    try:
+        requirements = parse_requirements(capture.spec_text)
+    except RequirementsError as e:
+        _requirements_refusal(key, [f"{why} — {capture.spec_rel}: {e}"])
+    inputs = [e for e in capture.entries if is_input_entry(e)]
+    problems, counts = check_coverage(review.body, inputs, requirements, capture.entries)
+    if problems:
+        _requirements_refusal(
+            key,
+            [
+                f"refused — the input-coverage block of review {review.id!r} is unsound:",
+                *(f"- {p}" for p in problems),
+            ],
+        )
+    return (
+        f"{counts.spans} spans: R={counts.requirement} deferred={counts.deferred} "
+        f"context={counts.context} missing={counts.missing}"
+    )
 
 
 def _verify_reviewer(
