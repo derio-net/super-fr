@@ -7,6 +7,7 @@ carrying the `input=true` header token (spec §A), built by `_input_entry`.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -183,6 +184,50 @@ def test_unknown_source_form_is_error() -> None:
         parse_requirements(text)
 
 
+def test_unknown_source_form_error_names_the_valid_forms_and_the_row() -> None:
+    """#776: take 9 wrote curly quotes with no `input` keyword, and the error
+    named no valid form — the agent had to read this module to pass."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        "| R1 | a \\| basket | \u201cA basket is a list\u201d |\n"
+    )
+    with pytest.raises(RequirementsError) as exc:
+        parse_requirements(text)
+    msg = str(exc.value)
+    assert 'input "<verbatim quote>"' in msg
+    assert "decision <id>" in msg
+    assert "<br>" in msg
+    assert "| R1 | a \\| basket | \u201cA basket is a list\u201d |" in msg
+
+
+def test_unescaped_double_quote_inside_a_quote_parses_and_matches() -> None:
+    """#776: a quote may contain `"` as-is — it runs first `"` to last `"`."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        '| R1 | x | input "labelled "\u2713 680\u2013720 g" when in range" |\n'
+    )
+    value = parse_requirements(text).items[0].sources[0].value
+    assert value == 'labelled "\u2713 680\u2013720 g" when in range'
+    assert quote_matches(value, 'the item is labelled "\u2713 680\u2013720 g" when in range')
+
+
+def test_backslash_escaped_double_quote_is_unescaped() -> None:
+    """#776: `\\"` is the escape an agent guesses; it used to be kept
+    literally, so the quote never matched the input."""
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        '| R1 | x | input "labelled \\"\u2713 680\u2013720 g\\" when" |\n'
+    )
+    assert (
+        parse_requirements(text).items[0].sources[0].value
+        == 'labelled "\u2713 680\u2013720 g" when'
+    )
+    deferred = REQ_ONE + (
+        '\n## Deferred from input\n\n| input | reason |\n|---|---|\n| "a \\"b\\" c" | later |\n'
+    )
+    assert parse_requirements(deferred).deferred == (Deferred(quote='a "b" c', reason="later"),)
+
+
 def test_no_requirements_section_is_error() -> None:
     with pytest.raises(RequirementsError, match=r"no `## Requirements` section"):
         parse_requirements("# Spec\n\nsome prose\n")
@@ -266,6 +311,23 @@ def test_no_input_entry_is_a_problem() -> None:
     entries = [_decision_entry("d1")]
     problems = check_requirements(text, entries, matrix, "widget:spec.md")
     assert any("no input entry" in p for p in problems)
+
+
+def test_pending_input_entry_is_not_a_problem_before_resolve() -> None:
+    """#776: the pre-check runs before the brainstorm resolve that writes the
+    input entry; with `input_pending=True` its absence (and the quotes it
+    would match) is not reported. The resolve gate never passes the flag."""
+    matrix = _matrix("widget:spec.md#R1")
+    assert check_requirements(REQ_ONE, [], matrix, "widget:spec.md", input_pending=True) == []
+    strict = check_requirements(REQ_ONE, [], matrix, "widget:spec.md")
+    assert any("no input entry" in p for p in strict)
+
+
+def test_input_pending_still_checks_quotes_once_the_entry_exists() -> None:
+    matrix = _matrix("widget:spec.md#R1")
+    entries = [_input_entry("i1", "something else entirely")]
+    problems = check_requirements(REQ_ONE, entries, matrix, "widget:spec.md", input_pending=True)
+    assert any("does not match any input entry" in p for p in problems)
 
 
 def test_unknown_decision_id_is_a_problem() -> None:
@@ -540,3 +602,120 @@ def test_759_replay_coverage_partitions_the_literal_ellipsis() -> None:
     assert counts.spans == 2
     assert counts.requirement == 1
     assert counts.context == 1
+
+
+def test_the_skill_documented_grammar_example_parses() -> None:
+    """#776: fr-brainstorming §2 is where an agent learns the `source`
+    grammar; its inline example must stay one this parser accepts."""
+    skill = (
+        Path(__file__).parents[2] / "plugins/super-fr/skills/fr-brainstorming/SKILL.md"
+    ).read_text()
+    m = re.search(r"e\.g\. `(input .+?)`;", skill)
+    assert m, "fr-brainstorming §2 lost its `source` example"
+    parsed = parse_requirements(
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        f"| R1 | x | {m.group(1)} |\n"
+    )
+    kinds = {s.kind for r in parsed.items for s in r.sources}
+    assert kinds == {"input", "decision"}
+    assert any('"' in s.value for r in parsed.items for s in r.sources if s.kind == "input")
+    assert any(len(r.sources) > 1 for r in parsed.items)
+
+
+# ── #777: the reviewer's partition is read as the reviewer wrote it ─────────
+#
+# Take 9 (fr 4.29.2): the spec reviewer returned one span per input line,
+# with blank `""` spans, `\"` for a quote inside a span, the input's own
+# Markdown table quoted with its raw `|`, and a `missing s1`. fr refused it
+# (`expected 2 columns, got 6`), so the orchestrator re-cut and relabelled
+# the block until it passed — recorded evidence that was not the reviewer's.
+# The input below is synthetic (the real one is third-party); the SHAPE is
+# take 9's, row for row.
+
+_777_INPUT = """# Library: renew several loans at once
+
+## Background
+
+Today a member renews **one loan at a time**. Members say "renew all" is
+what they "expect" from the app.
+
+| Loans | Result |
+|---|---|
+| 3 books | renewed |
+
+Plan this as a single phase.
+"""
+
+_777_REVIEWER_BLOCK = r"""```input-coverage
+| span | coverage |
+|---|---|
+| "# Library: renew several loans at once" | context |
+| "" | context |
+| "## Background" | context |
+| "" | context |
+| "Today a member renews **one loan at a time**. Members say \"renew all\" is" | R1 |
+| "what they \"expect\" from the app." | R1 |
+| "" | context |
+| "| Loans | Result |" | context |
+| "|---|---|" | context |
+| "| 3 books | renewed |" | R1 |
+| "" | context |
+| "Plan this as a single phase." | missing s1 |
+```
+"""
+
+
+def _777_fixture() -> tuple[list[JournalEntry], Requirements]:
+    entries = [_input_entry("i1", _777_INPUT), _finding_entry("s1")]
+    reqs = Requirements(items=(Requirement(id="R1", text="x", sources=()),))
+    return entries, reqs
+
+
+def test_777_take9_reviewer_partition_is_accepted_as_written() -> None:
+    entries, reqs = _777_fixture()
+    problems, counts = check_coverage(_777_REVIEWER_BLOCK, entries, reqs, entries)
+    assert problems == []
+    assert counts.spans == 12
+    assert counts.requirement == 3
+    assert counts.context == 8
+    assert counts.missing == 1
+
+
+def test_777_raw_pipes_in_a_span_still_refuse_a_gap() -> None:
+    """Reading a quoted span's raw `|` must not loosen the partition: the
+    table's middle row dropped is still a gap."""
+    entries, reqs = _777_fixture()
+    block = _777_REVIEWER_BLOCK.replace('| "|---|---|" | context |\n', "")
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert any("do not partition" in p for p in problems)
+
+
+def test_777_input_carrying_a_literal_backslash_quote_still_matches() -> None:
+    """`\\"` is read as `"` on BOTH sides, so an input that itself contains
+    `\\"` partitions whichever way the reviewer quotes it."""
+    entries = [_input_entry("i1", r"say \"hi\" now")]
+    reqs = Requirements(items=())
+    for span in (r"say \"hi\" now", 'say "hi" now'):
+        problems, _ = check_coverage(_coverage_block([(span, "context")]), entries, reqs, entries)
+        assert problems == [], span
+
+
+def test_777_unreadable_block_says_to_redispatch_the_reviewer() -> None:
+    """A shape fr still cannot read names the remedy: the reviewer re-writes
+    it. The orchestrator never edits the reviewer's partition."""
+    entries, reqs = _777_fixture()
+    block = "```input-coverage\n| span | coverage |\n|---|---|\n| alpha | context |\n```\n"
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert problems
+    assert any("re-dispatch the reviewer" in p for p in problems)
+
+
+def test_777_escape_never_pairs_across_a_span_boundary() -> None:
+    """Review: decoding after the join let a stray trailing `\\` in one span
+    pair with the next span's leading `"` — a character the input does not
+    hold, passed as an exact partition. Each span decodes on its own."""
+    entries = [_input_entry("i1", 'ab"cd')]
+    reqs = Requirements(items=())
+    block = _coverage_block([("ab\\", "context"), ('"cd', "context")])
+    problems, _ = check_coverage(block, entries, reqs, entries)
+    assert any("do not partition" in p for p in problems)

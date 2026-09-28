@@ -115,6 +115,11 @@ by span, in order — no gap, no overlap, no reordering:
 requirement); `missing <finding-id>` (the id of the `dropped` finding you
 raised for that span). A span is the input's literal text — quote it exactly,
 `…` included if the input itself contains one; never use `…` as an elision.
+Cut spans wherever reads best: a line each (blank lines as `""`) or a
+paragraph each. Inside the quotes, the input's own `|` and `"` may stand as
+they are or be escaped as `\|` and `\"`. fr reads the block exactly as you
+return it. The orchestrator records it unedited, and if fr refuses it, the
+orchestrator sends you fr's message to return a corrected block.
 
 ## Tag every finding: in scope or out of scope
 
