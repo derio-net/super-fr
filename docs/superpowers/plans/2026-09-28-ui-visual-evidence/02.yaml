@@ -137,54 +137,68 @@ tasks:
 state:
   steps:
     P2.T1.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: tests/unit/test_run_telemetry_visual.py — RED on ImportError (read_file_since
+        absent)
     P2.T1.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: read_file_since/shell_named_since in fr.run.telemetry; tool names via
+        new fr.usage.classify.canonical_tool (the one _ALIASES table); 135 passed
+        (telemetry + telemetry_visual)
     P2.T1.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: extracted _tool_uses(records) iterator; tool_use_ids now uses it; 353
+        passed (-k telemetry or separate_context or usage)
     P2.T2.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 3 witness_transcript tests in the same file; RED was the file-level ImportError
+        shared with T1
     P2.T2.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: witness_transcript(session, agent_id) through attribute_dispatches; green
     P2.T3.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: tests/unit/test_run_evidence_visual.py part 1 (pure) — RED on ImportError
+        (fr.run.visual absent)
     P2.T3.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'fr.run.visual: owed_rows, check_visual, git_ignored; 22 passed'
     P2.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'part 2 through fr run resolve --record: 18 tests; RED: ''cannot verify
+        visual evidence'''
     P2.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'run_cmd: visual in _VERIFIABLE/_DERIVED/_DERIVED_FROM, _visual_witness
+        after reviewer; resolve_in_process(visual=) from record/apply.py; template
+        visual: hint (+1 test); 40 + 7 passed; 1082 passed (-k evidence or telemetry
+        or record or run_cli or workflow)'
     P2.T4.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: run_cmd._visual_witness is one call into fr.run.visual.owed_for_unit/derive_visual
+        (witness resolution, role, all refusal text live there); script-exists moved
+        into pure check_visual; 61 passed
     P2.T5.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: manifest + parity-row tests RED (2 failed, 21 passed)
     P2.T5.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'fr-goal.yaml (plugin + packaged copy) and parity.yaml visual-evidence
+        row; fr workflow check fr-goal ok; fr harness parity --check exit 0; -k ''evidence
+        or telemetry or parity or workflow or record'': 919 passed, 0 failed'
   completion:
-    at: null
+    at: '2026-09-28T20:29:10+00:00'
     note: null
     observed_prs: []

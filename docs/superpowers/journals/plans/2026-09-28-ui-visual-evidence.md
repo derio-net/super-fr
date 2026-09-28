@@ -56,3 +56,46 @@ fr acceptance set-status visual-evidence-row-flag -> ci with unit levels test_ac
 ### p1-f2-resolved · finding [fixed] · resolves p1-f2: P1.T4.S3 ticked without the pass count its text asks for (phase 1)
 
 P1.T4.S3 note backfilled with the targeted and full-suite counts (commit 9aceb0a3).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-visual-semantics created=2026-09-28T20:29:10+00:00 phase=2 -->
+### p2-visual-semantics · discovery · For phase 3's prose: the exact `visual` evidence semantics as implemented (phase 2)
+
+Where it lives: `fr.run.visual` (owed_rows, check_visual, derive_visual, role_for, owed_for_unit); `fr.run.telemetry` (read_file_since, shell_named_since, witness_transcript); `run_cmd._visual_witness` is one call.
+- **Owed rows**: phase unit → rows in the phase header `acceptance:` that carry `visual` and not `verify: post-merge`; flat unit (deliver) → rows citing the run's spec (`rows_citing`), same filter. No matrix / no linked row / no spec recorded → witness `none` and the record's `visual:` is not consulted.
+- **Role** (from the step's shape, not its id): a step declaring `reviewer` evidence → the offered reviewer's subagent transcript; any other phase unit → the holder (this resolve's `agent`, else the last attempt's `agent`) via `attribute_dispatches`, or the orchestrator's own stream when there is no holder (inline); a flat step → the orchestrator's stream.
+- **Checks 1–3 always apply** (even unobserved): an entry per owed row; every declared state/interaction named by some shot's `shows`, and no name the row does not declare; each shot has an image suffix (.png .jpg .jpeg .webp .gif, case-insensitive), is not under `<run>.records/`, is `git check-ignore`d when inside the repo, exists and is non-empty; a named `script` exists (absolute or repo-relative). Freshness (mtime ≥ unit opened − 1 s) only when the role is not `holder` (review-phase, deliver).
+- **Checks 4–5**: in the witness transcript, a tool call normalising to `Read` (`read_file`, `view` count) whose `file_path`/`path` names each shot at or after the unit opened; and, for a `script`, a call normalising to `Bash` whose command names it (`_names`) since the unit opened.
+- **Unobserved**: no readable witness transcript (not Claude Code, session not found, holder/reviewer not paired to a dispatch of this session) → every row's witness gets `:unobserved`, `unobserved` evidence includes `visual`, and a yellow "could not verify that the screenshots were opened" warning. Never a refusal.
+- **Witness**: `<row>:<n-shots>:<sha256[:12] over the shot bytes in resolved-path order>[:unobserved]`, joined by `,`; `none` when nothing is owed.
+- **Refusals**: `--evidence visual=` ("not yours to pass"); a flag-form resolve (no `--record`) of a unit that owes a row → exit 2 naming the rows and `fr run resolve ... --record <record>`; a flag-form resolve owing nothing records `visual=none` (every in-flight run, including this one: no matrix row carries `visual:` yet).
+- Record hint: the template for a step whose evidence lists `visual` carries a commented `visual:` block (row / script / shots {path, shows}).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-holder-unpaired-is-unobserved created=2026-09-28T20:29:10+00:00 phase=2 -->
+### p2-holder-unpaired-is-unobserved · discovery · A holder or reviewer id this session never dispatched makes checks 4–5 unobserved, not refused (phase 2)
+
+Per the plan's three-valued contract, `witness_transcript` returns None both for "cannot read" and for "no dispatch of this session pairs to that agent id", and the gate records `unobserved` in both cases. For `review-phase` the reviewer id is independently refused by `_verify_reviewer` when the transcript is readable and no such dispatch exists, so only the implement-phase holder can take this path: an executor whose `agent` is a claimed id the orchestrator's session never dispatched (e.g. the resolve runs in a different session than the dispatch) is recorded unobserved with the yellow warning. Tightening it would need `witness_transcript` to return False for "readable, no such agent" — a deliberate contract change, left as is.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-template-derived-names created=2026-09-28T20:29:10+00:00 phase=2 -->
+### p2-template-derived-names · discovery · record/template.py's _DERIVED omits the requirements-traceability names (phase 2)
+
+`fr.record.template._DERIVED` lists `findings`, `proportionality` and (now) `visual`, but not `requirements`, `coverage` or `requirement-rows`, so a template for a step declaring those still prints them under `#   owed: <name>: <id>` although `--evidence <name>=` is refused as derived. Pre-existing; not changed here (no test pins it, and it is prose in a comment). A one-line fix whenever someone touches the template.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-capture-script-row created=2026-09-28T20:29:10+00:00 phase=2 -->
+### p2-capture-script-row · discovery · visual-evidence-capture-script left not-implemented for phase 3 (phase 2)
+
+`visual-evidence-gate` and `visual-evidence-reviewer-own-eyes` moved to `ci` in this phase (fr acceptance set-status, tests test_run_evidence_visual.py / test_run_telemetry_visual.py). `visual-evidence-capture-script` is half built: the gate half (script must exist, and a shell call naming it by the witness since the unit opened — tests test_a_named_script_*) is in, but its acceptance also says "the skills prefer such a script", which is phase 3's prose. Phase 3 should move it with `--level unit=super-fr:tests/unit/test_run_evidence_visual.py` plus its prose test.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-28T20:29:10+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+witness_transcript is a six-line pairing over attribute_dispatches, which already owns the only logic it needs; nothing repeated to extract.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-09-28T20:29:10+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+owed_rows/check_visual were written with the per-shot rules already split into _shot_problems; the one later cleanup (script-exists into check_visual) happened in T4.S3.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-09-28T20:29:10+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+declarative YAML only (manifest evidence lists, one parity row); the pinned evidence tuples were updated in place, no code to clean.
