@@ -1,0 +1,77 @@
+schema_version: 4
+run: 2026-09-28-feat-batch-ui-evidence-2
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: visual-evidence-browser-check-prose row text still said 'prefer a committed script'
+  body: visual-evidence-browser-check-prose row text still said 'prefer a committed script'
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: in
+  title: browser-check prose never says where shots live (take 9 lost them in the container /tmp)
+  body: browser-check prose never says where shots live (take 9 lost them in the container /tmp)
+- kind: finding
+  id: p3-r3
+  phase: 3
+  review_scope: in
+  title: "fr-goal \xA76 dropped the reviewer's script-coverage audit"
+  body: "fr-goal \xA76 dropped the reviewer's script-coverage audit"
+- kind: finding
+  id: p3-r4
+  phase: 3
+  review_scope: in
+  title: "fr-brainstorming \xA73 collapsed into one 601-char line against the file's 76-80 col style"
+  body: "fr-brainstorming \xA73 collapsed into one 601-char line against the file's 76-80 col style"
+- kind: finding
+  id: p3-r5
+  phase: 3
+  review_scope: in
+  title: explainer said 'every named state' though interactions are covered too
+  body: explainer said 'every named state' though interactions are covered too
+- kind: review
+  id: review-p3
+  phase: 3
+  title: 'phase 3 prose review: 5 findings (all in scope)'
+  body: Independent reviewer (separate context, standard tier, with shell) reviewed git diff f7a53fec..HEAD
+    (skills, agent, mirrors, explainer, prose test, matrix). Verified mirrors in sync, neutrality tripwire
+    clean, skill validation and explainer tripwire green, acceptance check/report clean, fr-execute renumbering
+    consistent. Findings p3-r1..p3-r5.
+resolves:
+- id: p3-r1
+  phase: 3
+  state: fixed
+  body: "7069e120: row text now reads 'prefer a capture script re-run at each stage' (spec \xA7D: committing\
+    \ is the implementer's call); reports regenerated."
+- id: p3-r2
+  phase: 3
+  state: fixed
+  body: "7069e120: fr-execute step 3 and fr-goal \xA75 name a git-ignored worktree dir (devcontainer bind\
+    \ mount) or a host-visible scratch dir, never the container's /tmp or <run>.records/. Pinned by test_fr_execute_browser_check_says_where_shots_live\
+    \ and test_fr_goal_section5_says_where_shots_live."
+- id: p3-r3
+  phase: 3
+  state: fixed
+  body: "7069e120: \xA76 adds 'checking the script covers every name the row declares'; test_fr_goal_section6_review_phase_names_the_reviewers_own_screenshots\
+    \ asserts it."
+- id: p3-r4
+  phase: 3
+  state: fixed
+  body: '7069e120: original wrapping restored; the new sentence is appended to the one line where it belongs
+    (187 chars). The file was already at exactly the 120-line cap before this change and no paragraph
+    saves a line on rewrap, so a fully wrapped form (122 lines) would fail test_skill_validation''s cap;
+    this is the smallest outlier that fits.'
+- id: p3-r5
+  phase: 3
+  state: fixed
+  body: '7069e120: ''every named state and interaction''; the .html regenerated per explainers-currency
+    (unmodified re-render byte-identical first, then a one-sentence page diff).'
+evidence:
+  review: review-p3
+  reviewer: aac889fc8520fc109
+  model: claude-opus-5-5
