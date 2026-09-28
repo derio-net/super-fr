@@ -3180,15 +3180,12 @@ def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | N
     spec_rel = run_spec(state)
     if spec_rel is None:
         return None
+    from rich.markup import escape
+
     try:
         oi = operator_input.load(repo_root, spec_rel)
-    except JournalParseError as e:
-        path = resolve_journal_read_path(repo_root, "spec", spec_journal_slug(Path(spec_rel).stem))
-        err_console.print(
-            f"[red]cannot relay the operator input: spec journal {path} is not parseable "
-            f"({e})[/red]",
-            soft_wrap=True,
-        )
+    except operator_input.OperatorInputUnreadableError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
     return operator_input.to_brief(oi) if oi is not None else None
 

@@ -19,6 +19,7 @@ from pathlib import Path
 
 from fr.journal.model import (
     JournalEntry,
+    JournalParseError,
     parse_journal,
     resolve_journal_read_path,
     spec_journal_slug,
@@ -37,6 +38,12 @@ OPERATOR_INPUT_RULE = (
 )
 
 _Item = tuple[str, str, str]  # (id, title, body)
+
+
+class OperatorInputUnreadableError(JournalParseError):
+    """The spec journal exists but does not parse. Its message is the one
+    refusal every caller prints (exit 2), naming the journal — so the brief
+    and the handoff cannot word the same failure two ways."""
 
 
 @dataclass(frozen=True)
@@ -60,13 +67,20 @@ def from_entries(entries: list[JournalEntry]) -> OperatorInput | None:
 def load(repo_root: Path, spec_rel: str) -> OperatorInput | None:
     """Load the relay payload from the spec's journal (active, else archived).
 
-    A missing journal is None. An unparseable one raises `JournalParseError`:
+    A missing journal is None. An unparseable one raises
+    `OperatorInputUnreadableError` (a `JournalParseError`) naming the journal:
     silently dropping the input is the defect this module exists to close.
     """
     path = resolve_journal_read_path(repo_root, "spec", spec_journal_slug(Path(spec_rel).stem))
     if not path.is_file():
         return None
-    return from_entries(parse_journal(path.read_text()))
+    try:
+        entries = parse_journal(path.read_text())
+    except JournalParseError as e:
+        raise OperatorInputUnreadableError(
+            f"cannot relay the operator input: spec journal {path} is not parseable ({e})"
+        ) from e
+    return from_entries(entries)
 
 
 def _dicts(items: tuple[_Item, ...]) -> list[dict[str, str]]:

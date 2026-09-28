@@ -6578,6 +6578,8 @@ def test_unparseable_spec_journal_refuses_before_claiming_the_unit(tmp_path: Pat
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert result.exit_code == 2, result.output
     assert "journals/specs/2026-09-28-x.md" in result.output
+    # One refusal, worded once (review r1-f1): the handoff prints the same.
+    assert "cannot relay the operator input" in result.output
     state = load_run_state(repo, "r1")
     assert units.unit_states(state.steps["implement"]).get("phase/1/code") != "running"
     from fr.commands.run_cmd import _held_record

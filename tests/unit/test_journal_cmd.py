@@ -1412,6 +1412,52 @@ class TestHandoff:
 
         assert res.exit_code == 2
         assert "2026-01-01-x.md" in res.output
+        # One refusal, worded once (review r1-f1): the brief path prints the same.
+        assert "cannot relay the operator input" in res.output
+
+    def test_handoff_cross_repo_spec_has_no_section(self, tmp_path: Path, monkeypatch) -> None:
+        """A cross-repo spec leaves `spec_path` unset: its journal lives in
+        another repo, so there is nothing here to relay (spec §C)."""
+        from fr.plan_ops import PhaseSpec, create
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        create(
+            repo_root=root,
+            slug="H",
+            spec="derio-net/other:docs/superpowers/specs/2026-01-01-x-design.md",
+            target_repo="derio-net/test",
+            fr_version=">=3.0.0,<5.0.0",
+            phases=[PhaseSpec(number=1, title="One", tasks=())],
+            prose="# x\n",
+        )
+        # A same-named local spec journal WITH input must not be picked up.
+        p = root / "docs/superpowers/journals/specs/2026-01-01-x.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(self._input_journal())
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert "Operator input" not in res.output
+
+    def test_handoff_no_plan_journal_and_unparseable_plan_stays_fail_open(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Parsing the plan first (sr-3) must not turn today's fail-open case —
+        no journal written yet — into a refusal when the plan is also broken."""
+        from fr.journal.model import journal_path
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        self._plan_with_spec(root, self._input_journal())
+        journal_path(root, "plan", "H").unlink()
+        (root / "docs/superpowers/plans/H/_meta.yaml").write_text("not: [valid\n")
+
+        res = self._handoff("1")
+
+        assert res.exit_code == 0, res.output
+        assert res.output.strip() == ""
 
     def test_handoff_malformed_journal_fails_closed(self, tmp_path: Path, monkeypatch) -> None:
         """Unlike `render` (PR-body feed, fail-open), the handoff feeds an

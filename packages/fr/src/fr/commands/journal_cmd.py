@@ -35,7 +35,6 @@ from fr.journal.model import (
     resolution_record_id,
     resolve_journal_read_path,
     serialize_entry,
-    spec_journal_slug,
     unauthorized_fixes,
 )
 from fr.operator_input import OperatorInput
@@ -716,13 +715,14 @@ def check(
 
 def _load_operator_input(root: Path, spec_rel: str) -> OperatorInput | None:
     """The spec journal's operator input (gh#778); an unparseable journal is exit 2."""
-    from fr.operator_input import load
+    from rich.markup import escape
+
+    from fr.operator_input import OperatorInputUnreadableError, load
 
     try:
         return load(root, spec_rel)
-    except JournalParseError as e:
-        spec_path = resolve_journal_read_path(root, "spec", spec_journal_slug(Path(spec_rel).stem))
-        err_console.print(f"[red]spec journal {spec_path} is not parseable:[/red] {e}")
+    except OperatorInputUnreadableError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
 
