@@ -591,3 +591,13 @@ Pre-existing behaviour on main.
 ### p5r-test-docstring-resolved · finding [out-of-scope] · resolves p5r-test-docstring: test_migration_trigger.py:178-180 docstring says exempt commands never write, untrue for init scaffold (phase 5)
 
 Pre-existing inaccuracy predating this change.
+
+<!-- fr:journal kind=decision scope=plan id=p6-explainer-no-change created=2026-09-28T23:05:43+00:00 phase=6 -->
+### p6-explainer-no-change · decision · explainers need no regeneration (phase 6)
+
+docs/explainers/01-fr-goal.md has no 'CI green' gate wording nor a backend:/issue-filing assumption a newcomer would be misled by (its only issue mention is 'once you have filed the issue', true when a tracker exists); .md and .html untouched.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-09-28T23:05:43+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+prose-only task; the one cleanup was condensing two fr-init lines to stay under the 120-line skill limit, and fixing two mypy arg-type errors phase 5 left in services/init.py
