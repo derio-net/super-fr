@@ -139,3 +139,8 @@ Every span of the input labelled R<n>/deferred/context/missing <finding>; fr ver
 ### d10-traceability-first · decision · fr-spec-reviewer checks traceability first
 
 Before the codebase lookups that otherwise consume its attention.
+
+<!-- fr:journal kind=decision scope=spec id=d11-post-merge-rows created=2026-09-28T07:00:08+00:00 -->
+### d11-post-merge-rows · decision · Rows may declare verify: post-merge; deliver skips them, PR lists them
+
+Operator, on review finding o3: chosen over marking post-merge requirements in the spec Test Plan, and over relabelling such rows skipped. Matrix 1->2.
