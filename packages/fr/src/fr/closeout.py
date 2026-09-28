@@ -218,9 +218,11 @@ class Owed:
 
 @dataclass(frozen=True)
 class HeldSpec:
-    """A live spec that is NOT owed, with the reason `_spec_fully_implemented`
-    gave (a pending slice, an unresolved cross-repo row, or a row still
-    active under `plans/`) — visible, never silent (R5)."""
+    """An on-ref spec that is NOT owed, genuinely stuck rather than merely
+    still being built — a pending slice or an unresolved cross-repo row
+    (`_PENDING_NOTE_MARK` / `_CROSS_REPO_NOTE_MARK`) — visible, never silent
+    (R5). A spec only on the current branch, or one whose note just means
+    "still active under plans/", is reported by neither `owed` nor `held`."""
 
     spec: str  # spec file name
     note: str
@@ -232,20 +234,49 @@ class OwedArtifacts:
     held: tuple[HeldSpec, ...]
 
 
-def _owed_debug_journals(repo_root: Path, evidence: MergeEvidence) -> list[Owed]:
+def _ref_tree(repo_root: Path, ref: str) -> frozenset[str] | None:
+    """Every file path under `docs/superpowers/` on `ref`, ONE `git ls-tree`
+    call reused by every owed/held check below — the bulk-read counterpart of
+    `fr.archive._plans_on_ref`'s one-shot materialization (review finding
+    #3: no more one `file_on_ref` subprocess per candidate).
+
+    `None` when the ref cannot be read at all. Every check below treats that
+    the same way it treats an absent path: NOT on the ref, so nothing is
+    reported owed — fail closed, never "assume it landed"."""
+    from fr.git import GitUnavailableError, git_answer
+
+    try:
+        result = git_answer(
+            repo_root, "ls-tree", "-r", "--name-only", ref, "--", "docs/superpowers"
+        )
+    except GitUnavailableError:
+        return None
+    if result.returncode != 0:
+        return None
+    return frozenset(line for line in result.stdout.splitlines() if line)
+
+
+def _dir_on_ref(ref_files: frozenset[str], rel: Path) -> bool:
+    """True iff some file on the ref lives under directory `rel` — `ls-tree`
+    lists blobs, not directories, so a real (non-empty) archived directory is
+    detected by prefix, exactly as `_dir_on_ref`'s caller needs "this
+    implemented/plans/<slug> dir is on the ref"."""
+    prefix = f"{rel}/"
+    return any(f.startswith(prefix) for f in ref_files)
+
+
+def _owed_debug_journals(repo_root: Path, ref_files: frozenset[str] | None) -> list[Owed]:
     """A debug journal is done (d2/d3) once it is on the default ref — the
     same rule `fr archive --branch` uses for a branch's own debug journal."""
-    if evidence.ref is None:
+    if ref_files is None:
         return []
-    from fr.git import file_on_ref
-
     debug_dir = repo_root / JOURNALS_REL / SCOPE_DIRS["debug"]
     if not debug_dir.is_dir():
         return []
     owed: list[Owed] = []
     for p in sorted(debug_dir.glob("*.md")):
         rel = p.relative_to(repo_root)
-        if file_on_ref(evidence.ref.ref, str(rel), cwd=repo_root):
+        if str(rel) in ref_files:
             owed.append(Owed(kind="debug_journal", path=rel, clear="fr archive --all"))
     return owed
 
@@ -262,74 +293,135 @@ def _owed_plans(repo_root: Path, evidence: MergeEvidence) -> list[Owed]:
     ]
 
 
-def _owed_specs(repo_root: Path) -> tuple[list[Owed], list[HeldSpec]]:
-    """`_spec_fully_implemented` with `gh=None` (no forge call, per §C):
-    unresolved cross-repo rows degrade to a held note rather than a probe."""
+# The two note shapes that mean "genuinely stuck", not merely "still being
+# built" — the ONLY notes that make a spec `held` (review finding #1). Every
+# other note (most commonly "row … still active under plans/") is silent:
+# the plan it names is already visible in `fr status`'s plan blocks, so
+# repeating it here would just be noise, and — before this fix — was actively
+# wrong for a spec that had not even merged yet (see the ref gate below).
+_PENDING_NOTE_MARK = "pending — slice not yet built"
+_CROSS_REPO_NOTE_MARK = "unresolved locally (cross-repo?)"
+
+
+def _spec_rows_on_ref(spec_path: Path, repo_root: Path, ref_files: frozenset[str]) -> bool:
+    """True iff every Implementation Plans row's local resolution — already
+    confirmed to be an archived (`implemented/plans/` or legacy
+    `archived-plans/`) directory by `_spec_fully_implemented` — is ALSO on
+    the default ref. An `implemented/plans/` dir a branch-only
+    `fr archive --force` created locally must not make the spec's completion
+    count as landed (review finding #2)."""
+    from fr.spec import _resolve_local_plan_dir, parse_spec
+
+    meta = parse_spec(spec_path)
+    for row in meta.plans:
+        if not row.file or row.file in ("—", "-"):
+            continue  # manual/informational row
+        resolved = _resolve_local_plan_dir(row, repo_root)
+        if resolved is None:
+            continue  # cross-repo, resolved via gh elsewhere — nothing local to gate
+        try:
+            rel = resolved.relative_to(repo_root)
+        except ValueError:
+            continue
+        if not _dir_on_ref(ref_files, rel):
+            return False
+    return True
+
+
+def _owed_specs(
+    repo_root: Path, ref_files: frozenset[str] | None
+) -> tuple[list[Owed], list[HeldSpec]]:
+    """`_spec_fully_implemented` with `gh=None` (no forge call, per §C).
+
+    A spec is owed or held ONLY when the spec file itself is already on the
+    default ref — its introducing PR has merged. A spec that exists only on
+    THIS branch is neither: there is nothing to close out yet, so reporting
+    it (as `held`, before this fix) was simply wrong (review finding #1).
+    `held` is narrower still: only `_PENDING_NOTE_MARK` /
+    `_CROSS_REPO_NOTE_MARK` — an ordinary "still active under plans/" note is
+    silent, because the still-active plan is already reported elsewhere.
+    """
     from fr.migrate import _spec_fully_implemented
 
     owed: list[Owed] = []
     held: list[HeldSpec] = []
+    if ref_files is None:
+        return owed, held
     specs_dir = repo_root / SPECS_REL
     if not specs_dir.is_dir():
         return owed, held
     for spec_path in sorted(specs_dir.glob("*.md")):
-        implemented, note = _spec_fully_implemented(spec_path, repo_root, gh=None)
         rel = spec_path.relative_to(repo_root)
+        if str(rel) not in ref_files:
+            continue  # only on this branch — its PR has not merged yet
+        implemented, note = _spec_fully_implemented(spec_path, repo_root, gh=None)
         if implemented:
-            owed.append(Owed(kind="spec", path=rel, clear="fr archive --sweep-only"))
-        elif note and "no Implementation Plans rows" not in note:
+            if _spec_rows_on_ref(spec_path, repo_root, ref_files):
+                owed.append(Owed(kind="spec", path=rel, clear="fr archive --sweep-only"))
+            # else: implemented locally only — not landed, so not owed; not
+            # held either, since the live plan it names is reported elsewhere.
+        elif note and (_PENDING_NOTE_MARK in note or _CROSS_REPO_NOTE_MARK in note):
             held.append(HeldSpec(spec=spec_path.name, note=note))
     return owed, held
 
 
-def _owed_orphan_journals(repo_root: Path) -> list[Owed]:
-    """A plan/spec journal whose owner is already archived — no ref check:
-    the owner's own archive is the evidence, wherever it happened."""
+def _owed_orphan_journals(repo_root: Path, ref_files: frozenset[str] | None) -> list[Owed]:
+    """A plan/spec journal whose owner is already archived — gated on the
+    default ref both ways (review finding #2): the journal itself must be on
+    the ref (its PR merged), and so must its owner, or a `fr archive --force`
+    on an unmerged branch would make an unlanded owner count."""
     owed: list[Owed] = []
+    if ref_files is None:
+        return owed
     for scope in ("plan", "spec"):
         live_dir = repo_root / JOURNALS_REL / SCOPE_DIRS[scope]
         if not live_dir.is_dir():
             continue
         for p in sorted(live_dir.glob("*.md")):
+            rel = p.relative_to(repo_root)
+            if str(rel) not in ref_files:
+                continue  # the journal itself has not merged yet
             slug = p.stem
             if scope == "plan":
-                owner_archived = (repo_root / IMPLEMENTED_PLANS_REL / slug).is_dir()
+                owner_rel = IMPLEMENTED_PLANS_REL / slug
+                owner_archived = (repo_root / owner_rel).is_dir() and _dir_on_ref(
+                    ref_files, owner_rel
+                )
             else:
                 owner_archived = any(
                     (repo_root / IMPLEMENTED_SPECS_REL / name).is_file()
+                    and f"{IMPLEMENTED_SPECS_REL / name}" in ref_files
                     for name in (f"{slug}-design.md", f"{slug}.md")
                 )
             if owner_archived:
-                owed.append(
-                    Owed(
-                        kind="orphan_journal",
-                        path=p.relative_to(repo_root),
-                        clear="fr archive --all",
-                    )
-                )
+                owed.append(Owed(kind="orphan_journal", path=rel, clear="fr archive --all"))
     return owed
 
 
-def _owed_orphan_runs(repo_root: Path, evidence: MergeEvidence) -> list[Owed]:
+def _owed_orphan_runs(repo_root: Path, ref_files: frozenset[str] | None) -> list[Owed]:
     """A run cursor whose `emitted.plan` is already archived, or one naming no
-    plan whose `deliver` is done and which is itself on the default ref."""
+    plan whose `deliver` is done — gated on the default ref both ways (review
+    finding #2): the cursor itself must be on the ref, and a named plan's
+    archived owner dir must be too."""
     from fr.archive import deliver_done, emitted_plan
-    from fr.git import file_on_ref
 
     owed: list[Owed] = []
+    if ref_files is None:
+        return owed
     runs_dir = repo_root / RUNS_REL
     if not runs_dir.is_dir():
         return owed
     for cursor in sorted(runs_dir.glob("*.yaml")):
         rel = cursor.relative_to(repo_root)
+        if str(rel) not in ref_files:
+            continue  # the cursor itself has not merged yet
         plan = emitted_plan(cursor)
         if plan:
-            if (repo_root / IMPLEMENTED_PLANS_REL / Path(plan).name).is_dir():
+            owner_rel = IMPLEMENTED_PLANS_REL / Path(plan).name
+            if _dir_on_ref(ref_files, owner_rel):
                 owed.append(Owed(kind="orphan_run", path=rel, clear="fr archive --all"))
             continue
-        if evidence.ref is None:
-            continue
-        if deliver_done(cursor) and file_on_ref(evidence.ref.ref, str(rel), cwd=repo_root):
+        if deliver_done(cursor):
             owed.append(Owed(kind="orphan_run", path=rel, clear="fr archive --all"))
     return owed
 
@@ -338,19 +430,26 @@ def owed_artifacts(repo_root: Path, evidence: MergeEvidence) -> OwedArtifacts:
     """The ONE definition of "live, but its PR already merged" (§C). Reads the
     working tree and `evidence` only — no forge call, no fetch, no mutation.
 
+    ``evidence.ref`` is materialized into `ref_files` (review finding #3)
+    with exactly ONE `git ls-tree -r` call, reused by every check below —
+    never a per-candidate `file_on_ref` subprocess.
+
     `fr status` prints this to tell an operator what a `fr pickup --branch`
     closeout left behind; `fr archive --all` iterates the same list to clear
-    it. A spec `_spec_fully_implemented` cannot yet clear (a pending slice, an
-    unresolved cross-repo row, a row still active under `plans/`) is reported
-    in `held`, never silently dropped (R5).
+    it. A spec `_spec_fully_implemented` cannot yet clear (a pending slice or
+    an unresolved cross-repo row) is reported in `held`, never silently
+    dropped (R5) — but only once its OWN spec file has landed on the default
+    ref; a spec that exists only on the current branch is neither owed nor
+    held (review finding #1).
     """
     owed: list[Owed] = []
-    owed.extend(_owed_debug_journals(repo_root, evidence))
+    ref_files = _ref_tree(repo_root, evidence.ref.ref) if evidence.ref is not None else None
+    owed.extend(_owed_debug_journals(repo_root, ref_files))
     owed.extend(_owed_plans(repo_root, evidence))
-    spec_owed, held = _owed_specs(repo_root)
+    spec_owed, held = _owed_specs(repo_root, ref_files)
     owed.extend(spec_owed)
-    owed.extend(_owed_orphan_journals(repo_root))
-    owed.extend(_owed_orphan_runs(repo_root, evidence))
+    owed.extend(_owed_orphan_journals(repo_root, ref_files))
+    owed.extend(_owed_orphan_runs(repo_root, ref_files))
     return OwedArtifacts(owed=tuple(owed), held=tuple(held))
 
 

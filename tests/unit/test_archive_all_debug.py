@@ -30,6 +30,13 @@ def _write(repo: Path, rel: Path, text: str) -> Path:
     return p
 
 
+def _archived_plan(repo: Path, slug: str) -> Path:
+    """An `implemented/plans/<slug>` dir git can actually track — a bare
+    `mkdir` creates an EMPTY directory, invisible to `git ls-tree` (and so
+    never on a ref), so "this owner is archived" needs a real file inside."""
+    return _write(repo, SP / "implemented" / "plans" / slug / "_meta.yaml", "schema_version: 2\n")
+
+
 def _run_cursor(repo: Path, run_id: str, plan_rel: str) -> Path:
     return _write(
         repo,
@@ -58,10 +65,10 @@ def _build(tmp_path: Path) -> Path:
 
     _write(repo, SP / "journals" / "debug" / "on-ref.md", "# on ref\n")
 
-    (repo / SP / "implemented" / "plans" / "orphan-owner-plan").mkdir(parents=True)
+    _archived_plan(repo, "orphan-owner-plan")
     _write(repo, SP / "journals" / "plans" / "orphan-owner-plan.md", "# orphan plan journal\n")
 
-    (repo / SP / "implemented" / "plans" / "run-owner-plan").mkdir(parents=True)
+    _archived_plan(repo, "run-owner-plan")
     _run_cursor(repo, "2026-01-01-run-owner", "docs/superpowers/plans/run-owner-plan")
     _write(repo, SP / "usage" / "2026-01-01-run-owner.yaml", "captures: []\n")
 
@@ -131,3 +138,75 @@ def test_all_reports_the_moves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "on-ref.md" in result.output
     assert "orphan-owner-plan.md" in result.output
     assert "2026-01-01-run-owner.yaml" in result.output
+
+
+# --- negative: an owner or artifact only on the branch is never moved -------
+
+
+def _build_branch_only_owners(tmp_path: Path) -> Path:
+    repo = _repo(tmp_path)
+
+    # An on-ref journal whose owner will only be archived on the branch.
+    _write(repo, SP / "journals" / "plans" / "branch-archives-owner.md", "# owner comes later\n")
+    # An on-ref run cursor whose owner plan will only be archived on the branch.
+    _run_cursor(
+        repo, "2026-01-01-branch-archives-owner", "docs/superpowers/plans/branch-only-run-owner"
+    )
+    # An on-ref archived owner whose journal is only written on the branch.
+    _archived_plan(repo, "branch-writes-journal")
+    # An on-ref archived owner whose run cursor is only written on the branch.
+    _archived_plan(repo, "branch-writes-run")
+
+    _seed(repo)
+
+    _archived_plan(repo, "branch-only-run-owner")  # branch-only owner (journal's owner test)
+    _write(repo, SP / "journals" / "plans" / "branch-writes-journal.md", "# branch-only journal\n")
+    _run_cursor(repo, "2026-01-01-branch-writes-run", "docs/superpowers/plans/branch-writes-run")
+
+    return repo
+
+
+def test_all_does_not_move_journal_whose_owner_is_branch_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _build_branch_only_owners(tmp_path)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert (repo / SP / "journals" / "plans" / "branch-archives-owner.md").exists()
+    assert not (
+        repo / SP / "implemented" / "journals" / "plans" / "branch-archives-owner.md"
+    ).exists()
+
+
+def test_all_does_not_move_run_whose_owner_is_branch_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _build_branch_only_owners(tmp_path)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert (repo / SP / "runs" / "2026-01-01-branch-archives-owner.yaml").exists()
+    assert not (
+        repo / SP / "implemented" / "runs" / "2026-01-01-branch-archives-owner.yaml"
+    ).exists()
+
+
+def test_all_does_not_move_branch_only_journal_even_with_on_ref_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _build_branch_only_owners(tmp_path)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert (repo / SP / "journals" / "plans" / "branch-writes-journal.md").exists()
+    assert not (
+        repo / SP / "implemented" / "journals" / "plans" / "branch-writes-journal.md"
+    ).exists()
+
+
+def test_all_does_not_move_branch_only_run_even_with_on_ref_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _build_branch_only_owners(tmp_path)
+    result = _invoke(monkeypatch, repo, FakeGhClient(), ["archive", "--all"])
+    assert result.exit_code == 0, result.output
+    assert (repo / SP / "runs" / "2026-01-01-branch-writes-run.yaml").exists()
+    assert not (repo / SP / "implemented" / "runs" / "2026-01-01-branch-writes-run.yaml").exists()

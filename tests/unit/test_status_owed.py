@@ -32,6 +32,13 @@ def _write(repo: Path, rel: str | Path, text: str) -> Path:
     return p
 
 
+def _archived_plan(repo: Path, slug: str) -> Path:
+    """An `implemented/plans/<slug>` dir git can actually track — a bare
+    `mkdir` creates an EMPTY directory, invisible to `git ls-tree` (and so
+    never on a ref), so "this owner is archived" needs a real file inside."""
+    return _write(repo, SP / "implemented" / "plans" / slug / "_meta.yaml", "schema_version: 2\n")
+
+
 def _spec(repo: Path, name: str, rows: list[tuple[str, str]]) -> Path:
     lines = [
         f"# {name}\n",
@@ -80,7 +87,7 @@ def _owed_repo(tmp_path: Path) -> Path:
 
     _write(repo, SP / "journals" / "debug" / "on-ref.md", "# on ref\n")
 
-    (repo / SP / "implemented" / "plans" / "implemented-plan").mkdir(parents=True)
+    _archived_plan(repo, "implemented-plan")
     _spec(
         repo,
         "2026-01-01-done-spec-design.md",
@@ -89,10 +96,10 @@ def _owed_repo(tmp_path: Path) -> Path:
 
     _spec(repo, "2026-01-01-held-spec-design.md", [("later", "pending")])
 
-    (repo / SP / "implemented" / "plans" / "orphan-owner-plan").mkdir(parents=True)
+    _archived_plan(repo, "orphan-owner-plan")
     _write(repo, SP / "journals" / "plans" / "orphan-owner-plan.md", "# orphan plan journal\n")
 
-    (repo / SP / "implemented" / "plans" / "run-owner-plan").mkdir(parents=True)
+    _archived_plan(repo, "run-owner-plan")
     _run_cursor(repo, "2026-01-01-run-owner", "docs/superpowers/plans/run-owner-plan")
 
     _commit(repo, "seed")
@@ -186,6 +193,51 @@ def test_status_json_has_owed_and_held_keys(
     kinds = {o["kind"] for o in data["owed"]}
     assert {"debug_journal", "spec", "orphan_journal", "orphan_run"} <= kinds
     assert any(h["spec"] == "2026-01-01-held-spec-design.md" for h in data["held"])
+
+
+# --- negative: branch-only artifacts/owners never appear (review #1/#2/#4) --
+
+
+def _branch_only_repo(tmp_path: Path) -> Path:
+    """Every owner/artifact below is written AFTER `_publish` — on the
+    branch only, never on the default ref."""
+    repo = _init(tmp_path / "r")
+    _add_remote(repo, tmp_path / "o.git")
+    _archived_plan(repo, "on-ref-journal-owner")
+    _run_cursor(repo, "2026-01-01-on-ref-run", "docs/superpowers/plans/on-ref-run-owner")
+    _commit(repo, "seed")
+    _publish(repo)
+
+    # This PR's own spec, still only on the branch.
+    _spec(repo, "2026-01-01-branch-only-spec-design.md", [("x", "pending")])
+    # A journal on the branch whose owner (published above) IS on the ref —
+    # but the journal itself is not, so it must not be owed.
+    _write(
+        repo,
+        SP / "journals" / "plans" / "on-ref-journal-owner.md",
+        "# journal written after publish\n",
+    )
+    # A run cursor on the branch whose emitted plan is archived only on the
+    # branch too.
+    _archived_plan(repo, "on-ref-run-owner")
+    return repo
+
+
+def test_status_ignores_branch_only_spec_journal_and_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _branch_only_repo(tmp_path)
+    result = _invoke(monkeypatch, repo, ["status", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    owed_paths = {o["path"] for o in data["owed"]}
+    held_specs = {h["spec"] for h in data["held"]}
+    assert "docs/superpowers/journals/plans/on-ref-journal-owner.md" not in owed_paths
+    assert "docs/superpowers/runs/2026-01-01-on-ref-run.yaml" not in owed_paths
+    assert "2026-01-01-branch-only-spec-design.md" not in held_specs
+    assert "2026-01-01-branch-only-spec-design.md" not in {
+        o["path"].rsplit("/", 1)[-1] for o in data["owed"]
+    }
 
 
 def test_status_json_keeps_existing_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
