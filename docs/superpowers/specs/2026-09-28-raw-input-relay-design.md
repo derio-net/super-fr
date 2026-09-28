@@ -164,3 +164,9 @@ Unit, in CI:
 4. A prose tripwire: the fr-goal skill names `operator_input` in §5 and §6,
    and the phase-executor agent file carries the rule's load-bearing tokens
    (`the spec governs`, `input-`).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-28-raw-input-relay | `derio-net/super-fr` | `2026-09-28-raw-input-relay` | — |
