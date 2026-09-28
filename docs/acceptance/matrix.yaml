@@ -4430,9 +4430,15 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R2
     - super-fr:docs/superpowers/specs/2026-09-28-phase-sizing-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_phase_sizing.py
+      - super-fr:tests/unit/test_plan_phase_sizing.py
+    status: ci
+    notes: 'Phase 1 (spec §A/§B, R2/R6): fr.phase_sizing derives each agentic phase''s
+      own asks through its rows; fr plan self-review errors on a phase serving no ask
+      of its own, including the #745 standalone skeleton, unless a tier:/risk-first:/review-size:
+      split decision waives it (CLI exit covered).'
   - id: phase-sizing-split-reason
     capability: fr-goal-methodology
     acceptance: fr plan self-review fails a plan whose agentic phases after the first
