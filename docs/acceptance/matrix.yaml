@@ -4336,7 +4336,9 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
     levels: {}
     status: not-implemented
-    notes: Born at brainstorm; target level live.
+    notes: 'Live-only: proven by the post-merge Test Plan item 17 run; marked post-merge
+      (phase 4 review g2).'
+    verify: post-merge
   - id: requirements-unconfirmed-in-pr
     capability: fr-goal-methodology
     acceptance: Behaviour built without operator confirmation is listed in its own required
