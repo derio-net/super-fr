@@ -197,3 +197,62 @@ Three tests: combined spec-review record applies; migrated v2 record applies thr
 ### p2-d5-resolved · finding [out-of-scope] · resolves p2-d5: parse_journal catches only KeyError; a hand-edited token invalid for its scope raises raw ValueError (phase 2)
 
 Pre-existing: parse_journal already lets out_of_scope/tracked_by validator errors escape the same way; this change adds two more tokens to an existing pattern rather than causing it. Listed in the PR for filing.
+
+<!-- fr:journal kind=decision scope=plan id=p3-predates-is-debt created=2026-09-28T11:37:40+00:00 phase=3 -->
+### p3-predates-is-debt · decision · A predates witness is recorded on the cursor and read back as debt (phase 3)
+
+§G says each derived name "records `predates the requirements gate`"
+AND that `fr run status` shows the unit as `done, unevidenced`. Both
+hold by storing the line as the evidence value (so resolve never
+refuses and the cursor says why) and by `_unevidenced_units` treating a
+held value equal to `fr.requirements.REQUIREMENTS_PREDATES` as lacking.
+The decision is per run, not per name: the run predates the gate when
+the step that recorded `emitted.spec` is not the resolving step and
+carries no `requirements` evidence. The constant lives in
+fr.requirements so run_cmd and pr_body share it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-shipped-walk-fixtures created=2026-09-28T11:37:40+00:00 phase=3 -->
+### p3-shipped-walk-fixtures · discovery · Every test walking the shipped fr-goal past brainstorm now seeds a sound capture (phase 3)
+
+The shipped manifest's new `brainstorm evidence: [requirements]` refused
+~90 existing tests that walk the real shape (`_drive_to_implement`,
+`started_run`, `_fr_goal_at_implement`, question-rounds, adopt, record
+tests). One helper, tests/unit/requirements_support.seed_requirements,
+writes what a real brainstorm leaves (a Requirements table, a spec-journal
+`input` entry, a matrix row via render_row_block with org/repo keys, since
+test workspaces have no github remote); spec_review_evidence's review body
+now carries the matching input-coverage block. One assertion in
+test_run_question_rounds read "the first spec-journal entry is the
+decision"; it now selects the decision by id, since the input entry
+precedes it.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-this-run-predates created=2026-09-28T11:37:40+00:00 phase=3 -->
+### p3-this-run-predates · discovery · This run (2026-09-28-feat-gh-759) resolves on the new manifest with no drift (phase 3)
+
+The wheel's copy (packages/fr/src/fr/workflows/fr-goal.yaml) is what
+`uv run fr` resolves in this worktree, so the edit is live for this run.
+`fr run check` passes (no drift; spec-review reported as `unevidenced:
+requirements, coverage (predates that obligation)`). Its brainstorm
+carries no `requirements`, so `deliver` will record `requirement-rows`
+as predates rather than refuse, and the PR body renders the predates
+line under `## Input coverage`.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-28T11:37:40+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the one duplicated rule (does a matrix origin name this spec, twin-aware) was extracted into fr.requirements.origin_fragment while going green, and check_requirements now reads it; the capture loading is one helper from the start
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-09-28T11:37:40+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+one witness function over the capture T1 already loads; check_coverage owns the partition, nothing is repeated to extract
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-09-28T11:37:40+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+requirement-rows reuses origin_fragment (T1) for the spec match and _unevidenced_units' existing debt wording; the predates marker is one constant read by both the writer and the status reader
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t4 created=2026-09-28T11:37:40+00:00 phase=3 -->
+### no-refactor-p3-t4 · discovery · no-refactor-because P3.T4 (phase 3)
+
+the three renderers reuse origin_fragment and a new coverage_block beside the block regex check_coverage already owns; the predates string moved to fr.requirements so run_cmd and pr_body share one constant
