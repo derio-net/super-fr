@@ -48,7 +48,8 @@ def test_a_migration_off_version_one_is_registered_for_the_record_kind() -> None
     kind = artifact_kind("record")
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
     assert chain, "no registered migration moves a pre-framework record file"
-    assert [step.to_version for step in chain] == [2, 3]  # every hop, not just the end
+    # every hop, not just the end
+    assert [step.to_version for step in chain] == list(range(2, kind.current_version + 1))
     assert chain[-1].to_version == kind.current_version
 
 

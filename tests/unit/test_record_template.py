@@ -172,3 +172,29 @@ def test_a_stale_session_resumes_an_in_progress_record(tmp_path: Path) -> None:
     assert done.exit_code == 0, done.output
     assert "3 ticked" in done.stdout and "1 decision" in done.stdout
     assert not path.exists()
+
+
+def test_a_visual_steps_template_carries_a_commented_visual_hint() -> None:
+    """2026-09-28-ui-visual-evidence §C: `visual` is DERIVED from the record's
+    `visual:` section, so the template hints that section (commented, so the
+    empty template stays valid) and never lists `visual` as an owed id."""
+    import yaml
+    from fr.record.template import render_template
+
+    text = render_template(
+        run="r1",
+        step="implement-phase",
+        item="phase/1",
+        allowed=frozenset({"evidence"}),
+        tick_ids=[],
+        refactor_tasks=[],
+        evidence=["visual"],
+        emitted=[],
+        resolve="fr run resolve r1 --step implement-phase --item phase/1",
+    )
+
+    visual = [line for line in text.splitlines() if "visual" in line]
+    assert visual and all(line.lstrip().startswith("#") for line in visual)
+    assert "#       - {path: <image>, shows:" in text
+    assert "visual: <id>" not in text
+    assert "visual" not in (yaml.safe_load(text) or {})

@@ -1,0 +1,161 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Skeleton — the `visual` acceptance row and record section, with their migrations
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - visual-evidence-row-flag
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/acceptance/*
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/template.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/matrix_visual.py
+  - packages/fr/src/fr/artifacts/record_visual.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - docs/acceptance/*
+  - docs/superpowers/runs/*
+  - docs/superpowers/plans/*
+  - tests/unit/test_acceptance_visual.py
+  - tests/unit/test_record_visual.py
+  - tests/unit/test_migration_*.py
+  - tests/unit/test_record_*.py
+  - tests/unit/test_artifact*.py
+  - .changes/feat-batch-ui-evidence-2.yaml
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Walking skeleton — a row carrying `visual` round-trips through the matrix
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: tests/unit/test_acceptance_visual.py — parse a matrix text holding one row with
+      `visual: {states: [a], interactions: ["20 cap"]}` via `fr.acceptance.model.parse_matrix`;
+      assert `row.visual.states == ("a",)` and `row.visual.interactions == ("20 cap",)`. Fails:
+      `Row` is `extra="forbid"` and has no `visual`.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/acceptance/model.py add a closed `Visual(BaseModel)`
+      (frozen, extra="forbid", `states: tuple[StrictStr, ...] = ()`,
+      `interactions: tuple[StrictStr, ...] = ()`) and `Row.visual: Visual | None = None` beside
+      `verify` (spec §A). Add `.changes/feat-batch-ui-evidence-2.yaml` (`bump: minor`, summary:
+      "fr-goal: UI evidence is visual — a `visual` acceptance row owes screenshots actually opened
+      (transcript-verified) and every named state and interaction covered, at implement, review and
+      deliver (#779)"). Test green; `uv run ruff check packages/ tests/` clean.
+- number: 2
+  title: Visual validation and the acceptance CLI
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: extend test_acceptance_visual.py (spec Test Plan 1): both lists empty refused; one empty
+      list accepted; a name duplicated within or across `states`/`interactions` refused (error naming
+      the name); a row with `visual` dumped and re-parsed is identical;
+      `fr acceptance add --visual-state a --visual-interaction "20 cap" ...` (typer CliRunner, tmp
+      matrix) writes the field; `fr acceptance set-status` on that row keeps `visual` intact. Fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: `Visual` model_validator (non-empty union, unique names); repeatable `--visual-state` /
+      `--visual-interaction` options on `add` in commands/acceptance_cmd.py, threaded to the row
+      writer the way `--verify` is (grep `verify` in acceptance_cmd.py and the writer it calls);
+      confirm set-status's in-place rewrite preserves the field (fix if not). Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: one name-uniqueness helper shared by the validator and any CLI pre-check; ruff and
+      mypy on packages/fr/src clean.
+- number: 3
+  title: Record sections — AcceptanceItem.visual and StepRecord.visual
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_record_visual.py — a record with
+      `acceptance: [{id, capability, acceptance, status: not-implemented, visual: {states: [a]}}]`
+      creates a row carrying `visual` through `fr.record.apply` (follow the existing
+      acceptance-record tests' fixtures); a record with
+      `visual: [{row: r, script: s.cjs, shots: [{path: /x/a.png, shows: [a]}]}]` parses into
+      `StepRecord.visual`; `present_sections` reports it under `evidence`; an unknown key inside a
+      shot, an empty `shots` and an empty `shows` are refused. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: record/model.py — `AcceptanceItem.visual: Visual | None`; closed models
+      `VisualShot{path: StrictStr, shows: tuple[StrictStr, ...] (min 1)}` and
+      `VisualEvidence{row: StrictStr, script: StrictStr | None = None, shots: tuple[VisualShot, ...] (min 1)}`;
+      `StepRecord.visual: tuple[VisualEvidence, ...] = ()`; `_SECTION_FIELDS["evidence"]` gains
+      `"visual"`; `RECORD_SCHEMA_VERSION = 4` with a docstring line. Thread `AcceptanceItem.visual`
+      through record/apply.py's row creation. Tests green.
+- number: 4
+  title: Artifact versioning — matrix 2→3, record 3→4, this repo migrated
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_migration_matrix_visual.py and tests/unit/test_migration_record_visual.py,
+      modelled on test_migration_matrix_verify.py / test_migration_record_input_unconfirmed.py:
+      registered, stamp-only (body unchanged but the stamp), an unreadable file refused and left
+      untouched, the whole chain reachable (matrix `[2, 3]` from 1, record `[2, 3, 4]` from 1). Update
+      any existing test pinning these kinds' `current_version`. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: packages/fr/src/fr/artifacts/matrix_visual.py (matrix_verify.py's shape, 2→3) and
+      record_visual.py (record_input_unconfirmed.py's shape, 3→4), both imported from
+      artifacts/__init__.py; registry.py `current_version` matrix 3 and record 4, each with a comment
+      line citing spec 2026-09-28-ui-visual-evidence §G. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      Run `uv run fr migrate artifacts --yes` in the workspace and commit its result; then
+      `uv run fr acceptance report --deterministic`, `uv run fr acceptance check` and
+      `uv run fr validate artifacts` all exit 0. Run
+      `uv run pytest -q --no-cov -n auto tests/unit -k "migration or record or acceptance or artifact"`
+      and put the pass count in the step note.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T20:00:54+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-09-28T20:04:24+00:00'
+      note: 'targeted unit run: 1073 passed, 8 skipped; full suite 6933 passed, 97
+        skipped (executor-reported)'
+  completion:
+    at: '2026-09-28T20:00:54+00:00'
+    note: null
+    observed_prs: []

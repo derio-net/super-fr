@@ -55,13 +55,14 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeGuard
 
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+from fr.usage.classify import canonical_tool
 
 CLAUDE_CODE_PROJECTS = Path(".claude") / "projects"
 """Where Claude Code writes transcripts, under `$HOME`."""
@@ -252,21 +253,10 @@ def tool_use_ids(session: Path) -> dict[str, _dt.datetime | None]:
     if records is None:
         return {}
     found: dict[str, _dt.datetime | None] = {}
-    for record in records:
-        if record.get("type") != "assistant":
-            continue
-        message = record.get("message")
-        if not isinstance(message, Mapping):
-            continue
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
-                continue
-            block_id = block.get("id")
-            if isinstance(block_id, str):
-                found[block_id] = parse_timestamp(record.get("timestamp"))
+    for stamp, block in _tool_uses(records):
+        block_id = block.get("id")
+        if isinstance(block_id, str):
+            found[block_id] = stamp
     return found
 
 
@@ -794,6 +784,229 @@ def _names(command: str, log: Path) -> bool:
         _is_log(_resolve_target(m.group(0), assignments, m.start()), log)
         for m in _WORD.finditer(bare)
     )
+
+
+def _tool_uses(
+    records: list[dict[str, Any]], *, main_thread: bool = False
+) -> Iterator[tuple[_dt.datetime | None, Mapping[str, Any]]]:
+    """`(timestamp, block)` for every `tool_use` block of every assistant record,
+    in file order. The file IS the scope: a subagent's transcript is
+    `isSidechain` throughout, so it is read unfiltered. `main_thread` is for
+    the orchestrator's own session file, where a sidechain record is some
+    subagent's, not the orchestrator's (as `orchestrator_wrote_since`)."""
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        if main_thread and record.get("isSidechain") is True:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        stamp = parse_timestamp(record.get("timestamp"))
+        for block in content if isinstance(content, list) else ():
+            if isinstance(block, Mapping) and block.get("type") == "tool_use":
+                yield stamp, block
+
+
+def _first_call_since(
+    transcript: Path,
+    since: str,
+    tool: str,
+    matches: Callable[[Mapping[str, Any]], bool],
+    *,
+    not_before: _dt.datetime | None = None,
+    main_thread: bool = False,
+) -> _dt.datetime | Literal[False] | None:
+    """When the first `tool` call (alias-normalised) at or after `since` — and
+    `not_before`, when given — whose input `matches` was issued; `False` when
+    the transcript holds none, `None` when it cannot be read (or `since` does
+    not parse)."""
+    start = parse_timestamp(since)
+    records = _read_records(transcript)
+    if start is None or records is None:
+        return None
+    if not_before is not None and not_before > start:
+        start = not_before
+    for stamp, block in _tool_uses(records, main_thread=main_thread):
+        tool_input = block.get("input")
+        if (
+            stamp is not None
+            and stamp >= start
+            and canonical_tool(str(block.get("name"))) == tool
+            and isinstance(tool_input, Mapping)
+            and matches(tool_input)
+        ):
+            return stamp
+    return False
+
+
+def read_file_since(
+    transcript: Path,
+    path: Path,
+    since: str,
+    *,
+    not_before: _dt.datetime | None = None,
+    main_thread: bool = False,
+) -> _dt.datetime | Literal[False] | None:
+    """The first file read of `path` in `transcript` at or after `since` (and
+    `not_before` — the caller's "after the file's last write") — or `False`
+    when the transcript was read and holds none, `None` when it could not be
+    read (spec 2026-09-28-ui-visual-evidence §C, check 4).
+
+    A read is a tool call whose name normalises to `Read` through
+    `fr.usage.classify`'s alias table (`read_file`, `view` count), naming the
+    file in `file_path` or `path` by an ABSOLUTE path, compared as real paths
+    on both sides. A relative target never matches: the transcript carries no
+    cwd, so `shots/a.png` could be any `a.png` under any `shots/`. What the
+    tool returned is not inspected. `main_thread` skips sidechain records (the
+    orchestrator's own session file)."""
+    real = os.path.realpath(path)
+
+    def names(tool_input: Mapping[str, Any]) -> bool:
+        target = tool_input.get("file_path") or tool_input.get("path")
+        return (
+            isinstance(target, str) and os.path.isabs(target) and os.path.realpath(target) == real
+        )
+
+    return _first_call_since(
+        transcript, since, "Read", names, not_before=not_before, main_thread=main_thread
+    )
+
+
+_INTERPRETERS = frozenset({"node", "python", "python3", "bash", "sh", "npx", "deno", "bun"})
+"""Words whose first non-flag argument is the program they execute."""
+_SUBCOMMAND_RUNNERS = frozenset({"deno", "bun", "uv"})
+"""Interpreters that may put a `run` subcommand before the program."""
+_SEPARATORS = frozenset({"&&", "||", ";", "|", "|&", "&", "(", ")"})
+_LEADING_ASSIGNMENT = re.compile(r"^[A-Za-z_]\w*=")
+
+
+def _simple_commands(command: str) -> Iterator[list[str]]:
+    """The words of each simple command in `command`: split on lines and on
+    unquoted control operators, quotes removed. Unbalanced quotes fall back to
+    whitespace splitting for that line."""
+    import shlex
+
+    for line in command.replace("\\\n", " ").splitlines():
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            words = list(lexer)
+        except ValueError:
+            words = line.split()
+        current: list[str] = []
+        for word in words:
+            if word in _SEPARATORS or (word and set(word) <= set("&|;()")):
+                if current:
+                    yield current
+                current = []
+            else:
+                current.append(word)
+        if current:
+            yield current
+
+
+def _program(words: list[str], depth: int = 0) -> list[str]:
+    """The program(s) a simple command executes: its command word and, after an
+    interpreter word (`_INTERPRETERS`, `uv run`, a `deno`/`bun` `run`), the first
+    non-flag argument — recursively (`uv run python x`, `npx node x`). An
+    `fr isolation exec … --` prefix is stepped over, and a lone quoted argument
+    after it, or after `bash -c`/`sh -c`, is read as a command of its own."""
+    if depth > 4:
+        return []
+    while words and _LEADING_ASSIGNMENT.match(words[0]):
+        words = words[1:]
+    if not words:
+        return []
+    if words[:3] == ["uv", "run", "fr"]:
+        words = words[2:]
+    if words[:3] == ["fr", "isolation", "exec"]:
+        rest = words[words.index("--") + 1 :] if "--" in words else []
+        if len(rest) == 1:
+            return [p for sub in _simple_commands(rest[0]) for p in _program(sub, depth + 1)]
+        return _program(rest, depth + 1)
+    head = words[0]
+    found = [head]
+    name = os.path.basename(head)
+    if name not in _INTERPRETERS and name != "uv":
+        return found
+    args = words[1:]
+    if name in ("bash", "sh") and "-c" in args:
+        after = args[args.index("-c") + 1 :]
+        if after:
+            return [
+                *found,
+                *(p for sub in _simple_commands(after[0]) for p in _program(sub, depth + 1)),
+            ]
+        return found
+    operands = [a for a in args if not a.startswith("-")]
+    if name in _SUBCOMMAND_RUNNERS and operands[:1] == ["run"]:
+        operands = operands[1:]
+    elif name == "uv":
+        return found
+    if not operands:
+        return found
+    index = args.index(operands[0])
+    return [*found, *_program(args[index:], depth + 1)]
+
+
+def _executes(command: str, script: Path) -> bool:
+    """Does `command` execute `script` — as a command word, or as the program
+    an interpreter word runs (`_program`)?"""
+    return any(
+        _is_log(word, script) for words in _simple_commands(command) for word in _program(words)
+    )
+
+
+def shell_named_since(
+    transcript: Path,
+    name: str | Path,
+    since: str,
+    *,
+    main_thread: bool = False,
+) -> _dt.datetime | Literal[False] | None:
+    """The first shell call in `transcript` at or after `since` that EXECUTES
+    `name` — or `False` / `None` as `read_file_since` (spec §C, check 5: the
+    stage that names a capture script re-ran it).
+
+    Executes: the script is a simple command's command word (`./shots.cjs`),
+    or the first non-flag argument of an interpreter word — `node`, `python`,
+    `python3`, `bash`, `sh`, `npx`, `deno`, `bun`, `uv run [python]` — with
+    an `fr isolation exec -- …` prefix stepped over. `cat shots.cjs`,
+    `ls shots.cjs`, `echo shots.cjs` name it and do not run it.
+
+    BE HONEST ABOUT THE LIMIT (review p2-r7): this is syntax, not execution.
+    An indirection names no script — `npm run shots`, `make shots`, a
+    wrapper script, a shell function — and is NOT recognised: name the script
+    directly (`node shots.cjs`). An interpreter flag that takes a value
+    (`node --require x shots.cjs`) is read as the program being `x`. And the
+    transcript records that the command was issued, not that it succeeded."""
+    script = Path(name)
+
+    def runs(tool_input: Mapping[str, Any]) -> bool:
+        command = tool_input.get("command")
+        return isinstance(command, str) and _executes(command, script)
+
+    return _first_call_since(transcript, since, "Bash", runs, main_thread=main_thread)
+
+
+def witness_transcript(session: Path, agent_id: str | None) -> Path | Literal[False] | None:
+    """The transcript that owes a unit's image reads (spec §C, check 4): the
+    orchestrator's own stream when `agent_id` is `None`, else the subagent
+    transcript of the dispatch `attribute_dispatches` pairs to `agent_id`.
+
+    Three-valued (review p2-r1): `None` ONLY when the session file cannot be
+    read (the gate records unobserved); `False` when it reads but no dispatch
+    of this session pairs to `agent_id` — a bogus or foreign id, which the gate
+    refuses, never records as unobserved."""
+    if _read_records(session) is None:
+        return None
+    if agent_id is None:
+        return session
+    for dispatch in attribute_dispatches(session):
+        if dispatch.agent_id == agent_id:
+            return dispatch.transcript
+    return False
 
 
 def orchestrator_wrote_since(

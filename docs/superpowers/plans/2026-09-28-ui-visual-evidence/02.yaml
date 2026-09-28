@@ -1,0 +1,204 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The `visual` derived evidence — transcript predicates and the resolve gate
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - visual-evidence-gate
+  - visual-evidence-reviewer-own-eyes
+  - visual-evidence-capture-script
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/telemetry.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/record/template.py
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - packages/fr/src/fr/workflow/*
+  - packages/fr/src/fr/harness/parity.yaml
+  - tests/unit/test_run_telemetry_visual.py
+  - tests/unit/test_run_evidence_visual.py
+  - tests/unit/test_run_evidence*.py
+  - tests/unit/test_record_template*.py
+  - tests/unit/test_tripwire_shipped_workflows.py
+  - tests/unit/test_*parity*.py
+  - tests/unit/test_workflow*.py
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Transcript predicates — read_file_since and shell_named_since
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_run_telemetry_visual.py — JSONL transcript fixtures in tmp_path in the
+      record shape test_run_telemetry.py already builds (assistant records with `tool_use` blocks and
+      ISO timestamps). `read_file_since(transcript, shot, since)`: a `Read` tool_use whose
+      `input.file_path` names the shot after `since` returns its datetime; a relative path resolving
+      to the same file matches; an aliased tool (`read_file`, or `view` with `path`) matches; a read
+      before `since` → False; a read of another file → False; a missing/unreadable transcript → None.
+      `shell_named_since(transcript, "shots.cjs", since)`: a `Bash` tool_use whose command names it →
+      datetime; none → False; unreadable → None. Fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add both to packages/fr/src/fr/run/telemetry.py beside `subagent_dispatch_since` (same
+      three-valued contract, same `_read_records`), normalising tool names through
+      `fr.usage.classify`'s alias table (import it, do not copy it) and matching commands with the
+      existing `_names` helper. Tests green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: extract the shared "assistant tool_use blocks since a timestamp" iteration if
+      `tool_use_ids` and the new predicates now repeat it; tests green.
+- number: 2
+  title: witness_transcript — whose transcript owes the reads
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in test_run_telemetry_visual.py, a session file plus `subagents/agent-<id>.jsonl` and
+      `agent-<id>.meta.json` whose toolUseId pairs with an orchestrator tool_use (the fixture shape
+      test_run_evidence_separate_context.py uses): `witness_transcript(session, agent_id=None)` → the
+      orchestrator file; `witness_transcript(session, agent_id="<id>")` → that subagent's transcript;
+      an agent id this session never dispatched → None. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement through `attribute_dispatches` (`Dispatch.transcript`). Tests green.
+- number: 3
+  title: The `visual` derivation — owed rows and checks 1–3
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: tests/unit/test_run_evidence_visual.py (spec Test Plan 3) against a pure
+      `fr.run.visual.check_visual(owed_rows, entries, *, opened, fresh_required, repo_root, records_dir, is_ignored)`
+      returning problems and per-row witnesses: no owed row → "none"; missing row entry; uncovered
+      state/interaction; unknown name in `shows`; missing and zero-byte shot; shot under
+      `<run>.records/`; shot inside repo_root with is_ignored False; non-image suffix; stale shot
+      refused when fresh_required and accepted when not. Witness
+      `<row>:<n>:<sha256[:12] over bytes in path order>`, joined by ",". Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: new packages/fr/src/fr/run/visual.py with
+      `owed_rows(matrix, *, phase_rows=None, spec_ref=None)` (rows with `visual` and no
+      `verify: post-merge`; phase_rows from `PhaseHeader.acceptance`, spec_ref via
+      `fr.requirements.rows_citing`) and `check_visual`; the caller's `is_ignored` uses
+      `git check-ignore -q`. Tests green.
+- number: 4
+  title: Wire it into `fr run resolve` — checks 4–5, unobserved, refusals
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: extend test_run_evidence_visual.py through the real resolve path (the harness
+      test_run_evidence_requirements.py uses for derived evidence; fake the session env as
+      test_run_evidence_separate_context.py does). Spec Test Plan 4–5: a step declaring
+      `evidence: [visual]` with no visual row resolves done recording `visual=none`; dispatched
+      implement-phase — reads in the holder's subagent transcript pass, reads only in the
+      orchestrator refused; inline implement-phase (no holder) — orchestrator reads pass;
+      review-phase — reads only in the executor's transcript refused, in the reviewer's pass; deliver
+      — orchestrator reads of fresh shots pass, stale refused; a read before the unit opened refused;
+      a named script missing refused; a named script no Bash call named refused; unreadable
+      transcript → done with the witness suffixed `:unobserved` and a yellow warning;
+      `--evidence visual=x` refused as derived; a flag-form resolve owing visual rows refused naming
+      `--record`. Fails.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: commands/run_cmd.py — add "visual" to `_VERIFIABLE_EVIDENCE`, `_DERIVED_EVIDENCE`,
+      `_DERIVED_FROM`; derive it in `_verified_evidence` when done (after `reviewer`, so the reviewer
+      id is known), reading the record's `visual` section (pass it from record/apply.py's
+      `resolve_in_process` call as `emitted` is passed), computing owed rows (phase unit → the plan
+      phase header's `acceptance`; deliver → the run spec's rows), running `check_visual`, then checks
+      4–5 against `witness_transcript` (holder = the unit's last attempt's agent; reviewer = offered
+      `reviewer`; otherwise the orchestrator) with `read_file_since` / `shell_named_since` since the
+      unit opened; `_note_unobserved("visual")` on None. Add a commented `visual:` hint to
+      record/template.py for steps whose evidence lists `visual`. Tests green.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: keep run_cmd.py's addition a thin call into fr.run.visual (witness resolution and
+      refusal text live there); tests green.
+- number: 5
+  title: The shipped manifest and the parity row
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: a test asserting plugins/super-fr/workflows/fr-goal.yaml declares `visual` in the evidence
+      of implement-phase, review-phase and deliver, and that parity.yaml carries a `visual-evidence`
+      row that `fr harness parity --check` accepts. Fails.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: `evidence: [visual]` on implement-phase, `visual` appended to review-phase's and
+      deliver's evidence, with a comment citing spec 2026-09-28-ui-visual-evidence §C; the
+      `visual-evidence` row in packages/fr/src/fr/harness/parity.yaml per spec §F (claude-code
+      enforced with per-mode entries as deliver-tests-provenance; opencode advisory; hermes advisory;
+      codex and copilot-cli unsupported). `uv run fr workflow check` on the shipped manifest and
+      `uv run fr harness parity --check` exit 0; tests enumerating those steps' evidence updated. Run
+      `uv run pytest -q --no-cov -n auto tests/unit -k "evidence or telemetry or parity or workflow or record"`
+      and put the counts in the step note.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: tests/unit/test_run_telemetry_visual.py — RED on ImportError (read_file_since
+        absent)
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: read_file_since/shell_named_since in fr.run.telemetry; tool names via
+        new fr.usage.classify.canonical_tool (the one _ALIASES table); 135 passed
+        (telemetry + telemetry_visual)
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: extracted _tool_uses(records) iterator; tool_use_ids now uses it; 353
+        passed (-k telemetry or separate_context or usage)
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 3 witness_transcript tests in the same file; RED was the file-level ImportError
+        shared with T1
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: witness_transcript(session, agent_id) through attribute_dispatches; green
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: tests/unit/test_run_evidence_visual.py part 1 (pure) — RED on ImportError
+        (fr.run.visual absent)
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'fr.run.visual: owed_rows, check_visual, git_ignored; 22 passed'
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'part 2 through fr run resolve --record: 18 tests; RED: ''cannot verify
+        visual evidence'''
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'run_cmd: visual in _VERIFIABLE/_DERIVED/_DERIVED_FROM, _visual_witness
+        after reviewer; resolve_in_process(visual=) from record/apply.py; template
+        visual: hint (+1 test); 40 + 7 passed; 1082 passed (-k evidence or telemetry
+        or record or run_cli or workflow)'
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: run_cmd._visual_witness is one call into fr.run.visual.owed_for_unit/derive_visual
+        (witness resolution, role, all refusal text live there); script-exists moved
+        into pure check_visual; 61 passed
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: manifest + parity-row tests RED (2 failed, 21 passed)
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-09-28T20:29:10+00:00'
+      note: 'fr-goal.yaml (plugin + packaged copy) and parity.yaml visual-evidence
+        row; fr workflow check fr-goal ok; fr harness parity --check exit 0; -k ''evidence
+        or telemetry or parity or workflow or record'': 919 passed, 0 failed'
+  completion:
+    at: '2026-09-28T20:29:10+00:00'
+    note: null
+    observed_prs: []
