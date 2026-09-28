@@ -666,3 +666,8 @@ Filed at closeout as #805.
 ### p2r-splitlines-resolved-2 · finding [deferred → #806] · resolves p2r-splitlines: str.splitlines splits on \x0c/\x1c/U+2028, so a comment fragment could in theory be dropped
 
 Filed at closeout as #806 (bundled minor follow-ups).
+
+<!-- fr:journal kind=finding scope=plan id=p5r-local-hint-resolved-2 created=2026-09-28T23:33:55+00:00 state=open resolves=p5r-local-hint tracked_by=#806 -->
+### p5r-local-hint-resolved-2 · finding [deferred → #806] · resolves p5r-local-hint: isolation/local.py:945's `fr init scaffold --profile` hint may now refuse on a repo with no remote
+
+Filed at closeout as #806 (bundled minor follow-ups).
