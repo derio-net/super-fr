@@ -359,3 +359,28 @@ each skill's addition is a paragraph in its own existing section; the mirror syn
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 the explainer prose, AGENTS.md bullet and the 7 acceptance set-status calls are each a single addition; nothing duplicated to extract
+
+<!-- fr:journal kind=finding scope=plan id=p4-g1 created=2026-09-28T12:51:22+00:00 phase=4 state=open review_scope=in -->
+### p4-g1 · finding [open] (reviewer: in scope) · fr-spec-reviewer never says traceability findings are always in scope (phase 4)
+
+Spec §D / R4 require it, and apply.py:251-268 refuses unconfirmed on a finding tagged out — a mistagged invented finding would be stranded.
+
+<!-- fr:journal kind=finding scope=plan id=p4-g2 created=2026-09-28T12:51:22+00:00 phase=4 state=open review_scope=in -->
+### p4-g2 · finding [open] (reviewer: in scope) · The spec's own live-only rows (R3, R4) lack verify: post-merge, and no verb can set it on an existing row (phase 4)
+
+set-status had no --verify; add is create-only; there is no delete verb and matrix.yaml is never hand-edited.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-4 created=2026-09-28T12:51:22+00:00 phase=4 -->
+### review-phase-4 · review · phase 4 code review: 2 findings (both in scope, fixed) (phase 4)
+
+Independent reviewer (dispatched code-reviewer, standard tier) over the phase-4 prose/docs against the spec and the code as built. Checked clean: every named command/flag/section exists as written; the reviewer agent's return shape (input-coverage fence, | span | coverage | header, label grammar incl. missing <id>) matches check_coverage's parser exactly; coverage described as whitespace-insensitive; redaction and always-ask (no assumption escape) present; no harness-specific tool names outside a Harness clause; explainer accurate and its .html carries the new sections; each ci row's level refs exercise its claim.
+
+<!-- fr:journal kind=finding scope=plan id=p4-g1-resolved created=2026-09-28T12:51:22+00:00 phase=4 state=fixed resolves=p4-g1 -->
+### p4-g1-resolved · finding [fixed] · resolves p4-g1: fr-spec-reviewer never says traceability findings are always in scope (phase 4)
+
+One sentence in the traceability section (always in scope, never out, with the reason); pinned by test_traceability_findings_are_always_tagged_in_scope (red first); OpenCode mirrors regenerated (2e624da8).
+
+<!-- fr:journal kind=finding scope=plan id=p4-g2-resolved created=2026-09-28T12:51:22+00:00 phase=4 state=fixed resolves=p4-g2 -->
+### p4-g2-resolved · finding [fixed] · resolves p4-g2: The spec's own live-only rows (R3, R4) lack verify: post-merge, and no verb can set it on an existing row (phase 4)
+
+fr acceptance set-status --verify post-merge (only value; omitted preserves); spec §F and fr-acceptance skill updated; used on requirements-always-ask and requirements-spec-review-traceability (f1f62749, 2a082542, 8673951a). The reviewer's delete+re-add suggestion was not possible without hand-editing the matrix.
