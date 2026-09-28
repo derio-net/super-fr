@@ -7,8 +7,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.services import resolve as resolve_mod
 from fr.services.model import ServicesError
-from fr.services.resolve import resolve_services
+from fr.services.resolve import resolve_forge, resolve_services
 
 PROFILES = "profiles:\n  dev:\n    purpose: x\n"
 
@@ -123,10 +124,21 @@ class TestLegacy:
         assert _triple(s.forge) == ("gitlab", None, "default")
         assert s.ci.source == "legacy"
 
-    def test_an_unknown_top_level_key_is_refused(self, tmp_path: Path) -> None:
+    def test_an_unknown_backend_value_is_refused(self, tmp_path: Path) -> None:
         repo = _repo(tmp_path, profiles=PROFILES + "backend: bitbucket\n")
         with pytest.raises(ServicesError):
             resolve_services(repo)
+
+    def test_an_unknown_top_level_key_is_refused(self, tmp_path: Path) -> None:
+        repo = _repo(tmp_path, profiles=PROFILES + "backend: gitlab\nextra: 1\n")
+        with pytest.raises(ServicesError, match="extra"):
+            resolve_services(repo)
+
+    def test_an_explicit_schema_version_one_is_a_v1_file(self, tmp_path: Path) -> None:
+        repo = _repo(
+            tmp_path, profiles=PROFILES + "schema_version: 1\nbackend: gitea\nhost: g.example.org\n"
+        )
+        assert _triple(resolve_services(repo).forge) == ("gitea", "g.example.org", "legacy")
 
 
 class TestNoFile:
@@ -151,3 +163,60 @@ class TestNoFile:
         assert _triple(resolve_services(repo).ci) == ("none", None, "default")
         _write(repo, ".github/workflows/acceptance-report.yml")
         assert _triple(resolve_services(repo).ci) == ("github-actions", None, "default")
+
+
+class TestForgeOnly:
+    """r1: the forge consumers resolve the forge alone — no CI probe, and no
+    `git remote` when the file declares both the forge type and host."""
+
+    @pytest.fixture
+    def _no_probes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(*_a: object, **_k: object) -> None:
+            raise AssertionError("must not be called")
+
+        for name in ("origin_hostname", "detect_ci", "ci_config"):
+            monkeypatch.setattr(resolve_mod, name, boom)
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "forge: {type: gitlab, host: h.example.com}\n",
+            "backend: gitlab\nhost: h.example.com\n",
+        ],
+        ids=["v2", "v1"],
+    )
+    @pytest.mark.usefixtures("_no_probes")
+    def test_a_fully_declared_forge_touches_neither_git_nor_ci(
+        self, tmp_path: Path, body: str
+    ) -> None:
+        from fr import _hosts
+
+        repo = _repo(tmp_path, profiles=PROFILES + body)
+        assert (resolve_forge(repo).type, resolve_forge(repo).host) == ("gitlab", "h.example.com")
+        assert _hosts.detect_backend(repo) == "gitlab"
+        assert _hosts.declared_host(repo) == "h.example.com"
+        assert _hosts.host_for(repo) == "h.example.com"
+
+    def test_resolve_services_uses_the_same_forge(self, tmp_path: Path) -> None:
+        repo = _repo(
+            tmp_path,
+            remote="git@gitlab.example.org:g/p.git",
+            profiles=PROFILES + "forge: {type: gitlab}\n",
+        )
+        assert resolve_services(repo).forge == resolve_forge(repo)
+
+
+class TestUnreadable:
+    """r2: a non-UTF-8 file is unreadable, never a crash in lenient mode."""
+
+    def test_a_non_utf8_profiles_file(self, tmp_path: Path) -> None:
+        from fr import _hosts
+
+        repo = _repo(tmp_path, remote="https://gitlab.com/g/p.git")
+        (repo / ".devcontainer").mkdir()
+        (repo / ".devcontainer" / "fr-profiles.yaml").write_bytes(b"backend: \xff\xfe gitlab\n")
+        assert _hosts.detect_backend(repo) == "gitlab"
+        assert _hosts.host_for(repo) is None
+        assert resolve_forge(repo, lenient=True).source == "default"
+        with pytest.raises(ServicesError, match="cannot read"):
+            resolve_services(repo)

@@ -170,12 +170,12 @@ def backend_for_url(url: str) -> HostBackend:
 
 
 def _forge(repo_root: Path) -> ResolvedService:
-    """The resolved `forge` service, leniently — these consumers have always
+    """The resolved `forge` service alone (no CI probe), leniently — these consumers have always
     promised never to raise. Imported late: `fr.services.resolve` imports
     this module's origin helpers."""
-    from fr.services.resolve import resolve_services
+    from fr.services.resolve import resolve_forge
 
-    return resolve_services(repo_root, lenient=True).forge
+    return resolve_forge(repo_root, lenient=True)
 
 
 def detect_backend(repo_root: Path) -> HostBackend:
@@ -196,7 +196,7 @@ def detect_backend(repo_root: Path) -> HostBackend:
             _WARNED_UNKNOWN_HOSTS.add(hostname)
             print(
                 f"warning: origin host {hostname!r} is not a recognized forge; "
-                'assuming backend "github". Declare it as `backend: gitlab` '
+                'assuming backend "github". Declare it as `forge: {type: gitlab}` '
                 "(or gitea) in .devcontainer/fr-profiles.yaml, or run "
                 "`fr init scaffold --backend <b>`.",
                 file=sys.stderr,

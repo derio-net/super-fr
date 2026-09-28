@@ -89,3 +89,8 @@ def test_gitea_checks_gitea_then_github(tmp_path: Path, files: list[str], expect
     for rel in files:
         _write(tmp_path, rel)
     assert detect_ci(tmp_path, "gitea") == expected
+
+
+def test_a_non_utf8_gitlab_file_counts_as_real(tmp_path: Path) -> None:
+    (tmp_path / ".gitlab-ci.yml").write_bytes(b"acceptance-report:\n  script: [\xff\xfe]\n")
+    assert detect_ci(tmp_path, "gitlab") == "real"

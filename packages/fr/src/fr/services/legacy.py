@@ -27,6 +27,7 @@ class ProfilesV1(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: Literal[1] | None = None
     profiles: dict[str, Any] = {}
     default: str | None = None
     backend: Literal["github", "gitlab", "gitea"] | None = None
@@ -34,6 +35,6 @@ class ProfilesV1(BaseModel):
 
 
 FROZEN_CLASS_SHA256: dict[str, str] = {
-    "ProfilesV1": "587d94da26451270f38f1409824544bf9eb9bbc78a5e19ea2db36da1b29e795e",
+    "ProfilesV1": "bf80ddf500f2fac0fa111375b0bc0e0b7a79f7baf2310b1fc510f9cc96f47f94",
 }
 """SHA-256 of each frozen class's own source, as `inspect.getsource` returns it."""

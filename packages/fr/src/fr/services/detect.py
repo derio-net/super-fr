@@ -50,7 +50,7 @@ deliberately absent: it is handled on its own, as evidence of real CI."""
 def _gitlab_presence(path: Path) -> CiPresence:
     try:
         data = yaml.safe_load(path.read_text())
-    except (OSError, yaml.YAMLError):
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return "real"  # cannot be shown to be fr's own
     if not isinstance(data, dict) or "include" in data:
         return "real"

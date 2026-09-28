@@ -30,7 +30,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-import yaml
 from pydantic import ValidationError
 
 from fr._hosts import HostBackend, backend_for_hostname, origin_hostname, self_hosted_hostname
@@ -69,7 +68,7 @@ def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
         return None
     try:
         config = profiles_config(repo_root)
-    except (OSError, yaml.YAMLError) as exc:
+    except Exception as exc:  # noqa: BLE001 — lenient never raises; strict refuses by name
         if lenient:
             return None
         raise ServicesError(f"cannot read .devcontainer/fr-profiles.yaml: {exc}") from exc
@@ -81,7 +80,11 @@ def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
 
 
 def _refusal(exc: ValidationError, where: str) -> ServicesError:
-    reasons = "; ".join(str(err["msg"]).removeprefix("Value error, ") for err in exc.errors())
+    reasons = "; ".join(
+        (f"`{'.'.join(map(str, err['loc']))}`: " if err["loc"] else "")
+        + str(err["msg"]).removeprefix("Value error, ")
+        for err in exc.errors()
+    )
     return ServicesError(f".devcontainer/fr-profiles.yaml {where}: {reasons}")
 
 
@@ -112,24 +115,63 @@ def _legacy_v1(config: dict[str, Any], *, lenient: bool) -> ProfilesV1:
         )
 
 
+class _Origin:
+    """The origin remote's forge inference, read at most once and only when
+    asked — a file that declares both the forge type and host never runs
+    `git remote`."""
+
+    def __init__(self, repo_root: Path) -> None:
+        self._root = repo_root
+        self._read = False
+        self._hostname: str | None = None
+
+    def _hostname_once(self) -> str | None:
+        if not self._read:
+            self._hostname = origin_hostname(self._root)
+            self._read = True
+        return self._hostname
+
+    @property
+    def type(self) -> str:
+        return backend_for_hostname(self._hostname_once())
+
+    @property
+    def host(self) -> str | None:
+        return self_hosted_hostname(self._hostname_once())
+
+
 def _forge(repo_root: Path, config: dict[str, Any] | None, *, lenient: bool) -> ResolvedService:
-    origin = origin_hostname(repo_root)
-    inferred_type: str = backend_for_hostname(origin)
-    inferred_host = self_hosted_hostname(origin)
-    if config is None:
-        return ResolvedService(inferred_type, inferred_host, "default", _src(inferred_host))
-    if is_version_two(config):
+    origin = _Origin(repo_root)
+    type_: str | None = None
+    type_source: Source = "default"
+    host: str | None = None
+    host_source: Source = "default"
+    if config is not None and is_version_two(config):
         declared = _declared(config, "forge", ForgeService, lenient=lenient)
-        if declared is None:
-            return ResolvedService(inferred_type, inferred_host, "default", _src(inferred_host))
-        if declared.host:
-            return ResolvedService(declared.type, declared.host, "declared", "declared")
-        return ResolvedService(declared.type, inferred_host, "declared", _src(inferred_host))
-    v1 = _legacy_v1(config, lenient=lenient)
-    type_, type_source = (v1.backend, "legacy") if v1.backend else (inferred_type, "default")
-    if v1.host:
-        return ResolvedService(type_, v1.host, cast(Source, type_source), "legacy")
-    return ResolvedService(type_, inferred_host, cast(Source, type_source), _src(inferred_host))
+        if declared is not None:
+            type_, type_source = declared.type, "declared"
+            if declared.host:
+                host, host_source = declared.host, "declared"
+    elif config is not None:
+        v1 = _legacy_v1(config, lenient=lenient)
+        if v1.backend:
+            type_, type_source = v1.backend, "legacy"
+        if v1.host:
+            host, host_source = v1.host, "legacy"
+    if type_ is None:
+        type_ = origin.type
+    if host is None:
+        host = origin.host
+        return ResolvedService(type_, host, type_source, _src(host))
+    return ResolvedService(type_, host, type_source, host_source)
+
+
+def resolve_forge(repo_root: Path, *, lenient: bool = False) -> ResolvedService:
+    """The `forge` service alone — what `fr._hosts`' consumers need. Never
+    probes CI, and reads `git remote` only when the file leaves the forge
+    type or host undeclared. `resolve_services` resolves its forge the same
+    way. Raises `ServicesError` like `resolve_services`, unless `lenient`."""
+    return _forge(repo_root, _read_config(repo_root, lenient=lenient), lenient=lenient)
 
 
 def _src(host: str | None) -> Source | None:

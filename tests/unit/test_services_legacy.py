@@ -30,6 +30,12 @@ def test_profiles_v1_keys_are_all_optional() -> None:
     assert (v1.backend, v1.host, v1.default, v1.profiles) == (None, None, None, {})
 
 
+def test_profiles_v1_accepts_an_explicit_schema_version_one() -> None:
+    assert legacy.ProfilesV1.model_validate({"schema_version": 1}).schema_version == 1
+    with pytest.raises(ValidationError):
+        legacy.ProfilesV1.model_validate({"schema_version": 2})
+
+
 def test_profiles_v1_refuses_an_unknown_top_level_key() -> None:
     with pytest.raises(ValidationError):
         legacy.ProfilesV1.model_validate({"profiles": {}, "forge": {"type": "gitlab"}})
