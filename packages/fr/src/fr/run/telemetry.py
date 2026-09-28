@@ -55,13 +55,14 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeGuard
 
 from fr.harness.detect import detect_harness
 from fr.harness.model import HarnessError
+from fr.usage.classify import canonical_tool
 
 CLAUDE_CODE_PROJECTS = Path(".claude") / "projects"
 """Where Claude Code writes transcripts, under `$HOME`."""
@@ -252,21 +253,10 @@ def tool_use_ids(session: Path) -> dict[str, _dt.datetime | None]:
     if records is None:
         return {}
     found: dict[str, _dt.datetime | None] = {}
-    for record in records:
-        if record.get("type") != "assistant":
-            continue
-        message = record.get("message")
-        if not isinstance(message, Mapping):
-            continue
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
-                continue
-            block_id = block.get("id")
-            if isinstance(block_id, str):
-                found[block_id] = parse_timestamp(record.get("timestamp"))
+    for stamp, block in _tool_uses(records):
+        block_id = block.get("id")
+        if isinstance(block_id, str):
+            found[block_id] = stamp
     return found
 
 
@@ -794,6 +784,95 @@ def _names(command: str, log: Path) -> bool:
         _is_log(_resolve_target(m.group(0), assignments, m.start()), log)
         for m in _WORD.finditer(bare)
     )
+
+
+def _tool_uses(
+    records: list[dict[str, Any]],
+) -> Iterator[tuple[_dt.datetime | None, Mapping[str, Any]]]:
+    """`(timestamp, block)` for every `tool_use` block of every assistant record,
+    in file order. The file IS the scope: a subagent's transcript is
+    `isSidechain` throughout, so no sidechain filter belongs here."""
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        stamp = parse_timestamp(record.get("timestamp"))
+        for block in content if isinstance(content, list) else ():
+            if isinstance(block, Mapping) and block.get("type") == "tool_use":
+                yield stamp, block
+
+
+def _first_call_since(
+    transcript: Path, since: str, tool: str, matches: Callable[[Mapping[str, Any]], bool]
+) -> _dt.datetime | Literal[False] | None:
+    """When the first `tool` call (alias-normalised) at or after `since` whose
+    input `matches` was issued — `False` when the transcript holds none, `None`
+    when it cannot be read (or `since` does not parse)."""
+    start = parse_timestamp(since)
+    records = _read_records(transcript)
+    if start is None or records is None:
+        return None
+    for stamp, block in _tool_uses(records):
+        tool_input = block.get("input")
+        if (
+            stamp is not None
+            and stamp >= start
+            and canonical_tool(str(block.get("name"))) == tool
+            and isinstance(tool_input, Mapping)
+            and matches(tool_input)
+        ):
+            return stamp
+    return False
+
+
+def read_file_since(
+    transcript: Path, path: Path, since: str
+) -> _dt.datetime | Literal[False] | None:
+    """The first file read of `path` in `transcript` at or after `since` — or
+    `False` when the transcript was read and holds none, `None` when it could
+    not be read (spec 2026-09-28-ui-visual-evidence §C, check 4).
+
+    A read is a tool call whose name normalises to `Read` through
+    `fr.usage.classify`'s alias table (`read_file`, `view` count), naming the
+    file in `file_path` or `path` — absolute (compared as real paths) or
+    relative (its trailing parts). What the tool returned is not inspected."""
+
+    def names(tool_input: Mapping[str, Any]) -> bool:
+        target = tool_input.get("file_path") or tool_input.get("path")
+        return isinstance(target, str) and _is_log(target, path)
+
+    return _first_call_since(transcript, since, "Read", names)
+
+
+def shell_named_since(
+    transcript: Path, name: str | Path, since: str
+) -> _dt.datetime | Literal[False] | None:
+    """The first shell call in `transcript` at or after `since` whose command
+    names `name` (`_names`' matching) — or `False` / `None` as
+    `read_file_since` (spec §C, check 5: the stage that names a capture script
+    re-ran it)."""
+    script = Path(name)
+
+    def runs(tool_input: Mapping[str, Any]) -> bool:
+        command = tool_input.get("command")
+        return isinstance(command, str) and _names(command, script)
+
+    return _first_call_since(transcript, since, "Bash", runs)
+
+
+def witness_transcript(session: Path, agent_id: str | None) -> Path | None:
+    """The transcript that owes a unit's image reads (spec §C, check 4): the
+    orchestrator's own stream when `agent_id` is `None`, else the subagent
+    transcript of the dispatch `attribute_dispatches` pairs to `agent_id` —
+    `None` when this session dispatched no such agent (or its stream cannot be
+    read), which the gate records as unobserved."""
+    if agent_id is None:
+        return session
+    for dispatch in attribute_dispatches(session):
+        if dispatch.agent_id == agent_id:
+            return dispatch.transcript
+    return None
 
 
 def orchestrator_wrote_since(
