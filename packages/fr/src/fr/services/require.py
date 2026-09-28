@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.services.model import ServicesError
-from fr.services.resolve import resolve_services
+from fr.services.resolve import resolve_tracking
 
 
 class TrackerRequiredError(ServicesError):
@@ -21,7 +21,7 @@ class TrackerRequiredError(ServicesError):
 def require_tracker(repo_root: Path) -> None:
     """Raise `TrackerRequiredError` when *repo_root* has no issue tracker, or
     `ServicesError` when its services declaration is unreadable/invalid."""
-    if resolve_services(repo_root).tracking.type == "none":
+    if resolve_tracking(repo_root).type == "none":
         raise TrackerRequiredError(
             "this repo declares `tracking: {type: none}` in "
             ".devcontainer/fr-profiles.yaml — there is no issue tracker to write "

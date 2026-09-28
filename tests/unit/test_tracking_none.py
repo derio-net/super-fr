@@ -85,7 +85,7 @@ def test_closeout_tracking_none_prints_no_issue_filing(tmp_path: Path) -> None:
     brief = closeout_brief(tmp_path, closeout_fixtures._state())
     assert "file an issue" not in brief
     assert "--tracked-by" not in brief
-    assert "stay recorded in the journal and PR body" in brief
+    assert "stay recorded in the journal and PR body; no tracker is configured" in brief
     assert "fr archive" in brief
 
 
@@ -182,12 +182,115 @@ def test_dispatch_dry_run_is_not_refused_under_tracking_none(
     assert "tracking: {type: none}" in out  # warned
 
 
-def test_triage_collect_is_unaffected_by_tracking_none() -> None:
-    import inspect
+def test_triage_collect_is_unaffected_by_tracking_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit import test_triage_cli as cli_fixtures
 
-    from fr.commands import triage_cmd
+    repo = tmp_path / "repo"
+    _git_repo(repo)
+    _profiles(repo, NONE)
+    monkeypatch.chdir(repo)
+    state = tmp_path / "state"
+    result = cli_fixtures._run(
+        monkeypatch, cli_fixtures._Forge(), "--repo", "derio-net/super-fr", "--dir", str(state)
+    )
+    assert result.exit_code == 0, result.output
+    assert (state / "facts.json").exists()
 
-    assert "require_tracker" not in inspect.getsource(triage_cmd)
+
+# --- review fixes ---------------------------------------------------------
+
+
+def _dispatch_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, profiles: str | None):
+    gh = FakeGhClient()
+    for n in (*dispatch_fixtures.MEMBERS, 420):
+        gh.add_issue(dispatch_fixtures.REPO, n)
+    monkeypatch.setattr(triage_batch_cmd, "make_client", lambda url: gh)
+    monkeypatch.setattr(
+        triage_batch_cmd, "load_runner", lambda name: dispatch_fixtures.FakeRunner()
+    )
+    clone = tmp_path / "clone"
+    _git_repo(clone)
+    if profiles is not None:
+        _profiles(clone, profiles)
+    fake = dispatch_fixtures.FakeCheckout(clone)
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", lambda path: fake)
+    dispatch_fixtures._state(tmp_path)
+    return gh, fake
+
+
+def test_f1_repair_yes_under_tracking_none_refuses_with_no_forge_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh, _ = _dispatch_env(tmp_path, monkeypatch, NONE)
+    code, out = dispatch_fixtures._dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2, out
+    assert "tracking: {type: none}" in out
+    assert gh.calls == []
+
+
+def test_f1_repair_yes_with_no_clone_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage.model import TriageError
+
+    gh, _ = _dispatch_env(tmp_path, monkeypatch, None)
+
+    def _no_clone(path):  # noqa: ANN001, ANN202
+        raise TriageError("no clone here")
+
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", _no_clone)
+    code, out = dispatch_fixtures._dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2, out
+    assert "no clone here" in out
+    assert gh.calls == []
+
+
+def test_f1_repair_yes_in_a_clone_of_another_repo_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gh, fake = _dispatch_env(tmp_path, monkeypatch, None)
+    fake.origin = "someone/else"
+    code, out = dispatch_fixtures._dispatch(tmp_path, "lifecycle", "--repair", "--yes")
+    assert code == 2, out
+    assert "someone/else" in out
+    assert gh.calls == []
+
+
+def test_f2_no_plan_and_no_work_opens_no_housekeeping_block(tmp_path: Path) -> None:
+    closeout_fixtures._spec_file(tmp_path, with_test_plan=False)
+    closeout_fixtures._spec_out_of_scope_finding(tmp_path)
+    _profiles(tmp_path, NONE)
+    state = closeout_fixtures._state()
+    del state.steps["plan"]
+    brief = closeout_brief(tmp_path, state)
+    assert "stay recorded in the journal and PR body; no tracker is configured" in brief
+    assert "fr isolation up --branch" not in brief
+    assert "housekeeping PR" not in brief
+
+
+def test_f3_a_deferred_ci_does_not_refuse_apply_when_tracking_is_valid(tmp_path: Path) -> None:
+    plan_dir = apply_fixtures._ticked_plan_repo(tmp_path)
+    _profiles(tmp_path, "schema_version: 2\nci:\n  type: jenkins\n  host: ci.example.com\n")
+    require_tracker(tmp_path)
+    rc, text, _ = apply_cmd._apply_one(plan_dir, FakeGhClient(), yes=True)
+    assert "jenkins" not in text
+
+
+def test_f3_a_deferred_ci_does_not_make_closeout_blame_tracking(tmp_path: Path) -> None:
+    _closeout_repo(tmp_path, "schema_version: 2\nci:\n  type: jenkins\n  host: ci.example.com\n")
+    brief = closeout_brief(tmp_path, closeout_fixtures._state())
+    assert "WARNING" not in brief
+    assert "file an issue" in brief
+
+
+def test_f5_malformed_warning_only_when_out_of_scope_findings_exist(tmp_path: Path) -> None:
+    closeout_fixtures._spec_file(tmp_path, with_test_plan=False)
+    closeout_fixtures._plan_dir(tmp_path)
+    _profiles(tmp_path, MALFORMED)
+    brief = closeout_brief(tmp_path, closeout_fixtures._state())
+    assert "WARNING" not in brief
 
 
 def test_the_app_still_loads() -> None:

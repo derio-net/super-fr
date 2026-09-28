@@ -470,18 +470,25 @@ def _open_checkout(path: Path | None, owner_repo: str) -> Checkout:
     return checkout
 
 
-def _tracking_gate(checkout_path: Path | None, *, yes: bool) -> None:
+def _tracking_gate(checkout_path: Path | None, owner_repo: str, *, yes: bool) -> None:
     """R6: dispatch marks issues taken, so a repo with `tracking: {type: none}`
     refuses `--yes` (exit 2) before the first forge call; a dry run only warns.
-    Strict: a malformed tracking block refuses too."""
+    Strict: a malformed tracking block refuses too. With `--yes` the clone must
+    open AND be the batch's repo (`_open_checkout`), on `--repair` as well, so
+    the declaration read is the target repo's and never another clone's."""
+    if yes:
+        checkout = _open_checkout(checkout_path, owner_repo)
+    else:
+        try:
+            checkout = make_checkout(checkout_path)
+        except TriageError:
+            return  # a dry run needs no clone to warn
     try:
-        require_tracker(make_checkout(checkout_path).path)
+        require_tracker(checkout.path)
     except ServicesError as exc:
         if yes:
             _fail(str(exc))
         console.print(f"warning: --yes would be refused — {exc}", markup=False, soft_wrap=True)
-    except TriageError:
-        pass  # no clone to read; `_open_checkout` reports it where it matters
 
 
 def _orchestrator(repo_root: Path | None) -> Callable[[str], str | None]:
@@ -791,7 +798,7 @@ def batch_dispatch_command(
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")
-    _tracking_gate(checkout_path, yes=yes)  # before any forge call
+    _tracking_gate(checkout_path, owner_repo, yes=yes)  # before any forge call
     client = make_client(f"https://{_host_of(facts, owner_repo)}/{owner_repo}")
     if (handle or reserved_version) and not repair:
         _fail("--handle and --reserved-version go with --repair only")

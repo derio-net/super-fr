@@ -203,16 +203,16 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         # R6: nowhere to file — the findings stay in the journal and PR body.
         stays_recorded = bool(out_of_scope)
         out_of_scope = []
-        tracker_note = None
-    if tracker_note:
+    elif tracker_note and out_of_scope:
+        # only the issue-filing lines below depend on the declaration
         lines.append(f"  WARNING: {tracker_note}")
     if stays_recorded:
         lines.append(
-            "  this repo declares `tracking: {type: none}`: out-of-scope findings "
-            "stay recorded in the journal and PR body — file no issue for them"
+            "  out-of-scope findings stay recorded in the journal and PR body; "
+            "no tracker is configured"
         )
     lines.append("  fr status")
-    if plan_path or stays_recorded or out_of_scope:
+    if plan_path or out_of_scope:
         # p4-r2: exact commands, not a "# on a housekeeping branch" comment
         # that leaves it to the reader to invent one — a fresh session with
         # no memory of this run could otherwise `fr archive` right here, in

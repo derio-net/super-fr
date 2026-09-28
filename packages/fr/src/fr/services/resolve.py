@@ -234,3 +234,23 @@ def resolve_services(repo_root: Path, *, lenient: bool = False) -> Services:
         if not lenient:
             raise
     return services
+
+
+def resolve_tracking(repo_root: Path, *, lenient: bool = False) -> ResolvedService:
+    """The `tracking` service alone (with the forge it borrows from). Never
+    probes CI and never validates `ci:`, so a bad or deferred `ci:` cannot
+    block a command that only needs to know whether there is a tracker.
+    Raises `ServicesError` like `resolve_services`, unless `lenient`."""
+    config = _read_config(repo_root, lenient=lenient)
+    forge = _forge(repo_root, config, lenient=lenient)
+    tracking = _tracking(config, forge, lenient=lenient)
+    try:
+        validate_services(
+            ForgeService(type=forge.type, host=forge.host),
+            CiService(type=CI_FOR_FORGE[forge.type]),  # the forge's own: always native
+            TrackingService(type=tracking.type, host=tracking.host),
+        )
+    except ServicesError:
+        if not lenient:
+            raise
+    return tracking
