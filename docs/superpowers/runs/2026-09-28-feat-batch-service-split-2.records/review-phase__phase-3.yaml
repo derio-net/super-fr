@@ -1,0 +1,21 @@
+schema_version: 3
+run: 2026-09-28-feat-batch-service-split-2
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - {kind: finding, id: p3r-lenient-ci-gate, review_scope: in, title: "A malformed ci: declaration silently allowed `ci` rows", body: "acceptance/ci.py:76 resolved leniently, so an invalid ci: block fell through to the raw ci_config probe; init refused the same file strictly."}
+  - {kind: finding, id: p3r-issues-write, review_scope: in, title: "github-actions template kept `issues: write` with the debt step omitted (least privilege)", body: "scaffold.py:125-127."}
+  - {kind: finding, id: p3r-fr-only-message, review_scope: in, title: "Refusal said 'no CI config' when fr's own acceptance scaffold was found and discounted", body: "ci.py:81 / scaffold.py:505. The reviewer tagged this OUT of scope (rare path: gated commands migrate v1 first). Reclassified IN by the orchestrator: the fr-only discount that makes the message false is introduced by this change, and exempt/ungated paths still reach it."}
+  - {kind: finding, id: p3r-golden-tests, review_scope: in, title: "No byte-equality test for the unchanged debt=True renders; '@@' leakage and the notice assertion unpinned", body: "tests/unit/test_acceptance_services.py:115-139."}
+  - kind: review
+    id: p3-review
+    title: "Phase 3 review: 4 findings, all fixed in 867e43ab"
+    body: |
+      Independent reviewer over e89b1168 against spec R4 §3.B/§3.E and plan 03.yaml: debt=True renders verified byte-identical to main by hand, no token leaks, #787's no-profiles behaviour unchanged, --with-ci per §3.E, lazy import cycle safe. Findings p3r-lenient-ci-gate, p3r-issues-write, p3r-golden-tests (in) and p3r-fr-only-message (reviewer: out; reclassified in, see its body) fixed in 867e43ab; full suite 7109 passed.
+resolves:
+  - {id: p3r-lenient-ci-gate, state: fixed, body: "867e43ab: ci_reason resolves strictly; ServicesError becomes the refusal naming .devcontainer/fr-profiles.yaml; tests for scalar none, unknown type, jenkins."}
+  - {id: p3r-issues-write, state: fixed, body: "867e43ab: @@DEBT_PERMS@@ token; debt=False grants contents: read only; debt=True byte-identical (golden)."}
+  - {id: p3r-fr-only-message, state: fixed, body: "867e43ab: ci_none_reason names the discounted fr-only scaffold and points at declaring ci:; tests for refusal and init output."}
+  - {id: p3r-golden-tests, state: fixed, body: "867e43ab: golden fixtures from origin/main for 3 renders + 2 bullets, '@@' absent in all 6 renders, exact notice list."}
+evidence: {review: p3-review, reviewer: a2a74881ce965871d, model: claude-opus-5-5}
