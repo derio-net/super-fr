@@ -1,2 +1,0 @@
-bump: patch
-summary: "verify-merge/gc: a --no-ff merge-commit landing later reverted with `git revert -m 1`, and a revert applied after another edit to the same path, no longer read as landed"
