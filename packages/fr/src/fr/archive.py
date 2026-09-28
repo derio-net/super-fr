@@ -56,6 +56,8 @@ __all__ = [
     "archive_plan_dir",
     "archive_run_cursor",
     "completed_unarchived_plans",
+    "deliver_done",
+    "emitted_plan",
     "find_run_for_plan",
     "landed_for",
     "merge_evidence",
@@ -455,6 +457,22 @@ def emitted_plan(cursor: Path) -> str | None:
         if plan:
             return str(plan).rstrip("/")
     return None
+
+
+def deliver_done(cursor: Path) -> bool:
+    """True iff `cursor`'s `deliver` step is recorded `done`, read the same
+    way as `emitted_plan` (any cursor version, never the live model alone).
+    `False` when the file is unreadable, not a cursor, or has no `deliver`
+    step — an unfinished or unrecognized cursor is never treated as orphaned
+    (2026-09-28-closeout-always §C's no-named-plan orphan-run rule)."""
+    try:
+        state = _read_any_version(cursor.read_text())
+    except OSError:
+        return False
+    if state is None:
+        return False
+    record = state.steps.get("deliver")
+    return record is not None and record.state == "done"
 
 
 def _read_any_version(text: str) -> RunState | RunStateV6 | RunStateV4 | None:

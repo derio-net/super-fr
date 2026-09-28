@@ -40,7 +40,7 @@ from fr.archive import (
     paths_dirty,
     spec_archive_sweep,
 )
-from fr.closeout import BranchArtifact, branch_artifacts
+from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
 from fr.isolation.local import (
     branch_changed_paths,
@@ -543,6 +543,32 @@ def archive_command(
     elif (archived or all_plans) and no_spec_sweep:
         typer.echo("  (spec sweep skipped)")
 
+    # §C (2026-09-28-closeout-always): owed debug journals, orphan journals
+    # and orphan run cursors (+ usage) — after the plan loop and spec sweep
+    # above, as today, so an owner archived JUST NOW by this same --all run
+    # already counts. Recomputed here rather than reusing an earlier read:
+    # the plan/spec moves above changed the working tree `owed_artifacts`
+    # reads. Unaffected by --no-spec-sweep — none of these are specs.
+    owed_moved = False
+    if all_plans:
+        for o in owed_artifacts(repo_root, evidence).owed:
+            if o.kind in ("debug_journal", "orphan_journal"):
+                scope_slug = journal_scope_and_slug(o.path)
+                assert scope_slug is not None, o.path
+                scope, slug = scope_slug
+                journal_scope = cast("JournalScope", scope)
+                archive_journal(repo_root, journal_scope, slug)
+                _echo_archived(
+                    o.path,
+                    archived_journal_path(repo_root, journal_scope, slug).relative_to(repo_root),
+                )
+                owed_moved = True
+            elif o.kind == "orphan_run":
+                run_id = o.path.stem
+                archive_run_cursor(repo_root, run_id)
+                _echo_archived(o.path, archived_run_path(repo_root, run_id).relative_to(repo_root))
+                owed_moved = True
+
     # Repair in passing (2026-06-06 spec-path-repair): the move and the
     # ref normalization land in the same operator commit. One pass, whether
     # the sweep or a plan move (or both) triggered it (#710).
@@ -551,7 +577,7 @@ def archive_command(
 
     for s in skipped:
         typer.echo(f"  skipped: {s}")
-    if archived or specs_moved:
+    if archived or specs_moved or owed_moved:
         typer.echo("\nmoves staged via git mv — review, commit, and PR them.")
     elif all_plans:
         typer.echo("nothing to archive.")
