@@ -14,3 +14,8 @@ Replaying the raw block with only its pipes escaped and `\"` decoded passes chec
 ### root-cause · root-cause · fr's span-cell decoder does not read a quoted span the way the reviewer writes one
 
 check_coverage splits each row on every unescaped `|`, ignoring the `"…"` around the span, so a span quoting a Markdown table row (`| a | b |`) becomes 6 columns and the whole table is refused. And `\"` inside a span is kept literally, so the concatenation never equals the input. Both are encodings the reviewer brief never forbids (it says "quote it exactly"). With no readable shape and a refusal that names no remedy, the orchestrator's only path to a green gate was to edit the reviewer's block.
+
+<!-- fr:journal kind=finding scope=debug id=fix created=2026-09-28T19:19:29+00:00 state=fixed -->
+### fix · finding [fixed] · Coverage spans are read as the reviewer writes them; refusals route to the reviewer
+
+requirements.py §D: `_protect_span_pipes` keeps a quoted span's raw `|` in one cell; `_coverage_form` reads `\"`/`\|` as `"`/`|` on both sides of the comparison (so no escape can hide a gap); an unquoted span is a reported problem, not an uncaught raise; table/label/partition refusals end with "re-dispatch the reviewer … never edit its partition". Pinned red-first by tests/unit/test_requirements.py::test_777_* (synthetic input in take 9's shape). Replaying take 9's untouched reviewer block now passes: 94 spans, missing=1. Reviewer brief and fr-goal SKILL updated; both mirrors resynced.
