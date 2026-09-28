@@ -204,3 +204,34 @@ Independent reviewer (separate context, hard tier, with shell) reviewed git diff
 ### p2-r10-resolved · finding [fixed] · resolves p2-r10: before-the-gates tripwire did not undo the visual additions (phase 2)
 
 12fc6791: _BEFORE_THE_GATES reverses implement-phase and review-phase visual evidence. The in-flight 'unevidenced: visual (predates)' lines are report-only and are noted in the PR body.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-skill-line-budget created=2026-09-28T21:25:52+00:00 phase=3 -->
+### p3-skill-line-budget · discovery · test_skill_validation.py's 120-line SKILL.md cap forced three files into single unwrapped-paragraph lines (phase 3)
+
+Adding the `visual`/Browser-check prose pushed fr-execute (121→131), fr-brainstorming
+(120→123) and fr-plan (120→121) over `TestSkillValidation.test_under_120_lines`'s 120-line
+cap. The existing convention in these files already mixes hard-wrapped paragraphs with
+occasional very-long unwrapped lines (fr-execute step 2's `Implement` line is one); folding
+the new prose into a single long line per paragraph (rather than wrapping at ~100 chars)
+recovered the budget without cutting content. fr-execute: 119 lines final. fr-brainstorming:
+115. fr-plan: 120 (at the cap). Future prose additions to these three files should budget
+for this before wrapping normally, or trim elsewhere first.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-clause-search-not-anchored created=2026-09-28T21:25:52+00:00 phase=3 -->
+### p3-clause-search-not-anchored · discovery · fr.harness.prose._CLAUSE_LEAD_RE is a `search`, not a line-start match — a Harness clause can open mid-paragraph (phase 3)
+
+`_clause_spans` tests `_CLAUSE_LEAD_RE.search(lines[i])`, not a start-anchored match, so
+`**Harness — image read:**` can sit mid-sentence in the same physical line as the prose
+before it (used in fr-execute's Browser check step to stay inside the line budget above)
+and still open a valid scoped clause. Confirmed by
+tests/unit/test_skill_visual_evidence.py plus the neutrality tripwire staying green.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-09-28T21:25:52+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+Prose-only edits across five canonical files plus their generated mirrors, and one new test file following an existing convention (test_skill_journal_resolve_examples.py's short-discriminating-token style). Nothing repeated across the new paragraphs to extract; each names its own file's mechanics in that file's own voice.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t3 created=2026-09-28T21:25:52+00:00 phase=3 -->
+### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
+
+One GitHub issue filed and four verification commands run (ruff format/check, mypy, full suite); no code touched, nothing to clean.
