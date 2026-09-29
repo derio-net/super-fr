@@ -3,7 +3,7 @@ run: 2026-09-29-feat-batch-spec-fidelity
 workflow: fr-goal@1
 branch: feat/batch-spec-fidelity
 started: '2026-09-29T06:32:19+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -49,7 +49,11 @@ steps:
           returned: '2026-09-29T07:27:16+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-29T07:27:18+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
