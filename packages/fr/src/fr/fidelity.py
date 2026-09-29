@@ -71,14 +71,43 @@ def _one_block(pattern: re.Pattern[str], name: str, body: str) -> tuple[str | No
     return blocks[0], None
 
 
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+def _unfenced(lines: Sequence[str]) -> list[tuple[int, str]]:
+    """`(index, line)` for every line outside a ```` ``` ```` / `~~~` fenced
+    block (fence lines themselves dropped). A closing fence uses the opening
+    fence's character, at least as many of it, and no info string."""
+    out: list[tuple[int, str]] = []
+    fence: str | None = None
+    for idx, line in enumerate(lines):
+        m = _FENCE_RE.match(line)
+        if fence is None:
+            if m is not None:
+                fence = m.group(1)
+                continue
+            out.append((idx, line))
+        elif (
+            m is not None
+            and m.group(1)[0] == fence[0]
+            and len(m.group(1)) >= len(fence)
+            and not m.group(2).strip()
+        ):
+            fence = None
+    return out
+
+
 def parse_design_sections(spec_text: str) -> list[str]:
-    """The `###` subsections of `## Design`, in document order."""
-    lines = spec_text.splitlines()
-    start = next((i for i, line in enumerate(lines) if line.strip() == "## Design"), None)
+    """The `###` subsections of `## Design`, in document order — or
+    `["Design"]` when it has none. Fence-aware (§B): a `## ` or `### ` line
+    inside a fenced example neither ends the Design nor opens a section.
+    Raises `FidelityError` when the spec has no `## Design`."""
+    body = _unfenced(spec_text.splitlines())
+    start = next((n for n, (_, line) in enumerate(body) if line.strip() == "## Design"), None)
     if start is None:
         raise FidelityError("no `## Design` section found in the spec")
     sections: list[str] = []
-    for line in lines[start + 1 :]:
+    for _, line in body[start + 1 :]:
         if line.startswith("## "):
             break
         if line.startswith("### "):
@@ -245,10 +274,64 @@ def check_fidelity(
     return problems, counts
 
 
+_R_ID_RE = re.compile(r"^R[1-9][0-9]*$")
+_DECISION_BACKING_RE = re.compile(r"^decision\s+(\S+)$")
+_INVENTED_BACKING_RE = re.compile(r"^invented\s+(\S+)$")
+
+
+def _backing_problems(
+    behaviour: str,
+    backing: str,
+    line_no: int,
+    req_ids: set[str],
+    kinds: dict[str, str | None],
+) -> tuple[list[str], str | None]:
+    """(problems, the finding an `invented <id>` backing names)."""
+    where = f"line {line_no}"
+    if backing == "none":
+        if behaviour != "none":
+            return [
+                f"{where}: behaviour {behaviour!r} has backing `none` — `none` is allowed "
+                "only beside a `none` behaviour (an unbacked behaviour is `invented <finding-id>`)"
+            ], None
+        return [], None
+    if behaviour == "none":
+        return [f"{where}: a `none` behaviour takes a `none` backing, got {backing!r}"], None
+    m = _INVENTED_BACKING_RE.match(backing)
+    if m is not None:
+        fid = m.group(1)
+        if kinds.get(fid, "") != "finding":
+            return [
+                f"{where}: `invented {fid}` names no `kind=finding` entry in the spec journal"
+            ], None
+        return [], fid
+    problems: list[str] = []
+    for part in (p.strip() for p in backing.split(",")):
+        if _R_ID_RE.match(part):
+            if part not in req_ids:
+                problems.append(f"{where}: backing cites unknown requirement id {part!r}")
+            continue
+        d = _DECISION_BACKING_RE.match(part)
+        if d is not None:
+            if kinds.get(d.group(1), "") != "decision":
+                problems.append(
+                    f"{where}: `decision {d.group(1)}` names no `kind=decision` entry in the "
+                    "spec journal"
+                )
+            continue
+        problems.append(
+            f"{where}: unknown backing {part!r} — valid forms: `R<n>` and `decision <id>`, "
+            "comma-separated; `invented <finding-id>`; or `none`"
+        )
+    return problems, None
+
+
 def check_inventory(
     review_body: str, spec_text: str, entries: Sequence[Any]
 ) -> tuple[list[str], InventoryCounts]:
-    """The §B design-inventory gate: problems (empty when sound) and counts."""
+    """The §B design-inventory gate: problems (empty when sound) and counts.
+    Every `###` subsection of `## Design` appears, in document order, with
+    contiguous rows; every backing id resolves."""
     empty = InventoryCounts(sections=0, behaviours=0, invented=0)
     block, problem = _one_block(_INVENTORY_BLOCK_RE, "design-inventory", review_body)
     if block is None:
@@ -257,9 +340,59 @@ def check_inventory(
         rows = _parse_table(block.splitlines(), 1, _INVENTORY_HEADER, "design-inventory")
     except RequirementsError as exc:
         return [f"design-inventory table: {exc} — {_REDISPATCH}"], empty
-    sections = parse_design_sections(spec_text)
-    behaviours = sum(1 for cells, _ in rows if cells[1] != "none")
-    return [], InventoryCounts(sections=len(sections), behaviours=behaviours, invented=0)
+    try:
+        sections = parse_design_sections(spec_text)
+    except FidelityError as exc:
+        return [str(exc)], empty
+    try:
+        req_ids = {r.id for r in parse_requirements(spec_text).items}
+    except RequirementsError as exc:
+        return [f"`## Requirements`: {exc}"], empty
+    kinds: dict[str, str | None] = {e.id: getattr(e, "kind", None) for e in entries}
+
+    problems: list[str] = []
+    known = set(sections)
+    groups: list[str] = []
+    behaviours = 0
+    invented: dict[str, None] = {}
+    n_invented = 0
+    for (section, behaviour, backing), line_no in rows:
+        if section not in known:
+            problems.append(
+                f"line {line_no}: unknown Design section {section!r} (the sections are {sections})"
+            )
+            continue
+        if not groups or groups[-1] != section:
+            if section in groups:
+                problems.append(
+                    f"line {line_no}: the rows of section {section!r} are not contiguous"
+                )
+            groups.append(section)
+        if behaviour != "none":
+            behaviours += 1
+        found, fid = _backing_problems(behaviour, backing, line_no, req_ids, kinds)
+        problems.extend(found)
+        if fid is not None:
+            n_invented += 1
+            invented[fid] = None
+
+    seen = list(dict.fromkeys(groups))
+    for section in sections:
+        if section not in seen:
+            problems.append(
+                f"Design section {section!r} has no inventory row — every `###` subsection "
+                f"is inventoried — {_REDISPATCH}"
+            )
+    if seen != [s for s in sections if s in seen]:
+        problems.append(f"the design-inventory sections are not in document order (got {seen})")
+
+    counts = InventoryCounts(
+        sections=len(sections),
+        behaviours=behaviours,
+        invented=n_invented,
+        finding_ids=tuple(invented),
+    )
+    return problems, counts
 
 
 def fidelity_summary(fc: FidelityCounts, ic: InventoryCounts) -> str:
