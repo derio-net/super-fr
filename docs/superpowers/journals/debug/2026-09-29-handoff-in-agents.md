@@ -14,3 +14,8 @@ The only delivery path is fr-goal §5/§6 prose telling the orchestrator to copy
 ### d-shipped-reviewer · decision · Operator chose a shipped fr-phase-reviewer over executor-only or reusing fr-spec-reviewer
 
 review-phase had no shipped agent, so a self-fetch needed one. Asked once (scope fork); operator picked the recommended option. `agent:` is not a member id, so no cursor drifts; _verify_reviewer checks agent type only for flat steps, so fr accepts the same reviewers it did before.
+
+<!-- fr:journal kind=finding scope=debug id=f-self-fetch created=2026-09-29T11:54:53+00:00 state=fixed -->
+### f-self-fetch · finding [fixed] · Executor and phase reviewer fetch the operator input themselves
+
+Source: fr-phase-executor.md gains a first section running `fr journal handoff --scope plan` on every dispatch; new plugins/super-fr/agents/fr-phase-reviewer.md does the same; review-phase names `agent: super-fr:fr-phase-reviewer`; guard hook, install allowlist, OpenCode mirrors, fr-goal §5/§6 wired. Failing-first: tests/unit/test_operator_input_prose.py (first-section self-fetch, reviewer tools, manifest agent), test_hooks_phase_executor_guard.py::TestPhaseReviewerGuard, mirror enumerations. Full suite 7596 passed.
