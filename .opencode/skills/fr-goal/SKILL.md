@@ -23,7 +23,7 @@ first action); run every later command from the workspace it prints. **Bind the 
 → pause for fr-init. `kind: cli` executes directly — exit code is the verdict, fix and
 re-`advance` on failure. `kind: agent` never executes itself: it prints a dispatch brief
 (skill/agent/needs/emits/tier/for_each) you fulfill per that step below, then ONE `fr run
-resolve <run-id> --step <id> [--item <unit>] --record <file>`, which also advances: after a `done` record it runs any following `cli` steps and prints the next brief in that same call (`--no-advance` opts out; a `failed`/`blocked` record stops). The brief's `record` is a
+resolve <run-id> --step <id> [--item <unit>] --record <file>`, which also advances: after a `done` record it runs any following `cli` steps and prints the next brief in that same call (`--no-advance` opts out; a `failed`/`blocked` record stops). Exit 1 there means the record applied and a chained `cli` step failed; exit 2 with `record applied` means it applied and the advance was refused — fix and `fr run advance`, never re-apply the record. The brief's `record` is a
 pre-filled **step record** — only the sections that step's `emits` allows: fill it as the work
 happens, commit it with the work, and fr applies ticks, journal entries, resolutions, acceptance
 rows, `emitted` artifacts (a `spec`/`plan` path must exist) and evidence with the cursor move in
