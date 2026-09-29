@@ -39,3 +39,8 @@ local._FR_OWNED_EXCLUDES = (.fr-isolation, /.devcontainer/*/devcontainer-lock.js
 ### fix-825 · finding [fixed] · #825 fixed: the brief downs its housekeeping workspace
 
 closeout.branch_closeout_brief appends 'fr isolation down --branch <housekeeping>   # once the housekeeping PR has merged'. fr-goal SKILL.md is updated and both mirrors regenerated. Pinned in run-with-plan, run-without-plan and branch modes (red first).
+
+<!-- fr:journal kind=finding scope=debug id=fix-826 created=2026-09-29T11:56:06+00:00 state=fixed -->
+### fix-826 · finding [fixed] · #826 fixed: harness-neutral validator wrapper via fr validate plans
+
+fr/data/validate-plans.sh is bundled, byte-identical to scripts/validate-plans.sh (tripwire). The new 'fr validate plans' is exempt from the migration gate as part of the validate group. WRAPPER_TEXT and install-validator-wrapper.sh prefer it, fall back to the marketplace copy, else exit 127 naming the fix. The marketplace path stays in the text, so is_super_fr_validator_wrapper still recognizes, and refreshes, the fleet's committed wrappers. Two tests that used the phrase 'super-fr plugin' as the current-wrapper marker now check for 'exec fr validate plans'.
