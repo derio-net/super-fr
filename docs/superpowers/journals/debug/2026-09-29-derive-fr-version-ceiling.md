@@ -19,3 +19,8 @@ The `<5.0.0` ceiling was set as a literal in 4.0.0 (#442) and repeated in plan_c
 ### fix-derived-ceiling · finding [fixed] · Derive the ceiling once; parse error never advises a downgrade
 
 fr.version_floor.ceiling_for/CEILING_VERSION are the one derivation, used by DEFAULT/WORKFLOW/SCOPE_FR_VERSION, migrate, split plans, five self-review hints (one said <4.0.0) and widen_ceiling. parser._installed_has_outgrown routes a stale plan to `fr migrate artifacts --yes`. scripts/floors.py accepts a derived ceiling so floors stay release-checked. Pinned by tests/unit/test_fr_version_ceiling.py (default, --workflow and files/estimate_lines create paths parse at the installed fr; two tripwires). Commits 644d177b, c2780cda.
+
+<!-- fr:journal kind=finding scope=debug id=review-gt-bound created=2026-09-29T20:23:35+00:00 state=fixed -->
+### review-gt-bound · finding [fixed] · Review: '>' bound on the installed version was told to run migrate
+
+>5.0.0 under 5.0.0 got "run fr migrate artifacts --yes", which treats > as a floor and does nothing. Now says upgrade. Test first (RED), fixed in c2780cda.
