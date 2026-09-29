@@ -408,7 +408,10 @@ def test_o_a_deliver_record_on_the_closeout_shape_prints_the_handoff_once(
     out = _invoke(repo, shipped, argv)
 
     assert out.exit_code == 0, out.output
-    assert out.stdout.count("closeout: after the PR merges") == 1, out.stdout
+    # Both streams: the body's held-back closeout is replayed as a stderr
+    # notice, so a second print on stdout is a duplicate on a real terminal.
+    both = out.stdout + (out.stderr or "")
+    assert both.count("closeout: after the PR merges") == 1, both
     assert f"run {RUN} complete" not in out.stdout
     assert load_run_state(repo, RUN).steps["deliver"].state == "done"
 

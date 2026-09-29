@@ -5610,13 +5610,9 @@ def _resolve_with_record(
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     typer.echo(outcome.line)
-    if step_id == "deliver" and record.outcome == "done":
-        # The flag form prints this from `_resolve_step`'s body, whose stdout
-        # the record engine holds back — so the record form prints it here,
-        # once, whether or not it advances (`_advance_after_record` does not
-        # repeat it: a finished run has nothing to advance).
-        for line in _closeout_handoff_lines(repo_root, run_id, committed=outcome.committed):
-            console.print(line, soft_wrap=True)
+    # deliver's closeout handoff is NOT printed here: the body prints it into
+    # the held stdout, and `resolve_in_process` replays it among the notices
+    # above — printing it again duplicated it on a real terminal.
     if advance and record.outcome == "done":
         _advance_after_record(repo_root, run_id)
 
