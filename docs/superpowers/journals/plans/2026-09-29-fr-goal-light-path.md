@@ -305,3 +305,48 @@ chain from 1, and stamps to the live version — the pattern
 ### no-refactor-p3-t3 · discovery · no-refactor-because P3.T3 (phase 3)
 
 prose, mirrors and one explainer paragraph: no code was written in this task, so there was nothing to refactor
+
+<!-- fr:journal kind=finding scope=plan id=r3-1 created=2026-09-29T09:23:47+00:00 phase=3 state=open review_scope=in -->
+### r3-1 · finding [open] (reviewer: in scope) · fr-goal §8 and intro still tie deliver's suite to a separate `fr run advance` (phase 3)
+
+Reviewer (medium, in scope): SKILL.md §8 said to run the suite AFTER "the `fr run advance` that opens deliver", and the intro said "loop `fr run advance`", though the last review-phase record's resolve now chains journal-check and prints deliver's brief (§6 says a separate advance refuses). Spec §B requires dropping every such advance.
+
+<!-- fr:journal kind=finding scope=plan id=r3-2 created=2026-09-29T09:23:47+00:00 phase=3 state=open review_scope=in -->
+### r3-2 · finding [open] (reviewer: in scope) · _rebind_shape never runs check_workflow on the target, unlike fr run start (phase 3)
+
+Reviewer (medium-low, in scope): an invalid repo override of fr-goal-light (dangling needs, cli step with no run:) is refused by `fr run start` but accepted by a brainstorm-record rebind.
+
+<!-- fr:journal kind=finding scope=plan id=r3-3 created=2026-09-29T09:23:47+00:00 phase=3 state=open review_scope=in -->
+### r3-3 · finding [open] (reviewer: in scope) · No test that a failed/blocked brainstorm record declaring shape: does not rebind (phase 3)
+
+Reviewer (low, in scope): the done-only guard was correct but unpinned.
+
+<!-- fr:journal kind=finding scope=plan id=r3-4 created=2026-09-29T09:23:47+00:00 phase=3 state=open review_scope=in -->
+### r3-4 · finding [open] (reviewer: in scope) · RECORD_SCHEMA_VERSION docstring stops at the 3 -> 4 hop (phase 3)
+
+Reviewer (nit, in scope): the registry comment records 4 -> 5 but the model docstring did not.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-09-29T09:23:47+00:00 phase=3 -->
+### review-phase-3 · review · independent code review of phase 3: 4 findings (all in scope), all fixed (phase 3)
+
+Reviewer a085d62a1ec8a036a (dispatched feature-dev:code-reviewer, opus) reviewed 3ff4557f, 505374c2, d31726e4, 6744a458 against spec §A/§C, plan 03.yaml, the p3-* entries and the artifact-versioning / harness-neutrality rules. Raised r3-1..r3-4; confirmed rebind rules (first step only, same first step, unknown refused, same-shape no-op, validated before writes, refused record byte-identical, one commit, drift-consistent afterwards), single-phase derivation, spec-plan-review's full evidence gate, manifest order and byte-identical wheel copy, record v5 chain 1→5, agent return shapes, prose accuracy on exit codes and reuse; read the input and d1–d6: no input- findings. Received: each verified against the code and fixed in 96d01547 (skill §8/intro/per-phase loop wording + mirrors + pin test; check_workflow in _rebind_shape with a red-first test; failed-brainstorm no-rebind test; docstring).
+
+<!-- fr:journal kind=finding scope=plan id=r3-1-resolved created=2026-09-29T09:23:47+00:00 phase=3 state=fixed resolves=r3-1 -->
+### r3-1-resolved · finding [fixed] · resolves r3-1: fr-goal §8 and intro still tie deliver's suite to a separate `fr run advance` (phase 3)
+
+96d01547: §8 runs the suite after the resolve that opened deliver; intro and per-phase loop describe resolve-with-record; mirrors synced; test_deliver_section_no_longer_ties_the_suite_to_a_separate_advance.
+
+<!-- fr:journal kind=finding scope=plan id=r3-2-resolved created=2026-09-29T09:23:47+00:00 phase=3 state=fixed resolves=r3-2 -->
+### r3-2-resolved · finding [fixed] · resolves r3-2: _rebind_shape never runs check_workflow on the target, unlike fr run start (phase 3)
+
+96d01547: _rebind_shape runs check_workflow and refuses an invalid target; test_an_invalid_repo_override_of_the_target_shape_is_refused (red first).
+
+<!-- fr:journal kind=finding scope=plan id=r3-3-resolved created=2026-09-29T09:23:47+00:00 phase=3 state=fixed resolves=r3-3 -->
+### r3-3-resolved · finding [fixed] · resolves r3-3: No test that a failed/blocked brainstorm record declaring shape: does not rebind (phase 3)
+
+96d01547: test_a_failed_brainstorm_declaring_the_light_shape_does_not_rebind.
+
+<!-- fr:journal kind=finding scope=plan id=r3-4-resolved created=2026-09-29T09:23:47+00:00 phase=3 state=fixed resolves=r3-4 -->
+### r3-4-resolved · finding [fixed] · resolves r3-4: RECORD_SCHEMA_VERSION docstring stops at the 3 -> 4 hop (phase 3)
+
+96d01547: docstring records the 4 -> 5 hop and its migration.
