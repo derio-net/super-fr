@@ -34,3 +34,8 @@ pickup_cmd._missing_run_exit fetches (best effort), then prints preserve.explain
 ### fix-824 · finding [fixed] · #824 fixed: devcontainer-lock.json is git-excluded on up
 
 local._FR_OWNED_EXCLUDES = (.fr-isolation, /.devcontainer/*/devcontainer-lock.json), appended idempotently by _write_isolation_marker. The pattern is anchored so a repo's own lock file elsewhere stays visible. Pinned by 2 tests (red first).
+
+<!-- fr:journal kind=finding scope=debug id=fix-825 created=2026-09-29T11:56:05+00:00 state=fixed -->
+### fix-825 · finding [fixed] · #825 fixed: the brief downs its housekeeping workspace
+
+closeout.branch_closeout_brief appends 'fr isolation down --branch <housekeeping>   # once the housekeeping PR has merged'. fr-goal SKILL.md is updated and both mirrors regenerated. Pinned in run-with-plan, run-without-plan and branch modes (red first).
