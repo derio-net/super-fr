@@ -5455,9 +5455,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_pickup_branch.py
       - super-fr:tests/unit/test_run_closeout.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
-    notes: fr pickup --branch and fr pickup --run's delegation to branch_closeout_brief
-      are covered by unit tests
+    notes: 'fr pickup --branch and fr pickup --run''s delegation to branch_closeout_brief
+      are covered by unit tests; gh#825: both modes end by downing the housekeeping
+      workspace (test_closeout_run_clean.py).'
   - id: archive-branch-every-artifact
     capability: Branch-keyed close-out
     acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch
