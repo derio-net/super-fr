@@ -16,7 +16,16 @@ steps:
         evidence:
           requirements: 13 requirements:a22cb990e552604237fc6326754f26d678fd63e11d36f6d611f42361c59d7076
   spec-review:
-    state: pending
+    state: running
+    at: '2026-09-29T11:39:08+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-09-29T11:39:08+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 2f196929-faa0-4988-9f6b-99618c4066f7
   plan:
     state: pending
   plan-review:
