@@ -596,3 +596,6 @@ Test Plan items 2, 4, 5, 6, 8, 9 and 10 now cover the Claude Code return, R5/R7 
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-opencode-observe-p2 created=2026-09-29T11:52:25+00:00 -->
 ### phase-split-2026-09-29-opencode-observe-p2 · decision · ask: reviewer identity and returns (R3, R5-R8) are independently reviewable from the protocol
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-opencode-observe-p3 created=2026-09-29T11:52:26+00:00 -->
+### phase-split-2026-09-29-opencode-observe-p3 · decision · ask: operator answers, visual witness and parity (R9-R13) are independently reviewable, and standard tier
