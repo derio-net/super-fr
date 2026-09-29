@@ -54,3 +54,8 @@ Independent review: '- R1. a' / '* R1. a' made has_requirements False.
 ### rv-c1-resolved · finding [fixed] · resolves rv-c1: Bulleted R<n> lines read as no Requirements, skipping phase sizing silently
 
 The list grammar accepts an optional -/* bullet; test_a_bulleted_list_reads_the_same.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c2 created=2026-09-29T18:29:30+00:00 phase=2 state=open review_scope=in -->
+### rv-c2 · finding [open] (reviewer: in scope) · fr-plan still says 'Requirements table' (phase 2)
+
+Independent review: fr-plan/SKILL.md:69.
