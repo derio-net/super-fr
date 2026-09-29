@@ -1,0 +1,6 @@
+schema_version: 2
+plan: 2026-09-29-spec-is-the-contract
+spec: 2026-09-29-spec-is-the-contract-design.md
+target_repo: derio-net/super-fr
+fr_version: '>=4.40.0,<6.0.0'
+created: '2026-09-29'

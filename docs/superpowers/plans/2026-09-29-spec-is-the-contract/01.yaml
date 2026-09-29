@@ -1,0 +1,189 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Engine — the input stops at brainstorm (gates, parser, briefs, record 7)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-contract-no-input-gates
+  - spec-contract-plain-requirements
+  - spec-contract-record-v7
+  skeleton: true
+  tier: hard
+  files:
+  - .changes/feat-spec-is-the-contract.yaml
+  - packages/fr/src/fr/requirements.py
+  - packages/fr/src/fr/fidelity.py
+  - packages/fr/src/fr/operator_input.py
+  - packages/fr/src/fr/phase_sizing.py
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/proportionality.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/spec_cmd.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/journal/model.py
+  - packages/fr/src/fr/record/*.py
+  - packages/fr/src/fr/artifacts/*.py
+  - packages/fr/src/fr/workflows/*.yaml
+  - plugins/super-fr/workflows/*.yaml
+  - tests/unit/*.py
+  - tests/integration/*.py
+  - tests/fixtures/requirements/*
+  - docs/acceptance/*
+  estimate_lines: 9000
+tasks:
+- number: 1
+  title: Walking skeleton — fragment and a green CI on the branch
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Add `.changes/feat-spec-is-the-contract.yaml` with `bump: major` and `summary: fr-goal's spec is the contract again: the operator's input feeds brainstorm only; the requirements/coverage/fidelity/requirement-rows gates, the input relay into implement and review, the fr-phase-reviewer agent and `fr spec requirements` are removed; Requirements are a plain R<n> list.` Run `uv run --no-project python scripts/changes.py --help >/dev/null && uv run --no-project python scripts/check-change-fragment.py origin/main` — passes. Push; CI green on the spec + fragment.
+- number: 2
+  title: requirements.py becomes a plain-list parser (spec §B)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new tests/unit/test_spec_requirements_list.py. A spec whose `## Requirements` holds `R1. First thing.` / `R2. Second thing.` parses to ids [R1, R2] with those texts; the same ids and texts come out of a pre-5.0 three-column table (`| id | requirement | source |`, source ignored); a spec without the section gives `has_requirements(...) is False`; a duplicate or non-increasing id raises `RequirementsError` naming the line. `uv run pytest tests/unit/test_spec_requirements_list.py -q --no-cov` fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: rewrite packages/fr/src/fr/requirements.py to spec §B: keep the `R[1-9][0-9]*` id grammar, `origin_fragment`, `rows_citing`, `is_cited`, `spec_emitter`, `run_spec`, `load_spec_matrix`, `RequirementsError`; new `parse_requirements` (list form + legacy table) and `has_requirements` (rename of `has_requirements_table`); delete `Source`, `SourceKind`, `Deferred`, `CoverageCounts`, `is_input_entry`, `_INPUT_SOURCE_RE`, `SOURCE_FORMS`, `_extract_quote`, `_parse_sources`, `quote_matches`, `normalise`, `check_requirements`, `check_coverage` and the coverage block, `_REDISPATCH`, `REQUIREMENTS_PREDATES`. The new test is green.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: retarget the importers — phase_sizing.py, plan_ops._phase_sizing_issues, proportionality._phases, run/visual.py — to `parse_requirements` / `has_requirements`; reword their messages from "Requirements table"/"Requirements/Deferred tables" to "Requirements list". Move the phase-sizing, proportionality and plan-sizing test fixtures (tests/unit/requirements_support.py helpers) to the plain list, keeping one legacy-table case each. `uv run pytest tests/ -q --no-cov -n auto -k "phase_sizing or proportionality or plan_sizing or visual"` green.
+  - id: P1.T2.S4
+    text: |-
+      REFACTOR: delete tests/unit/test_requirements.py, tests/fixtures/requirements/759-input.md and the input-only helpers in tests/unit/requirements_support.py; no helper left that builds a `source` column except the one legacy-table fixture.
+- number: 3
+  title: The four input gates leave the workflows and run_cmd (spec §A)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_tripwire_shipped_workflows.py, pin 4.28.0's evidence lists for both shipped workflows (package and plugin copies): fr-goal brainstorm none, spec-review [review, reviewer, findings], deliver [tests, proportionality, visual]; fr-goal-light brainstorm none, spec-plan-review its lists minus requirements/coverage/fidelity, deliver [tests, proportionality, visual]. Assert `run_cmd._DERIVED_EVIDENCE` and `_VERIFIABLE_EVIDENCE` contain none of requirements, coverage, fidelity, requirement-rows. Fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: edit packages/fr/src/fr/workflows/fr-goal.yaml, fr-goal-light.yaml and their identical plugins/super-fr/workflows copies: drop the four names and the comments explaining them; drop review-phase's `agent: super-fr:fr-phase-reviewer` line. `uv run fr workflow check` on each passes.
+  - id: P1.T3.S3
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py remove the four names from `_VERIFIABLE_EVIDENCE`, `_DERIVED_EVIDENCE`, `_DERIVED_FROM`; delete the traceability block (`_REQUIREMENTS_EVIDENCE`, `_RequirementsCapture`, `_predates_requirements`, `_requirements_capture`, `_requirements_witnesses`, `_requirements_witness`, `_coverage_witness`, `_fidelity_witness`, `_requirement_rows_witness` and its refusal), the call site, and the predates debt logic in `_unevidenced_units`; rename `_requirements_refusal` to `_derived_refusal` for `_visual_witness`; restore `_review_journal_entries` to the 4.28.0 inline spec lookup via `run_spec`. Delete packages/fr/src/fr/fidelity.py.
+  - id: P1.T3.S4
+    text: |-
+      GREEN: delete `fr spec requirements` from packages/fr/src/fr/commands/spec_cmd.py (keep `fr spec status`). Delete tests/unit/test_run_evidence_requirements.py, test_run_evidence_fidelity.py, test_fidelity.py, test_spec_requirements_cmd.py. `uv run pytest tests/ -q --no-cov -n auto -k "workflow or run_cli or run_evidence or spec_cmd"` green.
+- number: 4
+  title: No operator input in briefs or handoff (spec §A, R1)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests asserting the implement-phase and review-phase member brief from `fr run advance` (existing harness in tests/unit/test_run_cli.py near the member-brief tests) has no `operator_input` key and the exact 4.28.0 key set plus keys added since that are not input-layer; and `fr journal handoff` output has no `## Operator input` section. Fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: remove `operator_input` from `_build_member_brief`, `_print_member_dispatch`, `_load_operator_input`, `_advance_group` (run_cmd.py) and from `compose_handoff` / `handoff` (journal/model.py, commands/journal_cmd.py). Delete packages/fr/src/fr/operator_input.py, tests/unit/test_operator_input.py, test_operator_input_prose.py. Tests green.
+- number: 5
+  title: Journal and record — delegated and unconfirmed go; record 6 -> 7 (spec §C)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_migration_record_contract.py — the record chain is [2, 3, 4, 5, 6, 7] hop by hop; a v6 record with `delegated: true` migrates to v7 with the key gone; a v6 record whose resolution state is `unconfirmed` stays byte-identical and is reported as that artifact's failure while others migrate; a body already wholly v7 under a v6 stamp lets the runner finish; `fr.record.legacy.FROZEN_CLASS_SHA256` matches `RecordV6`'s source. Journal tests: `delegated=true` and `unconfirmed` are no longer written or recognised, `input=true` still is; `fr journal add --delegated` is an unknown option. Fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/record/legacy.py with a frozen closed-world `RecordV6` (vocabularies inlined, sha pinned) copied from today's record/model.py; add packages/fr/src/fr/artifacts/record_contract.py (6 -> 7, write_text_atomic, refusal before any byte moves) and import it in fr/artifacts/__init__.py; point every record migration hop's guard at the frozen reader per .claude/rules/artifact-versioning.md; set the record kind's current_version=7 in fr/artifacts/registry.py. Remove `JournalItem.delegated` and the `unconfirmed` ResolutionState member from record/model.py; keep `JournalItem.input`.
+  - id: P1.T5.S3
+    text: |-
+      GREEN: journal/model.py and commands/journal_cmd.py drop `delegated` (field, validator, header token, `--delegated`) and the `unconfirmed` state (RESOLUTION_STATES, refusal, fold, `check` count, EffectiveFindingState); record/apply.py drops `_CARRIED_OPEN` unconfirmed, `unconfirmed_refusal` and the delegated pass-through; record/template.py drops the delegated and invented/reinterpreted hints (keeps `verify: post-merge`). Run `uv run fr migrate artifacts --yes` in the worktree if anything is stale. Update test_journal_model.py, test_journal_cmd.py, test_record_apply.py, test_record_schema.py, test_record_review_fixes.py and the existing record-migration tests whose live-read assertions named the removed fields. Tests green.
+- number: 6
+  title: PR body back to its non-input sections (spec §A)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: tests/unit/test_deliver_pr_body.py asserts REQUIRED_SECTIONS has no "Input coverage", "Design inventory" or "Built without operator confirmation", Findings has no unconfirmed bucket, and Post-merge verification owed and Tests still render. Fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: packages/fr/src/fr/record/pr_body.py — remove `_predates_gate`, `_input_coverage`, `_design_inventory`, `_delegated`, `PREDATES_LINE`, `DESIGN_PREDATES_LINE` and the three sections; keep `_post_merge_owed` (now via the plain parser's `rows_citing`). Tests green.
+- number: 7
+  title: Quality gate and acceptance rows
+  steps:
+  - id: P1.T7.S1
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src packages/fr-dispatch/src packages/fr-vk/src packages/fr-cncd/src packages/fr-herdr/src`, `uv run fr validate artifacts`, and the full suite `uv run pytest -q --no-cov -n auto > "$TMPDIR/contract-p1-suite.log" 2>&1; echo exit=$?` — exit=0. Fix anything red caused by this phase.
+  - id: P1.T7.S2
+    text: |-
+      Move the three rows with evidence: `uv run fr acceptance set-status --id spec-contract-no-input-gates --status ci --level unit=super-fr:tests/unit/test_tripwire_shipped_workflows.py --level unit=super-fr:tests/unit/test_run_cli.py --notes "Workflows pinned to 4.28 evidence lists; briefs and handoff carry no operator input."`, and likewise spec-contract-plain-requirements (test_spec_requirements_list.py) and spec-contract-record-v7 (test_migration_record_contract.py). `uv run fr acceptance check` passes. Push.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T7.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
