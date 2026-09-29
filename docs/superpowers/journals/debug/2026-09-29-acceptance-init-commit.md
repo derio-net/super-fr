@@ -14,3 +14,8 @@ Every record-writing command commits exactly the paths it wrote through fr.recor
 ### h-directive-rows · hypothesis · Process-directive rows are a separate defect, not the same root cause
 
 Rows like basket-delivery, basket-single-phase (level unit = the plan's 01.yaml), basket-user-input-boundaries and basket-browser-check state how the pipeline must run, not what the product does. Nothing in Row, acceptance add, the record engine or the fr-brainstorming §3 guidance refuses them. Independent of init's commit gap. Detection design is open. Stopped to ask the operator per the batch's more-than-one-root-cause rule.
+
+<!-- fr:journal kind=decision scope=debug id=d-scope created=2026-09-29T11:33:49+00:00 -->
+### d-scope · decision · Operator: fix both causes in this PR; refuse directives by a structural ref rule
+
+Asked at the more-than-one-root-cause stop. Operator chose: both (A) init commit + created/modified and (B) process-directive rows in this PR; (B) as a structural rule — a level ref into fr's own pipeline artifacts (docs/superpowers/) is refused. Enforced where rows are WRITTEN (the step-record engine every add/set-status/brainstorm record goes through), not where the matrix is loaded, so no existing matrix stops parsing and the matrix kind's current_version does not move.
