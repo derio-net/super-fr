@@ -137,35 +137,115 @@ def test_dirty_code_paths_lists_only_uncommitted_code(tmp_path: Path) -> None:
     assert dirty_code_paths(repo) == ["src/new.py", "src/x.py"]
 
 
-def test_newest_code_mtime_spans_committed_and_uncommitted_changes(tmp_path: Path) -> None:
+def _settle(repo: Path, at: float) -> None:
+    """Every file and directory in the checkout (not `.git`) stamped `at` — so
+    a test states each mtime rather than racing the clock."""
+    for path in [repo, *repo.rglob("*")]:
+        if ".git" in path.relative_to(repo).parts:
+            continue
+        os.utime(path, (at, at), follow_symlinks=False)
+
+
+_LOG_AT = 2_000.0
+"""When the suite log was written, in every freshness test below."""
+
+
+def test_newest_code_mtime_is_the_newest_tracked_code_path_or_directory(
+    tmp_path: Path,
+) -> None:
+    """The normal case: nothing touched since the suite ran, so every tracked
+    code path and the directories holding them predate the log."""
     repo = _plain_repo(tmp_path)
     base = _git(repo, "rev-parse", "HEAD").strip()
-    (repo / "src" / "y.py").write_text("y = 1\n")
-    _commit_all(repo, "code")
-    (repo / "src" / "z.py").write_text("z = 1\n")
-    _set_mtime(repo / "src" / "x.py", 5_000)  # unchanged since base: not counted
-    _set_mtime(repo / "src" / "y.py", 1_000)
-    _set_mtime(repo / "src" / "z.py", 2_000)
-    _set_mtime(repo / "docs" / "superpowers" / "runs" / "r1.yaml", 9_000)
+    _settle(repo, 1_000)
+    _set_mtime(repo / "src" / "x.py", 1_500)
+    _set_mtime(repo / "docs" / "superpowers" / "runs" / "r1.yaml", 9_000)  # artifact
 
-    assert newest_code_mtime(repo, base) == (2_000.0, "src/z.py")
+    newest = newest_code_mtime(repo, base)
 
-    _set_mtime(repo / "src" / "y.py", 3_000)
-    assert newest_code_mtime(repo, base) == (3_000.0, "src/y.py")
+    assert newest == (1_500.0, "src/x.py")
+    assert newest[0] < _LOG_AT
 
 
-def test_newest_code_mtime_is_none_when_no_code_changed(tmp_path: Path) -> None:
+def test_newest_code_mtime_counts_an_unchanged_tracked_file(tmp_path: Path) -> None:
+    """Review r2-2: every TRACKED code path counts, not only the ones that
+    differ from the merge-base — an edit restored to the base's bytes is
+    still an edit the suite did not run."""
     repo = _plain_repo(tmp_path)
     base = _git(repo, "rev-parse", "HEAD").strip()
-    (repo / "docs" / "superpowers" / "runs" / "r1.yaml").write_text("changed\n")
+    _settle(repo, 1_000)
+    _set_mtime(repo / "src" / "x.py", 5_000)
 
-    assert newest_code_mtime(repo, base) is None
+    assert newest_code_mtime(repo, base) == (5_000.0, "src/x.py")
+
+
+def test_an_edit_restored_to_the_base_after_the_log_is_seen(tmp_path: Path) -> None:
+    repo = _plain_repo(tmp_path)
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    _settle(repo, 1_000)
+    (repo / "src" / "x.py").write_text("x = 2\n")
+    (repo / "src" / "x.py").write_text("x = 1\n")  # the base's bytes again
+
+    newest = newest_code_mtime(repo, base)
+
+    assert newest is not None and newest[0] > _LOG_AT
+    assert newest[1] == "src/x.py"
+
+
+def test_a_rename_after_the_log_is_seen(tmp_path: Path) -> None:
+    """A rename keeps the file's own mtime; its directory's moves."""
+    repo = _plain_repo(tmp_path)
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    _settle(repo, 1_000)
+    _git(repo, "mv", "src/x.py", "src/renamed.py")
+    _git(repo, "commit", "-qm", "rename")
+    assert (repo / "src" / "renamed.py").stat().st_mtime == 1_000
+
+    newest = newest_code_mtime(repo, base)
+
+    assert newest is not None and newest[0] > _LOG_AT
+    assert newest[1] == "src/"
+
+
+def test_a_deletion_after_the_log_is_seen(tmp_path: Path) -> None:
+    repo = _plain_repo(tmp_path)
+    (repo / "src" / "keep.py").write_text("k = 1\n")
+    _commit_all(repo, "keep")
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    _settle(repo, 1_000)
+    _git(repo, "rm", "-q", "src/x.py")
+    _git(repo, "commit", "-qm", "delete")
+
+    newest = newest_code_mtime(repo, base)
+
+    assert newest is not None and newest[0] > _LOG_AT
+    assert newest[1] == "src/"
+
+
+def test_a_deletion_that_empties_its_directory_is_seen_on_the_parent(tmp_path: Path) -> None:
+    """`git rm` of a directory's last file removes the directory too; the
+    nearest surviving ancestor is where the unlink shows."""
+    repo = _plain_repo(tmp_path)
+    (repo / "pkg").mkdir()
+    (repo / "pkg" / "only.py").write_text("o = 1\n")
+    _commit_all(repo, "pkg")
+    base = _git(repo, "rev-parse", "HEAD").strip()
+    _settle(repo, 1_000)
+    _git(repo, "rm", "-q", "pkg/only.py")
+    _git(repo, "commit", "-qm", "delete")
+    assert not (repo / "pkg").exists()
+
+    newest = newest_code_mtime(repo, base)
+
+    assert newest is not None and newest[0] > _LOG_AT
+    assert newest[1] == "./"
 
 
 def test_newest_code_mtime_without_a_base_counts_every_code_path(tmp_path: Path) -> None:
-    """No merge-base (no remote default branch): fail toward stricter — every
-    tracked code path counts, so a log must be newer than all of them."""
+    """No merge-base (no remote default branch): every tracked code path and
+    its directory count, exactly as with one."""
     repo = _plain_repo(tmp_path)
+    _settle(repo, 1_000)
     _set_mtime(repo / "src" / "x.py", 4_000)
 
     assert newest_code_mtime(repo, None) == (4_000.0, "src/x.py")
@@ -176,8 +256,13 @@ def test_newest_code_mtime_skips_ignored_paths(tmp_path: Path) -> None:
     repo = _plain_repo(tmp_path)
     base = _git(repo, "rev-parse", "HEAD").strip()
     (repo / "suite.log").write_text("ok\n")
+    _commit_all(repo, "a tracked log")
+    _settle(repo, 1_000)
+    _set_mtime(repo / "suite.log", 9_000)
 
-    assert newest_code_mtime(repo, base, ignore=[repo / "suite.log"]) is None
+    newest = newest_code_mtime(repo, base, ignore=[repo / "suite.log"])
+
+    assert newest is not None and newest[0] == 1_000.0
 
 
 # --- Task 2: offered `tests` evidence on a phase unit -------------------------
@@ -318,6 +403,7 @@ def test_a_log_older_than_a_changed_code_file_is_refused(tmp_path: Path) -> None
     code = repo / "src" / "late.py"
     code.parent.mkdir(exist_ok=True)
     code.write_text("x = 1\n")
+    _commit_all(repo, "late")  # committed: the dirty check (r2-1) is not what refuses
     os.utime(code, (stamp + 10, stamp + 10))  # edited after the suite ran
 
     result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"])
@@ -413,21 +499,199 @@ def test_other_undeclared_evidence_on_a_phase_unit_is_still_refused(tmp_path: Pa
     result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", "review=x"])
 
     assert result.exit_code == 2, result.output
+    assert (
+        "step 'code' declares no evidence, so --evidence review= would record an id "
+        "nothing verified" in _squash(result.output)
+    )
+    assert "tests" not in _code_evidence(repo)
+
+
+def test_tests_on_a_flat_step_that_does_not_declare_it_is_refused(tmp_path: Path) -> None:
+    """`tests` is offered evidence on a PHASE unit only; a flat step that
+    declares none still refuses it like any other undeclared name."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _SHAPE)
+    _invoke(repo, shipped, ["run", "start", "grouped", "--branch", "b", "--run-id", "r1"])
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    (repo / "docs" / "superpowers" / "plans" / "x").mkdir(parents=True)
+    log = tmp_path / "suite.log"
+    log.write_text("4051 passed\n")
+
+    result = _invoke(
+        repo,
+        shipped,
+        ["run", "resolve", "r1", "--step", "plan", "--state", "done"]
+        + ["--emitted", "plan=docs/superpowers/plans/x", "--evidence", f"tests={log}"],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert (
+        "step 'plan' declares no evidence, so --evidence tests= would record an id "
+        "nothing verified" in _squash(result.output)
+    )
+    assert load_run_state(repo, "r1").steps["plan"].state == "running"
+
+
+def test_a_dirty_tree_at_phase_resolve_is_refused(tmp_path: Path) -> None:
+    """Review r2-1: the witness records HEAD's tree, so a suite run over
+    uncommitted code would vouch for a tree it never ran."""
+    repo, shipped, _ = _at_code(tmp_path)
+    (repo / "seed.md").write_text("edited, not committed\n")
+    log = tmp_path / "suite.log"
+    log.write_text("4051 passed\n")
+
+    result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"])
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "commit your code before recording the suite log" in out.lower()
+    assert "seed.md" in out
+    assert load_run_state(repo, "r1").steps["implement"].units["phase/1/code"].state == "running"
+
+
+def test_a_log_inside_the_worktree_is_not_dirty_code(tmp_path: Path) -> None:
+    """Review r2-5: the suite's own untracked log is not code, at the phase
+    resolve or at `deliver`'s reuse."""
+    repo, shipped = _at_deliver_after(tmp_path, log_in_repo=True)
+    assert "phase.log" in _git(repo, "status", "--porcelain")
+    witness = _code_evidence(repo)["tests"]
+    assert witness.startswith("phase.log@")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 0, result.output
+    assert _deliver_evidence(repo)["tests"] == f"reused:phase/1/code:{witness}"
+
+
+def test_a_same_named_file_with_other_bytes_is_still_dirty(tmp_path: Path) -> None:
+    """The exclusion is the witness's own log — same path AND same bytes."""
+    repo, shipped = _at_deliver_after(tmp_path, log_in_repo=True)
+    (repo / "phase.log").write_text("rewritten after the phase\n")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 2, result.output
+    assert "phase.log" in _squash(result.output)
+
+
+def test_a_rename_committed_after_the_log_is_refused(tmp_path: Path) -> None:
+    """Review r2-2: a rename keeps the file's mtime; the directory shows it."""
+    repo, shipped, _ = _at_code(tmp_path)
+    log = tmp_path / "suite.log"
+    log.write_text("4051 passed\n")
+    stamp = log.stat().st_mtime
+    _git(repo, "mv", "seed.md", "moved.md")
+    _git(repo, "commit", "-qm", "rename")
+    os.utime(repo, (stamp + 10, stamp + 10))  # the rename happened after the suite ran
+
+    result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"])
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "stale" in out and "./" in out
+
+
+_FAILED_CODE = [*_CODE[:-1], "failed"]
+
+
+def test_a_failed_resolve_records_no_tree(tmp_path: Path) -> None:
+    """Review r2-3: only a `done` phase vouches for its tree."""
+    repo, shipped, _ = _at_code(tmp_path)
+    log = tmp_path / "suite.log"
+    log.write_text("3 failed, 4048 passed\n")
+
+    result = _invoke(
+        repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"]
+    )
+
+    assert result.exit_code == 0, result.output
+    witness = _code_evidence(repo)["tests"]
+    assert witness.startswith("suite.log@") and ";tree=" not in witness
+
+
+def test_a_retry_resolved_without_tests_drops_the_prior_witness(tmp_path: Path) -> None:
+    repo, shipped, _ = _at_code(tmp_path)
+    log = tmp_path / "suite.log"
+    log.write_text("3 failed, 4048 passed\n")
+    failed = _invoke(
+        repo, shipped, [*_FAILED_CODE, "--agent", "impl-1", "--evidence", f"tests={log}"]
+    )
+    assert failed.exit_code == 0, failed.output
+    assert "tests" in _code_evidence(repo)
+    retry = _invoke(repo, shipped, ["run", "advance", "r1"])
+    assert retry.exit_code == 0, retry.output
+
+    result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-2"])
+
+    assert result.exit_code == 0, result.output
+    assert "tests" not in _code_evidence(repo)
+
+
+def _state_with_code_unit(unit_state: str) -> object:
+    from fr.run.model import RunState
+
+    return RunState.model_validate(
+        {
+            "run": "r1",
+            "workflow": "grouped",
+            "branch": "b",
+            "started": "2026-09-29T00:00:00+00:00",
+            "cursor": "implement",
+            "steps": {
+                "implement": {
+                    "state": "running",
+                    "units": {
+                        "phase/1/code": {
+                            "state": unit_state,
+                            "attempts": [
+                                {
+                                    "dispatched": "2026-09-29T01:00:00+00:00",
+                                    "returned": "2026-09-29T02:00:00+00:00",
+                                    "outcome": "done" if unit_state == "done" else "failed",
+                                }
+                            ],
+                            "evidence": {"tests": "a.log@000000000000;tree=aaa"},
+                        }
+                    },
+                }
+            },
+        }
+    )
+
+
+def test_a_witness_on_a_unit_that_is_not_done_is_not_reusable() -> None:
+    from fr.commands.run_cmd import _latest_tests_witness
+
+    assert _latest_tests_witness(_state_with_code_unit("done")) is not None  # type: ignore[arg-type]
+    assert _latest_tests_witness(_state_with_code_unit("failed")) is None  # type: ignore[arg-type]
 
 
 # --- Task 3: `deliver` `tests: reuse` -----------------------------------------
 
 
-def _at_deliver_after(tmp_path: Path, *, phase_log: bool = True) -> tuple:
+def _at_deliver_after(
+    tmp_path: Path,
+    *,
+    phase_log: bool = True,
+    log_in_repo: bool = False,
+    harness_env: dict[str, str | None] | None = None,
+) -> tuple:
     """Run to `deliver`, `phase/1/code` resolved with (or without) its own
-    suite log. Returns `(repo, shipped)`."""
+    suite log — written beside the repo, or untracked inside it, and resolved
+    under `harness_env` when given. Returns `(repo, shipped)`."""
     repo, shipped, _ = _at_code(tmp_path)
     code = [*_CODE, "--agent", "impl-1"]
     if phase_log:
-        log = tmp_path / "phase.log"
+        log = (repo if log_in_repo else tmp_path) / "phase.log"
         log.write_text("4051 passed\n")
         code += ["--evidence", f"tests={log}"]
-    assert (resolved := _invoke(repo, shipped, code)).exit_code == 0, resolved.output
+    resolved = (
+        _invoke(repo, shipped, code)
+        if harness_env is None
+        else _invoke_as_harness(repo, shipped, code, harness_env)
+    )
+    assert resolved.exit_code == 0, resolved.output
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
     review = _review(repo, shipped, None, "s-c", "review=rev-p1", "reviewer=r-9")
     assert review.exit_code == 0, review.output
@@ -566,3 +830,33 @@ def test_the_pr_body_names_the_reused_unit(tmp_path: Path) -> None:
     assert "## Tests" in body
     assert "reused from `phase/1/code`" in body
     assert "phase.log@0123456789ab" in body
+    assert "unverified" not in body  # the source's evidence noted nothing unobserved
+
+
+def test_deliver_without_tests_is_still_refused_as_missing(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+
+    result = _deliver(repo, shipped, None, "s-c")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "cannot be done without evidence (tests)" in out
+    assert load_run_state(repo, "r1").steps["deliver"].state == "running"
+
+
+def test_reusing_an_unobserved_phase_log_is_itself_unobserved(tmp_path: Path) -> None:
+    """Review r2-4: a reuse can be no better verified than its source."""
+    from fr.record.pr_body import render_pr_body
+
+    repo, shipped = _at_deliver_after(tmp_path, harness_env={"FR_HARNESS": "opencode"})
+    assert "tests" in _code_evidence(repo)["unobserved"].split(",")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 0, result.output
+    evidence = _deliver_evidence(repo)
+    assert evidence["tests"].startswith("reused:phase/1/code:")
+    assert "tests" in evidence["unobserved"].split(",")
+    assert "unverified" in _squash(result.output)
+    body = render_pr_body(repo, load_run_state(repo, "r1"))
+    assert "reused from `phase/1/code`" in body and "unverified" in body

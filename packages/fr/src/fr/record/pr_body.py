@@ -212,14 +212,20 @@ def _tests(state: RunState) -> str | None:
     witness = (unit.evidence or {}).get("tests") if unit is not None else None
     if not witness:
         return None
+    assert unit is not None
+    # Review r2-4: a log nobody could tie to a command says so, reused or not.
+    unverified = "tests" in (unit.evidence or {}).get("unobserved", "").split(",")
+    caveat = (
+        " (unverified: fr could not tie the log to the command that wrote it)" if unverified else ""
+    )
     if witness.startswith("reused:"):
         source, _, rest = witness.removeprefix("reused:").partition(":")
         log, _, tree = rest.partition(";tree=")
         return (
             f"Full suite reused from `{source}` — `{log}`, on code tree `{tree[:12]}`, "
-            "unchanged at delivery."
+            f"unchanged at delivery{caveat}."
         )
-    return f"Full suite run at delivery — `{witness}`."
+    return f"Full suite run at delivery — `{witness}`{caveat}."
 
 
 def _proportionality(repo_root: Path, state: RunState) -> str:

@@ -1721,6 +1721,7 @@ def _verified_evidence(
             repo_root,
             opened=opened,
             holder=holder or (attempt.agent if attempt is not None else None),
+            record_tree=state_value == "done",
         )
     elif "tests" in offered and offered["tests"] == TESTS_REUSE:
         verified["tests"] = _reuse_tests_witness(key, repo_root, state)
@@ -2393,10 +2394,11 @@ REUSED_PREFIX = "reused:"
 
 
 def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
-    """`(unit key, witness)` of the most recently resolved unit whose `tests`
-    evidence carries a code tree (a phase unit's, `_verify_phase_tests_log`),
-    or `None`. "Most recently" is the unit's last attempt's `returned`; a unit
-    with none sorts first, and a tie goes to the later unit in cursor order."""
+    """`(unit key, witness)` of the most recently resolved `done` unit whose
+    `tests` evidence carries a code tree (a phase unit's,
+    `_verify_phase_tests_log`), or `None`. "Most recently" is the unit's last
+    attempt's `returned`; a unit with none sorts first, and a tie goes to the
+    later unit in cursor order."""
     best: tuple[str, int, str, str] | None = None
     seq = 0
     for record in state.steps.values():
@@ -2404,6 +2406,10 @@ def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
             seq += 1
             witness = (unit.evidence or {}).get("tests", "")
             if _TREE_SEP not in witness or witness.startswith(REUSED_PREFIX):
+                continue
+            # Review r2-3: only a unit that is `done` NOW vouches for its tree
+            # — a failed one, or one re-dispatched since, does not.
+            if (unit.state or record.state) != "done":
                 continue
             returned = unit.attempts[-1].returned if unit.attempts else None
             candidate = (returned or "", seq, key, witness)
@@ -2417,6 +2423,7 @@ def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
     most recently resolved unit carrying a suite log and no code path is
     uncommitted — or exit 2 with the fresh-run instruction."""
     from fr.run.code_tree import code_paths_since_tree, code_tree, dirty_code_paths
+    from fr.run.telemetry import UNOBSERVED
 
     latest = _latest_tests_witness(state)
     if latest is None:
@@ -2429,9 +2436,13 @@ def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
         raise typer.Exit(2)
     unit, witness = latest
     recorded = witness.rpartition(_TREE_SEP)[2]
+    own_log = _own_log_path(repo_root, witness.rpartition(_TREE_SEP)[0])
     try:
-        same = code_tree(repo_root) == recorded and not dirty_code_paths(repo_root)
+        dirty = [p for p in dirty_code_paths(repo_root) if p != own_log]
+        same = code_tree(repo_root) == recorded and not dirty
         changed = None if same else code_paths_since_tree(repo_root, recorded)
+        if changed is not None:
+            changed = [p for p in changed if p != own_log]
     except GitUnavailableError as e:
         err_console.print(
             f"[red]{key}: tests: reuse — cannot compute the code tree: {e}[/red]", soft_wrap=True
@@ -2449,24 +2460,79 @@ def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
             soft_wrap=True,
         )
         raise typer.Exit(2)
+    if "tests" in _unit_evidence(state, unit).get(UNOBSERVED, "").split(","):
+        # Review r2-4: a reuse is no better verified than the log it reuses.
+        _note_unobserved("tests")
+        err_console.print(
+            f"[yellow]{key}: {unit}'s suite log was recorded unverified "
+            "(evidence: unobserved=tests), so this reuse is unverified too.[/yellow]",
+            soft_wrap=True,
+        )
     return f"{REUSED_PREFIX}{unit}:{witness}"
 
 
+def _unit_evidence(state: RunState, key: str) -> dict[str, str]:
+    """`key`'s evidence, from whichever step holds that unit (`{}` if none)."""
+    for record in state.steps.values():
+        unit = (record.units or {}).get(key)
+        if unit is not None:
+            return dict(unit.evidence or {})
+    return {}
+
+
+def _own_log_path(repo_root: Path, log_witness: str) -> str | None:
+    """The repo-relative path of the log `log_witness` (`<shown>@<sha[:12]>`)
+    names, when that file is in the worktree with exactly those bytes — so an
+    untracked suite log does not read as uncommitted code (review r2-5). A
+    same-named file with other bytes is not the log, and stays dirty."""
+    import hashlib
+
+    shown, _, digest = log_witness.rpartition("@")
+    if not shown or not digest:
+        return None
+    path = repo_root / shown
+    try:
+        data = path.read_bytes() if path.is_file() else None
+    except OSError:
+        return None
+    if data is None or hashlib.sha256(data).hexdigest()[:12] != digest:
+        return None
+    return Path(shown).as_posix()
+
+
 def _verify_phase_tests_log(
-    key: str, log: str, repo_root: Path, *, opened: str | None, holder: str | None
+    key: str,
+    log: str,
+    repo_root: Path,
+    *,
+    opened: str | None,
+    holder: str | None,
+    record_tree: bool = True,
 ) -> str:
     """A phase unit's own suite log (spec 2026-09-29-fr-goal-light-path §D,
     R6) — or exit 2. Returns `<shown>@<sha256[:12]>;tree=<code-tree>`.
 
     1. **Writer** — `_verify_tests_log`'s rules, read from the HOLDER's
        transcript (`_phase_log_windows`); unreadable records `unobserved=tests`.
-    2. **Freshness** — the log is no older than any code path differing from
-       the merge-base, committed or not (`fr.run.code_tree.newest_code_mtime`).
+    2. **Freshness** — the log is no older than any tracked code path, any
+       directory holding one, or the directory a code path was deleted or
+       renamed out of since the merge-base (`fr.run.code_tree.newest_code_mtime`).
     3. **Witness** — the code tree of HEAD. Computed here, before the record's
        own commit, and equal to the tree after it: that commit writes only fr's
-       artifact trees, which the code tree excludes by definition.
+       artifact trees, which the code tree excludes by definition. HEAD's tree
+       is what the suite ran only when nothing is uncommitted, so a dirty code
+       path (the log itself aside) is refused (review r2-1).
+
+    `record_tree=False` (a resolve that is not `done`, review r2-3) checks the
+    writer only and returns `<shown>@<sha256[:12]>` — a failed phase vouches
+    for no tree, so there is no tree to record and nothing to keep fresh.
     """
-    from fr.run.code_tree import code_tree, default_merge_base, newest_code_mtime
+    from fr.run.code_tree import (
+        code_tree,
+        default_merge_base,
+        dirty_code_paths,
+        newest_code_mtime,
+    )
     from fr.run.telemetry import parse_timestamp
 
     path, data = _read_suite_log(key, log, repo_root)
@@ -2510,7 +2576,11 @@ def _verify_phase_tests_log(
             "unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
+    if not record_tree:
+        return _log_witness(path, data, repo_root)
     try:
+        own = _own_log_path(repo_root, _log_witness(path, data, repo_root))
+        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
         newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
         tree = code_tree(repo_root)
     except GitUnavailableError as e:
@@ -2520,6 +2590,16 @@ def _verify_phase_tests_log(
             soft_wrap=True,
         )
         raise typer.Exit(2) from e
+    if dirty:
+        n = len(dirty)
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: {n} code path{'' if n == 1 else 's'} "
+            f"uncommitted (e.g. {dirty[0]}) — the witness is HEAD's tree, which is not "
+            "what the suite ran. Commit your code before recording the suite log, then "
+            "run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if newest is not None and newest[0] > path.stat().st_mtime:
         err_console.print(
             f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
@@ -4612,11 +4692,12 @@ def _resolve_member(
     verified = {**verified, **_take_unobserved()}
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
-    updated = _with_step(
-        state,
-        group.id,
-        units.with_unit_states(grec.model_copy(update={"emitted": merged_emitted or None}), items),
-    )
+    base_record = grec.model_copy(update={"emitted": merged_emitted or None})
+    if "tests" not in verified:
+        # Review r2-3: evidence merges across attempts, so a retry resolved
+        # without a suite log would otherwise inherit the last attempt's.
+        base_record = units.without_tests_evidence(base_record, key)
+    updated = _with_step(state, group.id, units.with_unit_states(base_record, items))
     if verified:
         updated = _with_step(
             updated, group.id, units.with_evidence(updated.steps[group.id], key, verified)

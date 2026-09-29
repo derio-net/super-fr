@@ -14,6 +14,7 @@ out to `git` through `fr.git.git_answer` (C-locale, prompt-free, time-boxed).
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -102,26 +103,66 @@ def changed_code_paths(repo: Path, since: str | None) -> list[str]:
     return sorted({p for p in committed if is_code_path(p)} | set(dirty_code_paths(repo)))
 
 
+def _deleted_code_paths(repo: Path, since: str | None) -> list[str]:
+    """Code paths present at `since` (HEAD when `None`) and absent from the
+    working tree now — deleted or renamed away, committed or not."""
+    raw = _out(
+        repo, "diff", "-z", "--no-renames", "--name-only", "--diff-filter=D", since or "HEAD"
+    )
+    return [p for p in _nul_split(raw) if is_code_path(p)]
+
+
+def _dir_label(root: Path, directory: Path) -> str:
+    rel = directory.relative_to(root).as_posix()
+    return "./" if rel == "." else f"{rel}/"
+
+
 def newest_code_mtime(
     repo: Path, base: str | None, *, ignore: Iterable[Path] = ()
 ) -> tuple[float, str] | None:
-    """`(mtime, path)` of the most recently modified code path that differs
-    from `base` (see `changed_code_paths`), or `None` when none does. A path
-    deleted on disk has no mtime and is skipped; `ignore` names files that are
-    not code the suite tested (the suite's own log, when it sits in the
-    worktree)."""
+    """`(mtime, label)` of the newest thing a suite log must postdate, or
+    `None` when the checkout tracks no code at all (review r2-2).
+
+    Counted, each by its `lstat` mtime:
+
+    - every TRACKED code path — not only those that differ from `base`, so an
+      edit restored to the base's bytes after the suite ran is still seen;
+    - every directory that directly holds a tracked code path — a create,
+      unlink or rename inside it moves the directory's mtime even where the
+      file's own does not (a rename keeps it);
+    - the nearest surviving ancestor directory of every code path deleted or
+      renamed away since `base` (HEAD when `None`), which is where that
+      unlink shows once the file, and perhaps its directory, is gone.
+
+    One `git ls-files`, one `git diff`, then stats: O(tracked files). fr's
+    artifact trees are not code (`is_code_path`); `ignore` names files that
+    are not code the suite tested (the suite's own log, when it sits in the
+    worktree). A directory is labelled `<dir>/`, the repo root `./`.
+    """
+    root = repo.resolve()
     skipped = {p.resolve() for p in ignore}
+    candidates: dict[Path, str] = {}
+    for rel in _nul_split(_out(repo, "ls-files", "-z")):
+        if not is_code_path(rel):
+            continue
+        path = root / rel
+        if path not in skipped:
+            candidates[path] = rel
+        parent = path.parent
+        candidates.setdefault(parent, _dir_label(root, parent))
+    for rel in _deleted_code_paths(repo, base):
+        parent = (root / rel).parent
+        while parent != root and not parent.is_dir():
+            parent = parent.parent
+        candidates.setdefault(parent, _dir_label(root, parent))
     newest: tuple[float, str] | None = None
-    for rel in changed_code_paths(repo, base):
-        path = repo / rel
-        if path.resolve() in skipped:
-            continue
+    for path, label in candidates.items():
         try:
-            mtime = path.stat().st_mtime
+            mtime = os.lstat(path).st_mtime
         except OSError:
-            continue
+            continue  # deleted in the working tree: its directory carries it
         if newest is None or mtime > newest[0]:
-            newest = (mtime, rel)
+            newest = (mtime, label)
     return newest
 
 
