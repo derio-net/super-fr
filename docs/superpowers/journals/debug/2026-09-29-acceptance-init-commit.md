@@ -24,3 +24,8 @@ Asked at the more-than-one-root-cause stop. Operator chose: both (A) init commit
 ### f-init-commit · finding [fixed] · init commits its writes and reports modified; pipeline level refs refused
 
 Source: acceptance_cmd.init_cmd commits outcome.written via commit_records; scaffold.InitOutcome.modified (+ .written); acceptance.model.pipeline_ref_error; record/apply._acceptance_writes refuses item.levels refs under docs/superpowers/. Pinned first (red, commit on the draft PR) by tests/unit/test_acceptance_init_commit.py — 12 tests; full suite 7579 passed. Rows acceptance-init-commits-writes and acceptance-refuses-pipeline-evidence (ci). fr-brainstorming §3 names the refusal.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-29T11:55:50+00:00 -->
+### review-1 · review · Independent adversarial review: 4 findings, 3 fixed, 1 accepted
+
+Fixed: (1) one gitignored written path (e.g. a repo ignoring .claude/) failed the whole git add, so nothing was committed — init now drops ignored paths via git check-ignore and names them; (2) prune_stale_reports deletions were uncommitted — InitOutcome.removed, committed when tracked (untracked deletions skipped, since git add of one fails the add); (4) pipeline_ref_error bypassable by docs/./ or x/../ — posixpath.normpath. Each pinned by a test that fails without it. Accepted, no change: (3) a user's own uncommitted .gitignore edits ride along in the init commit — the same whole-file semantics every fr bookkeeping writer has. Test naming: rerun test renamed and documented as a regression guard.
