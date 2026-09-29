@@ -112,9 +112,10 @@ state:
       ticked_at: '2026-09-29T18:10:53+00:00'
       note: null
     P2.T4.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-29T18:11:13+00:00'
+      note: 'Deleted in phase 1 (journal p1-rows-deleted-in-phase-1): acceptance check
+        could not pass there otherwise. No other row cites the three removed specs.'
     P2.T4.S2:
       state: ' '
       ticked_at: null
