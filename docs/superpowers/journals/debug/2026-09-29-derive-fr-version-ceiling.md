@@ -29,3 +29,8 @@ fr.version_floor.ceiling_for/CEILING_VERSION are the one derivation, used by DEF
 ### review-scoped-out · finding [open] · Review: explicit --fr-version unchecked; dev installs outside every spec
 
 Pre-existing, not caused by this fix. Tracked in derio-net/super-fr#855.
+
+<!-- fr:journal kind=review scope=debug id=2d827aa899f2 created=2026-09-29T20:23:54+00:00 -->
+### 2d827aa899f2 · review · Independent adversarial review: no blockers; 1 minor fixed, 2 minors deferred (#855), 1 nit fixed
+
+A separate read-only reviewer attacked the floors.py regex (3.11 vs 3.12 tokenization, fallback path, Counter keying), _installed_has_outgrown, import-time CEILING_VERSION, remaining literals, create/migrate contract and test strength. Raised: MINOR-1 (> bound on installed, fixed), MINOR-2 (dev installs, deferred #855), MINOR-3 (explicit --fr-version unchecked, deferred #855), NIT-1 (tripwire blind to shortened <5, fixed with a raw-text scan). Points 1,3,4,5 held. Full suite after fixes: 7571 passed, 0 failed.
