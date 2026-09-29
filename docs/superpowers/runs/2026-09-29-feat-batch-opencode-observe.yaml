@@ -100,6 +100,7 @@ steps:
           returned: '2026-09-29T14:52:51+00:00'
           outcome: abandoned
         - dispatched: '2026-09-29T14:52:51+00:00'
+          agent: abe6e292e5efe766a
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
           model: claude-opus-5-5
