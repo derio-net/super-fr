@@ -57,3 +57,8 @@ plan_ops._tier_issues, phase_sizing.tier_reasons; tests/unit/test_plan_tier_reas
 ### pr-body-tier-model-resolved · finding [deferred → derio-net/super-fr#838] · resolves pr-body-tier-model: #813 expectation 3: PR body shows each phase's tier and model
 
 a new PR-body section with its own required-section gate; out of this batch
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-29T12:02:37+00:00 -->
+### review-1 · review · Independent adversarial review: no high-confidence defects; one sub-threshold finding fixed
+
+Separate-context reviewer over the gate, the shared YAML stamp reader, the tier check and test quality. Gate still fails closed (is_stale unchanged; refusals only reworded); every YAML-stamped kind is a mapping. Sub-threshold (60): a hard phase with a cross-repo/absent spec got an unclearable error — fixed, now a warning (test_with_no_spec_journal_to_record_in_it_warns_rather_than_errs). Noted, not changed: stale+unreadable coexisting reports the unreadable first (two steps, accurate); the error string repeats the absolute path (cosmetic).
