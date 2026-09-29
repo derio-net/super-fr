@@ -1038,12 +1038,30 @@ def orchestrator_wrote_since(
     session = _this_session(env)
     if start is None or session is None:
         return None
-    records = _read_records(session)
+    return wrote_since(session, log, since, main_thread=True)
+
+
+def wrote_since(
+    transcript: Path, log: Path, since: str, *, main_thread: bool
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`orchestrator_wrote_since` over ONE Claude Code transcript file: the run
+    windows of every completed `Bash` command in `transcript`, issued at or
+    after `since`, that wrote `log`. `[]` when it holds none, `None` when it
+    cannot be read.
+
+    `main_thread` skips sidechain records — the orchestrator's own session
+    file. A subagent's transcript (`witness_transcript`) is ALL sidechain, so
+    it is read with `main_thread=False` (spec 2026-09-29-fr-goal-light-path
+    §D: a phase unit's suite log is witnessed by its holder's transcript)."""
+    start = parse_timestamp(since)
+    if start is None:
+        return None
+    records = _read_records(transcript)
     if records is None:
         return None
     issued: dict[str, _dt.datetime] = {}
     for record in records:
-        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+        if record.get("type") != "assistant" or (main_thread and record.get("isSidechain") is True):
             continue
         stamp = parse_timestamp(record.get("timestamp"))
         if stamp is None or stamp < start:
@@ -1066,7 +1084,7 @@ def orchestrator_wrote_since(
     windows: list[tuple[_dt.datetime, _dt.datetime]] = []
     backgrounded: set[str] = set()
     for record in records:
-        if record.get("type") != "user" or record.get("isSidechain") is True:
+        if record.get("type") != "user" or (main_thread and record.get("isSidechain") is True):
             continue
         done = parse_timestamp(record.get("timestamp"))
         message = record.get("message")
@@ -1098,7 +1116,7 @@ def orchestrator_wrote_since(
         if parsed is not None and stamp is not None and parsed[0] not in queued:
             queued[parsed[0]] = stamp
     for record in records:
-        if record.get("isSidechain") is True:
+        if main_thread and record.get("isSidechain") is True:
             continue
         # Only the harness's own notice counts: an operator prompt or `!cmd`
         # output is also a string-content `user` record (Opus review r2).

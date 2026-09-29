@@ -508,13 +508,30 @@ def test_it_acts_at_most_once_per_cursor_position(tmp_path: Path) -> None:
     _assert_silent(guard.stop())
 
 
+_TWO_AGENTS_SHAPE = """
+workflow: two-agents
+schema: 1
+unit: run
+steps:
+  - id: first
+    kind: agent
+  - id: second
+    kind: agent
+"""
+"""Two agent steps: a cli-only shape now runs to its end in one `advance`
+(spec 2026-09-29-fr-goal-light-path §B, R5), leaving no second position to
+be idle at. Resolving `first` by flag moves the cursor without advancing."""
+
+
 def test_it_acts_again_once_the_cursor_has_moved(tmp_path: Path) -> None:
-    repo, shipped = _start(tmp_path, "cli-only", _CLI_ONLY_SHAPE)
+    repo, shipped = _start(tmp_path, "two-agents", _TWO_AGENTS_SHAPE)
     guard = _bound(tmp_path, repo, shipped)
     _assert_blocks(guard.stop(), "fr run advance r1")
     _assert_silent(guard.stop())
 
-    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0  # hello done -> bye
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0  # first: running
+    done = ["run", "resolve", "r1", "--step", "first", "--state", "done"]
+    assert _invoke(repo, shipped, done).exit_code == 0  # cursor -> second, pending
 
     _assert_blocks(guard.stop(), "fr run advance r1")
     _assert_silent(guard.stop())

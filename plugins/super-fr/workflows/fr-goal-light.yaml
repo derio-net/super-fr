@@ -1,0 +1,107 @@
+# The shipped `fr-goal-light` shape — spec
+# docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md §A (R1-R3).
+# A light path for a small goal whose asks plan to ONE agentic phase. The
+# plain `fr-goal` pays three fixed costs that do not shrink with the goal; this
+# shape drops the first of them (two separate review stages before any code
+# exists). The other two — one `fr` call per step and a fresh suite at
+# `deliver` — are gone on every shape (`resolve --record` advances; `deliver`
+# may say `tests: reuse`).
+#
+# A run gets here two ways: `fr run start fr-goal-light`, or a `fr-goal` run
+# whose brainstorm record declares `shape: fr-goal-light`. That record rebinds
+# the run — only while `brainstorm` (the first step of BOTH shapes) is being
+# resolved, only onto a shape that begins with it — so the operator's one
+# question round decides the path, not a guess made before it.
+#
+# The order, and why it differs from `fr-goal`:
+#
+# 1. `plan` comes BEFORE the review, so a single `fr-spec-reviewer` dispatch
+#    (`spec-plan-review`) sees both documents at once. `single-phase` is
+#    DERIVED on `plan`'s resolve: the emitted plan must have exactly one phase
+#    that is not `[manual]`, or the resolve is refused naming the phases and
+#    the fix (merge them, or start a new run on `fr-goal`). A structural rule,
+#    checked at authoring time, not a hope that the plan stays small.
+# 2. `spec-plan-review` is held to `spec-review`'s evidence gate unchanged
+#    (review, reviewer, findings, requirements, coverage), against the SPEC
+#    journal. Plan findings go there too, tagged `target: plan`, so the one
+#    derived `findings` gates both documents. It emits no `journal:plan` and
+#    never ticks.
+# 3. `plan-review` (`fr plan self-review`, deterministic) comes AFTER the
+#    reviewer, so the plan is self-reviewed once more after the reviewer's
+#    fixes land.
+#
+# `implement`, `journal-check` and `deliver` are `fr-goal`'s, member for
+# member: the per-phase code review with a dispatched reviewer stays.
+workflow: fr-goal-light
+schema: 1
+description: TDD delivery of a one-phase goal — one spec+plan review, one code review, one PR.
+
+unit: run
+requires: [git, tests, scm]
+
+steps:
+  - id: brainstorm
+    kind: agent
+    skill: super-fr:fr-brainstorming
+    gate: operator
+    emits: [spec, journal:spec, acceptance]
+    # `requirements` is DERIVED, as on `fr-goal` (2026-09-28 spec §C).
+    evidence: [requirements]
+
+  - id: plan
+    kind: agent
+    skill: super-fr:fr-plan
+    needs: [spec]
+    emits: [plan, journal:plan]
+    # `single-phase` is DERIVED, never passed (2026-09-29 spec §A, R2).
+    evidence: [single-phase]
+
+  - id: spec-plan-review
+    kind: agent
+    # One dispatched, read-only reviewer over spec AND plan (R3, decision d2).
+    agent: super-fr:fr-spec-reviewer
+    tier: hard
+    needs: [spec, plan]
+    emits: [journal:spec, acceptance]
+    evidence: [review, reviewer, findings, requirements, coverage, fidelity]
+
+  - id: plan-review
+    kind: cli
+    run: fr plan self-review {{ artifacts.plan }}
+
+  - id: implement
+    kind: agent
+    agent: super-fr:fr-phase-executor
+    needs: [spec, plan]
+    for_each: phase
+    tier: from_phase
+    emits: [journal:plan]
+    steps:
+      - id: implement-phase
+        kind: agent
+        agent: super-fr:fr-phase-executor
+        needs: [spec, plan]
+        tier: from_phase
+        emits: [journal:plan, plan:ticks]
+        evidence: [visual]
+      - id: review-phase
+        kind: agent
+        skill:
+          - superpowers:requesting-code-review
+          - superpowers:receiving-code-review
+        needs: [spec, plan, journal:plan]
+        emits: [journal:plan]
+        evidence: [review, reviewer, findings, visual]
+
+  - id: journal-check
+    kind: cli
+    needs: [plan, journal:plan]
+    run: fr journal check --scope plan --plan-dir {{ artifacts.plan }} --require-reviews
+
+  - id: deliver
+    kind: agent
+    skill: superpowers:verification-before-completion
+    needs: [spec, plan]
+    emits: [pr, acceptance]
+    # `tests` may be `reuse` (2026-09-29 spec §D) on an unchanged code tree.
+    evidence: [tests, proportionality, requirement-rows, visual]

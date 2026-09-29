@@ -806,6 +806,80 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
             )
 
 
+def _rebind_shape(
+    state: RunState,
+    manifest: WorkflowManifest,
+    step_id: str,
+    target: str,
+    repo_root: Path,
+) -> WorkflowManifest | None:
+    """The manifest a record's `shape: <target>` rebinds the run onto, `None`
+    for a same-shape no-op — or `RunStateError` naming the rule it broke.
+
+    2026-09-29-fr-goal-light-path §A (R1). A run's cursor is a position in a
+    step list, so moving it onto another list is safe only before it has
+    moved at all, and only onto a list that shares the position it is at:
+
+    1. the step being resolved is the run's first step, and no other step has
+       left `pending`;
+    2. `resolve_workflow(target)` finds the shape, and its first step has the
+       same id as the step being resolved;
+    3. the target is not the run's current shape — that declaration is a
+       no-op, so a re-applied record is idempotent.
+
+    Pure: it validates, and `_rebound` builds the new state. `apply_record`
+    calls it before any write, and `resolve` again where it rewrites.
+    """
+    current = state.workflow.partition("@")[0]
+    if target == current:
+        return None
+    first = manifest.steps[0].id
+    if step_id != first:
+        raise RunStateError(
+            f"shape: {target!r} refused — only the run's first step ({first!r}) may "
+            f"rebind it, and {step_id!r} is not that step. Start a new run with "
+            f"`fr run start {target}` instead."
+        )
+    moved = sorted(
+        sid for sid, rec in state.steps.items() if sid != step_id and rec.state != "pending"
+    )
+    if moved:
+        raise RunStateError(
+            f"shape: {target!r} refused — step(s) {', '.join(moved)} already left "
+            "`pending`, so the run has moved on its current shape. Start a new run "
+            f"with `fr run start {target}` instead."
+        )
+    try:
+        rebound = resolve_workflow(target, repo_root)
+    except WorkflowError as e:
+        raise RunStateError(f"shape: {target!r} refused — {e}") from e
+    if not rebound.steps or rebound.steps[0].id != step_id:
+        begins = rebound.steps[0].id if rebound.steps else "nothing"
+        raise RunStateError(
+            f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
+            "a run rebinds only onto a shape that begins with the step being resolved."
+        )
+    errors = check_workflow(rebound)
+    if errors:
+        raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
+    return rebound
+
+
+def _rebound(state: RunState, rebound: WorkflowManifest, step_id: str) -> RunState:
+    """`state` on `rebound`'s step list: `workflow` rewritten, every step
+    fresh and `pending` as `fr run start` builds them, bar `step_id`'s own
+    record, which is carried over. The cursor stays on `step_id`, so the
+    caller's `_complete_step` moves it along the NEW list."""
+    steps = {
+        s.id: StepRecord(state="pending", members=[m.id for m in s.steps] or None)
+        for s in rebound.steps
+    }
+    steps[step_id] = state.steps[step_id]
+    return state.model_copy(
+        update={"workflow": f"{rebound.workflow}@{rebound.schema_version}", "steps": steps}
+    )
+
+
 def _with_step(state: RunState, step_id: str, record: StepRecord) -> RunState:
     new_steps = dict(state.steps)
     new_steps[step_id] = record
@@ -1397,6 +1471,7 @@ _VERIFIABLE_EVIDENCE = (
     "fidelity",
     "requirement-rows",
     "visual",
+    "single-phase",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1413,8 +1488,11 @@ _DERIVED_EVIDENCE = frozenset(
         "fidelity",
         "requirement-rows",
         "visual",
+        "single-phase",
     }
 )
+# `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
+# `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
 # `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
 # `visual:` section and the witness transcript; the rules live in `fr.run.visual`.
 # Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
@@ -1423,6 +1501,13 @@ _DERIVED_EVIDENCE = frozenset(
 # recording them unchecked. `tests` is not one: it is delivery's evidence, on
 # the flat `deliver` unit (debug journal C5).
 _PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
+# OFFERED evidence (2026-09-29-fr-goal-light-path §D, R6): a name a unit of a
+# `for_each: phase` group member may carry WITHOUT its step declaring it, and
+# that is never counted missing there. `tests` is the phase holder's own suite
+# log, which `deliver` may later reuse (`tests: reuse`) while the code tree it
+# covered is unchanged. Where a step DECLARES it (`deliver`) it stays mandatory
+# exactly as before; the shipped manifests do not change.
+_OFFERED_EVIDENCE = frozenset({"tests"})
 _DERIVED_FROM = {
     "findings": "from the reviewed journal: every finding filed against the phase "
     "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
@@ -1442,6 +1527,7 @@ _DERIVED_FROM = {
     "visual": "from the step record's `visual:` section — every owed row's screenshots "
     "cover its named states and interactions, and the witness transcript shows each "
     "one opened since the unit opened",
+    "single-phase": "from the plan this step emits: exactly one phase that is not `[manual]`",
 }
 
 
@@ -1496,7 +1582,7 @@ def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
     )
 
 
-def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
+def _parse_evidence(pairs: list[str], step: Step, *, phase_unit: bool = False) -> dict[str, str]:
     """`--evidence name=journal-entry-id` pairs, validated against `step`.
 
     Same five-rule shape as `_parse_emitted` and for the same reasons — split
@@ -1505,6 +1591,10 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
     decoration: a name the shape never asked for is verified against nothing,
     so recording it would put an unverified id on the cursor under a heading
     that reads as proof.
+
+    `phase_unit` (the unit is a `for_each: phase` group member) admits an
+    `_OFFERED_EVIDENCE` name the step does not declare — still verified, by
+    `_verified_evidence`, before anything reaches the cursor.
     """
     result: dict[str, str] = {}
     for pair in pairs:
@@ -1521,6 +1611,9 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
                 f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
                 "one obligation, one entry"
             )
+        if phase_unit and name in _OFFERED_EVIDENCE and name not in step.evidence:
+            result[name] = value.strip()
+            continue
         if not step.evidence:
             raise RunStateError(
                 f"step {step.id!r} declares no evidence, so --evidence {name}= "
@@ -1638,9 +1731,9 @@ def _verified_evidence(
     journal, and fr will say it cannot verify rather than store an id nothing
     checked.
     """
-    if not step.evidence:
+    if not step.evidence and not offered:
         # `_parse_evidence` already refused an offered name the step does not
-        # declare, so there is nothing offered here either — this is the
+        # declare — bar `_OFFERED_EVIDENCE` on a phase unit — so this is the
         # ordinary, unchanged path every pre-existing shape takes.
         return {}
     if state_value != "done" and not offered:
@@ -1714,10 +1807,23 @@ def _verified_evidence(
             opened=since,
             expected_agent=step.agent if target.phase is None else None,
         )
-    if "tests" in offered:
+    if "tests" in offered and phase is not None:
+        verified["tests"] = _verify_phase_tests_log(
+            key,
+            offered["tests"],
+            repo_root,
+            opened=opened,
+            holder=holder or (attempt.agent if attempt is not None else None),
+            record_tree=state_value == "done",
+        )
+    elif "tests" in offered and offered["tests"] == TESTS_REUSE:
+        verified["tests"] = _reuse_tests_witness(key, repo_root, state)
+    elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
         verified["proportionality"] = _proportionality_witness(key, repo_root, state)
+    if state_value == "done" and "single-phase" in step.evidence:
+        verified["single-phase"] = _single_phase_witness(key, repo_root, state, emitted or {})
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
     if "review" in offered or derives:
@@ -1818,6 +1924,45 @@ def _visual_witness(
             soft_wrap=True,
         )
     return derived.witness
+
+
+def _single_phase_witness(
+    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
+) -> str:
+    """`phase <n>` — the light shape's one agentic phase — or exit 2.
+
+    2026-09-29-fr-goal-light-path §A (R2): a structural rule checked when the
+    plan is authored, not a hope that it stays small. `[manual]` phases are
+    allowed (they are not work a subagent runs); anything but exactly one
+    agentic phase is refused, naming the phases and the two ways forward.
+    Fail-closed on a plan fr cannot read.
+    """
+    plan_rel = emitted.get("plan") or _emitted_plan(state)
+    if plan_rel is None:
+        err_console.print(
+            f"[red]{key}: cannot derive single-phase evidence — no plan recorded "
+            "(pass --emitted plan=<plan-dir>)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        tags = plan_phase_tags(repo_root, plan_rel)
+    except AdoptError as e:
+        err_console.print(
+            f"[red]{key}: cannot derive single-phase evidence — {e}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
+    if len(agentic) != 1:
+        ids = ", ".join(str(n) for n in agentic) or "none"
+        err_console.print(
+            f"{key}: single-phase: the light shape takes one agentic phase; this plan "
+            f"has {len(agentic)} ({ids}). Merge them, or start a new run on fr-goal.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"phase {agentic[0]}"
 
 
 def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
@@ -2293,40 +2438,9 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     opened. Unobservable: the file must at least be newer than the unit, and it
     says it could not verify who ran it.
     """
-    import hashlib
-
-    from fr.record.model import RECORDS_SUFFIX
     from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
-    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
-    try:
-        rel_parts = path.relative_to(repo_root.resolve()).parts
-    except ValueError:
-        rel_parts = ()
-    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
-        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
-    ):
-        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
-        # and fr empties it; a log written there got committed and reached
-        # `main` with nothing to remove it.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
-            "holds step records only and is emptied by fr. Write the suite log outside "
-            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-    except OSError:
-        data = b""
-    if not data:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
-            "yourself, write its output to a file, and name that file.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
+    path, data = _read_suite_log(key, log, repo_root)
     modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
     windows = orchestrator_wrote_since(os.environ, path, opened) if opened else None
     # One second of slack either side: the cursor stamps at second precision,
@@ -2375,14 +2489,318 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
-    # Review r1-8: the witness lands in a git-tracked cursor, so it names the
-    # log repo-relative, or by basename when it lives outside the repo — never
-    # an absolute path carrying someone's home directory.
+    return _log_witness(path, data, repo_root)
+
+
+def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
+    """`(resolved path, bytes)` of a named suite log — or exit 2 when it sits
+    in a run's records dir or is missing or empty. The checks every `tests=`
+    log meets, whoever wrote it (`deliver`'s and a phase unit's alike)."""
+    from fr.record.model import RECORDS_SUFFIX
+
+    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
+    try:
+        rel_parts = path.relative_to(repo_root.resolve()).parts
+    except ValueError:
+        rel_parts = ()
+    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
+        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
+    ):
+        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
+        # and fr empties it; a log written there got committed and reached
+        # `main` with nothing to remove it.
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
+            "holds step records only and is emptied by fr. Write the suite log outside "
+            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        data = path.read_bytes()
+    except OSError:
+        data = b""
+    if not data:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
+            "yourself, write its output to a file, and name that file.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return path, data
+
+
+def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
+    """`<shown>@<sha256[:12]>`. Review r1-8: the witness lands in a git-tracked
+    cursor, so it names the log repo-relative, or by basename when it lives
+    outside the repo — never an absolute path carrying someone's home
+    directory."""
+    import hashlib
+
     try:
         shown = str(path.relative_to(repo_root.resolve()))
     except ValueError:
         shown = path.name
     return f"{shown}@{hashlib.sha256(data).hexdigest()[:12]}"
+
+
+def _phase_log_windows(
+    path: Path, opened: str | None, holder: str | None
+) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
+    """The run windows of the holder's commands that wrote `path` — read from
+    the holder's own transcript: the claimed agent's subagent transcript, or
+    the orchestrator's main thread when the unit ran inline (no holder).
+
+    `False` when this session dispatched no agent `holder` (a bogus or foreign
+    id: refused, never unobserved); a `str` reason when nothing can be read —
+    including OpenCode and Hermes, which have no child-session reader today
+    (spec 2026-09-29-fr-goal-light-path §D, §E)."""
+    from fr.run.telemetry import _this_session, witness_transcript, wrote_since
+
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        harness = None
+    if harness in ("opencode", "hermes"):
+        return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
+    session = _this_session(os.environ)
+    if session is None or opened is None:
+        return _why_unobservable() if session is None else "the unit has no opening stamp"
+    found = witness_transcript(session, holder)
+    if found is None:
+        return f"the session transcript {session} could not be read"
+    if found is False:
+        return False
+    windows = wrote_since(found, path, opened, main_thread=holder is None)
+    if windows is None:
+        return f"the holder's transcript {found} could not be read"
+    return windows
+
+
+TESTS_REUSE = "reuse"
+"""`deliver`'s `tests: reuse` — the most recent phase suite log stands in for a
+fresh run while the code tree it covered is unchanged (spec
+2026-09-29-fr-goal-light-path §D, R6)."""
+_TREE_SEP = ";tree="
+REUSED_PREFIX = "reused:"
+
+
+def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
+    """`(unit key, witness)` of the most recently resolved `done` unit whose
+    `tests` evidence carries a code tree (a phase unit's,
+    `_verify_phase_tests_log`), or `None`. "Most recently" is the unit's last
+    attempt's `returned`; a unit with none sorts first, and a tie goes to the
+    later unit in cursor order."""
+    best: tuple[str, int, str, str] | None = None
+    seq = 0
+    for record in state.steps.values():
+        for key, unit in (record.units or {}).items():
+            seq += 1
+            witness = (unit.evidence or {}).get("tests", "")
+            if _TREE_SEP not in witness or witness.startswith(REUSED_PREFIX):
+                continue
+            # Review r2-3: only a unit that is `done` NOW vouches for its tree
+            # — a failed one, or one re-dispatched since, does not.
+            if (unit.state or record.state) != "done":
+                continue
+            returned = unit.attempts[-1].returned if unit.attempts else None
+            candidate = (returned or "", seq, key, witness)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+    return (best[2], best[3]) if best is not None else None
+
+
+def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
+    """`reused:<unit>:<witness>` when HEAD's code tree equals the tree of the
+    most recently resolved unit carrying a suite log and no code path is
+    uncommitted — or exit 2 with the fresh-run instruction."""
+    from fr.run.code_tree import code_paths_since_tree, code_tree, dirty_code_paths
+    from fr.run.telemetry import UNOBSERVED
+
+    latest = _latest_tests_witness(state)
+    if latest is None:
+        err_console.print(
+            f"[red]{key}: tests: reuse — no phase unit recorded a suite log "
+            "(`evidence: {tests: <log>}` on an implement-phase or review-phase record); "
+            "run the full suite yourself into a log and name it.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    unit, witness = latest
+    recorded = witness.rpartition(_TREE_SEP)[2]
+    own_log = _own_log_path(repo_root, witness.rpartition(_TREE_SEP)[0])
+    try:
+        dirty = [p for p in dirty_code_paths(repo_root) if p != own_log]
+        same = code_tree(repo_root) == recorded and not dirty
+        changed = None if same else code_paths_since_tree(repo_root, recorded)
+        if changed is not None:
+            changed = [p for p in changed if p != own_log]
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: tests: reuse — cannot compute the code tree: {e}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+    if not same:
+        if changed:
+            n = len(changed)
+            what = f"{n} path{'' if n == 1 else 's'}, e.g. {changed[0]}"
+        else:
+            what = "its commit is not in HEAD's recent history"
+        err_console.print(
+            f"[red]{key}: tests: reuse — the code tree changed since {unit} ({what}); "
+            "run the full suite yourself into a log and name it.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if "tests" in _unit_evidence(state, unit).get(UNOBSERVED, "").split(","):
+        # Review r2-4: a reuse is no better verified than the log it reuses.
+        _note_unobserved("tests")
+        err_console.print(
+            f"[yellow]{key}: {unit}'s suite log was recorded unverified "
+            "(evidence: unobserved=tests), so this reuse is unverified too.[/yellow]",
+            soft_wrap=True,
+        )
+    return f"{REUSED_PREFIX}{unit}:{witness}"
+
+
+def _unit_evidence(state: RunState, key: str) -> dict[str, str]:
+    """`key`'s evidence, from whichever step holds that unit (`{}` if none)."""
+    for record in state.steps.values():
+        unit = (record.units or {}).get(key)
+        if unit is not None:
+            return dict(unit.evidence or {})
+    return {}
+
+
+def _own_log_path(repo_root: Path, log_witness: str) -> str | None:
+    """The repo-relative path of the log `log_witness` (`<shown>@<sha[:12]>`)
+    names, when that file is in the worktree with exactly those bytes — so an
+    untracked suite log does not read as uncommitted code (review r2-5). A
+    same-named file with other bytes is not the log, and stays dirty."""
+    import hashlib
+
+    shown, _, digest = log_witness.rpartition("@")
+    if not shown or not digest:
+        return None
+    path = repo_root / shown
+    try:
+        data = path.read_bytes() if path.is_file() else None
+    except OSError:
+        return None
+    if data is None or hashlib.sha256(data).hexdigest()[:12] != digest:
+        return None
+    return Path(shown).as_posix()
+
+
+def _verify_phase_tests_log(
+    key: str,
+    log: str,
+    repo_root: Path,
+    *,
+    opened: str | None,
+    holder: str | None,
+    record_tree: bool = True,
+) -> str:
+    """A phase unit's own suite log (spec 2026-09-29-fr-goal-light-path §D,
+    R6) — or exit 2. Returns `<shown>@<sha256[:12]>;tree=<code-tree>`.
+
+    1. **Writer** — `_verify_tests_log`'s rules, read from the HOLDER's
+       transcript (`_phase_log_windows`); unreadable records `unobserved=tests`.
+    2. **Freshness** — the log is no older than any tracked code path, any
+       directory holding one, or the directory a code path was deleted or
+       renamed out of since the merge-base (`fr.run.code_tree.newest_code_mtime`).
+    3. **Witness** — the code tree of HEAD. Computed here, before the record's
+       own commit, and equal to the tree after it: that commit writes only fr's
+       artifact trees, which the code tree excludes by definition. HEAD's tree
+       is what the suite ran only when nothing is uncommitted, so a dirty code
+       path (the log itself aside) is refused (review r2-1).
+
+    `record_tree=False` (a resolve that is not `done`, review r2-3) checks the
+    writer only and returns `<shown>@<sha256[:12]>` — a failed phase vouches
+    for no tree, so there is no tree to record and nothing to keep fresh.
+    """
+    from fr.run.code_tree import (
+        code_tree,
+        default_merge_base,
+        dirty_code_paths,
+        newest_code_mtime,
+    )
+    from fr.run.telemetry import parse_timestamp
+
+    path, data = _read_suite_log(key, log, repo_root)
+    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
+    windows = _phase_log_windows(path, opened, holder)
+    if windows is False:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: this session dispatched no agent "
+            f"{holder!r}, so the unit's holder cannot be the one who ran the suite. "
+            "Name the agent id the executor's dispatch returned.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    slack = _dt.timedelta(seconds=1)
+    if isinstance(windows, list):
+        if not any(s - slack <= modified <= e + slack for s, e in windows):
+            why = (
+                "no command of the unit's holder wrote it (a `>`, `>>` or `tee` naming it)"
+                if not windows
+                else "its bytes were not written by the holder's command that names it"
+            )
+            err_console.print(
+                f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
+                f"{opened}. Name the log the phase's own full-suite run wrote, or leave "
+                "`tests` out of the record.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+    else:
+        opened_at = parse_timestamp(opened)
+        if opened_at is not None and modified < opened_at:
+            err_console.print(
+                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
+                "it is not a run of this phase's code.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        _note_unobserved("tests")
+        err_console.print(
+            f"[yellow]{key}: could not verify who ran {log} — {windows}; recorded "
+            "unverified (evidence: unobserved=tests).[/yellow]",
+            soft_wrap=True,
+        )
+    if not record_tree:
+        return _log_witness(path, data, repo_root)
+    try:
+        own = _own_log_path(repo_root, _log_witness(path, data, repo_root))
+        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
+        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
+        tree = code_tree(repo_root)
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: cannot compute the code tree it "
+            f"covers — {e}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    if dirty:
+        n = len(dirty)
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: {n} code path{'' if n == 1 else 's'} "
+            f"uncommitted (e.g. {dirty[0]}) — the witness is HEAD's tree, which is not "
+            "what the suite ran. Commit your code before recording the suite log, then "
+            "run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    if newest is not None and newest[0] > path.stat().st_mtime:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
+            "the log was written, so the suite did not run the code being recorded. "
+            "Run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"{_log_witness(path, data, repo_root)}{_TREE_SEP}{tree}"
 
 
 def _verify_review_entry(
@@ -3341,6 +3759,10 @@ def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | N
     return operator_input.to_brief(oi) if oi is not None else None
 
 
+AdvanceStop = Literal["brief", "gate", "cli-done", "cli-failed", "refused", "complete"]
+"""Why one `_advance_once` stopped. Only `cli-done` lets `_advance_chain` go on."""
+
+
 def _advance_group(
     repo_root: Path,
     state: RunState,
@@ -3349,7 +3771,7 @@ def _advance_group(
     record: StepRecord,
     *,
     redispatch: bool = False,
-) -> None:
+) -> AdvanceStop:
     """Dispatch the next pending `(phase, member)` unit of a grouped step.
 
     The cursor stays on the group while any unit is outstanding; `resolve`
@@ -3426,7 +3848,9 @@ def _advance_group(
             state = _with_step(state, step.id, units.with_unit_states(record, items))
         _save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
-        return
+        # The group completed inline with nothing dispatched — the cursor moved
+        # exactly as a passed cli step moves it, so `_advance_chain` goes on.
+        return "cli-done"
     # Spec §3.D.2 point 2: the preflight, ONCE, before the first unit of this
     # group is dispatched — `pending` is known and nothing has been saved yet.
     # Defence in depth behind `fr plan self-review`, not a substitute for it:
@@ -3478,6 +3902,7 @@ def _advance_group(
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
     _print_member_dispatch(step, member, item, state, resolved_tier, operator_input)
+    return "brief"
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
@@ -4099,8 +4524,67 @@ def advance_cmd(
     isolation worktree, so a second brief means two writers in one tree.
     `--redispatch` is the deliberate escape, and refuses in turn when
     nothing is outstanding.
+
+    Consecutive `kind: cli` steps run in this ONE invocation (spec
+    2026-09-29-fr-goal-light-path §B, R5): the advance repeats while the
+    previous step was a cli step that passed, and ends on the first brief,
+    gate, failure, refusal or the end of the run — one commit per step, as a
+    single advance has always made.
     """
     repo_root = resolve_repo_root()
+    stop = _advance_chain(repo_root, run_id, redispatch=redispatch)
+    if stop == "cli-failed":
+        raise typer.Exit(1)
+    if stop == "refused":
+        raise typer.Exit(2)
+
+
+def _advance_chain(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
+    """Advance until something other than a passed cli step happens (R5).
+
+    Each step is committed on its own, under its own subject, exactly as one
+    `fr run advance` per step used to commit it: every iteration runs inside
+    a fresh `_RunWrites` and commits it on every exit path. The chain is
+    capped by the manifest's step count, so a manifest can never spin.
+    """
+    # Every advance, not once at start: `/model` can move mid-run, and the
+    # moment a turn is spent on the wrong model is the moment to hear it (C3).
+    # Once per chain — the chain is one call, so one notice.
+    notice = _orchestrator_model_notice(repo_root)
+    if notice is not None:
+        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
+    try:
+        state = load_run_state(repo_root, run_id)
+        bound = len(_resolve_manifest_for_state(repo_root, state).steps) + 1
+    except Exception:  # noqa: BLE001 — `_advance_once` reports it, in its own words
+        bound = 1
+    stop: AdvanceStop = "cli-done"
+    for _ in range(bound):
+        writes = _RunWrites(verb="advance")
+        token = _RUN_WRITES.set(writes)
+        try:
+            stop = _advance_once(repo_root, run_id, redispatch=redispatch)
+        finally:
+            _RUN_WRITES.reset(token)
+            writes.commit()
+        # `--redispatch` names the unit held NOW, never one a later step briefs.
+        redispatch = False
+        if stop != "cli-done":
+            break
+    return stop
+
+
+def _advance_once(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
+    """One `advance` step — its prints unchanged; its exits become a stop."""
+    try:
+        return _advance_step(repo_root, run_id, redispatch=redispatch)
+    except typer.Exit:
+        # A failed cli step RETURNS `cli-failed`; every exit, whatever its code,
+        # is a refusal that wrote nothing it had not already said (review r1-1).
+        return "refused"
+
+
+def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -4108,12 +4592,6 @@ def advance_cmd(
     except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
-
-    # Every advance, not once at start: `/model` can move mid-run, and the
-    # moment a turn is spent on the wrong model is the moment to hear it (C3).
-    notice = _orchestrator_model_notice(repo_root)
-    if notice is not None:
-        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
     record = state.steps.get(state.cursor)
     if record is None:
@@ -4164,7 +4642,7 @@ def advance_cmd(
             committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
-        return
+        return "complete"
 
     if _gate_pending(step, record):
         if record.state != "blocked":
@@ -4197,12 +4675,11 @@ def advance_cmd(
         _commit_run_writes_now()
         if step.kind == "agent":
             console.print(json.dumps(_build_brief(step, state), sort_keys=True), soft_wrap=True)
-        return
+        return "gate"
 
     if step.kind == "agent":
         if step.steps:
-            _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
-            return
+            return _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
         # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
         # call site. This sits AFTER the `_gate_pending` block on purpose — a
         # gated step is `blocked`, never `running`, and its brief is how the
@@ -4247,7 +4724,7 @@ def advance_cmd(
         _commit_run_writes_now()
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
-        return
+        return "brief"
 
     # kind == "cli"
     context = _template_context(state)
@@ -4277,13 +4754,17 @@ def advance_cmd(
         )
         _save_run_state(repo_root, new_state)
         console.print(f"{step.id}: done (exit 0)")
+        return "cli-done"
     else:
         new_state = _complete_step(
             state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
         )
         _save_run_state(repo_root, new_state)
         err_console.print(f"{step.id}: failed (exit {proc.returncode})")
-        raise typer.Exit(1)
+        # A return value, not `typer.Exit(1)`: only this branch knows a step
+        # ran and failed, so only it may say so (review r1-1). Every
+        # `typer.Exit` raised under `_advance_step` is a refusal.
+        return "cli-failed"
 
 
 def _resolve_member(
@@ -4403,11 +4884,12 @@ def _resolve_member(
     verified = {**verified, **_take_unobserved()}
     items[key] = state_value
     merged_emitted = {**(grec.emitted or {}), **emitted_map}
-    updated = _with_step(
-        state,
-        group.id,
-        units.with_unit_states(grec.model_copy(update={"emitted": merged_emitted or None}), items),
-    )
+    base_record = grec.model_copy(update={"emitted": merged_emitted or None})
+    if "tests" not in verified:
+        # Review r2-3: evidence merges across attempts, so a retry resolved
+        # without a suite log would otherwise inherit the last attempt's.
+        base_record = units.without_tests_evidence(base_record, key)
+    updated = _with_step(state, group.id, units.with_unit_states(base_record, items))
     if verified:
         updated = _with_step(
             updated, group.id, units.with_evidence(updated.steps[group.id], key, verified)
@@ -4517,6 +4999,13 @@ def resolve_cmd(
         "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
         "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
     ),
+    no_advance: bool = typer.Option(
+        False,
+        "--no-advance",
+        help="With --record: apply the record and stop. By default an `outcome: done` "
+        "record goes on to advance the run — running any following `kind: cli` steps "
+        "and printing the next dispatch brief — in this same call.",
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -4544,8 +5033,15 @@ def resolve_cmd(
       and reporting the outcome are the same act.
     - `kind: cli` — `done` clears the gate and returns the step to `pending`
       so the next `advance` executes it and its exit code is still the
-      verdict; `failed` records a declined gate. `resolve` executes nothing,
-      ever.
+      verdict; `failed` records a declined gate. The flag form executes
+      nothing, ever.
+
+    `--record` also ADVANCES (spec 2026-09-29-fr-goal-light-path §B, R4): once
+    an `outcome: done` record is applied and committed, the run advances in
+    the same call exactly as `fr run advance` would — any following `kind:
+    cli` steps run, and the next brief prints. `--no-advance` stops after the
+    apply. A `failed` or `blocked` record never advances: its step keeps the
+    cursor, and advancing would re-brief the work that just failed.
     """
     if record_file is not None:
         # p3-r4: every flag the record carries is refused beside it, never
@@ -4577,8 +5073,14 @@ def resolve_cmd(
                 soft_wrap=True,
             )
             raise typer.Exit(2)
-        _resolve_with_record(run_id, step_id, item, record_file)
+        _resolve_with_record(run_id, step_id, item, record_file, advance=not no_advance)
         return
+    if no_advance:
+        err_console.print(
+            "[red]--no-advance goes with --record — the flag form never advances[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if state_value is None:
         err_console.print("[red]--state done|failed is required (or pass --record <file>)[/red]")
         raise typer.Exit(2)
@@ -4697,9 +5199,14 @@ def _resolve_body(
     harness: str | None = None,
     model: str | None = None,
     visual: tuple[VisualEvidence, ...] | None = None,
+    shape: str | None = None,
 ) -> None:
     """`fr run resolve`'s body, callable in process — the flag form and the
-    step-record engine (`fr.record.apply`) both run exactly this."""
+    step-record engine (`fr.record.apply`) both run exactly this.
+
+    `shape` is a record's `shape:` (2026-09-29-fr-goal-light-path §A): on a
+    `done` resolve of the run's first step it rebinds the run onto that
+    shape (`_rebind_shape`), riding this resolve's one commit."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
         raise typer.Exit(2)
@@ -4732,7 +5239,12 @@ def _resolve_body(
         # the step that carries it (the `review-phase` member), and falling
         # back to the group the way `emits` does would let a member satisfy an
         # obligation it never declared.
-        evidence_map = _parse_evidence(evidence, step)
+        evidence_map = _parse_evidence(
+            evidence, step, phase_unit=parent is not None and parent.for_each == "phase"
+        )
+        rebind = (
+            _rebind_shape(state, manifest, step_id, shape, repo_root) if shape is not None else None
+        )
     except (RunStateError, WorkflowError, AdoptError) as e:
         # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
         # in a flag pair the operator copy-pastes, and rich folds at width 80
@@ -4952,6 +5464,9 @@ def _resolve_body(
         # `pr`-less resolve exists to fetch, and before the gate's queued
         # journal decision is written — the last refusal before any write.
         _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
+    if rebind is not None and state_value == "done":
+        state, manifest = _rebound(state, rebind, step_id), rebind
+        console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
     new_state = _complete_step(
         state,
         manifest,
@@ -5049,6 +5564,7 @@ def resolve_in_process(
     questions: QuestionRounds | None = None,
     guard: ResolveGuard | None = None,
     visual: tuple[VisualEvidence, ...] = (),
+    shape: str | None = None,
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
     (every gate included), with the engine's written paths noted into the same
@@ -5091,6 +5607,7 @@ def resolve_in_process(
                 harness=harness,
                 model=model,
                 visual=visual,
+                shape=shape,
             )
             _capture_on_new_host(writes, {"step_id": step_id})
         writes.commit()
@@ -5111,8 +5628,12 @@ def resolve_in_process(
     )
 
 
-def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_file: Path) -> None:
-    """`fr run resolve --record`: parse, fill run/step/item, apply — one line."""
+def _resolve_with_record(
+    run_id: str, step_id: str, item: str | None, record_file: Path, *, advance: bool = True
+) -> None:
+    """`fr run resolve --record`: parse, fill run/step/item, apply — one line —
+    then, for an `outcome: done` record, advance the run (R4) unless `advance`
+    is false."""
     from fr.record.apply import RecordRefusedError, apply_record
     from fr.record.model import RecordError, load_record, records_dir
 
@@ -5154,6 +5675,47 @@ def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_fil
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     typer.echo(outcome.line)
+    # deliver's closeout handoff is NOT printed here: the body prints it into
+    # the held stdout, and `resolve_in_process` replays it among the notices
+    # above — printing it again duplicated it on a real terminal.
+    if advance and record.outcome == "done":
+        _advance_after_record(repo_root, run_id)
+
+
+def _advance_after_record(repo_root: Path, run_id: str) -> None:
+    """The advance half of a one-call resolve (spec 2026-09-29 §B, R4).
+
+    Runs only after the record's commit landed, so a failure here must say the
+    record is applied — nobody should re-apply it. A record that finished the
+    run (its last step, `deliver` on fr-goal) has nothing to advance: the
+    resolve already printed the closeout, and an advance would repeat it."""
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except Exception:  # noqa: BLE001 — `_advance_chain` reports it, in its own words
+        pass
+    else:
+        record = state.steps.get(state.cursor)
+        if record is not None and record.state == "done":
+            if _next_step_id(manifest, state.cursor) is None:
+                return
+    stop = _advance_chain(repo_root, run_id, redispatch=False)
+    if stop == "cli-failed":
+        state = load_run_state(repo_root, run_id)
+        failed = state.steps.get(state.cursor)
+        code = failed.exit if failed is not None else None
+        err_console.print(
+            f"record applied; {state.cursor} failed (exit {code})", markup=False, soft_wrap=True
+        )
+        raise typer.Exit(1)
+    if stop == "refused":
+        err_console.print(
+            "record applied; the advance after it was refused (above) — "
+            f"fix that, then `fr run advance {run_id}`",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _refactor_gate(repo_root: Path, state: RunState, key: str, phase_n: int | None) -> None:
