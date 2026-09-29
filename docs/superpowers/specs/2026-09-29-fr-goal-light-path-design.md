@@ -16,11 +16,9 @@
 | R7 | The fr-goal skill documents the light path and the one-call resolve. The phase executor and the spec reviewer return a fixed structured shape: the executor returns its suite log path, the reviewer covers spec and plan. The orchestrator is told to act on those returns and never to open a subagent's transcript or re-read what a brief already carries. | input "subagents return structured results"<br>decision d5-context-prose-and-brief-keys |
 | R8 | On the super-fr-3 feature-C benchmark, the light path costs at most 2× plain's money and takes at most 2.5× plain's time, with delivery still verified. | input "Target ≤ 2× plain's cost, ≤ 2.5× its time on feature C."<br>decision d6-test-plan-rerun-feature-c |
 
-## Deferred from input
-
-None. The delivery rules (branch name, draft PR on spec commit, `Closes` line, no member issue as `tracking_issue`) are instructions for this run and are honoured by it. They are not product requirements.
-
 ## Design
+
+The input's delivery rules (branch name, draft PR on spec commit, `Closes` line, no member issue as `tracking_issue`) are instructions for this run and are honoured by it. They are not product requirements.
 
 ### Background: where a small goal's money goes
 
