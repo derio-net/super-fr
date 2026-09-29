@@ -231,3 +231,8 @@ Built as written: the benchmark passes only when cost ≤ 2× and time ≤ 2.5×
 ### phase-split-2026-09-29-fr-goal-light-path-p2 · decision · ask: deliver reuses a verified phase suite log (R6)
 
 Its own ask in the input; a separate review surface (telemetry/evidence gates).
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-fr-goal-light-path-p3 created=2026-09-29T07:26:55+00:00 -->
+### phase-split-2026-09-29-fr-goal-light-path-p3 · decision · ask: the fr-goal-light shape and its prose (R1-R3, R7)
+
+Its own ask in the input (fold plan review into spec review for one-phase plans).
