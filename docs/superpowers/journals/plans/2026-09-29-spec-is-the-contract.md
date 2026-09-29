@@ -44,3 +44,8 @@ The task is the quality gate and the acceptance moves: it runs checks and moves 
 ### review-branch · review · Independent adversarial review of the whole branch: 3 findings, all in scope, all fixed (phase 2)
 
 A general-purpose subagent that wrote none of it reviewed origin/main...HEAD against the spec. Q1 (nothing outside the input layer lost): verified intact — workflows (4.28 lists + visual/single-phase), phase sizing, light path incl. the spec reviewer's plan section and tests: reuse, visual evidence, pr_body Post-merge + Tests, question-round prose, services, close-out, #828's deliver changes, the review-unit-holder exclusion. Q2 (no path after brainstorm reads the input): none found across packages/*/src (incl. fr-opencode-plugin), workflows, skills, agents, rules, hooks. Record 6->7 checked against artifact-versioning: compliant. Findings rv-c1..rv-c3 (all low, in scope) fixed.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c1 created=2026-09-29T18:29:29+00:00 phase=2 state=open review_scope=in -->
+### rv-c1 · finding [open] (reviewer: in scope) · Bulleted R<n> lines read as no Requirements, skipping phase sizing silently (phase 2)
+
+Independent review: '- R1. a' / '* R1. a' made has_requirements False.
