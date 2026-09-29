@@ -4456,9 +4456,14 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R1
     - super-fr:docs/superpowers/implemented/specs/2026-09-28-raw-input-relay-design.md
     - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-fidelity-invention-design.md
-    levels: {}
-    status: not-implemented
-    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
+      - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_journal_cmd.py
+    status: ci
+    notes: Workflows pinned to 4.28 evidence lists; briefs and handoff carry no operator
+      input; the brief is still stored as an input=true entry (test_journal_cmd.py).
   - id: spec-contract-plain-requirements
     capability: fr-goal-methodology
     acceptance: A spec's Requirements section is a plain R<n> list with no quote, source
