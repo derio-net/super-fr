@@ -4611,9 +4611,12 @@ rows:
       user-visible behaviour and its backing at merge
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: 'PR body renders ## Design inventory in <details>, predates line otherwise
+      (phase 2)'
   - id: spec-fidelity-live-invention-caught
     capability: fr-goal-methodology
     acceptance: On a live brief, a spec that invents an interaction (take 9's card-click
