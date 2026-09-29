@@ -263,6 +263,25 @@ def with_evidence(record: StepRecord, key: str, evidence: Mapping[str, str]) -> 
     return _with_units(record, mapping)
 
 
+def without_tests_evidence(record: StepRecord, key: str) -> StepRecord:
+    """`record` with `key`'s `tests` witness removed, and `tests` dropped from
+    its `unobserved` list — what a new attempt resolved with no suite log
+    leaves (review r2-3): a witness belongs to the attempt that ran the suite.
+    Unchanged when the unit carries no `tests` evidence."""
+    mapping = _units(record)
+    prior = mapping.get(key)
+    if prior is None or not prior.evidence or "tests" not in prior.evidence:
+        return record
+    evidence = {k: v for k, v in prior.evidence.items() if k != "tests"}
+    gates = [g for g in evidence.get("unobserved", "").split(",") if g and g != "tests"]
+    if gates:
+        evidence["unobserved"] = ",".join(gates)
+    else:
+        evidence.pop("unobserved", None)
+    mapping[key] = prior.model_copy(update={"evidence": evidence or None})
+    return _with_units(record, mapping)
+
+
 # ----------------------------------------------------------------- the units
 
 

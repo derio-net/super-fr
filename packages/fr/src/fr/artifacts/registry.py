@@ -439,8 +439,11 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `2026-09-28-ui-visual-evidence-design` §G), migration
             # `fr.artifacts.record_visual`; 4 -> 5 for `JournalItem.delegated`
             # (spec `2026-09-29-spec-fidelity-invention-design` §E), migration
-            # `fr.artifacts.record_delegated`.
-            current_version=5,
+            # `fr.artifacts.record_delegated`; 5 -> 6 for `StepRecord.shape`
+            # (spec `2026-09-29-fr-goal-light-path-design` §A, the brainstorm
+            # record's rebind onto `fr-goal-light`), migration
+            # `fr.artifacts.record_shape`.
+            current_version=6,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

@@ -91,6 +91,26 @@ and the spec's `## Requirements` / `## Deferred from input` tables, then check:
 
 Do not review prose style, and do not propose features the spec does not need.
 
+## When the brief names a plan too (`spec-plan-review`)
+
+On the light shape (`fr-goal-light`) one dispatch reviews the spec AND its
+one-phase plan together, after the plan is written — the brief names the plan
+directory beside the spec. Run the four checks above on the spec, then check
+the plan:
+
+- **Reads back against the spec.** Every requirement the spec builds is built
+  by a step of the phase; nothing in the phase builds what the spec does not
+  ask for.
+- **One agentic phase, TDD-shaped.** Exactly one phase is not `[manual]`, and
+  its tasks run red → green → refactor (or carry a reason for no refactor).
+- **Rows linked.** Every acceptance row the spec creates is in the phase's
+  `acceptance` list, or is a `verify: post-merge` row.
+
+Every finding carries `target: spec|plan` in its body, beside `check:`. All of
+them go in the one return below — the spec journal holds both documents'
+findings, so one derived `findings` gate covers both. Without a plan in the
+brief (`spec-review`), write `target: spec` or leave it out.
+
 ## Traceability findings: how each gets fixed
 
 Say, per traceability finding, which resolution you expect:
@@ -211,7 +231,8 @@ journal:
     review_scope: in            # in | out
     title: <one line>
     body: |
-      check: traceability | decisions | codebase | consistency
+      check: traceability | decisions | codebase | consistency | plan
+      target: spec|plan           # plan only on spec-plan-review
       evidence: <input span / decision id / spec section / path:line>
       scope: <one-line reason for the tag>
       resolution: dropped | invented | reinterpreted    # traceability findings only

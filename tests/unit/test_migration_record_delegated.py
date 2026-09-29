@@ -31,20 +31,21 @@ def _record_file(root: Path, text: str = _V4_RECORD, stem: str = "implement-phas
     return path
 
 
-def test_the_record_kind_is_at_version_five() -> None:
-    assert RECORD_SCHEMA_VERSION == 5
-    assert artifact_kind("record").current_version == 5
+def test_the_record_kind_is_at_version_five_or_later() -> None:
+    assert RECORD_SCHEMA_VERSION >= 5
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
 def test_a_four_to_five_migration_is_registered() -> None:
-    (hop,) = MIGRATIONS.chain("record", 4)
+    hop = MIGRATIONS.chain("record", 4)[0]
     assert (hop.from_version, hop.to_version) == (4, 5)
+    assert hop.description.startswith("record: add `JournalItem.delegated`")
 
 
-def test_the_chain_from_one_reaches_five_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_five_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [(s.from_version, s.to_version) for s in chain] == [(1, 2), (2, 3), (3, 4), (4, 5)]
-    assert [s.to_version for s in chain] == [2, 3, 4, 5]
+    # 5 -> 6 (`StepRecord.shape`) follows; test_migration_record_shape pins the whole chain.
+    assert [(s.from_version, s.to_version) for s in chain][:4] == [(1, 2), (2, 3), (3, 4), (4, 5)]
 
 
 def test_a_v4_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
@@ -54,8 +55,10 @@ def test_a_v4_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == before.replace("schema_version: 4\n", "schema_version: 5\n")
-    assert parse_record(path.read_text()).schema_version == 5
+    assert path.read_text() == before.replace(
+        "schema_version: 4\n", f"schema_version: {RECORD_SCHEMA_VERSION}\n"
+    )
+    assert parse_record(path.read_text()).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -78,7 +81,7 @@ def test_an_unreadable_v4_record_is_refused_byte_identical(tmp_path: Path) -> No
 
     assert [f.path for f in report.failed] == [broken]
     assert broken.read_bytes() == before
-    assert artifact_kind("record").read_version(healthy) == 5
+    assert artifact_kind("record").read_version(healthy) == RECORD_SCHEMA_VERSION
 
 
 def test_an_empty_v4_record_is_stamped(tmp_path: Path) -> None:
@@ -87,7 +90,7 @@ def test_an_empty_v4_record_is_stamped(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert artifact_kind("record").read_version(path) == 5
+    assert artifact_kind("record").read_version(path) == RECORD_SCHEMA_VERSION
 
 
 def test_this_repos_own_live_records_are_current(repo_root: Path) -> None:
