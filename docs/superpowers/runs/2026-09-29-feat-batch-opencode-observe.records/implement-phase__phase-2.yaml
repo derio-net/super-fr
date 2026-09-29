@@ -6,7 +6,7 @@ run: 2026-09-29-feat-batch-opencode-observe
 step: implement-phase
 item: phase/2
 outcome: done
-ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T4.S3]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T4.S3, P2.T4.S4]
 refactor:
   P2.T1: "Already built by review fix p1-r1 (2aa091c5): all three comparison sites call agent_name and _verify_reviewer reads observed_session(...).dispatches(opened). This phase only added the one missing RED case (a `general` child named as spec reviewer); no code changed, nothing to clean."
   P2.T2: "One 30-line helper (`_observed_holder`) called at the two resolve paths before any check reads the holder; it reuses the protocol, `agent_name` and the claim path, so there was no duplication to fold."
@@ -88,5 +88,27 @@ journal:
       pins (`cp plugins/super-fr/workflows/*.yaml packages/fr/src/fr/workflows/`).
       The plan's T4.S3 named only the two sync scripts; the copy is committed
       with the prose.
+  - kind: discovery
+    id: p2-every-non-executor-child-is-a-reviewer
+    title: Any non-executor subagent the orchestrator dispatches during a review window now owes a findings block
+    body: |
+      Per spec §D every child dispatched since the review-phase unit opened
+      that is not a phase executor counts as a reviewer, on Claude Code as on
+      OpenCode. An orchestrator that dispatches a helper (say, a read-only
+      search agent to verify a finding) inside that window will see the
+      resolve refused until that helper's return also ends with a findings
+      block (`none` suffices). The fr-goal §6 prose says "every
+      non-executor subagent's return"; worth confirming at review that this
+      is the intended strictness.
+  - kind: discovery
+    id: p2-acceptance-rows-moved
+    title: The phase's three acceptance rows moved not-implemented -> ci
+    body: |
+      `opencode-child-dispatch`, `reviewer-return-coverage` and
+      `review-phase-findings-block` were moved with `fr acceptance set-status`
+      (cca7db06, c6d49acf, e17f1c2c), each citing the new test files.
+      `session-observer-protocol` (phase 1's R4 row) is still
+      `not-implemented`; phase 2 did not touch it.
 resolves: []
-evidence: {}
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/2f196929-faa0-4988-9f6b-99618c4066f7/scratchpad/p2-full-suite.log
