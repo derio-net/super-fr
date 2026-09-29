@@ -159,3 +159,89 @@ one new field threaded through existing seams (model, parse, CLI, record item); 
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 the new _design_inventory deliberately mirrors _input_coverage; extracting a shared helper would couple two sections whose miss-messages differ
+
+<!-- fr:journal kind=finding scope=plan id=p2-q1-explainer-count created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=in -->
+### p2-q1-explainer-count · finding [open] (reviewer: in scope) · Explainer says "Two more sections" but now lists three (phase 2)
+
+docs/explainers/01-fr-goal.md:940 (and the rendered .html) — this phase added the design-inventory item to that sentence without updating the count. In scope: prose this change edited.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q2-vacuous-assert created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=in -->
+### p2-q2-vacuous-assert · finding [open] (reviewer: in scope) · Vacuous `assert parse_journal` in test_record_schema.py (phase 2)
+
+tests/unit/test_record_schema.py:232 asserted an imported function is truthy; no behaviour checked. In scope: a test this change added.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q3-template-grammar-untested created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=in -->
+### p2-q3-template-grammar-untested · finding [open] (reviewer: in scope) · No test ties the reviewer's example blocks to the grammar fr checks (phase 2)
+
+test_spec_reviewer_agent.py only checked the block names appear; a template whose fences, headers or labels drifted from fr.fidelity would stay green. In scope: the template is this change's.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q4-predates-asserts-private-helper created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=in -->
+### p2-q4-predates-asserts-private-helper · finding [open] (reviewer: in scope) · The fidelity-predates test asserted `_predates_gate`, not the rendered section (phase 2)
+
+Test Plan 6 is about the rendered `## Design inventory` reading the predates line when `fidelity` holds REQUIREMENTS_PREDATES. In scope: this change's test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q5-not-available-untested created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=out -->
+### p2-q5-not-available-untested · finding [open] (reviewer: out of scope) · The `Not available: …` branches of `_design_inventory` have no test (phase 2)
+
+pr_body.py:209-222 mirrors `_input_coverage`'s tested branches. The reviewer tagged it out (a coverage nicety); the orchestrator reclassifies it IN: the branches are new code of this change, which the out-of-scope definition (not caused by this change) does not fit.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q6-delegated-citation-silent-fallback created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=out -->
+### p2-q6-delegated-citation-silent-fallback · finding [open] (reviewer: out of scope) · Delegated citation lookup falls back to `cited by: none` on an unparseable Requirements table (phase 2)
+
+pr_body.py:_delegated. Unreachable in a gated run: the `requirements` derived evidence refuses such a spec at brainstorm and spec-review, long before deliver renders.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q7-migration-test-pins-equality created=2026-09-29T08:39:29+00:00 phase=2 state=open review_scope=out -->
+### p2-q7-migration-test-pins-equality · finding [open] (reviewer: out of scope) · test_migration_record_delegated pins `== 5` and the exact chain (phase 2)
+
+It will need relaxing to a prefix at the next record bump, as this phase did to the visual test. Prescribed by spec Test Plan 5 and artifact-versioning.md's 'assert every hop'; the relaxing is the next bump's work, not this change's.
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-09-29T08:39:29+00:00 phase=2 -->
+### p2-review · review · phase 2 code review: 7 findings (q1-q7); q1-q5 fixed, q6-q7 out of scope (phase 2)
+
+Independent reviewer over 813a5202..26c7e72e against spec §E, §F, §G, §I, Test Plan 5-6 and
+artifact-versioning.md. Findings q1-q4 in scope, all low; q5 reclassified in (new code of this
+change); q6-q7 out of scope. Fixed in aeda8a2a: explainer count ("Three more sections",
+.html regenerated after a byte-identical re-render of the unmodified source, one-line diff);
+the vacuous assert and unused import removed; test_the_agents_example_blocks_pass_frs_own_checks
+feeds the prose's example blocks through check_fidelity/check_inventory; the predates test
+renders the section; two new tests pin the Not-available branches.
+Verified clean by the reviewer: the delegated token round-trip and validator scope, record 4→5
+in both constants with an imported stamp-only migration and no stale live artifacts, the relaxed
+visual migration test still guarding its hop, requirement-grammar-based citation lookup,
+REQUIRED_SECTIONS order, no prose telling the orchestrator to resolve `unconfirmed`, harness
+neutrality, mirrors carrying the same edits, and no uncovered operator input.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q1-explainer-count-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=fixed resolves=p2-q1-explainer-count -->
+### p2-q1-explainer-count-resolved · finding [fixed] · resolves p2-q1-explainer-count: Explainer says "Two more sections" but now lists three (phase 2)
+
+"Three more sections"; 01-fr-goal.html regenerated per explainers-currency (unmodified re-render byte-identical first) (aeda8a2a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-q2-vacuous-assert-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=fixed resolves=p2-q2-vacuous-assert -->
+### p2-q2-vacuous-assert-resolved · finding [fixed] · resolves p2-q2-vacuous-assert: Vacuous `assert parse_journal` in test_record_schema.py (phase 2)
+
+Assertion and unused import removed; the apply path stays covered in test_record_apply.py (aeda8a2a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-q3-template-grammar-untested-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=fixed resolves=p2-q3-template-grammar-untested -->
+### p2-q3-template-grammar-untested-resolved · finding [fixed] · resolves p2-q3-template-grammar-untested: No test ties the reviewer's example blocks to the grammar fr checks (phase 2)
+
+test_the_agents_example_blocks_pass_frs_own_checks runs the agent's example requirement-fidelity and design-inventory blocks through fr's own checks against a matching spec and journal (aeda8a2a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-q4-predates-asserts-private-helper-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=fixed resolves=p2-q4-predates-asserts-private-helper -->
+### p2-q4-predates-asserts-private-helper-resolved · finding [fixed] · resolves p2-q4-predates-asserts-private-helper: The fidelity-predates test asserted `_predates_gate`, not the rendered section (phase 2)
+
+test_a_stored_predates_line_for_fidelity_reads_as_predating now asserts the rendered `## Design inventory` equals the predates line (aeda8a2a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-q5-not-available-untested-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=fixed resolves=p2-q5-not-available-untested -->
+### p2-q5-not-available-untested-resolved · finding [fixed] · resolves p2-q5-not-available-untested: The `Not available: …` branches of `_design_inventory` have no test (phase 2)
+
+Reclassified in scope and fixed: test_an_unreadable_spec_journal_makes_the_inventory_not_available and test_a_recorded_review_missing_from_the_journal_makes_the_inventory_not_available (aeda8a2a).
+
+<!-- fr:journal kind=finding scope=plan id=p2-q6-delegated-citation-silent-fallback-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=open resolves=p2-q6-delegated-citation-silent-fallback out_of_scope=true -->
+### p2-q6-delegated-citation-silent-fallback-resolved · finding [out-of-scope] · resolves p2-q6-delegated-citation-silent-fallback: Delegated citation lookup falls back to `cited by: none` on an unparseable Requirements table (phase 2)
+
+Not caused by a reachable path of this change: the requirements gate refuses an unparseable Requirements table before deliver can render it.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q7-migration-test-pins-equality-resolved created=2026-09-29T08:39:29+00:00 phase=2 state=open resolves=p2-q7-migration-test-pins-equality out_of_scope=true -->
+### p2-q7-migration-test-pins-equality-resolved · finding [out-of-scope] · resolves p2-q7-migration-test-pins-equality: test_migration_record_delegated pins `== 5` and the exact chain (phase 2)
+
+The exact chain is what spec Test Plan 5 and artifact-versioning.md require now; relaxing it is the next record bump's obligation, not this change's.
