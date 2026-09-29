@@ -62,6 +62,13 @@ _FIDELITY_HEADER = ["requirement", "clause", "fidelity"]
 _INVENTORY_HEADER = ["section", "behaviour", "backing"]
 
 
+def inventory_block(review_body: str) -> str | None:
+    """The fenced `design-inventory` block of a review entry, fences included —
+    or None when there is not exactly one. What the PR body renders (§F)."""
+    matches = list(_INVENTORY_BLOCK_RE.finditer(review_body))
+    return matches[0].group(0) if len(matches) == 1 else None
+
+
 def _one_block(pattern: re.Pattern[str], name: str, body: str) -> tuple[str | None, str | None]:
     blocks = pattern.findall(body)
     if not blocks:

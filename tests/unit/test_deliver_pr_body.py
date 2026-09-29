@@ -128,6 +128,7 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
     assert missing_sections("## Findings\n## Out-of-scope findings\nNone.\n") == [
         "## Built without operator confirmation",
         "## Input coverage",
+        "## Design inventory",
         "## Post-merge verification owed",
         "## Proportionality",
         "## Cost",
@@ -170,6 +171,7 @@ def test_the_three_traceability_sections_are_required_in_order() -> None:
         "## Out-of-scope findings",
         "## Built without operator confirmation",
         "## Input coverage",
+        "## Design inventory",
         "## Post-merge verification owed",
         "## Proportionality",
         "## Cost",
@@ -181,6 +183,7 @@ def test_the_three_traceability_sections_are_required_in_order() -> None:
     [
         "## Built without operator confirmation",
         "## Input coverage",
+        "## Design inventory",
         "## Post-merge verification owed",
     ],
 )
@@ -250,7 +253,7 @@ def test_the_body_renders_unconfirmed_coverage_and_post_merge_sections(tmp_path:
     unconfirmed = body.split("## Built without operator confirmation")[1].split(
         "## Input coverage"
     )[0]
-    coverage = body.split("## Input coverage")[1].split("## Post-merge verification owed")[0]
+    coverage = body.split("## Input coverage")[1].split("## Design inventory")[0]
     owed = body.split("## Post-merge verification owed")[1].split("## Proportionality")[0]
     assert "s-inv" not in findings
     assert "`s-inv`" in unconfirmed
@@ -286,14 +289,16 @@ def test_a_run_predating_the_gate_renders_the_predates_line_and_nones(tmp_path: 
 
     after = body.split("## Built without operator confirmation")[1]
     assert after.split("## Input coverage")[0].strip() == "None."
-    coverage = after.split("## Input coverage")[1].split("## Post-merge verification owed")[0]
+    coverage = after.split("## Input coverage")[1].split("## Design inventory")[0]
     assert coverage.strip() == "Not recorded (predates the requirements gate)."
+    inventory = after.split("## Design inventory")[1].split("## Post-merge verification owed")[0]
+    assert inventory.strip() == "Not recorded (predates the fidelity gate)."
     owed = after.split("## Post-merge verification owed")[1].split("## Proportionality")[0]
     assert owed.strip() == "None."
 
 
 def _coverage_section(body: str) -> str:
-    return body.split("## Input coverage")[1].split("## Post-merge verification owed")[0].strip()
+    return body.split("## Input coverage")[1].split("## Design inventory")[0].strip()
 
 
 def test_a_gated_run_whose_shape_records_no_coverage_is_not_available(tmp_path: Path) -> None:
@@ -325,3 +330,108 @@ def test_an_unreadable_spec_journal_is_not_available_not_predates(tmp_path: Path
 
     assert coverage.startswith("Not available:"), coverage
     assert "predates" not in coverage
+
+
+# --- spec-fidelity §F (Test Plan 5-6) ---------------------------------------
+
+
+def _section(body: str, heading: str, nxt: str) -> str:
+    return body.split(heading)[1].split(nxt)[0].strip()
+
+
+def _with_fidelity(repo: Path):
+    """The traced run's state plus `fidelity` evidence naming a second review
+    entry that carries all three blocks (a legacy `unconfirmed` finding cannot
+    coexist with a live `fidelity` derivation, so the fixture is patched)."""
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+    from fr.run import units
+
+    from tests.unit.requirements_support import REVIEW_BLOCKS, now
+    from tests.unit.test_run_evidence_requirements import SLUG
+
+    append_journal_entry(
+        journal_path(repo, "spec", SLUG),
+        SLUG,
+        JournalEntry(
+            kind="review", scope="spec", id="sr-2", created=now(),
+            title="spec review 2", body=REVIEW_BLOCKS,
+        ),
+    )  # fmt: skip
+    state = load_run_state(repo, "r1")
+    record = units.with_evidence(
+        state.steps["spec-review"],
+        "step/spec-review",
+        {"fidelity": "1 requirements, 1 sections", "review": "sr-2"},
+    )
+    return state.model_copy(update={"steps": {**state.steps, "spec-review": record}})
+
+
+def test_the_design_inventory_renders_the_reviews_table_inside_details(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    repo = _traced_run_at_deliver(tmp_path)
+
+    body = render_pr_body(repo, _with_fidelity(repo))
+
+    inventory = _section(body, "## Design inventory", "## Post-merge verification owed")
+    assert inventory.startswith("<details>") and inventory.endswith("</details>")
+    assert "```design-inventory" in inventory
+    assert "| A. Widget | the widget counts | R1 |" in inventory
+
+
+def test_a_run_whose_spec_review_has_no_fidelity_evidence_predates(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import _at_deliver
+
+    repo, _ = _at_deliver(tmp_path)  # a shape that records coverage-less spec review
+
+    body = render_pr_body(repo, load_run_state(repo, "r1"))
+
+    inventory = _section(body, "## Design inventory", "## Post-merge verification owed")
+    assert inventory == "Not recorded (predates the fidelity gate)."
+
+
+def test_a_stored_predates_line_for_fidelity_reads_as_predating(tmp_path: Path) -> None:
+    from fr.record.pr_body import _predates_gate
+    from fr.requirements import REQUIREMENTS_PREDATES
+    from fr.run import units
+
+    repo = _traced_run_at_deliver(tmp_path)
+    state = load_run_state(repo, "r1")
+    assert _predates_gate(state) is False
+    record = state.steps["spec-review"]
+    stored = units.with_evidence(record, "step/spec-review", {"fidelity": REQUIREMENTS_PREDATES})
+    state = state.model_copy(update={"steps": {**state.steps, "spec-review": stored}})
+
+    assert _predates_gate(state) is True
+
+
+def test_delegated_decisions_list_with_the_requirements_citing_them(tmp_path: Path) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.requirements_support import now
+    from tests.unit.test_run_evidence_requirements import SLUG, SPEC
+
+    repo = _traced_run_at_deliver(tmp_path)
+    append_journal_entry(
+        journal_path(repo, "spec", SLUG),
+        SLUG,
+        JournalEntry(
+            kind="decision", scope="spec", id="d-call", created=now(),
+            title="Card style is the agent's call", body="chose flat cards", delegated=True,
+        ),
+    )  # fmt: skip
+    spec = repo / SPEC
+    spec.write_text(
+        spec.read_text().rstrip("\n") + "\n| R9 | Cards are flat. | decision d-call |\n"
+    )
+
+    body = render_pr_body(repo, load_run_state(repo, "r1"))
+
+    section = _section(body, "## Built without operator confirmation", "## Input coverage")
+    assert "`d-call`" in section and "Card style is the agent's call" in section
+    assert "R9" in section
+    # legacy unconfirmed finding still listed after the delegated decisions
+    assert section.index("`d-call`") < section.index("`s-inv`")
