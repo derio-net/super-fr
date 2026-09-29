@@ -14,3 +14,8 @@ pickup_cmd.py maps RunStateError straight to exit 2 with 'no run state at <path>
 ### rc-824 · root-cause · #824: up git-excludes .fr-isolation but not the devcontainer CLI's devcontainer-lock.json
 
 LocalIsolation._write_isolation_marker (isolation/local.py) appends only '.fr-isolation' to the shared info/exclude. The devcontainer CLI writes .devcontainer/<profile>/devcontainer-lock.json on 'up', untracked. down's reap-hazard check (git status --porcelain, untracked counts: #435 d1) then sees a dirty worktree and refuses.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-825 created=2026-09-29T11:35:46+00:00 -->
+### rc-825 · root-cause · #825: the close-out brief opens a housekeeping workspace but only downs the feature branch
+
+run/closeout.py branch_closeout_brief prints 'fr isolation up --branch <housekeeping>' (chore/archive-<plan> or chore/closeout-<...>) and ends with 'fr isolation down --branch <feature branch>'. It has no line for the housekeeping branch, so that workspace outlives every close-out.
