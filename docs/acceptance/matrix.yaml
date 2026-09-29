@@ -4706,6 +4706,16 @@ rows:
       run cost read a foreign transcript (#848). Failing until #846 closes or the row
       is reclassified.'
     verify: post-merge
+  - id: spec-contract-no-input-gates
+    capability: fr-goal-methodology
+    acceptance: 'No fr-goal step after brainstorm reads, receives or is gated on the
+      operator''s raw input: the shipped workflows carry no requirements/coverage/fidelity/requirement-rows
+      evidence, and implement/review briefs and journal handoff carry no operator input'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R1
+    levels: {}
+    status: not-implemented
+    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
