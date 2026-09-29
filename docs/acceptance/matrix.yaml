@@ -5606,9 +5606,13 @@ rows:
       one the reviewer returned is refused, on every harness whose return fr can read.
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_review_return.py
+      - super-fr:tests/unit/test_run_review_return_resolve.py
+    status: ci
+    notes: 'Phase 2: returned_coverage/coverage_divergence unit tests plus resolve-level
+      refusals on the OpenCode fixture and a Claude Code transcript, in CI.'
   - id: review-phase-findings-block
     capability: review-phase
     acceptance: A review-phase resolve is refused when the reviewer's returned findings
