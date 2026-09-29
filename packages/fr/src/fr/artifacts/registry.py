@@ -437,8 +437,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.record_input_unconfirmed`; 3 -> 4 for
             # `AcceptanceItem.visual`/`StepRecord.visual` (spec
             # `2026-09-28-ui-visual-evidence-design` §G), migration
-            # `fr.artifacts.record_visual`.
-            current_version=4,
+            # `fr.artifacts.record_visual`; 4 -> 5 for `JournalItem.delegated`
+            # (spec `2026-09-29-spec-fidelity-invention-design` §E), migration
+            # `fr.artifacts.record_delegated`.
+            current_version=5,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,

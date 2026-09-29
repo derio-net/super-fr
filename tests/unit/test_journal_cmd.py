@@ -2019,6 +2019,36 @@ class TestAddInput:
         assert not (root / "docs/superpowers/journals").exists()
 
 
+class TestAddDelegated:
+    """`fr journal add --delegated` (spec 2026-09-29 §E)."""
+
+    def test_it_writes_the_token_on_a_spec_decision(self, tmp_path: Path, monkeypatch) -> None:
+        from fr.journal.model import parse_journal
+
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "spec", "--slug", "S", "--kind", "decision", "--delegated"),
+            *("--id", "d1", "--title", "your call", "--body", "chose X"),
+        )
+        assert res.exit_code == 0, res.output
+        text = _spec_file(root, "S").read_text()
+        assert "delegated=true" in text
+        assert parse_journal(text)[0].delegated is True
+
+    def test_it_is_refused_off_a_spec_decision(self, tmp_path: Path, monkeypatch) -> None:
+        root = _init_repo(tmp_path)
+        monkeypatch.chdir(root)
+        res = _add(
+            root,
+            *("--scope", "spec", "--slug", "S", "--kind", "discovery", "--delegated"),
+            *("--title", "t", "--body", "b"),
+        )
+        assert res.exit_code == 2, res.output
+        assert "`delegated` is only valid" in res.output
+
+
 class TestResolveUnconfirmed:
     """`--state unconfirmed` is retired for new writes (spec 2026-09-29 §D,
     d1-remove-only): an invented or reinterpreted finding is removed, never

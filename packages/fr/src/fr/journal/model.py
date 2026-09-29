@@ -121,6 +121,12 @@ class JournalEntry(BaseModel):
     # 2026-09-28 §A). Header token `input=true`, serialized only when set, so
     # an older fr reads a plain discovery.
     input: bool = False
+    # DELEGATED: a spec-scope `decision` the operator answered "Your call." —
+    # the agent chose, so it is a valid requirement source but is listed in the
+    # PR's "Built without operator confirmation" (spec 2026-09-29 §E,
+    # d5-delegated-flag). Header token `delegated=true`, serialized only when
+    # set, so an older fr reads a plain decision.
+    delegated: bool = False
     # UNCONFIRMED: an `open` spec resolution record saying the behaviour is
     # built without the operator confirming it (spec 2026-09-28 §D). Folds to
     # `unconfirmed`; header token `unconfirmed=true`, carried like
@@ -183,6 +189,11 @@ class JournalEntry(BaseModel):
             raise ValueError(
                 "`input` is only valid on a spec-scope `discovery` entry: it holds the "
                 "operator's input, which only a spec journal carries"
+            )
+        if self.delegated and (self.kind != "decision" or self.scope != "spec"):
+            raise ValueError(
+                "`delegated` is only valid on a spec-scope `decision` entry: it marks an "
+                'operator answer of "Your call.", which only a spec journal records'
             )
         if self.unconfirmed and (
             self.resolves is None
@@ -269,6 +280,7 @@ _HEADER_FIELDS = (
     "review_scope",
     "answered_by",
     "input",
+    "delegated",
     "unconfirmed",
 )
 
@@ -372,6 +384,7 @@ def parse_journal(text: str) -> list[JournalEntry]:
                 review_scope=_review_scope_token(fields.get("review_scope")),
                 answered_by=_answered_by_token(fields.get("answered_by")),
                 input=fields.get("input") == "true",
+                delegated=fields.get("delegated") == "true",
                 unconfirmed=fields.get("unconfirmed") == "true",
             )
             if entry.id in entry_ids:

@@ -370,6 +370,7 @@ def _journal_writes(
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
+                delegated=item.delegated,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e

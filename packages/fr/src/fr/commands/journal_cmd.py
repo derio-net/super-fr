@@ -172,6 +172,12 @@ def add(
         help="--scope spec --kind discovery only: this entry is the operator's input, "
         "verbatim after third-party redaction (spec 2026-09-28 §A).",
     ),
+    delegated: bool = typer.Option(
+        False,
+        "--delegated",
+        help='--scope spec --kind decision only: the operator answered "Your call.", '
+        "so the agent chose (spec 2026-09-29 §E).",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
@@ -230,6 +236,7 @@ def add(
             review_scope=review_scope,  # type: ignore[arg-type]
             answered_by=answered_by,  # type: ignore[arg-type]
             input=is_input,
+            delegated=delegated,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -270,6 +277,7 @@ def add(
             "resolves": resolves,
             "answered_by": answered_by,
             "input": is_input,
+            "delegated": delegated,
         }
     )
     _apply(

@@ -220,6 +220,18 @@ def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
     assert record.acceptance[0].verify == "post-merge"
 
 
+def test_a_delegated_decision_parses_and_applies_as_the_token(tmp_path) -> None:
+    from fr.journal.model import parse_journal
+    from fr.record.model import parse_record
+
+    record = parse_record(
+        "journal:\n  - {kind: decision, id: d1, title: t, body: b, delegated: true}\n"
+    )
+    assert record.journal[0].delegated is True
+    assert parse_record("journal: [{kind: decision, title: t}]\n").journal[0].delegated is False
+    assert parse_journal  # applied end to end in test_record_apply
+
+
 def test_verify_accepts_post_merge_only() -> None:
     from fr.record.model import RecordError, parse_record
 

@@ -86,6 +86,9 @@ def render_template(
         )
         lines.append("#     a finding also takes review_scope: in|out (state defaults to open)")
         lines.append("#     a spec-journal discovery holding the operator input takes input: true")
+        lines.append(
+            '#     a spec-journal decision the operator answered "Your call." takes delegated: true'
+        )
     if "resolves" in allowed:
         lines.append("resolves: []")
         lines.append(

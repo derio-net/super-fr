@@ -548,6 +548,19 @@ def test_a_spec_record_writes_an_input_discovery(tmp_path: Path) -> None:
     assert entry.input is True and entry.kind == "discovery"
 
 
+def test_a_spec_record_writes_a_delegated_decision(tmp_path: Path) -> None:
+    root = _at_spec_review(tmp_path)
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
+    given = {"kind": "decision", "id": "d9", "title": "your call", "body": "chose X"}
+    record = write_record(root, _spec_review_record(journal=[review, {**given, "delegated": True}]))
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 0, out.output
+    (entry,) = [e for e in _spec_entries(root) if e.id == "d9"]
+    assert entry.delegated is True and entry.kind == "decision"
+
+
 @pytest.mark.parametrize("finding_scope", ["in", "out"])
 def test_a_spec_record_resolving_unconfirmed_is_refused_and_writes_nothing(
     tmp_path: Path, finding_scope: str
