@@ -9,3 +9,8 @@ Four independent defects in four modules: #811 fr/commands/pickup_cmd.py + fr/ru
 ### rc-811 · root-cause · #811: pickup --run and status read the working tree only, never comparing it to the ref they name
 
 pickup_cmd.py maps RunStateError straight to exit 2 with 'no run state at <path>' and never looks at <remote>/<default>, so a clone that has not pulled the merge gets no hint. status_cmd's sweep enumerates plan dirs (fr.closeout.plan_sweep) and owed artifacts from the working tree, while merge_evidence reads the fetched origin/<default>. When HEAD is strictly behind that ref, the merged plan is not on disk, so no bucket lists it. The header names the ref ('origin/master @ sha'), which reads as though the ref was evaluated.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-824 created=2026-09-29T11:35:45+00:00 -->
+### rc-824 · root-cause · #824: up git-excludes .fr-isolation but not the devcontainer CLI's devcontainer-lock.json
+
+LocalIsolation._write_isolation_marker (isolation/local.py) appends only '.fr-isolation' to the shared info/exclude. The devcontainer CLI writes .devcontainer/<profile>/devcontainer-lock.json on 'up', untracked. down's reap-hazard check (git status --porcelain, untracked counts: #435 d1) then sees a dirty worktree and refuses.
