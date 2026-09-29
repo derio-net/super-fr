@@ -4348,121 +4348,6 @@ rows:
       - super-fr:tests/unit/test_run_telemetry.py
     status: ci
     notes: _writes resolves same-command $VAR/${VAR} targets (gh#594/#607/#631)
-  - id: requirements-input-in-spec-journal
-    capability: fr-goal-methodology
-    acceptance: The operator's raw input is recorded verbatim in the spec journal as
-      an input entry
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R1
-    levels:
-      unit:
-      - super-fr:tests/unit/test_journal_model.py
-      - super-fr:tests/unit/test_journal_cmd.py
-      - super-fr:tests/unit/test_record_apply.py
-    status: ci
-    notes: 'Covered by unit tests: input token round-trip on the model/verb/record paths,
-      and the redaction contract.'
-  - id: requirements-structural-gate
-    capability: fr-goal-methodology
-    acceptance: fr refuses a brainstorm or spec-review whose spec has malformed or unsourced
-      requirements, or quotes text the input does not contain
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R6
-    levels:
-      unit:
-      - super-fr:tests/unit/test_requirements.py
-      - super-fr:tests/unit/test_run_evidence_requirements.py
-      - super-fr:tests/unit/test_spec_requirements_cmd.py
-    status: ci
-    notes: Covered by parse_requirements/check_requirements unit tests, the brainstorm
-      resolve gate, and the fr spec requirements CLI.
-  - id: requirements-always-ask
-    capability: fr-goal-methodology
-    acceptance: fr-goal's question round asks about every user-visible behaviour and
-      ambiguous statement the input leaves open
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R3
-    levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-09-28 (Test Plan item 17, fr 4.29.0, throwaway local
-      repo): a UI brief leaving the 1–20 range semantics and card interactions unstated.
-      The round (8 questions, two dialogs) asked what the total sums given qty never
-      reaches 0, the bounds behaviour, and typed vs buttons-only; every answer became
-      a decision the spec''s requirements cite (fr spec requirements: 7 requirements,
-      exit 0). Card clicks were not asked, and the spec invents none. Dialog labelling
-      confusion filed as #766. Manual run, not in CI; verify: post-merge kept.'
-    verify: post-merge
-  - id: requirements-spec-review-traceability
-    capability: fr-goal-methodology
-    acceptance: fr-spec-reviewer flags dropped, reinterpreted and invented requirements
-      against the raw input
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R4
-    levels: {}
-    status: skipped
-    notes: 'Live-verified 2026-09-28 (Test Plan item 17): fr-spec-reviewer ran on the
-      hard tier (claude-opus-5-5); coverage partitioned the whole input (7 spans: R=6
-      deferred=1 context=0 missing=0) and the PR body rendered it. It flagged an invented
-      behaviour (s2: a CI workflow no requirement asked for) and a design drift from
-      R6/d-total-bar (s1: sticky vs fixed), both in scope and fixed. No dropped statement
-      existed to catch (missing=0), so that arm is evidenced by unit tests only. The
-      same run showed deliver''s requirement-rows gate refusing a not-implemented row
-      through the real CLI and passing once it moved. Manual run, not in CI.'
-    verify: post-merge
-  - id: requirements-unconfirmed-in-pr
-    capability: fr-goal-methodology
-    acceptance: Behaviour built without operator confirmation is listed in its own required
-      PR-body section
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R5
-    levels:
-      unit:
-      - super-fr:tests/unit/test_journal_cmd.py
-      - super-fr:tests/unit/test_record_apply.py
-      - super-fr:tests/unit/test_deliver_pr_body.py
-    status: ci
-    notes: Covered by the unconfirmed resolution-state tests (verb, record path, fold),
-      the required PR-body section, and journal check treating it as closed.
-  - id: requirements-rows-deliver-gate
-    capability: fr-goal-methodology
-    acceptance: Every requirement is cited by an acceptance row, and deliver refuses
-      while a row citing the spec is not-implemented
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R7
-    levels:
-      unit:
-      - super-fr:tests/unit/test_run_evidence_requirements.py
-    status: ci
-    notes: 'Covered by deliver''s requirement-rows unit tests: refuses a not-implemented
-      row citing the spec, passes on skipped/ci/scheduled, counts rows the record itself
-      moves.'
-  - id: requirements-coverage-partition
-    capability: fr-goal-methodology
-    acceptance: fr refuses a spec review whose input-coverage table leaves any part
-      of the input unclassified
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R8
-    levels:
-      unit:
-      - super-fr:tests/unit/test_requirements.py
-      - super-fr:tests/unit/test_run_evidence_requirements.py
-    status: ci
-    notes: Covered by check_coverage unit tests (partition, gap/overlap/reordering)
-      and the spec-review coverage-derivation gate.
-  - id: requirements-spec-review-hard-first
-    capability: fr-goal-methodology
-    acceptance: Spec review runs on the hard tier and checks traceability to the input
-      before anything else
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R9
-    levels:
-      unit:
-      - super-fr:tests/unit/test_tripwire_shipped_workflows.py
-      - super-fr:tests/unit/test_spec_reviewer_agent.py
-    status: ci
-    notes: 'Covered by the shipped fr-goal.yaml tripwire (spec-review tier: hard) and
-      the agent-prose pin (traceability checked first).'
   - id: requirements-post-merge-rows
     capability: fr-goal-methodology
     acceptance: A requirement that can only be verified after merge does not block delivery
@@ -4471,11 +4356,11 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-requirements-traceability-design.md#R10
     levels:
       unit:
-      - super-fr:tests/unit/test_run_evidence_requirements.py
       - super-fr:tests/unit/test_deliver_pr_body.py
     status: ci
-    notes: Covered by deliver's post-merge-row skip/count unit test and the PR body's
-      Post-merge verification owed section.
+    notes: 'Re-pointed (spec-is-the-contract): the requirement-rows deliver gate is
+      removed, so nothing blocks delivery; the PR body''s Post-merge verification owed
+      section still lists the row (test_deliver_pr_body.py).'
   - id: phase-sizing-ask-floor
     capability: fr-goal-methodology
     acceptance: fr plan self-review fails a plan with an agentic phase that serves no
@@ -4549,55 +4434,6 @@ rows:
     notes: 'Phase 1 (spec §E, R7): fr-plan drops ''Prefer 4–6 phases'', states one agentic
       phase per independently reviewable ask with recorded split reasons, and keeps
       steps bite-sized per spec design section.'
-  - id: raw-input-relay-member-briefs
-    capability: fr-goal-methodology
-    acceptance: Every implement-phase and review-phase dispatch brief carries the operator's
-      verbatim input and recorded answers, read-only, with the rule that the spec governs
-      and a disagreement is a finding
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R3
-    levels:
-      unit:
-      - super-fr:tests/unit/test_run_cli.py
-      - super-fr:tests/unit/test_operator_input.py
-    status: ci
-    notes: 'Unit-pinned: operator_input on implement/review member briefs, null without
-      input, refusal before the write-claim (#778).'
-  - id: raw-input-relay-handoff
-    capability: fr-goal-methodology
-    acceptance: The per-phase journal handoff opens with the operator's verbatim input,
-      recorded answers and the spec-governs rule, so an executor reads them even when
-      the orchestrator's relay drops them
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R4
-    levels:
-      unit:
-      - super-fr:tests/unit/test_journal_cmd.py
-      - super-fr:tests/unit/test_journal_model.py
-      - super-fr:tests/unit/test_operator_input.py
-    status: ci
-    notes: 'Unit-pinned: handoff opens with the fenced operator-input section, also
-      with no plan journal; cross-repo/no-input omit it (#778).'
-  - id: raw-input-relay-prose
-    capability: fr-goal-methodology
-    acceptance: fr-goal relays the operator input into both the executor's and the reviewer's
-      prompts, and an input statement the spec and no recorded answer covers becomes
-      a gated in-scope phase finding
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-09-28-raw-input-relay-design.md#R6
-    levels:
-      unit:
-      - super-fr:tests/unit/test_operator_input_prose.py
-    status: ci
-    notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
-      in both agents. Since the #778 reopen (take 10), the delivery path is each agent''s
-      own first-step `fr journal handoff` (fr-phase-executor, fr-phase-reviewer), not
-      the orchestrator''s prompt relay: pinned by test_operator_input_prose.py; review-phase
-      names the reviewer agent. d5: unit tests suffice; live child-session check is
-      #823.'
   - id: light-path-structured-returns
     capability: fr-goal-methodology
     acceptance: fr-goal documents the light path and one-call resolve; the executor
@@ -4611,101 +4447,6 @@ rows:
     status: ci
     notes: 'Phase 3 (spec §C, R7): Light path section, one-call resolve wording, executor
       tests_log return, reviewer target spec|plan pinned.'
-  - id: spec-fidelity-clause-partition
-    capability: fr-goal-methodology
-    acceptance: Spec review accounts for every clause of every requirement's source
-      quote, and fr refuses a review that skips one
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R1
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
-    levels:
-      unit:
-      - super-fr:tests/unit/test_fidelity.py
-      - super-fr:tests/unit/test_run_evidence_fidelity.py
-    status: ci
-    notes: fr.fidelity.check_fidelity verifies the requirement-fidelity block partitions
-      every input-sourced requirement's quotes into clauses (elision-aware, table order,
-      contiguous, labels kept or a spec finding); the fidelity derived evidence on spec-review
-      refuses an unsound block (Test Plan 1, 3).
-  - id: spec-fidelity-design-inventory
-    capability: fr-goal-methodology
-    acceptance: Spec review inventories every user-visible behaviour of every Design
-      section with its backing, and fr refuses a review that skips a section
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
-    levels:
-      unit:
-      - super-fr:tests/unit/test_fidelity.py
-      - super-fr:tests/unit/test_run_evidence_fidelity.py
-    status: ci
-    notes: 'fr.fidelity.parse_design_sections reads the ### subsections of ## Design
-      fence-aware; check_inventory refuses a missing, reordered, non-contiguous or unknown
-      section, an unknown R/decision id, an invented id that is not a finding, a none
-      backing beside a behaviour and a mis-celled row; the fidelity evidence on spec-review
-      derives from it (Test Plan 2, 3).'
-  - id: spec-fidelity-remove-only
-    capability: fr-goal-methodology
-    acceptance: An invented or reinterpreted spec finding blocks spec-review until the
-      departure is removed or the finding refuted; it can no longer be closed as built
-      without confirmation
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R4
-    levels:
-      unit:
-      - super-fr:tests/unit/test_run_evidence_fidelity.py
-      - super-fr:tests/unit/test_journal_cmd.py
-      - super-fr:tests/unit/test_record_apply.py
-    status: ci
-    notes: 'The fidelity witness refuses spec-review while a finding a flagged fidelity
-      row or an invented inventory row names is closed other than fixed or refuted (naming
-      its fr journal resolve --state fixed line); fr journal resolve --state unconfirmed
-      and a record state: unconfirmed are refused citing d1-remove-only, while an existing
-      unconfirmed record still folds (Test Plan 3, 4).'
-  - id: spec-fidelity-delegated-decisions
-    capability: fr-goal-methodology
-    acceptance: A "Your call." answer is recorded as a delegated decision, and the PR
-      lists every delegated decision with the requirements resting on it
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R5
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R6
-    levels:
-      unit:
-      - super-fr:tests/unit/test_migration_record_delegated.py
-      - super-fr:tests/unit/test_deliver_pr_body.py
-      - super-fr:tests/unit/test_journal_model.py
-    status: ci
-    notes: delegated=true on spec decisions, record 4->5 migration and the PR's delegated
-      listing are unit-tested (phase 2)
-  - id: spec-fidelity-pr-design-inventory
-    capability: fr-goal-methodology
-    acceptance: The delivered PR shows the design inventory, so the operator sees every
-      user-visible behaviour and its backing at merge
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R7
-    levels:
-      unit:
-      - super-fr:tests/unit/test_deliver_pr_body.py
-    status: ci
-    notes: 'PR body renders ## Design inventory in <details>, predates line otherwise
-      (phase 2)'
-  - id: spec-fidelity-live-invention-caught
-    capability: fr-goal-methodology
-    acceptance: On a live brief, a spec that invents an interaction (take 9's card-click
-      toggle) gets an invented finding at spec-review and ships without it
-    origin:
-    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
-    levels: {}
-    status: failing
-    notes: 'Live run 2026-09-29 (talk demo take 11, fr 4.36.0, OpenCode; repo redacted):
-      spec-review check UNTESTED (no spec draft ever carried the toggle, so invented=0
-      was correct), but the card-click toggle shipped anyway - added at implement under
-      a vague Design sentence and reinforced by review-phase (#846). Also seen: stale
-      PR-body design inventory (#847); a spec-review record the orchestrator stitched
-      from two reviewers, accepted because OpenCode reviewers are unobserved (#823);
-      run cost read a foreign transcript (#848). Failing until #846 closes or the row
-      is reclassified.'
-    verify: post-merge
   - id: spec-contract-no-input-gates
     capability: fr-goal-methodology
     acceptance: 'No fr-goal step after brainstorm reads, receives or is gated on the
@@ -4713,6 +4454,8 @@ rows:
       evidence, and implement/review briefs and journal handoff carry no operator input'
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R1
+    - super-fr:docs/superpowers/implemented/specs/2026-09-28-raw-input-relay-design.md
+    - super-fr:docs/superpowers/implemented/specs/2026-09-29-spec-fidelity-invention-design.md
     levels: {}
     status: not-implemented
     notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
