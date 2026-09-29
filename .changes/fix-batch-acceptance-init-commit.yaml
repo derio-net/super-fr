@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr acceptance init` commits every file it writes and reports an edited `.gitignore` as modified, not created; an acceptance row whose level evidence is one of fr's own pipeline artifacts (`docs/superpowers/`) is refused as a process directive (#775)"

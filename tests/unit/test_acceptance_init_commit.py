@@ -60,9 +60,7 @@ def _init(root: Path, monkeypatch: pytest.MonkeyPatch):
 # ── A: init commits every file it writes, and says created vs modified ─────
 
 
-def test_init_commits_every_file_it_writes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_init_commits_every_file_it_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _repo_on_branch(tmp_path, gitignore="node_modules/\n")
     result = _init(root, monkeypatch)
     assert result.exit_code == 0, result.output
@@ -139,7 +137,7 @@ def test_add_refuses_a_level_ref_into_the_pipeline(
         ],
     )  # fmt: skip
     assert result.exit_code == 2, result.output
-    assert "process directive" in result.output
+    assert "process directive" in " ".join(result.output.split())  # rich wraps
     assert (root / "docs/acceptance/matrix.yaml").read_text() == before
 
 
@@ -156,7 +154,7 @@ def test_set_status_refuses_adding_a_pipeline_level_ref(
         ],
     )  # fmt: skip
     assert result.exit_code == 2, result.output
-    assert "process directive" in result.output
+    assert "process directive" in " ".join(result.output.split())  # rich wraps
 
 
 def test_live_evidence_under_docs_acceptance_is_still_a_level_ref(

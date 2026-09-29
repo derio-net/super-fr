@@ -642,7 +642,14 @@ def _acceptance_writes(
     from typing import get_args
 
     from fr.acceptance.edit import drop_levels, insert_row, merge_levels, replace_row
-    from fr.acceptance.model import AcceptanceError, Row, Status, parse_matrix, split_ref
+    from fr.acceptance.model import (
+        AcceptanceError,
+        Row,
+        Status,
+        parse_matrix,
+        pipeline_ref_error,
+        split_ref,
+    )
     from fr.acceptance.report import STALE_LEGACY_REPORTS, render_committed_set
 
     matrix_path = repo_root / MATRIX_REL
@@ -718,6 +725,12 @@ def _acceptance_writes(
                 )
             for ref in row.refs():
                 split_ref(ref)
+            # Only the refs this write adds: refused where written, not where
+            # loaded, so a row that already carries one still moves (gh#775).
+            for refs in item.levels.values():
+                for ref in refs:
+                    if (why := pipeline_ref_error(ref)) is not None:
+                        raise RecordRefusedError(f"acceptance {item.id}: {why}")
         except AcceptanceError as e:
             raise RecordRefusedError(f"acceptance {item.id}: {e}") from e
         except ValueError as e:

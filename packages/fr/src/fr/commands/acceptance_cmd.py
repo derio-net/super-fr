@@ -642,10 +642,20 @@ def init_cmd(
     )
     for rel in outcome.created:
         typer.echo(f"created {rel}")
+    for rel in outcome.modified:
+        typer.echo(f"modified {rel}")
     for rel in outcome.skipped:
         typer.echo(f"exists  {rel} (left untouched)")
     for notice in outcome.notices:
         typer.echo(notice)
+    # gh#775: commit every path written here, as every fr writer does (gh#610).
+    # Left to the next command, only ITS paths were committed, and the rule
+    # file and `.gitignore` sat dirty until close-out stashed them. Never fails
+    # init: a refused commit (the default branch, no repo) is one stderr line.
+    from fr.records_commit import commit_records
+
+    if outcome.written:
+        commit_records(root, [Path(rel) for rel in outcome.written], "chore(fr): acceptance init")
 
 
 BACKFILL_PROTOCOL = """\

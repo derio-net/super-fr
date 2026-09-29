@@ -40,6 +40,26 @@ def split_ref(ref: str) -> tuple[str, str, str]:
     return repo, path, frag
 
 
+# fr's own pipeline artifacts — specs, plans, runs, journals, their archive.
+# None of them is verification: a row whose level evidence is one states how
+# the pipeline must run, not what the product does (gh#775 — take 10's
+# `basket-single-phase` cited the plan's `01.yaml` as its unit test). A spec is
+# a row's ORIGIN, never its evidence.
+PIPELINE_ARTIFACTS_REL = "docs/superpowers/"
+
+
+def pipeline_ref_error(ref: str) -> str | None:
+    """Why `ref` cannot be level evidence, or None when it can."""
+    _, path, _ = split_ref(ref)
+    if not path.removeprefix("./").startswith(PIPELINE_ARTIFACTS_REL):
+        return None
+    return (
+        f"{ref} is one of fr's own pipeline artifacts ({PIPELINE_ARTIFACTS_REL}), not a test "
+        "— a row verified by the pipeline itself is a process directive, not a business "
+        "acceptance; cite a test or captured live evidence, or drop the row"
+    )
+
+
 # Specs migrate specs/ ↔ implemented/specs/ at `fr archive` without renaming
 # (spec trap 1), and journals migrate journals/<scope> ↔
 # implemented/journals/<scope> the same way (2026-09-28-closeout-always §F).
