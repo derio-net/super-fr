@@ -4864,7 +4864,11 @@ rows:
     notes: 'Live walk 2026-09-26 missed the target: 2.7 turns/step-item on Claude Code
       (32/12, PR #635), 3.6 on OpenCode (36/10, PR #633), down from 6.1. Main drivers:
       deliver''s tests= gate refusing real suite logs (#607 comment), OpenCode''s orphan
-      journal (#639). Stays open until a walk lands at or under 2.'
+      journal (#639). Stays open until a walk lands at or under 2. | 2026-09-29 take
+      10 (super-fr-3; fr 4.35.0, OpenCode 1.18.32, GitLab no CI, devcontainer; run A
+      gpt-6-sol, run B gpt-6-luna high; docs/audits/2026-09-29-take10-opencode-live-walk.md):
+      OpenCode A 6.75 (narrow) / B ~24 bookkeeping turns per step (spec-review loop
+      #808); fr captured no per-step cost (#636). Still missed.'
   - id: deliver-pr-body-sections
     capability: Lean cost-aware pipeline
     acceptance: A PR missing a required fr-rendered section cannot be delivered
