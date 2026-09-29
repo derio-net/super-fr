@@ -34,3 +34,8 @@ Per batch rule. Proposed: fix all four in one PR; #813's reason as a spec-journa
 ### fix-815-none · finding [fixed] · Phases section lists only phases with no ask; no bare none.
 
 proportionality.py; pinned by test_plan_proportionality::test_the_folded_shape_has_no_phase_without_an_ask (changed from pinning the bug).
+
+<!-- fr:journal kind=finding scope=debug id=fix-815-unobservable created=2026-09-29T11:56:05+00:00 state=fixed -->
+### fix-815-unobservable · finding [fixed] · _why_unobservable(what) — reviewer gate says subagent dispatches
+
+run_cmd.py; test_run_evidence_separate_context::test_an_unobservable_reviewer_names_dispatches_not_questions.
