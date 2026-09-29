@@ -1,0 +1,2 @@
+bump: minor
+summary: fr observes OpenCode sessions — the run session (via the plugin's shell.env export), each dispatched child and what it returned — so operator answers, reviewer ids and returns, screenshot reads and cost are verified on OpenCode as on Claude Code.
