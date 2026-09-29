@@ -69,3 +69,8 @@ Reworded to 'Requirements list'; mirrors resynced.
 ### rv-c3 · finding [open] (reviewer: in scope) · Consumers keep retired fr-phase-reviewer OpenCode agents (phase 2)
 
 Independent review: install.sh copied/removed only shipped agent files.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c3-resolved created=2026-09-29T18:29:33+00:00 state=fixed resolves=rv-c3 -->
+### rv-c3-resolved · finding [fixed] · resolves rv-c3: Consumers keep retired fr-phase-reviewer OpenCode agents
+
+RETIRED_OPENCODE_AGENTS purged on install and uninstall; test_the_retired_phase_reviewer_agents_are_purged (red on the old install.sh).
