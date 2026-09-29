@@ -78,7 +78,12 @@ goal, explore the codebase (in the worktree), propose approaches, refine.
   reasonable reading; each one the input does not itself settle is a question
   in the round, its answer a `decision` a requirement can cite. fr-goal's
   "past ~10 questions" guard is the pressure valve on size; there is no
-  separate assumption list — an unsettled point is asked, never assumed.
+  separate assumption list — an unsettled point is asked, never assumed. An
+  operator answer of "Your call." is still a decision a requirement can cite,
+  recorded with `delegated: true` (`fr journal add --scope spec --kind
+  decision --delegated …`, or `delegated: true` on the record's journal
+  item): the PR lists every delegated decision, and the requirements citing
+  it, under "Built without operator confirmation".
 
 ## 2. Hand off
 
