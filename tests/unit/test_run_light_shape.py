@@ -392,3 +392,30 @@ def test_spec_plan_review_resolves_with_the_spec_review_evidence(tmp_path: Path)
 
     assert out.exit_code == 0, out.output
     assert load_run_state(root, RUN).cursor == "plan-review"
+
+
+def test_an_invalid_repo_override_of_the_target_shape_is_refused(tmp_path: Path) -> None:
+    root = _at_brainstorm(tmp_path)
+    override = root / "docs" / "superpowers" / "workflows" / "fr-goal-light.yaml"
+    override.parent.mkdir(parents=True, exist_ok=True)
+    override.write_text(
+        "workflow: fr-goal-light\nschema: 1\ndescription: x\nunit: run\n"
+        "steps:\n  - id: brainstorm\n    kind: agent\n    emits: [spec]\n"
+        "  - id: broken\n    kind: cli\n    needs: [nowhere]\n"
+    )
+    commit_all(root, "invalid override")
+    record = _brainstorm_record(root, shape="fr-goal-light")
+
+    _refused_unchanged(root, record, "not a valid workflow")
+
+
+def test_a_failed_brainstorm_declaring_the_light_shape_does_not_rebind(tmp_path: Path) -> None:
+    root = _at_brainstorm(tmp_path)
+    record = _brainstorm_record(root, outcome="failed", shape="fr-goal-light")
+
+    _resolve_record(root, record)
+
+    state = load_run_state(root, RUN)
+    assert state.workflow == "fr-goal@1"
+    assert list(state.steps) == [s.id for s in resolve_workflow("fr-goal", root).steps]
+    assert state.cursor == "brainstorm"

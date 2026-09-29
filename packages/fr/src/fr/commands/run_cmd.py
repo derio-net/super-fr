@@ -859,6 +859,9 @@ def _rebind_shape(
             f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
             "a run rebinds only onto a shape that begins with the step being resolved."
         )
+    errors = check_workflow(rebound)
+    if errors:
+        raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
     return rebound
 
 

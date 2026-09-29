@@ -64,3 +64,9 @@ def test_the_spec_reviewer_reviews_a_plan_when_the_brief_names_one() -> None:
     text = _flat(REVIEWER)
     assert "target: spec|plan" in text
     assert "spec-plan-review" in text
+
+
+def test_deliver_section_no_longer_ties_the_suite_to_a_separate_advance() -> None:
+    body = _section(SKILL.read_text(), "deliver")
+    assert "the `fr run advance` that opens `deliver`" not in body
+    assert "AFTER the resolve that opened `deliver`" in body

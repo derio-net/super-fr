@@ -61,7 +61,9 @@ change under `.claude/rules/artifact-versioning.md`. Migration:
 `fr.artifacts.record_input_unconfirmed`. Bumped 3 -> 4 for
 `AcceptanceItem.visual` and `StepRecord.visual` (spec
 `2026-09-28-ui-visual-evidence-design.md` §G). Migration:
-`fr.artifacts.record_visual`."""
+`fr.artifacts.record_visual`. Bumped 4 -> 5 for `StepRecord.shape` (spec
+`2026-09-29-fr-goal-light-path-design.md` §A). Migration:
+`fr.artifacts.record_shape`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
