@@ -14,3 +14,8 @@ packages/fr/src/fr/proportionality.py:222 reuses _bullets, whose empty sentinel 
 ### rc-815-unobservable · root-cause · _why_unobservable() is gate-agnostic and hard-codes 'questions'
 
 run_cmd.py:242; called by the operator-gate (:1233) and the reviewer gate (:2254).
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-812-records created=2026-09-29T11:09:48+00:00 -->
+### rc-812-records · root-cause · record locator claims every *.records/*.yaml; trigger words an unreadable artifact as 'must be migrated'; fr-plan names no scratch home
+
+registry.py:444 locator; trigger.py:581 _will_not_act_here shared wording; skills/fr-plan/SKILL.md.
