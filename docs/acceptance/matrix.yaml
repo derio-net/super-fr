@@ -5558,6 +5558,9 @@ rows:
       byte-identical and reported
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R8
-    levels: {}
-    status: not-implemented
-    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_contract.py
+    status: ci
+    notes: Record chain reaches 7 hop by hop through the frozen RecordV6; delegated
+      dropped; unconfirmed left byte-identical and reported; RecordV6 source pinned.
