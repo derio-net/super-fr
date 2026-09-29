@@ -34,3 +34,8 @@ origin/main already carried #828 (deliver-handoff, 6c3c01e8) and v4.40.1 when ph
 ### p1-spec-review-tier-emits · decision · spec-review keeps tier: hard and emits acceptance (operator's answer) (phase 1)
 
 Asked the operator: #762 moved fr-goal's spec-review to tier hard and added acceptance to its emits, justified by traceability alone, and the light path copied both. Operator answer: keep both as-is on both shapes. Only the evidence lists and the comments change; the fr-goal comment now gives a neutral reason for the acceptance emit.
+
+<!-- fr:journal kind=decision scope=plan id=no-refactor-p1-t7 created=2026-09-29T18:01:40+00:00 phase=1 -->
+### no-refactor-p1-t7 · decision · no-refactor-because: P1.T7 (phase 1)
+
+The task is the quality gate and the acceptance moves: it runs checks and moves rows, and writes no code to clean.
