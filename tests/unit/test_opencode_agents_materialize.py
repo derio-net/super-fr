@@ -143,9 +143,10 @@ class TestMaterializeAgents:
         result = materialize_agents(config_home, models_cfg={"opencode": {"hard": "model-X"}})
 
         # One `-hard` file per canonical agent: fr-phase-executor and, since
-        # 2026-09-24 spec §E, fr-spec-reviewer.
+        # 2026-09-24 spec §E, fr-spec-reviewer; since #778, fr-phase-reviewer.
         assert sorted(c.path.name for c in result.changes) == [
             "fr-phase-executor-hard.md",
+            "fr-phase-reviewer-hard.md",
             "fr-spec-reviewer-hard.md",
         ]
         change = next(c for c in result.changes if c.path.name == "fr-phase-executor-hard.md")
