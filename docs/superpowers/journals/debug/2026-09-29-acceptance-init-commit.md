@@ -9,3 +9,8 @@ Take 10 (#817) runs A and B, fr 4.35.0, GitLab, ci: none. `fr acceptance init` c
 ### rc-init-uncommitted · root-cause · init is the one fr writer that bypasses commit_records
 
 Every record-writing command commits exactly the paths it wrote through fr.records_commit.commit_records (gh#610). `init_cmd` writes up to seven files (matrix, rule, CI file, three reports, .gitignore) and commits none of them. The next `acceptance add` / resolve commits only the paths IT wrote (matrix + reports), so the rule file and .gitignore are orphaned in the tree. Separately, `InitOutcome` has only created/skipped, so the one file init edits (.gitignore, via _append_gitignore_line) is filed under `created`.
+
+<!-- fr:journal kind=hypothesis scope=debug id=h-directive-rows created=2026-09-29T11:09:54+00:00 -->
+### h-directive-rows · hypothesis · Process-directive rows are a separate defect, not the same root cause
+
+Rows like basket-delivery, basket-single-phase (level unit = the plan's 01.yaml), basket-user-input-boundaries and basket-browser-check state how the pipeline must run, not what the product does. Nothing in Row, acceptance add, the record engine or the fr-brainstorming §3 guidance refuses them. Independent of init's commit gap. Detection design is open. Stopped to ask the operator per the batch's more-than-one-root-cause rule.
