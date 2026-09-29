@@ -94,13 +94,18 @@ def _run(repo: Path, shipped: Path, argv: list[str], root: Path | None, session:
 
 
 def _at_the_review(
-    tmp_path: Path, *, root: Path | None = None, session: str = "s-x", implementer: str = "impl-1"
+    tmp_path: Path,
+    *,
+    root: Path | None = None,
+    session: str = "s-x",
+    implementer: str = "impl-1",
+    shape: str = _SHAPE,
 ) -> tuple[Path, Path, str]:
     """`phase/1/peer-review` opened; `code` was done by `implementer`.
     Returns the review unit's `dispatched`."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
-    _write_shape(shipped, "grouped", _SHAPE)
+    _write_shape(shipped, "grouped", shape)
     _started_grouped_with_plan(repo, shipped)
     _journal(repo)
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
@@ -145,6 +150,31 @@ def test_the_implementer_cannot_review_its_own_phase(tmp_path: Path) -> None:
     assert result.exit_code == 2, result.output
     assert "IMPLEMENTED phase 1" in _squash(result.output)
     assert _review_evidence(repo) == {}
+
+
+_NAMED_REVIEWER_SHAPE = _SHAPE.replace(
+    "      - id: peer-review\n        kind: agent\n",
+    "      - id: peer-review\n        kind: agent\n        agent: super-fr:fr-phase-reviewer\n",
+)
+
+
+def test_the_reviewer_holding_its_own_review_unit_is_not_an_implementer(tmp_path: Path) -> None:
+    """#778: once the review member names its agent, the reviewer's child
+    session claims the review unit (the OpenCode plugin's `--open-unit` claim
+    matches any dispatched agent type). Holding the review unit makes it the
+    reviewer, never the phase's implementer — so naming it is accepted."""
+    assert _SHAPE != _NAMED_REVIEWER_SHAPE
+    repo, shipped, _ = _at_the_review(tmp_path, shape=_NAMED_REVIEWER_SHAPE)
+    claim = ["run", "claim", "r1", "--open-unit", "--agent", "rev-9"]
+    claimed = _invoke(repo, shipped, [*claim, "--agent-type", "fr-phase-reviewer-standard"])
+    assert claimed.exit_code == 0, claimed.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/peer-review")
+    assert attempt is not None and attempt.agent == "rev-9"
+
+    result = _review(repo, shipped, None, "s-x", "review=rev-p1", "reviewer=rev-9")
+
+    assert result.exit_code == 0, result.output
+    assert _review_evidence(repo)["reviewer"] == "rev-9"
 
 
 def test_a_reviewer_this_session_dispatched_is_accepted(tmp_path: Path) -> None:

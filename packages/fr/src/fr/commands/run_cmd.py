@@ -2196,12 +2196,16 @@ def _verify_reviewer(
     from fr.run.telemetry import subagent_dispatch_since
 
     phase = target.phase
+    # The review unit's own holders are reviewers by construction: once the
+    # review member names its agent (#778, `fr-phase-reviewer`), that agent's
+    # session claims the unit, and counting it here refused the very reviewer
+    # the step dispatched.
     implementers = (
         {
             a.agent
             for record in state.steps.values()
             for unit_key in (record.units or {})
-            if unit_key.startswith(f"phase/{phase}/")
+            if unit_key.startswith(f"phase/{phase}/") and unit_key != key
             for a in units.attempts(record, unit_key)
             if a.agent_type is not None and a.agent is not None
         }
