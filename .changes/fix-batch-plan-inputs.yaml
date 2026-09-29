@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr-plan: tier criteria with standard as the default and a recorded reason for hard (self-review errors without one); plan create scratch inputs go to $TMPDIR, and an unreadable artifact is named with its parse error instead of \"must be migrated\"; no stray none. under Phases; the reviewer gate names subagent dispatches, not questions"

@@ -148,7 +148,12 @@ def _yaml_read_key(path: Path, key: str) -> int | None:
         data: Any = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise ArtifactStampError(f"{path}: not valid YAML, cannot read `{key}`: {e}") from e
-    if not isinstance(data, dict) or key not in data:
+    if data is not None and not isinstance(data, dict):
+        # Not "unstamped": no migration turns a list into this kind, and
+        # reading it as version 1 sent the gate off to migrate a file it
+        # could never migrate (#812 — a scratch phase list under .records/).
+        raise ArtifactStampError(f"{path}: top level must be a mapping, got {type(data).__name__}")
+    if data is None or key not in data:
         return None
     return _coerce_version(data[key], path, key)
 

@@ -318,6 +318,25 @@ def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> b
     return False
 
 
+def inspection_failures(
+    repo_root: Path, *, registry: MigrationRegistry | None = None
+) -> tuple[FailedAction, ...]:
+    """Every artifact whose state could not even be read — an unparseable
+    file, an unreadable stamp, a repair predicate that raised.
+
+    `is_stale` counts these as "not known to be current", which is right for
+    refusing; this is for SAYING why. An artifact here is not out of date, and
+    `fr migrate artifacts` cannot fix it — the refusal must name the file and
+    the error rather than send the operator to a migration (#812).
+    """
+    reg = registry if registry is not None else MIGRATIONS
+    failures: list[FailedAction] = []
+    for name, kind in _ordered_kinds(reg):
+        for path in iter_paths_of(repo_root, kind):
+            failures.extend(_actions_for(reg, name, kind, path)[1])
+    return tuple(failures)
+
+
 def _ordered_kinds(reg: MigrationRegistry) -> list[tuple[str, ArtifactKind]]:
     """Kinds in a stable, name-sorted order (review r5-e7).
 

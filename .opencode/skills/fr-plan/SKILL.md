@@ -45,9 +45,10 @@ number). The renderer / observer / diff / apply chain depends on this shape.
    ```bash
    fr plan create --slug <YYYY-MM-DD-slug> --target-repo <owner/repo> \
        --spec docs/superpowers/specs/<spec-file>.md \
-       --phases-file <phases.yaml> \
-       --prose-file <prose.md>
+       --phases-file "$TMPDIR/<slug>-phases.yaml" \
+       --prose-file "$TMPDIR/<slug>-prose.md"
    ```
+   Both inputs are scratch: write them to `$TMPDIR`, **never inside the repository** — drafts in the plan folder get committed and hold up `fr archive`, and every file under `docs/superpowers/runs/<run>.records/` is read as a step record, so a phase list there makes every `fr` command refuse.
    `fr plan create` ALSO appends a row to the spec's `## Implementation Plans`
    table — there is no separate spec-index step.
 6. Iterate on the prose / per-phase yaml via the Edit tool.
@@ -79,7 +80,9 @@ number). The renderer / observer / diff / apply chain depends on this shape.
   never ironed over. The phase that builds the UI links the row carrying `visual` too, so fr-execute's browser check knows what to capture.
 - **Tier:** every agentic phase declares `tier: mechanical | standard | hard` (`fr.types.PHASE_TIERS`;
   manual phases don't — never dispatched). fr-goal resolves it via `fr models resolve`; omit it and
-  dispatch is untiered, inheriting the session model — self-review warns when missing. It also declares `files:` (repo-relative globs it will touch; `*` spans `/`) and `estimate_lines:` (added + deleted) — `fr plan proportionality` reports touches outside them and size above 2× at deliver; self-review warns on no `files`.
+  dispatch is untiered, inheriting the session model — self-review warns when missing.
+  **`standard` is the default**; choose by the phase's hardest step, not its size — `mechanical`: rote, fully specified edits (renames, a message, a table row, a mirror sync); `standard`: ordinary feature or fix work against a clear spec, however many files; `hard`: a design judgement the spec leaves open, or a change to a gate, migration or concurrency path every caller relies on. `hard` sends the whole phase to the costliest model, so it needs a reason — `fr journal add --scope spec --slug <spec-journal-slug> --kind decision --id tier-<plan>-p<N> --title "<why>"` (a `tier:` phase-split decision for that phase counts); self-review errors without one.
+  The phase also declares `files:` (repo-relative globs it will touch; `*` spans `/`) and `estimate_lines:` (added + deleted) — `fr plan proportionality` reports touches outside them and size above 2× at deliver; self-review warns on no `files`.
 - No placeholders: every step has actual code, commands, expected output.
 - Bite-sized steps: 2-5 minutes each, sized within the phase — a one-phase plan still keeps one or
   more steps per spec design section, never one step for a whole section.

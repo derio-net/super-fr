@@ -787,7 +787,10 @@ without changing that behavior. This test-first cycle is commonly called
 **TDD**, or test-driven development.
 
 Each phase carries a difficulty **tier**, assigned when the plan was written,
-and that tier is what chooses the model the phase is implemented with. Every
+and that tier is what chooses the model the phase is implemented with. The
+middle tier, `standard`, is the default. `hard` sends the whole phase to the
+most expensive model, so the plan has to say why: the plan check refuses a
+`hard` phase with no reason recorded in the spec's journal. Every
 turn of the loop is the same four moves: dispatch the executor, claim the
 dispatch so the run knows who is holding this phase, wait for it, then resolve
 the phase with how it went. The claim is a single extra command, and it is what
