@@ -190,3 +190,20 @@ background with ID: …", about a second after the call). Its completion arrives
 much later as a `user` record whose string content is a `<task-notification>`
 naming the same `<tool-use-id>` and a `<status>` (`completed` | `failed` |
 `killed`). The `queue-operation` record is the enqueue of that same notice.
+
+## The parent-side result of a dispatch (added 2026-09-29)
+
+No captured record carries the `tool_result` that answers an `Agent`
+tool_use in the orchestrator's stream — the selection above kept the
+dispatch, not its answer. `fr.run.observed.ClaudeCodeSession` reads that
+answer as `ChildDispatch.returned` (spec `2026-09-29-opencode-observe` §A),
+because the subagent's own last text block is a one-line handback stub
+(`claude-code-subagent.jsonl`, line 2), not what the orchestrator received.
+
+`tests/unit/transcript_sessions.py::agent_result_row` therefore builds it
+from the captured `Bash` result (`claude-code-bash.jsonl`, line 1): the
+record is copied whole, re-keyed to the dispatch's `tool_use_id`, its content
+re-shaped to the form an `Agent` result carries — a `user` record whose
+`message.content` holds `{type: tool_result, tool_use_id, content: [{type:
+text, text}]}` — and its Bash-specific `toolUseResult` dropped. That content
+shape is the one stated, not a new capture.

@@ -6,7 +6,7 @@ run: 2026-09-29-feat-batch-opencode-observe
 step: implement-phase
 item: phase/1
 outcome: done            # done | failed | blocked
-ticks: [P1.T1.S1, P1.T1.S2]
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2]
 refactor: {}             # P<n>.T<m>: "why there was nothing to clean"
 journal: []
 resolves: []

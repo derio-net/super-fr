@@ -81,7 +81,20 @@ SESSION_ID_ENV = "CLAUDE_CODE_SESSION_ID"
 """Set in every Claude Code tool call. Verified live (2026-09-20) from inside
 a dispatched subagent: the value there is the ORCHESTRATOR's session id, which
 is exactly what this module needs — the orchestrator's file is where the
-dispatch tool_use ids live."""
+dispatch tool_use ids live. Claude Code's entry of `SESSION_ID_ENVS`, kept
+under its old name for importers."""
+
+OPENCODE_SESSION_ID_ENV = "FR_OPENCODE_SESSION_ID"
+"""Exported into every OpenCode `bash` call by the super-fr OpenCode plugin's
+`shell.env` hook (spec 2026-09-29-opencode-observe §B): the id of the session
+that issued the command — a CHILD's id when a subagent runs it."""
+
+SESSION_ID_ENVS: Mapping[str, str] = {
+    "claude-code": SESSION_ID_ENV,
+    "opencode": OPENCODE_SESSION_ID_ENV,
+}
+"""The key each harness's session id arrives under, by `detect_harness` key.
+A harness absent here has no session fr can learn."""
 
 
 # --- 1. reading: a path in, numbers out ----------------------------------
@@ -314,6 +327,43 @@ def attribute_dispatches(session: Path) -> list[Dispatch]:
     return dispatches
 
 
+def dispatch_results(records: list[dict[str, Any]]) -> dict[str, str]:
+    """`tool_use id -> text` of every main-thread `tool_result` in an
+    orchestrator stream: what the orchestrator RECEIVED for each call, its text
+    blocks joined by newlines (a plain-string content is taken whole). The
+    reading `ChildDispatch.returned` is built from (spec
+    2026-09-29-opencode-observe §A) — not the subagent file's last text block,
+    which is a one-line handback stub."""
+    results: dict[str, str] = {}
+    for record in records:
+        if record.get("type") != "user" or record.get("isSidechain") is True:
+            continue
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, Mapping) else None
+        for block in content if isinstance(content, list) else ():
+            if not (
+                isinstance(block, Mapping)
+                and block.get("type") == "tool_result"
+                and isinstance(block.get("tool_use_id"), str)
+            ):
+                continue
+            body = block.get("content")
+            if isinstance(body, str):
+                text = body
+            elif isinstance(body, list):
+                text = "\n".join(
+                    b["text"]
+                    for b in body
+                    if isinstance(b, Mapping)
+                    and b.get("type") == "text"
+                    and isinstance(b.get("text"), str)
+                )
+            else:
+                continue
+            results.setdefault(block["tool_use_id"], text)
+    return results
+
+
 # --- 3. harness scoping --------------------------------------------------
 
 
@@ -330,12 +380,22 @@ def current_session(env: Mapping[str, str]) -> str | None:
     Derived from fr's own environment, the way `detect_harness` derives the
     harness — `fr run advance` records it on every attempt it opens, and
     `fr run status` compares against it, so the two must be one rule and not
-    two `env.get(...)` calls that can drift. One harness has a session concept
-    today, hence one key; an empty value is `None`, never the empty string,
-    because `"" == ""` would make two session-less processes "the same
-    session".
+    two `env.get(...)` calls that can drift. The key read is the one the
+    DETECTED harness owns (`SESSION_ID_ENVS`, gh#537): an OpenCode started
+    from a Claude Code shell inherits `CLAUDE_CODE_SESSION_ID`, which names a
+    session that never ran this process, so under OpenCode only OpenCode's
+    own key counts. With no harness detected the Claude Code key is read, as
+    it always was — only Claude Code sets it. An empty value is `None`, never
+    the empty string, because `"" == ""` would make two session-less
+    processes "the same session". Never raises: a mistyped `FR_HARNESS` is
+    `None`.
     """
-    return env.get(SESSION_ID_ENV) or None
+    try:
+        harness = detect_harness(env)
+    except HarnessError:
+        return None
+    key = SESSION_ID_ENV if harness is None else SESSION_ID_ENVS.get(harness)
+    return (env.get(key) or None) if key else None
 
 
 def dispatched_from_this_session(env: Mapping[str, str], session: str | None) -> bool:
@@ -499,6 +559,12 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
     transcript = _this_session(env)
     if start is None or transcript is None:
         return None
+    return answered_rounds_in(transcript, start)
+
+
+def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | None:
+    """`answered_rounds_since` over one transcript file — the Claude Code
+    backend of `fr.run.observed`."""
     records = _read_records(transcript)
     if records is None:
         return None
@@ -1038,6 +1104,16 @@ def orchestrator_wrote_since(
     session = _this_session(env)
     if start is None or session is None:
         return None
+    return orchestrator_wrote_in(session, log, start)
+
+
+def orchestrator_wrote_in(
+    session: Path, log: Path, start: _dt.datetime
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """`orchestrator_wrote_since` over one Claude Code session file — the
+    backend of `fr.run.observed.ClaudeCodeSession.wrote_windows`. Only
+    main-thread records count, so a subagent file (sidechain throughout)
+    holds none."""
     records = _read_records(session)
     if records is None:
         return None

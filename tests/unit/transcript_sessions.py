@@ -301,6 +301,27 @@ def tool_rows(timestamp: str, *, tool_use_id: str, name: str) -> list[dict[str, 
     return [call, result]
 
 
+def agent_result_row(timestamp: str, *, tool_use_id: str, text: str) -> dict[str, Any]:
+    """The PARENT-side `tool_result` answering a dispatch's `Agent` tool_use:
+    the captured `Bash` result record (`BASH`, line 1) re-keyed to
+    `tool_use_id`, its content re-shaped to the list-of-text-blocks form an
+    `Agent` result carries (`[{type: text, text}]`), and its Bash-specific
+    `toolUseResult` dropped — see `claude-code-session.NOTE.md`. What the
+    orchestrator received is `text`; the subagent's own file ends in a
+    handback stub instead."""
+    result = copy_of(records(BASH)[1])
+    result["timestamp"] = timestamp
+    result["message"]["content"] = [
+        {
+            "tool_use_id": tool_use_id,
+            "type": "tool_result",
+            "content": [{"type": "text", "text": text}],
+        }
+    ]
+    result.pop("toolUseResult", None)
+    return result
+
+
 def text_row(timestamp: str) -> dict[str, Any]:
     """The captured text-only assistant turn, moved to `timestamp`."""
     row = copy_of(records(ORCHESTRATOR)[TEXT_LINE])
