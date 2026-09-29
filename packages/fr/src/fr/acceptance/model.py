@@ -50,8 +50,11 @@ PIPELINE_ARTIFACTS_REL = "docs/superpowers/"
 
 def pipeline_ref_error(ref: str) -> str | None:
     """Why `ref` cannot be level evidence, or None when it can."""
+    import posixpath
+
     _, path, _ = split_ref(ref)
-    if not path.removeprefix("./").startswith(PIPELINE_ARTIFACTS_REL):
+    # normpath: `./docs/…`, `docs/./superpowers/…` and `x/../docs/…` are the same file.
+    if not (posixpath.normpath(path).lstrip("/") + "/").startswith(PIPELINE_ARTIFACTS_REL):
         return None
     return (
         f"{ref} is one of fr's own pipeline artifacts ({PIPELINE_ARTIFACTS_REL}), not a test "

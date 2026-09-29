@@ -419,11 +419,14 @@ class InitOutcome:
     # Existing files init edited rather than created — today only `.gitignore`'s
     # appended line (gh#775: it used to be reported as "created").
     modified: list[str] = field(default_factory=list)
+    # Legacy reports deleted by `prune_stale_reports` — a deletion dirties the
+    # tree as surely as a write does.
+    removed: list[str] = field(default_factory=list)
 
     @property
     def written(self) -> list[str]:
-        """Every path this run wrote — what `fr acceptance init` commits."""
-        return [*self.created, *self.modified]
+        """Every path this run changed — what `fr acceptance init` commits."""
+        return [*self.created, *self.modified, *self.removed]
 
 
 def _append_gitignore_line(path: Path, line: str) -> bool:
@@ -549,8 +552,7 @@ def init(
             created.append(report_rel)
         else:
             skipped.append(report_rel)
-    if rendered is not None:
-        prune_stale_reports(root)
+    removed = prune_stale_reports(root) if rendered is not None else []
 
     # `report.html` is the ad-hoc / uncommitted render — gitignore it.
     gitignore = root / ".gitignore"
@@ -560,4 +562,6 @@ def init(
         (modified if existed else created).append(".gitignore")
     else:
         skipped.append(".gitignore")
-    return InitOutcome(created=created, skipped=skipped, notices=notices, modified=modified)
+    return InitOutcome(
+        created=created, skipped=skipped, notices=notices, modified=modified, removed=removed
+    )

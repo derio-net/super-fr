@@ -89,7 +89,50 @@ def test_init_reports_a_new_gitignore_as_created(tmp_path: Path) -> None:
     assert ".gitignore" not in outcome.modified
 
 
-def test_rerunning_init_makes_no_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_commits_the_rest_when_one_path_is_gitignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One ignored path fails a whole `git add` — and so, before, the whole commit."""
+    root = _repo_on_branch(tmp_path, gitignore=".claude/\n")
+    result = _init(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert _git(root, "status", "--porcelain") == ""
+    committed = set(_git(root, "show", "--name-only", "--format=", "HEAD").split())
+    assert "docs/acceptance/matrix.yaml" in committed
+    assert ".claude/rules/acceptance-matrix.md" not in committed
+    assert "ignored .claude/rules/acceptance-matrix.md" in result.output
+
+
+def test_init_commits_the_deletion_of_a_pruned_legacy_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _repo_on_branch(tmp_path)
+    legacy = root / "docs/acceptance/report.github.html"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("<html></html>\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "legacy report")
+    result = _init(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "removed docs/acceptance/report.github.html" in result.output
+    assert _git(root, "status", "--porcelain") == "", "the deletion was left uncommitted"
+
+
+def test_init_prunes_an_untracked_legacy_report_without_failing_the_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`git add` of a deleted path git never tracked fails the whole add."""
+    root = _repo_on_branch(tmp_path)
+    legacy = root / "docs/acceptance/report.github.html"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("<html></html>\n")
+    result = _init(root, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert _git(root, "status", "--porcelain") == ""
+
+
+def test_rerunning_init_is_a_no_op_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A regression guard (it passes without the fix): nothing new, no commit."""
     root = _repo_on_branch(tmp_path)
     assert _init(root, monkeypatch).exit_code == 0
     head = _git(root, "rev-parse", "HEAD")
@@ -119,6 +162,9 @@ def test_init_on_the_default_branch_writes_but_says_it_did_not_commit(
         "own:docs/superpowers/runs/r1.yaml",
         "own:docs/superpowers/journals/plans/p.md",
         "own:docs/superpowers/specs/s.md",
+        "own:./docs/superpowers/plans/p/01.yaml",
+        "own:docs/./superpowers/runs/r1.yaml",
+        "own:tests/../docs/superpowers/runs/r1.yaml",
     ],
 )
 def test_add_refuses_a_level_ref_into_the_pipeline(
@@ -191,3 +237,17 @@ def test_a_legacy_pipeline_ref_does_not_block_moving_its_row(
         app, ["acceptance", "set-status", "--id", "r1", "--status", "skipped", "--notes", "x"]
     )
     assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "own:docs/superpowers-notes/x.md",
+        "own:tests/test_superpowers.py",
+        "own:docs/acceptance/e.md",
+    ],
+)
+def test_a_neighbour_of_the_pipeline_dir_is_not_refused(ref: str) -> None:
+    from fr.acceptance.model import pipeline_ref_error
+
+    assert pipeline_ref_error(ref) is None
