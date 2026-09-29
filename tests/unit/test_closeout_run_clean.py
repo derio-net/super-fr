@@ -236,7 +236,10 @@ def _run_state(*, plan: bool) -> RunState:
 @pytest.mark.parametrize(
     ("brief", "housekeeping"),
     [
-        (lambda root: closeout_brief(root, _run_state(plan=True)), "chore/archive-2026-09-29-feature"),
+        (
+            lambda root: closeout_brief(root, _run_state(plan=True)),
+            "chore/archive-2026-09-29-feature",
+        ),
         (lambda root: closeout_brief(root, _run_state(plan=False)), "chore/closeout-r1"),
         (lambda root: branch_closeout_brief(root, "feat/x"), "chore/closeout-feat-x"),
     ],
@@ -299,7 +302,8 @@ def test_the_wrapper_falls_back_to_the_marketplace_validator_for_an_older_fr(
     _stub(tmp_path / "bin" / "fr", "exit 2")
     log = tmp_path / "market.log"
     _stub(
-        tmp_path / "home/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh",
+        tmp_path
+        / "home/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh",
         f'echo "$*" >> {log}',
     )
 

@@ -1,0 +1,2 @@
+bump: minor
+summary: "Close-out runs clean: `fr pickup --run` and `fr status` say when the clone has not pulled the merge; `devcontainer-lock.json` no longer dirties a workspace; the brief takes down its housekeeping workspace; the plan-validator wrapper runs the new `fr validate plans` on any harness."

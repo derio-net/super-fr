@@ -282,6 +282,12 @@ def branch_closeout_brief(
 
     lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
     lines.append(f"  fr isolation down --branch {branch}")
+    # gh#825: the brief brought the housekeeping workspace up, so it takes it
+    # down too — after that PR merges, since `down` refuses unlanded work.
+    lines.append(
+        f"  fr isolation down --branch {housekeeping_branch}   "
+        "# once the housekeeping PR has merged"
+    )
 
     return "\n".join(lines)
 

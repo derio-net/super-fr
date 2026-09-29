@@ -1182,9 +1182,30 @@ def explain_missing(repo_root: Path, run_id: str, path: Path) -> str:
                 f"{root}{f' ({reason})' if reason else ''} and is not restored automatically"
                 f"{where}."
             )
+        on_ref = _on_default_ref(repo_root, run_id)
+        if on_ref is not None:
+            return (
+                f"run {run_id} is not in this checkout, but it is on {on_ref}: this clone "
+                "has not pulled it yet. Pull the default branch here (`git pull --ff-only` "
+                "while on it), then re-run."
+            )
     except Exception:  # never raise: fall through to the plain answer
         pass
     return _never_existed(repo_root, run_id, path)
+
+
+def _on_default_ref(repo_root: Path, run_id: str) -> str | None:
+    """The default branch's remote-tracking ref (`origin/main`) when it holds
+    `runs/<run_id>.yaml`, else None (gh#811: a close-out session in a base
+    clone that has not pulled the merge). Reads the local ref only; a caller
+    that wants it current fetches first, as `fr pickup --run` does."""
+    from fr.git import git_answer, remote_default_ref
+
+    ref = remote_default_ref(repo_root)
+    if not isinstance(ref, str):
+        return None
+    spec = f"{ref}:{(RUNS_DIR / f'{run_id}.yaml').as_posix()}"
+    return ref if git_answer(repo_root, "cat-file", "-e", spec).returncode == 0 else None
 
 
 def _never_existed(repo_root: Path, run_id: str, path: Path) -> str:

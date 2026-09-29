@@ -13,10 +13,23 @@ PLANS_REL = Path("docs") / "superpowers" / "plans"
 REPAIR_COMMAND = "fr init validator-wrapper"
 WRAPPER_REL = Path("scripts") / "validate-plans.sh"
 
+# Harness-neutral too (gh#826): `fr validate plans` runs the validator bundled
+# in the fr package, so the committed wrapper works wherever `fr` is installed.
+# The marketplace line is the fallback for an older `fr`, and it keeps the
+# delegate path `is_super_fr_validator_wrapper` recognizes.
 WRAPPER_TEXT = """#!/usr/bin/env bash
-# Thin wrapper — delegates to the canonical validator from the
-# super-fr plugin installed at the user level.
-exec "$HOME/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh" "$@"
+# Thin wrapper — delegates to the plan validator of the installed super-fr,
+# on any harness: the `fr` CLI's bundled copy first, then the Claude Code
+# marketplace copy for an `fr` too old to carry one.
+if command -v fr >/dev/null 2>&1 && fr validate plans --help >/dev/null 2>&1; then
+  exec fr validate plans "$@"
+fi
+legacy="$HOME/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh"
+if [ -x "$legacy" ]; then
+  exec "$legacy" "$@"
+fi
+echo 'validate-plans: no super-fr plan validator found; install/upgrade fr' >&2
+exit 127
 """
 
 
