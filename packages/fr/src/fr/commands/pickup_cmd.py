@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import typer
 from rich.console import Console
@@ -13,7 +13,7 @@ from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.git import ref_exists, remote_name
 from fr.parser import PlanSchemaError
 from fr.run.closeout import CloseoutNotReadyError, branch_closeout_brief, closeout_brief
-from fr.run.model import RunStateError, load_run_state
+from fr.run.model import RunStateError, load_run_state, run_path
 
 if TYPE_CHECKING:
     from fr.record.template import RecordBrief
@@ -64,6 +64,9 @@ def pickup_command(
             )
             raise typer.Exit(2)
         repo_root = resolve_repo_root()
+        path = run_path(repo_root, run)
+        if not path.exists():  # a present-but-unreadable file keeps its own error
+            _missing_run_exit(repo_root, run, path)
         try:
             run_state = load_run_state(repo_root, run)
         except RunStateError as e:
@@ -146,6 +149,28 @@ def pickup_command(
     # Disable Rich markup parsing — the PR title contains literal "[repo]"
     # which Rich would otherwise interpret as a tag and strip.
     typer.echo("\n".join(lines))
+
+
+def _missing_run_exit(repo_root: Path, run_id: str, path: Path) -> NoReturn:
+    """Exit 2 explaining where the run went (`preserve.explain_missing`, the
+    `fr run` load sites' answer) — after a best-effort fetch (gh#811). A
+    close-out session starts in the base clone right after the merge, before
+    anyone fetched, so without it the remote-tracking ref is as stale as the
+    working tree and "it is on origin/main, pull it" could never be said. A
+    failed fetch is not an error here: the explanation reads the local ref."""
+    import subprocess
+
+    from fr.archive import _fetch
+    from fr.isolation.preserve import explain_missing
+
+    remote = remote_name(repo_root)
+    if isinstance(remote, str):
+        try:
+            _fetch(repo_root, remote)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            pass
+    err_console.print(f"[red]{explain_missing(repo_root, run_id, path)}[/red]", soft_wrap=True)
+    raise typer.Exit(2)
 
 
 def _refuse_unresolvable_branch(repo_root: Path, branch: str) -> None:

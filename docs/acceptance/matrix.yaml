@@ -576,9 +576,11 @@ rows:
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/integration/test_install_sh.py
       - super-fr:tests/integration/test_install_validator_wrapper.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
-    notes: Scaffold install/refusal, isolation fail-closed behavior, and installer-output
-      cleanup are pinned per-PR.
+    notes: 'Scaffold install/refusal, isolation fail-closed behavior, and installer-output
+      cleanup are pinned per-PR. gh#826: the wrapper runs fr validate plans (bundled
+      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).'
   - id: migrate-creates-missing-spec-table
     capability: Migrate v1-to-v2
     acceptance: fr migrate v1-to-v2 creates the spec-s Implementation Plans table (canonical
@@ -4755,10 +4757,13 @@ rows:
       - super-fr:tests/unit/test_run_closeout.py
       - super-fr:tests/unit/test_pickup_cmd.py
       - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
     notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
       conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
-      handoff tests in test_run_cli.py.'
+      handoff tests in test_run_cli.py. gh#811/#825: pickup --run in an unpulled clone
+      names the run on origin/<default>, and the brief downs its housekeeping workspace
+      (test_closeout_run_clean.py).'
   - id: triage-batch-state
     capability: Backlog triage
     acceptance: An operator can group judged issues into a named batch; fr refuses a
@@ -5544,9 +5549,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_pickup_branch.py
       - super-fr:tests/unit/test_run_closeout.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
-    notes: fr pickup --branch and fr pickup --run's delegation to branch_closeout_brief
-      are covered by unit tests
+    notes: 'fr pickup --branch and fr pickup --run''s delegation to branch_closeout_brief
+      are covered by unit tests; gh#825: both modes end by downing the housekeeping
+      workspace (test_closeout_run_clean.py).'
   - id: archive-branch-every-artifact
     capability: Branch-keyed close-out
     acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch

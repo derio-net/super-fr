@@ -78,4 +78,4 @@ def test_install_validator_wrapper_refreshes_legacy_wrapper(tmp_path: Path) -> N
     )
 
     assert result.returncode == 0, result.stderr
-    assert "super-fr plugin" in target.read_text()
+    assert "exec fr validate plans" in target.read_text()

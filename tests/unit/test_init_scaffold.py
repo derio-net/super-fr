@@ -127,7 +127,7 @@ def test_scaffold_plan_repo_installs_validator_wrapper(repo: Path) -> None:
     wrapper = repo / "scripts" / "validate-plans.sh"
     assert wrapper.exists()
     assert wrapper.stat().st_mode & 0o111
-    assert "super-fr plugin" in wrapper.read_text()
+    assert "exec fr validate plans" in wrapper.read_text()
     head_files = _git(repo, "show", "--name-only", "--format=", "HEAD").stdout.split()
     assert "scripts/validate-plans.sh" in head_files
     assert "scripts/validate-plans.sh" in _tracked(repo)

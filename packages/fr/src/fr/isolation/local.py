@@ -247,6 +247,13 @@ def _hazard_detail(branch: str, headline: str, paths: list[str], remedy: str) ->
 _ARCHIVED_KINDS = ("plans", "specs", "journals", "runs", "usage")
 _SUPERPOWERS = "docs/superpowers/"
 
+# Files only fr's own tooling writes into a workspace, appended to the shared
+# `info/exclude` on `up` so they never make a worktree dirty — which would make
+# `down`'s reap-hazard check refuse at close-out. `devcontainer-lock.json` is
+# what the devcontainer CLI writes beside each profile's config (gh#824);
+# anchored, so a lock file the repo keeps elsewhere stays the repo's business.
+_FR_OWNED_EXCLUDES = (".fr-isolation", "/.devcontainer/*/devcontainer-lock.json")
+
 
 def _archived_path(path: str) -> str | None:
     """Where `fr archive` moves `path` to, or None when it never moves it.
@@ -2552,9 +2559,10 @@ class LocalWorktreeDevcontainerTarget:
         exclude = _git_common_dir(self.repo_root) / "info" / "exclude"
         exclude.parent.mkdir(parents=True, exist_ok=True)
         existing = exclude.read_text().splitlines() if exclude.is_file() else []
-        if ".fr-isolation" not in existing:
+        missing = [p for p in _FR_OWNED_EXCLUDES if p not in existing]
+        if missing:
             with exclude.open("a") as fh:
-                fh.write(".fr-isolation\n")
+                fh.writelines(f"{p}\n" for p in missing)
 
     def _remove_isolation_marker(self, worktree: Path) -> None:
         """Retire the marker on `down` (idempotent — absent is fine)."""
