@@ -4154,9 +4154,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_light_shape.py
+      - super-fr:tests/unit/test_migration_record_shape.py
+    status: ci
+    notes: 'Phase 3 (spec §A, R1/R2): fr-goal-light shape, brainstorm-record rebind
+      (first step only, same first step, valid shape, done only), single-phase derived
+      gate, record kind v5.'
   - id: light-path-one-review
     capability: fr-goal-cost
     acceptance: On the light shape one dispatched fr-spec-reviewer reviews spec and
@@ -4164,9 +4169,12 @@ rows:
       review still runs
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_light_shape.py
+    status: ci
+    notes: 'Phase 3 (spec §A, R3): spec-plan-review carries the full spec-review evidence
+      gate; plan-review and review-phase stay.'
   - id: deliver-suite-reuse
     capability: fr-goal-cost
     acceptance: deliver accepts `tests=reuse` only while HEAD's code tree equals the
@@ -4174,9 +4182,13 @@ rows:
       otherwise it demands a fresh run
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_suite_reuse.py
+    status: ci
+    notes: 'Phase 2 (spec §D, R6): offered tests evidence on phase units (holder-written,
+      committed-clean, fresh incl. deletions/renames), done-only tree witness, deliver
+      tests: reuse on an unchanged code tree, unobserved propagated.'
   - id: light-path-benchmark
     capability: fr-goal-cost
     acceptance: On the super-fr-3 feature-C benchmark the light path costs at most 2x
@@ -4587,9 +4599,12 @@ rows:
       plan, and the orchestrator is told never to open subagent transcripts
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_skill_light_path.py
+    status: ci
+    notes: 'Phase 3 (spec §C, R7): Light path section, one-call resolve wording, executor
+      tests_log return, reviewer target spec|plan pinned.'
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -5612,6 +5627,10 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R4
     - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_one_call.py
+    status: ci
+    notes: 'Phase 1 (spec §B, R4/R5): advance chains cli steps; resolve --record advances
+      after a done record, --no-advance opts out, failed/blocked stop; edge cases (refusal
+      after apply, deliver closeout once, inline group completion, --redispatch) pinned.'
