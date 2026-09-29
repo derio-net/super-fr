@@ -14,3 +14,8 @@ Three observed symptoms, one surface: (a) the Ready checklist names 'explicit re
 ### 9596ebaa641f · root-cause · Deliver's handoff contract fixed neither ownership nor order
 
 fr-goal §8 granted the orchestrator the ready transition ('ONLY when all three hold: mark it ready') with an ownerless 'explicit review ok'; ordered the local suite before the push for no reason; and fr's `_closeout_handoff_lines` printed closeout → pickup → push, so the push was the last instruction and the closeout the one dropped. Confirmed by reading SKILL.md §8 and by the existing test pinning closeout < pickup < push.
+
+<!-- fr:journal kind=finding scope=debug id=deliver-handoff created=2026-09-29T11:13:01+00:00 state=fixed -->
+### deliver-handoff · finding [fixed] · Operator owns the ok and ready; push first; closeout last
+
+run_cmd.py `_closeout_handoff_lines`: push/NOT-committed line first, closeout pair last. fr-goal §8: push + open/refresh draft PR before the full suite; Ready-checklist is the operator's; never tick, never mark ready; closeout relayed as the final line. fr-debugging §4: same relay rule, PR stays draft. Manifest comment corrected. Tests (red first, commit on PR #828): test_run_cli closeout-last asserts ×3; test_fr_goal_journal §8 guards ×4.
