@@ -51,7 +51,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 5
+RECORD_SCHEMA_VERSION = 6
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -63,7 +63,9 @@ change under `.claude/rules/artifact-versioning.md`. Migration:
 `2026-09-28-ui-visual-evidence-design.md` §G). Migration:
 `fr.artifacts.record_visual`. Bumped 4 -> 5 for `JournalItem.delegated` (spec
 `2026-09-29-spec-fidelity-invention-design.md` §E). Migration:
-`fr.artifacts.record_delegated`."""
+`fr.artifacts.record_delegated`. Bumped 5 -> 6 for `StepRecord.shape` (spec
+`2026-09-29-fr-goal-light-path-design.md` §A). Migration:
+`fr.artifacts.record_shape`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -227,6 +229,11 @@ class StepRecord(_Strict):
     step: StrictStr | None = None
     item: StrictStr | None = None
     outcome: Outcome | None = None
+    shape: StrictStr | None = None
+    """The workflow shape this run continues on (spec
+    `2026-09-29-fr-goal-light-path-design.md` §A, R1). Only the run's first
+    step may carry it; `apply_record` rebinds the cursor onto the named shape
+    when it begins with that same step. Same-shape is a no-op."""
     no_questions: bool = False
     """`fr run resolve --no-questions`: clear the step's operator gate WITHOUT
     having asked the operator — the explicit, recorded bypass (needs `reason`)."""

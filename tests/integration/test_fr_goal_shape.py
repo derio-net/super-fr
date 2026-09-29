@@ -391,12 +391,14 @@ def _walk_brief(output: str) -> dict:
     return json.loads(output[output.index("{") :])
 
 
-def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, plan_rel: str) -> None:
+def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, plan_rel: str) -> dict:
     """Start a run and walk it to the `implement` group, resolving each
     preceding step with the artifact it emits.
 
     `plan-review` is `kind: cli` and EXECUTES the real `fr plan self-review`
-    against `plan_rel`, so the plan handed in must pass it.
+    against `plan_rel`, so the plan handed in must pass it. The same advance
+    goes on to brief `implement-phase phase/1` (spec 2026-09-29-fr-goal-light-
+    path §B, R5); that brief is returned.
     """
     assert _fr(root, ["run", "start", "fr-goal", "--branch", branch, "--run-id", run_id])
     _fr(root, ["run", "advance", run_id])  # brainstorm: gate + brief
@@ -443,6 +445,7 @@ def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, pla
     out = _fr(root, ["run", "advance", run_id])  # plan-review executes for real
     assert out.exit_code == 0, out.output
     assert load_run_state(root, run_id).cursor == "implement"
+    return _walk_brief(out.output)
 
 
 def _next_member_brief(root: Path, run_id: str) -> dict:
@@ -600,15 +603,18 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
 
     # plan-review EXECUTES the real self-review: the skeleton-marked,
     # single-step toy plan passes it.
-    _drive_to_implement(root, "r1", "feat/walk", "docs/spec.md", plan_rel)
+    first: dict | None = _drive_to_implement(root, "r1", "feat/walk", "docs/spec.md", plan_rel)
     slug = Path(plan_rel).name
 
     seen: list[tuple[str, str]] = []
     for n in (1, 2, 3):
         for member in ("implement-phase", "review-phase"):
-            out = _fr(root, ["run", "advance", "r1"])
-            assert out.exit_code == 0, out.output
-            brief = _walk_brief(out.output)
+            if first is not None:  # plan-review's advance already briefed phase/1
+                brief, first = first, None
+            else:
+                out = _fr(root, ["run", "advance", "r1"])
+                assert out.exit_code == 0, out.output
+                brief = _walk_brief(out.output)
             assert (brief["step"], brief["item"]) == (member, f"phase/{n}"), out.output
             seen.append((member, f"phase/{n}"))
             if n == 1 and member == "implement-phase":
@@ -763,10 +769,13 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
 
     # journal-check is `kind: cli` and self-completes: the toy plan's steps
     # were never ticked, so no phase is locally-complete and none is "owed"
-    # a review — `--require-reviews` has nothing to flag.
+    # a review — `--require-reviews` has nothing to flag. The same advance
+    # goes on to brief `deliver` (spec 2026-09-29-fr-goal-light-path §B, R5).
     checked = _fr(root, ["run", "advance", "r1"])
     assert checked.exit_code == 0, checked.output
+    assert "journal-check: done (exit 0)" in checked.output
     assert load_run_state(root, "r1").cursor == "deliver"
+    assert _walk_brief(checked.output)["step"] == "deliver"
 
     # `deliver` hashes the proportionality report, which reads the plan at
     # HEAD — committed, as it is by the time a real run delivers.
@@ -774,9 +783,6 @@ def test_grouped_goal_walks_implement_review_per_phase_to_deliver(tmp_path: Path
 
     subprocess.run(["git", "-C", str(root), "add", plan_rel], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "plan"], check=True)
-    out = _fr(root, ["run", "advance", "r1"])  # deliver brief
-    assert out.exit_code == 0, out.output
-    assert _walk_brief(out.output)["step"] == "deliver"
     assert (
         _fr(
             root,
@@ -897,12 +903,14 @@ def test_a_phases_file_tier_reaches_the_dispatch_brief(tmp_path: Path, monkeypat
         root, spec_rel, slug, {1: "tier: declares the hard tier", 2: "review-size: toy phase 2"}
     )
 
-    _drive_to_implement(root, "r1", "feat/tier", spec_rel, plan_rel)
+    first: dict | None = _drive_to_implement(root, "r1", "feat/tier", spec_rel, plan_rel)
 
     # Phase 1 declared `tier: hard` in the PHASES FILE — both its members'
     # briefs must resolve to it.
     for member in ("implement-phase", "review-phase"):
-        brief = _next_member_brief(root, "r1")
+        brief, first = (
+            (first, None) if first is not None else (_next_member_brief(root, "r1"), None)
+        )
         assert (brief["step"], brief["item"]) == (member, "phase/1"), brief
         assert brief["resolved_tier"] == _DECLARED_TIER, (
             f"the tier the phases file declared ({_DECLARED_TIER!r}) did not reach "

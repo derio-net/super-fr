@@ -137,17 +137,31 @@ before you start; these are the disciplines that hold while you run.
 
 ## What you return
 
-A compact structured result for the orchestrator — the only thing that
-re-enters its context:
+A fixed structured result for the orchestrator — the only thing that
+re-enters its context, and the orchestrator acts on it without opening your
+transcript:
 
-- the **record path** (committed) and its outcome — `done`, `failed` or
-  `blocked` with the blocker named; with no record, the steps ticked and the
-  ids of journal entries you added;
-- the test command run and its pass/fail summary;
-- when the phase's linked acceptance rows carry `visual`, that the record's
-  `visual:` section is filled — screenshots taken, opened, and named by
-  `shows`;
-- files touched.
+```yaml
+record: <path, committed>        # with no record: none
+outcome: done | failed | blocked
+tests_log: <host-visible path> | none
+summary: |
+  <at most 5 lines: the blocker when blocked; the suite's pass/fail line;
+   ticks and journal ids when there is no record; files touched; for a phase
+   whose linked rows carry `visual`, that the record's `visual:` section is
+   filled — screenshots taken, opened, and named by `shows`>
+```
+
+**Your last act before returning is the full suite**, after your last code
+commit, with the code tree clean: written to a log the host can read, outside
+the repo's `<run>.records/` directory, in the long-command form below so it
+ends in its `exit=N` line. Name that log in the record's
+`evidence: {tests: <log>}` and commit the record after it — touch no code
+file after the suite ran. fr verifies you wrote it, refuses it on a dirty code
+tree or when any code path is newer than the log, and stores the code tree it
+covered, so `deliver` can reuse it (`tests: reuse`) instead of running the
+suite a second time. `tests_log: none` only when the phase is `failed` or
+`blocked` before a suite could mean anything.
 
 Keep the prose minimal; the record holds the detail.
 

@@ -1,0 +1,171 @@
+schema_version: 2
+phase:
+  number: 3
+  title: fr-goal-light shape, brainstorm rebind, record v5, agents and skill prose
+    (spec §A, §C)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - light-path-shape
+  - light-path-one-review
+  - light-path-structured-returns
+  - light-path-benchmark
+  tier: hard
+  files:
+  - plugins/super-fr/workflows/fr-goal-light.yaml
+  - packages/fr/src/fr/workflows/fr-goal-light.yaml
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/model.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/record_shape.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - plugins/super-fr/agents/fr-phase-executor.md
+  - plugins/super-fr/agents/fr-spec-reviewer.md
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - docs/explainers/01-fr-goal.md
+  - docs/explainers/01-fr-goal.html
+  - tests/unit/test_run_light_shape.py
+  - tests/unit/test_migration_record_shape.py
+  - tests/unit/test_skill_light_path.py
+  - tests/unit/test_tripwire_shipped_workflows.py
+  - tests/unit/test_migration_*.py
+  - docs/superpowers/runs/**
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Record kind v5 — optional `shape` (artifact-versioning)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_migration_record_shape.py modelled on
+      test_migration_record_visual.py: the record chain reaches 5 from 1 (assert every
+      hop), a v4 record migrates to 5 byte-identical but for the stamp, a v5 record with
+      `shape: fr-goal-light` loads via `fr.record.model.load_record`. Confirm failure.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: RECORD_SCHEMA_VERSION 4→5 (record/model.py:54), `shape: StrictStr | None = None`
+      on StepRecord, registry record current_version 5, stamp-only SchemaMigration in
+      fr/artifacts/record_shape.py imported from fr/artifacts/__init__.py, validator
+      aware. Update any test pinning 4 (grep `schema_version: 4` in tests/ and the record
+      template). Run `uv run fr migrate artifacts --yes` in the workspace and commit the
+      result (artifact-versioning rule §2).
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: docstring in registry.py records the 4 → 5 hop like the prior ones.
+- number: 2
+  title: The fr-goal-light shape, single-phase gate and brainstorm rebind (R1–R3)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_run_light_shape.py: `resolve_workflow("fr-goal-light")`
+      resolves from the shipped dirs and passes `fr workflow check`; its step ids are
+      brainstorm, plan, spec-plan-review, plan-review, implement{implement-phase,
+      review-phase}, journal-check, deliver; spec-plan-review is agent
+      super-fr:fr-spec-reviewer, tier hard, needs [spec, plan], emits
+      [journal:spec, acceptance], evidence [review, reviewer, findings, requirements,
+      coverage]; `plan` declares evidence [single-phase]. Rebind: a brainstorm record
+      with `shape: fr-goal-light` on an fr-goal run rewrites `workflow` to
+      `fr-goal-light@1` and the steps set, cursor on `plan`; refused when any other step
+      has left pending, when the target's first step differs (a tmp repo-override shape),
+      when the shape is unknown; same-shape is a no-op. single-phase: a light-plan resolve
+      with two agentic phases is refused naming them; one agentic + one [manual] passes.
+      spec-plan-review is refused without reviewer / review entry / with an open finding
+      (reuse test_run_evidence_findings helpers). Confirm failures.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: write plugins/super-fr/workflows/fr-goal-light.yaml (header comment
+      explaining the order: plan before the one reviewer, plan-review after its fixes)
+      and its wheel copy packages/fr/src/fr/workflows/fr-goal-light.yaml (keep
+      test_tripwire_shipped_workflows green; extend its list if it pins names). Add
+      `single-phase` to `_DERIVED_EVIDENCE`/verification (count non-manual phases of the
+      emitted plan via the plan loader). Implement the rebind in apply_record's
+      validation + `_resolve_body` state rewrite before `_complete_step`. Tests pass.
+  - id: P3.T2.S3
+    text: |-
+      REFACTOR: one helper `_rebind_shape(state, target, repo_root)` holding the three rules and its refusal text; re-run `uv run pytest tests/unit -q --no-cov -n auto -k "run_ or workflow"`.
+- number: 3
+  title: Agents and skill prose; mirrors; explainer (R7)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests/unit/test_skill_light_path.py pins: fr-goal SKILL.md has a `Light path`
+      section naming `fr-goal-light`, `shape: fr-goal-light`, `tests: reuse` and the rule
+      never to open a subagent transcript; it no longer instructs a separate
+      `fr run advance` right after a `resolve --record`; fr-phase-executor.md's return
+      block names `tests_log`; fr-spec-reviewer.md names `target: spec|plan`. Confirm failure.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: edit plugins/super-fr/skills/fr-goal/SKILL.md (Light path section; one-call
+      resolve wording across §§1–8; §5/§8 tests reuse), fr-phase-executor.md (fixed return
+      shape: record, outcome, tests_log, summary ≤5 lines; last act = full suite into a
+      host-visible log outside <run>.records/, named in the record's evidence),
+      fr-spec-reviewer.md (plan review when the brief names a plan). Keep harness-neutral
+      wording (test_tripwire_skill_tool_neutrality). Run `uv run --no-project python
+      scripts/sync-opencode.py` AND `uv run --no-project python scripts/sync-hermes.py`.
+      Tests pass.
+  - id: P3.T3.S3
+    text: |-
+      Explainer: add a light-path paragraph to docs/explainers/01-fr-goal.md and
+      regenerate 01-fr-goal.html per .claude/rules/explainers-currency.md (from `/`, with
+      `uv run --isolated --no-project --with markdown --with pyyaml`, after first
+      confirming the unmodified render is byte-identical). If the renderer is
+      unavailable, say so in the step record and leave the .html untouched.
+  - id: P3.T3.S4
+    text: |-
+      Quality gate: ruff format/check, mypy, `uv run fr harness parity --check`,
+      `uv run fr validate artifacts`, then the full suite into a host-visible log:
+      `(uv run pytest -q --no-cov -n auto; echo "exit=$?") > "$TMPDIR/p3-suite.log" 2>&1`
+      and name it in the record's `evidence: {tests: ...}`.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T2.S3:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+    P3.T3.S4:
+      state: x
+      ticked_at: '2026-09-29T09:17:43+00:00'
+      note: null
+  completion:
+    at: '2026-09-29T09:17:43+00:00'
+    note: null
+    observed_prs: []

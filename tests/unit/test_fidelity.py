@@ -384,3 +384,20 @@ def test_a_spec_with_no_design_refuses_the_inventory() -> None:
     spec = _spec('| R1 | x | input "alpha beta" |\n', "")
     problems, _ = check_inventory(_inventory(T3_SOUND), spec, T3_ENTRIES)
     assert any("## Design" in p for p in problems), problems
+
+
+def test_a_malformed_deferred_row_is_reported_once_under_its_own_section() -> None:
+    """#776: `parse_requirements` errors name their own section; the fidelity
+    and inventory gates used to prefix them `## Requirements` again, which
+    blamed the wrong section for a Deferred row."""
+    spec = MINIMAL_SPEC.replace(
+        "## Design",
+        "## Deferred from input\n\n| input | reason |\n|---|---|\n"
+        "| no quotes | later |\n\n## Design",
+    )
+    fidelity, _ = check_fidelity(SOUND_REVIEW, spec, [_input()])
+    inventory, _ = check_inventory(SOUND_REVIEW, spec, [_input()])
+    for problems in (fidelity, inventory):
+        assert len(problems) == 1
+        assert problems[0].startswith("`## Deferred from input`:")
+        assert "`## Requirements`" not in problems[0]
