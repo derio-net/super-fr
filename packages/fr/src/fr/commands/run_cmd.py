@@ -246,8 +246,21 @@ def _why_unobservable() -> str:
         harness = None
     if harness is None:
         return "no harness detected"
+    if harness == "opencode":
+        # Review p1-r5: OpenCode HAS a reader (`fr.run.observed`); what is
+        # missing is the session to read, or the database that holds it.
+        if not os.environ.get("FR_OPENCODE_SESSION_ID"):
+            return (
+                "no OpenCode session id reached fr (FR_OPENCODE_SESSION_ID is unset: the "
+                "super-fr OpenCode plugin is missing or older than this release)"
+            )
+        return (
+            "the exported OpenCode session (FR_OPENCODE_SESSION_ID) is not in the OpenCode "
+            "database fr read, or that database could not be read — check FR_OPENCODE_DB / "
+            "XDG_DATA_HOME; the super-fr OpenCode plugin exports the id"
+        )
     if harness != "claude-code":
-        return f"fr has no transcript reader for {harness}'s questions"
+        return f"fr has no session reader for {harness}"
     return "no readable transcript for this session"
 
 
@@ -2115,8 +2128,10 @@ def _verify_reviewer(
 
     A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
     implementer to exclude — the spec's author is the orchestrator, which has
-    no agent id and so can never pass the dispatch check. On OpenCode and
-    Hermes there is no dispatch reader, so the id is recorded as claimed.
+    no agent id and so can never pass the dispatch check. Dispatches are read
+    through `fr.run.observed` — Claude Code's transcript, OpenCode's child
+    sessions (once the super-fr plugin exports the run session); on Hermes, or
+    wherever the session cannot be read, the id is recorded as claimed.
     When the step names its reviewer (`expected_agent`, spec-review's
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
     is refused (review p4-f2) — qualified or bare spelling both match.

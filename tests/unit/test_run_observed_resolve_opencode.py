@@ -156,3 +156,34 @@ def test_every_agent_type_comparison_folds_the_opencode_tier() -> None:
         assert same("fr-spec-reviewer-hard", "super-fr:fr-spec-reviewer")
         assert not same("general", "super-fr:fr-spec-reviewer")
         assert not same(None, "super-fr:fr-spec-reviewer")
+
+
+# --- p1-r5: the unobservable wording names what is missing -----------------
+
+
+def test_why_unobservable_on_opencode_names_the_missing_export(monkeypatch) -> None:
+    from fr.commands.run_cmd import _why_unobservable
+
+    monkeypatch.setenv("FR_HARNESS", "opencode")
+    why = _why_unobservable()
+    assert "FR_OPENCODE_SESSION_ID" in why
+    assert "super-fr OpenCode plugin" in why
+    assert "no transcript reader" not in why
+    monkeypatch.setenv("FR_HARNESS", "hermes")
+    assert "hermes" in _why_unobservable()
+
+
+def test_an_unexported_session_warns_with_the_plugin_wording(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_the_spec_review(tmp_path, shape=_AGENT_SPEC_SHAPE)
+    db = _shifted_to(tmp_path, opened)
+    _spec_journal(repo, _REVIEW)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        [*SPEC_REVIEW, "--evidence", "review=sr-1", "--evidence", "reviewer=ses_rev"],
+        opencode_env(db, session=None),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "super-fr OpenCode plugin" in _squash(result.stderr)
