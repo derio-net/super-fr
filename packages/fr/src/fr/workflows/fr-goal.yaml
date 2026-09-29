@@ -95,11 +95,17 @@ steps:
     # it asked for. `tier: hard` (d8): traceability is the judgement #759's
     # standard-tier review missed. Neither a tier nor an emit is a step id, so
     # no cursor in flight drifts.
+    #
+    # `fidelity` (2026-09-29 spec §C, §D) reads the same review entry's
+    # `requirement-fidelity` block (each requirement's quotes partitioned into
+    # clauses, `kept` or a finding) and `design-inventory` block (every `###`
+    # of `## Design`, each behaviour backed), and refuses while a finding
+    # either flags is closed other than fixed (removed) or refuted.
     agent: super-fr:fr-spec-reviewer
     tier: hard
     needs: [spec]
     emits: [journal:spec, acceptance]
-    evidence: [review, reviewer, findings, requirements, coverage]
+    evidence: [review, reviewer, findings, requirements, coverage, fidelity]
 
   - id: plan
     kind: agent

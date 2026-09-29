@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, spec_journal_slug
 
-from tests.unit.requirements_support import COVERAGE_BLOCK
+from tests.unit.requirements_support import REVIEW_BLOCKS
 
 REVIEWER_ID = "spec-reviewer-1"
 
@@ -35,9 +35,9 @@ def spec_review_evidence(repo: Path, spec_rel: str, *, entry_id: str = "spec-rev
             id=entry_id,
             created=datetime.now().replace(microsecond=0).isoformat(),
             title="independent spec review",
-            # The input partition `coverage` derives from (2026-09-28 spec §D),
-            # over the input `requirements_support.seed_requirements` writes.
-            body=f"no findings\n\n{COVERAGE_BLOCK}",
+            # The blocks `coverage` (2026-09-28 spec §D) and `fidelity` (2026-09-29
+            # spec §A/§B) derive from, over what `seed_requirements` writes.
+            body=f"no findings\n\n{REVIEW_BLOCKS}",
         ),
     )
     return ["--evidence", f"review={entry_id}", "--evidence", f"reviewer={REVIEWER_ID}"]

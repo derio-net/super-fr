@@ -26,7 +26,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
-from tests.unit.requirements_support import COVERAGE_BLOCK, seed_requirements
+from tests.unit.requirements_support import REVIEW_BLOCKS, seed_requirements
 
 
 def _resolve(root: Path, record: Path, step: str = "implement-phase", item: str | None = "phase/1"):
@@ -466,9 +466,10 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
 # `emits:` in the manifest, not from a `--scope` flag.
 
 
-# The shipped `spec-review` derives `coverage` (2026-09-28 spec §D): the review
+# The shipped `spec-review` derives `coverage` (2026-09-28 spec §D) and `fidelity`
+# (2026-09-29 spec §A/§B): the review
 # body partitions the seeded input, plus any input entry the record adds.
-_WITH_X = COVERAGE_BLOCK.replace("```\n", '| "build X" | context |\n```\n', 1)
+_WITH_X = REVIEW_BLOCKS.replace("```\n", '| "build X" | context |\n```\n', 1)
 
 
 def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
@@ -522,7 +523,7 @@ def _spec_review_record(**overrides: object) -> dict[str, object]:
         "step": "spec-review",
         "outcome": "done",
         "journal": [
-            {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
+            {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
         ],
         "evidence": {"review": "sr-1", "reviewer": "spec-reviewer-1"},
     }
@@ -567,7 +568,7 @@ def test_a_spec_record_resolves_a_finding_unconfirmed_and_the_findings_gate_pass
 
 def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> None:
     root = _at_spec_review(tmp_path)
-    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
     bad = {"kind": "decision", "id": "d1", "title": "t", "body": "b", "input": True}
     record = write_record(root, _spec_review_record(journal=[review, bad]))
     files = snapshot(root)

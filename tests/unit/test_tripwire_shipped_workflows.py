@@ -158,7 +158,14 @@ def test_shipped_fr_goal_declares_the_requirements_gates() -> None:
     review = _step(manifest, "spec-review")
     assert review.tier == "hard"
     assert review.emits == ("journal:spec", "acceptance")
-    assert review.evidence == ("review", "reviewer", "findings", "requirements", "coverage")
+    assert review.evidence == (
+        "review",
+        "reviewer",
+        "findings",
+        "requirements",
+        "coverage",
+        "fidelity",
+    )
     assert _step(manifest, "deliver").evidence == (
         "tests",
         "proportionality",
@@ -173,7 +180,7 @@ _BEFORE_THE_GATES = (
     ("    tier: hard\n", "    tier: standard\n"),
     ("    emits: [journal:spec, acceptance]\n", "    emits: [journal:spec]\n"),
     (
-        "    evidence: [review, reviewer, findings, requirements, coverage]\n",
+        "    evidence: [review, reviewer, findings, requirements, coverage, fidelity]\n",
         "    evidence: [review, reviewer, findings]\n",
     ),
     (
