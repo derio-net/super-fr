@@ -1413,6 +1413,13 @@ _DERIVED_EVIDENCE = frozenset(
 # recording them unchecked. `tests` is not one: it is delivery's evidence, on
 # the flat `deliver` unit (debug journal C5).
 _PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings"})
+# OFFERED evidence (2026-09-29-fr-goal-light-path §D, R6): a name a unit of a
+# `for_each: phase` group member may carry WITHOUT its step declaring it, and
+# that is never counted missing there. `tests` is the phase holder's own suite
+# log, which `deliver` may later reuse (`tests: reuse`) while the code tree it
+# covered is unchanged. Where a step DECLARES it (`deliver`) it stays mandatory
+# exactly as before; the shipped manifests do not change.
+_OFFERED_EVIDENCE = frozenset({"tests"})
 _DERIVED_FROM = {
     "findings": "from the reviewed journal: every finding filed against the phase "
     "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
@@ -1482,7 +1489,7 @@ def _evidence_hint(name: str, target: _EvidenceTarget | None) -> str:
     )
 
 
-def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
+def _parse_evidence(pairs: list[str], step: Step, *, phase_unit: bool = False) -> dict[str, str]:
     """`--evidence name=journal-entry-id` pairs, validated against `step`.
 
     Same five-rule shape as `_parse_emitted` and for the same reasons — split
@@ -1491,6 +1498,10 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
     decoration: a name the shape never asked for is verified against nothing,
     so recording it would put an unverified id on the cursor under a heading
     that reads as proof.
+
+    `phase_unit` (the unit is a `for_each: phase` group member) admits an
+    `_OFFERED_EVIDENCE` name the step does not declare — still verified, by
+    `_verified_evidence`, before anything reaches the cursor.
     """
     result: dict[str, str] = {}
     for pair in pairs:
@@ -1507,6 +1518,9 @@ def _parse_evidence(pairs: list[str], step: Step) -> dict[str, str]:
                 f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
                 "one obligation, one entry"
             )
+        if phase_unit and name in _OFFERED_EVIDENCE and name not in step.evidence:
+            result[name] = value.strip()
+            continue
         if not step.evidence:
             raise RunStateError(
                 f"step {step.id!r} declares no evidence, so --evidence {name}= "
@@ -1624,9 +1638,9 @@ def _verified_evidence(
     journal, and fr will say it cannot verify rather than store an id nothing
     checked.
     """
-    if not step.evidence:
+    if not step.evidence and not offered:
         # `_parse_evidence` already refused an offered name the step does not
-        # declare, so there is nothing offered here either — this is the
+        # declare — bar `_OFFERED_EVIDENCE` on a phase unit — so this is the
         # ordinary, unchanged path every pre-existing shape takes.
         return {}
     if state_value != "done" and not offered:
@@ -1700,7 +1714,15 @@ def _verified_evidence(
             opened=since,
             expected_agent=step.agent if target.phase is None else None,
         )
-    if "tests" in offered:
+    if "tests" in offered and phase is not None:
+        verified["tests"] = _verify_phase_tests_log(
+            key,
+            offered["tests"],
+            repo_root,
+            opened=opened,
+            holder=holder or (attempt.agent if attempt is not None else None),
+        )
+    elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
         verified["proportionality"] = _proportionality_witness(key, repo_root, state)
@@ -2221,40 +2243,9 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
     opened. Unobservable: the file must at least be newer than the unit, and it
     says it could not verify who ran it.
     """
-    import hashlib
-
-    from fr.record.model import RECORDS_SUFFIX
     from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
 
-    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
-    try:
-        rel_parts = path.relative_to(repo_root.resolve()).parts
-    except ValueError:
-        rel_parts = ()
-    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
-        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
-    ):
-        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
-        # and fr empties it; a log written there got committed and reached
-        # `main` with nothing to remove it.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
-            "holds step records only and is emptied by fr. Write the suite log outside "
-            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-    except OSError:
-        data = b""
-    if not data:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
-            "yourself, write its output to a file, and name that file.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
+    path, data = _read_suite_log(key, log, repo_root)
     modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
     windows = orchestrator_wrote_since(os.environ, path, opened) if opened else None
     # One second of slack either side: the cursor stamps at second precision,
@@ -2303,14 +2294,171 @@ def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None
             "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
             soft_wrap=True,
         )
-    # Review r1-8: the witness lands in a git-tracked cursor, so it names the
-    # log repo-relative, or by basename when it lives outside the repo — never
-    # an absolute path carrying someone's home directory.
+    return _log_witness(path, data, repo_root)
+
+
+def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
+    """`(resolved path, bytes)` of a named suite log — or exit 2 when it sits
+    in a run's records dir or is missing or empty. The checks every `tests=`
+    log meets, whoever wrote it (`deliver`'s and a phase unit's alike)."""
+    from fr.record.model import RECORDS_SUFFIX
+
+    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
+    try:
+        rel_parts = path.relative_to(repo_root.resolve()).parts
+    except ValueError:
+        rel_parts = ()
+    if rel_parts[:3] == ("docs", "superpowers", "runs") and (
+        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
+    ):
+        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
+        # and fr empties it; a log written there got committed and reached
+        # `main` with nothing to remove it.
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
+            "holds step records only and is emptied by fr. Write the suite log outside "
+            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        data = path.read_bytes()
+    except OSError:
+        data = b""
+    if not data:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
+            "yourself, write its output to a file, and name that file.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return path, data
+
+
+def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
+    """`<shown>@<sha256[:12]>`. Review r1-8: the witness lands in a git-tracked
+    cursor, so it names the log repo-relative, or by basename when it lives
+    outside the repo — never an absolute path carrying someone's home
+    directory."""
+    import hashlib
+
     try:
         shown = str(path.relative_to(repo_root.resolve()))
     except ValueError:
         shown = path.name
     return f"{shown}@{hashlib.sha256(data).hexdigest()[:12]}"
+
+
+def _phase_log_windows(
+    path: Path, opened: str | None, holder: str | None
+) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
+    """The run windows of the holder's commands that wrote `path` — read from
+    the holder's own transcript: the claimed agent's subagent transcript, or
+    the orchestrator's main thread when the unit ran inline (no holder).
+
+    `False` when this session dispatched no agent `holder` (a bogus or foreign
+    id: refused, never unobserved); a `str` reason when nothing can be read —
+    including OpenCode and Hermes, which have no child-session reader today
+    (spec 2026-09-29-fr-goal-light-path §D, §E)."""
+    from fr.run.telemetry import _this_session, witness_transcript, wrote_since
+
+    try:
+        harness = detect_harness(os.environ)
+    except HarnessError:
+        harness = None
+    if harness in ("opencode", "hermes"):
+        return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
+    session = _this_session(os.environ)
+    if session is None or opened is None:
+        return _why_unobservable() if session is None else "the unit has no opening stamp"
+    found = witness_transcript(session, holder)
+    if found is None:
+        return f"the session transcript {session} could not be read"
+    if found is False:
+        return False
+    windows = wrote_since(found, path, opened, main_thread=holder is None)
+    if windows is None:
+        return f"the holder's transcript {found} could not be read"
+    return windows
+
+
+def _verify_phase_tests_log(
+    key: str, log: str, repo_root: Path, *, opened: str | None, holder: str | None
+) -> str:
+    """A phase unit's own suite log (spec 2026-09-29-fr-goal-light-path §D,
+    R6) — or exit 2. Returns `<shown>@<sha256[:12]>;tree=<code-tree>`.
+
+    1. **Writer** — `_verify_tests_log`'s rules, read from the HOLDER's
+       transcript (`_phase_log_windows`); unreadable records `unobserved=tests`.
+    2. **Freshness** — the log is no older than any code path differing from
+       the merge-base, committed or not (`fr.run.code_tree.newest_code_mtime`).
+    3. **Witness** — the code tree of HEAD. Computed here, before the record's
+       own commit, and equal to the tree after it: that commit writes only fr's
+       artifact trees, which the code tree excludes by definition.
+    """
+    from fr.run.code_tree import code_tree, default_merge_base, newest_code_mtime
+    from fr.run.telemetry import parse_timestamp
+
+    path, data = _read_suite_log(key, log, repo_root)
+    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
+    windows = _phase_log_windows(path, opened, holder)
+    if windows is False:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: this session dispatched no agent "
+            f"{holder!r}, so the unit's holder cannot be the one who ran the suite. "
+            "Name the agent id the executor's dispatch returned.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    slack = _dt.timedelta(seconds=1)
+    if isinstance(windows, list):
+        if not any(s - slack <= modified <= e + slack for s, e in windows):
+            why = (
+                "no command of the unit's holder wrote it (a `>`, `>>` or `tee` naming it)"
+                if not windows
+                else "its bytes were not written by the holder's command that names it"
+            )
+            err_console.print(
+                f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
+                f"{opened}. Name the log the phase's own full-suite run wrote, or leave "
+                "`tests` out of the record.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+    else:
+        opened_at = parse_timestamp(opened)
+        if opened_at is not None and modified < opened_at:
+            err_console.print(
+                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
+                "it is not a run of this phase's code.[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2)
+        _note_unobserved("tests")
+        err_console.print(
+            f"[yellow]{key}: could not verify who ran {log} — {windows}; recorded "
+            "unverified (evidence: unobserved=tests).[/yellow]",
+            soft_wrap=True,
+        )
+    try:
+        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
+        tree = code_tree(repo_root)
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log}: cannot compute the code tree it "
+            f"covers — {e}[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2) from e
+    if newest is not None and newest[0] > path.stat().st_mtime:
+        err_console.print(
+            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
+            "the log was written, so the suite did not run the code being recorded. "
+            "Run the full suite again and name the new log.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"{_log_witness(path, data, repo_root)};tree={tree}"
 
 
 def _verify_review_entry(
@@ -4743,7 +4891,9 @@ def _resolve_body(
         # the step that carries it (the `review-phase` member), and falling
         # back to the group the way `emits` does would let a member satisfy an
         # obligation it never declared.
-        evidence_map = _parse_evidence(evidence, step)
+        evidence_map = _parse_evidence(
+            evidence, step, phase_unit=parent is not None and parent.for_each == "phase"
+        )
     except (RunStateError, WorkflowError, AdoptError) as e:
         # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
         # in a flag pair the operator copy-pastes, and rich folds at width 80

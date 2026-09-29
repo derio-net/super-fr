@@ -17,7 +17,7 @@ import hashlib
 from collections.abc import Iterable
 from pathlib import Path
 
-from fr.git import GitUnavailableError, git_answer
+from fr.git import GitUnavailableError, git_answer, remote_default_ref
 
 FR_ARTIFACT_PREFIXES: tuple[str, ...] = ("docs/superpowers/", "docs/acceptance/")
 """The repo-relative prefixes that are fr's artifact trees, not code.
@@ -69,6 +69,19 @@ def dirty_code_paths(repo: Path) -> list[str]:
     return sorted(p for p in paths if is_code_path(p))
 
 
+def default_merge_base(repo: Path) -> str | None:
+    """The merge-base of HEAD and the remote default branch, or `None` when no
+    remote default branch resolves (a repo with no remote, two remotes and no
+    `checkout.defaultRemote`, ...) or the two share no history."""
+    found = remote_default_ref(repo)
+    if not isinstance(found, str):
+        return None
+    res = git_answer(repo, "merge-base", "HEAD", found)
+    if res.returncode != 0:
+        return None
+    return res.stdout.strip() or None
+
+
 def changed_code_paths(repo: Path, since: str | None) -> list[str]:
     """Code paths that differ from commit `since` — committed on HEAD or still
     uncommitted — sorted. `since=None` (no merge-base could be found) counts
@@ -77,7 +90,9 @@ def changed_code_paths(repo: Path, since: str | None) -> list[str]:
     if since is None:
         committed = _nul_split(_out(repo, "ls-files", "-z"))
     else:
-        committed = _nul_split(_out(repo, "diff", "-z", "--no-renames", "--name-only", since, "HEAD"))
+        committed = _nul_split(
+            _out(repo, "diff", "-z", "--no-renames", "--name-only", since, "HEAD")
+        )
     return sorted({p for p in committed if is_code_path(p)} | set(dirty_code_paths(repo)))
 
 
