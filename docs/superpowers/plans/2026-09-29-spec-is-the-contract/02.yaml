@@ -124,9 +124,12 @@ state:
         name only kept behaviour; the 'phase reviewer' mentions elsewhere are historical
         live-run notes. Reports in sync; check passes.
     P2.T5.S1:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-29T18:18:10+00:00'
+      note: All gates green; suite exit=0 (7564 passed). The removed-name grep is
+        not empty only because this change's own spec, plan, journal, fragment, the
+        matrix rows describing the removal, and absence-asserting tests name what
+        they remove; no live code or shipped prose does.
     P2.T5.S2:
       state: ' '
       ticked_at: null
