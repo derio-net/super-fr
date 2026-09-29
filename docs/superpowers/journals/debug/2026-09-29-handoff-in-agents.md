@@ -24,3 +24,8 @@ Source: fr-phase-executor.md gains a first section running `fr journal handoff -
 ### rv-reviewer-counted-as-implementer · finding [open] (reviewer: in scope) · A claimed fr-phase-reviewer is refused as the phase's implementer
 
 Naming agent: on review-phase records agent_type on the review unit (run_cmd.py _open_dispatch). The OpenCode plugin's --open-unit claim now matches it (_ran_as), so the reviewer's session id becomes the review unit's holder; _verify_reviewer's implementers set takes every phase/N/* unit with agent_type+agent, so reviewer=<that id> exits 2. Before this change agent_type was None and the unit was never claimable.
+
+<!-- fr:journal kind=finding scope=debug id=rv-reviewer-counted-as-implementer-resolved created=2026-09-29T11:59:03+00:00 state=fixed resolves=rv-reviewer-counted-as-implementer -->
+### rv-reviewer-counted-as-implementer-resolved · finding [fixed] · resolves rv-reviewer-counted-as-implementer: A claimed fr-phase-reviewer is refused as the phase's implementer
+
+run_cmd._verify_reviewer excludes the review unit's own key from implementers; pinned by test_the_reviewer_holding_its_own_review_unit_is_not_an_implementer (failed first with 'IMPLEMENTED phase 1').
