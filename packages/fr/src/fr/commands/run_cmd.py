@@ -4246,6 +4246,49 @@ def advance_cmd(
         raise typer.Exit(1)
 
 
+def _observed_holder(state: RunState, key: str) -> str | None:
+    """The child session that holds `key`, observed — or `None` (spec
+    2026-09-29-opencode-observe §C, R3).
+
+    Only for an OPEN attempt dispatched to an agent type with nobody claiming
+    it: when the session protocol shows exactly ONE child of that agent type
+    (compared through `agent_name`) dispatched since the attempt opened, that
+    child is the holder. Zero or several, or a session fr cannot read, leave
+    the unit unclaimed — the existing "unclaimed" handling stands."""
+    from fr.run.observed import agent_name, observed_session
+    from fr.run.telemetry import parse_timestamp
+
+    attempt = units.last_attempt(state, key)
+    if (
+        attempt is None
+        or attempt.returned is not None
+        or attempt.synthesized
+        or attempt.agent is not None
+        or attempt.agent_type is None
+    ):
+        return None
+    start = parse_timestamp(attempt.dispatched)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    if not dispatched:
+        return None
+    wanted = agent_name(attempt.agent_type)
+    matching = [
+        d.agent_id
+        for d in dispatched
+        if d.agent_type is not None and agent_name(d.agent_type) == wanted
+    ]
+    if len(matching) != 1:
+        return None
+    err_console.print(
+        f"{key}: holder {matching[0]} observed — the one {attempt.agent_type} "
+        "dispatch since the unit opened; recorded as its claim.",
+        soft_wrap=True,
+        markup=False,
+    )
+    return matching[0]
+
+
 def _resolve_member(
     repo_root: Path,
     state: RunState,
@@ -4348,6 +4391,9 @@ def _resolve_member(
         _refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
     if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
         _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
+    # R3: before any check reads the holder (visual, reviewer), and written
+    # through the claim path `_close_on_resolve` takes.
+    agent = agent if agent is not None else _observed_holder(state, key)
     verified = _verified_evidence(
         repo_root,
         state,
@@ -4870,6 +4916,7 @@ def _resolve_body(
         raise typer.Exit(2)
 
     flat_key = _unit_key(repo_root, state, step, None, None)
+    agent = agent if agent is not None else _observed_holder(state, flat_key)
     # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
     # verified for it and `_verified_evidence` refuses rather than records.
     verified = _verified_evidence(

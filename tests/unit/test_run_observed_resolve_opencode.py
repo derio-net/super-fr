@@ -13,13 +13,14 @@ command.
 
 from __future__ import annotations
 
+import datetime as _dt
 from pathlib import Path
 
 from fr.run import units
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
-from tests.unit.opencode_fixture import DB, opencode_env, shifted
+from tests.unit.opencode_fixture import DB, opencode_env, shifted, with_copied_child
 from tests.unit.test_run_cli import (
     _GROUPED_SHAPE,
     _dispatch_of,
@@ -29,7 +30,9 @@ from tests.unit.test_run_cli import (
     _started_grouped_with_plan,
     _write_shape,
 )
+from tests.unit.test_run_evidence import _journal
 from tests.unit.test_run_evidence_separate_context import (
+    _SHAPE,
     _AGENT_SPEC_SHAPE,
     _REVIEW,
     _at_the_review,
@@ -201,3 +204,71 @@ def test_an_unexported_session_warns_with_the_plugin_wording(tmp_path: Path) -> 
 
     assert result.exit_code == 0, result.output
     assert "super-fr OpenCode plugin" in _squash(result.stderr)
+
+
+# --- R3: the holder is filled from the one observed child ------------------
+
+CODE = ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"]
+
+
+def _at_the_code_unit(tmp_path: Path) -> tuple[Path, Path, str]:
+    """`phase/1/code` opened on OpenCode, dispatched to the phase executor with
+    nobody claiming it. Returns the unit's `dispatched`."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+    _journal(repo)
+    advanced = _invoke_as_harness(repo, shipped, ["run", "advance", "r1"], opencode_env(DB))
+    assert advanced.exit_code == 0, advanced.output
+    attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/code")
+    assert attempt is not None and attempt.agent is None
+    assert attempt.agent_type is not None
+    return repo, shipped, attempt.dispatched
+
+
+def _code_holder(repo: Path) -> str | None:
+    (attempt,) = _dispatch_of(repo, "implement", "phase/1/code")
+    return attempt.agent
+
+
+def test_the_one_observed_executor_child_becomes_the_holder(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_the_code_unit(tmp_path)
+    db = _shifted_to(tmp_path, opened)
+
+    result = _resolve(repo, shipped, db, CODE)
+
+    assert result.exit_code == 0, result.output
+    assert _code_holder(repo) == "ses_exec"
+
+
+def test_two_executor_children_leave_the_holder_unclaimed(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_the_code_unit(tmp_path)
+    db = with_copied_child(_shifted_to(tmp_path, opened), "ses_exec", "ses_exec2")
+
+    result = _resolve(repo, shipped, db, CODE)
+
+    assert result.exit_code == 0, result.output
+    assert _code_holder(repo) is None
+
+
+def test_no_executor_child_since_the_unit_opened_leaves_it_unclaimed(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_the_code_unit(tmp_path)
+    start = parse_timestamp(opened)
+    assert start is not None
+    db = shifted(tmp_path, start - _dt.timedelta(hours=1))
+
+    result = _resolve(repo, shipped, db, CODE)
+
+    assert result.exit_code == 0, result.output
+    assert _code_holder(repo) is None
+
+
+def test_a_claimed_holder_is_never_replaced_by_the_observed_one(tmp_path: Path) -> None:
+    repo, shipped, opened = _at_the_code_unit(tmp_path)
+    db = _shifted_to(tmp_path, opened)
+
+    result = _resolve(repo, shipped, db, [*CODE, "--agent", "impl-1"])
+
+    assert result.exit_code == 0, result.output
+    assert _code_holder(repo) == "impl-1"
