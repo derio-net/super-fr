@@ -139,6 +139,6 @@ state:
       ticked_at: '2026-09-29T18:36:47+00:00'
       note: 'Draft PR #851, left as a draft for the operator''s review.'
   completion:
-    at: null
+    at: '2026-09-29T18:36:48+00:00'
     note: null
     observed_prs: []
