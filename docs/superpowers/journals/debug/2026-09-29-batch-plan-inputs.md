@@ -9,3 +9,8 @@ Members #813 #812 #815, fr 4.35.0 on OpenCode + GitLab. See the issues for trans
 ### rc-815-none · root-cause · proportionality asks section: _bullets([]) returns ['none.'] when every phase has its own ask
 
 packages/fr/src/fr/proportionality.py:222 reuses _bullets, whose empty sentinel suits list sections but dangles after the count line.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-815-unobservable created=2026-09-29T11:09:47+00:00 -->
+### rc-815-unobservable · root-cause · _why_unobservable() is gate-agnostic and hard-codes 'questions'
+
+run_cmd.py:242; called by the operator-gate (:1233) and the reviewer gate (:2254).
