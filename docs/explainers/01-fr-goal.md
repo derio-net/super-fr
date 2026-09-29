@@ -543,23 +543,14 @@ documented escapes and fail-open cases, not a security boundary.
 ### 2. Explore first, then ask a round sized to the decisions (`brainstorm`)
 
 The agent does not begin by asking questions it could answer from the project.
-It first records what you actually said — your goal text, or an issue's title,
-body, and any comments you pointed at — verbatim, as an entry in the spec's
-journal, before it explores anything (redacted first if it names a third-party
-host, org, repo, or person, with the entry saying so). That entry is the
-anchor everything downstream traces back to: a requirement it produces later
-must quote it, and a reviewer checks that quote against it.
-
-It then studies how the current system works and compares possible approaches.
+It stores what you actually said — your goal text, or an issue's title and
+body — verbatim in the spec's journal, for the record (redacted first if it
+names a third-party host, org, repo, or person). Then it studies how the
+current system works and compares possible approaches.
 Only then does it collect the decisions that genuinely belong to you into a single
 question round, sized to those decisions, recommended choices first — a
 second round follows only when it was announced before the first question,
-or you ask for one, and there is never a third. Before that round, it lists
-every user-visible behavior the design needs and every statement in your
-input that could reasonably be read more than one way; anything neither of
-those settles becomes a question in the round rather than a silent
-assumption — there is no separate "assumptions" list, because an unsettled
-point is asked, not guessed. A deployed change may include
+or you ask for one, and there is never a third. A deployed change may include
 a question about how you will verify it in the real environment
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`).
 
@@ -604,57 +595,24 @@ and why. The next step checks that document against both your answers and the
 existing project. If it refers to a service, helper, or path that does not
 exist, the discrepancy must be resolved before planning.
 
-The specification itself carries a **Requirements table** — one row per
-requirement, each quoting the recorded input verbatim (paraphrase is allowed
-only in the requirement's own text) — plus an optional **Deferred from
-input** table for anything the input mentioned that is deliberately not part
-of this change, each with a reason. Together they trace every requirement
-back to what you actually said, rather than to what the agent inferred you
-meant.
-
-Your raw input does not stop at the specification. It stays recorded, verbatim,
-in the specification's journal, and later — when the code is built and
-reviewed — it travels on beside your recorded answers as a read-only reference.
-It is not handed along by the orchestrator: the agent that builds each phase
-and the agent that reviews it each fetch it themselves, first thing, on every
-dispatch, because a copy passed through someone else's prompt can arrive
-paraphrased, as a pointer, or not at all. The specification still governs; the
-input is there only so a clause the requirements lost along the way can be
-caught.
+The specification opens with a **Requirements** list — one numbered line per
+requirement, `R1.`, `R2.`, in the author's own words. That list, and the
+design under it, is what the questions settled, and from here on it is the
+contract: nothing after this step goes back to your original words. A
+requirement the specification does not state is not built, and if the
+specification turns out to be wrong, the fix is to the specification.
 
 That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they
 wrote, so `spec-review` dispatches a separate, read-only reviewer,
 `fr-spec-reviewer`. It can read and search the project and nothing else. It
-checks **traceability to your input first**, before anything else: every
-statement of your input must map to a requirement or an explicit deferral (a
-**dropped** finding otherwise), a requirement must say no more and no less
-than its quotes, checked clause by clause (a **reinterpreted** finding
-otherwise — "in the same style" dropped from a requirement is caught even
-when it survives in the quote), and no user-visible behavior in any section of
-the design may appear with no requirement or decision of yours behind it (an
-**invented** finding otherwise). It returns three tables: its full partition of
-the input — each span labeled with the requirement it satisfies, `deferred`,
-`context`, or the finding that flags it missing — the cut of every
-requirement's quote into clauses, each `kept` or naming the finding that flags
-it, and an inventory of every section of the design with the behaviors it adds
-and what backs each. fr checks all three mechanically for completeness, so
-"nothing was missed" is not something the reviewer merely claims. A dropped
-requirement is simply added or deferred; an invented or reinterpreted one is
-removed — the invented behavior deleted, the requirement restored to what your
-words literally said — and you are not asked, because the answer would only
-confirm what you never requested. Where you answered "your call", the
-decision is recorded as delegated, and the pull request lists it, with the
-requirements that cite it, under a section named for exactly that: behavior
-built without your confirmation. Only then does the reviewer check the specification against the
-decisions you gave, cite a file and line for every name the document relies
-on, and look for sections that disagree with each other. The step cannot be
-marked done without that review on record: a review entry written after the
-step began, the reviewer's own identifier — which, where the harness lets
-`fr` read the conversation, must be a reviewer this session really dispatched
-— an input partition that covers the input with no gap or overlap, clause and
-design inventories that account for every clause and section, and no finding
-left open. The file lives at
+checks the specification against the decisions you gave, cites a file and line
+for every name the document relies on, looks for sections that disagree with
+each other, and hands back a list of findings; it changes nothing itself. The
+step cannot be marked done without that review on record: a review entry
+written after the step began, the reviewer's own identifier — which, where the
+harness lets `fr` read the conversation, must be a reviewer this session really
+dispatched — and no finding left open. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
@@ -712,7 +670,7 @@ defects such as dependency cycles and manual work hidden inside an agentic
 phase; when a local Test Plan and readable acceptance matrix are present, it
 also errors on unknown acceptance IDs, and it checks that a plan naming its own
 workflow shape names one that actually resolves. When the spec carries a
-Requirements table, it follows each phase's acceptance rows back to the
+Requirements list, it follows each phase's acceptance rows back to the
 requirements they cite, and errors on a phase that serves no ask of its own or
 on a later phase with no recorded reason for existing — so the sizing rule above
 is checked, not merely suggested.
@@ -799,11 +757,8 @@ there waiting for you.
 Now the central loop from the opening diagram begins. The shape says this step
 runs once per plan phase, so the phases are worked through in dependency order,
 one at a time. Each one goes to a dedicated phase executor, which is given the
-phase's scope, the specification, the running journal of what earlier phases
-discovered, and — read-only — your original input together with the answers you
-gave. The specification governs: if that input asks for something neither the
-specification nor your answers cover, the executor (and later the reviewer)
-reports it as a finding rather than silently building it or ignoring it. It writes a failing test, implements the behavior, and cleans up
+phase's scope, the specification, and the running journal of what earlier phases
+discovered. It writes a failing test, implements the behavior, and cleans up
 without changing that behavior. This test-first cycle is commonly called
 **TDD**, or test-driven development.
 
@@ -956,16 +911,10 @@ That refusal exists because one pull request did ship without its out-of-scope
 section, and a section that must be remembered is a section that will
 eventually be forgotten.
 
-`deliver` also refuses while any acceptance row citing this specification is
-still not implemented, unless that row is explicitly marked as needing a live,
-operator-driven run to prove — the kind of claim no unit test can settle. Such
-a row keeps nagging you after merge rather than blocking delivery, and the PR
-body lists it under its own heading so it is not forgotten either. Three more
-sections come from the same traceability work as `spec-review`: the input
-partition the reviewer returned, so you can see the whole input accounted for
-in one place, the reviewer's inventory of the design's behaviors, and what
-shipped without your confirmation — each decision you delegated with "your
-call", listed with the requirements that cite it.
+An acceptance row that only a live, operator-driven run can prove — the kind
+of claim no unit test can settle — is marked as such. It keeps nagging you
+after merge rather than blocking delivery, and the PR body lists it under its
+own heading so it is not forgotten either.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files
