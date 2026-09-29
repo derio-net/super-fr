@@ -245,3 +245,8 @@ Not caused by a reachable path of this change: the requirements gate refuses an 
 ### p2-q7-migration-test-pins-equality-resolved · finding [out-of-scope] · resolves p2-q7-migration-test-pins-equality: test_migration_record_delegated pins `== 5` and the exact chain (phase 2)
 
 The exact chain is what spec Test Plan 5 and artifact-versioning.md require now; relaxing it is the next record bump's obligation, not this change's.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q6-delegated-citation-silent-fallback-resolved-2 created=2026-09-29T11:13:11+00:00 state=open resolves=p2-q6-delegated-citation-silent-fallback tracked_by=#829 -->
+### p2-q6-delegated-citation-silent-fallback-resolved-2 · finding [deferred → #829] · resolves p2-q6-delegated-citation-silent-fallback: Delegated citation lookup falls back to `cited by: none` on an unparseable Requirements table
+
+Filed at closeout as #829.
