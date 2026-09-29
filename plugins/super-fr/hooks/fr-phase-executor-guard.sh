@@ -1,6 +1,7 @@
 #!/bin/bash
 # PreToolUse(Agent) hook: refuse dispatching the fr-phase-executor subagent —
-# or the read-only fr-spec-reviewer (2026-09-24 spec §E, review p4-f6) — WITH
+# or the read-only fr-spec-reviewer (2026-09-24 spec §E, review p4-f6), or the
+# fr-phase-reviewer (super-fr#778) — WITH
 # `isolation: "worktree"`. fr's isolation worktree already IS the
 # executor's working copy; the two mechanisms are mutually exclusive, not
 # composable, and combining them deadlocks the agent (#420).
@@ -56,10 +57,13 @@ esac
 # is dispatched to review a spec that lives on the feature branch, and a
 # worktree cut from `main` does not contain it. Read-only does not help — what
 # it cannot see, it cannot review — so it gets its own reason text.
+# fr-phase-reviewer likewise (#778): the phase's code, and the journals its
+# first-step `fr journal handoff` reads, exist only on the feature branch.
 subagent_type=$(printf '%s' "$input" | jq -r '.tool_input.subagent_type // empty')
 case "$subagent_type" in
   super-fr:fr-phase-executor | fr-phase-executor) agent=executor ;;
   super-fr:fr-spec-reviewer | fr-spec-reviewer) agent=spec-reviewer ;;
+  super-fr:fr-phase-reviewer | fr-phase-reviewer) agent=phase-reviewer ;;
   *) exit 0 ;;
 esac
 
@@ -71,6 +75,12 @@ isolation=$(printf '%s' "$input" | jq -r '.tool_input.isolation // empty')
 
 if [ "$agent" = spec-reviewer ]; then
   jq -n --arg reason "fr-spec-reviewer must be dispatched WITHOUT \`isolation: \"worktree\"\` — it reviews the spec in fr's isolation worktree, where the feature branch's spec and spec journal live. With the flag it wakes in a separate worktree cut from \`main\`, where that spec is invisible: there is nothing for it to review, and the review it returns is of nothing. Re-dispatch the same prompt with no \`isolation\` argument. (See super-fr#420.)" \
+    '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
+  exit 0
+fi
+
+if [ "$agent" = phase-reviewer ]; then
+  jq -n --arg reason "fr-phase-reviewer must be dispatched WITHOUT \`isolation: \"worktree\"\` — it reviews the phase's code in fr's isolation worktree, and fetches the operator input from the feature branch's journals (\`fr journal handoff\`). With the flag it wakes in a separate worktree cut from \`main\`, where that code and those journals are invisible: the review it returns is of nothing. Re-dispatch the same prompt with no \`isolation\` argument. (See super-fr#420, #778.)" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}'
   exit 0
 fi

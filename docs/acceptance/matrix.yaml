@@ -4593,7 +4593,11 @@ rows:
       - super-fr:tests/unit/test_operator_input_prose.py
     status: ci
     notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
-      in the phase-executor agent (#778); d5: unit tests suffice, no live row.'
+      in both agents. Since the #778 reopen (take 10), the delivery path is each agent''s
+      own first-step `fr journal handoff` (fr-phase-executor, fr-phase-reviewer), not
+      the orchestrator''s prompt relay: pinned by test_operator_input_prose.py; review-phase
+      names the reviewer agent. d5: unit tests suffice; live child-session check is
+      #823.'
   - id: light-path-structured-returns
     capability: fr-goal-methodology
     acceptance: fr-goal documents the light path and one-call resolve; the executor
