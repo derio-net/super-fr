@@ -3269,6 +3269,10 @@ def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | N
     return operator_input.to_brief(oi) if oi is not None else None
 
 
+AdvanceStop = Literal["brief", "gate", "cli-done", "cli-failed", "refused", "complete"]
+"""Why one `_advance_once` stopped. Only `cli-done` lets `_advance_chain` go on."""
+
+
 def _advance_group(
     repo_root: Path,
     state: RunState,
@@ -3277,7 +3281,7 @@ def _advance_group(
     record: StepRecord,
     *,
     redispatch: bool = False,
-) -> None:
+) -> AdvanceStop:
     """Dispatch the next pending `(phase, member)` unit of a grouped step.
 
     The cursor stays on the group while any unit is outstanding; `resolve`
@@ -3354,7 +3358,9 @@ def _advance_group(
             state = _with_step(state, step.id, units.with_unit_states(record, items))
         _save_run_state(repo_root, _complete_step(state, manifest, step.id, "done"))
         console.print(_group_done_line(step.id, expected, manual), soft_wrap=True)
-        return
+        # The group completed inline with nothing dispatched — the cursor moved
+        # exactly as a passed cli step moves it, so `_advance_chain` goes on.
+        return "cli-done"
     # Spec §3.D.2 point 2: the preflight, ONCE, before the first unit of this
     # group is dispatched — `pending` is known and nothing has been saved yet.
     # Defence in depth behind `fr plan self-review`, not a substitute for it:
@@ -3406,6 +3412,7 @@ def _advance_group(
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
     _print_member_dispatch(step, member, item, state, resolved_tier, operator_input)
+    return "brief"
 
 
 def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> str | None:
@@ -4027,8 +4034,67 @@ def advance_cmd(
     isolation worktree, so a second brief means two writers in one tree.
     `--redispatch` is the deliberate escape, and refuses in turn when
     nothing is outstanding.
+
+    Consecutive `kind: cli` steps run in this ONE invocation (spec
+    2026-09-29-fr-goal-light-path §B, R5): the advance repeats while the
+    previous step was a cli step that passed, and ends on the first brief,
+    gate, failure, refusal or the end of the run — one commit per step, as a
+    single advance has always made.
     """
     repo_root = resolve_repo_root()
+    stop = _advance_chain(repo_root, run_id, redispatch=redispatch)
+    if stop == "cli-failed":
+        raise typer.Exit(1)
+    if stop == "refused":
+        raise typer.Exit(2)
+
+
+def _advance_chain(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
+    """Advance until something other than a passed cli step happens (R5).
+
+    Each step is committed on its own, under its own subject, exactly as one
+    `fr run advance` per step used to commit it: every iteration runs inside
+    a fresh `_RunWrites` and commits it on every exit path. The chain is
+    capped by the manifest's step count, so a manifest can never spin.
+    """
+    # Every advance, not once at start: `/model` can move mid-run, and the
+    # moment a turn is spent on the wrong model is the moment to hear it (C3).
+    # Once per chain — the chain is one call, so one notice.
+    notice = _orchestrator_model_notice(repo_root)
+    if notice is not None:
+        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
+    try:
+        state = load_run_state(repo_root, run_id)
+        bound = len(_resolve_manifest_for_state(repo_root, state).steps) + 1
+    except Exception:  # noqa: BLE001 — `_advance_once` reports it, in its own words
+        bound = 1
+    stop: AdvanceStop = "cli-done"
+    for _ in range(bound):
+        writes = _RunWrites(verb="advance")
+        token = _RUN_WRITES.set(writes)
+        try:
+            stop = _advance_once(repo_root, run_id, redispatch=redispatch)
+        finally:
+            _RUN_WRITES.reset(token)
+            writes.commit()
+        # `--redispatch` names the unit held NOW, never one a later step briefs.
+        redispatch = False
+        if stop != "cli-done":
+            break
+    return stop
+
+
+def _advance_once(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
+    """One `advance` step — its prints unchanged; its exits become a stop."""
+    try:
+        return _advance_step(repo_root, run_id, redispatch=redispatch)
+    except typer.Exit as e:
+        # Exit 1 is only ever raised for a cli step that ran and failed; every
+        # other exit is a refusal that wrote nothing it had not already said.
+        return "cli-failed" if e.exit_code == 1 else "refused"
+
+
+def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -4036,12 +4102,6 @@ def advance_cmd(
     except (RunStateError, WorkflowError, AdoptError) as e:
         err_console.print(f"[red]{e}[/red]")
         raise typer.Exit(2) from e
-
-    # Every advance, not once at start: `/model` can move mid-run, and the
-    # moment a turn is spent on the wrong model is the moment to hear it (C3).
-    notice = _orchestrator_model_notice(repo_root)
-    if notice is not None:
-        err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
 
     record = state.steps.get(state.cursor)
     if record is None:
@@ -4092,7 +4152,7 @@ def advance_cmd(
             committed=outcome is None or outcome.committed or outcome.unchanged,
         ):
             console.print(line, soft_wrap=True)
-        return
+        return "complete"
 
     if _gate_pending(step, record):
         if record.state != "blocked":
@@ -4125,12 +4185,11 @@ def advance_cmd(
         _commit_run_writes_now()
         if step.kind == "agent":
             console.print(json.dumps(_build_brief(step, state), sort_keys=True), soft_wrap=True)
-        return
+        return "gate"
 
     if step.kind == "agent":
         if step.steps:
-            _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
-            return
+            return _advance_group(repo_root, state, manifest, step, record, redispatch=redispatch)
         # #499 (spec §3.A): the same rule as `_advance_group`'s, at the other
         # call site. This sits AFTER the `_gate_pending` block on purpose — a
         # gated step is `blocked`, never `running`, and its brief is how the
@@ -4175,7 +4234,7 @@ def advance_cmd(
         _commit_run_writes_now()
         console.print(f"{step.id}: dispatch brief")
         console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
-        return
+        return "brief"
 
     # kind == "cli"
     context = _template_context(state)
@@ -4205,6 +4264,7 @@ def advance_cmd(
         )
         _save_run_state(repo_root, new_state)
         console.print(f"{step.id}: done (exit 0)")
+        return "cli-done"
     else:
         new_state = _complete_step(
             state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
@@ -4445,6 +4505,13 @@ def resolve_cmd(
         "its outcome, ticks, journal entries, resolutions, acceptance rows and evidence, "
         "applied in one commit (spec 2026-09-25 §5.C.2). Replaces --state/--evidence/--emitted.",
     ),
+    no_advance: bool = typer.Option(
+        False,
+        "--no-advance",
+        help="With --record: apply the record and stop. By default an `outcome: done` "
+        "record goes on to advance the run — running any following `kind: cli` steps "
+        "and printing the next dispatch brief — in this same call.",
+    ),
 ) -> None:
     """Record the outcome of an `agent` step, or answer a step's operator gate.
 
@@ -4472,8 +4539,15 @@ def resolve_cmd(
       and reporting the outcome are the same act.
     - `kind: cli` — `done` clears the gate and returns the step to `pending`
       so the next `advance` executes it and its exit code is still the
-      verdict; `failed` records a declined gate. `resolve` executes nothing,
-      ever.
+      verdict; `failed` records a declined gate. The flag form executes
+      nothing, ever.
+
+    `--record` also ADVANCES (spec 2026-09-29-fr-goal-light-path §B, R4): once
+    an `outcome: done` record is applied and committed, the run advances in
+    the same call exactly as `fr run advance` would — any following `kind:
+    cli` steps run, and the next brief prints. `--no-advance` stops after the
+    apply. A `failed` or `blocked` record never advances: its step keeps the
+    cursor, and advancing would re-brief the work that just failed.
     """
     if record_file is not None:
         # p3-r4: every flag the record carries is refused beside it, never
@@ -4505,8 +4579,14 @@ def resolve_cmd(
                 soft_wrap=True,
             )
             raise typer.Exit(2)
-        _resolve_with_record(run_id, step_id, item, record_file)
+        _resolve_with_record(run_id, step_id, item, record_file, advance=not no_advance)
         return
+    if no_advance:
+        err_console.print(
+            "[red]--no-advance goes with --record — the flag form never advances[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
     if state_value is None:
         err_console.print("[red]--state done|failed is required (or pass --record <file>)[/red]")
         raise typer.Exit(2)
@@ -5039,8 +5119,12 @@ def resolve_in_process(
     )
 
 
-def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_file: Path) -> None:
-    """`fr run resolve --record`: parse, fill run/step/item, apply — one line."""
+def _resolve_with_record(
+    run_id: str, step_id: str, item: str | None, record_file: Path, *, advance: bool = True
+) -> None:
+    """`fr run resolve --record`: parse, fill run/step/item, apply — one line —
+    then, for an `outcome: done` record, advance the run (R4) unless `advance`
+    is false."""
     from fr.record.apply import RecordRefusedError, apply_record
     from fr.record.model import RecordError, load_record, records_dir
 
@@ -5082,6 +5166,44 @@ def _resolve_with_record(run_id: str, step_id: str, item: str | None, record_fil
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     typer.echo(outcome.line)
+    if advance and record.outcome == "done":
+        _advance_after_record(repo_root, run_id)
+
+
+def _advance_after_record(repo_root: Path, run_id: str) -> None:
+    """The advance half of a one-call resolve (spec 2026-09-29 §B, R4).
+
+    Runs only after the record's commit landed, so a failure here must say the
+    record is applied — nobody should re-apply it. A record that finished the
+    run (its last step, `deliver` on fr-goal) has nothing to advance: the
+    resolve already printed the closeout, and an advance would repeat it."""
+    try:
+        state = load_run_state(repo_root, run_id)
+        manifest = _resolve_manifest_for_state(repo_root, state)
+    except Exception:  # noqa: BLE001 — `_advance_chain` reports it, in its own words
+        pass
+    else:
+        record = state.steps.get(state.cursor)
+        if record is not None and record.state == "done":
+            if _next_step_id(manifest, state.cursor) is None:
+                return
+    stop = _advance_chain(repo_root, run_id, redispatch=False)
+    if stop == "cli-failed":
+        state = load_run_state(repo_root, run_id)
+        failed = state.steps.get(state.cursor)
+        code = failed.exit if failed is not None else None
+        err_console.print(
+            f"record applied; {state.cursor} failed (exit {code})", markup=False, soft_wrap=True
+        )
+        raise typer.Exit(1)
+    if stop == "refused":
+        err_console.print(
+            "record applied; the advance after it was refused (above) — "
+            f"fix that, then `fr run advance {run_id}`",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
 
 
 def _refactor_gate(repo_root: Path, state: RunState, key: str, phase_n: int | None) -> None:
