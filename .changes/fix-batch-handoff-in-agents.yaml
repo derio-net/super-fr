@@ -1,2 +1,0 @@
-bump: minor
-summary: The phase executor and a new shipped fr-phase-reviewer agent fetch the operator's verbatim input themselves (`fr journal handoff`) on every dispatch, instead of relying on the orchestrator to relay it (#778).
