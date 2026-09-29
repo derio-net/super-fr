@@ -1,0 +1,24 @@
+schema_version: 7
+run: 2026-09-29-feat-batch-spec-fidelity
+workflow: fr-goal@1
+branch: feat/batch-spec-fidelity
+started: '2026-09-29T06:32:19+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  deliver:
+    state: pending
