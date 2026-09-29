@@ -5786,3 +5786,13 @@ rows:
     notes: 'Phase 1 (spec §B, R4/R5): advance chains cli steps; resolve --record advances
       after a done record, --no-advance opts out, failed/blocked stop; edge cases (refusal
       after apply, deliver closeout once, inline group completion, --redispatch) pinned.'
+  - id: spec-contract-record-v7
+    capability: artifact-versioning
+    acceptance: Record kind 7 drops delegated and the unconfirmed state; the chain reaches
+      7 from 1 hop by hop through a frozen RecordV6, and an unconfirmed record is left
+      byte-identical and reported
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
