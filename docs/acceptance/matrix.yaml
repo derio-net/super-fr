@@ -4146,6 +4146,47 @@ rows:
       mode (PR #679, usage/2026-09-26-fix-659-isolation-gc-fetch.yaml, 7/7 steps). Stays
       skipped until #637 (Claude Code omits subagent cost) is fixed; OpenCode needs
       an explicit session binding until #636.'
+  - id: light-path-shape
+    capability: fr-goal-cost
+    acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light`
+      or a brainstorm-record rebind (first step only, same first step), and the light
+      plan step refuses a plan with more than one agentic phase
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: light-path-one-review
+    capability: fr-goal-cost
+    acceptance: On the light shape one dispatched fr-spec-reviewer reviews spec and
+      plan together under the full spec-review evidence gate, and the per-phase code
+      review still runs
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: deliver-suite-reuse
+    capability: fr-goal-cost
+    acceptance: deliver accepts `tests=reuse` only while HEAD's code tree equals the
+      tree of the latest phase unit whose holder-written, fresh suite log fr verified;
+      otherwise it demands a fresh run
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: light-path-benchmark
+    capability: fr-goal-cost
+    acceptance: On the super-fr-3 feature-C benchmark the light path costs at most 2x
+      plain's money and 2.5x its time with verified delivery
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: fr-goal-independent-spec-review
     capability: fr-goal-methodology
     acceptance: The spec is reviewed by an independent agent, not its author, and spec-review
@@ -4539,6 +4580,16 @@ rows:
     status: ci
     notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
       in the phase-executor agent (#778); d5: unit tests suffice, no live row.'
+  - id: light-path-structured-returns
+    capability: fr-goal-methodology
+    acceptance: fr-goal documents the light path and one-call resolve; the executor
+      returns a fixed shape carrying its suite log, the spec reviewer covers spec and
+      plan, and the orchestrator is told never to open subagent transcripts
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
@@ -5553,3 +5604,14 @@ rows:
     status: ci
     notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
       run in CI.
+  - id: run-resolve-advances
+    capability: Run
+    acceptance: '`fr run resolve --record` applies the record and advances in the same
+      call (running following cli steps, printing the next brief); `fr run advance`
+      chains consecutive cli steps; `--no-advance` keeps the old behaviour'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R4
+    - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
