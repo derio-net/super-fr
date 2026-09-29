@@ -5443,7 +5443,12 @@ rows:
       --run 2026-09-28-feat-batch-closeout-always-2 named fr archive --branch feat/batch-closeout-always-2;
       run in the chore/archive workspace it archived spec, plan, run, usage and both
       journals with no held: line, and fr status then reported no owed artifact from
-      the branch. Manual live run, not in CI.'
+      the branch. Manual live run, not in CI. | 2026-09-29 take 10 (super-fr-3; fr 4.35.0,
+      OpenCode 1.18.32, GitLab no CI, devcontainer; run A gpt-6-sol, run B gpt-6-luna
+      high; docs/audits/2026-09-29-take10-opencode-live-walk.md): OpenCode+GitLab parity
+      partial: archive and brief correct, but pickup --run fails in an unpulled base
+      clone (#811), lock file blocks isolation down and the housekeeping workspace is
+      never downed (#610), acceptance check fails after archive (#528).'
     verify: post-merge
   - id: every-pr-flow-relays-closeout
     capability: Branch-keyed close-out
