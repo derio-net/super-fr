@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from fr.record.model import QuestionRounds, VisualEvidence
+    from fr.run.observed import ChildDispatch
     from fr.run.telemetry import Round
 from fr.run.provenance import agent_cleared_gates, gates
 from fr.run.units import UnitAttempt
@@ -1759,6 +1760,8 @@ def _verified_evidence(
                 step,
                 emitted=emitted or {},
                 review_id=offered.get("review"),
+                reviewer=offered.get("reviewer"),
+                since=since,
             )
         )
     if not derives:
@@ -1963,8 +1966,11 @@ def _requirements_witnesses(
     *,
     emitted: Mapping[str, str],
     review_id: str | None,
+    reviewer: str | None = None,
+    since: str | None = None,
 ) -> dict[str, str]:
-    """Every requirements-traceability witness `step` declares — or exit 2."""
+    """Every requirements-traceability witness `step` declares — or exit 2.
+    `reviewer`/`since` locate the reviewer's return (`coverage`, R5)."""
     wanted = [n for n in _REQUIREMENTS_EVIDENCE if n in step.evidence]
     if not wanted:
         return {}
@@ -1975,7 +1981,7 @@ def _requirements_witnesses(
     if "requirements" in wanted:
         out["requirements"] = _requirements_witness(key, capture)
     if "coverage" in wanted:
-        out["coverage"] = _coverage_witness(key, capture, review_id)
+        out["coverage"] = _coverage_witness(key, capture, review_id, reviewer=reviewer, since=since)
     if "requirement-rows" in wanted:
         out["requirement-rows"] = _requirement_rows_witness(key, capture)
     return out
@@ -2001,10 +2007,21 @@ def _requirements_witness(key: str, capture: _RequirementsCapture) -> str:
     return f"{n} requirements:{requirements_digest(capture.spec_text)}"
 
 
-def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | None) -> str:
+def _coverage_witness(
+    key: str,
+    capture: _RequirementsCapture,
+    review_id: str | None,
+    *,
+    reviewer: str | None = None,
+    since: str | None = None,
+) -> str:
     """`<n> spans: R=… deferred=… context=… missing=…` from the `input-coverage`
     block of the review entry `review` names (§D) — or exit 2. A `missing <id>`
-    span is well-formed here; the `findings` gate holds it while it is open."""
+    span is well-formed here; the `findings` gate holds it while it is open.
+
+    The recorded block must be the one `reviewer` RETURNED (spec
+    2026-09-29-opencode-observe §D, R5): read through the session protocol
+    wherever the return is observable, else noted `unobserved=reviewer-return`."""
     from fr.requirements import (
         RequirementsError,
         check_coverage,
@@ -2026,6 +2043,8 @@ def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | 
         requirements = parse_requirements(capture.spec_text)
     except RequirementsError as e:
         _requirements_refusal(key, [f"{why} — {capture.spec_rel}: {e}"])
+    if reviewer is not None:
+        _check_returned_coverage(key, review.body, reviewer, since)
     inputs = [e for e in capture.entries if is_input_entry(e)]
     problems, counts = check_coverage(review.body, inputs, requirements, capture.entries)
     if problems:
@@ -2040,6 +2059,68 @@ def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | 
         f"{counts.spans} spans: R={counts.requirement} deferred={counts.deferred} "
         f"context={counts.context} missing={counts.missing}"
     )
+
+
+def _reviewer_dispatches(since: str | None) -> list[ChildDispatch] | None:
+    """Every subagent this session dispatched since `since`, through the
+    session protocol — `None` when fr cannot read the session."""
+    from fr.run.observed import observed_session
+    from fr.run.telemetry import parse_timestamp
+
+    start = parse_timestamp(since)
+    view = observed_session(os.environ) if start is not None else None
+    return view.dispatches(start) if view is not None and start is not None else None
+
+
+def _return_unobserved(key: str, reviewer: str, why: str) -> None:
+    _note_unobserved("reviewer-return")
+    err_console.print(
+        f"[yellow]{key}: could not read what reviewer {reviewer} returned — {why}; "
+        "the record is taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
+        soft_wrap=True,
+    )
+
+
+def _check_returned_coverage(key: str, body: str, reviewer: str, since: str | None) -> None:
+    """The recorded review entry's `input-coverage` block equals the one
+    `reviewer` returned — or exit 2 naming the first differing line (R5)."""
+    from fr.requirements import coverage_block
+    from fr.run.review_return import coverage_divergence, returned_coverage
+
+    dispatched = _reviewer_dispatches(since)
+    dispatch = (
+        next((d for d in dispatched if d.agent_id == reviewer), None)
+        if dispatched is not None
+        else None
+    )
+    if dispatch is None or dispatch.returned is None:
+        _return_unobserved(
+            key,
+            reviewer,
+            _why_unobservable() if dispatched is None else "its return is not readable yet",
+        )
+        return
+    returned = returned_coverage(dispatch.returned)
+    if returned is None:
+        _requirements_refusal(
+            key,
+            [
+                f"refused — the reviewer returned no input-coverage block (reviewer {reviewer}). "
+                "Re-dispatch it: its return must end with the block the review entry records."
+            ],
+        )
+    recorded = coverage_block(body) or ""
+    divergence = coverage_divergence(recorded, returned)
+    if divergence is not None:
+        _requirements_refusal(
+            key,
+            [
+                f"refused — the recorded input-coverage block differs from the one reviewer "
+                f"{reviewer} returned, at {divergence}.",
+                "Record the reviewer's block unedited, or re-dispatch the reviewer; "
+                "fr never accepts a partition the reviewer did not return.",
+            ],
+        )
 
 
 def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:
@@ -2138,9 +2219,6 @@ def _verify_reviewer(
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
     is refused (review p4-f2) — qualified or bare spelling both match.
     """
-    from fr.run.observed import ChildDispatch, observed_session
-    from fr.run.telemetry import parse_timestamp
-
     phase = target.phase
     implementers = (
         {
@@ -2164,9 +2242,7 @@ def _verify_reviewer(
         raise typer.Exit(2)
     # Through the session protocol (spec 2026-09-29-opencode-observe §A): the
     # dispatch named by the id, among those since the review opened.
-    start = parse_timestamp(opened)
-    view = observed_session(os.environ) if start is not None else None
-    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    dispatched = _reviewer_dispatches(opened)
     observed: ChildDispatch | Literal[False] | None = (
         None
         if dispatched is None
