@@ -1,0 +1,117 @@
+schema_version: 4
+run: 2026-09-29-feat-batch-light-path
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: input-batch-light-path
+    title: Operator input — batch light-path (super-fr#780), verbatim
+    body: |
+      /fr-goal fr-goal light path for small single-phase goals: one review dispatch, one bookkeeping call per step, deliver reuses the verified suite log
+
+      Batch `light-path` of derio-net/super-fr: 1 issues, delivered as ONE pull request.
+
+      ## super-fr#780: fr-goal: a light path for small single-phase goals; the orchestrator's per-step bookkeeping is most of the cost gap to a plain agent
+      Feature C (small, one phase): plain OpenCode $2.13 / 12.8 min / 83 turns; fr-goal take 9 $7.67 / 45 min / 269 turns (≈2.3× money, 2.8× time without #758). The orchestrator carries 76% (193 turns), re-reading its context per bookkeeping step; 3.6 bookkeeping turns/step on OpenCode against 1–2; fr_cli_learning 3.2%.
+      Note: Operator-prioritised for the talk. Feature (fr-goal), batch `light-path` (wave 8): fold plan review into spec review for one-phase plans, one bookkeeping call per step, deliver reuses the executor's verified suite log on an unchanged tree. Target ≤ 2× plain's cost, ≤ 2.5× its time on feature C. After phase-sizing (#745) and the wave-6 skill edits.
+
+      ## Why these belong together
+      Wave 8, the ceremony tax. Take 9 (feature C, one phase) cost ≈2.3× plain's money and ≈2.8× its time without #758; the orchestrator carries 76% of it, re-reading its context on every fr run bookkeeping step. Target from #780: ≤ 2× plain's cost and ≤ 2.5× its time on feature C. Fold plan review into spec review for a one-phase plan; resolve+record+advance in one fr run call; deliver reuses the executor's verified suite log when the tree is unchanged; subagents return structured results. After phase-sizing (#745) and the wave-6 fr-goal skill edits (rebase). Take 10's plain-vs-fr gap is the benchmark.
+
+      ## Delivery rules
+      - Work on branch `feat/batch-light-path`.
+      - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+        Closes derio-net/super-fr#780
+      - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+  - kind: decision
+    id: d1-select-brainstorm-rebind
+    title: Light path is a second shape, reachable at start or by a brainstorm-record rebind
+    body: |
+      Q: How does a run get onto the light path? A: Brainstorm record rebinds (recommended).
+      Ship `fr-goal-light`; the brainstorm record may declare `shape: fr-goal-light` and resolve
+      rebinds the cursor (only at the first step, only onto a shape beginning with it); the
+      operator may also `fr run start fr-goal-light`. The light `plan` step refuses >1 agentic phase.
+  - kind: decision
+    id: d2-reviews-spec-plan-once-code-once
+    title: Light path keeps one spec+plan reviewer dispatch and the per-phase code review
+    body: |
+      Q: Which review dispatches does the light path keep? A: Spec+plan once, code once (recommended).
+      One fr-spec-reviewer dispatch reviews spec and one-phase plan together after the plan is
+      written; `fr plan self-review` stays as a cli step; review-phase with a dispatched reviewer stays.
+  - kind: decision
+    id: d3-one-call-default-all-shapes
+    title: resolve --record advances by default on every shape; advance chains cli steps
+    body: |
+      Q: One bookkeeping call per step — all runs or light only? A: Default, all shapes (recommended).
+      `resolve --record` advances by default (`--no-advance` opts out); `fr run advance` chains
+      consecutive cli steps until the next agent step or first failure.
+  - kind: decision
+    id: d4-suite-reuse-tree-matched
+    title: deliver reuses the latest tree-matched phase suite log, writer verified where readable
+    body: |
+      Q: How does deliver reuse an earlier suite log? A: Latest log, tree-matched (recommended).
+      Executor / review-fix records name `evidence: {tests: <log>}`; fr stores hash + code tree
+      (excluding fr bookkeeping); deliver accepts it while HEAD's code tree matches, else a fresh
+      run is required; writer verified from the subagent transcript where readable, else unobserved.
+      Applies on both shapes.
+  - kind: decision
+    id: d5-context-prose-and-brief-keys
+    title: Context discipline ships as skill prose plus fixed agent return shapes
+    body: |
+      Q: How much of the 'orchestrator context stays small' bullet is in this PR?
+      A: Skill prose + brief keys (recommended). Light-path section in fr-goal SKILL.md with
+      explicit rules; executor and reviewer agent files get a fixed return shape; no new fr code
+      beyond what the other decisions need.
+  - kind: decision
+    id: d6-test-plan-rerun-feature-c
+    title: Post-merge Test Plan reruns the super-fr-3 feature-C benchmark
+    body: |
+      Q: Post-merge Test Plan? A: Rerun feature C (recommended). Operator-driven rerun of the
+      feature-C brief on the light path (take 9/10 base and models), cost and time against plain,
+      result recorded on #780; the target is a `verify: post-merge` acceptance row.
+resolves: []
+acceptance:
+  - id: light-path-shape
+    capability: fr-goal-cost
+    acceptance: A run reaches the fr-goal-light shape by `fr run start fr-goal-light` or a brainstorm-record rebind (first step only, same first step), and the light plan step refuses a plan with more than one agentic phase
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R1
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R2
+    status: not-implemented
+  - id: light-path-one-review
+    capability: fr-goal-cost
+    acceptance: On the light shape one dispatched fr-spec-reviewer reviews spec and plan together under the full spec-review evidence gate, and the per-phase code review still runs
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R3
+    status: not-implemented
+  - id: run-resolve-advances
+    capability: Run
+    acceptance: '`fr run resolve --record` applies the record and advances in the same call (running following cli steps, printing the next brief); `fr run advance` chains consecutive cli steps; `--no-advance` keeps the old behaviour'
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R4
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R5
+    status: not-implemented
+  - id: deliver-suite-reuse
+    capability: fr-goal-cost
+    acceptance: deliver accepts `tests=reuse` only while HEAD's code tree equals the tree of the latest phase unit whose holder-written, fresh suite log fr verified; otherwise it demands a fresh run
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R6
+    status: not-implemented
+  - id: light-path-structured-returns
+    capability: fr-goal-methodology
+    acceptance: fr-goal documents the light path and one-call resolve; the executor returns a fixed shape carrying its suite log, the spec reviewer covers spec and plan, and the orchestrator is told never to open subagent transcripts
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R7
+    status: not-implemented
+  - id: light-path-benchmark
+    capability: fr-goal-cost
+    acceptance: On the super-fr-3 feature-C benchmark the light path costs at most 2x plain's money and 2.5x its time with verified delivery
+    origin:
+      - super-fr:docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md#R8
+    status: not-implemented
+    verify: post-merge
+emitted:
+  spec: docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md
+evidence: {}
