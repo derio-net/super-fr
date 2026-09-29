@@ -1,2 +1,0 @@
-bump: patch
-summary: "`fr spec requirements` reports the decisions, acceptance rows and input entry the brainstorm resolve will write as pending, not as errors; its errors name their section and that section's row shape"
