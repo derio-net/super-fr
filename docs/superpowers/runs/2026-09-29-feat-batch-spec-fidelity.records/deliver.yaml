@@ -1,9 +1,0 @@
-schema_version: 5
-run: 2026-09-29-feat-batch-spec-fidelity
-step: deliver
-outcome: done
-acceptance: []
-emitted:
-  pr: https://github.com/derio-net/super-fr/pull/819
-evidence:
-  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/162a91cf-03fd-4d78-a879-ea25fe65194f/scratchpad/full-suite.log
