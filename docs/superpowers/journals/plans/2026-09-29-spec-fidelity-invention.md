@@ -112,3 +112,50 @@ unconfirmed_refusal(finding_id) -> str; _refuse_unconfirmed raises directly; cal
 ### p1-r4-backtick-info-string-resolved · finding [fixed] · resolves p1-r4-backtick-info-string: A backtick run with a backtick in its info string opened a fence (phase 1)
 
 A backtick run whose info string holds a backtick no longer opens a fence. Test: test_a_backtick_run_with_a_backtick_in_its_info_string_is_not_a_fence (8dd3156a).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-acceptance-via-set-status created=2026-09-29T08:29:58+00:00 phase=2 -->
+### p2-acceptance-via-set-status · discovery · Acceptance rows moved with `fr acceptance set-status` (phase 2) (phase 2)
+
+An implement-phase record cannot carry `acceptance:`, so
+spec-fidelity-delegated-decisions and spec-fidelity-pr-design-inventory were moved to `ci`
+with `fr acceptance set-status ... --level unit=...` (commits 10dce7cc, b10a29c8);
+`fr acceptance check` is green.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-traced-fixture-cannot-carry-fidelity created=2026-09-29T08:29:58+00:00 phase=2 -->
+### p2-traced-fixture-cannot-carry-fidelity · discovery · The legacy-unconfirmed PR-body fixture cannot coexist with live fidelity evidence (phase 2) (phase 2)
+
+test_deliver_pr_body's `_traced_run_at_deliver` holds an `unconfirmed` spec finding,
+which the `fidelity` witness always refuses. The Design-inventory tests therefore patch
+the loaded state with `fidelity` evidence naming a second review entry (`_with_fidelity`)
+rather than deriving it live. The delegated listing precedes any legacy unconfirmed line.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-inventory-block-extractor created=2026-09-29T08:29:58+00:00 phase=2 -->
+### p2-inventory-block-extractor · discovery · fr.fidelity gained a public inventory_block extractor (phase 2) (phase 2)
+
+Phase 1's module only had the private `_one_block`; the PR body needs the fenced block
+itself (fences included, like `coverage_block`), so `inventory_block(review_body)` was added
+beside it and returns None unless there is exactly one block.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-brainstorming-skill-line-cap created=2026-09-29T08:29:58+00:00 phase=2 -->
+### p2-brainstorming-skill-line-cap · discovery · fr-brainstorming SKILL.md sits at the 120-line cap (phase 2) (phase 2)
+
+test_under_120_lines forced the delegated-answer sentence onto one long line instead of
+five wrapped ones. Further additions there need trimming elsewhere.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-explainer-regenerated created=2026-09-29T08:29:58+00:00 phase=2 -->
+### p2-explainer-regenerated · discovery · 01-fr-goal.html regenerated; renderer verified byte-identical first (phase 2) (phase 2)
+
+The blog-craft renderer resolved at the marketplace path. Run from `/` with
+`uv run --isolated --no-project --with markdown --with pyyaml`, the unmodified .md
+re-rendered byte-identical to the committed .html; after the prose edit only the edited
+paragraphs changed. test_tripwire_explainers_fresh is green. Nothing owed.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-09-29T08:29:58+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+one new field threaded through existing seams (model, parse, CLI, record item); the migration module is a copy of record_visual by design, nothing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-09-29T08:29:58+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the new _design_inventory deliberately mirrors _input_coverage; extracting a shared helper would couple two sections whose miss-messages differ
