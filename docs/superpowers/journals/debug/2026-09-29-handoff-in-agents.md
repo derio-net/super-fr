@@ -29,3 +29,8 @@ Naming agent: on review-phase records agent_type on the review unit (run_cmd.py 
 ### rv-reviewer-counted-as-implementer-resolved · finding [fixed] · resolves rv-reviewer-counted-as-implementer: A claimed fr-phase-reviewer is refused as the phase's implementer
 
 run_cmd._verify_reviewer excludes the review unit's own key from implementers; pinned by test_the_reviewer_holding_its_own_review_unit_is_not_an_implementer (failed first with 'IMPLEMENTED phase 1').
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-09-29T11:59:03+00:00 -->
+### review-1 · review · Independent adversarial review (separate subagent context)
+
+Two in-scope findings, both fixed: (1) rv-reviewer-counted-as-implementer — a claimed fr-phase-reviewer refused as implementer (code fix + test); (2) fr-goal §6 said the reviewer fills the record's visual: section while the agent writes nothing — reworded so the orchestrator fills it from the reviewer's return. Noted, not a defect: review-phase remains untyped-enforced (expected_agent only on flat steps), consistent with the manifest comment. Checked fine: handoff invocation/exit codes, cursor drift, enumerations, harness neutrality, guard hook.
