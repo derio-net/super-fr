@@ -239,6 +239,38 @@ def test_deferred_empty_reason_is_error() -> None:
         parse_requirements(text)
 
 
+def test_deferred_row_error_names_its_section_and_row_shape() -> None:
+    """#776 reopened (take 10 run A): a Deferred row error was labelled
+    `## Requirements` and named no row shape, so the agent deleted the
+    section. It names its own section and that section's row shape."""
+    text = REQ_ONE + "\n## Deferred from input\n\n| input | reason |\n|---|---|\n| x | later |\n"
+    with pytest.raises(RequirementsError) as exc:
+        parse_requirements(text)
+    msg = str(exc.value)
+    assert msg.startswith("`## Deferred from input`")
+    assert '| "<verbatim quote>" | <reason> |' in msg
+    problems = check_requirements(
+        text, [_input_entry("i1", "the quick brown fox")], _matrix(), "widget:spec.md"
+    )
+    assert problems and all("`## Requirements`:" not in p for p in problems)
+    assert any(p.startswith("`## Deferred from input`") for p in problems)
+
+
+def test_deferred_wrong_column_count_names_the_row_shape() -> None:
+    text = REQ_ONE + '\n## Deferred from input\n\n| input | reason |\n|---|---|\n| "x" | a | b |\n'
+    with pytest.raises(RequirementsError, match=r"expected 2 columns.*\| \"<verbatim quote>\""):
+        parse_requirements(text)
+
+
+def test_requirements_row_error_names_its_section_and_row_shape() -> None:
+    text = "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n| X1 | x | decision d |\n"
+    with pytest.raises(RequirementsError) as exc:
+        parse_requirements(text)
+    msg = str(exc.value)
+    assert msg.startswith("`## Requirements`")
+    assert "| R<n> | <requirement> | <source> |" in msg
+
+
 def test_deferred_absent_is_fine() -> None:
     assert parse_requirements(REQ_ONE).deferred == ()
 
@@ -315,19 +347,60 @@ def test_no_input_entry_is_a_problem() -> None:
 
 def test_pending_input_entry_is_not_a_problem_before_resolve() -> None:
     """#776: the pre-check runs before the brainstorm resolve that writes the
-    input entry; with `input_pending=True` its absence (and the quotes it
-    would match) is not reported. The resolve gate never passes the flag."""
+    input entry; with a `pending` list its absence (and the quotes it would
+    match) is reported there, not as a problem. The resolve gate never
+    passes one."""
     matrix = _matrix("widget:spec.md#R1")
-    assert check_requirements(REQ_ONE, [], matrix, "widget:spec.md", input_pending=True) == []
+    pending: list[str] = []
+    assert check_requirements(REQ_ONE, [], matrix, "widget:spec.md", pending=pending) == []
+    assert any(p.startswith("input entry:") for p in pending)
     strict = check_requirements(REQ_ONE, [], matrix, "widget:spec.md")
     assert any("no input entry" in p for p in strict)
 
 
-def test_input_pending_still_checks_quotes_once_the_entry_exists() -> None:
+def test_pending_still_checks_quotes_once_the_input_entry_exists() -> None:
     matrix = _matrix("widget:spec.md#R1")
     entries = [_input_entry("i1", "something else entirely")]
-    problems = check_requirements(REQ_ONE, entries, matrix, "widget:spec.md", input_pending=True)
+    pending: list[str] = []
+    problems = check_requirements(REQ_ONE, entries, matrix, "widget:spec.md", pending=pending)
     assert any("does not match any input entry" in p for p in problems)
+    assert pending == []
+
+
+def test_pending_treats_a_decision_the_resolve_writes_as_pending() -> None:
+    """#776 reopened (take 10): the brainstorm record writes its decisions in
+    the same resolve, so before it a cited decision id absent from the
+    journal is pending, not a problem. Strict mode still refuses it."""
+    text = REQ_ONE.replace('input "the quick brown fox"', "decision d-scan")
+    entries = [_input_entry("i1", "irrelevant")]
+    matrix = _matrix("widget:spec.md#R1")
+    pending: list[str] = []
+    assert check_requirements(text, entries, matrix, "widget:spec.md", pending=pending) == []
+    assert any("d-scan" in p and "journal:" in p for p in pending)
+    assert any(
+        "not a `kind=decision`" in p
+        for p in check_requirements(text, entries, matrix, "widget:spec.md")
+    )
+
+
+def test_pending_still_refuses_a_decision_id_naming_another_kind() -> None:
+    """An id already in the journal is not the resolve's to write: citing a
+    non-decision entry is wrong now and stays wrong after the resolve."""
+    text = REQ_ONE.replace('input "the quick brown fox"', "decision i1")
+    entries = [_input_entry("i1", "irrelevant")]
+    matrix = _matrix("widget:spec.md#R1")
+    pending: list[str] = []
+    problems = check_requirements(text, entries, matrix, "widget:spec.md", pending=pending)
+    assert any("not a `kind=decision`" in p for p in problems)
+
+
+def test_pending_treats_an_uncited_requirement_as_pending() -> None:
+    """#776 reopened: the record's `acceptance:` rows are staged by the same
+    resolve, so an uncited requirement is pending before it."""
+    entries = [_input_entry("i1", "the quick brown fox")]
+    pending: list[str] = []
+    assert check_requirements(REQ_ONE, entries, _matrix(), "widget:spec.md", pending=pending) == []
+    assert any("widget:spec.md#R1" in p and "acceptance:" in p for p in pending)
 
 
 def test_unknown_decision_id_is_a_problem() -> None:

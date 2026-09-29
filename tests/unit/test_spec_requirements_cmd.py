@@ -134,3 +134,28 @@ def test_requirements_cmd_reports_a_missing_input_entry_as_pending(
     assert "no input entry" not in result.output
     assert "does not match" not in result.output
     assert "1 requirements" in result.output
+
+
+def test_requirements_cmd_reports_what_the_resolve_writes_as_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#776 reopened (take 10): before the brainstorm resolve, a decision and a
+    matrix row its record writes are pending — exit 0, listed — not a
+    refusal the agent reads as an error to fix."""
+    monkeypatch.chdir(tmp_path)
+    Path("spec.md").write_text(
+        "# Spec\n\n## Requirements\n\n"
+        "| id | requirement | source |\n"
+        "|---|---|---|\n"
+        '| R1 | x | input "q"<br>decision d-scan |\n'
+    )
+    _write_matrix(Path("matrix.yaml"), origin="widget:other.md#R9")
+
+    from fr.cli import app
+
+    result = CliRunner().invoke(app, ["spec", "requirements", "spec.md", "--matrix", "matrix.yaml"])
+    assert result.exit_code == 0, result.output
+    assert "1 requirements" in result.output
+    assert "d-scan" in result.output
+    assert "widget:spec.md#R1" in result.output
+    assert "pending" in result.output
