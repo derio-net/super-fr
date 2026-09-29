@@ -4562,9 +4562,16 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fidelity.py
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+    status: ci
+    notes: 'fr.fidelity.parse_design_sections reads the ### subsections of ## Design
+      fence-aware; check_inventory refuses a missing, reordered, non-contiguous or unknown
+      section, an unknown R/decision id, an invented id that is not a finding, a none
+      backing beside a behaviour and a mis-celled row; the fidelity evidence on spec-review
+      derives from it (Test Plan 2, 3).'
   - id: spec-fidelity-remove-only
     capability: fr-goal-methodology
     acceptance: An invented or reinterpreted spec finding blocks spec-review until the
