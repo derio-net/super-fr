@@ -1,5 +1,6 @@
 """The `record` kind's version-5 migration — spec
-`2026-09-29-spec-fidelity-invention-design.md` §E: `JournalItem.delegated` on an `extra="forbid"` model, so a stamp bump + a
+`2026-09-29-spec-fidelity-invention-design.md` §E: `JournalItem.delegated` on an
+`extra="forbid"` model, so a stamp bump + a
 registered migration + the validator, per
 `.claude/rules/artifact-versioning.md`. Nothing is removed or moved, so no
 frozen legacy model; stamp only, no body rewrite.
