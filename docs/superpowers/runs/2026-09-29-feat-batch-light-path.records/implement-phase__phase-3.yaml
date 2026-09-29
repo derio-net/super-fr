@@ -1,0 +1,78 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-09-29-feat-batch-light-path --step implement-phase --item phase/3 --record docs/superpowers/runs/2026-09-29-feat-batch-light-path.records/implement-phase__phase-3.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 5
+run: 2026-09-29-feat-batch-light-path
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3, P3.T2.S1, P3.T2.S2, P3.T2.S3, P3.T3.S1, P3.T3.S2, P3.T3.S3, P3.T3.S4]
+refactor:
+  P3.T3: "prose, mirrors and one explainer paragraph: no code was written in this task, so there was nothing to refactor"
+journal:
+  - kind: decision
+    id: p3-rebind-validated-twice-applied-once
+    title: the rebind's three rules live in one helper, run before any write and again where resolve rewrites the cursor (phase 3)
+    body: |
+      `run_cmd._rebind_shape(state, manifest, step_id, target, repo_root)` holds the
+      three §A rules and their refusal text and returns the target manifest (or `None`
+      for a same-shape no-op). `apply_record`'s `_run_context` calls it before the
+      overlay writes anything, so a refused rebind leaves HEAD and the tree
+      byte-identical; `_resolve_body` calls it again inside its parse block (exit 2 on
+      a refusal) and, only on a `done` resolve, swaps in `_rebound(...)` — the target's
+      fresh `pending` step records, the first step's record carried over — right
+      before `_complete_step`, so the cursor moves along the NEW list and the rewrite
+      rides the record's one commit. A `failed`/`blocked` brainstorm record with a
+      `shape:` is validated but rebinds nothing. The helper's signature takes the
+      current manifest and step id beyond the plan's `(state, target, repo_root)`,
+      because rule 1 needs the first step of the CURRENT shape.
+  - kind: decision
+    id: p3-same-shape-checked-first
+    title: a same-shape `shape:` is a no-op on any step, checked before the first-step rule (phase 3)
+    body: |
+      Spec §A lists "the target is not the run's current shape" as rule 3, and calls
+      a same-shape declaration a no-op. It is checked first, so a record re-declaring
+      the run's own shape is idempotent wherever it sits rather than refused as a
+      late rebind. Only a CHANGE of shape is held to rules 1 and 2.
+  - kind: decision
+    id: p3-single-phase-witness
+    title: single-phase records `phase <n>`; zero agentic phases is refused too (phase 3)
+    body: |
+      `_single_phase_witness` reads the tags of the plan this resolve emits (else the
+      run's recorded plan) via `plan_phase_tags`, and records `phase <n>` for the one
+      agentic phase. Spec §A says "exactly one phase that is not [manual]", so a plan
+      of only manual phases is refused as well (`this plan has 0 (none)`). It is added
+      to `_VERIFIABLE_EVIDENCE`, `_DERIVED_EVIDENCE` and `_DERIVED_FROM`, so passing
+      `--evidence single-phase=` is refused as derived.
+  - kind: discovery
+    id: p3-light-path-rows-owed
+    title: rows light-path-shape, light-path-one-review and light-path-structured-returns now have unit evidence; implement-phase cannot move them (phase 3)
+    body: |
+      `tests/unit/test_run_light_shape.py` verifies R1–R3 (shape resolves and checks
+      clean; brainstorm-record rebind and its three refusals; single-phase refusal and
+      the manual-phase pass; spec-plan-review's evidence gate), and
+      `tests/unit/test_skill_light_path.py` pins R7's prose. The rows are still
+      `not-implemented`; implement-phase does not emit `acceptance`, so the moves
+      (`light-path-shape`, `light-path-one-review` → `--level
+      unit=super-fr:tests/unit/test_run_light_shape.py`; `light-path-structured-returns`
+      → `--level unit=super-fr:tests/unit/test_skill_light_path.py`) belong to deliver.
+  - kind: discovery
+    id: p3-explainer-rendered-from-worktree
+    title: the explainer was rendered from the worktree, not `/` — the bash guard refuses `cd /`; the unmodified render was byte-identical first (phase 3)
+    body: |
+      The fr-isolation bash guard refuses a `cd /` while the pipeline is active. With
+      `uv run --isolated --no-project --with markdown --with pyyaml` run from the
+      worktree, the unmodified `01-fr-goal.md` re-rendered byte-identical to the
+      committed `.html` (cmp), so `--isolated` alone closed the pygments leak here; the
+      real render then added exactly the one new paragraph.
+  - kind: discovery
+    id: p3-visual-hop-test-relaxed
+    title: the 3 -> 4 record hop test now asserts its hop inside the chain, not the chain's end (phase 3)
+    body: |
+      `test_migration_record_visual.py` pinned `RECORD_SCHEMA_VERSION == 4` and a chain
+      ending at `(3, 4)`. It now asserts the 3 -> 4 hop exists and is the third of the
+      chain from 1, and stamps to the live version — the pattern
+      `test_migration_record_input_unconfirmed.py` already follows. The full chain
+      `[(1,2),(2,3),(3,4),(4,5)]` is asserted by `test_migration_record_shape.py`.
+resolves: []
+evidence: {}
