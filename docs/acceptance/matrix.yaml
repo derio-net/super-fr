@@ -4716,6 +4716,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
+  - id: spec-contract-plain-requirements
+    capability: fr-goal-methodology
+    acceptance: A spec's Requirements section is a plain R<n> list with no quote, source
+      or gate; the parser also reads a pre-5.0 three-column table, and phase sizing
+      and visual evidence work on both
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
