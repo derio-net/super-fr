@@ -32,9 +32,9 @@ from tests.unit.test_run_cli import (
 )
 from tests.unit.test_run_evidence import _journal
 from tests.unit.test_run_evidence_separate_context import (
-    _SHAPE,
     _AGENT_SPEC_SHAPE,
     _REVIEW,
+    _SHAPE,
     _at_the_review,
     _at_the_spec_review,
     _review_evidence,
