@@ -35,6 +35,7 @@ from fr.parser import parse as _parse_v2
 from fr.plan.parser import _RE_STEP, _strip_fenced_regions
 from fr.plan.parser import parse_plan as _parse_v1
 from fr.plan_config import strip_dead_keys
+from fr.version_floor import CEILING_VERSION
 
 
 class MigrationError(Exception):
@@ -278,8 +279,8 @@ def _migrate_one(
         "spec": refs.canonical_spec_ref(v1plan.spec, repo_root) if v1plan.spec else v1plan.spec,
         "target_repo": resolved_target,
         # Match `fr plan create`'s default (fr_version) — migrated plans are v2 plans (#245).
-        # Widened past the 4.0.0 major bump, same reasoning as plan_cmd.py's default.
-        "fr_version": ">=3.0.0,<5.0.0",
+        # The ceiling is derived, same reasoning as plan_cmd.py's default.
+        "fr_version": f">=3.0.0,<{CEILING_VERSION}",
         "created": slug[:10],  # YYYY-MM-DD prefix is enforced above
     }
     if parent_plan:

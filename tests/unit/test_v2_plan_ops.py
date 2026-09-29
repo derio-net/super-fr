@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fr.version_floor import CEILING_VERSION
 
 
 def _make_repo(tmp_path: Path) -> Path:
@@ -50,7 +51,7 @@ def test_create_scaffolds_folder_and_appends_spec_row(tmp_path):
         slug="2026-05-10-fixture-create",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -79,7 +80,7 @@ def test_create_rejects_existing_folder_with_mismatched_content(tmp_path):
         slug="2026-05-10-dup",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -115,7 +116,7 @@ def test_create_appends_row_even_when_spec_body_backticks_the_slug(tmp_path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -158,7 +159,7 @@ def _create_args(repo, spec_path, slug):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -230,7 +231,7 @@ def test_create_rejects_spec_with_mislabeled_table_header(tmp_path):
             slug=slug,
             spec=str(spec_path.relative_to(repo)),
             target_repo="derio-net/test",
-            fr_version=">=1.0.0,<5.0.0",
+            fr_version=f">=1.0.0,<{CEILING_VERSION}",
             phases=[PhaseSpec(number=1, title="t", tasks=())],
             prose="# x\n",
         )
@@ -257,7 +258,7 @@ def test_create_no_table_error_names_the_header_and_creates_nothing(tmp_path):
             slug=slug,
             spec=str(spec_path.relative_to(repo)),
             target_repo="derio-net/test",
-            fr_version=">=1.0.0,<5.0.0",
+            fr_version=f">=1.0.0,<{CEILING_VERSION}",
             phases=[PhaseSpec(number=1, title="t", tasks=())],
             prose="# x\n",
         )
@@ -310,7 +311,7 @@ def test_create_repairs_matching_existing_folder_idempotently(tmp_path):
         slug="2026-05-10-repair",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -345,7 +346,7 @@ def test_create_rerun_after_spec_is_written_appends_row_and_canonicalizes(tmp_pa
         slug="2026-05-10-later",
         spec=spec_rel,
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -372,7 +373,7 @@ def test_create_rerun_canonicalization_keeps_created_and_stages_meta(tmp_path):
         slug="2026-05-10-dated",
         spec="docs/superpowers/specs/2026-05-10-dated-spec.md",
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -415,7 +416,7 @@ def test_create_rerun_over_a_corrupted_spec_line_is_a_collision(tmp_path, corrup
         slug="2026-05-10-corrupt",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -443,7 +444,7 @@ def test_create_rerun_with_a_different_spec_is_still_a_collision(tmp_path):
         repo_root=repo,
         slug="2026-05-10-two",
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -465,7 +466,7 @@ def test_create_rejects_existing_folder_with_stale_extra_phase(tmp_path):
         slug="2026-05-10-stale",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         prose="# x\n",
     )
     create(
@@ -778,7 +779,7 @@ def _purity_plan(tmp_path, *, phase1_tag="agentic", step_text="Run the test suit
         slug="2026-06-04-purity",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -1254,7 +1255,7 @@ def test_create_rejects_phase_zero_before_writing(tmp_path):
             slug="2026-06-04-zero-phase",
             spec=str(spec_path.relative_to(repo)),
             target_repo="derio-net/test",
-            fr_version=">=3.0.0,<5.0.0",
+            fr_version=f">=3.0.0,<{CEILING_VERSION}",
             phases=[
                 PhaseSpec(number=0, title="Prereqs", tag="manual"),
                 PhaseSpec(number=1, title="Build", tag="agentic"),
@@ -1280,7 +1281,7 @@ def test_self_review_warns_on_overlong_plan_label(tmp_path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -1304,7 +1305,7 @@ def test_self_review_overlong_lint_checks_the_normalized_label(tmp_path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -1325,7 +1326,7 @@ def test_self_review_warns_on_unresolvable_same_repo_spec(tmp_path):
         slug="2026-05-10-specwarn",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -1355,7 +1356,7 @@ def test_self_review_no_spec_warning_for_valid_cross_repo_form(tmp_path):
         slug="2026-05-10-xrepo",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -1474,7 +1475,7 @@ def test_create_writes_bare_slug_file_cell(tmp_path):
         slug="2026-06-06-slugcell",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# p\n",
     )
@@ -1566,7 +1567,7 @@ def _skeleton_plan(tmp_path, *, skeleton_on=()):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -1640,7 +1641,7 @@ def test_self_review_errors_when_first_phase_is_manual_only(tmp_path):
         slug="2026-09-09-manual-only",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -1751,7 +1752,7 @@ def _sole_skeleton_plan(tmp_path, *, with_manual=False, marked=True):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=4.2.0,<5.0.0",
+        fr_version=f">=4.2.0,<{CEILING_VERSION}",
         phases=phases,
         prose="# x\n",
     )
@@ -1785,7 +1786,9 @@ def test_a_sole_marked_phase_still_gets_the_fr_version_floor_error(tmp_path):
     that marks a skeleton while admitting a pre-marker fr still fails."""
     plan_dir = _sole_skeleton_plan(tmp_path)
     meta = plan_dir / "_meta.yaml"
-    meta.write_text(meta.read_text().replace(">=4.2.0,<5.0.0", ">=3.0.0,<5.0.0"))
+    meta.write_text(
+        meta.read_text().replace(f">=4.2.0,<{CEILING_VERSION}", f">=3.0.0,<{CEILING_VERSION}")
+    )
     issues = _skeleton_issues(plan_dir)
 
     assert any("floor it at" in i.message for i in issues), issues
@@ -1824,7 +1827,7 @@ def _refactor_plan(tmp_path, *, step_texts=(), tag="agentic", ticked=False):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,
@@ -1943,7 +1946,7 @@ def _tiered(tmp_path, tier=None):
         slug="2026-09-20-tiered",
         spec=None,
         target_repo="derio-net/test",
-        fr_version=">=4.2.0,<5.0.0",
+        fr_version=f">=4.2.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="Build", tag="agentic", skeleton=True, **kwargs)],
         prose="# x\n",
     ).dir

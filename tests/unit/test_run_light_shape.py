@@ -22,6 +22,7 @@ from fr.journal.model import JournalEntry, append_journal_entry, journal_path
 from fr.record.model import RECORD_SCHEMA_VERSION
 from fr.run import units
 from fr.run.model import load_run_state
+from fr.version_floor import CEILING_VERSION
 from fr.workflow.check import check_workflow
 from fr.workflow.resolve import resolve_workflow
 
@@ -258,7 +259,7 @@ def _plan(root: Path, slug: str, tags: list[str]) -> str:
         slug=slug,
         spec=SPEC_REL,
         target_repo="derio-net/super-fr",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=n,

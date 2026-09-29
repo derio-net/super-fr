@@ -34,6 +34,7 @@ from fr.artifacts.commit import (
 )
 from fr.artifacts.runner import MigrationReport, PlannedAction
 from fr.cli import app
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 # --- fixtures ------------------------------------------------------------
@@ -173,7 +174,7 @@ def test_the_migrated_content_is_what_landed(tmp_path: Path) -> None:
 
     commit_migration(root, _migrate(root))
 
-    assert "<5.0.0" in _at_head(root, "docs/superpowers/plans/p/_meta.yaml")
+    assert f"<{CEILING_VERSION}" in _at_head(root, "docs/superpowers/plans/p/_meta.yaml")
 
 
 # --- the cases that must not commit --------------------------------------
@@ -189,7 +190,7 @@ def test_not_a_git_repo_migrates_without_committing_and_does_not_crash(tmp_path:
     assert isinstance(outcome, CommitOutcome)
     assert not outcome.committed
     assert "git" in outcome.reason.lower()
-    assert "<5.0.0" in p.read_text(), "the migration itself must still have happened"
+    assert f"<{CEILING_VERSION}" in p.read_text(), "the migration itself must still have happened"
 
 
 def test_nothing_changed_makes_no_empty_commit(tmp_path: Path) -> None:
