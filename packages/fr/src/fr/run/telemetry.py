@@ -55,7 +55,7 @@ import datetime as _dt
 import json
 import os
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypeGuard
@@ -568,36 +568,71 @@ def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | N
     records = _read_records(transcript)
     if records is None:
         return None
-    groups: list[tuple[list[str], list[str]]] = []  # (tool_use ids, question texts)
+
+    def events() -> Iterator[RoundEvent]:
+        for record in records:
+            if record.get("type") != "assistant" or record.get("isSidechain") is True:
+                continue
+            stamp = parse_timestamp(record.get("timestamp"))
+            message = record.get("message")
+            content = message.get("content") if isinstance(message, Mapping) else None
+            for block in content if isinstance(content, list) else ():
+                if not isinstance(block, Mapping) or block.get("type") != "tool_use":
+                    continue
+                name = str(block.get("name"))
+                block_id = block.get("id")
+                yield (
+                    name,
+                    block_id if isinstance(block_id, str) else None,
+                    _question_texts(block.get("input")) if name == QUESTION_TOOL else [],
+                    stamp,
+                )
+
+    return question_rounds(
+        events(),
+        start,
+        question_tool=QUESTION_TOOL,
+        neutral=ROUND_NEUTRAL_TOOLS,
+        answered=lambda: _answered_ids(records),
+    )
+
+
+RoundEvent = tuple[str, str | None, list[str], _dt.datetime | None]
+"""One tool call as the round rule reads it: `(tool name, call id, question
+texts, when issued)` — the whole of what either harness's reader hands over."""
+
+
+def question_rounds(
+    events: Iterable[RoundEvent],
+    start: _dt.datetime,
+    *,
+    question_tool: str,
+    neutral: frozenset[str],
+    answered: Callable[[], set[str]],
+) -> list[Round]:
+    """THE round rule (spec 2026-09-26 §3.C), shared by the Claude Code and
+    OpenCode readers so the two cannot drift: consecutive `question_tool` calls
+    issued at or after `start` form one round; a `neutral` call does not break
+    it; any other tool call closes it. A round counts when any of its call ids
+    is in `answered()` (called only when some round exists)."""
+    groups: list[tuple[list[str], list[str]]] = []  # (call ids, question texts)
     open_group: tuple[list[str], list[str]] | None = None
-    for record in records:
-        if record.get("type") != "assistant" or record.get("isSidechain") is True:
+    for tool, call_id, texts, stamp in events:
+        if stamp is None or stamp < start or tool in neutral:
             continue
-        stamp = parse_timestamp(record.get("timestamp"))
-        if stamp is None or stamp < start:
+        if tool != question_tool or call_id is None:
+            open_group = None
             continue
-        message = record.get("message")
-        content = message.get("content") if isinstance(message, Mapping) else None
-        for block in content if isinstance(content, list) else ():
-            if not isinstance(block, Mapping) or block.get("type") != "tool_use":
-                continue
-            if block.get("name") in ROUND_NEUTRAL_TOOLS:
-                continue
-            if block.get("name") != QUESTION_TOOL or not isinstance(block.get("id"), str):
-                open_group = None
-                continue
-            if open_group is None:
-                open_group = ([], [])
-                groups.append(open_group)
-            open_group[0].append(block["id"])
-            open_group[1].extend(_question_texts(block.get("input")))
+        if open_group is None:
+            open_group = ([], [])
+            groups.append(open_group)
+        open_group[0].append(call_id)
+        open_group[1].extend(texts)
     if not groups:
         return []
-    answered = _answered_ids(records)
+    done = answered()
     return [
-        Round(question_texts=tuple(texts))
-        for ids, texts in groups
-        if any(i in answered for i in ids)
+        Round(question_texts=tuple(texts)) for ids, texts in groups if any(i in done for i in ids)
     ]
 
 
@@ -1090,7 +1125,10 @@ def orchestrator_wrote_since(
     these windows, which ties the bytes on disk to that command.
 
     Claude Code reads this session's transcript; OpenCode reads its session
-    database (`_opencode_wrote_since`, gh#638). Any other harness is `None`.
+    database (gh#638) — scoped to the run session when the super-fr plugin
+    exported it, else every top-level session active since (spec
+    2026-09-29-opencode-observe §A, `fr.run.observed.opencode_unscoped`). Both
+    go through `fr.run.observed`. Any other harness is `None`.
 
     BE HONEST ABOUT THE LIMIT (review r1-1): this proves the orchestrator
     produced the log, in this session, during delivery. It cannot prove the
@@ -1098,13 +1136,16 @@ def orchestrator_wrote_since(
     not the drift this gate closes (relaying someone else's green), and
     closing it needs a per-repo test-runner declaration fr does not have.
     """
+    from fr.run.observed import observed_session, opencode_unscoped
+
     start = parse_timestamp(since)
-    if start is not None and detect_harness(env) == OpenCodeReader.harness:
-        return _opencode_wrote_since(env, log, start)
-    session = _this_session(env)
-    if start is None or session is None:
+    if start is None:
         return None
-    return orchestrator_wrote_in(session, log, start)
+    opencode = detect_harness(env) == OpenCodeReader.harness
+    view = observed_session(env)
+    if view is not None:
+        return view.wrote_windows(log, start)
+    return opencode_unscoped(env).wrote_windows(log, start) if opencode else None
 
 
 def orchestrator_wrote_in(
@@ -1286,102 +1327,6 @@ def _ms_to_dt(value: object) -> _dt.datetime | None:
     if not isinstance(value, int | float) or isinstance(value, bool):
         return None
     return _dt.datetime.fromtimestamp(value / 1000, tz=_dt.UTC)
-
-
-def _opencode_wrote_since(
-    env: Mapping[str, str], log: Path, start: _dt.datetime
-) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
-    """`orchestrator_wrote_since` over OpenCode's database (gh#638): the
-    `(start, end)` of every `bash` tool part that WROTE `log`, started at or
-    after `start`, completed with exit 0 — in a TOP-LEVEL session, the
-    orchestrator's (a `task` subagent is a child session, `parent_id` set).
-    `None` when the database cannot be read.
-
-    Before this, OpenCode had no reader, so the gate degraded to "a fresh,
-    non-empty file" and accepted a log the agent composed with its edit tool.
-
-    No OpenCode session id reaches fr's environment, so this cannot pin THE
-    session the way the Claude Code reader does: any top-level session active
-    since the unit opened counts. Weaker than one session, still proof that an
-    orchestrator's own shell command produced the bytes — which is the drift
-    this gate closes. Exit 0 stands in for Claude Code's `is_error`, which a
-    non-zero exit sets.
-
-    A READABLE database is not necessarily the right one (gh#740: OpenCode ran
-    under `XDG_DATA_HOME`, fr read `~/.local/share`). The orchestrator calling
-    this is itself mid-`bash`, a part of its session, so a database that
-    recorded no part at all since the unit opened cannot hold it: that is
-    `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
-    Activity is read from `part`, not `session.time_updated`, which nothing
-    shows OpenCode bumps per part.
-    """
-    import sqlite3
-    from contextlib import closing
-
-    from fr.usage.readers.opencode import open_ro
-
-    since_ms = int(start.timestamp() * 1000)
-    try:
-        with closing(open_ro(OpenCodeReader().database(env))) as con:
-            (active,) = con.execute(
-                "SELECT EXISTS (SELECT 1 FROM part WHERE time_updated >= ?)", (since_ms,)
-            ).fetchone()
-            rows = con.execute(
-                "SELECT p.data FROM part p JOIN session s ON s.id = p.session_id "
-                "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
-                (since_ms,),
-            ).fetchall()
-    except sqlite3.Error:
-        return None
-    if not active:
-        return None
-    calls: list[_BashCall] = []
-    for (raw,) in rows:
-        try:
-            part = json.loads(raw) if isinstance(raw, str | bytes) else None
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(part, Mapping) or part.get("tool") != "bash":
-            continue
-        state = part.get("state")
-        state = state if isinstance(state, Mapping) else {}
-        tool_input = state.get("input")
-        command = tool_input.get("command") if isinstance(tool_input, Mapping) else None
-        meta = state.get("metadata")
-        meta = meta if isinstance(meta, Mapping) else {}
-        output = state.get("output")
-        output = output if isinstance(output, str) else meta.get("output")
-        times = state.get("time")
-        times = times if isinstance(times, Mapping) else {}
-        began, ended = _ms_to_dt(times.get("start")), _ms_to_dt(times.get("end"))
-        if (
-            state.get("status") == "completed"
-            and isinstance(command, str)
-            and began is not None
-            and ended is not None
-            and began >= start
-        ):
-            exit_code = meta.get("exit")
-            calls.append(
-                _BashCall(
-                    began,
-                    ended,
-                    command,
-                    exit_code if type(exit_code) is int else None,
-                    output if isinstance(output, str) else "",
-                )
-            )
-    calls.sort(key=lambda c: (c.began, c.ended))
-    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
-    for call in calls:
-        if call.exit_code != 0 or not _writes(call.command, log):
-            continue
-        windows.append((call.began, call.ended))
-        if _detaches(call.command):
-            seen = _seen_exit(call, calls, log)
-            if seen is not None:
-                windows.append((call.began, seen))
-    return windows
 
 
 @dataclass(frozen=True)

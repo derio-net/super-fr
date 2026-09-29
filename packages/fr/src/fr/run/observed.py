@@ -15,10 +15,15 @@ on: `None` = could not read, `False` / `[]` = read and found nothing.
 from __future__ import annotations
 
 import datetime as _dt
-from collections.abc import Mapping
+import json
+import os
+import re
+import sqlite3
+from collections.abc import Callable, Mapping
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 if TYPE_CHECKING:
     from fr.run.telemetry import Round
@@ -156,11 +161,366 @@ class ClaudeCodeSession:
         return orchestrator_wrote_in(self.transcript, log, since)
 
 
-@dataclass
+# --- OpenCode -------------------------------------------------------------
+
+OPENCODE_QUESTION_TOOL = "question"
+"""OpenCode's operator-question tool (live 1.18.33): `state.input.questions[]`,
+answered `status: completed` with `state.metadata.answers: [[str]]`, declined
+`status: error`, pending `status: running`."""
+
+OPENCODE_ROUND_NEUTRAL_TOOLS = frozenset({"todowrite", "todoread"})
+"""OpenCode's counterpart of `telemetry.ROUND_NEUTRAL_TOOLS`: its own
+progress-tracking tools, which do not close a question round."""
+
+_TASK_RESULT = re.compile(r"<task_result>(.*)</task_result>", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class ToolPart:
+    """One `part.data` of type `tool`, its `state` parsed once — the ONE place
+    the bash, read, question and task readers take a part's status, input,
+    metadata, output and times from."""
+
+    session: str
+    tool: str
+    call_id: str | None
+    status: str | None
+    input: Mapping[str, Any]
+    metadata: Mapping[str, Any]
+    output: str | None
+    began: _dt.datetime | None
+    ended: _dt.datetime | None
+
+
+def tool_part(session: str, raw: object, created_ms: object = None) -> ToolPart | None:
+    """`raw` (a `part.data` JSON string) as a `ToolPart`, or `None` when it is
+    not a tool part. `began` is `state.time.start`, else the row's
+    `time_created`."""
+    from fr.run.telemetry import _ms_to_dt
+
+    try:
+        part = json.loads(raw) if isinstance(raw, str | bytes) else None
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(part, Mapping) or part.get("type", "tool") != "tool":
+        return None
+    tool = part.get("tool")
+    if not isinstance(tool, str):
+        return None
+    state = _mapping(part.get("state"))
+    times = _mapping(state.get("time"))
+    output = state.get("output")
+    call_id = part.get("callID")
+    status = state.get("status")
+    return ToolPart(
+        session=session,
+        tool=tool,
+        call_id=call_id if isinstance(call_id, str) else None,
+        status=status if isinstance(status, str) else None,
+        input=_mapping(state.get("input")),
+        metadata=_mapping(state.get("metadata")),
+        output=output if isinstance(output, str) else None,
+        began=_ms_to_dt(times.get("start")) or _ms_to_dt(created_ms),
+        ended=_ms_to_dt(times.get("end")),
+    )
+
+
+def _mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _answered(part: ToolPart) -> bool:
+    answers = part.metadata.get("answers")
+    return (
+        part.status == "completed"
+        and isinstance(answers, list)
+        and any(isinstance(a, list) and a for a in answers)
+    )
+
+
+def _query(db: Path, sql: str, params: tuple[object, ...]) -> list[tuple[Any, ...]] | None:
+    """Rows of one read-only query on OpenCode's database; `None` when it
+    cannot be read (missing, locked, another schema)."""
+    from fr.usage.readers.opencode import open_ro
+
+    try:
+        with closing(open_ro(db)) as con:
+            return con.execute(sql, params).fetchall()
+    except sqlite3.Error:
+        return None
+
+
+def _wrote_windows(
+    db: Path, log: Path, start: _dt.datetime, session: str | None
+) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+    """The `(start, end)` of every `bash` part that WROTE `log`, started at or
+    after `start`, completed with exit 0 — in `session`, or (`None`) in any
+    TOP-LEVEL session (a `task` subagent is a child session, `parent_id` set).
+    `None` when the database cannot be read.
+
+    A READABLE database is not necessarily the right one (gh#740: OpenCode ran
+    under `XDG_DATA_HOME`, fr read `~/.local/share`). The orchestrator calling
+    this is itself mid-`bash`, a part of its session, so a database that
+    recorded no part at all since the unit opened cannot hold it: that is
+    `None` (unobserved), never `[]`, which refuses as "nobody wrote it".
+    Activity is read from `part`, not `session.time_updated`, which nothing
+    shows OpenCode bumps per part. Exit 0 stands in for Claude Code's
+    `is_error`, which a non-zero exit sets.
+    """
+    from fr.run.telemetry import _BashCall, _detaches, _seen_exit, _writes
+
+    since_ms = int(start.timestamp() * 1000)
+    active = _query(db, "SELECT 1 FROM part WHERE time_updated >= ? LIMIT 1", (since_ms,))
+    if session is None:
+        rows = _query(
+            db,
+            "SELECT p.session_id, p.time_created, p.data FROM part p "
+            "JOIN session s ON s.id = p.session_id "
+            "WHERE s.parent_id IS NULL AND p.time_updated >= ?",
+            (since_ms,),
+        )
+    else:
+        rows = _query(
+            db,
+            "SELECT session_id, time_created, data FROM part "
+            "WHERE session_id = ? AND time_updated >= ?",
+            (session, since_ms),
+        )
+    if active is None or rows is None or not active:
+        return None
+    calls: list[_BashCall] = []
+    for owner, created, raw in rows:
+        part = tool_part(owner, raw, created)
+        if part is None or part.tool != "bash" or part.status != "completed":
+            continue
+        command = part.input.get("command")
+        output = part.output if part.output is not None else part.metadata.get("output")
+        exit_code = part.metadata.get("exit")
+        if (
+            isinstance(command, str)
+            and part.began is not None
+            and part.ended is not None
+            and part.began >= start
+        ):
+            calls.append(
+                _BashCall(
+                    part.began,
+                    part.ended,
+                    command,
+                    exit_code if type(exit_code) is int else None,
+                    output if isinstance(output, str) else "",
+                )
+            )
+    calls.sort(key=lambda c: (c.began, c.ended))
+    windows: list[tuple[_dt.datetime, _dt.datetime]] = []
+    for call in calls:
+        if call.exit_code != 0 or not _writes(call.command, log):
+            continue
+        windows.append((call.began, call.ended))
+        if _detaches(call.command):
+            seen = _seen_exit(call, calls, log)
+            if seen is not None:
+                windows.append((call.began, seen))
+    return windows
+
+
+@dataclass(frozen=True)
 class OpenCodeSession:
+    """One OpenCode session of `opencode.db`, read-only: its OWN `part` rows
+    for rounds, reads, shells and writes; its `task` parts for dispatches
+    (spec §A, §C, §F). A child session is a view of the same kind, reached
+    through `child`."""
+
     db: Path
     session: str
     harness: str = "opencode"
+
+    def _parts(self) -> list[ToolPart] | None:
+        rows = _query(
+            self.db,
+            "SELECT session_id, time_created, data FROM part WHERE session_id = ? "
+            "ORDER BY time_created, id",
+            (self.session,),
+        )
+        if rows is None:
+            return None
+        parts = [tool_part(owner, raw, created) for owner, created, raw in rows]
+        return [p for p in parts if p is not None]
+
+    def answered_rounds(self, since: _dt.datetime) -> list[Round] | None:
+        from fr.run.telemetry import _question_texts, question_rounds
+
+        parts = self._parts()
+        if parts is None:
+            return None
+        return question_rounds(
+            (
+                (
+                    p.tool,
+                    p.call_id,
+                    _question_texts(p.input) if p.tool == OPENCODE_QUESTION_TOOL else [],
+                    p.began,
+                )
+                for p in parts
+            ),
+            since,
+            question_tool=OPENCODE_QUESTION_TOOL,
+            neutral=OPENCODE_ROUND_NEUTRAL_TOOLS,
+            answered=lambda: {
+                p.call_id
+                for p in parts
+                if p.tool == OPENCODE_QUESTION_TOOL and p.call_id and _answered(p)
+            },
+        )
+
+    def _children(self) -> set[str] | None:
+        rows = _query(self.db, "SELECT id FROM session WHERE parent_id = ?", (self.session,))
+        return None if rows is None else {row[0] for row in rows}
+
+    def _final_text(self, session: str) -> str | None:
+        rows = _query(
+            self.db,
+            "SELECT data FROM part WHERE session_id = ? ORDER BY time_created DESC, id DESC",
+            (session,),
+        )
+        for (raw,) in rows or ():
+            try:
+                part = json.loads(raw) if isinstance(raw, str | bytes) else None
+            except json.JSONDecodeError:
+                continue
+            text = part.get("text") if isinstance(part, Mapping) else None
+            if part is not None and part.get("type") == "text" and isinstance(text, str) and text:
+                return text
+        return None
+
+    def dispatches(self, since: _dt.datetime) -> list[ChildDispatch] | None:
+        parts = self._parts()
+        children = self._children()
+        if parts is None or children is None:
+            return None
+        found: list[ChildDispatch] = []
+        for part in parts:
+            child = part.metadata.get("sessionId")
+            if (
+                part.tool != "task"
+                or part.began is None
+                or part.began < since
+                or not isinstance(child, str)
+                # Both keys must agree: the part's own parent claim AND the
+                # child session's row.
+                or part.metadata.get("parentSessionId") != self.session
+                or child not in children
+            ):
+                continue
+            returned: str | None = None
+            if part.status != "running":
+                returned = self._final_text(child)
+                if returned is None and part.output is not None:
+                    match = _TASK_RESULT.search(part.output)
+                    returned = match.group(1) if match else None
+            agent_type = part.input.get("subagent_type")
+            found.append(
+                ChildDispatch(
+                    agent_id=child,
+                    agent_type=agent_type if isinstance(agent_type, str) else None,
+                    started=part.began,
+                    returned=returned,
+                )
+            )
+        return found
+
+    def child(self, agent_id: str) -> OpenCodeSession | Literal[False] | None:
+        children = self._children()
+        if children is None:
+            return None
+        return OpenCodeSession(self.db, agent_id) if agent_id in children else False
+
+    def _first(
+        self, tool: str, since: _dt.datetime, matches: Callable[[Mapping[str, Any]], bool]
+    ) -> _dt.datetime | Literal[False] | None:
+        parts = self._parts()
+        if parts is None:
+            return None
+        for part in parts:
+            if (
+                part.tool == tool
+                and part.began is not None
+                and part.began >= since
+                and matches(part.input)
+            ):
+                return part.began
+        return False
+
+    def first_read(
+        self, path: Path, since: _dt.datetime, *, not_before: _dt.datetime | None = None
+    ) -> _dt.datetime | Literal[False] | None:
+        real = os.path.realpath(path)
+        start = max(since, not_before) if not_before is not None else since
+
+        def names(tool_input: Mapping[str, Any]) -> bool:
+            target = tool_input.get("filePath")
+            return (
+                isinstance(target, str)
+                and os.path.isabs(target)
+                and os.path.isabs(path)
+                and os.path.realpath(target) == real
+            )
+
+        return self._first("read", start, names)
+
+    def first_shell_executing(
+        self, script: Path, since: _dt.datetime
+    ) -> _dt.datetime | Literal[False] | None:
+        from fr.run.telemetry import _executes
+
+        def runs(tool_input: Mapping[str, Any]) -> bool:
+            command = tool_input.get("command")
+            return isinstance(command, str) and _executes(command, script)
+
+        return self._first("bash", since, runs)
+
+    def wrote_windows(
+        self, log: Path, since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        return _wrote_windows(self.db, log, since, self.session)
+
+
+@dataclass(frozen=True)
+class OpenCodeUnscoped:
+    """OpenCode with no session id (the plugin not delivered, or older than
+    `shell.env`): serves `wrote_windows` only, reading every TOP-LEVEL session
+    active since — today's reading, which keeps `deliver-tests-provenance`
+    enforced without the plugin (spec §A). Weaker than one session; still proof
+    that an orchestrator's own shell command produced the bytes."""
+
+    db: Path
+
+    def wrote_windows(
+        self, log: Path, since: _dt.datetime
+    ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        return _wrote_windows(self.db, log, since, None)
+
+
+def opencode_unscoped(env: Mapping[str, str]) -> OpenCodeUnscoped:
+    from fr.run.telemetry import OpenCodeReader
+
+    return OpenCodeUnscoped(OpenCodeReader().database(env))
+
+
+_ROOT_HOPS = 32
+
+
+def _opencode_root(db: Path, session: str) -> str:
+    """The top-level session above `session` (a command run from a child — an
+    executor's `fr journal add` — carries the CHILD's id), walking `parent_id`;
+    `session` itself when the database cannot say."""
+    current = session
+    for _ in range(_ROOT_HOPS):
+        rows = _query(db, "SELECT parent_id FROM session WHERE id = ?", (current,))
+        if not rows or not isinstance(rows[0][0], str) or not rows[0][0]:
+            return current
+        current = rows[0][0]
+    return current
 
 
 def _harness(env: Mapping[str, str]) -> str | None:
@@ -196,5 +556,6 @@ def observed_session(env: Mapping[str, str], session: str | None = None) -> Obse
             return None
         return None if transcript is None else ClaudeCodeSession(transcript, sid)
     if harness == OpenCodeReader.harness:
-        return OpenCodeSession(OpenCodeReader().database(env), sid)  # type: ignore[return-value]
+        db = OpenCodeReader().database(env)
+        return OpenCodeSession(db, _opencode_root(db, sid))
     return None
