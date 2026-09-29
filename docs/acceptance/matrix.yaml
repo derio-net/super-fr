@@ -4353,7 +4353,12 @@ rows:
       R6/d-total-bar (s1: sticky vs fixed), both in scope and fixed. No dropped statement
       existed to catch (missing=0), so that arm is evidenced by unit tests only. The
       same run showed deliver''s requirement-rows gate refusing a not-implemented row
-      through the real CLI and passing once it moved. Manual run, not in CI.'
+      through the real CLI and passing once it moved. Manual run, not in CI. | 2026-09-29
+      take 10 (super-fr-3; fr 4.35.0, OpenCode 1.18.32, GitLab no CI, devcontainer;
+      run A gpt-6-sol, run B gpt-6-luna high; docs/audits/2026-09-29-take10-opencode-live-walk.md):
+      OpenCode: A (sol) coverage recorded as returned (94 spans); B (luna) orchestrator
+      re-cut the partition (93->94, 3 relabels), unobservable on OpenCode (#777 comment);
+      13-dispatch loop (#808).'
     verify: post-merge
   - id: requirements-unconfirmed-in-pr
     capability: fr-goal-methodology
