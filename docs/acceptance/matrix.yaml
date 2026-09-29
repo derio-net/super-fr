@@ -5572,9 +5572,12 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R3
     - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_observed_resolve_opencode.py
+    status: ci
+    notes: 'Phase 2: the holder fill (R3) and the OpenCode reviewer-id refusals (R6)
+      run on the committed opencode.db fixture in CI.'
   - id: opencode-observe-take10-rerun
     capability: fr-goal on OpenCode
     acceptance: 'Re-running take 10 run B''s shape on OpenCode with this release: the
