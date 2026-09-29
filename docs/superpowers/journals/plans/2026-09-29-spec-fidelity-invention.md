@@ -250,3 +250,8 @@ The exact chain is what spec Test Plan 5 and artifact-versioning.md require now;
 ### p2-q6-delegated-citation-silent-fallback-resolved-2 · finding [deferred → #829] · resolves p2-q6-delegated-citation-silent-fallback: Delegated citation lookup falls back to `cited by: none` on an unparseable Requirements table
 
 Filed at closeout as #829.
+
+<!-- fr:journal kind=finding scope=plan id=p2-q7-migration-test-pins-equality-resolved-2 created=2026-09-29T11:13:12+00:00 state=open resolves=p2-q7-migration-test-pins-equality tracked_by=#830 -->
+### p2-q7-migration-test-pins-equality-resolved-2 · finding [deferred → #830] · resolves p2-q7-migration-test-pins-equality: test_migration_record_delegated pins `== 5` and the exact chain
+
+Filed at closeout as #830.
