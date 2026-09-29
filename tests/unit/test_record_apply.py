@@ -26,7 +26,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
-from tests.unit.requirements_support import COVERAGE_BLOCK, seed_requirements
+from tests.unit.requirements_support import REVIEW_BLOCKS, seed_requirements
 
 
 def _resolve(root: Path, record: Path, step: str = "implement-phase", item: str | None = "phase/1"):
@@ -466,9 +466,10 @@ def test_a_drop_on_a_row_the_record_names_twice_is_refused(tmp_path: Path) -> No
 # `emits:` in the manifest, not from a `--scope` flag.
 
 
-# The shipped `spec-review` derives `coverage` (2026-09-28 spec §D): the review
+# The shipped `spec-review` derives `coverage` (2026-09-28 spec §D) and `fidelity`
+# (2026-09-29 spec §A/§B): the review
 # body partitions the seeded input, plus any input entry the record adds.
-_WITH_X = COVERAGE_BLOCK.replace("```\n", '| "build X" | context |\n```\n', 1)
+_WITH_X = REVIEW_BLOCKS.replace("```\n", '| "build X" | context |\n```\n', 1)
 
 
 def _at_spec_review(tmp_path: Path, *, finding_scope: str | None = None) -> Path:
@@ -522,7 +523,7 @@ def _spec_review_record(**overrides: object) -> dict[str, object]:
         "step": "spec-review",
         "outcome": "done",
         "journal": [
-            {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
+            {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
         ],
         "evidence": {"review": "sr-1", "reviewer": "spec-reviewer-1"},
     }
@@ -547,27 +548,52 @@ def test_a_spec_record_writes_an_input_discovery(tmp_path: Path) -> None:
     assert entry.input is True and entry.kind == "discovery"
 
 
-def test_a_spec_record_resolves_a_finding_unconfirmed_and_the_findings_gate_passes(
-    tmp_path: Path,
-) -> None:
-    root = _at_spec_review(tmp_path, finding_scope="in")
-    record = write_record(
-        root,
-        _spec_review_record(resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}]),
-    )
+def test_a_spec_record_writes_a_delegated_decision(tmp_path: Path) -> None:
+    root = _at_spec_review(tmp_path)
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
+    given = {"kind": "decision", "id": "d9", "title": "your call", "body": "chose X"}
+    record = write_record(root, _spec_review_record(journal=[review, {**given, "delegated": True}]))
 
     out = _resolve(root, record, step="spec-review", item=None)
 
     assert out.exit_code == 0, out.output
-    entries = _spec_entries(root)
-    assert effective_finding_states(entries) == {"f1": "unconfirmed"}
-    (rec,) = [e for e in entries if e.resolves == "f1"]
-    assert rec.state == "open" and rec.unconfirmed is True and rec.body == "builds Y"
+    (entry,) = [e for e in _spec_entries(root) if e.id == "d9"]
+    assert entry.delegated is True and entry.kind == "decision"
+
+
+@pytest.mark.parametrize("finding_scope", ["in", "out"])
+def test_a_spec_record_resolving_unconfirmed_is_refused_and_writes_nothing(
+    tmp_path: Path, finding_scope: str
+) -> None:
+    """Spec 2026-09-29 §D (d1-remove-only): `unconfirmed` is retired for new
+    writes — an invented or reinterpreted finding is removed, never confirmed."""
+    root = _at_spec_review(tmp_path, finding_scope=finding_scope)
+    record = write_record(
+        root,
+        _spec_review_record(resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}]),
+    )
+    files = snapshot(root)
+
+    out = _resolve(root, record, step="spec-review", item=None)
+
+    assert out.exit_code == 2, out.output
+    assert "d1-remove-only" in out.output
+    assert snapshot(root) == files
+
+
+def test_unconfirmed_refusal_names_the_finding_and_the_decision() -> None:
+    """The one statement of the rule `fr journal resolve` and a record share:
+    every new `unconfirmed` write is refused — even an in-scope spec finding,
+    which #759 let close that way."""
+    from fr.record.apply import unconfirmed_refusal
+
+    reason = unconfirmed_refusal("f1")
+    assert "'f1'" in reason and "d1-remove-only" in reason
 
 
 def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> None:
     root = _at_spec_review(tmp_path)
-    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": COVERAGE_BLOCK}
+    review = {"kind": "review", "id": "sr-1", "title": "spec review", "body": REVIEW_BLOCKS}
     bad = {"kind": "decision", "id": "d1", "title": "t", "body": "b", "input": True}
     record = write_record(root, _spec_review_record(journal=[review, bad]))
     files = snapshot(root)
@@ -576,23 +602,6 @@ def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> 
 
     assert out.exit_code == 2, out.output
     assert "`input` is only valid" in out.output
-    assert snapshot(root) == files
-
-
-def test_a_spec_record_refuses_unconfirmed_on_a_finding_the_reviewer_tagged_out(
-    tmp_path: Path,
-) -> None:
-    root = _at_spec_review(tmp_path, finding_scope="out")
-    record = write_record(
-        root,
-        _spec_review_record(resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}]),
-    )
-    files = snapshot(root)
-
-    out = _resolve(root, record, step="spec-review", item=None)
-
-    assert out.exit_code == 2, out.output
-    assert "f1" in out.output and "out" in out.output
     assert snapshot(root) == files
 
 
@@ -621,7 +630,7 @@ def test_a_plan_record_refuses_an_unconfirmed_resolution(tmp_path: Path) -> None
     out = _resolve(root, record)
 
     assert out.exit_code == 2, out.output
-    assert "`unconfirmed` is only valid" in out.output
+    assert "d1-remove-only" in out.output
     assert snapshot(root) == files
 
 
@@ -710,7 +719,7 @@ def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
     return root
 
 
-def test_a_spec_review_record_applies_input_post_merge_and_unconfirmed_together(
+def test_a_spec_review_record_applies_input_post_merge_and_a_resolve_together(
     tmp_path: Path,
 ) -> None:
     root = _at_spec_review_with_acceptance(tmp_path)
@@ -720,7 +729,7 @@ def test_a_spec_review_record_applies_input_post_merge_and_unconfirmed_together(
         root,
         _spec_review_record(
             journal=[review, {**given, "input": True}],
-            resolves=[{"id": "f1", "state": "unconfirmed", "body": "builds Y"}],
+            resolves=[{"id": "f1", "state": "fixed", "body": "Y removed from the spec"}],
             acceptance=[
                 {
                     "id": "trace-row",
@@ -739,10 +748,10 @@ def test_a_spec_review_record_applies_input_post_merge_and_unconfirmed_together(
     entries = _spec_entries(root)
     (input_entry,) = [e for e in entries if e.id == "input-1"]
     assert input_entry.input is True and input_entry.kind == "discovery"
-    assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+    assert effective_finding_states(entries) == {"f1": "fixed"}
     (resolution,) = [e for e in entries if e.resolves == "f1"]
-    assert resolution.state == "open" and resolution.unconfirmed is True
-    assert resolution.body == "builds Y"
+    assert resolution.state == "fixed" and resolution.unconfirmed is False
+    assert resolution.body == "Y removed from the spec"
 
     from fr.acceptance.model import load_matrix
 

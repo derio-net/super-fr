@@ -4539,6 +4539,94 @@ rows:
     status: ci
     notes: 'Prose tripwire pins operator_input in fr-goal §5/§6 and the rule''s tokens
       in the phase-executor agent (#778); d5: unit tests suffice, no live row.'
+  - id: spec-fidelity-clause-partition
+    capability: fr-goal-methodology
+    acceptance: Spec review accounts for every clause of every requirement's source
+      quote, and fr refuses a review that skips one
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fidelity.py
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+    status: ci
+    notes: fr.fidelity.check_fidelity verifies the requirement-fidelity block partitions
+      every input-sourced requirement's quotes into clauses (elision-aware, table order,
+      contiguous, labels kept or a spec finding); the fidelity derived evidence on spec-review
+      refuses an unsound block (Test Plan 1, 3).
+  - id: spec-fidelity-design-inventory
+    capability: fr-goal-methodology
+    acceptance: Spec review inventories every user-visible behaviour of every Design
+      section with its backing, and fr refuses a review that skips a section
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fidelity.py
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+    status: ci
+    notes: 'fr.fidelity.parse_design_sections reads the ### subsections of ## Design
+      fence-aware; check_inventory refuses a missing, reordered, non-contiguous or unknown
+      section, an unknown R/decision id, an invented id that is not a finding, a none
+      backing beside a behaviour and a mis-celled row; the fidelity evidence on spec-review
+      derives from it (Test Plan 2, 3).'
+  - id: spec-fidelity-remove-only
+    capability: fr-goal-methodology
+    acceptance: An invented or reinterpreted spec finding blocks spec-review until the
+      departure is removed or the finding refuted; it can no longer be closed as built
+      without confirmation
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+    status: ci
+    notes: 'The fidelity witness refuses spec-review while a finding a flagged fidelity
+      row or an invented inventory row names is closed other than fixed or refuted (naming
+      its fr journal resolve --state fixed line); fr journal resolve --state unconfirmed
+      and a record state: unconfirmed are refused citing d1-remove-only, while an existing
+      unconfirmed record still folds (Test Plan 3, 4).'
+  - id: spec-fidelity-delegated-decisions
+    capability: fr-goal-methodology
+    acceptance: A "Your call." answer is recorded as a delegated decision, and the PR
+      lists every delegated decision with the requirements resting on it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R5
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_delegated.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: delegated=true on spec decisions, record 4->5 migration and the PR's delegated
+      listing are unit-tested (phase 2)
+  - id: spec-fidelity-pr-design-inventory
+    capability: fr-goal-methodology
+    acceptance: The delivered PR shows the design inventory, so the operator sees every
+      user-visible behaviour and its backing at merge
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_deliver_pr_body.py
+    status: ci
+    notes: 'PR body renders ## Design inventory in <details>, predates line otherwise
+      (phase 2)'
+  - id: spec-fidelity-live-invention-caught
+    capability: fr-goal-methodology
+    acceptance: On a live brief, a spec that invents an interaction (take 9's card-click
+      toggle) gets an invented finding at spec-review and ships without it
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged

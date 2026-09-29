@@ -924,6 +924,28 @@ class TestInputToken:
                 )
 
 
+class TestDelegatedToken:
+    """`delegated=true` on a spec decision (spec 2026-09-29 §E, d5-delegated-flag)."""
+
+    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+        from fr.journal.model import parse_journal, serialize_entry
+
+        e = _entry(kind="decision", scope="spec", id="d1", phase=None, delegated=True)
+        text = serialize_entry(e)
+        assert "delegated=true" in text.splitlines()[0]
+        assert parse_journal(text)[0].delegated is True
+        plain = serialize_entry(_entry(kind="decision", scope="spec", id="d2", phase=None))
+        assert "delegated" not in plain.splitlines()[0]
+        assert parse_journal(plain)[0].delegated is False
+
+    def test_it_is_refused_off_a_spec_decision(self) -> None:
+        from fr.journal.model import JournalEntry
+
+        for kind, scope in (("discovery", "spec"), ("decision", "plan"), ("decision", "debug")):
+            with pytest.raises(ValueError, match="`delegated` is only valid"):
+                JournalEntry(kind=kind, scope=scope, id="d", created="t", title="x", delegated=True)
+
+
 class TestUnconfirmed:
     def test_the_fold_reads_it_as_unconfirmed_and_the_gates_stop_counting_it(self) -> None:
         from fr.journal.model import effective_finding_states, open_finding_ids, parse_journal

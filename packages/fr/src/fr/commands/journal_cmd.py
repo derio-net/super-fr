@@ -172,6 +172,12 @@ def add(
         help="--scope spec --kind discovery only: this entry is the operator's input, "
         "verbatim after third-party redaction (spec 2026-09-28 §A).",
     ),
+    delegated: bool = typer.Option(
+        False,
+        "--delegated",
+        help='--scope spec --kind decision only: the operator answered "Your call.", '
+        "so the agent chose (spec 2026-09-29 §E).",
+    ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
     _validate_scope(scope)
@@ -230,6 +236,7 @@ def add(
             review_scope=review_scope,  # type: ignore[arg-type]
             answered_by=answered_by,  # type: ignore[arg-type]
             input=is_input,
+            delegated=delegated,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -270,6 +277,7 @@ def add(
             "resolves": resolves,
             "answered_by": answered_by,
             "input": is_input,
+            "delegated": delegated,
         }
     )
     _apply(
@@ -323,8 +331,9 @@ def resolve(
         help="fixed | refuted | deferred | out-of-scope | unconfirmed. `deferred` = the "
         "finding is valid but not this change's to fix; requires --tracked-by. "
         "`out-of-scope` = true, but not caused by this change (--note says why); no "
-        "issue needed yet. `unconfirmed` = --scope spec only: the behaviour is built "
-        "without the operator confirming it (--note says what gets built).",
+        "issue needed yet. `unconfirmed` is retired (d1-remove-only): an invented or "
+        "reinterpreted spec finding closes `fixed` (removed) or `refuted`; it is "
+        "refused, and still read in an existing journal.",
     ),
     note: str = typer.Option(
         ...,
@@ -420,10 +429,10 @@ def resolve(
     if state == "unconfirmed":
         from fr.record.apply import unconfirmed_refusal
 
-        reason = unconfirmed_refusal(entry_id, target, scope)
-        if reason is not None:
-            err_console.print(f"[red]{reason}[/red] — nothing resolved", soft_wrap=True)
-            raise typer.Exit(2)
+        err_console.print(
+            f"[red]{unconfirmed_refusal(entry_id)}[/red] — nothing resolved", soft_wrap=True
+        )
+        raise typer.Exit(2)
     from fr.record.model import Resolution, StepRecord
 
     record_id = _record_id(entry_id, {e.id for e in entries})

@@ -51,7 +51,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 4
+RECORD_SCHEMA_VERSION = 5
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -61,7 +61,9 @@ change under `.claude/rules/artifact-versioning.md`. Migration:
 `fr.artifacts.record_input_unconfirmed`. Bumped 3 -> 4 for
 `AcceptanceItem.visual` and `StepRecord.visual` (spec
 `2026-09-28-ui-visual-evidence-design.md` §G). Migration:
-`fr.artifacts.record_visual`."""
+`fr.artifacts.record_visual`. Bumped 4 -> 5 for `JournalItem.delegated` (spec
+`2026-09-29-spec-fidelity-invention-design.md` §E). Migration:
+`fr.artifacts.record_delegated`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
@@ -124,6 +126,9 @@ class JournalItem(_Strict):
     input: bool = False
     """A spec-journal `discovery` holding the operator's input (spec
     2026-09-28 §A); `JournalEntry`'s validator refuses it anywhere else."""
+    delegated: bool = False
+    """A spec-journal `decision` the operator answered "Your call." (spec
+    2026-09-29 §E); `JournalEntry`'s validator refuses it anywhere else."""
 
 
 class Resolution(_Strict):

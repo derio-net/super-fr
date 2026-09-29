@@ -45,21 +45,31 @@ and the spec's `## Requirements` / `## Deferred from input` tables, then check:
    - **Covered or deferred.** It maps to a requirement (an `input "<quote>"`
      source in `## Requirements`), or appears under `## Deferred from input`
      with a reason. A span in neither is a **dropped** finding.
-   - **Faithful.** A requirement says no more and no less than its quotes; a
-     narrowed or widened range, an added condition, or a changed default is a
-     **reinterpreted** finding.
-   - **Nothing invented.** User-visible behaviour in `## Design` (or anywhere
-     outside `## Requirements`) with no requirement behind it is an
-     **invented** finding.
+   - **Faithful, clause by clause.** Cut every requirement's `input` quotes
+     into clauses (a clause never spans an elision or a quote boundary) and
+     check each against the requirement's own text. A clause the requirement
+     drops or weakens — "in the same style", "the same layout", a range
+     label, a narrowed or widened range, an added condition, a changed
+     default — is a **reinterpreted** finding, even when the clause survives
+     inside the `Source` quote: downstream agents implement the requirement
+     text. Return the cut as the `requirement-fidelity` block below.
+   - **Nothing invented, section by section.** Walk every `###` subsection of
+     `## Design`, in order, and list each user-visible behaviour it adds (an
+     interaction, output, demo data, configuration key, default), each backed
+     by a requirement (`R<n>`), an operator `decision <id>`, or — when nothing
+     backs it — an **invented** finding. Return the walk as the
+     `design-inventory` block below.
 
    All three — dropped, reinterpreted and invented — are always tagged
-   `in scope`, never `out`: the orchestrator resolves invented/reinterpreted
-   findings `unconfirmed`, and `unconfirmed` is refused on a finding tagged
-   `review_scope: out`, so a mistagged one would be stranded with no way to
-   close the gate.
+   `in scope`, never `out`: a finding tagged `review_scope: out` is held open
+   by fr's `fidelity` gate, so a mistagged one would be stranded with no way
+   to close it.
 
    Return your partition of the input as the `input-coverage` block below —
-   it is what makes "nothing missed" checkable, not just claimed.
+   it is what makes "nothing missed" checkable, not just claimed. The other
+   two blocks do the same for fidelity and invention: fr checks that the
+   account is complete, not that each label is right — that stays your
+   judgement.
 
 2. **Decisions vs. spec.** Every `decision` entry in the spec journal is honoured
    by the spec, and the spec decides nothing the operator decided otherwise. Quote
@@ -83,10 +93,11 @@ Say, per traceability finding, which resolution you expect:
 - **dropped** → fix: add the requirement (and its row), or defer it explicitly
   under `## Deferred from input` with a reason. No operator needed — the input
   already decided it.
-- **invented / reinterpreted** → the operator was never asked, so the gate stays
-  closed: the orchestrator resolves it `unconfirmed` with a note stating what
-  gets built, or removes the behaviour so the literal reading of the input
-  suffices. It must never rewrite the requirement to fit the design you found.
+- **invented / reinterpreted** → **removed** (or refuted), never confirmed and
+  never asked: the orchestrator deletes the invented behaviour, or restores the
+  requirement to its quote's literal reading (a dropped clause is put back),
+  then closes the finding `fixed`. It must never rewrite the requirement to fit
+  the design you found, and the operator is not asked at spec-review.
 
 ## Return the input-coverage partition
 
@@ -115,6 +126,53 @@ paragraph each. Inside the quotes, the input's own `|` and `"` may stand as
 they are or be escaped as `\|` and `\"`. fr reads the block exactly as you
 return it. The orchestrator records it unedited, and if fr refuses it, the
 orchestrator sends you fr's message to return a corrected block.
+
+## Return the requirement-fidelity block
+
+Alongside `input-coverage`, in the same review entry, return a fenced
+`requirement-fidelity` block: one row per clause of every requirement that has
+an `input` source, requirements in `## Requirements` table order, a
+requirement's rows contiguous, and its clauses concatenated in order equal to
+its `input` quotes concatenated (whitespace-insensitive, like coverage):
+
+````markdown
+```requirement-fidelity
+| requirement | clause | fidelity |
+|---|---|---|
+| R1 | "a number field in the same style" | s4 |
+| R1 | "as the article view" | kept |
+| R2 | "− / + on each article card" | kept |
+```
+````
+
+`clause` is a verbatim piece of that requirement's quotes in straight quotes
+(escape `|` as `\|` and `"` as `\"`; never span an elision). `fidelity` is
+`kept` — the requirement text carries the clause's meaning — or the id of the
+`reinterpreted` finding you raised for it. A decision-only requirement has no
+rows.
+
+## Return the design-inventory block
+
+And a fenced `design-inventory` block covering every `###` subsection of
+`## Design` (a `## Design` with none is one section named `Design`), in
+document order, rows contiguous:
+
+````markdown
+```design-inventory
+| section | behaviour | backing |
+|---|---|---|
+| A. Quantities | − / + on each card, 1–20 | R2 |
+| A. Quantities | clicking a card adds or removes the article | invented s7 |
+| B. Storage | none | none |
+```
+````
+
+`section` is the heading text without `### `. `behaviour` is one user-visible
+behaviour in your words (a `|` in it escaped as `\|`), or `none`. `backing` is
+`R<n>` and/or `decision <id>` (comma-separated), `invented <finding-id>`, or
+`none` — allowed only beside a `none` behaviour. fr refuses a missing or
+reordered section, an unknown requirement or decision id, and an `invented`
+id that is not a finding in the spec journal.
 
 ## Tag every finding: in scope or out of scope
 
@@ -164,13 +222,26 @@ journal:
       | "<verbatim span of the input>" | R1, R4 |
       | "<next span>" | context |
       ```
+      requirement-fidelity:
+      ```requirement-fidelity
+      | requirement | clause | fidelity |
+      |---|---|---|
+      | R1 | "<verbatim clause of R1's input quotes>" | kept |
+      ```
+      design-inventory:
+      ```design-inventory
+      | section | behaviour | backing |
+      |---|---|---|
+      | <### heading text> | <a user-visible behaviour, or none> | R1 |
+      ```
       verified:
       - <path:line> — <name the spec relies on, confirmed>
 ```
 
 The `verified` list in the review entry is the names you checked and found
 correct; it is what makes "no findings" distinguishable from "did not look".
-The `input-coverage` block is what makes the traceability check checkable, not
-just claimed — it must partition the WHOLE input, every time, findings or not.
-A clean review returns the `review` entry alone, with the `input-coverage`
-block and a non-empty `verified`.
+The `input-coverage`, `requirement-fidelity` and `design-inventory` blocks are
+what make the traceability check checkable, not just claimed — the first must
+partition the WHOLE input, the second every requirement's clauses, the third
+every Design subsection, every time, findings or not. A clean review returns
+the `review` entry alone, with all three blocks and a non-empty `verified`.
