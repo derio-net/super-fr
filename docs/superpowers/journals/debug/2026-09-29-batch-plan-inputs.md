@@ -19,3 +19,8 @@ run_cmd.py:242; called by the operator-gate (:1233) and the reviewer gate (:2254
 ### rc-812-records · root-cause · record locator claims every *.records/*.yaml; trigger words an unreadable artifact as 'must be migrated'; fr-plan names no scratch home
 
 registry.py:444 locator; trigger.py:581 _will_not_act_here shared wording; skills/fr-plan/SKILL.md.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-813-tier created=2026-09-29T11:09:49+00:00 -->
+### rc-813-tier · root-cause · fr-plan lists tiers without criteria and self-review asks no reason for tier above standard
+
+skills/fr-plan/SKILL.md:80. A policy gap, not a code defect.
