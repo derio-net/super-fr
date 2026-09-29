@@ -44,3 +44,8 @@ closeout.branch_closeout_brief appends 'fr isolation down --branch <housekeeping
 ### fix-826 · finding [fixed] · #826 fixed: harness-neutral validator wrapper via fr validate plans
 
 fr/data/validate-plans.sh is bundled, byte-identical to scripts/validate-plans.sh (tripwire). The new 'fr validate plans' is exempt from the migration gate as part of the validate group. WRAPPER_TEXT and install-validator-wrapper.sh prefer it, fall back to the marketplace copy, else exit 127 naming the fix. The marketplace path stays in the text, so is_super_fr_validator_wrapper still recognizes, and refreshes, the fleet's committed wrappers. Two tests that used the phrase 'super-fr plugin' as the current-wrapper marker now check for 'exec fr validate plans'.
+
+<!-- fr:journal kind=review scope=debug id=1bae7f7f6f05 created=2026-09-29T11:57:51+00:00 -->
+### 1bae7f7f6f05 · review · Independent review: no high-confidence findings
+
+A code-reviewer subagent read the diff independently. It confirmed that the wrapper quoting is correct, the two wrapper copies match, the fleet's committed wrappers are still recognised, the data file ships in the wheel, and explain_missing ordering and markup are safe. It also confirmed that _behind_ref handles detached HEAD, unborn and diverged branches, and HEAD equal to the ref. One low-confidence note (about 40): if info/exclude lacks a trailing newline, the first appended pattern is glued onto its last line. That behaviour predates this diff (.fr-isolation was appended the same way), so it is left out of scope and not fixed here.
