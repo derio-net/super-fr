@@ -59,3 +59,48 @@ now exits 2 (ALREADY HELD) if followed literally. Spec §B's last line ("The ski
 prose drops every then `fr run advance` that follows a `resolve --record`") is
 owed by the prose phase (phase 3, R7); left untouched here as out of this
 phase's task list.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1 created=2026-09-29T08:18:10+00:00 phase=1 state=open review_scope=in -->
+### r1-1 · finding [open] (reviewer: in scope) · _advance_once classifies any typer.Exit(1) under _advance_step as cli-failed (phase 1)
+
+Reviewer (in scope — this change is the first to infer "cli step failed" from an exit code): run_cmd.py _advance_once read together with _advance_after_record. Correct today (the only Exit(1) on the path is the cli branch) but any future Exit(1) under _advance_step would read as a cli failure and print `record applied; <agent-step> failed (exit None)`. Fix: the cli branch returns "cli-failed"; every typer.Exit is "refused".
+
+<!-- fr:journal kind=finding scope=plan id=r1-2 created=2026-09-29T08:18:10+00:00 phase=1 state=open review_scope=in -->
+### r1-2 · finding [open] (reviewer: in scope) · Chain edge cases untested: refusal after apply, deliver-record closeout, inline group completion, --redispatch, model notice (phase 1)
+
+Reviewer (in scope — the executor's three stated decisions and two new behaviours had no test; deleting the last-step early return or reverting group completion to "brief" stayed green). Fix: one test each.
+
+<!-- fr:journal kind=finding scope=plan id=r1-3 created=2026-09-29T08:18:10+00:00 phase=1 state=open review_scope=in -->
+### r1-3 · finding [open] (reviewer: in scope) · resolve --record exit 2 now means both 'refused, nothing applied' and 'applied, advance refused' (phase 1)
+
+Reviewer (in scope — this change introduced the second meaning): a caller branching on exit code alone would re-apply a consumed record. Advisory; the stderr line says "record applied". Fix: name the case in the skill prose.
+
+<!-- fr:journal kind=discovery scope=plan id=r1-deliver-record-closeout created=2026-09-29T08:18:10+00:00 phase=1 -->
+### r1-deliver-record-closeout · discovery · resolve --record on deliver printed no closeout handoff at all (found while fixing r1-2) (phase 1)
+
+resolve_in_process holds back the flag-form body's stdout, which is where the closeout handoff printed, so a record-form deliver never relayed `fr pickup --run`. Fixed in 329aa318: _resolve_record_cmd prints the handoff once after the outcome line for a done deliver; pinned by test_o.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-1 created=2026-09-29T08:18:10+00:00 phase=1 -->
+### review-phase-1 · review · independent code review of phase 1: 3 findings (all in scope), all fixed (phase 1)
+
+Reviewer ae42ae7153a2b5c23 (dispatched feature-dev:code-reviewer, opus) reviewed 97c49baa against spec §B, plan 01.yaml and the p1-* journal entries. Raised r1-1 (low), r1-2 (medium), r1-3 (low); endorsed the executor's three decisions; found loop cap, one-commit-per-step, done-only chaining, flag handling, held-unit refusals, output order and the adapted existing tests sound; no input- findings. Received: each finding verified against the code and fixed — r1-1 and r1-2 in 329aa318 (tests m–r, plus the deliver-record closeout bug), r1-3 in 393a1673 (skill prose). The pre-existing p1-skill-prose-still-advances-after-record fixed in 31eda282.
+
+<!-- fr:journal kind=finding scope=plan id=r1-1-resolved created=2026-09-29T08:18:10+00:00 phase=1 state=fixed resolves=r1-1 -->
+### r1-1-resolved · finding [fixed] · resolves r1-1: _advance_once classifies any typer.Exit(1) under _advance_step as cli-failed (phase 1)
+
+329aa318: cli branch returns cli-failed; every typer.Exit in _advance_once is refused; test_m pins it.
+
+<!-- fr:journal kind=finding scope=plan id=r1-2-resolved created=2026-09-29T08:18:10+00:00 phase=1 state=fixed resolves=r1-2 -->
+### r1-2-resolved · finding [fixed] · resolves r1-2: Chain edge cases untested: refusal after apply, deliver-record closeout, inline group completion, --redispatch, model notice (phase 1)
+
+329aa318: tests n (refusal after apply, exit 2, record committed), o (deliver record prints closeout once), p (inline group completion continues), q (--redispatch one brief), r (model notice once per chain).
+
+<!-- fr:journal kind=finding scope=plan id=r1-3-resolved created=2026-09-29T08:18:10+00:00 phase=1 state=fixed resolves=r1-3 -->
+### r1-3-resolved · finding [fixed] · resolves r1-3: resolve --record exit 2 now means both 'refused, nothing applied' and 'applied, advance refused' (phase 1)
+
+393a1673: fr-goal SKILL.md names exit 1 / exit 2-with-'record applied' after an applied record and says never re-apply; mirrors synced.
+
+<!-- fr:journal kind=finding scope=plan id=p1-skill-prose-still-advances-after-record-resolved created=2026-09-29T08:18:10+00:00 phase=1 state=fixed resolves=p1-skill-prose-still-advances-after-record -->
+### p1-skill-prose-still-advances-after-record-resolved · finding [fixed] · resolves p1-skill-prose-still-advances-after-record: fr-goal skill still says `fr run advance` after `resolve --record`; that advance is now refused as held (phase 1)
+
+31eda282: fr-goal §1/§6 say resolve --record briefs the next unit; the separate advance is gone; pinned wording updated in test_run_resolve_requires_advance.py; mirrors synced.
