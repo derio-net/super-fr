@@ -1,2 +1,0 @@
-bump: minor
-summary: "Spec review checks clause fidelity and design invention, not coverage alone: fr verifies the reviewer's requirement-fidelity and design-inventory blocks, invented/reinterpreted findings are removed rather than confirmed, and \"Your call.\" answers are delegated decisions (#773)"
