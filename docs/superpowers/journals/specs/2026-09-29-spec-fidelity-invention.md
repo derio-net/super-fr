@@ -226,3 +226,6 @@ verified:
 ### s6-resolved · finding [fixed] · resolves s6: §E's record 4→5 bump names the migration module but not its import or the second version constant
 
 §E names both constants (registry.py:441, record/model.py:54), the record_visual template, the __init__.py import, and states no frozen legacy model is owed; Test Plan 5 asserts the chain [2, 3, 4, 5].
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-spec-fidelity-invention-p2 created=2026-09-29T07:27:07+00:00 -->
+### phase-split-2026-09-29-spec-fidelity-invention-p2 · decision · ask: R5–R7 (delegated decisions, PR body, prose) are independently reviewable from the R1–R4 check
