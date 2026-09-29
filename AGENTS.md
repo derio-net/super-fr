@@ -178,18 +178,6 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `fr journal add/resolve`, `fr plan edit --tick/--complete-phase` and
     `fr acceptance add/set-status` build one-entry records through the same
     engine.
-  - **`fr/requirements.py`** (2026-09-28 spec, `requirements-traceability`) —
-    requirements traceability: §B grammar (`parse_requirements`, quote
-    matching), §C structural gate (`check_requirements` — an input entry
-    exists, the Requirements table parses, every quote/decision resolves,
-    every requirement id is cited by a matrix row) and §D coverage partition
-    (`check_coverage` — the reviewer's `input-coverage` block partitions the
-    input with no gap or overlap). Pure, no I/O beyond `load_spec_matrix`,
-    which `run_cmd.py` and `record/pr_body.py` both call rather than reading
-    the matrix twice. Callers: `fr spec requirements <spec>` (the standalone
-    check) and the three derived evidence names it backs —
-    `requirements` (on `brainstorm`), `coverage` (on `spec-review`) and
-    `requirement-rows` (on `deliver`).
 - `fr-dispatch` — runner-agnostic protocol/tick framework. Runners register
   via the `fr.runners` entry-point group, not by editing this package.
   `work_item.py` (`WorkItem`, the `item_id`/`parent_id` identity grammar)
@@ -217,6 +205,12 @@ uv workspace monorepo, version lockstepped across every manifest (see
 
 `plugins/super-fr` and `plugins/super-fr-dispatch` are the Claude Code plugin
 manifests (skills + rules + hooks) built from those packages.
+
+## fr-goal's boundary
+
+The spec is the contract: nothing after brainstorm reads the raw input, and a
+requirement the spec does not state is a spec defect, fixed in the spec.
+(`docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md`)
 
 ## Dev commands
 
