@@ -3,7 +3,7 @@ run: 2026-09-29-feat-batch-spec-fidelity
 workflow: fr-goal@1
 branch: feat/batch-spec-fidelity
 started: '2026-09-29T06:32:19+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -16,8 +16,8 @@ steps:
         evidence:
           requirements: 7 requirements:5f972efc0a177b83ba8d693784a24d61b31218bcd461065ed16bda793d46bcf7
   spec-review:
-    state: running
-    at: '2026-09-29T07:18:58+00:00'
+    state: done
+    at: '2026-09-29T07:25:27+00:00'
     units:
       step/spec-review:
         attempts:
@@ -26,6 +26,14 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 162a91cf-03fd-4d78-a879-ea25fe65194f
+          returned: '2026-09-29T07:25:27+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a0c97987cd9487b99
+          requirements: 7 requirements:5f972efc0a177b83ba8d693784a24d61b31218bcd461065ed16bda793d46bcf7
+          coverage: '32 spans: R=10 deferred=4 context=18 missing=0'
+          findings: s1,s2,s3,s4,s5,s6
   plan:
     state: pending
   plan-review:
