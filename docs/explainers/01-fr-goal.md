@@ -598,8 +598,12 @@ meant.
 Your raw input does not stop at the specification. It stays recorded, verbatim,
 in the specification's journal, and later — when the code is built and
 reviewed — it travels on beside your recorded answers as a read-only reference.
-The specification still governs; the input is there only so a clause the
-requirements lost along the way can be caught.
+It is not handed along by the orchestrator: the agent that builds each phase
+and the agent that reviews it each fetch it themselves, first thing, on every
+dispatch, because a copy passed through someone else's prompt can arrive
+paraphrased, as a pointer, or not at all. The specification still governs; the
+input is there only so a clause the requirements lost along the way can be
+caught.
 
 That check is not done by the agent that wrote the specification. An author
 re-reading their own document finds what they meant to write, not what they

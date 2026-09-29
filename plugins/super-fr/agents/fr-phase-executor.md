@@ -46,20 +46,40 @@ it here destroys the only property it had. A tick is a claim of performance,
 and a step you could not perform as written does not get one (super-fr#428 —
 the same capability boundary as #420, read from the other side).
 
+## First, on every dispatch: fetch the operator input yourself
+
+Before you read anything else, run the phase's handoff yourself:
+
+    fr journal handoff --scope plan --slug <plan-slug> --phase N
+
+(the plan slug is the plan dir's last path segment; run it the way you run
+every other command in the workspace). Its output opens with
+`## Operator input` — the operator's raw input and recorded answers,
+verbatim — then the curated journal state for this phase. Do this on
+every dispatch, a re-dispatch included, even when your prompt already quotes an
+input or points you at a journal: the orchestrator's copy is a relay, and a
+relay can arrive paraphrased, as a pointer, or not at all (super-fr#778). The
+handoff is fr's own copy; read yours from it.
+
+No `## Operator input` section means the spec predates the input record —
+nothing to relay, carry on. A non-zero exit is a blocker: STOP and report it,
+do not implement without it.
+
 ## Inputs (in your dispatch prompt)
 
 - the **plan dir** and **phase number** (`fr pickup <plan-dir> --phase N` gives
   the phase's tasks + steps);
 - the **spec** path;
 - the **journal handoff** — the curated current state for this phase, composed by
-  `fr journal handoff --scope plan --slug <plan-slug> --phase N` (open findings and
+  the `fr journal handoff` you ran above (open findings and
   relevant decisions/discoveries in full, closed findings and unrelated context collapsed to a line each) — which
   stands in for the orchestrator's conversation history you do not inherit. The raw
   `fr journal render` is the escape hatch, not the default: if the handoff is missing
   anything you need to implement the phase, STOP and say so — do not guess (the
   completeness of that handoff is the contract).
 - the **operator input** — the operator's raw input and recorded answers, verbatim,
-  read-only, in your task prompt and as the first section of the handoff.
+  read-only: the first section of the handoff you fetched above. A copy in your
+  task prompt is a convenience; where the two differ, the handoff's is the input.
   The spec governs: build against the spec, never against this text. Where the raw
   input says something that neither the spec nor a recorded answer covers, do not
   silently implement it or ignore it — record a `finding` against this phase whose

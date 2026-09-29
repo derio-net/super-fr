@@ -140,6 +140,13 @@ steps:
         evidence: [visual]
       - id: review-phase
         kind: agent
+        # The reviewer is a SHIPPED agent (#778, take 10): its own definition
+        # fetches the operator input with `fr journal handoff` on every
+        # dispatch, so the input no longer rides only on the orchestrator's
+        # relay into a generic reviewer's prompt. `agent:` is not a member id,
+        # so no cursor in flight drifts; the reviewer-type check stays on flat
+        # steps only (`_verify_reviewer`'s `expected_agent`).
+        agent: super-fr:fr-phase-reviewer
         # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
         # Naming only the first left what happens to a review's findings
         # (verify each; fix it with a test or refute it with reasoning; never

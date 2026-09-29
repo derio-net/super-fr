@@ -1,9 +1,10 @@
 """gh#778: the raw-input relay's prose homes must name what the engine emits.
 
 `fr.operator_input.OPERATOR_INPUT_RULE` rides every member brief and the
-handoff; fr-goal §5/§6 must tell the orchestrator to relay the brief's
-`operator_input` into the executor's and the reviewer's prompts, and the
-executor's agent file must carry the rule's load-bearing sentences.
+handoff; fr-goal §5/§6 must name the brief's `operator_input`, and the
+executor's and phase reviewer's agent files must carry the rule's
+load-bearing sentences AND fetch the input themselves (take 10: the relay
+through the orchestrator's prompt is not a delivery path).
 """
 
 from __future__ import annotations
@@ -12,7 +13,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from fr.operator_input import OPERATOR_INPUT_RULE
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
