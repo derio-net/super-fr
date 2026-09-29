@@ -1,2 +1,0 @@
-bump: patch
-summary: fr 5.0.0 refused the plans it wrote — a new plan's fr_version ceiling is now derived from the installed major instead of a hardcoded `<5.0.0`, and a stale-ceiling error points to `fr migrate artifacts --yes` instead of suggesting an older fr
