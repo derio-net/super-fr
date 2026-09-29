@@ -24,3 +24,8 @@ registry.py:444 locator; trigger.py:581 _will_not_act_here shared wording; skill
 ### rc-813-tier · root-cause · fr-plan lists tiers without criteria and self-review asks no reason for tier above standard
 
 skills/fr-plan/SKILL.md:80. A policy gap, not a code defect.
+
+<!-- fr:journal kind=decision scope=debug id=batch-not-one-cause created=2026-09-29T11:09:49+00:00 -->
+### batch-not-one-cause · decision · Batch spans four independent root causes; paused for operator direction before any fix
+
+Per batch rule. Proposed: fix all four in one PR; #813's reason as a spec-journal decision (no plan shape change), so no artifact current_version moves.
