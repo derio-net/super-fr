@@ -5334,7 +5334,12 @@ rows:
     - super-fr:docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md#R5
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: '2026-09-29 take 10 (super-fr-3; fr 4.35.0, OpenCode 1.18.32, GitLab no CI,
+      devcontainer; run A gpt-6-sol, run B gpt-6-luna high; docs/audits/2026-09-29-take10-opencode-live-walk.md):
+      Walked live, not passed: checks 1-3 enforced and deliver''s freshness refusal
+      worked (A), but every witness recorded unobserved on OpenCode (#797) and both
+      review records list the orchestrator''s shots, not the reviewer''s (#816). Stays
+      not-implemented.'
     verify: post-merge
   - id: visual-evidence-browser-check-prose
     capability: fr-goal-prose
