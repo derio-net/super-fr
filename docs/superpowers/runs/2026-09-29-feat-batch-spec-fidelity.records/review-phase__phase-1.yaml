@@ -1,0 +1,56 @@
+schema_version: 4
+run: 2026-09-29-feat-batch-spec-fidelity
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1-duplicate-design-sections
+    review_scope: in
+    title: "Two same-named ### Design subsections always refused as out of order"
+    body: "fidelity.py parse_design_sections kept duplicates while check_inventory de-duplicated `seen`, so a spec with two `### Notes` got a false order refusal the reviewer could never satisfy, and InventoryCounts.sections double-counted. In scope: new code in this change."
+  - kind: finding
+    id: p1-r2-test-gaps
+    review_scope: in
+    title: "Missing tests: open/legacy-unconfirmed departures, quote-boundary clause, escaped quote, nested fence, duplicates; substring import guard"
+    body: "The behaviour was right but unpinned: a never-resolved departure and a legacy `unconfirmed` one at the witness, a clause spanning two separate quotes, a `\\\"` escape in a clause, a longer fence holding a shorter one, duplicate sections. The import-direction test was a bare substring check with an unclosed file. In scope: tests for this change."
+  - kind: finding
+    id: p1-r3-unconfirmed-refusal-shape
+    review_scope: in
+    title: "unconfirmed_refusal always refuses but kept a str | None type, unused params and a dead unconfirmed= write"
+    body: "After retirement the helper can only refuse; its Optional return, `del target, scope`, the callers' `is not None` checks and the `unconfirmed=res.state == \"unconfirmed\"` write were dead weight obscuring the retirement. In scope: code this change edited."
+  - kind: finding
+    id: p1-r4-backtick-info-string
+    review_scope: in
+    title: "A backtick run with a backtick in its info string opened a fence"
+    body: "_FENCE_RE treated \"```inline``` text\" at line start as a fence opener, swallowing the rest of the Design (CommonMark forbids a backtick in a backtick fence's info string). In scope: new parser in this change."
+  - kind: review
+    id: p1-review
+    title: "phase 1 code review: 4 findings (r1-r4), all in scope, all fixed"
+    body: |
+      Independent reviewer over d0d66c4a..9ba1748f against spec §A-§D, §H and Test Plan 1-4.
+      Findings: p1-r1-duplicate-design-sections, p1-r2-test-gaps, p1-r3-unconfirmed-refusal-shape,
+      p1-r4-backtick-info-string — each verified against the code and fixed in 8dd3156a with tests
+      (r1, r4 red first; r2's gap tests passed on first run, confirming the behaviour and pinning it).
+      Verified clean by the reviewer: clause-partition walk (whitespace, elision fragments, middle-column
+      pipe protection, escapes), CommonMark fence rules, the four run_cmd.py tables and both manifest
+      copies, predates handling, staged-resolve reading in the witness, unconfirmed still folding,
+      fr/requirements.py free of fr.fidelity. Out of scope, noted: fr/requirements.py `_locate_section`
+      remains fence-unaware (pre-existing; the spec limits the fence fix to the Design parser).
+resolves:
+  - id: p1-r1-duplicate-design-sections
+    state: fixed
+    body: "parse_design_sections raises FidelityError naming duplicate section names (rename one); check_inventory reports it. Test: test_duplicate_design_section_names_are_refused_naming_them (8dd3156a)."
+  - id: p1-r2-test-gaps
+    state: fixed
+    body: "Added test_a_departure_left_open_or_legacy_unconfirmed_is_refused (4 cases), clause-spans-two-quotes param, test_a_clause_holding_an_escaped_quote_parses, test_a_longer_fence_is_not_closed_by_a_shorter_one, the duplicate-section test, and an AST-based import-direction check (8dd3156a)."
+  - id: p1-r3-unconfirmed-refusal-shape
+    state: fixed
+    body: "unconfirmed_refusal(finding_id) -> str; _refuse_unconfirmed raises directly; callers drop the None check; the unreachable unconfirmed= write removed (the fold still reads existing records) (8dd3156a)."
+  - id: p1-r4-backtick-info-string
+    state: fixed
+    body: "A backtick run whose info string holds a backtick no longer opens a fence. Test: test_a_backtick_run_with_a_backtick_in_its_info_string_is_not_a_fence (8dd3156a)."
+evidence:
+  review: p1-review
+  reviewer: a71e833bc4d9ed6f5
+  model: claude-opus-5-5
