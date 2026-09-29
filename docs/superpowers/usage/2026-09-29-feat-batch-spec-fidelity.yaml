@@ -1,0 +1,63 @@
+schema_version: 1
+run: 2026-09-29-feat-batch-spec-fidelity
+captures:
+- host: h-7e4ce15d
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-29T08:48:00+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: 162a91cf-03fd-4d78-a879-ea25fe65194f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 406
+        cache_write: 590893
+        cache_read: 31399839
+        output: 101971
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 194
+        cache_write: 447228
+        cache_read: 10435561
+        output: 3771
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 154
+      other:
+        usd: null
+        turns: 76
+      paperwork:
+        usd: null
+        turns: 86
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+      brainstorm:
+        usd: null
+        turns: 25
+      spec-review:
+        usd: null
+        turns: 35
+      plan:
+        usd: null
+        turns: 8
+      implement:
+        usd: null
+        turns: 213
+      deliver:
+        usd: null
+        turns: 7
+    briefs:
+      a0c97987cd9487b99: 1872
+      phase/1/implement-phase: 5629
+      a71e833bc4d9ed6f5: 2854
+      phase/2/implement-phase: 11236
+      a9218249853492e8b: 3769

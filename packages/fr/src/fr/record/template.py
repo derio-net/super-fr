@@ -86,12 +86,15 @@ def render_template(
         )
         lines.append("#     a finding also takes review_scope: in|out (state defaults to open)")
         lines.append("#     a spec-journal discovery holding the operator input takes input: true")
+        lines.append(
+            '#     a spec-journal decision the operator answered "Your call." takes delegated: true'
+        )
     if "resolves" in allowed:
         lines.append("resolves: []")
         lines.append(
             "#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}"
         )
-        lines.append("#     spec journal only: state: unconfirmed, body: <what gets built>")
+        lines.append("#     invented/reinterpreted spec findings close fixed (removed) or refuted")
     if "acceptance" in allowed:
         lines.append("acceptance: []")
         lines.append(

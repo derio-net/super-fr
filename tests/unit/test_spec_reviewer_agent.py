@@ -57,19 +57,34 @@ def test_body_names_the_input_coverage_return_and_four_labels() -> None:
         assert label in body.lower()
 
 
-def test_body_names_unconfirmed_as_the_resolution_for_invented_or_reinterpreted() -> None:
+def test_body_names_invented_reinterpreted_and_dropped_findings() -> None:
     body = _body(AGENT.read_text())
-    assert "unconfirmed" in body
-    assert "invented" in body
-    assert "reinterpreted" in body
-    assert "dropped" in body
+    for word in ("invented", "reinterpreted", "dropped"):
+        assert word in body
+
+
+def test_the_agent_names_both_fidelity_blocks_in_its_checks_and_return_template() -> None:
+    """spec 2026-09-29 §G: clause-by-clause fidelity and the design inventory."""
+    body = _body(AGENT.read_text())
+    checks = body[body.index("## What you check") : body.index("## Tag every finding")]
+    template = body[body.index("## What you return") :]
+    for block in ("requirement-fidelity", "design-inventory"):
+        assert block in checks, f"the checks name no {block} block"
+        assert f"```{block}" in template, f"the return template omits the {block} block"
+
+
+def test_the_agent_no_longer_resolves_invented_or_reinterpreted_unconfirmed() -> None:
+    """d1-remove-only: removed (or refuted), never confirmed, never asked."""
+    body = _body(AGENT.read_text())
+    assert "unconfirmed" not in body.replace("never confirmed", "")
+    assert "never confirmed" in body
+    assert "removed" in body
 
 
 def test_traceability_findings_are_always_tagged_in_scope() -> None:
-    """spec §D: "All three are tagged in scope." apply.py's unconfirmed_refusal
-    (packages/fr/src/fr/record/apply.py) refuses `--state unconfirmed` on a
-    finding tagged `review_scope: out` — a mistagged invented/reinterpreted/
-    dropped finding would be stranded with no way to close the gate. The
+    """spec §D: "All three are tagged in scope." fr's fidelity witness holds a
+    finding tagged `review_scope: out` open-for-the-gate — a mistagged invented/
+    reinterpreted/dropped finding would be stranded with no way to close it. The
     traceability section (not the later, general "tag every finding" section)
     must state this explicitly, with the reason."""
     body = _body(AGENT.read_text())
@@ -80,5 +95,41 @@ def test_traceability_findings_are_always_tagged_in_scope() -> None:
     assert "always" in trace_section.lower()
     assert "in scope" in trace_section.lower()
     assert "never" in trace_section.lower() and "out" in trace_section.lower()
-    assert "unconfirmed" in trace_section
     assert "review_scope" in trace_section or "out of scope" in trace_section.lower()
+
+
+def _first_block(body: str, fence: str) -> str:
+    start = body.index(f"```{fence}\n")
+    end = body.index("```", start + 3 + len(fence))
+    return body[start : end + 3] + "\n"
+
+
+def test_the_agents_example_blocks_pass_frs_own_checks() -> None:
+    """q3 (phase 2 review): the prose's example `requirement-fidelity` and
+    `design-inventory` blocks are fed through the checks fr runs at resolve, so a
+    template whose fence, header or label forms drift from `fr.fidelity`'s grammar
+    fails here instead of at the first live spec-review."""
+    from fr.fidelity import check_fidelity, check_inventory
+    from fr.journal.model import JournalEntry
+
+    body = _body(AGENT.read_text())
+    spec = (
+        "# spec\n\n## Requirements\n\n| id | requirement | source |\n|---|---|---|\n"
+        '| R1 | x | input "a number field in the same style as the article view" |\n'
+        '| R2 | y | input "− / + on each article card" |\n\n'
+        "## Design\n\n### A. Quantities\n\n### B. Storage\n"
+    )
+    stamp = dict(scope="spec", created="2026-09-29T00:00:00", title="t")
+    entries = [
+        JournalEntry(kind="discovery", id="input-x", input=True, **stamp,  # type: ignore[arg-type]
+                     body="a number field in the same style as the article view; "
+                          "− / + on each article card"),
+        JournalEntry(kind="finding", id="s4", state="open", **stamp),  # type: ignore[arg-type]
+        JournalEntry(kind="finding", id="s7", state="open", **stamp),  # type: ignore[arg-type]
+    ]  # fmt: skip
+
+    fidelity, _ = check_fidelity(_first_block(body, "requirement-fidelity"), spec, entries)
+    inventory, _ = check_inventory(_first_block(body, "design-inventory"), spec, entries)
+
+    assert fidelity == []
+    assert inventory == []

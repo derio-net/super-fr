@@ -254,31 +254,28 @@ _CARRIED_OPEN = frozenset({"deferred", "out-of-scope", "unconfirmed"})
 reads the finding as open (fail closed) rather than failing to parse."""
 
 
-def unconfirmed_refusal(finding_id: str, target: JournalEntry, scope: str | None) -> str | None:
-    """Why `unconfirmed` may not close `target`, or None (spec 2026-09-28 §D).
-
-    The ONE statement of the two rules, shared by `fr journal resolve` and a
-    step record: `unconfirmed` is a spec-capture state, and a finding the
-    reviewer tagged `out` is not the input's to confirm. The model validator
-    also refuses a non-spec record, but only this check can see the TARGET."""
-    if scope != "spec":
-        return (
-            f"`unconfirmed` is only valid on a spec-scope finding, and {finding_id!r} is in "
-            f"a {scope} journal — it records behaviour built without operator confirmation"
-        )
-    if target.review_scope == "out":
-        return (
-            f"{finding_id!r} was tagged review_scope: out by the reviewer — `unconfirmed` "
-            "is for behaviour this spec builds; resolve an out-of-scope finding "
-            "`out-of-scope` or `deferred`"
-        )
-    return None
+UNCONFIRMED_RETIRED = (
+    "`unconfirmed` is retired for new writes (d1-remove-only, spec 2026-09-29 §D): an "
+    "invented or reinterpreted finding is fixed by removing the departure — resolve it "
+    "`fixed` once the invented behaviour is deleted or the requirement restored to its "
+    "quote, or `refuted` with the reasoning"
+)
 
 
-def _refuse_unconfirmed(finding_id: str, target: JournalEntry, scope: str | None) -> None:
-    reason = unconfirmed_refusal(finding_id, target, scope)
-    if reason is not None:
-        raise RecordRefusedError(reason)
+def unconfirmed_refusal(finding_id: str) -> str:
+    """Why `unconfirmed` may not close `finding_id` — always, now (spec 2026-09-29
+    §D, d1-remove-only, superseding 2026-09-28 §D's d3-late-unconfirmed).
+
+    The ONE statement of the rule, shared by `fr journal resolve` and a step
+    record. The state stays in `RESOLUTION_STATES`, `ResolutionState` and the
+    journal fold, so a journal or record that already carries it still parses
+    and renders: the state is retired by refusing writes, not by a shape
+    change."""
+    return f"{finding_id!r}: {UNCONFIRMED_RETIRED}"
+
+
+def _refuse_unconfirmed(finding_id: str) -> None:
+    raise RecordRefusedError(unconfirmed_refusal(finding_id))
 
 
 def _journal_writes(
@@ -379,6 +376,7 @@ def _journal_writes(
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
+                delegated=item.delegated,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
@@ -391,7 +389,7 @@ def _journal_writes(
     for res in record.resolves:
         target_entry = finding(res.id)
         if res.state == "unconfirmed":
-            _refuse_unconfirmed(res.id, target_entry, scope)
+            _refuse_unconfirmed(res.id)
         try:
             entry = JournalEntry(
                 kind="finding",
@@ -405,7 +403,6 @@ def _journal_writes(
                 resolves=res.id,
                 tracked_by=res.tracked_by,
                 out_of_scope=res.state == "out-of-scope",
-                unconfirmed=res.state == "unconfirmed",
                 answered_by=res.answered_by,
             )
         except ValueError as e:

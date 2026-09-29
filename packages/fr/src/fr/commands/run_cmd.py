@@ -1468,6 +1468,7 @@ _VERIFIABLE_EVIDENCE = (
     "proportionality",
     "requirements",
     "coverage",
+    "fidelity",
     "requirement-rows",
     "visual",
     "single-phase",
@@ -1477,12 +1478,14 @@ _VERIFIABLE_EVIDENCE = (
 # `requirements`, `coverage` and `requirement-rows` (2026-09-28 spec §C, §D, §F)
 # are the requirements-traceability witnesses: all three in all three tables,
 # or resolve refuses the step as unverifiable or demands `--evidence <name>=`.
+# `fidelity` (2026-09-29 spec §C) joins them, in all four tables.
 _DERIVED_EVIDENCE = frozenset(
     {
         "findings",
         "proportionality",
         "requirements",
         "coverage",
+        "fidelity",
         "requirement-rows",
         "visual",
         "single-phase",
@@ -1515,6 +1518,10 @@ _DERIVED_FROM = {
     "its spec journal and the acceptance matrix",
     "coverage": "from the `input-coverage` block of the review entry named by "
     "`review`, checked as an exact partition of the spec journal's input",
+    "fidelity": "from the `requirement-fidelity` and `design-inventory` blocks of the "
+    "review entry named by `review`: every requirement's quotes partitioned into clauses, "
+    "every Design section inventoried, and every departure they flag closed fixed or "
+    "refuted",
     "requirement-rows": "from the acceptance rows citing the run's spec: none may be "
     "`not-implemented` unless it declares `verify: post-merge`",
     "visual": "from the step record's `visual:` section — every owed row's screenshots "
@@ -2011,7 +2018,7 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
 # acceptance matrix as they stand at this resolve (for a record, as the record
 # leaves them: `apply_record` writes before it runs this resolve in process).
 
-_REQUIREMENTS_EVIDENCE = ("requirements", "coverage", "requirement-rows")
+_REQUIREMENTS_EVIDENCE = ("requirements", "coverage", "fidelity", "requirement-rows")
 
 
 @dataclass(frozen=True)
@@ -2113,6 +2120,8 @@ def _requirements_witnesses(
         out["requirements"] = _requirements_witness(key, capture)
     if "coverage" in wanted:
         out["coverage"] = _coverage_witness(key, capture, review_id)
+    if "fidelity" in wanted:
+        out["fidelity"] = _fidelity_witness(key, capture, review_id)
     if "requirement-rows" in wanted:
         out["requirement-rows"] = _requirement_rows_witness(key, capture)
     return out
@@ -2177,6 +2186,62 @@ def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | 
         f"{counts.spans} spans: R={counts.requirement} deferred={counts.deferred} "
         f"context={counts.context} missing={counts.missing}"
     )
+
+
+def _fidelity_witness(key: str, capture: _RequirementsCapture, review_id: str | None) -> str:
+    """`<c> clauses over <r> requirements (kept=… flagged=…); <s> sections, <b>
+    behaviours (invented=…)` from the `requirement-fidelity` and
+    `design-inventory` blocks of the review entry `review` names (2026-09-29
+    spec §C) — or exit 2. §D: every finding a flagged fidelity row or an
+    `invented` inventory row names must close `fixed` (the departure removed)
+    or `refuted`; the spec journal is read as this resolve leaves it, so a
+    record's own staged resolves count."""
+    from fr.fidelity import check_fidelity, check_inventory, fidelity_summary
+    from fr.requirements import _REDISPATCH
+
+    why = "cannot derive fidelity evidence"
+    review = next((e for e in capture.entries if e.id == review_id and e.kind == "review"), None)
+    if review is None:
+        _requirements_refusal(
+            key,
+            [
+                f"{why} — no `kind=review` spec-journal entry named by `review` "
+                f"({review_id!r}) carries the requirement-fidelity and design-inventory blocks"
+            ],
+        )
+    fproblems, fc = check_fidelity(review.body, capture.spec_text, capture.entries)
+    iproblems, ic = check_inventory(review.body, capture.spec_text, capture.entries)
+    problems = fproblems + iproblems
+    if problems:
+        _requirements_refusal(
+            key,
+            [
+                f"refused — the fidelity blocks of review {review.id!r} are unsound "
+                f"({_REDISPATCH}):",
+                *(f"- {p}" for p in problems),
+            ],
+        )
+    states = effective_finding_states(capture.entries)
+    slug = spec_journal_slug(Path(capture.spec_rel).stem)
+    departures = list(dict.fromkeys((*fc.finding_ids, *ic.finding_ids)))
+    held = [(fid, states.get(fid, "open")) for fid in departures]
+    held = [(fid, st) for fid, st in held if st not in ("fixed", "refuted")]
+    if held:
+        _requirements_refusal(
+            key,
+            [
+                "refused — an invented or reinterpreted finding closes only by removing the "
+                "departure (fixed) or refuting it (d1-remove-only):",
+                *(
+                    f"- {fid} is {st}: remove it from the spec, then `fr journal resolve "
+                    f"--scope spec --slug {slug} --id {fid} --state fixed "
+                    '--note "<what was removed>"` '
+                    "(or --state refuted with the reasoning)"
+                    for fid, st in held
+                ),
+            ],
+        )
+    return fidelity_summary(fc, ic)
 
 
 def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:

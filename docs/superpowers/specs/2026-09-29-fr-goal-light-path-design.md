@@ -37,7 +37,7 @@ brainstorm (gate: operator)            # identical to fr-goal
 plan                                   # fr-plan; evidence: [single-phase]
 spec-plan-review                       # agent: fr-spec-reviewer, tier: hard
                                        #   needs: [spec, plan]; emits: [journal:spec, acceptance]
-                                       #   evidence: [review, reviewer, findings, requirements, coverage]
+                                       #   evidence: [review, reviewer, findings, requirements, coverage, fidelity]
 plan-review (cli)                      # fr plan self-review {{ artifacts.plan }}
 implement { implement-phase, review-phase }   # identical members to fr-goal
 journal-check (cli)                    # identical
@@ -45,7 +45,7 @@ deliver                                # identical, plus `tests: reuse` (§D)
 ```
 
 - **Order.** `plan` comes before the review so a single dispatch sees both documents. `plan-review` (deterministic) comes after the reviewer, so the plan is self-reviewed once more after the reviewer's fixes land.
-- **`spec-plan-review`** reuses the `spec-review` evidence machinery unchanged: `_evidence_target` routes a step that emits `journal:spec` to the spec journal (`run_cmd.py:1452-1462`), and `_verify_reviewer` checks `expected_agent=step.agent` (`run_cmd.py:2096-2185`). Plan findings go into the **spec journal** as well, tagged `target: plan` in the body, so `findings` (derived from that one journal) gates both documents. This step emits no `journal:plan` and never ticks.
+- **`spec-plan-review`** carries exactly `spec-review`'s evidence list, including `fidelity` since spec-fidelity (#819) added it; a test pins the two lists equal. It reuses the `spec-review` evidence machinery unchanged: `_evidence_target` routes a step that emits `journal:spec` to the spec journal (`run_cmd.py:1452-1462`), and `_verify_reviewer` checks `expected_agent=step.agent` (`run_cmd.py:2096-2185`). Plan findings go into the **spec journal** as well, tagged `target: plan` in the body, so `findings` (derived from that one journal) gates both documents. This step emits no `journal:plan` and never ticks.
 - **`single-phase`** is a new derived evidence name, never passed. It is computed on the light shape's `plan` resolve from the emitted plan's phases. The plan must have exactly one phase that is not `[manual]`, otherwise the resolve is refused: `single-phase: the light shape takes one agentic phase; this plan has N (<ids>). Merge them, or start a new run on fr-goal.` This is a structural rule, checked at authoring time, rather than a hope that the plan stays small.
 - **Derived-evidence dispatch** follows the existing pattern (`_verified_evidence`, `run_cmd.py:1580-1753`). `Step` gains no field, and the manifest stays `schema: 1` (`packages/fr/src/fr/workflow/model.py:27,115`).
 

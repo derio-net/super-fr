@@ -40,6 +40,33 @@ COVERAGE_BLOCK = f"""```input-coverage
 ```
 """
 
+DESIGN_SECTION = """
+## Design
+
+### A. Widget
+
+The widget counts.
+"""
+
+# The two blocks the `fidelity` evidence derives from (2026-09-29 spec §A/§B),
+# over `REQUIREMENTS_SECTION` and `DESIGN_SECTION`.
+FIDELITY_BLOCK = f"""```requirement-fidelity
+| requirement | clause | fidelity |
+|---|---|---|
+| R1 | "{QUOTE}" | kept |
+```
+"""
+
+INVENTORY_BLOCK = """```design-inventory
+| section | behaviour | backing |
+|---|---|---|
+| A. Widget | the widget counts | R1 |
+```
+"""
+
+REVIEW_BLOCKS = f"{COVERAGE_BLOCK}\n{FIDELITY_BLOCK}\n{INVENTORY_BLOCK}"
+"""Everything a sound spec review returns: `coverage` and `fidelity`'s blocks."""
+
 
 def now() -> str:
     return datetime.now().replace(microsecond=0).isoformat()
@@ -106,12 +133,16 @@ def row(
 
 def seed_requirements(repo: Path, spec_rel: str, *, status: str = "skipped") -> None:
     """Make `spec_rel` pass the §C gate: a Requirements section appended to
-    the spec, an input entry, and one matrix row (status `status`) citing R1."""
+    the spec, an input entry, and one matrix row (status `status`) citing R1.
+    A spec with neither section also gets `DESIGN_SECTION` BEFORE its
+    Requirements, so `REVIEW_BLOCKS`' inventory matches it and a test that
+    appends a requirement row still appends it to the table."""
     spec = repo / spec_rel
     spec.parent.mkdir(parents=True, exist_ok=True)
     text = spec.read_text() if spec.exists() else "# spec\n"
     if "## Requirements" not in text:
-        spec.write_text(text.rstrip("\n") + "\n" + REQUIREMENTS_SECTION)
+        design = DESIGN_SECTION if "## Design" not in text else ""
+        spec.write_text(text.rstrip("\n") + "\n" + design + REQUIREMENTS_SECTION)
     write_input_entry(repo, spec_rel)
     write_matrix(repo, [row(spec_rel, status=status)])
 

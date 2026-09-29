@@ -63,7 +63,7 @@ steps:
     tier: hard
     needs: [spec, plan]
     emits: [journal:spec, acceptance]
-    evidence: [review, reviewer, findings, requirements, coverage]
+    evidence: [review, reviewer, findings, requirements, coverage, fidelity]
 
   - id: plan-review
     kind: cli

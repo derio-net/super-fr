@@ -65,7 +65,11 @@ def test_spec_plan_review_is_one_hard_reviewer_dispatch_over_spec_and_plan() -> 
     assert step.tier == "hard"
     assert list(step.needs) == ["spec", "plan"]
     assert list(step.emits) == ["journal:spec", "acceptance"]
-    assert list(step.evidence) == ["review", "reviewer", "findings", "requirements", "coverage"]
+    # R3: the same evidence gate as fr-goal's `spec-review`, whatever that gate
+    # grows to (spec-fidelity added `fidelity` after this shape was written).
+    (full,) = [s for s in resolve_workflow("fr-goal", REPO_ROOT).steps if s.id == "spec-review"]
+    assert list(step.evidence) == list(full.evidence)
+    assert "fidelity" in step.evidence
 
 
 def test_the_light_plan_step_declares_single_phase() -> None:

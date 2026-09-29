@@ -625,25 +625,32 @@ wrote, so `spec-review` dispatches a separate, read-only reviewer,
 checks **traceability to your input first**, before anything else: every
 statement of your input must map to a requirement or an explicit deferral (a
 **dropped** finding otherwise), a requirement must say no more and no less
-than its quotes (a **reinterpreted** finding otherwise), and no user-visible
-behavior in the design may appear with no requirement behind it (an
-**invented** finding otherwise). It returns its full partition of the input —
-a table of spans, each labeled with the requirement it satisfies, `deferred`,
-`context`, or the finding that flags it missing — so "nothing was missed" is
-something fr can check mechanically, not something the reviewer merely
-claims. A dropped requirement is simply added or deferred; an invented or
-reinterpreted one cannot be waved through by the agent that built it — the
-orchestrator marks it `unconfirmed` with a note on what will actually ship, or
-removes the behavior, and that note is what the pull request later shows you
-under a section named for exactly that: behavior built without your
-confirmation. Only then does the reviewer check the specification against the
+than its quotes, checked clause by clause (a **reinterpreted** finding
+otherwise — "in the same style" dropped from a requirement is caught even
+when it survives in the quote), and no user-visible behavior in any section of
+the design may appear with no requirement or decision of yours behind it (an
+**invented** finding otherwise). It returns three tables: its full partition of
+the input — each span labeled with the requirement it satisfies, `deferred`,
+`context`, or the finding that flags it missing — the cut of every
+requirement's quote into clauses, each `kept` or naming the finding that flags
+it, and an inventory of every section of the design with the behaviors it adds
+and what backs each. fr checks all three mechanically for completeness, so
+"nothing was missed" is not something the reviewer merely claims. A dropped
+requirement is simply added or deferred; an invented or reinterpreted one is
+removed — the invented behavior deleted, the requirement restored to what your
+words literally said — and you are not asked, because the answer would only
+confirm what you never requested. Where you answered "your call", the
+decision is recorded as delegated, and the pull request lists it, with the
+requirements that cite it, under a section named for exactly that: behavior
+built without your confirmation. Only then does the reviewer check the specification against the
 decisions you gave, cite a file and line for every name the document relies
 on, and look for sections that disagree with each other. The step cannot be
 marked done without that review on record: a review entry written after the
 step began, the reviewer's own identifier — which, where the harness lets
 `fr` read the conversation, must be a reviewer this session really dispatched
-— an input partition that covers the input with no gap or overlap, and no
-finding left open. The file lives at
+— an input partition that covers the input with no gap or overlap, clause and
+design inventories that account for every clause and section, and no finding
+left open. The file lives at
 `docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md` — the path is
 `fr-brainstorming`'s, which `brainstorm` invokes
 (`plugins/super-fr/skills/fr-goal/SKILL.md:42-53`,
@@ -946,12 +953,12 @@ eventually be forgotten.
 still not implemented, unless that row is explicitly marked as needing a live,
 operator-driven run to prove — the kind of claim no unit test can settle. Such
 a row keeps nagging you after merge rather than blocking delivery, and the PR
-body lists it under its own heading so it is not forgotten either. Two more
+body lists it under its own heading so it is not forgotten either. Three more
 sections come from the same traceability work as `spec-review`: the input
 partition the reviewer returned, so you can see the whole input accounted for
-in one place, and behavior that shipped without your confirmation — an
-invented or reinterpreted requirement the orchestrator resolved on its own
-judgment — listed with the note explaining what was actually built.
+in one place, the reviewer's inventory of the design's behaviors, and what
+shipped without your confirmation — each decision you delegated with "your
+call", listed with the requirements that cite it.
 
 Two of those sections deserve a word. The first is the **proportionality
 report** from `fr plan proportionality`: new files nothing refers to, files

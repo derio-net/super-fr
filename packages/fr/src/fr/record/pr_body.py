@@ -44,18 +44,20 @@ REQUIRED_SECTIONS = (
     "## Out-of-scope findings",
     "## Built without operator confirmation",
     "## Input coverage",
+    "## Design inventory",
     "## Post-merge verification owed",
     "## Proportionality",
     "## Cost",
 )
-"""The headings a delivered PR's body must carry, in order. The middle three
-are spec 2026-09-28 §D (d12) and §F: what was built on the orchestrator's
-reading alone, the spec review's input partition, and the acceptance rows only
-a live run after merge can move."""
+"""The headings a delivered PR's body must carry, in order. The middle four
+are spec 2026-09-28 §D (d12) and §F, and 2026-09-29 §F: what was built without
+the operator's confirmation, the spec review's input partition, its design
+inventory, and the acceptance rows only a live run after merge can move."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 _UNCONFIRMED = "unconfirmed"
 PREDATES_LINE = "Not recorded (predates the requirements gate)."
+DESIGN_PREDATES_LINE = "Not recorded (predates the fidelity gate)."
 
 
 def missing_sections(body: str) -> list[str]:
@@ -124,7 +126,7 @@ def render_out_of_scope(lines: Sequence[str]) -> str:
 def _predates_gate(state: RunState) -> bool:
     """§G, as the run records it: no step recorded the run's spec, the one
     that did carries no `requirements` evidence, or a unit stored the
-    predates line for `requirements`/`coverage`."""
+    predates line for `requirements`/`coverage`/`fidelity`."""
     from fr.requirements import REQUIREMENTS_PREDATES, spec_emitter
     from fr.run import units
 
@@ -137,7 +139,7 @@ def _predates_gate(state: RunState) -> bool:
     return any(
         units.evidence_of(r, f"step/{step_id}").get(name) == REQUIREMENTS_PREDATES
         for step_id, r in state.steps.items()
-        for name in ("requirements", "coverage")
+        for name in ("requirements", "coverage", "fidelity")
     )
 
 
@@ -179,6 +181,74 @@ def _input_coverage(repo_root: Path, state: RunState) -> str:
         return f"Not available: review entry `{review.id}` carries no input-coverage block."
     summary = f"{recorded['coverage']} (review `{review.id}`)"
     return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
+
+
+def _design_inventory(repo_root: Path, state: RunState) -> str:
+    """The spec review's `design-inventory` block inside `<details>` (spec
+    2026-09-29 §F, d6), read from the review entry the unit that recorded
+    `fidelity` names. A run with no `fidelity` evidence — or one §G covers —
+    predates the fidelity gate; any other miss says why it is `Not available`."""
+    from fr.fidelity import inventory_block
+    from fr.requirements import run_spec
+    from fr.run import units
+
+    if _predates_gate(state):
+        return DESIGN_PREDATES_LINE
+    recorded = next(
+        (
+            ev
+            for step_id, r in state.steps.items()
+            if "fidelity" in (ev := units.evidence_of(r, f"step/{step_id}"))
+        ),
+        None,
+    )
+    if recorded is None:
+        return DESIGN_PREDATES_LINE
+    spec_rel = run_spec(state)
+    assert spec_rel is not None  # _predates_gate is True without one
+    if "review" not in recorded:
+        return "Not available: the step that recorded `fidelity` names no `review` entry."
+    slug = spec_journal_slug(Path(spec_rel).stem)
+    path = resolve_journal_read_path(repo_root, "spec", slug)
+    try:
+        entries = parse_journal(path.read_text())
+    except (JournalParseError, OSError) as e:
+        return f"Not available: spec journal {path.name} is unreadable: {e}"
+    review = next((e for e in entries if e.id == recorded["review"]), None)
+    if review is None:
+        return f"Not available: review entry `{recorded['review']}` is not in the spec journal."
+    block = inventory_block(review.body)
+    if block is None:
+        return f"Not available: review entry `{review.id}` carries no design-inventory block."
+    summary = f"{recorded['fidelity']} (review `{review.id}`)"
+    return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
+
+
+def _delegated(repo_root: Path, state: RunState) -> list[str]:
+    """Every `delegated=true` spec decision (spec 2026-09-29 §E): id, title and
+    the requirement ids whose source cites it."""
+    from fr.requirements import RequirementsError, parse_requirements, run_spec
+
+    spec_rel = run_spec(state)
+    citing: dict[str, list[str]] = {}
+    if spec_rel is not None:
+        try:
+            reqs = parse_requirements((repo_root / spec_rel).read_text())
+        except (OSError, RequirementsError):
+            reqs = None
+        for req in reqs.items if reqs is not None else ():
+            for src in req.sources:
+                if src.kind == "decision":
+                    citing.setdefault(src.value, []).append(req.id)
+    lines: list[str] = []
+    for scope, entries in _journals(repo_root, state):
+        if scope != "spec":
+            continue
+        for e in entries:
+            if e.kind == "decision" and e.delegated:
+                ids = ", ".join(citing.get(e.id, ())) or "none"
+                lines.append(f"- `{e.id}` — {e.title} — cited by: {ids}")
+    return lines
 
 
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
@@ -284,6 +354,7 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
     """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order.
     The agent may add a summary above it; it may not drop a section."""
     inside, outside, unconfirmed = _findings(repo_root, state)
+    delegated = _delegated(repo_root, state)
     parts = [
         f"<!-- rendered by fr for run {state.run}; edit above this line only -->",
         "## Findings",
@@ -291,9 +362,11 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         "## Out-of-scope findings",
         render_out_of_scope(outside),
         "## Built without operator confirmation",
-        "\n".join(unconfirmed) if unconfirmed else "None.",
+        "\n".join([*delegated, *unconfirmed]) if delegated or unconfirmed else "None.",
         "## Input coverage",
         _input_coverage(repo_root, state),
+        "## Design inventory",
+        _design_inventory(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
     ]
