@@ -3,7 +3,7 @@ run: 2026-09-29-feat-batch-light-path
 workflow: fr-goal@1
 branch: feat/batch-light-path
 started: '2026-09-29T06:32:52+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -50,7 +50,11 @@ steps:
           returned: '2026-09-29T07:27:37+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-09-29T07:27:39+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
