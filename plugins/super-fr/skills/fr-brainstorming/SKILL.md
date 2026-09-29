@@ -104,7 +104,7 @@ requirements — an `acceptance:` entry of the brainstorm record (`status:
 not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
 post-merge` when only a live run can prove it), or with no run
 `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
-first if the repo has no matrix). A UI row also carries `visual`: states and interactions, limits included (§1 asks any the input leaves unstated). **The brainstorm ENDS by presenting the
+first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (§1 asks any the input leaves unstated). **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,
 the target verification level, why it is business-level not implementation
 detail. Silent row creation is not acceptance-of-scope; the presentation is.
