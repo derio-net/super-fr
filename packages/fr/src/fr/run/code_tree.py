@@ -35,9 +35,15 @@ holds.
 """
 
 
+ISOLATION_MARKER = ".fr-isolation"
+"""The workspace marker `fr isolation up` writes at the toplevel. It is
+excluded through `info/exclude` in a real workspace, but it is fr's, never
+code, so it is not counted even where that exclusion is missing."""
+
+
 def is_code_path(path: str) -> bool:
     """`path` (repo-relative, `/`-separated) is code — not an fr artifact."""
-    return not path.startswith(FR_ARTIFACT_PREFIXES)
+    return path != ISOLATION_MARKER and not path.startswith(FR_ARTIFACT_PREFIXES)
 
 
 def _out(repo: Path, *args: str) -> str:
@@ -117,3 +123,16 @@ def newest_code_mtime(
         if newest is None or mtime > newest[0]:
             newest = (mtime, rel)
     return newest
+
+
+def code_paths_since_tree(repo: Path, tree: str, *, limit: int = 200) -> list[str] | None:
+    """The code paths that differ between the newest commit (of HEAD's last
+    `limit`) whose code tree is `tree` and the working tree — committed since
+    or uncommitted — sorted. `None` when no such commit is found: the tree is
+    only a hash, so the paths can be named only through a commit that has it.
+    """
+    revs = _out(repo, "rev-list", f"--max-count={limit}", "HEAD").split()
+    for rev in revs:
+        if code_tree(repo, rev) == tree:
+            return changed_code_paths(repo, rev)
+    return None

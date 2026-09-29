@@ -202,6 +202,26 @@ def _post_merge_owed(repo_root: Path, state: RunState) -> str:
     return "\n".join(lines) if lines else "None."
 
 
+def _tests(state: RunState) -> str | None:
+    """`deliver`'s suite evidence, or `None` when it carries none yet (spec
+    2026-09-29-fr-goal-light-path §D: the PR body renders a reused unit and its
+    witness). Not a required section — a body rendered before the evidence
+    exists simply has no line to show."""
+    record = state.steps.get("deliver")
+    unit = (record.units or {}).get("step/deliver") if record is not None else None
+    witness = (unit.evidence or {}).get("tests") if unit is not None else None
+    if not witness:
+        return None
+    if witness.startswith("reused:"):
+        source, _, rest = witness.removeprefix("reused:").partition(":")
+        log, _, tree = rest.partition(";tree=")
+        return (
+            f"Full suite reused from `{source}` — `{log}`, on code tree `{tree[:12]}`, "
+            "unchanged at delivery."
+        )
+    return f"Full suite run at delivery — `{witness}`."
+
+
 def _proportionality(repo_root: Path, state: RunState) -> str:
     from fr.parser import PlanSchemaError, parse
     from fr.proportionality import run_report
@@ -270,6 +290,11 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _input_coverage(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
+    ]
+    tests = _tests(state)
+    if tests is not None:
+        parts += ["## Tests", tests]
+    parts += [
         "## Proportionality",
         _proportionality(repo_root, state),
         "## Cost",

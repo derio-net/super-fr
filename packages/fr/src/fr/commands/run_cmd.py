@@ -1722,6 +1722,8 @@ def _verified_evidence(
             opened=opened,
             holder=holder or (attempt.agent if attempt is not None else None),
         )
+    elif "tests" in offered and offered["tests"] == TESTS_REUSE:
+        verified["tests"] = _reuse_tests_witness(key, repo_root, state)
     elif "tests" in offered:
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
@@ -2382,6 +2384,74 @@ def _phase_log_windows(
     return windows
 
 
+TESTS_REUSE = "reuse"
+"""`deliver`'s `tests: reuse` — the most recent phase suite log stands in for a
+fresh run while the code tree it covered is unchanged (spec
+2026-09-29-fr-goal-light-path §D, R6)."""
+_TREE_SEP = ";tree="
+REUSED_PREFIX = "reused:"
+
+
+def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
+    """`(unit key, witness)` of the most recently resolved unit whose `tests`
+    evidence carries a code tree (a phase unit's, `_verify_phase_tests_log`),
+    or `None`. "Most recently" is the unit's last attempt's `returned`; a unit
+    with none sorts first, and a tie goes to the later unit in cursor order."""
+    best: tuple[str, int, str, str] | None = None
+    seq = 0
+    for record in state.steps.values():
+        for key, unit in (record.units or {}).items():
+            seq += 1
+            witness = (unit.evidence or {}).get("tests", "")
+            if _TREE_SEP not in witness or witness.startswith(REUSED_PREFIX):
+                continue
+            returned = unit.attempts[-1].returned if unit.attempts else None
+            candidate = (returned or "", seq, key, witness)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+    return (best[2], best[3]) if best is not None else None
+
+
+def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
+    """`reused:<unit>:<witness>` when HEAD's code tree equals the tree of the
+    most recently resolved unit carrying a suite log and no code path is
+    uncommitted — or exit 2 with the fresh-run instruction."""
+    from fr.run.code_tree import code_paths_since_tree, code_tree, dirty_code_paths
+
+    latest = _latest_tests_witness(state)
+    if latest is None:
+        err_console.print(
+            f"[red]{key}: tests: reuse — no phase unit recorded a suite log "
+            "(`evidence: {tests: <log>}` on an implement-phase or review-phase record); "
+            "run the full suite yourself into a log and name it.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    unit, witness = latest
+    recorded = witness.rpartition(_TREE_SEP)[2]
+    try:
+        same = code_tree(repo_root) == recorded and not dirty_code_paths(repo_root)
+        changed = None if same else code_paths_since_tree(repo_root, recorded)
+    except GitUnavailableError as e:
+        err_console.print(
+            f"[red]{key}: tests: reuse — cannot compute the code tree: {e}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+    if not same:
+        if changed:
+            n = len(changed)
+            what = f"{n} path{'' if n == 1 else 's'}, e.g. {changed[0]}"
+        else:
+            what = "its commit is not in HEAD's recent history"
+        err_console.print(
+            f"[red]{key}: tests: reuse — the code tree changed since {unit} ({what}); "
+            "run the full suite yourself into a log and name it.[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"{REUSED_PREFIX}{unit}:{witness}"
+
+
 def _verify_phase_tests_log(
     key: str, log: str, repo_root: Path, *, opened: str | None, holder: str | None
 ) -> str:
@@ -2458,7 +2528,7 @@ def _verify_phase_tests_log(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    return f"{_log_witness(path, data, repo_root)};tree={tree}"
+    return f"{_log_witness(path, data, repo_root)}{_TREE_SEP}{tree}"
 
 
 def _verify_review_entry(

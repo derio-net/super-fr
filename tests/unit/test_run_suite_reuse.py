@@ -9,15 +9,41 @@ and `deliver` never reads as a code change.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
 
+from fr.run import units
 from fr.run.code_tree import (
     FR_ARTIFACT_PREFIXES,
     code_tree,
     dirty_code_paths,
     newest_code_mtime,
+)
+from fr.run.model import load_run_state
+
+from tests.unit.test_run_cli import (
+    _invoke,
+    _invoke_as_harness,
+    _invoke_measurable,
+    _repo,
+    _squash,
+    _started_grouped_with_plan,
+    _write_shape,
+)
+from tests.unit.test_run_evidence import _journal
+from tests.unit.test_run_evidence_separate_context import _SHAPE, _deliver, _later, _review, _soon
+from tests.unit.transcript_sessions import (
+    AGENT_ID,
+    BASH,
+    CAPTURED_LOG,
+    SUBAGENT,
+    copy_of,
+    dispatched_at,
+    ran_at,
+    records,
+    write_agent,
 )
 
 
@@ -93,6 +119,13 @@ def test_code_tree_ignores_uncommitted_changes(tmp_path: Path) -> None:
     assert code_tree(repo) == before
 
 
+def test_the_isolation_marker_is_never_code(tmp_path: Path) -> None:
+    repo = _plain_repo(tmp_path)
+    (repo / ".fr-isolation").write_text("{}\n")
+
+    assert dirty_code_paths(repo) == []
+
+
 def test_dirty_code_paths_lists_only_uncommitted_code(tmp_path: Path) -> None:
     repo = _plain_repo(tmp_path)
     assert dirty_code_paths(repo) == []
@@ -153,33 +186,6 @@ def test_newest_code_mtime_skips_ignored_paths(tmp_path: Path) -> None:
 # the shipped `implement-phase` declares none but the derived `visual`. `tests`
 # is OFFERED evidence there: accepted undeclared, never owed.
 
-import json  # noqa: E402
-
-from fr.run import units  # noqa: E402
-from fr.run.model import load_run_state  # noqa: E402
-
-from tests.unit.test_run_cli import (  # noqa: E402
-    _invoke,
-    _invoke_as_harness,
-    _invoke_measurable,
-    _repo,
-    _squash,
-    _started_grouped_with_plan,
-    _write_shape,
-)
-from tests.unit.test_run_evidence import _journal  # noqa: E402
-from tests.unit.test_run_evidence_separate_context import _SHAPE, _later, _soon  # noqa: E402
-from tests.unit.transcript_sessions import (  # noqa: E402
-    AGENT_ID,
-    BASH,
-    CAPTURED_LOG,
-    SUBAGENT,
-    copy_of,
-    dispatched_at,
-    ran_at,
-    records,
-    write_agent,
-)
 
 _CODE = ["run", "resolve", "r1", "--step", "code", "--item", "phase/1", "--state", "done"]
 
@@ -407,3 +413,156 @@ def test_other_undeclared_evidence_on_a_phase_unit_is_still_refused(tmp_path: Pa
     result = _invoke(repo, shipped, [*_CODE, "--agent", "impl-1", "--evidence", "review=x"])
 
     assert result.exit_code == 2, result.output
+
+
+# --- Task 3: `deliver` `tests: reuse` -----------------------------------------
+
+
+def _at_deliver_after(tmp_path: Path, *, phase_log: bool = True) -> tuple:
+    """Run to `deliver`, `phase/1/code` resolved with (or without) its own
+    suite log. Returns `(repo, shipped)`."""
+    repo, shipped, _ = _at_code(tmp_path)
+    code = [*_CODE, "--agent", "impl-1"]
+    if phase_log:
+        log = tmp_path / "phase.log"
+        log.write_text("4051 passed\n")
+        code += ["--evidence", f"tests={log}"]
+    assert (resolved := _invoke(repo, shipped, code)).exit_code == 0, resolved.output
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    review = _review(repo, shipped, None, "s-c", "review=rev-p1", "reviewer=r-9")
+    assert review.exit_code == 0, review.output
+    assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
+    return repo, shipped
+
+
+def _deliver_evidence(repo: Path) -> dict[str, str]:
+    return units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
+
+
+def test_reuse_passes_on_an_unchanged_code_tree(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    witness = _code_evidence(repo)["tests"]
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 0, result.output
+    assert _deliver_evidence(repo)["tests"] == f"reused:phase/1/code:{witness}"
+
+
+def test_reuse_passes_after_a_bookkeeping_only_commit(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    note = repo / "docs" / "superpowers" / "notes.md"
+    note.write_text("bookkeeping\n")
+    _commit_all(repo, "chore: bookkeeping")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 0, result.output
+
+
+def test_reuse_is_refused_after_a_code_commit(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "fix.py").write_text("x = 2\n")
+    _commit_all(repo, "fix: review")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 2, result.output
+    out = _squash(result.output)
+    assert "the code tree changed since phase/1/code (1 path, e.g. src/fix.py)" in out
+    assert "run the full suite yourself into a log and name it" in out
+    assert load_run_state(repo, "r1").steps["deliver"].state == "running"
+
+
+def test_reuse_is_refused_while_a_code_path_is_uncommitted(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path)
+    (repo / "seed.md").write_text("edited\n")
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 2, result.output
+    assert "seed.md" in _squash(result.output)
+
+
+def test_reuse_is_refused_when_no_unit_carries_a_suite_log(tmp_path: Path) -> None:
+    repo, shipped = _at_deliver_after(tmp_path, phase_log=False)
+
+    result = _deliver(repo, shipped, None, "s-c", "tests=reuse")
+
+    assert result.exit_code == 2, result.output
+    assert "no phase unit recorded a suite log" in _squash(result.output)
+
+
+def test_reuse_takes_the_most_recently_resolved_witness() -> None:
+    from fr.commands.run_cmd import _latest_tests_witness
+    from fr.run.model import RunState
+
+    state = RunState.model_validate(
+        {
+            "run": "r1",
+            "workflow": "grouped",
+            "branch": "b",
+            "started": "2026-09-29T00:00:00+00:00",
+            "cursor": "deliver",
+            "steps": {
+                "implement": {
+                    "state": "done",
+                    "units": {
+                        "phase/1/code": {
+                            "state": "done",
+                            "attempts": [
+                                {
+                                    "dispatched": "2026-09-29T01:00:00+00:00",
+                                    "returned": "2026-09-29T02:00:00+00:00",
+                                    "outcome": "done",
+                                }
+                            ],
+                            "evidence": {"tests": "a.log@000000000000;tree=aaa"},
+                        },
+                        "phase/1/peer-review": {
+                            "state": "done",
+                            "attempts": [
+                                {
+                                    "dispatched": "2026-09-29T03:00:00+00:00",
+                                    "returned": "2026-09-29T04:00:00+00:00",
+                                    "outcome": "done",
+                                }
+                            ],
+                            "evidence": {"tests": "b.log@111111111111;tree=bbb"},
+                        },
+                    },
+                }
+            },
+        }
+    )
+
+    assert _latest_tests_witness(state) == (
+        "phase/1/peer-review",
+        "b.log@111111111111;tree=bbb",
+    )
+
+
+def test_the_pr_body_names_the_reused_unit(tmp_path: Path) -> None:
+    from fr.record.pr_body import render_pr_body
+    from fr.run import units as _units
+
+    repo, shipped = _at_deliver_after(tmp_path)
+    state = load_run_state(repo, "r1")
+    reused = "reused:phase/1/code:phase.log@0123456789ab;tree=" + "f" * 64
+    state = state.model_copy(
+        update={
+            "steps": {
+                **state.steps,
+                "deliver": _units.with_evidence(
+                    state.steps["deliver"], "step/deliver", {"tests": reused}
+                ),
+            }
+        }
+    )
+
+    body = render_pr_body(repo, state)
+
+    assert "## Tests" in body
+    assert "reused from `phase/1/code`" in body
+    assert "phase.log@0123456789ab" in body
