@@ -19,3 +19,8 @@ fr-goal §8 granted the orchestrator the ready transition ('ONLY when all three 
 ### deliver-handoff · finding [fixed] · Operator owns the ok and ready; push first; closeout last
 
 run_cmd.py `_closeout_handoff_lines`: push/NOT-committed line first, closeout pair last. fr-goal §8: push + open/refresh draft PR before the full suite; Ready-checklist is the operator's; never tick, never mark ready; closeout relayed as the final line. fr-debugging §4: same relay rule, PR stays draft. Manifest comment corrected. Tests (red first, commit on PR #828): test_run_cli closeout-last asserts ×3; test_fr_goal_journal §8 guards ×4.
+
+<!-- fr:journal kind=review scope=debug id=fb350d0a3c2d created=2026-09-29T11:15:05+00:00 -->
+### fb350d0a3c2d · review · Independent review: code correct; three §8 wording findings, all fixed
+
+Reviewer (separate context) confirmed `_closeout_handoff_lines` puts the closeout pair last in all three branches and that no other test depends on the old order. In scope, fixed: stale 'once the PR exists' wording; garbled 'git push-it sha' line missing the NOT-committed variant; the hand-off sat under the 'Devcontainer mode' label though it applies in every mode. Out of scope, not changed: fr-execute §42 'take the PR out of draft for fr:pr-ready' is the dispatched runner's label lifecycle, not the fr-goal orchestrator.
