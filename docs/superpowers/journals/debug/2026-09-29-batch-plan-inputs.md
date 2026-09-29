@@ -29,3 +29,8 @@ skills/fr-plan/SKILL.md:80. A policy gap, not a code defect.
 ### batch-not-one-cause · decision · Batch spans four independent root causes; paused for operator direction before any fix
 
 Per batch rule. Proposed: fix all four in one PR; #813's reason as a spec-journal decision (no plan shape change), so no artifact current_version moves.
+
+<!-- fr:journal kind=finding scope=debug id=fix-815-none created=2026-09-29T11:56:05+00:00 state=fixed -->
+### fix-815-none · finding [fixed] · Phases section lists only phases with no ask; no bare none.
+
+proportionality.py; pinned by test_plan_proportionality::test_the_folded_shape_has_no_phase_without_an_ask (changed from pinning the bug).
