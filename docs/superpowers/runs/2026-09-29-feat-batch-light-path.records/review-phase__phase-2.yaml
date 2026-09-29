@@ -1,0 +1,58 @@
+schema_version: 4
+run: 2026-09-29-feat-batch-light-path
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: r2-1
+    review_scope: in
+    title: "Phase witness records HEAD's tree even when the suite ran on a dirty working tree"
+    body: |
+      Reviewer (high, in scope): _verify_phase_tests_log / code_tree. Suite run with an uncommitted Δ, resolve records HEAD's tree (without Δ), Δ discarded, deliver reuses a log that never ran on the delivered tree. Fix: refuse a done phase resolve while code is dirty.
+  - kind: finding
+    id: r2-2
+    review_scope: in
+    title: "Freshness cannot see deletions, renames or reverts"
+    body: |
+      Reviewer (high, in scope): newest_code_mtime skipped deleted paths and only compared merge-base-diff paths; git mv / git rm / edit-restored-to-base after the suite escaped. Fix: all tracked code paths plus their directories plus surviving parents of deleted/renamed paths.
+  - kind: finding
+    id: r2-3
+    review_scope: in
+    title: "A witness recorded on a failed resolve stays reusable"
+    body: |
+      Reviewer (medium, in scope): offered evidence stored whatever the state and merged across attempts; _latest_tests_witness ignored unit state. Fix: tree only on done, skip non-done units, drop the prior witness on a retry without tests.
+  - kind: finding
+    id: r2-4
+    review_scope: in
+    title: "An unobserved phase log becomes a verified-looking deliver witness"
+    body: |
+      Reviewer (medium, in scope): reuse of an unobserved=tests witness recorded no unobserved and the PR body claimed a clean reuse. Fix: propagate unobserved and say "unverified".
+  - kind: finding
+    id: r2-5
+    review_scope: in
+    title: "A phase log written inside the worktree blocks reuse on an unchanged tree"
+    body: |
+      Reviewer (low/medium, in scope): the untracked log itself counted as dirty code at deliver. Fix: exclude the witness's own log (path and bytes match).
+  - kind: finding
+    id: r2-6
+    review_scope: in
+    title: "Weak refusal assertion; missing scope tests for offered evidence"
+    body: |
+      Reviewer (low, in scope): the undeclared-evidence test asserted only exit 2; no test for tests on a flat step or deliver without tests.
+  - kind: review
+    id: review-phase-2
+    title: "independent code review of phase 2: 6 findings (all in scope), all fixed"
+    body: |
+      Reviewer a393ffe12dcc351f8 (dispatched feature-dev:code-reviewer, opus) reviewed 25a21d36, 3ff99386, 2f94183b against spec §D, plan 02.yaml and the p2-* journal entries, probing forged/stale/foreign logs, dirty/untracked state, deletions/renames, failed resolves and unobserved harnesses. Raised r2-1..r2-6; confirmed _OFFERED_EVIDENCE scope, deliver still mandatory, the plain deliver path unchanged, foreign-session logs refused, no-merge-base fallback, records-dir and outside-repo logs handled. Received: each finding verified against the code and fixed in ce830a94 with red-first tests (15 new failing tests went green; 2 tightening tests already green); spec §D prose updated to the tightened freshness rule, its false-refusal-never-false-pass trade-off stated. Performance note (200-commit walk on the refusal path only) accepted as is.
+resolves:
+  - {id: r2-1, state: fixed, body: "ce830a94: done phase resolve refuses while any code path is uncommitted (log excluded); test_a_dirty_tree_at_phase_resolve_is_refused."}
+  - {id: r2-2, state: fixed, body: "ce830a94: newest_code_mtime over all tracked code paths, their directories and surviving parents of deleted/renamed paths; rename/delete/restore tests plus end-to-end rename refusal."}
+  - {id: r2-3, state: fixed, body: "ce830a94: tree witness only on done; non-done units skipped; retry without tests drops the witness (units.without_tests_evidence); three tests."}
+  - {id: r2-4, state: fixed, body: "ce830a94: reuse of an unobserved witness notes unobserved=tests and the PR body line says unverified; test."}
+  - {id: r2-5, state: fixed, body: "ce830a94: _own_log_path excludes the witness's own log (path and bytes) from dirty checks; two tests."}
+  - {id: r2-6, state: fixed, body: "ce830a94: message asserted; tests for tests on a flat step and deliver without tests."}
+evidence:
+  review: review-phase-2
+  reviewer: a393ffe12dcc351f8
+  model: claude-opus-5-5
