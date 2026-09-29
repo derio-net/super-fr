@@ -3,11 +3,18 @@ run: 2026-09-29-feat-batch-spec-fidelity
 workflow: fr-goal@1
 branch: feat/batch-spec-fidelity
 started: '2026-09-29T06:32:19+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-29T06:32:27+00:00'
+    state: done
+    at: '2026-09-29T07:18:37+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 7 requirements:5f972efc0a177b83ba8d693784a24d61b31218bcd461065ed16bda793d46bcf7
   spec-review:
     state: pending
   plan:
