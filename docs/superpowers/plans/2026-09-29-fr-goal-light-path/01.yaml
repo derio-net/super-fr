@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 1
+  title: One call per step — resolve --record advances, advance chains cli steps (spec
+    §B)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-resolve-advances
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/test_run_one_call.py
+  - tests/unit/test_run_resolve_requires_advance.py
+  - tests/unit/test_record_apply.py
+  - .changes/feat-batch-light-path.yaml
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: Smoke — the run-cursor test surface is green in this workspace
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest tests/unit/test_run_resolve_requires_advance.py tests/unit/test_record_apply.py -q --no-cov -n auto`
+      and confirm it passes before any change (baseline for the chaining work). Add
+      `.changes/feat-batch-light-path.yaml` with `bump: minor` and summary
+      "fr-goal light path: fr-goal-light shape, one-call resolve (resolve --record advances), deliver reuses a verified phase suite log".
+- number: 2
+  title: Extract _advance_once and chain cli steps in `fr run advance` (R5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: create tests/unit/test_run_one_call.py (reuse the run fixtures used by
+      tests/unit/test_run_resolve_requires_advance.py). Cases: (a) a manifest
+      `a (agent) → c1 (cli: true) → c2 (cli: true) → b (agent)`; with a resolved, one
+      `fr run advance` runs c1 and c2 and prints `b: dispatch brief` plus the brief JSON
+      line, exit 0; (b) c1 `run: false` → exit 1, cursor stays on c1, b not briefed;
+      (c) cursor on an agent step → exactly one brief, no chaining; (d) a gate stops
+      the chain; (e) the run's last step being cli → chain ends at `complete`.
+      Run `uv run pytest tests/unit/test_run_one_call.py -q --no-cov`; confirm (a) fails.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/run_cmd.py extract the body of `advance_cmd`
+      (after arg handling) into `_advance_once(repo_root, run_id, *, redispatch) -> AdvanceStop`
+      (a Literal: brief | gate | cli-done | cli-failed | refused | complete), keeping
+      every print unchanged. `advance_cmd` loops: call `_advance_once` again while the
+      previous call returned `cli-done` (bounded by the manifest's step count); exit 1 on
+      `cli-failed`, 2 on `refused`. Re-run the test file until green, plus
+      `tests/unit/test_run_*.py -n auto`.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep the commit decorator behaviour (`_commits_run_writes("advance")`)
+      one-commit-per-step as today; remove duplication between the loop and the single
+      call; re-run `uv run pytest tests/unit -q --no-cov -n auto -k "run_"`.
+- number: 3
+  title: resolve --record advances by default, --no-advance opts out (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_run_one_call.py add: (f) `resolve --record` with
+      `outcome: done` prints the one-line outcome THEN the next step's brief; (g) when
+      the next step is cli it runs and the brief after it prints; (h) a chained cli
+      failure exits 1 with the message `record applied; <step> failed (exit N)` and the
+      record commit present in `git log`; (i) `--no-advance` prints only the outcome
+      line; (j) `outcome: failed` and `outcome: blocked` records print the outcome line
+      and open NO new dispatch (the step's dispatch list is unchanged); (k) a refused
+      record neither applies nor advances; (l) the flag form (`--state done`) does not
+      advance. Confirm failures.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `--no-advance` to `resolve_cmd` (refused alongside the flag form like
+      the other record-only options); in `_resolve_with_record` after a successful
+      `apply_record` whose outcome is `done`, call the advance loop from T2 (in-process,
+      after the record's commit has landed). Make the tests pass; update any existing
+      test in test_run_resolve_requires_advance.py / test_record_apply.py that asserted
+      resolve prints nothing after the outcome line, by passing `--no-advance` where the
+      test is about resolve alone.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR + quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check
+      packages/ tests/`, mypy on packages/fr/src, then the full suite into a log:
+      `(uv run pytest -q --no-cov -n auto; echo "exit=$?") > "$TMPDIR/p1-suite.log" 2>&1`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

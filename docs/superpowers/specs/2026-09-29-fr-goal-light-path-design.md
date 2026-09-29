@@ -117,3 +117,9 @@ Automated (CI, `uv run pytest`):
 Post-merge — operator-driven:
 
 6. **Benchmark (R8).** Rerun the super-fr-3 feature-C brief on the light path, with the same base and models as take 9 (or take 10). Compare cost and wall-clock time against plain. Pass when cost ≤ 2× and time ≤ 2.5×, with `deliver`'s evidence verified. Record the result on #780. R8's acceptance row (`light-path-benchmark`) carries `verify: post-merge`, so `deliver`'s `requirement-rows` gate counts it without refusing, and the PR body lists it under `## Post-merge verification owed`.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-09-29-fr-goal-light-path | `derio-net/super-fr` | `2026-09-29-fr-goal-light-path` | — |
