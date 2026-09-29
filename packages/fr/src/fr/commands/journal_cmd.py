@@ -323,8 +323,9 @@ def resolve(
         help="fixed | refuted | deferred | out-of-scope | unconfirmed. `deferred` = the "
         "finding is valid but not this change's to fix; requires --tracked-by. "
         "`out-of-scope` = true, but not caused by this change (--note says why); no "
-        "issue needed yet. `unconfirmed` = --scope spec only: the behaviour is built "
-        "without the operator confirming it (--note says what gets built).",
+        "issue needed yet. `unconfirmed` is retired (d1-remove-only): an invented or "
+        "reinterpreted spec finding closes `fixed` (removed) or `refuted`; it is "
+        "refused, and still read in an existing journal.",
     ),
     note: str = typer.Option(
         ...,

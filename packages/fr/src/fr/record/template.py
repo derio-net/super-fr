@@ -91,7 +91,7 @@ def render_template(
         lines.append(
             "#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}"
         )
-        lines.append("#     spec journal only: state: unconfirmed, body: <what gets built>")
+        lines.append("#     invented/reinterpreted spec findings close fixed (removed) or refuted")
     if "acceptance" in allowed:
         lines.append("acceptance: []")
         lines.append(

@@ -2020,8 +2020,10 @@ class TestAddInput:
 
 
 class TestResolveUnconfirmed:
-    """`--state unconfirmed` (spec 2026-09-28 §D): built without the operator
-    confirming it. Written `open` + `unconfirmed=true`, like out-of-scope."""
+    """`--state unconfirmed` is retired for new writes (spec 2026-09-29 §D,
+    d1-remove-only): an invented or reinterpreted finding is removed, never
+    confirmed. The state stays readable — a journal that already carries an
+    `unconfirmed=true` record still parses, folds and passes the gate."""
 
     def _open_spec_finding(self, root: Path, monkeypatch, review_scope: str = "in") -> None:
         monkeypatch.chdir(root)
@@ -2043,35 +2045,16 @@ class TestResolveUnconfirmed:
             ],
         )  # fmt: skip
 
-    def test_it_appends_an_open_record_with_the_token_and_passes_the_gate(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        from fr.journal.model import effective_finding_states, parse_journal
-
-        root = _init_repo(tmp_path)
-        self._open_spec_finding(root, monkeypatch)
-        res = self._resolve()
-        assert res.exit_code == 0, res.output
-        entries = parse_journal(_spec_file(root, "S").read_text())
-        record = next(e for e in entries if e.resolves == "f1")
-        assert record.state == "open" and record.unconfirmed is True
-        assert record.body == "builds X as the literal reading"
-        assert effective_finding_states(entries) == {"f1": "unconfirmed"}
-        check = runner.invoke(app, ["journal", "check", "--scope", "spec", "--slug", "S"])
-        assert check.exit_code == 0, check.output
-        # Passes, but SAID, never silent — like deferred and out-of-scope
-        # (review d2): the operator must see what was built unasked.
-        assert "1 unconfirmed finding(s): f1" in check.output
-
-    def test_it_is_refused_on_a_finding_the_reviewer_tagged_out(
-        self, tmp_path: Path, monkeypatch
+    @pytest.mark.parametrize("review_scope", ["in", "out"])
+    def test_it_is_refused_citing_d1_remove_only(
+        self, tmp_path: Path, monkeypatch, review_scope: str
     ) -> None:
         root = _init_repo(tmp_path)
-        self._open_spec_finding(root, monkeypatch, review_scope="out")
+        self._open_spec_finding(root, monkeypatch, review_scope=review_scope)
         before = _spec_file(root, "S").read_text()
         res = self._resolve()
         assert res.exit_code == 2, res.output
-        assert "review_scope" in res.output or "out of scope" in res.output
+        assert "d1-remove-only" in res.output
         assert _spec_file(root, "S").read_text() == before
 
     def test_it_is_refused_on_a_plan_scope_finding(self, tmp_path: Path, monkeypatch) -> None:
@@ -2080,8 +2063,38 @@ class TestResolveUnconfirmed:
         before = _journal_file(root, "S").read_text()
         res = self._resolve("plan")
         assert res.exit_code == 2, res.output
-        assert "spec" in res.output
+        assert "d1-remove-only" in res.output
         assert _journal_file(root, "S").read_text() == before
+
+    def test_an_existing_unconfirmed_record_still_folds_and_passes_the_gate(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        from fr.journal.model import (
+            JournalEntry,
+            append_journal_entry,
+            effective_finding_states,
+            parse_journal,
+        )
+
+        root = _init_repo(tmp_path)
+        self._open_spec_finding(root, monkeypatch)
+        path = _spec_file(root, "S")
+        append_journal_entry(
+            path,
+            "S",
+            JournalEntry(
+                kind="finding", scope="spec", id="f1-r1", created="2026-09-28T00:00:00",
+                title="f1", body="builds X as the literal reading", state="open",
+                resolves="f1", unconfirmed=True,
+            ),
+        )  # fmt: skip
+        entries = parse_journal(path.read_text())
+        record = next(e for e in entries if e.resolves == "f1")
+        assert record.state == "open" and record.unconfirmed is True
+        assert effective_finding_states(entries) == {"f1": "unconfirmed"}
+        check = runner.invoke(app, ["journal", "check", "--scope", "spec", "--slug", "S"])
+        assert check.exit_code == 0, check.output
+        assert "1 unconfirmed finding(s): f1" in check.output
 
 
 class TestReviewScope:
