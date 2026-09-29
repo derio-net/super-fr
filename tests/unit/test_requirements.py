@@ -263,7 +263,9 @@ def test_deferred_wrong_column_count_names_the_row_shape() -> None:
 
 
 def test_requirements_row_error_names_its_section_and_row_shape() -> None:
-    text = "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n| X1 | x | decision d |\n"
+    text = (
+        "## Requirements\n\n| id | requirement | source |\n|---|---|---|\n| X1 | x | decision d |\n"
+    )
     with pytest.raises(RequirementsError) as exc:
         parse_requirements(text)
     msg = str(exc.value)

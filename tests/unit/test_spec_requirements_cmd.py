@@ -95,21 +95,23 @@ def test_requirements_cmd_exits_2_on_an_unsound_spec(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    # R1 is never cited by any matrix row origin.
+    # R1 cites `input-1` as a decision: it is already in the journal as a
+    # discovery, so no resolve can make it right. (An uncited requirement is
+    # pending before the resolve, #776 — see the test below.)
     Path("spec.md").write_text(
         "# Spec\n\n## Requirements\n\n"
         "| id | requirement | source |\n"
         "|---|---|---|\n"
-        "| R1 | x | decision d1 |\n"
+        "| R1 | x | decision input-1 |\n"
     )
     _write_spec_journal(tmp_path, "spec")
-    _write_matrix(Path("matrix.yaml"), origin="widget:other.md#R9")
+    _write_matrix(Path("matrix.yaml"), origin="widget:spec.md#R1")
 
     from fr.cli import app
 
     result = CliRunner().invoke(app, ["spec", "requirements", "spec.md", "--matrix", "matrix.yaml"])
     assert result.exit_code == 2
-    assert "not cited by any matrix row" in result.output
+    assert "not a `kind=decision`" in result.output
 
 
 def test_requirements_cmd_reports_a_missing_input_entry_as_pending(
