@@ -36,7 +36,15 @@ steps:
           coverage: '30 spans: R=14 deferred=0 context=16 missing=0'
           findings: s1,s2,s3,s4,s5,s6,s7
   plan:
-    state: pending
+    state: running
+    at: '2026-09-29T07:25:18+00:00'
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-09-29T07:25:18+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 180aad7a-775d-4ce0-85ee-3cb109642dfc
   plan-review:
     state: pending
   implement:
