@@ -39,3 +39,8 @@ proportionality.py; pinned by test_plan_proportionality::test_the_folded_shape_h
 ### fix-815-unobservable · finding [fixed] · _why_unobservable(what) — reviewer gate says subagent dispatches
 
 run_cmd.py; test_run_evidence_separate_context::test_an_unobservable_reviewer_names_dispatches_not_questions.
+
+<!-- fr:journal kind=finding scope=debug id=fix-812-unreadable created=2026-09-29T11:56:06+00:00 state=fixed -->
+### fix-812-unreadable · finding [fixed] · Unreadable artifact named with its error; non-mapping body is a failure; scratch inputs to $TMPDIR
+
+registry._yaml_read_key, runner.inspection_failures, trigger._will_not_act_here/_cannot_read; fr-plan SKILL. Locator NOT narrowed: silently skipping a stray .records/ file would let it be committed unseen; naming it loudly is the structural fix. test_migration_trigger::test_a_non_interactive_refusal_names_an_unreadable_file_not_a_migration.
