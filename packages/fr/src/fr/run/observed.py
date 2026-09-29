@@ -108,22 +108,36 @@ class ClaudeCodeSession:
         return answered_rounds_in(self.transcript, since)
 
     def dispatches(self, since: _dt.datetime) -> list[ChildDispatch] | None:
-        from fr.run.telemetry import _read_records, attribute_dispatches, dispatch_results
+        """`returned` is the child's own `SubagentHandback` report when it
+        made one (a backgrounded dispatch — the parent then holds only a
+        launch ack), else the parent-side `tool_result` text when that is not
+        a launch ack, else `None` (review p1-r3)."""
+        from fr.run.telemetry import (
+            _read_records,
+            attribute_dispatches,
+            dispatch_results,
+            handback_message,
+        )
 
         records = _read_records(self.transcript)
         if records is None:
             return None
         results = dispatch_results(records)
-        return [
-            ChildDispatch(
-                agent_id=d.agent_id,
-                agent_type=d.agent_type,
-                started=d.started,
-                returned=results.get(d.tool_use_id),
+        found: list[ChildDispatch] = []
+        for d in attribute_dispatches(self.transcript, records):
+            if d.started is None or d.started < since:
+                continue
+            child = _read_records(d.transcript)
+            handback = handback_message(child) if child is not None else None
+            found.append(
+                ChildDispatch(
+                    agent_id=d.agent_id,
+                    agent_type=d.agent_type,
+                    started=d.started,
+                    returned=handback if handback is not None else results.get(d.tool_use_id),
+                )
             )
-            for d in attribute_dispatches(self.transcript)
-            if d.started is not None and d.started >= since
-        ]
+        return found
 
     def child(self, agent_id: str) -> ClaudeCodeSession | Literal[False] | None:
         from fr.run.telemetry import witness_transcript

@@ -42,6 +42,14 @@ whose `toolUseResult` is an object with a non-empty `answers` map. A declined
 or failed tool call carries a plain STRING `toolUseResult` instead — observed
 on other tools in the same transcript."""
 
+HANDBACK = FIXTURES / "claude-code-subagent-handback.jsonl"
+"""A backgrounded subagent's own file, ending in its `SubagentHandback`
+tool_use (`input.message` = its report) — see `NOTE.md`, review p1-r3."""
+HANDBACK_MESSAGE = "Reviewed phase 1.\n\n```findings\np1-r1 | in | an example gap\n```"
+LAUNCH_ACK = FIXTURES / "claude-code-agent-launch-ack.jsonl"
+"""The parent-side `tool_result` of a backgrounded `Agent` dispatch: a launch
+ack (`toolUseResult.isAsync`, `status: async_launched`), not the report."""
+
 AGENT_ID = "adc0716be5565cc07"
 TOOL_USE_ID = "toolu_014ynBvFpxdbG1PXwxASc1Cu"
 AGENT_TOOL_USE_LINE = 7
@@ -320,6 +328,15 @@ def agent_result_row(timestamp: str, *, tool_use_id: str, text: str) -> dict[str
     ]
     result.pop("toolUseResult", None)
     return result
+
+
+def agent_ack_row(timestamp: str, *, tool_use_id: str) -> dict[str, Any]:
+    """The launch ack of a backgrounded dispatch (`LAUNCH_ACK`), re-keyed to
+    `tool_use_id` and moved to `timestamp`."""
+    (ack,) = copy_of(records(LAUNCH_ACK))
+    ack["timestamp"] = timestamp
+    ack["message"]["content"][0]["tool_use_id"] = tool_use_id
+    return ack
 
 
 def text_row(timestamp: str) -> dict[str, Any]:

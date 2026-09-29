@@ -254,15 +254,19 @@ def session_dir(session: Path) -> Path:
     return session.parent / name
 
 
-def tool_use_ids(session: Path) -> dict[str, _dt.datetime | None]:
+def tool_use_ids(
+    session: Path, records: list[dict[str, Any]] | None = None
+) -> dict[str, _dt.datetime | None]:
     """Every tool_use id in the orchestrator stream, with when it was issued.
 
     Indexed by id and NOT filtered by tool name. The pairing below is by id,
     which is unique and exact, so filtering on the dispatch tool's name would
     add nothing except a way to go silent the day that name changes (it has
-    already changed once, `Task` -> `Agent`).
+    already changed once, `Task` -> `Agent`). `records` are `session`'s,
+    already read — a caller holding them does not parse the file again.
     """
-    records = _read_records(session)
+    if records is None:
+        records = _read_records(session)
     if records is None:
         return {}
     found: dict[str, _dt.datetime | None] = {}
@@ -281,15 +285,18 @@ def _first_timestamp(path: Path) -> _dt.datetime | None:
     return None
 
 
-def attribute_dispatches(session: Path) -> list[Dispatch]:
+def attribute_dispatches(
+    session: Path, records: list[dict[str, Any]] | None = None
+) -> list[Dispatch]:
     """Every subagent transcript of `session` that THIS session dispatched.
 
     File-to-file, keyed on the metadata's `toolUseId`: an agent file whose id
     matches no tool_use in the orchestrator stream is not attributed at all.
     That is the whole difference between this and a glob over `subagents/`,
     and it is why an unrelated agent file cannot be charged to a unit here.
+    `records` are `session`'s own, when the caller already read them.
     """
-    known = tool_use_ids(session)
+    known = tool_use_ids(session, records)
     if not known:
         return []
     subagents = session_dir(session) / "subagents"
@@ -338,6 +345,8 @@ def dispatch_results(records: list[dict[str, Any]]) -> dict[str, str]:
     for record in records:
         if record.get("type") != "user" or record.get("isSidechain") is True:
             continue
+        if _is_async_ack(record):
+            continue  # a backgrounded dispatch's launch ack is not what it returned
         message = record.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         for block in content if isinstance(content, list) else ():
@@ -362,6 +371,36 @@ def dispatch_results(records: list[dict[str, Any]]) -> dict[str, str]:
                 continue
             results.setdefault(block["tool_use_id"], text)
     return results
+
+
+HANDBACK_TOOL = "SubagentHandback"
+"""The tool a backgrounded Claude Code subagent reports through: its report is
+the `input.message` of its own final call (review p1-r3; shape in
+`tests/fixtures/transcripts/claude-code-session.NOTE.md`)."""
+
+
+def _is_async_ack(record: Mapping[str, Any]) -> bool:
+    """Is this `tool_result` record the launch ack of a backgrounded dispatch
+    (`toolUseResult.isAsync`, `status: async_launched`) or command
+    (`backgroundTaskId`), rather than what the call returned?"""
+    result = record.get("toolUseResult")
+    return isinstance(result, Mapping) and (
+        result.get("isAsync") is True
+        or result.get("status") == "async_launched"
+        or bool(result.get("backgroundTaskId"))
+    )
+
+
+def handback_message(records: list[dict[str, Any]]) -> str | None:
+    """The `input.message` of the LAST `HANDBACK_TOOL` call in a subagent's own
+    file, or `None` when it made none."""
+    found: str | None = None
+    for _, block in _tool_uses(records):
+        tool_input = block.get("input")
+        message = tool_input.get("message") if isinstance(tool_input, Mapping) else None
+        if block.get("name") == HANDBACK_TOOL and isinstance(message, str):
+            found = message
+    return found
 
 
 # --- 3. harness scoping --------------------------------------------------

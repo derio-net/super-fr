@@ -17,9 +17,12 @@ from tests.unit.transcript_sessions import (
     AGENT_ID,
     AGENT_TOOL_USE_LINE,
     CAPTURED_LOG,
+    HANDBACK,
+    HANDBACK_MESSAGE,
     ORCHESTRATOR,
     SUBAGENT,
     TOOL_USE_ID,
+    agent_ack_row,
     agent_result_row,
     bash_rows,
     copy_of,
@@ -169,3 +172,45 @@ def test_wrote_windows_are_the_orchestrator_writes(session: Any) -> None:
 def test_no_session_id_is_no_view(session: Any) -> None:
     env, _, _, _ = session
     assert observed.observed_session({**env, "CLAUDE_CODE_SESSION_ID": ""}) is None
+
+
+# --- review p1-r3: a backgrounded dispatch --------------------------------
+
+
+def _backgrounded(
+    tmp_path: Path, *, parent: dict[str, Any] | None, handback: bool
+) -> dict[str, str]:
+    root = tmp_path / "projects"
+    rows = [r for r in _rows(tmp_path / "a.png", tmp_path / "s.cjs") if r.get("type") != "user"]
+    if parent is not None:
+        rows.append(parent)
+    transcript = write_session(root, session_id="sess-bg", rows=rows)
+    sub = copy_of(records(HANDBACK if handback else SUBAGENT))
+    for row in sub:
+        row["timestamp"] = "2026-09-21T10:06:00.000Z"
+    write_agent(transcript, rows=sub)
+    return {
+        "FR_HARNESS": "claude-code",
+        "FR_TRANSCRIPT_ROOT": str(root),
+        "CLAUDE_CODE_SESSION_ID": "sess-bg",
+    }
+
+
+def _returned(env: dict[str, str]) -> str | None:
+    (dispatch,) = _view(env).dispatches(_since()) or []
+    return dispatch.returned
+
+
+def test_a_backgrounded_report_is_the_childs_handback(tmp_path: Path) -> None:
+    ack = agent_ack_row("2026-09-21T10:05:01.000Z", tool_use_id=TOOL_USE_ID)
+    assert _returned(_backgrounded(tmp_path, parent=ack, handback=True)) == HANDBACK_MESSAGE
+
+
+def test_the_handback_wins_over_the_parents_result(tmp_path: Path) -> None:
+    result = agent_result_row("2026-09-21T10:20:00.000Z", tool_use_id=TOOL_USE_ID, text="other")
+    assert _returned(_backgrounded(tmp_path, parent=result, handback=True)) == HANDBACK_MESSAGE
+
+
+def test_a_launch_ack_alone_is_no_return(tmp_path: Path) -> None:
+    ack = agent_ack_row("2026-09-21T10:05:01.000Z", tool_use_id=TOOL_USE_ID)
+    assert _returned(_backgrounded(tmp_path, parent=ack, handback=False)) is None

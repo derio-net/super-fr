@@ -207,3 +207,25 @@ re-shaped to the form an `Agent` result carries — a `user` record whose
 `message.content` holds `{type: tool_result, tool_use_id, content: [{type:
 text, text}]}` — and its Bash-specific `toolUseResult` dropped. That content
 shape is the one stated, not a new capture.
+
+## A backgrounded dispatch: the launch ack and the handback (added 2026-09-29)
+
+Review p1-r3. Claude Code runs a dispatch with `run_in_background` (and every
+fr-goal phase executor or reviewer is one) asynchronously, and the two ends of
+it do not look like a foreground dispatch:
+
+- the PARENT-side `tool_result` answering the `Agent` tool_use is only a launch
+  ack: its record's `toolUseResult` carries `isAsync: true` and
+  `status: "async_launched"` (with `agentId`, `description`, `resolvedModel`,
+  `prompt`, `outputFile`, `canReadOutputFile`);
+- the subagent's report is its OWN final `tool_use` named `SubagentHandback`,
+  `input: {"message": <report>}`, in `subagents/agent-<agentId>.jsonl`
+  (`isSidechain: true`); the file then ends with the tool's result and a short
+  assistant `text`.
+
+Both shapes were read KEYS ONLY on 2026-09-29 from this operator's own live
+Claude Code session transcripts of the super-fr repo; no content was copied.
+`claude-code-agent-launch-ack.jsonl` (one record) and
+`claude-code-subagent-handback.jsonl` (four records) are built to those shapes
+with fictional ids and text throughout — composed from the key capture, not
+copied records.
