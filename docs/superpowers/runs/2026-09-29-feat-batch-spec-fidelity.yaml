@@ -3,7 +3,7 @@ run: 2026-09-29-feat-batch-spec-fidelity
 workflow: fr-goal@1
 branch: feat/batch-spec-fidelity
 started: '2026-09-29T06:32:19+00:00'
-cursor: journal-check
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -116,6 +116,10 @@ steps:
           visual: none
           findings: p2-q1-explainer-count,p2-q2-vacuous-assert,p2-q3-template-grammar-untested,p2-q4-predates-asserts-private-helper,p2-q5-not-available-untested,p2-q6-delegated-citation-silent-fallback,p2-q7-migration-test-pins-equality
   journal-check:
-    state: pending
+    state: done
+    at: '2026-09-29T08:39:31+00:00'
+    exit: 0
+    stdout: "2 out-of-scope finding(s): p2-q6-delegated-citation-silent-fallback,\
+      \ \np2-q7-migration-test-pins-equality\n"
   deliver:
     state: pending
