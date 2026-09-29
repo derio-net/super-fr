@@ -64,3 +64,8 @@ Independent review: fr-plan/SKILL.md:69.
 ### rv-c2-resolved · finding [fixed] · resolves rv-c2: fr-plan still says 'Requirements table'
 
 Reworded to 'Requirements list'; mirrors resynced.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c3 created=2026-09-29T18:29:32+00:00 phase=2 state=open review_scope=in -->
+### rv-c3 · finding [open] (reviewer: in scope) · Consumers keep retired fr-phase-reviewer OpenCode agents (phase 2)
+
+Independent review: install.sh copied/removed only shipped agent files.
