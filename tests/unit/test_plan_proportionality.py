@@ -734,7 +734,10 @@ def test_the_folded_shape_has_no_phase_without_an_ask(tmp_path: Path) -> None:
     _split(repo, 2, "ask: the second ask")
     body = _phases_report(repo)
     assert "2 agentic phases serve 3 of 4 requirements (R1, R2, R3)." in body
-    assert body.strip().endswith("none.")
+    # #815: with every phase serving its own ask there is nothing to list, and
+    # a bare `none.` under the count line reads as "no requirements served".
+    assert "none." not in body
+    assert body.strip().endswith("(R1, R2, R3).")
 
 
 def test_a_phase_with_no_own_ask_shows_its_split_reason(tmp_path: Path) -> None:
