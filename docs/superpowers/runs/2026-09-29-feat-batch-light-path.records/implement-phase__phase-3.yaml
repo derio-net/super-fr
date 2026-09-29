@@ -75,4 +75,5 @@ journal:
       `test_migration_record_input_unconfirmed.py` already follows. The full chain
       `[(1,2),(2,3),(3,4),(4,5)]` is asserted by `test_migration_record_shape.py`.
 resolves: []
-evidence: {}
+evidence:
+  tests: /private/tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/180aad7a-775d-4ce0-85ee-3cb109642dfc/scratchpad/p3-suite.log
