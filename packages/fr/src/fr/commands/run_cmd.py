@@ -251,12 +251,14 @@ def _why_unobservable() -> str:
         # missing is the session to read, or the database that holds it.
         if not os.environ.get("FR_OPENCODE_SESSION_ID"):
             return (
-                "no OpenCode session id reached fr (FR_OPENCODE_SESSION_ID is unset: the "
-                "super-fr OpenCode plugin is missing or older than this release)"
+                "your harness (opencode) exported no session id to fr "
+                "(FR_OPENCODE_SESSION_ID is unset: the super-fr OpenCode plugin is missing "
+                "or older than this release)"
             )
         return (
-            "the exported OpenCode session (FR_OPENCODE_SESSION_ID) is not in the OpenCode "
-            "database fr read, or that database could not be read — check FR_OPENCODE_DB / "
+            "the session your harness (opencode) exported (FR_OPENCODE_SESSION_ID) is not in the "
+            "OpenCode database fr read, or that database could not be read — check "
+            "FR_OPENCODE_DB / "
             "XDG_DATA_HOME; the super-fr OpenCode plugin exports the id"
         )
     if harness != "claude-code":
