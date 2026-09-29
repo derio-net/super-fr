@@ -19,3 +19,8 @@ RecordV6 is a deliberate literal freeze (sha-pinned, never edited); record_contr
 ### no-refactor-p1-t6 · decision · no-refactor-because: P1.T6 (phase 1)
 
 _findings and render_pr_body are 4.28.0's again plus the kept Post-merge and Tests sections; the helpers for the three removed sections are deleted outright.
+
+<!-- fr:journal kind=decision scope=plan id=p1-rows-deleted-in-phase-1 created=2026-09-29T18:01:23+00:00 phase=1 -->
+### p1-rows-deleted-in-phase-1 · decision · The 17 input-layer matrix rows are deleted in phase 1, not phase 2 (phase 1)
+
+P1.T7.S2 requires fr acceptance check to pass, but phase 1 deletes the test files those rows cite (and spec-fidelity-live-invention-caught is failing), so the check cannot pass until they go. Spec §E already settles their deletion; only the phase moved. The two archived specs left with no citing row (raw-input-relay, spec-fidelity-invention) are folded into spec-contract-no-input-gates' origin. Phase 2 keeps the rewording of the remaining rows.
