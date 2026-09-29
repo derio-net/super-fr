@@ -34,12 +34,21 @@ PLAN = "2026-09-28-toy"
 REQUIREMENTS = """\
 ## Requirements
 
+R1. First ask.
+R2. Second ask.
+R3. Third ask.
+"""
+
+LEGACY_REQUIREMENTS = """\
+## Requirements
+
 | id | requirement | source |
 |---|---|---|
 | R1 | First ask. | decision d1 |
 | R2 | Second ask. | decision d2 |
 | R3 | Third ask. | decision d3 |
 """
+"""A spec written before 5.0.0: the three-column table still sizes a plan."""
 
 
 def _row(rid: str, *reqs: str, spec: str = SPEC_REL) -> str:
@@ -135,7 +144,7 @@ def _warns(issues: list[ReviewIssue]) -> list[str]:
     return [i.message for i in issues if i.severity == "warn"]
 
 
-# ── the cut-off: silent unless the spec's Requirements table parses ──────────
+# ── the cut-off: silent unless the spec's Requirements list parses ───────────
 
 
 def test_silent_without_a_requirements_section(tmp_path: Path) -> None:
@@ -163,15 +172,25 @@ def test_silent_when_the_spec_file_does_not_exist(tmp_path: Path) -> None:
     assert _phase_sizing_issues(plan) == []
 
 
-def test_an_unparseable_requirements_table_gives_one_not_checked_warning(tmp_path: Path) -> None:
-    broken = REQUIREMENTS.replace("| R2 |", "| X2 |")
+def test_an_unparseable_requirements_list_gives_one_not_checked_warning(tmp_path: Path) -> None:
+    broken = REQUIREMENTS.replace("R3. Third", "R2. Third")
     repo = _repo(tmp_path, requirements=broken)
     plan = _plan(repo, P(skeleton=True), P(("row-r1",)))
     issues = _phase_sizing_issues(plan)
     assert len(issues) == 1
     assert issues[0].severity == "warn"
-    assert "X2" in issues[0].message
+    assert "Requirements list does not parse (" in issues[0].message
+    assert "R2" in issues[0].message
     assert "sizing was not checked" in issues[0].message
+
+
+def test_a_legacy_requirements_table_still_sizes_the_plan(tmp_path: Path) -> None:
+    legacy = _repo(tmp_path / "legacy", requirements=LEGACY_REQUIREMENTS)
+    plain = _repo(tmp_path / "plain")
+    shape = (P(skeleton=True), P(("row-r1",)))
+    assert [i.message for i in _phase_sizing_issues(_plan(legacy, *shape))] == [
+        i.message for i in _phase_sizing_issues(_plan(plain, *shape))
+    ]
 
 
 # ── the floor and the ceiling ────────────────────────────────────────────────
@@ -396,19 +415,6 @@ def test_r3_a_matrix_whose_repo_identity_cannot_be_resolved_warns(tmp_path: Path
     assert len(warns) == 1
     assert warns[0].startswith("acceptance matrix unreadable (")
     assert "cannot resolve repo identity" in warns[0]
-
-
-def test_r4_a_broken_deferred_table_names_both_tables(tmp_path: Path) -> None:
-    broken = (
-        REQUIREMENTS
-        + "\n## Deferred from input\n\n| input | reason |\n|---|---|\n| no quote | x |\n"
-    )
-    repo = _repo(tmp_path, requirements=broken)
-    plan = _plan(repo, P(("row-r1",)))
-    issues = _phase_sizing_issues(plan)
-    assert len(issues) == 1
-    assert issues[0].severity == "warn"
-    assert "Requirements/Deferred tables do not parse (" in issues[0].message
 
 
 def test_r6_a_decision_naming_no_agentic_phase_is_an_orphan_warning(tmp_path: Path) -> None:

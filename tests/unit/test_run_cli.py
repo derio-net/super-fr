@@ -6538,22 +6538,39 @@ def _grouped_oi_repo(tmp_path: Path, journal: str | None) -> tuple[Path, Path]:
     return repo, shipped
 
 
-def test_member_briefs_carry_the_operator_input(tmp_path: Path) -> None:
-    from fr.journal.model import parse_journal
-    from fr.operator_input import from_entries, to_brief
+_MEMBER_BRIEF_KEYS = {
+    "run",
+    "workflow",
+    "step",
+    "group",
+    "long_commands",
+    "item",
+    "kind",
+    "skill",
+    "agent",
+    "needs",
+    "emits",
+    "gate",
+    "tier",
+    "evidence",
+    "resolved_tier",
+    "for_each",
+    "steps",
+    "record",
+}
+"""4.28.0's member brief, key for key: the spec is the contract, so no brief
+after brainstorm carries the operator's input (spec 2026-09-29 §A, R1)."""
 
-    journal = _oi_journal()
-    repo, shipped = _grouped_oi_repo(tmp_path, journal)
-    oi = from_entries(parse_journal(journal))
-    assert oi is not None
-    want = to_brief(oi)
+
+def test_member_briefs_carry_no_operator_input(tmp_path: Path) -> None:
+    repo, shipped = _grouped_oi_repo(tmp_path, _oi_journal())
 
     first = _invoke(repo, shipped, ["run", "advance", "r1"])
     assert first.exit_code == 0, first.output
     brief = _brief_of(first.output)
     assert brief["step"] == "code"
-    assert brief["operator_input"] == want
-    assert brief["operator_input"]["input"][0]["body"] == "## Brief\n\nsame style, 680-720"
+    assert set(brief) == _MEMBER_BRIEF_KEYS
+    assert "same style, 680-720" not in first.output
 
     resolved = _invoke(
         repo,
@@ -6565,25 +6582,14 @@ def test_member_briefs_carry_the_operator_input(tmp_path: Path) -> None:
     assert second.exit_code == 0, second.output
     brief2 = _brief_of(second.output)
     assert brief2["step"] == "peer-review"
-    assert brief2["operator_input"] == want
+    assert set(brief2) == _MEMBER_BRIEF_KEYS
+    assert "same style, 680-720" not in second.output
 
 
-def test_member_brief_operator_input_is_null_without_an_input_entry(tmp_path: Path) -> None:
-    repo, shipped = _grouped_oi_repo(tmp_path, None)
-    result = _invoke(repo, shipped, ["run", "advance", "r1"])
-    assert result.exit_code == 0, result.output
-    assert _brief_of(result.output)["operator_input"] is None
-
-
-def test_unparseable_spec_journal_refuses_before_claiming_the_unit(tmp_path: Path) -> None:
+def test_an_unparseable_spec_journal_does_not_block_a_member_dispatch(tmp_path: Path) -> None:
+    """Nothing after brainstorm reads the spec journal's input, so a broken
+    one no longer refuses the dispatch it used to be relayed into."""
     repo, shipped = _grouped_oi_repo(tmp_path, "<!-- fr:journal kind=nonsense -->\n")
     result = _invoke(repo, shipped, ["run", "advance", "r1"])
-    assert result.exit_code == 2, result.output
-    assert "journals/specs/2026-09-28-x.md" in result.output
-    # One refusal, worded once (review r1-f1): the handoff prints the same.
-    assert "cannot relay the operator input" in result.output
-    state = load_run_state(repo, "r1")
-    assert units.unit_states(state.steps["implement"]).get("phase/1/code") != "running"
-    from fr.commands.run_cmd import _held_record
-
-    assert _held_record(state.steps["implement"], "phase/1/code") is None
+    assert result.exit_code == 0, result.output
+    assert _brief_of(result.output)["step"] == "code"

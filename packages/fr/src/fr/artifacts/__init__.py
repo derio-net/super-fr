@@ -53,6 +53,7 @@ from fr.artifacts import record_input_unconfirmed as _record_input_unconfirmed  
 from fr.artifacts import record_visual as _record_visual  # noqa: F401  (isort: skip)
 from fr.artifacts import record_delegated as _record_delegated  # noqa: F401  (isort: skip)
 from fr.artifacts import record_shape as _record_shape  # noqa: F401  (isort: skip)
+from fr.artifacts import record_contract as _record_contract  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_verify as _matrix_verify  # noqa: F401  (isort: skip)
 from fr.artifacts import matrix_visual as _matrix_visual  # noqa: F401  (isort: skip)
 from fr.artifacts import profiles_services as _profiles_services  # noqa: F401  (isort: skip)

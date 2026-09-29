@@ -1,13 +1,13 @@
-"""A sound requirements capture for tests that walk a run past `brainstorm`.
+"""A spec's Requirements list and the matrix rows citing it, for tests that
+walk a run past `brainstorm`.
 
-Spec `2026-09-28-requirements-traceability-design.md` §C/§D/§F: the shipped
-`fr-goal` shape derives `requirements` on `brainstorm` and `spec-review`,
-`coverage` on `spec-review` and `requirement-rows` on `deliver`. A test that
-walks that shape has to leave what a real brainstorm leaves: a spec with a
-`## Requirements` table, an `input` entry in the spec journal the quotes
-match, and a matrix row citing each requirement. Every file is written
-through the real writers (journal serializer, matrix YAML), so the fixture is
-the real shape rather than a guess at it.
+Spec `2026-09-29-spec-is-the-contract-design.md` §B: `## Requirements` is a
+plain `R<n>. <text>` list with no gate on its content. What reads it is phase
+sizing (a plan's agentic phases link rows citing `<spec>#R<n>`) and the PR
+body's post-merge section, so a test that walks the shipped shape leaves a
+spec with the list and a matrix row citing R1. Every file is written through
+the real writers (journal serializer, matrix YAML), so the fixture is the real
+shape rather than a guess at it.
 """
 
 from __future__ import annotations
@@ -18,54 +18,15 @@ from pathlib import Path
 import yaml
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, spec_journal_slug
 
-INPUT_TEXT = "build the widget so it counts from 1–20"
-QUOTE = "build the widget"
 MATRIX_REL = "docs/acceptance/matrix.yaml"
 ORG = "t"
 REPO = "t"
 
-REQUIREMENTS_SECTION = f"""
+REQUIREMENTS_SECTION = """
 ## Requirements
 
-| id | requirement | source |
-|---|---|---|
-| R1 | The widget is built. | input "{QUOTE}" |
+R1. The widget is built.
 """
-
-COVERAGE_BLOCK = f"""```input-coverage
-| span | coverage |
-|---|---|
-| "{QUOTE}" | R1 |
-| "so it counts from 1–20" | context |
-```
-"""
-
-DESIGN_SECTION = """
-## Design
-
-### A. Widget
-
-The widget counts.
-"""
-
-# The two blocks the `fidelity` evidence derives from (2026-09-29 spec §A/§B),
-# over `REQUIREMENTS_SECTION` and `DESIGN_SECTION`.
-FIDELITY_BLOCK = f"""```requirement-fidelity
-| requirement | clause | fidelity |
-|---|---|---|
-| R1 | "{QUOTE}" | kept |
-```
-"""
-
-INVENTORY_BLOCK = """```design-inventory
-| section | behaviour | backing |
-|---|---|---|
-| A. Widget | the widget counts | R1 |
-```
-"""
-
-REVIEW_BLOCKS = f"{COVERAGE_BLOCK}\n{FIDELITY_BLOCK}\n{INVENTORY_BLOCK}"
-"""Everything a sound spec review returns: `coverage` and `fidelity`'s blocks."""
 
 
 def now() -> str:
@@ -74,23 +35,6 @@ def now() -> str:
 
 def spec_ref(spec_rel: str) -> str:
     return f"{REPO}:{spec_rel}"
-
-
-def write_input_entry(repo: Path, spec_rel: str, *, body: str = INPUT_TEXT) -> None:
-    slug = spec_journal_slug(Path(spec_rel).stem)
-    append_journal_entry(
-        journal_path(repo, "spec", slug),
-        slug,
-        JournalEntry(
-            kind="discovery",
-            scope="spec",
-            id="operator-input",
-            created=now(),
-            title="operator input",
-            body=body,
-            input=True,
-        ),
-    )
 
 
 def write_matrix(repo: Path, rows: list[dict[str, object]]) -> Path:
@@ -132,18 +76,13 @@ def row(
 
 
 def seed_requirements(repo: Path, spec_rel: str, *, status: str = "skipped") -> None:
-    """Make `spec_rel` pass the §C gate: a Requirements section appended to
-    the spec, an input entry, and one matrix row (status `status`) citing R1.
-    A spec with neither section also gets `DESIGN_SECTION` BEFORE its
-    Requirements, so `REVIEW_BLOCKS`' inventory matches it and a test that
-    appends a requirement row still appends it to the table."""
+    """Give `spec_rel` a Requirements list and one matrix row (status
+    `status`) citing R1 — what phase sizing and the post-merge section read."""
     spec = repo / spec_rel
     spec.parent.mkdir(parents=True, exist_ok=True)
     text = spec.read_text() if spec.exists() else "# spec\n"
     if "## Requirements" not in text:
-        design = DESIGN_SECTION if "## Design" not in text else ""
-        spec.write_text(text.rstrip("\n") + "\n" + design + REQUIREMENTS_SECTION)
-    write_input_entry(repo, spec_rel)
+        spec.write_text(text.rstrip("\n") + "\n" + REQUIREMENTS_SECTION)
     write_matrix(repo, [row(spec_rel, status=status)])
 
 
@@ -151,7 +90,7 @@ def write_phase_splits(repo: Path, spec_rel: str, plan_slug: str, reasons: dict[
     """Record a `phase-split-<plan>-p<N>` spec-journal decision per phase
     (spec `2026-09-28-phase-sizing-design.md` §B): what lets a multi-phase toy
     plan whose phases link no requirement rows pass `fr plan self-review`'s
-    sizing gate once `seed_requirements` gives its spec a Requirements table.
+    sizing gate once `seed_requirements` gives its spec a Requirements list.
     Each title must start with a reason token (`tier:`, `risk-first:`,
     `review-size:`, or `ask:`)."""
     slug = spec_journal_slug(Path(spec_rel).stem)

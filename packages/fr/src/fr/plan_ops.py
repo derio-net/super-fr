@@ -1384,7 +1384,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     issues.extend(_skeleton_issues(plan))
 
     # Phase sizing (2026-09-28 phase-sizing spec §B/§C): one agentic phase per
-    # ask of the spec's Requirements table, a recorded reason for any other.
+    # ask of the spec's Requirements list, a recorded reason for any other.
     issues.extend(_phase_sizing_issues(plan))
 
     # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
@@ -1874,7 +1874,7 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     )
     from fr.requirements import (
         RequirementsError,
-        has_requirements_table,
+        has_requirements,
         load_spec_matrix,
         parse_requirements,
     )
@@ -1890,15 +1890,14 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
     try:
         parse_requirements(spec_text)
     except RequirementsError as e:
-        if not has_requirements_table(spec_text):
+        if not has_requirements(spec_text):
             return []
         return [
             ReviewIssue(
                 severity="warn",
                 message=(
-                    f"spec {spec_rel}'s Requirements/Deferred tables do not parse ({e}), "
-                    "so phase sizing was not checked — fix them (`fr spec "
-                    "requirements <spec>`) and re-run self-review."
+                    f"spec {spec_rel}'s Requirements list does not parse ({e}), "
+                    "so phase sizing was not checked — fix it and re-run self-review."
                 ),
             )
         ]

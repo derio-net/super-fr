@@ -249,33 +249,9 @@ _STAMP = frozenset({"created"})
 _STAMP_AND_ID = frozenset({"created", "id"})
 
 
-_CARRIED_OPEN = frozenset({"deferred", "out-of-scope", "unconfirmed"})
+_CARRIED_OPEN = frozenset({"deferred", "out-of-scope"})
 """Resolution states written `state=open` plus a header token, so an older fr
 reads the finding as open (fail closed) rather than failing to parse."""
-
-
-UNCONFIRMED_RETIRED = (
-    "`unconfirmed` is retired for new writes (d1-remove-only, spec 2026-09-29 §D): an "
-    "invented or reinterpreted finding is fixed by removing the departure — resolve it "
-    "`fixed` once the invented behaviour is deleted or the requirement restored to its "
-    "quote, or `refuted` with the reasoning"
-)
-
-
-def unconfirmed_refusal(finding_id: str) -> str:
-    """Why `unconfirmed` may not close `finding_id` — always, now (spec 2026-09-29
-    §D, d1-remove-only, superseding 2026-09-28 §D's d3-late-unconfirmed).
-
-    The ONE statement of the rule, shared by `fr journal resolve` and a step
-    record. The state stays in `RESOLUTION_STATES`, `ResolutionState` and the
-    journal fold, so a journal or record that already carries it still parses
-    and renders: the state is retired by refusing writes, not by a shape
-    change."""
-    return f"{finding_id!r}: {UNCONFIRMED_RETIRED}"
-
-
-def _refuse_unconfirmed(finding_id: str) -> None:
-    raise RecordRefusedError(unconfirmed_refusal(finding_id))
 
 
 def _journal_writes(
@@ -376,7 +352,6 @@ def _journal_writes(
                 tracked_by=item.tracked_by,
                 out_of_scope=item.out_of_scope,
                 input=item.input,
-                delegated=item.delegated,
             )
         except ValueError as e:
             raise RecordRefusedError(f"invalid journal entry {eid!r}: {e}") from e
@@ -388,8 +363,6 @@ def _journal_writes(
 
     for res in record.resolves:
         target_entry = finding(res.id)
-        if res.state == "unconfirmed":
-            _refuse_unconfirmed(res.id)
         try:
             entry = JournalEntry(
                 kind="finding",

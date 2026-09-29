@@ -66,10 +66,9 @@ def test_spec_plan_review_is_one_hard_reviewer_dispatch_over_spec_and_plan() -> 
     assert list(step.needs) == ["spec", "plan"]
     assert list(step.emits) == ["journal:spec", "acceptance"]
     # R3: the same evidence gate as fr-goal's `spec-review`, whatever that gate
-    # grows to (spec-fidelity added `fidelity` after this shape was written).
+    # becomes — and, since the spec is the contract (2026-09-29), no input gate.
     (full,) = [s for s in resolve_workflow("fr-goal", REPO_ROOT).steps if s.id == "spec-review"]
-    assert list(step.evidence) == list(full.evidence)
-    assert "fidelity" in step.evidence
+    assert list(step.evidence) == list(full.evidence) == ["review", "reviewer", "findings"]
 
 
 def test_the_light_plan_step_declares_single_phase() -> None:

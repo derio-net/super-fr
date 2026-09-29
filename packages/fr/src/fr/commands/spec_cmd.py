@@ -1,4 +1,4 @@
-"""`fr spec status` / `fr spec requirements` CLI."""
+"""`fr spec status` CLI."""
 
 from __future__ import annotations
 
@@ -8,11 +8,7 @@ from typing import TYPE_CHECKING
 import typer
 from rich.console import Console
 
-from fr.acceptance.check import resolve_identity
-from fr.acceptance.model import AcceptanceError, Matrix, load_matrix
 from fr.commands.common import require_migrated_layout
-from fr.journal.model import parse_journal, resolve_journal_read_path, spec_journal_slug
-from fr.requirements import check_requirements, parse_requirements
 from fr.spec import compute_status, parse_spec, render_status_md
 
 if TYPE_CHECKING:
@@ -75,65 +71,3 @@ def status_cmd(
         st = compute_status(meta, repo_root, gh=gh)
         blocks.append(render_status_md(st))
     typer.echo("\n\n---\n\n".join(blocks))
-
-
-@spec_app.command("requirements")
-def requirements_cmd(
-    spec_path: Path = typer.Argument(..., help="Path to spec markdown file."),
-    journal_path: Path | None = typer.Option(
-        None,
-        "--journal",
-        help="Spec journal path (default: derived from the spec with spec_journal_slug).",
-    ),
-    matrix_path: Path = typer.Option(
-        Path("docs/acceptance/matrix.yaml"), "--matrix", help="Acceptance matrix path."
-    ),
-) -> None:
-    """Check a spec's `## Requirements` section (spec 2026-09-28 §C).
-
-    Exits 2 and prints each problem when the capture is unsound; exits 0 with
-    a one-line summary otherwise. What the brainstorm resolve's record writes
-    — the input entry, a cited decision, a matrix row citing a requirement — is
-    reported as pending, not unsound: this pre-check runs before that resolve
-    (#776). The only implementation of §C — the
-    `requirements` derived-evidence gate on `fr run resolve` calls the same
-    `check_requirements`, never a copy.
-    """
-    require_migrated_layout()
-    if not spec_path.exists():
-        err_console.print(f"no such spec: {spec_path}")
-        raise typer.Exit(2)
-    repo_root = Path.cwd()
-    spec_text = spec_path.read_text()
-
-    slug = spec_journal_slug(spec_path.stem)
-    jpath = (
-        journal_path
-        if journal_path is not None
-        else resolve_journal_read_path(repo_root, "spec", slug)
-    )
-    entries = parse_journal(jpath.read_text()) if jpath.exists() else []
-
-    matrix = load_matrix(matrix_path) if matrix_path.exists() else Matrix()
-    try:
-        _, repo = resolve_identity(matrix, repo_root)
-    except AcceptanceError as e:
-        err_console.print(str(e))
-        raise typer.Exit(2) from e
-    spec_ref = f"{repo}:{spec_path.as_posix()}"
-
-    pending: list[str] = []
-    problems = check_requirements(spec_text, entries, matrix, spec_ref, pending=pending)
-    if problems:
-        for p in problems:
-            err_console.print(f"- {p}")
-        raise typer.Exit(2)
-    n = len(parse_requirements(spec_text).items)
-    typer.echo(f"{n} requirements")
-    if pending:
-        typer.echo(
-            "pending — written by the brainstorm resolve, which re-runs this check "
-            "strictly against them (not errors to fix in the spec):"
-        )
-        for p in pending:
-            typer.echo(f"- {p}")

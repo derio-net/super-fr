@@ -629,6 +629,15 @@ SIZED_SPEC = "docs/superpowers/specs/2026-09-28-sized-design.md"
 SIZED_REQUIREMENTS = """\
 ## Requirements
 
+R1. First ask.
+R2. Second ask.
+R3. Third ask.
+R4. Fourth ask.
+"""
+
+LEGACY_SIZED_REQUIREMENTS = """\
+## Requirements
+
 | id | requirement | source |
 |---|---|---|
 | R1 | First ask. | decision d1 |
@@ -636,6 +645,7 @@ SIZED_REQUIREMENTS = """\
 | R3 | Third ask. | decision d3 |
 | R4 | Fourth ask. | decision d4 |
 """
+"""A spec written before 5.0.0: its table counts the same asks."""
 
 
 def _sized_matrix(*, repo_key: bool = True) -> str:
@@ -787,9 +797,18 @@ def test_an_archived_spec_journal_at_head_is_read(tmp_path: Path) -> None:
     assert "split reason: review-size: archived" in _phases_report(repo)
 
 
-def test_no_requirements_table_says_asks_cannot_be_counted(tmp_path: Path) -> None:
+def test_no_requirements_list_says_asks_cannot_be_counted(tmp_path: Path) -> None:
     repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")], requirements=None)
-    assert "spec has no Requirements table; asks cannot be counted." in _phases_report(repo)
+    assert "spec has no Requirements list; asks cannot be counted." in _phases_report(repo)
+
+
+def test_a_legacy_requirements_table_counts_the_same_asks(tmp_path: Path) -> None:
+    phases = [(("row-r1",), "agentic"), (("row-r2",), "agentic")]
+    (tmp_path / "legacy").mkdir()
+    (tmp_path / "plain").mkdir()
+    legacy = _sized_repo(tmp_path / "legacy", phases, requirements=LEGACY_SIZED_REQUIREMENTS)
+    plain = _sized_repo(tmp_path / "plain", phases)
+    assert _phases_report(legacy) == _phases_report(plain)
 
 
 def test_no_matrix_says_asks_cannot_be_derived(tmp_path: Path) -> None:
@@ -805,7 +824,7 @@ def test_a_matrix_naming_no_repo_says_asks_cannot_be_derived(tmp_path: Path) -> 
 def test_a_plan_with_no_spec_says_asks_cannot_be_counted(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     report = build_report(repo, _plan(repo), None)
-    assert "spec has no Requirements table; asks cannot be counted." in _section(report, "Phases")
+    assert "spec has no Requirements list; asks cannot be counted." in _section(report, "Phases")
 
 
 def test_r2_an_uncommitted_meta_spec_edit_does_not_change_the_report(tmp_path: Path) -> None:

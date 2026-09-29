@@ -96,6 +96,15 @@ CLAUDE_RULES=(
 )
 # Retired rule name, no longer installed but must be removed on --uninstall.
 RETIRED_CLAUDE_RULES=(vk-plan-override.md)
+# Retired OpenCode agents: fr-phase-reviewer (4.29–4.40) was removed in 5.0.0
+# (spec 2026-09-29-spec-is-the-contract). Its copies told the agent to fetch the
+# operator input first, so install and uninstall both purge them.
+RETIRED_OPENCODE_AGENTS=(
+  fr-phase-reviewer.md
+  fr-phase-reviewer-mechanical.md
+  fr-phase-reviewer-standard.md
+  fr-phase-reviewer-hard.md
+)
 # Legacy user-level copies from pre-plugin installs (old vk-* names).
 SKILL_NAMES=(vk-plan vk-dispatch vk-execute vk-progress)
 
@@ -187,6 +196,12 @@ if [[ "${1:-}" == "--uninstall" ]]; then
       if [ -f "$OPENCODE_AGENTS_DIR/$agent" ]; then
         rm -f "$OPENCODE_AGENTS_DIR/$agent"
         echo "  Removed $OPENCODE_AGENTS_DIR/$agent"
+      fi
+    done
+    for agent in "${RETIRED_OPENCODE_AGENTS[@]}"; do
+      if [ -f "$OPENCODE_AGENTS_DIR/$agent" ]; then
+        rm -f "$OPENCODE_AGENTS_DIR/$agent"
+        echo "  Removed retired $OPENCODE_AGENTS_DIR/$agent"
       fi
     done
   fi
@@ -614,13 +629,6 @@ if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
   echo "  WARNING: could not allowlist fr-spec-reviewer in the agent-worktree hook" >&2
   echo "  (see the error above) — fr-goal's spec-review dispatch will be blocked." >&2
 fi
-# And fr-phase-reviewer (super-fr#778): it reviews the phase's code and fetches
-# the operator input from journals that exist only on the feature branch.
-if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
-     "$CLAUDE_DIR/hooks/agent-worktree-required.sh" super-fr:fr-phase-reviewer; then
-  echo "  WARNING: could not allowlist fr-phase-reviewer in the agent-worktree hook" >&2
-  echo "  (see the error above) — fr-goal's review-phase dispatch will be blocked." >&2
-fi
 
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
 # because it now shells out to `fr models apply`.
@@ -757,6 +765,12 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   echo ""
   echo "Installing OpenCode agents ($OPENCODE_AGENTS_DIR)..."
   mkdir -p "$OPENCODE_AGENTS_DIR"
+  for agent in "${RETIRED_OPENCODE_AGENTS[@]}"; do
+    if [ -f "$OPENCODE_AGENTS_DIR/$agent" ]; then
+      rm -f "$OPENCODE_AGENTS_DIR/$agent"
+      echo "  Removed retired $OPENCODE_AGENTS_DIR/$agent"
+    fi
+  done
   for agent_file in "$PLUGIN_ROOT"/.opencode/agent/*.md; do
     agent="$(basename "$agent_file")"
     cp "$agent_file" "$OPENCODE_AGENTS_DIR/$agent"

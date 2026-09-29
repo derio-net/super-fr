@@ -175,7 +175,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         spec_rel, spec_text = found
         requirements = parse_requirements(spec_text)
     except RequirementsError:
-        return ["spec has no Requirements table; asks cannot be counted."]
+        return ["spec has no Requirements list; asks cannot be counted."]
 
     matrix_text = _show_head(repo_root, MATRIX_REL)
     if matrix_text is None:

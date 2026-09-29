@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Prose, agents, matrix and delivery — back to the 4.28 wording
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - spec-contract-no-input-gates
+  tier: standard
+  files:
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/agents/*.md
+  - plugins/super-fr/hooks/fr-phase-executor-guard.sh
+  - plugins/super-fr/rules/fr-isolation-required.md
+  - .claude/rules/fr-isolation-required.md
+  - scripts/install.sh
+  - scripts/ensure-phase-executor-allowlist.sh
+  - packages/fr/src/fr/harness/parity.yaml
+  - AGENTS.md
+  - .opencode/*
+  - .hermes/*
+  - docs/explainers/01-fr-goal.*
+  - docs/acceptance/*
+  - tests/unit/*.py
+  - tests/integration/*.py
+  estimate_lines: 3500
+tasks:
+- number: 1
+  title: Skills back to the boundary (spec §D)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      plugins/super-fr/skills/fr-goal/SKILL.md: §1 opens with v4.28.0's "Invoke `fr-brainstorming`. Explore, collect EVERY operator-owned decision…" (read it with `git show v4.28.0:plugins/super-fr/skills/fr-goal/SKILL.md`), keeping the #767/#784 round-label and one-dialog text and dropping "questions whose answers are interpretations of the input come first…"; §2 back to v4.28.0's spec-review paragraph (decisions + codebase, fix every in-scope finding); §6 back to the generic reviewer brief without fr-phase-reviewer, operator_input or input- findings; the light-path section loses coverage/fidelity mentions. Phase sizing (§3) unchanged.
+  - id: P2.T1.S2
+    text: |-
+      plugins/super-fr/skills/fr-brainstorming/SKILL.md: §1 becomes "## 1. Brainstorm" (v4.28.0 bullets) plus one paragraph "record the brief verbatim as an `input` journal entry, for the record; nothing after brainstorm reads it"; §2 describes the plain `## Requirements` list (`R1. <text>` per line, the spec author's words, no quote/source/Deferred, no gate); §3 keeps `origin <spec>#R<n>` and `verify: post-merge`; the "Your call"/delegated rule and the pre-check (`fr spec requirements`) text go. plugins/super-fr/skills/fr-acceptance/SKILL.md: "Requirements table" -> "Requirements list", drop the requirement-rows gate mention.
+- number: 2
+  title: Agents — spec reviewer and executor back; fr-phase-reviewer deleted (spec
+    §A, §D)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      plugins/super-fr/agents/fr-spec-reviewer.md: restore v4.28.0's "three things, in this order" (decisions, codebase, itself) and return shape; keep the light path's "When the brief names a plan too" section; delete traceability-first, the three fenced blocks and the dropped/invented/reinterpreted rules. plugins/super-fr/agents/fr-phase-executor.md: delete "First, on every dispatch: fetch the operator input yourself" and the operator-input bullet; keep the light-path additions.
+  - id: P2.T2.S2
+    text: |-
+      Delete plugins/super-fr/agents/fr-phase-reviewer.md and everything that exists only for it: its branch in plugins/super-fr/hooks/fr-phase-executor-guard.sh, its allowlist block in scripts/install.sh and the comment in scripts/ensure-phase-executor-allowlist.sh, its mention in plugins/super-fr/rules/fr-isolation-required.md and the hand-maintained .claude/rules/fr-isolation-required.md, and its line in packages/fr/src/fr/harness/parity.yaml. Update test_hooks_phase_executor_guard.py, test_opencode_agent_mirror.py, test_opencode_agents_materialize.py, tests/integration/test_install_opencode_agents.py, test_run_evidence_separate_context.py and test_spec_reviewer_agent.py / spec_review_support.py.
+- number: 3
+  title: AGENTS.md, mirrors and the explainer (spec §D, R9)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      AGENTS.md: remove the lines #762 added (the requirements-traceability bullet under fr) and add under "Repo shape" or a new short "fr-goal's boundary" note the sentence: "The spec is the contract: nothing after brainstorm reads the raw input, and a requirement the spec does not state is a spec defect, fixed in the spec."
+  - id: P2.T3.S2
+    text: |-
+      Regenerate mirrors: `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`, then both with `--check` — clean. The fr-phase-reviewer mirror files disappear.
+  - id: P2.T3.S3
+    text: |-
+      docs/explainers/01-fr-goal.md: remove the traceability, relay, fidelity and phase-reviewer passages, keeping the voice. From `/`, re-render the UNMODIFIED page first with `uv run --isolated --no-project --with markdown --with pyyaml python ~/.claude/plugins/marketplaces/derio-net--blog-craft/tools/render_explainer.py <worktree>/docs/explainers/01-fr-goal.md --style broadsheet --embed-fonts -o $TMPDIR/check.html` and confirm it matches the committed .html byte for byte; then render the edited .md to docs/explainers/01-fr-goal.html. `uv run pytest tests/unit/test_tripwire_explainers_fresh.py -q --no-cov` green.
+- number: 4
+  title: Acceptance matrix (spec §E)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      Hand-delete the input-layer rows from docs/acceptance/matrix.yaml: requirements-input-in-spec-journal, requirements-structural-gate, requirements-always-ask, requirements-spec-review-traceability, requirements-unconfirmed-in-pr, requirements-rows-deliver-gate, requirements-coverage-partition, requirements-spec-review-hard-first, raw-input-relay-member-briefs, raw-input-relay-handoff, raw-input-relay-prose, spec-fidelity-clause-partition, spec-fidelity-design-inventory, spec-fidelity-remove-only, spec-fidelity-delegated-decisions, spec-fidelity-pr-design-inventory, spec-fidelity-live-invention-caught (grep the file for any other row citing the three removed specs' input-layer R-ids and list it). Keep the list for the PR body.
+  - id: P2.T4.S2
+    text: |-
+      Reword with `fr acceptance set-status --id <id> --status <unchanged> --notes "<reworded>"` the rows naming the table, a removed gate or the phase reviewer: requirements-post-merge-rows, phase-sizing-*, light-path-* (including light-path-one-review), fr-goal-independent-spec-review; `--drop-level` any evidence ref pointing at a deleted test file. `uv run fr acceptance report --deterministic`; `uv run fr acceptance check` passes.
+- number: 5
+  title: Quality gate, independent review, PR
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      Full gate: ruff format + check, mypy (all five packages), both mirror syncs with --check, `uv run fr workflow check` on both workflows, `uv run fr validate artifacts`, `uv run fr acceptance check`, `uv run fr harness parity --check`, and the full suite to `$TMPDIR/contract-final-suite.log` — exit=0. Grep proves no removed name survives outside docs/superpowers/implemented/ and the migration history: `git grep -n -E "operator_input|input-coverage|requirement-fidelity|design-inventory|fr-phase-reviewer|requirement-rows|check_coverage|fr spec requirements" -- ':!docs/superpowers/implemented' ':!packages/fr/src/fr/artifacts/record_*' ':!packages/fr/src/fr/record/legacy.py' ':!tests/unit/test_migration_*'` — empty.
+  - id: P2.T5.S2
+    text: |-
+      Get an independent adversarial review of the whole branch diff against origin/main from a reviewer that did not write it, briefed with the spec: (1) nothing outside the input layer was lost — phase sizing, light path, UI evidence, close-out, services, tiers, verify: post-merge; (2) no path after brainstorm still reads or receives the operator's input. Fix every in-scope finding; record out-of-scope ones for the operator.
+  - id: P2.T5.S3
+    text: |-
+      Rebase onto origin/main (after #828 merges), re-run the suite, push, and open the PR as a draft: title "fr-goal: the spec is the contract — remove the input layer (5.0.0)", body with Summary, the removed matrix row ids, the review's findings, the Test Plan with item 7 (the dry run) under "Post-merge verification owed", and the attribution line. Leave it as a draft for the operator's review.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-29T18:05:17+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-29T18:05:18+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-29T18:06:12+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-29T18:08:49+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-29T18:09:14+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-29T18:09:15+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-29T18:10:53+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-09-29T18:11:13+00:00'
+      note: 'Deleted in phase 1 (journal p1-rows-deleted-in-phase-1): acceptance check
+        could not pass there otherwise. No other row cites the three removed specs.'
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-09-29T18:11:34+00:00'
+      note: Only requirements-post-merge-rows named a removed gate; re-pointed and
+        reworded in phase 1. light-path-*, phase-sizing-* and fr-goal-independent-spec-review
+        name only kept behaviour; the 'phase reviewer' mentions elsewhere are historical
+        live-run notes. Reports in sync; check passes.
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-09-29T18:18:10+00:00'
+      note: All gates green; suite exit=0 (7564 passed). The removed-name grep is
+        not empty only because this change's own spec, plan, journal, fragment, the
+        matrix rows describing the removal, and absence-asserting tests name what
+        they remove; no live code or shipped prose does.
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-09-29T18:29:14+00:00'
+      note: null
+    P2.T5.S3:
+      state: x
+      ticked_at: '2026-09-29T18:36:47+00:00'
+      note: 'Draft PR #851, left as a draft for the operator''s review.'
+  completion:
+    at: '2026-09-29T18:36:48+00:00'
+    note: null
+    observed_prs: []

@@ -15,8 +15,6 @@
 # decides by NAME, not by tools, so even a read-only agent outside its `case`
 # arm must pass `isolation: "worktree"` — and a worktree cut from `main` cannot
 # see the feature branch's spec it is dispatched to review.
-# `super-fr:fr-phase-reviewer` too (super-fr#778), for the phase's code and
-# the feature branch's journals.
 #
 # - Inserts `fr-phase-executor` into the existing allowlist `case` pattern.
 # - Idempotent: a second run is a no-op.

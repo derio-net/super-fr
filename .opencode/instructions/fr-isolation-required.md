@@ -169,8 +169,7 @@ tool's `isolation: "worktree"` argument: dispatch a phase executor **without**
 it. `plugins/super-fr/hooks/fr-phase-executor-guard.sh` (PreToolUse, matcher
 `Agent|Task`) refuses the combination outright — for `fr-spec-reviewer` too,
 which reviews the feature branch's spec and would find none in a worktree cut
-from `main`, and for `fr-phase-reviewer`, whose phase code and journals are
-equally invisible there. OpenCode's task tool and
+from `main`. OpenCode's task tool and
 Hermes' `delegate_task` take no isolation argument at all, so the poisoned
 shape cannot be expressed there and no hook is needed: dispatch the executor
 as you would any subagent, and it runs in the workspace it was sent into.

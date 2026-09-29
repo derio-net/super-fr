@@ -52,44 +52,38 @@ fr isolation up --branch <feature-branch> [--profile <name>]
   `fr run advance <id>`. Refused over stale artifacts? Run
   `fr migrate artifacts --yes` and retry — `fr run start` is not exempt.
 
-## 1. Record the input, then brainstorm
+## 1. Brainstorm
 
-Before exploring anything, record the operator's raw input **verbatim** as a
-spec-journal entry: the goal text as typed, or the issue's title and body plus
-any comments pointed at (several input entries are fine — an issue plus a
-clarifying message). Redact per `.claude/rules/third-party-privacy.md` first —
+Run `superpowers:brainstorming` as usual — understand the context and goal,
+explore the codebase (in the worktree), propose approaches, refine into a
+design.
+
+Before exploring, record the operator's brief **verbatim** as a spec-journal entry, for
+the record: the goal text as typed, or the issue's title and body plus any
+comments pointed at. Redact per `.claude/rules/third-party-privacy.md` first —
 a third-party host, org, repo or person becomes an RFC 2606 name
-(`example.com`, `.invalid`, …) keeping the shape, entry noting it was
-redacted, since everything downstream (quotes, coverage) matches the redacted
-text, the only text ever committed. Standalone: `fr journal add --scope spec
---kind discovery --input …`. Under fr-goal: `journal: [{kind: discovery,
-input: true, id, title, body}]` on the brainstorm record.
-
-Then run `superpowers:brainstorming` as usual: understand the context and
-goal, explore the codebase (in the worktree), propose approaches, refine.
+(`example.com`, `.invalid`, …) keeping the shape. Standalone: `fr journal add
+--scope spec --kind discovery --input …`; under fr-goal: `journal: [{kind:
+discovery, input: true, id, title, body}]` on the brainstorm record. Nothing
+after brainstorm reads it: the spec is the contract.
 
 - **Standalone invocation:** fully interactive — ask questions as they
   arise, section-by-section validation, the normal brainstorming flow.
 - **Under fr-goal:** the sized-round contract applies instead — collect every
   operator-owned decision into one round, rarely two (fr-goal's rules win
   while it drives).
-- **Before the round, always ask.** List every user-visible behaviour the
-  design needs, and every statement in the recorded input with more than one
-  reasonable reading; each one the input does not itself settle is a question
-  in the round, its answer a `decision` a requirement can cite. fr-goal's
-  "past ~10 questions" guard is the pressure valve on size; there is no
-  separate assumption list — an unsettled point is asked, never assumed. An operator answer of "Your call." is still a decision a requirement can cite, recorded with `delegated: true` (`fr journal add --scope spec --kind decision --delegated …`, or `delegated: true` on the record's journal item); the PR lists it, and the requirements citing it, under "Built without operator confirmation".
 
 ## 2. Hand off
 
 The brainstorm's design document becomes the spec
 (`docs/superpowers/specs/<YYYY-MM-DD-slug>-design.md`, committed in the
-worktree), written in this shape, in order: `## Requirements` (one row per
-requirement, quoting the input verbatim in `source` — paraphrase only in the
-requirement's own text), `## Deferred from input` (optional, one-line reason),
-then `## Design`. A `source` cell is one or more forms joined by `<br>`: `input "<verbatim quote>"` (straight quotes; a `"` inside stays as-is, since the quote runs from the first `"` to the last, so never cut a quote short to dodge one; ` … ` elides between in-order fragments; a `|` is `\|`; no `<br>` inside) or `decision <id>` (a `kind=decision` spec-journal entry), e.g. `input "labelled "✓ 680–720 g" when in range"<br>decision d-scan`; `fr spec requirements <spec>` checks the table before you resolve: whatever the record writes (the input entry, a cited `decision`, an `acceptance:` row citing `<spec>#R<n>`) prints as pending, never as an error, so write it into the record rather than editing the spec. Every error names its section and that section's row shape (`| R<n> | <requirement> | <source> |`; `## Deferred from input`: `| "<verbatim quote>" | <reason> |`) — fix the row, never delete the section. **Standalone:** resolve the cursor §0 started with its step
+worktree), with a `## Requirements` section before `## Design`: a plain
+numbered list, one requirement per line — `R1. <text>`, `R2. <text>` — in the
+spec author's own words, with no quote, no source and no gate on its content.
+It is what the questions settled: a requirement the spec does not state is not
+built, and a spec defect is fixed in the spec. **Standalone:** resolve the cursor §0 started with its step
 record — `emitted: {spec: <path>}`, each answer a `decision` in `journal:`,
-the input entry from §1, each §3 row in `acceptance:` — in ONE `fr run
+the brief from §1, each §3 row in `acceptance:` — in ONE `fr run
 resolve <run-id> --step brainstorm --record <file>`, then `fr run advance
 <run-id>` for everything after (the cursor is a gate, not a file on disk:
 `implement`'s `needs: [spec, plan]` refuses work that never wrote one). Hand
@@ -104,7 +98,7 @@ requirements — an `acceptance:` entry of the brainstorm record (`status:
 not-implemented`, `origin: [<repo>:<new-spec-path>#R<n>]`, `verify:
 post-merge` when only a live run can prove it), or with no run
 `fr acceptance add --origin <repo>:<spec>#R<n> …` (run `fr acceptance init`
-first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (§1 asks any the input leaves unstated). **The brainstorm ENDS by presenting the
+first if the repo has no matrix; it commits what it writes). A row states what the product does, never how the pipeline runs ("delivered in one phase", "a browser check was done"): a process directive is not a row, and a level ref into `docs/superpowers/` is refused. A UI row also carries `visual`: states and interactions, limits included (ask about any the design leaves unstated). **The brainstorm ENDS by presenting the
 rows to the operator with a one-line defense each** — the business claim,
 the target verification level, why it is business-level not implementation
 detail. Silent row creation is not acceptance-of-scope; the presentation is.

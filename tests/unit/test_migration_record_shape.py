@@ -39,19 +39,20 @@ def _record_file(root: Path, text: str = _V5_RECORD, stem: str = "implement-phas
     return path
 
 
-def test_the_record_kind_is_at_version_six() -> None:
-    assert RECORD_SCHEMA_VERSION == 6
-    assert artifact_kind("record").current_version == 6
+def test_the_record_kind_is_at_version_six_or_later() -> None:
+    assert RECORD_SCHEMA_VERSION >= 6
+    assert artifact_kind("record").current_version == RECORD_SCHEMA_VERSION
 
 
 def test_a_five_to_six_migration_is_registered() -> None:
-    (hop,) = MIGRATIONS.chain("record", 5)
+    hop = MIGRATIONS.chain("record", 5)[0]
     assert (hop.from_version, hop.to_version) == (5, 6)
 
 
-def test_the_chain_from_one_reaches_six_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_six_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
-    assert [(s.from_version, s.to_version) for s in chain] == [
+    # 6 -> 7 (removal) follows; test_migration_record_contract pins the whole chain.
+    assert [(s.from_version, s.to_version) for s in chain][:5] == [
         (1, 2),
         (2, 3),
         (3, 4),
@@ -67,8 +68,9 @@ def test_a_v5_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == before.replace("schema_version: 5\n", "schema_version: 6\n")
-    assert parse_record(path.read_text()).schema_version == 6
+    stamp = f"schema_version: {RECORD_SCHEMA_VERSION}\n"
+    assert path.read_text() == before.replace("schema_version: 5\n", stamp)
+    assert parse_record(path.read_text()).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -91,11 +93,12 @@ def test_an_unreadable_v5_record_is_refused_byte_identical(tmp_path: Path) -> No
 
     assert [f.path for f in report.failed] == [broken]
     assert broken.read_bytes() == before
-    assert artifact_kind("record").read_version(healthy) == 6
+    assert artifact_kind("record").read_version(healthy) == RECORD_SCHEMA_VERSION
 
 
 def test_a_v6_record_carrying_shape_loads(tmp_path: Path) -> None:
     path = _record_file(tmp_path, _V6_BRAINSTORM_RECORD, stem="brainstorm")
+    run_migrations(tmp_path, dry_run=False)
 
     record = load_record(path)
 
@@ -104,4 +107,5 @@ def test_a_v6_record_carrying_shape_loads(tmp_path: Path) -> None:
 
 
 def test_a_record_without_shape_defaults_to_none() -> None:
-    assert parse_record(_V5_RECORD.replace("schema_version: 5", "schema_version: 6")).shape is None
+    current = f"schema_version: {RECORD_SCHEMA_VERSION}"
+    assert parse_record(_V5_RECORD.replace("schema_version: 5", current)).shape is None

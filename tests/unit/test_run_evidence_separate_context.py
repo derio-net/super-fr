@@ -154,19 +154,20 @@ def test_the_implementer_cannot_review_its_own_phase(tmp_path: Path) -> None:
 
 _NAMED_REVIEWER_SHAPE = _SHAPE.replace(
     "      - id: peer-review\n        kind: agent\n",
-    "      - id: peer-review\n        kind: agent\n        agent: super-fr:fr-phase-reviewer\n",
+    "      - id: peer-review\n        kind: agent\n        agent: acme:code-reviewer\n",
 )
 
 
 def test_the_reviewer_holding_its_own_review_unit_is_not_an_implementer(tmp_path: Path) -> None:
-    """#778: once the review member names its agent, the reviewer's child
-    session claims the review unit (the OpenCode plugin's `--open-unit` claim
-    matches any dispatched agent type). Holding the review unit makes it the
-    reviewer, never the phase's implementer — so naming it is accepted."""
+    """When a review member names its agent (a repo-overridden shape may), the
+    reviewer's child session claims the review unit (the OpenCode plugin's
+    `--open-unit` claim matches any dispatched agent type). Holding the review
+    unit makes it the reviewer, never the phase's implementer — so naming it is
+    accepted."""
     assert _SHAPE != _NAMED_REVIEWER_SHAPE
     repo, shipped, _ = _at_the_review(tmp_path, shape=_NAMED_REVIEWER_SHAPE)
     claim = ["run", "claim", "r1", "--open-unit", "--agent", "rev-9"]
-    claimed = _invoke(repo, shipped, [*claim, "--agent-type", "fr-phase-reviewer-standard"])
+    claimed = _invoke(repo, shipped, [*claim, "--agent-type", "code-reviewer-standard"])
     assert claimed.exit_code == 0, claimed.output
     attempt = units.last_attempt(load_run_state(repo, "r1"), "phase/1/peer-review")
     assert attempt is not None and attempt.agent == "rev-9"

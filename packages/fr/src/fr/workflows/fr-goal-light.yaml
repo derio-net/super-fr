@@ -22,7 +22,7 @@
 #    the fix (merge them, or start a new run on `fr-goal`). A structural rule,
 #    checked at authoring time, not a hope that the plan stays small.
 # 2. `spec-plan-review` is held to `spec-review`'s evidence gate unchanged
-#    (review, reviewer, findings, requirements, coverage), against the SPEC
+#    (review, reviewer, findings), against the SPEC
 #    journal. Plan findings go there too, tagged `target: plan`, so the one
 #    derived `findings` gates both documents. It emits no `journal:plan` and
 #    never ticks.
@@ -45,8 +45,6 @@ steps:
     skill: super-fr:fr-brainstorming
     gate: operator
     emits: [spec, journal:spec, acceptance]
-    # `requirements` is DERIVED, as on `fr-goal` (2026-09-28 spec §C).
-    evidence: [requirements]
 
   - id: plan
     kind: agent
@@ -63,7 +61,7 @@ steps:
     tier: hard
     needs: [spec, plan]
     emits: [journal:spec, acceptance]
-    evidence: [review, reviewer, findings, requirements, coverage, fidelity]
+    evidence: [review, reviewer, findings]
 
   - id: plan-review
     kind: cli
@@ -104,4 +102,4 @@ steps:
     needs: [spec, plan]
     emits: [pr, acceptance]
     # `tests` may be `reuse` (2026-09-29 spec §D) on an unchanged code tree.
-    evidence: [tests, proportionality, requirement-rows, visual]
+    evidence: [tests, proportionality, visual]
