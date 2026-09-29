@@ -2568,7 +2568,7 @@ def _phase_log_windows(
         return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
     session = _this_session(os.environ)
     if session is None or opened is None:
-        return _why_unobservable() if session is None else "the unit has no opening stamp"
+        return _why_unobservable("commands") if session is None else "the unit has no opening stamp"
     found = witness_transcript(session, holder)
     if found is None:
         return f"the session transcript {session} could not be read"
