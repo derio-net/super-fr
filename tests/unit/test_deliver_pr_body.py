@@ -393,7 +393,7 @@ def test_a_run_whose_spec_review_has_no_fidelity_evidence_predates(tmp_path: Pat
 
 
 def test_a_stored_predates_line_for_fidelity_reads_as_predating(tmp_path: Path) -> None:
-    from fr.record.pr_body import _predates_gate
+    from fr.record.pr_body import _predates_gate, render_pr_body
     from fr.requirements import REQUIREMENTS_PREDATES
     from fr.run import units
 
@@ -405,6 +405,45 @@ def test_a_stored_predates_line_for_fidelity_reads_as_predating(tmp_path: Path) 
     state = state.model_copy(update={"steps": {**state.steps, "spec-review": stored}})
 
     assert _predates_gate(state) is True
+    body = render_pr_body(repo, state)
+    inventory = _section(body, "## Design inventory", "## Post-merge verification owed")
+    assert inventory == "Not recorded (predates the fidelity gate)."
+
+
+def test_an_unreadable_spec_journal_makes_the_inventory_not_available(tmp_path: Path) -> None:
+    from fr.journal.model import journal_path
+    from fr.record.pr_body import render_pr_body
+
+    from tests.unit.test_run_evidence_requirements import SLUG
+
+    repo = _traced_run_at_deliver(tmp_path)
+    state = _with_fidelity(repo)
+    journal_path(repo, "spec", SLUG).write_text("this is not a journal\n")
+
+    inventory = _section(
+        render_pr_body(repo, state), "## Design inventory", "## Post-merge verification owed"
+    )
+    assert inventory.startswith("Not available:"), inventory
+    assert "predates" not in inventory
+
+
+def test_a_recorded_review_missing_from_the_journal_makes_the_inventory_not_available(
+    tmp_path: Path,
+) -> None:
+    from fr.record.pr_body import render_pr_body
+    from fr.run import units
+
+    repo = _traced_run_at_deliver(tmp_path)
+    state = _with_fidelity(repo)
+    record = units.with_evidence(
+        state.steps["spec-review"], "step/spec-review", {"review": "sr-missing"}
+    )
+    state = state.model_copy(update={"steps": {**state.steps, "spec-review": record}})
+
+    inventory = _section(
+        render_pr_body(repo, state), "## Design inventory", "## Post-merge verification owed"
+    )
+    assert inventory.startswith("Not available:") and "sr-missing" in inventory, inventory
 
 
 def test_delegated_decisions_list_with_the_requirements_citing_them(tmp_path: Path) -> None:
