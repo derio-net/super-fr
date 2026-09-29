@@ -20,6 +20,7 @@ from fr.journal.model import JournalEntry, append_journal_entry, journal_path
 from fr.parser import Plan
 from fr.parser import parse as parse_plan
 from fr.plan_ops import PhaseSpec, ReviewIssue, _tier_issues, create
+from fr.version_floor import CEILING_VERSION
 
 from tests.unit.test_plan_phase_sizing import PLAN, SPEC_REL, SPEC_SLUG, _repo
 
@@ -41,7 +42,7 @@ def _plan(repo: Path, *tiers: str) -> Plan:
         slug=PLAN,
         spec=SPEC_REL,
         target_repo="derio-net/own",
-        fr_version=">=4.20.0,<5.0.0",
+        fr_version=f">=4.20.0,<{CEILING_VERSION}",
         phases=specs,
         prose="# toy\n",
     )

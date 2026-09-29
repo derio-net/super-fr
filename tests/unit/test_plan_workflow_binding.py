@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 from fr._yaml import dump_plan_yaml
+from fr.version_floor import CEILING_VERSION
 
 MINIMAL = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -330,7 +331,7 @@ def test_plan_create_without_the_flag_writes_no_workflow_key(
     assert result.exit_code == 0, result.output
     text = _meta_text(repo)
     assert "workflow" not in text
-    assert "fr_version: '>=3.0.0,<5.0.0'" in text
+    assert f"fr_version: '>=3.0.0,<{CEILING_VERSION}'" in text
 
 
 def test_plan_create_with_the_flag_writes_the_key_and_floors_fr_version(
@@ -367,7 +368,7 @@ def test_plan_create_refuses_a_workflow_plan_whose_fr_version_admits_older_fr(
         "--workflow",
         "fr-goal-phase-dispatch",
         "--fr-version",
-        ">=3.0.0,<5.0.0",
+        f">=3.0.0,<{CEILING_VERSION}",
     )
 
     assert result.exit_code == 2, result.output
@@ -411,10 +412,10 @@ def test_plan_create_leaves_fr_version_alone_without_the_flag(
     older fr, which is the whole reason the key is optional."""
     repo = _cli_repo(tmp_path)
 
-    result = _create(repo, monkeypatch, "--fr-version", ">=3.0.0,<5.0.0")
+    result = _create(repo, monkeypatch, "--fr-version", f">=3.0.0,<{CEILING_VERSION}")
 
     assert result.exit_code == 0, result.output
-    assert "fr_version: '>=3.0.0,<5.0.0'" in _meta_text(repo)
+    assert f"fr_version: '>=3.0.0,<{CEILING_VERSION}'" in _meta_text(repo)
 
 
 # ── self-review validates the reference ────────────────────────────────

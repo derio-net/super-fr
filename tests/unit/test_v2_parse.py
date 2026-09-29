@@ -377,6 +377,7 @@ def test_an_unknown_key_still_fails_when_the_version_gate_passes(tmp_path):
     validation."""
     import pytest
     from fr.parser import PlanSchemaError, parse
+    from fr.version_floor import CEILING_VERSION
 
     plan_dir = tmp_path / "p"
     plan_dir.mkdir()
@@ -385,7 +386,7 @@ def test_an_unknown_key_still_fails_when_the_version_gate_passes(tmp_path):
         "plan: 2026-08-31-ok\n"
         "target_repo: acme/demo\n"
         "created: 2026-08-31\n"
-        'fr_version: ">=4.0.0,<5.0.0"\n'
+        f'fr_version: ">=4.0.0,<{CEILING_VERSION}"\n'
         "a_key_from_a_later_fr: yes\n"
     )
 

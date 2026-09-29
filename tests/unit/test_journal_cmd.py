@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from fr.cli import app
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -594,7 +595,7 @@ class TestCheckRequireReviews:
             slug=slug,
             spec=None,
             target_repo="derio-net/test",
-            fr_version=">=3.0.0,<5.0.0",
+            fr_version=f">=3.0.0,<{CEILING_VERSION}",
             phases=phases,
             prose="# x\n",
         )
@@ -1244,7 +1245,7 @@ class TestHandoff:
             slug=slug,
             spec=None,
             target_repo="derio-net/test",
-            fr_version=">=3.0.0,<5.0.0",
+            fr_version=f">=3.0.0,<{CEILING_VERSION}",
             phases=[
                 PhaseSpec(number=1, title="One", tasks=()),
                 PhaseSpec(number=2, title="Two", depends_on=(1,), tasks=()),
@@ -1334,7 +1335,7 @@ class TestHandoff:
             slug="H",
             spec=self._SPEC,
             target_repo="derio-net/test",
-            fr_version=">=3.0.0,<5.0.0",
+            fr_version=f">=3.0.0,<{CEILING_VERSION}",
             phases=[PhaseSpec(number=1, title="One", tasks=())],
             prose="# x\n",
         )

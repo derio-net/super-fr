@@ -30,6 +30,7 @@ from fr.artifacts import trigger
 from fr.artifacts.registry import ARTIFACT_KINDS, ArtifactKind
 from fr.artifacts.runner import MigrationRegistry, SchemaMigration
 from fr.cli import app
+from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
 runner_cli = CliRunner()
@@ -278,7 +279,7 @@ def test_a_current_tree_neither_migrates_nor_commits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`is_stale` short-circuits; nothing else may walk the tree behind it."""
-    _plan(tmp_path, fr_version=">=4.0.0,<5.0.0")
+    _plan(tmp_path, fr_version=f">=4.0.0,<{CEILING_VERSION}")
     ran, committed = [], []
     monkeypatch.setattr(trigger, "run_migrations", lambda *a, **k: ran.append(1))
     monkeypatch.setattr(trigger, "commit_migration", lambda *a, **k: committed.append(1))
@@ -300,7 +301,7 @@ def test_interactive_migrates_commits_and_returns(tmp_path: Path) -> None:
         interactive=True,
         commit=lambda root, report: committed.append(report),
     )
-    assert "<5.0.0" in p.read_text()
+    assert f"<{CEILING_VERSION}" in p.read_text()
     assert len(committed) == 1
 
 
@@ -368,7 +369,7 @@ def test_a_half_migrated_tree_is_exit_two_not_a_silent_pass(
             commit=lambda root, report: None,
         )
     assert e.value.exit_code == 2
-    assert "<5.0.0" in good.read_text(), "one bad artifact must not stop the others"
+    assert f"<{CEILING_VERSION}" in good.read_text(), "one bad artifact must not stop the others"
     assert "not a specifier" in bad.read_text(), "a constraint fr cannot parse is never rewritten"
     assert "FAILED" in capsys.readouterr().err
 
@@ -408,7 +409,7 @@ def test_the_callback_runs_before_the_invoked_command(
     p = _plan(tmp_path)
     result = _invoke(monkeypatch, tmp_path, GATED_COMMAND)
     assert result.exit_code == 0, result.output
-    assert "<5.0.0" in p.read_text()
+    assert f"<{CEILING_VERSION}" in p.read_text()
     assert "claude-code" in result.output, "the typed command must still run"
 
 
@@ -681,7 +682,7 @@ def test_a_feature_branch_is_migrated_as_before(
         commit=lambda root, report: None,
     )
 
-    assert "<5.0.0" in p.read_text()
+    assert f"<{CEILING_VERSION}" in p.read_text()
 
 
 def test_the_gate_holds_back_an_artifact_with_uncommitted_changes(
@@ -827,7 +828,7 @@ def test_the_loser_proceeds_when_the_winner_already_migrated(
     left to do. Refusing there would turn a resolved race into an error."""
     from fr.artifacts.atomic import migration_lock
 
-    _plan(tmp_path, fr_version=">=3.0.0,<5.0.0")  # already current
+    _plan(tmp_path, fr_version=f">=3.0.0,<{CEILING_VERSION}")  # already current
     lock = tmp_path / "fr-migrate.lock"
     monkeypatch.setattr(trigger, "lock_path", lambda root: lock)
     # Force the "stale" verdict once so the gate reaches the lock at all.
@@ -862,7 +863,7 @@ def test_a_lock_free_repo_still_migrates(tmp_path: Path, monkeypatch: pytest.Mon
         commit=lambda root, report: None,
     )
 
-    assert "<5.0.0" in p.read_text()
+    assert f"<{CEILING_VERSION}" in p.read_text()
 
 
 # --- r5-c5: partial success is its own outcome ---------------------------
@@ -887,7 +888,7 @@ def test_a_partial_migration_says_how_many_landed(
         )
 
     assert e.value.exit_code == 2
-    assert "<5.0.0" in good.read_text()
+    assert f"<{CEILING_VERSION}" in good.read_text()
     err = capsys.readouterr().err
     assert "1 artifact(s) migrated" in err
     assert "1 left unmodified" in err

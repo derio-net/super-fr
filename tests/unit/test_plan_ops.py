@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pytest
 import yaml
+from fr.version_floor import CEILING_VERSION
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 
@@ -216,7 +217,7 @@ def _shaped_plan(tmp_path: Path, shapes: list[tuple[int, str, tuple[int, ...]]])
         slug="2026-09-20-shape",
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=n,
@@ -437,7 +438,7 @@ def _create_args(repo: Path, slug: str) -> dict:
         slug=slug,
         spec=None,
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[PhaseSpec(number=1, title="t", tasks=())],
         prose="# x\n",
     )
@@ -510,7 +511,7 @@ def _create_with_spec(repo: Path, spec: str | None) -> Path:
         slug="2026-09-26-canon",
         spec=spec,
         target_repo="derio-net/test",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,

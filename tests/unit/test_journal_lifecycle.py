@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from fr.version_floor import CEILING_VERSION
+
 
 def _make_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
@@ -42,7 +44,7 @@ def _create_plan(repo: Path, slug: str, spec_path: Path):
         slug=slug,
         spec=str(spec_path.relative_to(repo)),
         target_repo="derio-net/test",
-        fr_version=">=1.0.0,<5.0.0",
+        fr_version=f">=1.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,

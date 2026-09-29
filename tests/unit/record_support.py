@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from fr.version_floor import CEILING_VERSION
 
 from tests.integration.test_fr_goal_shape import (
     _drive_to_implement,
@@ -80,7 +81,7 @@ def _plan(root: Path) -> None:
         slug=SLUG,
         spec="docs/spec.md",
         target_repo="derio-net/super-fr",
-        fr_version=">=3.0.0,<5.0.0",
+        fr_version=f">=3.0.0,<{CEILING_VERSION}",
         phases=[
             PhaseSpec(
                 number=1,

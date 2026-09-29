@@ -33,6 +33,7 @@ from fr.artifacts.runner import (
     plan_migrations,
     run_migrations,
 )
+from fr.version_floor import CEILING_VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -435,7 +436,9 @@ def _seed_closed_world(root: Path) -> dict[str, Path]:
     spec.parent.mkdir(parents=True)
     spec.write_text("# A spec\n\n## Implementation Plans\n")
     paths["spec"] = spec
-    paths["plan"] = _plan(root, "live", version=2, extra="fr_version: '>=4.0.0,<5.0.0'\n")
+    paths["plan"] = _plan(
+        root, "live", version=2, extra=f"fr_version: '>=4.0.0,<{CEILING_VERSION}'\n"
+    )
     return paths
 
 

@@ -13,8 +13,30 @@ probes. So exact, non-wildcard pins are compared directly as well.
 
 from __future__ import annotations
 
+import importlib.metadata
+
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
+
+
+def ceiling_for(version: str) -> str:
+    """The exclusive `fr_version` ceiling that admits `version`'s whole major: `X+1.0.0`.
+
+    The ONE place that formula lives. It used to be a literal (`<5.0.0`) written
+    at 4.0.0 and copied to ten sites, so the 5.0.0 release refused every plan it
+    wrote. The repair that widens EXISTING plans (`fr.artifacts.fr_version`)
+    calls this too, so the two can no longer drift.
+    """
+    return f"{Version(version).major + 1}.0.0"
+
+
+CEILING_VERSION = ceiling_for(importlib.metadata.version("fr"))
+"""The ceiling a NEW plan carries, derived from the installed fr at import.
+
+Write a default as `f">=4.20.0,<{CEILING_VERSION}"`: the lower bound stays a
+literal so `scripts/floors.py` keeps checking it against the release it names,
+and only the ceiling — the part that goes stale — is derived.
+"""
 
 PRE_4_PROBES: tuple[str, ...] = (
     "0.1.0",
