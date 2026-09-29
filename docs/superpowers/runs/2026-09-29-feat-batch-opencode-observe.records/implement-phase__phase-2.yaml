@@ -6,7 +6,7 @@ run: 2026-09-29-feat-batch-opencode-observe
 step: implement-phase
 item: phase/2
 outcome: done
-ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T4.S3]
 refactor:
   P2.T1: "Already built by review fix p1-r1 (2aa091c5): all three comparison sites call agent_name and _verify_reviewer reads observed_session(...).dispatches(opened). This phase only added the one missing RED case (a `general` child named as spec reviewer); no code changed, nothing to clean."
   P2.T2: "One 30-line helper (`_observed_holder`) called at the two resolve paths before any check reads the holder; it reuses the protocol, `agent_name` and the claim path, so there was no duplication to fold."
@@ -78,5 +78,15 @@ journal:
       member whose evidence carries both `findings` and `reviewer` on a
       `phase/<N>` item, so no other brief's key set moves (test_run_cli's
       exact-key assertion is for a flat step and stays green).
+  - kind: discovery
+    id: p2-packaged-workflow-copy
+    title: Editing plugins/super-fr/workflows/fr-goal.yaml also needs the packaged copy under packages/fr/src/fr/workflows/
+    body: |
+      Beside the two mirror generators, the shipped manifest has a third copy,
+      `packages/fr/src/fr/workflows/fr-goal.yaml`, that
+      `test_tripwire_shipped_workflows.py::test_the_packaged_copy_is_byte_identical`
+      pins (`cp plugins/super-fr/workflows/*.yaml packages/fr/src/fr/workflows/`).
+      The plan's T4.S3 named only the two sync scripts; the copy is committed
+      with the prose.
 resolves: []
 evidence: {}

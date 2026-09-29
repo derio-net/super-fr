@@ -89,7 +89,11 @@ steps:
     # here because the review's fixes edit the spec (§C); `coverage` reads the
     # `input-coverage` block of the review entry `review` names and refuses
     # unless its spans partition the input exactly (§D, d9). A `missing <id>`
-    # span is held by `findings` until that finding closes. `acceptance` joins
+    # span is held by `findings` until that finding closes. The recorded block
+    # must equal the one the named reviewer RETURNED (2026-09-29
+    # opencode-observe §D, R5): a re-cut or relabel is refused naming the first
+    # differing line (#777); an unreadable return is unobserved=reviewer-return.
+    # `acceptance` joins
     # `emits` because fixing a dropped statement adds a requirement AND its
     # row, and they must ride one record or the re-derived gate refuses the fix
     # it asked for. `tier: hard` (d8): traceability is the judgement #759's
@@ -179,6 +183,15 @@ steps:
         # scope — true, but not caused by this change. The orchestrator journals
         # the tag as `--review-scope`, fixes every in-scope finding, and files
         # the rest with `fr journal resolve --state out-of-scope`.
+        #
+        # The reviewer's own return is checked too (2026-09-29 opencode-observe
+        # §D, R7): the brief's `findings_block` has each reviewer end its return
+        # with a ```findings block (`p<N>-r<k> | in|out | summary`, a letter per
+        # reviewer when there are several, or `none`), and `done` is refused
+        # while any non-executor subagent dispatched since the review opened
+        # returned no block, or a returned id is not a phase-N plan-journal
+        # finding with the reviewer's scope tag. #816 recorded `findings: none`
+        # over six returned findings. Unreadable returns: unobserved=reviewer-return.
         # `visual` (spec 2026-09-28-ui-visual-evidence §C): the REVIEWER's own
         # fresh screenshots, opened in the reviewer's transcript — never the
         # executor's.
