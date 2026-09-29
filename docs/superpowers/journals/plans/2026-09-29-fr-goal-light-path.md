@@ -104,3 +104,70 @@ Reviewer ae42ae7153a2b5c23 (dispatched feature-dev:code-reviewer, opus) reviewed
 ### p1-skill-prose-still-advances-after-record-resolved · finding [fixed] · resolves p1-skill-prose-still-advances-after-record: fr-goal skill still says `fr run advance` after `resolve --record`; that advance is now refused as held (phase 1)
 
 31eda282: fr-goal §1/§6 say resolve --record briefs the next unit; the separate advance is gone; pinned wording updated in test_run_resolve_requires_advance.py; mirrors synced.
+
+<!-- fr:journal kind=decision scope=plan id=p2-tree-computed-at-verification created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-tree-computed-at-verification · decision · the phase log's code tree is computed at verification, and equals the tree after the record's commit (phase 2)
+
+`_verify_phase_tests_log` hashes HEAD's code tree while verifying, i.e. before
+`apply_record`'s commit. Spec §D says "after the record's own commit"; the two
+are equal by construction, because that commit (`commit_records`) stages only the
+paths the record wrote — runs, records, journals, plan, matrix — all under
+`FR_ARTIFACT_PREFIXES`, which the code tree excludes. The docstring states this.
+An uncommitted code change at record time is not in the tree; freshness still
+counts it, and deliver's reuse refuses while any code path is dirty.
+
+<!-- fr:journal kind=decision scope=plan id=p2-freshness-without-a-merge-base created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-freshness-without-a-merge-base · decision · with no merge-base (no remote default branch), freshness counts every tracked code path (phase 2)
+
+`newest_code_mtime(repo, None)` compares the log against every tracked code path
+plus uncommitted ones, failing toward stricter, never toward "nothing changed".
+The merge-base comes from `default_merge_base` (remote default ref, as
+proportionality resolves it). The log file itself is ignored when it sits in the
+worktree.
+
+<!-- fr:journal kind=decision scope=plan id=p2-untracked-counts-marker-does-not created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-untracked-counts-marker-does-not · decision · untracked (non-ignored) files are dirty code paths; the `.fr-isolation` marker never is (phase 2)
+
+`dirty_code_paths` uses `git status --untracked-files=all`: a new source file not
+yet added can change what the suite runs, so reuse refuses over it. The isolation
+marker is excluded by name (`ISOLATION_MARKER`) because a workspace whose
+`info/exclude` lacks it (the unit-test fixture repo) would otherwise refuse every
+reuse over a file that is fr's, not code.
+
+<!-- fr:journal kind=decision scope=plan id=p2-reuse-refusal-names-paths-via-history created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-reuse-refusal-names-paths-via-history · decision · deliver's refusal counts changed paths by finding the commit whose code tree matches the witness (phase 2)
+
+The witness stores only `tree=<sha256>` (spec format), so the "<n> paths, e.g.
+<path>" in the refusal comes from `code_paths_since_tree`: the newest of HEAD's
+last 200 commits whose code tree equals the recorded one, diffed to the working
+tree. When no such commit is found the refusal says so instead of a count.
+
+<!-- fr:journal kind=decision scope=plan id=p2-holder-transcript-rules created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-holder-transcript-rules · decision · a phase log's writer is the holder's transcript; a holder this session never dispatched is refused (phase 2)
+
+`_phase_log_windows` reads `witness_transcript(session, holder)` — the subagent
+transcript (all sidechain, so `wrote_since(..., main_thread=False)`) or the main
+thread when the unit ran inline. `witness_transcript` returning False (a bogus or
+foreign agent id) is a refusal, as for `visual`; an unreadable session, or
+OpenCode/Hermes (no child-session reader, spec §D/§E), records `unobserved=tests`
+after the predates-the-unit check. `orchestrator_wrote_since` is now a thin
+wrapper over `wrote_since(..., main_thread=True)`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-pr-body-tests-section created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-pr-body-tests-section · decision · the PR body gains an optional `## Tests` section, rendered only when deliver carries tests evidence (phase 2)
+
+`render_pr_body` adds `## Tests` before `## Proportionality` when `step/deliver`
+has a `tests` witness: "Full suite reused from `<unit>` — `<log>@<sha>`, on code
+tree `<12>`, unchanged at delivery." or "Full suite run at delivery — `<witness>`.".
+It is not in `REQUIRED_SECTIONS`, so no live PR is refused for lacking it.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-deliver-suite-reuse-row-owed created=2026-09-29T08:35:06+00:00 phase=2 -->
+### p2-deliver-suite-reuse-row-owed · discovery · acceptance row deliver-suite-reuse now has unit evidence; implement-phase cannot move it (phase 2)
+
+`tests/unit/test_run_suite_reuse.py` verifies R6 (phase log recorded with its
+tree, hand-written/stale/records-dir logs refused, reuse passes on an unchanged
+tree and after bookkeeping-only commits, refused after a code change). The row
+`deliver-suite-reuse` is still `not-implemented`; implement-phase does not emit
+`acceptance`, so the move (`--status ci --level
+unit=super-fr:tests/unit/test_run_suite_reuse.py`) belongs to a step that does
+(deliver).
