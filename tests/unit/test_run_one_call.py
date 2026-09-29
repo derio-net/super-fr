@@ -307,3 +307,181 @@ def test_no_advance_is_refused_with_the_flag_form(tmp_path: Path) -> None:
     assert out.exit_code == 2, out.output
     assert "--no-advance" in _squash(out.output)
     assert load_run_state(repo, RUN).steps["a"].state == "running"
+
+
+# --- review r1-1: a refusal is never read as a cli failure --------------------
+
+
+def test_m_an_exit_1_that_is_not_a_cli_step_is_a_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the cli branch knows a step ran and failed, so only it may say
+    `cli-failed` — as a return value. Any `typer.Exit` under the step,
+    whatever its code, is a refusal (review r1-1)."""
+    import typer
+    from fr.commands import run_cmd
+
+    def _exits_1(*_a: object, **_k: object) -> None:
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(run_cmd, "_advance_step", _exits_1)
+
+    assert run_cmd._advance_once(tmp_path, RUN, redispatch=False) == "refused"
+
+
+# --- review r1-2: chain edge cases ---------------------------------------------
+
+
+def test_n_a_chain_refused_after_an_applied_record_exits_2_with_the_record_committed(
+    tmp_path: Path,
+) -> None:
+    """The `plan` record resolves `done`; the chained advance reaches the
+    `implement` fan-out, whose manual-placement preflight refuses a plan with
+    an outstanding manual phase ahead of an agentic one."""
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
+    from tests.unit.test_run_cli import _GROUPED_SHAPE, _plan_with_tags
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    plan_rel = _plan_with_tags(repo, [(1, "manual", ()), (2, "agentic", ())])
+    start = ["run", "start", "grouped", "--branch", "b", "--run-id", RUN]
+    assert _invoke(repo, shipped, start).exit_code == 0
+    assert _invoke(repo, shipped, ["run", "advance", RUN]).exit_code == 0  # plan: running
+    path = repo / "docs" / "superpowers" / "runs" / f"{RUN}.records" / "plan.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "schema_version": RECORD_SCHEMA_VERSION,
+        "run": RUN,
+        "step": "plan",
+        "outcome": "done",
+        "emitted": {"plan": plan_rel},
+    }
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "record", "--no-verify")
+
+    out = _invoke(repo, shipped, ["run", "resolve", RUN, "--step", "plan", "--record", str(path)])
+
+    assert out.exit_code == 2, out.output
+    squashed = _squash(out.output)
+    assert "mis-places a manual phase" in squashed
+    assert "record applied; the advance after it was refused" in _squash(out.stderr)
+    assert "dispatch brief" not in out.output
+    assert not path.exists()
+    assert any("resolve plan" in s for s in _subjects(repo))
+    assert _git(repo, "status", "--porcelain", "--", "docs/superpowers/runs") == ""
+    state = load_run_state(repo, RUN)
+    assert state.steps["plan"].state == "done"
+    assert state.cursor == "implement"
+
+
+@pytest.mark.usefixtures("complete_live_pr")
+def test_o_a_deliver_record_on_the_closeout_shape_prints_the_handoff_once(
+    tmp_path: Path,
+) -> None:
+    """`deliver` is the last step: the resolve prints the closeout handoff, and
+    the advance half must not print it a second time (spec §B, R4)."""
+    from fr.record.model import RECORD_SCHEMA_VERSION
+
+    from tests.unit.test_run_cli import _CLOSEOUT_SHAPE, _resolved_to_deliver
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
+    _resolved_to_deliver(repo, shipped)
+    path = repo / "docs" / "superpowers" / "runs" / f"{RUN}.records" / "deliver.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "schema_version": RECORD_SCHEMA_VERSION,
+        "run": RUN,
+        "step": "deliver",
+        "outcome": "done",
+        "emitted": {"pr": "https://github.com/derio-net/super-fr/pull/1"},
+    }
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "record", "--no-verify")
+
+    argv = ["run", "resolve", RUN, "--step", "deliver", "--record", str(path)]
+    out = _invoke(repo, shipped, argv)
+
+    assert out.exit_code == 0, out.output
+    assert out.stdout.count("closeout: after the PR merges") == 1, out.stdout
+    assert f"run {RUN} complete" not in out.stdout
+    assert load_run_state(repo, RUN).steps["deliver"].state == "done"
+
+
+_ALL_DONE_GROUP = (
+    "workflow: grouped\nschema: 1\nunit: run\nsteps:\n"
+    "  - id: plan\n    kind: agent\n    emits: [plan]\n"
+    "  - id: implement\n    kind: agent\n    needs: [plan]\n    for_each: phase\n"
+    "    steps:\n"
+    "      - id: code\n        kind: agent\n        needs: [plan]\n"
+    "  - id: deliver\n    kind: agent\n    needs: [plan]\n"
+)
+
+
+def test_p_a_group_whose_units_are_all_done_continues_to_the_next_brief(
+    tmp_path: Path,
+) -> None:
+    from fr.run.model import save_run_state
+
+    from tests.unit.test_run_cli import _started_grouped_with_plan
+
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _ALL_DONE_GROUP)
+    _started_grouped_with_plan(repo, shipped)
+    # Every unit resolved, the group itself never completed: `_advance_group`
+    # finds nothing pending and completes the step inline.
+    state = load_run_state(repo, RUN)
+    implement = units.with_unit_states(state.steps["implement"], {"phase/1/code": "done"})
+    save_run_state(
+        repo, state.model_copy(update={"steps": {**state.steps, "implement": implement}})
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "units done", "--no-verify")
+
+    out = _invoke(repo, shipped, ["run", "advance", RUN])
+
+    assert out.exit_code == 0, out.output
+    lines = out.stdout.splitlines()
+    assert any(line.startswith("implement: done (1 members done") for line in lines), lines
+    assert "deliver: dispatch brief" in lines
+    assert json.loads(lines[-1])["step"] == "deliver"
+    state = load_run_state(repo, RUN)
+    assert state.steps["implement"].state == "done"
+    assert state.cursor == "deliver"
+    assert state.steps["deliver"].state == "running"
+
+
+def test_q_redispatch_from_a_held_agent_step_prints_exactly_one_brief(tmp_path: Path) -> None:
+    repo, shipped = _started(tmp_path, _shape())
+
+    out = _invoke(repo, shipped, ["run", "advance", RUN, "--redispatch"])
+
+    assert out.exit_code == 0, out.output
+    assert out.stdout.count("dispatch brief") == 1, out.stdout
+    assert [b["step"] for b in _briefs(out.stdout)] == ["a"]
+    state = load_run_state(repo, RUN)
+    assert state.cursor == "a"
+    assert state.steps["c1"].state == "pending"
+
+
+def test_r_the_orchestrator_model_notice_prints_once_per_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import run_cmd
+
+    repo, shipped = _started(tmp_path, _shape())
+    _a_done_by_flag(repo, shipped)
+    notice = "warning: orchestrator-model-notice-fixture"
+    monkeypatch.setattr(run_cmd, "_orchestrator_model_notice", lambda _root: notice)
+
+    out = _invoke(repo, shipped, ["run", "advance", RUN])
+
+    assert out.exit_code == 0, out.output
+    assert "c1: done (exit 0)" in out.stdout and "b: dispatch brief" in out.stdout
+    assert out.stderr.count(notice) == 1, out.stderr

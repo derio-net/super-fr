@@ -4088,10 +4088,10 @@ def _advance_once(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
     """One `advance` step — its prints unchanged; its exits become a stop."""
     try:
         return _advance_step(repo_root, run_id, redispatch=redispatch)
-    except typer.Exit as e:
-        # Exit 1 is only ever raised for a cli step that ran and failed; every
-        # other exit is a refusal that wrote nothing it had not already said.
-        return "cli-failed" if e.exit_code == 1 else "refused"
+    except typer.Exit:
+        # A failed cli step RETURNS `cli-failed`; every exit, whatever its code,
+        # is a refusal that wrote nothing it had not already said (review r1-1).
+        return "refused"
 
 
 def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceStop:
@@ -4271,7 +4271,10 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         )
         _save_run_state(repo_root, new_state)
         err_console.print(f"{step.id}: failed (exit {proc.returncode})")
-        raise typer.Exit(1)
+        # A return value, not `typer.Exit(1)`: only this branch knows a step
+        # ran and failed, so only it may say so (review r1-1). Every
+        # `typer.Exit` raised under `_advance_step` is a refusal.
+        return "cli-failed"
 
 
 def _resolve_member(
@@ -5166,6 +5169,13 @@ def _resolve_with_record(
     for notice in outcome.notices:
         err_console.print(notice, markup=False, soft_wrap=True)
     typer.echo(outcome.line)
+    if step_id == "deliver" and record.outcome == "done":
+        # The flag form prints this from `_resolve_step`'s body, whose stdout
+        # the record engine holds back — so the record form prints it here,
+        # once, whether or not it advances (`_advance_after_record` does not
+        # repeat it: a finished run has nothing to advance).
+        for line in _closeout_handoff_lines(repo_root, run_id, committed=outcome.committed):
+            console.print(line, soft_wrap=True)
     if advance and record.outcome == "done":
         _advance_after_record(repo_root, run_id)
 
