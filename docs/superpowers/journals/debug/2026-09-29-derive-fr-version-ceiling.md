@@ -24,3 +24,8 @@ fr.version_floor.ceiling_for/CEILING_VERSION are the one derivation, used by DEF
 ### review-gt-bound · finding [fixed] · Review: '>' bound on the installed version was told to run migrate
 
 >5.0.0 under 5.0.0 got "run fr migrate artifacts --yes", which treats > as a floor and does nothing. Now says upgrade. Test first (RED), fixed in c2780cda.
+
+<!-- fr:journal kind=finding scope=debug id=review-scoped-out created=2026-09-29T20:23:37+00:00 state=open -->
+### review-scoped-out · finding [open] · Review: explicit --fr-version unchecked; dev installs outside every spec
+
+Pre-existing, not caused by this fix. Tracked in derio-net/super-fr#855.
