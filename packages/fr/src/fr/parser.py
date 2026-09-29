@@ -115,7 +115,10 @@ def _installed_has_outgrown(spec: SpecifierSet, installed: Version) -> bool:
             bound = Version(s.version.removesuffix(".*"))
         except InvalidVersion:
             return False
-        if bound > installed:
+        # `>X` excludes X itself, so a `>` bound EQUAL to the installed version
+        # is still a plan that wants a newer fr (migrate treats `>` as a floor
+        # problem and does nothing, so "run migrate" would leave the user stuck).
+        if bound > installed or (s.operator == ">" and bound == installed):
             return False
     return True
 

@@ -179,13 +179,17 @@ def test_a_plan_the_installed_fr_has_outgrown_points_at_migrate_not_a_downgrade(
     assert "To upgrade" not in msg
 
 
+@pytest.mark.parametrize("constraint", [">=99.0.0,<100.0.0", ">5.0.0", ">=4.0.0,>5.0.0"])
 def test_a_plan_that_needs_a_newer_fr_still_says_to_upgrade(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, constraint: str
 ) -> None:
+    """`>5.0.0` under 5.0.0 is a LOWER bound sitting exactly on the installed fr:
+    `fr migrate artifacts` treats `>` as a floor problem and does nothing, so
+    saying "run migrate" would leave the user stuck (review of this fix)."""
     monkeypatch.setattr("fr.parser.INSTALLED_FR_VERSION", "5.0.0")
 
     with pytest.raises(PlanSchemaError) as e:
-        parse(_plan_with(tmp_path, ">=99.0.0,<100.0.0"))
+        parse(_plan_with(tmp_path, constraint))
 
     assert "To upgrade" in str(e.value)
     assert "fr migrate artifacts" not in str(e.value)
@@ -239,3 +243,21 @@ def test_no_hardcoded_fr_version_ceiling_survives_in_package_source() -> None:
     ]
 
     assert hard == [], "hardcoded fr_version ceiling(s):\n  " + "\n  ".join(hard)
+
+
+def test_no_shortened_ceiling_literal_slips_past_the_floor_scan() -> None:
+    """`floors.FLOOR_RE` wants three dotted parts, so `">=4.20.0,<5"` or `<5.0`
+    would pass the tripwire above yet strand at the next major all the same.
+    This one reads raw text (comments included) for `>=…,<` followed by ANY digit;
+    a derived ceiling is `<{`, which it does not match."""
+    import re
+
+    loose = re.compile(r">=\s*\d[\d.]*\s*,\s*<=?\s*\d")
+    hits = [
+        f"{path.relative_to(REPO).as_posix()}:{n}: {line.strip()}"
+        for path in sorted((REPO / "packages").glob("*/src/**/*.py"))
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if loose.search(line)
+    ]
+
+    assert hits == [], "hardcoded fr_version ceiling(s):\n  " + "\n  ".join(hits)
