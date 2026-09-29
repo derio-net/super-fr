@@ -1187,6 +1187,10 @@ def orchestrator_wrote_since(
     view = observed_session(env)
     if view is not None:
         return view.wrote_windows(log, start)
+    if opencode and current_session(env):
+        # A session id the database does not hold: the wrong database
+        # (gh#740, review p1-r2) — never widened to every top-level session.
+        return None
     return opencode_unscoped(env).wrote_windows(log, start) if opencode else None
 
 

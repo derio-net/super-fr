@@ -349,7 +349,16 @@ class OpenCodeSession:
     session: str
     harness: str = "opencode"
 
+    def _known(self) -> bool:
+        """Is this session a row of the database — readable AND the right one?
+        A readable database that does not hold it is the wrong database
+        (gh#740), which reads as unobserved, never as "nothing happened"
+        (review p1-r2)."""
+        return bool(_query(self.db, "SELECT 1 FROM session WHERE id = ?", (self.session,)))
+
     def _parts(self) -> list[ToolPart] | None:
+        if not self._known():
+            return None
         rows = _query(
             self.db,
             "SELECT session_id, time_created, data FROM part WHERE session_id = ? "
@@ -388,6 +397,8 @@ class OpenCodeSession:
         )
 
     def _children(self) -> set[str] | None:
+        if not self._known():
+            return None
         rows = _query(self.db, "SELECT id FROM session WHERE parent_id = ?", (self.session,))
         return None if rows is None else {row[0] for row in rows}
 
@@ -402,8 +413,10 @@ class OpenCodeSession:
                 part = json.loads(raw) if isinstance(raw, str | bytes) else None
             except json.JSONDecodeError:
                 continue
-            text = part.get("text") if isinstance(part, Mapping) else None
-            if part is not None and part.get("type") == "text" and isinstance(text, str) and text:
+            if not isinstance(part, Mapping):
+                continue  # valid JSON is not necessarily a part (review p1-r4)
+            text = part.get("text")
+            if part.get("type") == "text" and isinstance(text, str) and text:
                 return text
         return None
 
@@ -496,6 +509,8 @@ class OpenCodeSession:
     def wrote_windows(
         self, log: Path, since: _dt.datetime
     ) -> list[tuple[_dt.datetime, _dt.datetime]] | None:
+        if not self._known():
+            return None
         return _wrote_windows(self.db, log, since, self.session)
 
 
@@ -571,5 +586,10 @@ def observed_session(env: Mapping[str, str], session: str | None = None) -> Obse
         return None if transcript is None else ClaudeCodeSession(transcript, sid)
     if harness == OpenCodeReader.harness:
         db = OpenCodeReader().database(env)
-        return OpenCodeSession(db, _opencode_root(db, sid))
+        view = OpenCodeSession(db, _opencode_root(db, sid))
+        # A readable database that does not hold the session is the WRONG one
+        # (gh#740): unobserved. An unreadable one keeps its view, every method
+        # of which is `None` anyway.
+        readable = _query(db, "SELECT 1 FROM session LIMIT 1", ()) is not None
+        return None if readable and not view._known() else view
     return None

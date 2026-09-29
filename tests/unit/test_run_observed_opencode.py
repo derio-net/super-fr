@@ -177,3 +177,39 @@ def test_current_session_reads_the_key_its_harness_owns() -> None:
     assert current_session({"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": "x"}) is None
     assert current_session({"FR_HARNESS": "hermes", **both}) is None
     assert current_session({"FR_HARNESS": "not-a-harness", **both}) is None
+
+
+# --- review p1-r2 / p1-r4 ---------------------------------------------------
+
+
+def test_a_session_the_database_does_not_hold_is_unobserved() -> None:
+    """gh#740: a readable database that is not the run's (OpenCode ran under
+    another `XDG_DATA_HOME`) must read as unobserved, never as `[]` — which
+    the gates refuse as "nobody did it"."""
+    from fr.run.telemetry import orchestrator_wrote_since
+
+    env = _env(session="ses_not_in_this_db")
+    assert observed.observed_session(env) is None
+    view = observed.OpenCodeSession(DB, "ses_not_in_this_db")
+    assert view.answered_rounds(SINCE) is None
+    assert view.dispatches(SINCE) is None
+    assert view.child("ses_gen1") is None
+    assert view.first_read(SHOT, SINCE) is None
+    assert view.wrote_windows(LOG, SINCE) is None
+    # ...and the `tests=` gate does not fall back to every top-level session.
+    assert orchestrator_wrote_since(env, LOG, SINCE.isoformat()) is None
+
+
+def test_a_non_mapping_part_does_not_break_the_final_text(tmp_path: Path) -> None:
+    db = tmp_path / "opencode.db"
+    shutil.copy(DB, db)
+    with closing(sqlite3.connect(db)) as con:
+        con.execute(
+            "INSERT INTO part VALUES ('prt_gen2_9', 'msg_gen2', 'ses_gen2', ?, ?, '[1, 2]')",
+            (TR + 164_500, TR + 164_500),
+        )
+        con.commit()
+    view = observed.observed_session(_env(db=db))
+    assert view is not None
+    by_id = {d.agent_id: d for d in view.dispatches(SINCE) or []}
+    assert by_id["ses_gen2"].returned == "Reviewed phase 2 and found nothing to raise."
