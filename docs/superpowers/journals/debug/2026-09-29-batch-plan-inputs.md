@@ -49,3 +49,6 @@ registry._yaml_read_key, runner.inspection_failures, trigger._will_not_act_here/
 ### fix-813-tier · finding [fixed] · Tier criteria in fr-plan; self-review errors on hard without a tier-<plan>-p<N> decision
 
 plan_ops._tier_issues, phase_sizing.tier_reasons; tests/unit/test_plan_tier_reason.py.
+
+<!-- fr:journal kind=finding scope=debug id=pr-body-tier-model created=2026-09-29T11:56:08+00:00 state=open -->
+### pr-body-tier-model · finding [open] · #813 expectation 3: PR body shows each phase's tier and model
