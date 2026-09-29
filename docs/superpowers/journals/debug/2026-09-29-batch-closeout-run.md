@@ -19,3 +19,8 @@ LocalIsolation._write_isolation_marker (isolation/local.py) appends only '.fr-is
 ### rc-825 · root-cause · #825: the close-out brief opens a housekeeping workspace but only downs the feature branch
 
 run/closeout.py branch_closeout_brief prints 'fr isolation up --branch <housekeeping>' (chore/archive-<plan> or chore/closeout-<...>) and ends with 'fr isolation down --branch <feature branch>'. It has no line for the housekeeping branch, so that workspace outlives every close-out.
+
+<!-- fr:journal kind=root-cause scope=debug id=rc-826 created=2026-09-29T11:35:47+00:00 -->
+### rc-826 · root-cause · #826: the committed wrapper execs a Claude Code marketplace path, and fr ships no validator of its own
+
+plan_validator_wrapper.WRAPPER_TEXT (and scripts/install-validator-wrapper.sh) exec $HOME/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh. Only the Claude Code install creates that path. The fr wheel does not bundle validate-plans.sh, so on an OpenCode- or Hermes-only host nothing can resolve it.
