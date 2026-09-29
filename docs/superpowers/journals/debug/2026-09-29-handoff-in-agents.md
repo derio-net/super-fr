@@ -19,3 +19,8 @@ review-phase had no shipped agent, so a self-fetch needed one. Asked once (scope
 ### f-self-fetch · finding [fixed] · Executor and phase reviewer fetch the operator input themselves
 
 Source: fr-phase-executor.md gains a first section running `fr journal handoff --scope plan` on every dispatch; new plugins/super-fr/agents/fr-phase-reviewer.md does the same; review-phase names `agent: super-fr:fr-phase-reviewer`; guard hook, install allowlist, OpenCode mirrors, fr-goal §5/§6 wired. Failing-first: tests/unit/test_operator_input_prose.py (first-section self-fetch, reviewer tools, manifest agent), test_hooks_phase_executor_guard.py::TestPhaseReviewerGuard, mirror enumerations. Full suite 7596 passed.
+
+<!-- fr:journal kind=finding scope=debug id=rv-reviewer-counted-as-implementer created=2026-09-29T11:56:47+00:00 state=open review_scope=in -->
+### rv-reviewer-counted-as-implementer · finding [open] (reviewer: in scope) · A claimed fr-phase-reviewer is refused as the phase's implementer
+
+Naming agent: on review-phase records agent_type on the review unit (run_cmd.py _open_dispatch). The OpenCode plugin's --open-unit claim now matches it (_ran_as), so the reviewer's session id becomes the review unit's holder; _verify_reviewer's implementers set takes every phase/N/* unit with agent_type+agent, so reviewer=<that id> exits 2. Before this change agent_type was None and the unit was never claimable.
