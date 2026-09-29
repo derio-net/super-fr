@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Reviewer identity and what the reviewer returned
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-child-dispatch
+  - reviewer-return-coverage
+  - review-phase-findings-block
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/run/observed.py
+  - packages/fr/src/fr/run/review_return.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/record/pr_body.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/workflows/fr-goal.yaml
+  - .opencode/**
+  - .hermes/**
+  - tests/unit/test_run_review_return*.py
+  - tests/unit/test_run_resolve*.py
+  - tests/unit/test_run_reviewer*.py
+  - tests/unit/test_record_pr_body*.py
+  - tests/fixtures/transcripts/*
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: One agent-name normaliser at all three comparison sites
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: resolve-level test (FR_HARNESS=opencode, fixture db, FR_OPENCODE_SESSION_ID=ses_run): review-phase naming `reviewer=ses_exec` (an `fr-phase-executor-standard` child) is refused as an implementer; spec-review naming `reviewer=ses_gen1` (a `general` child) is refused as the wrong agent type while `ses_rev` (`fr-spec-reviewer-hard`) passes the type check; an invented `reviewer=opencode-gpt-6-luna` is refused ("names no subagent this session dispatched"). Fails (OpenCode is unobserved today).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: `_same_agent` (run_cmd.py:2188), `_same_agent` (run/visual.py:434) and the phase-executor check (run_cmd.py:2148) all compare through `fr.run.observed.agent_name`; `_verify_reviewer` reads the dispatch from `observed_session(...).dispatches(opened)`. Existing Claude Code reviewer tests stay green.
+- number: 2
+  title: Holder fill from the observed child (R3)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: an implement-phase unit dispatched to `fr-phase-executor` with no claimed agent, resolved on the fixture: exactly one matching child (ses_exec) → the attempt's `agent` becomes ses_exec; with a second executor child added to a copy of the fixture (or with none) → unchanged. Fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: at resolve, before the visual/reviewer checks read `attempt.agent`, fill it from the protocol when exactly one child of the attempt's `agent_type` (by `agent_name`) was dispatched since the attempt opened; write through the existing claim path so the cursor records it as a claim. Green.
+- number: 3
+  title: spec-review — the recorded coverage block must be the returned one (R5)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: packages/fr/src/fr/run/review_return.py unit tests — `returned_coverage(text)` parses a YAML record return and yields the `kind: review` entry body's ```input-coverage block, falls back to dedenting a fenced block when the return is not YAML, and `None` when absent; `coverage_divergence(recorded, returned)` is `None` for equal blocks (CRLF/trailing-space differences ignored) and otherwise names the first differing row with both lines. Resolve-level: on the fixture, a recorded block re-cut from ses_rev's is refused naming the row; the unedited block resolves; a Claude Code transcript fixture pair does the same. Fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement review_return.py; `_coverage_witness` (run_cmd.py:1989) compares against the named reviewer's `returned` when the protocol yields one; a return with no block refuses ("the reviewer returned no input-coverage block"); an unreadable return notes `unobserved=reviewer-return` with a yellow warning. Green.
+- number: 4
+  title: review-phase — the returned findings block must be in the journal (R7, R8)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: `parse_findings_block(text)` → list of `(id, scope, summary)` or `[]` for `none`, `None` when absent, raising on a malformed line or an id not matching `p<N>(<letter>)?-r<k>`; resolve-level on the fixture: review-phase for phase 2 with reviewers ses_gen1 (block) and ses_gen2 (no block) is refused naming ses_gen2's missing block; with ses_gen2 given a block and neither's ids journaled, refused naming every missing id; a duplicate id across two returns refused; journal holding `p2a-r1` (review_scope in) and `p2a-r2` (out) resolves; `p2a-r1` journaled with review_scope out is refused (scope mismatch). The same missing-block/missing-id refusal on a Claude Code transcript fixture. `render_pr_body` on that run lists `p2a-r1`/`p2a-r2` with their resolutions (R8). Fails.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement in review_return.py; in the review-phase `done` path (beside `_closed_findings_witness`), collect every non-executor child dispatched since the unit opened, check each return's block against the plan-journal findings for that phase (id present, `phase=N`, `review_scope` equal), refuse missing blocks/ids/duplicates, and note `unobserved=reviewer-return` when no return is readable. Green.
+  - id: P2.T4.S3
+    text: |-
+      GREEN: prose — fr-goal SKILL.md §6: the reviewer brief asks for the trailing ```findings block with ids `p<N>-r<k>` (several reviewers: `p<N>a-r<k>`, `p<N>b-r<k>`, one letter each, assigned in the dispatch prompt) or `none`, and the orchestrator journals each with that id and the reviewer's tag; §2: fr compares the recorded input-coverage block with the reviewer's return. fr-goal.yaml review-phase comment names the check. Run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`; commit the mirrors; tripwires (`uv run pytest tests/unit -q --no-cov -n auto -k "tripwire or mirror or neutrality"`) green.
+  - id: P2.T4.S4
+    text: |-
+      REFACTOR + gate: one refusal-printing helper for the reviewer-return checks; ruff format/check, mypy, full suite to a log — green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

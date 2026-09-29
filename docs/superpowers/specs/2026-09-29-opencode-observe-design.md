@@ -387,4 +387,6 @@ at the pre-ready merge, with every hop of the chain asserted (operator note,
 
 ## Implementation Plans
 
-- `docs/superpowers/plans/2026-09-29-opencode-observe/` (to be written by fr-plan).
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
+| 2026-09-29-opencode-observe | `derio-net/super-fr` | `2026-09-29-opencode-observe` | — |

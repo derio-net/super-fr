@@ -1,0 +1,112 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Operator answers, the visual witness, parity and prose
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - opencode-operator-answers
+  - answered-by-no-default
+  - opencode-visual-reads
+  - opencode-observe-take10-rerun
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/run/visual.py
+  - packages/fr/src/fr/run/gates.py
+  - packages/fr/src/fr/run/observed.py
+  - packages/fr/src/fr/harness/parity.yaml
+  - packages/fr/src/fr/harness/observe.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - tests/unit/test_run_gate*.py
+  - tests/unit/test_run_operator*.py
+  - tests/unit/test_run_visual*.py
+  - tests/unit/test_run_resolve*.py
+  - tests/unit/test_harness*.py
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: Operator gate verified from OpenCode's question tool (R9)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: resolve-level on the fixture (gate blocked before the first question): brainstorm resolves with `answered_by: operator` derived; declaring `questions: {rounds: 2}` over the fixture's one answered round is refused by `question_rounds_refusal`; with the gate's `at` after every answered call, refused as "no answered question". Fails (unobserved today).
+  - id: P3.T1.S2
+    text: |-
+      GREEN: `_gate_provenance` takes rounds from `observed_session(...).answered_rounds`; the refusal text names the harness's question tool (AskUserQuestion on Claude Code, `question` on OpenCode). Green.
+- number: 2
+  title: No default answered_by; honest gates wording (R10, R11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: an unobservable gated step (FR_HARNESS=hermes, or no transcript) resolved by record with no `answered_by`, and by `--state done` flags with no `--answered-by`, both exit 2 naming `answered_by: operator|agent`; with `answered_by: agent` it records claimed + `unobserved=operator-gate`. `fr run gates` / `fr run check`: observed agent → "…no operator answered it"; claimed agent with unobserved operator-gate → "operator gate cleared by the agent, as claimed — unobserved: fr could not read who answered"; claimed operator unobserved → "answered by the operator, as claimed — unobserved". Fails.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: `resolve_in_process` (run_cmd.py:4994) pops with `None`; the flag form (:4524) passes `None` through; `_gate_provenance` refuses the unobserved-and-unclaimed case; `agent_cleared_gates`/`gates()` expose whether the step's evidence carries `unobserved` ⊇ operator-gate and both commands word it as above. Existing gate tests updated only where they relied on the silent default (each such change named in the step note). Green.
+- number: 3
+  title: Visual witness on OpenCode, keyed on the owing session (R12)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: review-phase unit owing a `visual` row on the fixture: shots read only by ses_run (the orchestrator) with reviewer ses_gen2 → refused "was not opened in the transcript of the reviewer"; reviewer ses_gen1 (who read it) → witness without `:unobserved`; capture script run by ses_run satisfies a deliver-role check but not the reviewer's. `_unobservable` no longer names opencode. Fails.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: `run/visual.py:_witness_file` resolves the owing session through `observed_session(...)` (`child(agent)` for reviewer/holder, the run session's own parts for the orchestrator) and calls its `first_read`/`first_shell_executing`; the Claude Code path is unchanged. Green.
+- number: 4
+  title: Parity rows, skill prose, mirrors
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      GREEN: parity.yaml — OpenCode cells of operator-gate, out-of-scope-operator-guard, spec-review-independence, visual-evidence, dispatch-holder-identity and usage-capture → `partial`, each scope_note naming the fixture tests and the post-merge row `opencode-observe-take10-rerun`; deliver-tests-provenance stays enforced with a note that it is now pinned to the run session (unscoped fallback without the plugin); new row `run-session-identity` (claude-code enforced, opencode partial, hermes absent, codex/copilot-cli unsupported). `uv run fr harness parity --check` green.
+  - id: P3.T4.S2
+    text: |-
+      GREEN: fr-goal SKILL.md "Harness — questions": OpenCode has a `question` tool — same labelling, sequential calls, fr verifies the rounds from opencode.db; Hermes keeps the end-the-turn wording and must state `answered_by` (fr refuses without it wherever it cannot observe). §2 "Harness — spec reviewer": OpenCode reviewer ids are verified against dispatched child sessions. Run both sync scripts, commit the mirrors; `uv run pytest tests/unit -q --no-cov -n auto -k "tripwire or mirror or neutrality or skill"` green.
+  - id: P3.T4.S3
+    text: |-
+      REFACTOR + gate: ruff format/check, mypy (all packages per AGENTS.md), `cd packages/fr-opencode-plugin && bun test`, and the full suite to a log — green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
