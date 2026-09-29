@@ -2773,7 +2773,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import current_session, orchestrator_model
+    from fr.run.telemetry import orchestrator_model, run_session
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -2816,8 +2816,8 @@ def _open_dispatch(
             # Claude Code's key, which names a session that never held this
             # unit; OpenCode's own arrives through the super-fr plugin's
             # `shell.env` export (spec 2026-09-29-opencode-observe §B).
-            # `advance` is the orchestrator's, so this is the run session.
-            session=current_session(os.environ),
+            # `run_session` walks a child's id up to the run's (p1-r6).
+            session=run_session(os.environ),
         ),
     )
     return _with_step(state, step_id, new_record)

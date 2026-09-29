@@ -539,7 +539,7 @@ def opencode_unscoped(env: Mapping[str, str]) -> OpenCodeUnscoped:
 _ROOT_HOPS = 32
 
 
-def _opencode_root(db: Path, session: str) -> str:
+def opencode_root(db: Path, session: str) -> str:
     """The top-level session above `session` (a command run from a child — an
     executor's `fr journal add` — carries the CHILD's id), walking `parent_id`;
     `session` itself when the database cannot say."""
@@ -586,7 +586,7 @@ def observed_session(env: Mapping[str, str], session: str | None = None) -> Obse
         return None if transcript is None else ClaudeCodeSession(transcript, sid)
     if harness == OpenCodeReader.harness:
         db = OpenCodeReader().database(env)
-        view = OpenCodeSession(db, _opencode_root(db, sid))
+        view = OpenCodeSession(db, opencode_root(db, sid))
         # A readable database that does not hold the session is the WRONG one
         # (gh#740): unobserved. An unreadable one keeps its view, every method
         # of which is `None` anyway.

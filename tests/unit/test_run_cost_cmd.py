@@ -257,18 +257,21 @@ def test_recompute_reads_this_hosts_transcripts_and_writes_nothing(
     assert not usage_path(tmp_path, RUN).exists()
 
 
-def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path) -> None:
+@pytest.mark.parametrize("exported", ["ses_run", "ses_gen1"])
+def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path, exported: str) -> None:
     """R2 (spec 2026-09-29-opencode-observe §B): the plugin's `shell.env`
     export names the run session, so the capture reads it — and its children —
     from opencode.db, and the Cost table prints real figures, not dashes. The
     stale Claude Code key an OpenCode started from a Claude Code shell inherits
-    is never read (gh#537)."""
+    is never read (gh#537). A CHILD's id (a subagent ran the command,
+    review p1-r6) captures as the run session it belongs to: one session read
+    whole, never the child a second time on top of it."""
     from fr.usage.capture import capture
 
     env = {
         "FR_HARNESS": "opencode",
         "FR_OPENCODE_DB": str(FIXTURES / "opencode" / "opencode.db"),
-        "FR_OPENCODE_SESSION_ID": "ses_run",
+        "FR_OPENCODE_SESSION_ID": exported,
         "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
     }
     state = RunState(
@@ -287,4 +290,8 @@ def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path) -> No
     assert result.exit_code == 0, result.output
     # ses_run $0.25 + its children $0.125 + $0.0625 + $0.0625 + $0.50
     assert "$1.00" in result.output
-    assert "stale-claude-session" not in usage_path(tmp_path, RUN).read_text()
+    from fr.usage.file import load_usage
+
+    usage = load_usage(usage_path(tmp_path, RUN))
+    assert usage is not None
+    assert [s.session for c in usage.captures for s in c.sessions] == ["ses_run"]

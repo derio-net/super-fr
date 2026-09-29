@@ -437,6 +437,28 @@ def current_session(env: Mapping[str, str]) -> str | None:
     return (env.get(key) or None) if key else None
 
 
+def run_session(env: Mapping[str, str]) -> str | None:
+    """The RUN's session id — the one fr records on an attempt, binds a
+    workspace to, captures usage from and compares windows against (review
+    p1-r6). Claude Code's key already names the orchestrator's session from
+    inside a subagent, so there it is `current_session`. OpenCode's plugin
+    exports the CALLING session, a child's when a subagent runs the command,
+    so there it is walked up `parent_id` to the top-level session in the
+    database — the raw id when the database cannot say."""
+    session = current_session(env)
+    if session is None:
+        return None
+    try:
+        harness = detect_harness(env)
+    except HarnessError:
+        return session
+    if harness != OpenCodeReader.harness:
+        return session
+    from fr.run.observed import opencode_root
+
+    return opencode_root(OpenCodeReader().database(env), session)
+
+
 def dispatched_from_this_session(env: Mapping[str, str], session: str | None) -> bool:
     """Was `session` the session this process is running in? (§4.D.1)
 
@@ -446,7 +468,7 @@ def dispatched_from_this_session(env: Mapping[str, str], session: str | None) ->
     concept — does not get this session's window, and neither does a real
     session id compared against a process that has none.
     """
-    current = current_session(env)
+    current = run_session(env)
     return session is not None and current is not None and session == current
 
 
