@@ -12,6 +12,7 @@ Every repo is a `tmp_path` sandbox; nothing here touches the checkout.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -110,3 +111,23 @@ def test_a_decision_for_another_phase_does_not_clear_it(tmp_path: Path) -> None:
     _decide(repo, f"tier-{PLAN}-p1", "cross-cutting")
     errors = _reason_errors(_tier_issues(_plan(repo, "hard", "hard")))
     assert len(errors) == 1 and "phase 2" in errors[0], errors
+
+
+def test_with_no_spec_journal_to_record_in_it_warns_rather_than_errs(tmp_path: Path) -> None:
+    """A cross-repo spec's journal lives in its own repo, so there is nowhere
+    here to record the reason: an error would be unclearable short of lowering
+    the tier. Say it, as a warning (review of #834)."""
+    plan = _plan(_repo(tmp_path), "hard")
+    cross = "derio-net/elsewhere:docs/superpowers/specs/2026-09-28-toy-design.md"
+    plan = replace(plan, meta=plan.meta.model_copy(update={"spec": cross}))
+
+    issues = [i for i in _tier_issues(plan) if "tier: hard" in i.message]
+
+    assert [i.severity for i in issues] == ["warn"], issues
+    assert "no same-repo spec journal" in issues[0].message
+
+
+def test_an_empty_titled_tier_decision_is_no_reason(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _decide(repo, f"tier-{PLAN}-p1", "   ")
+    assert len(_reason_errors(_tier_issues(_plan(repo, "hard")))) == 1

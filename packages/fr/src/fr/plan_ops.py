@@ -2100,9 +2100,24 @@ def _tier_issues(plan: Plan) -> list[ReviewIssue]:
     ]
     if above:
         reasoned = tier_reasons(_spec_journal_entries(plan), plan.meta.plan)
-        slug = _spec_journal_slug(plan) or "<spec-journal-slug>"
+        slug = _spec_journal_slug(plan)
         for h in above:
             if h.number in reasoned:
+                continue
+            if slug is None:
+                # No same-repo spec journal (a cross-repo spec, or none): there
+                # is nowhere here to record the reason, so an error could only
+                # be cleared by lowering the tier. Say it instead.
+                out.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"phase {h.number} declares tier: {h.tier} — standard is the "
+                            "default, and this plan has no same-repo spec journal to "
+                            "record why; state the reason in the phase prose."
+                        ),
+                    )
+                )
                 continue
             out.append(
                 ReviewIssue(
