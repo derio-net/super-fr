@@ -1,0 +1,283 @@
+schema_version: 4
+run: 2026-09-29-feat-batch-opencode-observe
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: design-risk
+  reason: Round 1 chose a harness-neutral session protocol and a structured findings block; each opened a sub-decision the code check surfaced (whether the reviewer-return checks also bind Claude Code, and how block items match plan-journal finding ids).
+journal:
+- kind: discovery
+  input: true
+  id: input-brief
+  title: 'Operator input: the /fr-goal batch brief (verbatim)'
+  body: |
+    /fr-goal fr observes OpenCode sessions: the run's session, each dispatched child, and what the child returned
+
+    Batch `opencode-observe` of derio-net/super-fr: 4 issues, delivered as ONE pull request.
+
+    ## super-fr#823: fr observes OpenCode sessions: the run's own session, each dispatched child, and what the child returned (one batch)
+    Umbrella, one batch: fr learns the OpenCode run session and each dispatched child session, then reads the reviewer's own output (#777 re-cut, #816 made-up reviewer), question answers (#809), file reads (#797) and cost (#636 discovery half) from opencode.db. Readers already exist (_opencode_wrote_since, usage/readers/opencode.py).
+    Note: Wave 9 `opencode-observe`, for the talk run. Merge after spec-review-loop (both touch spec-review).
+
+    ## super-fr#797: visual evidence: recognise a file read in OpenCode's session store
+    read_file_since/shell_named_since read only Claude Code JSONL; on OpenCode every visual witness is unobserved, so checks 4–5 of the visual gate never observe a screenshot read. #817: PARTIAL in both take-10 runs.
+    Note: Proposed batch `opencode-evidence` (#816 #809 #797): read OpenCode's opencode.db the way the tests= gate already does.
+
+    ## super-fr#809: OpenCode has a question tool, but the skill and parity.yaml say it doesn't; resolve silently records answered_by: agent
+    take 10 (#817, OpenCode + GitLab, fr 4.35.0): OpenCode 1.18.32 has a question tool, but fr-goal and parity.yaml say it does not; a record with no answered_by defaults to agent, and fr run gates prints "no operator answered it" into the PR body although one did.
+    Note: Proposed batch `opencode-evidence`; the default-to-agent must refuse instead.
+
+    ## super-fr#816: review-phase record on OpenCode: a fabricated reviewer id and findings: none despite 6 reviewer findings
+    take 10 (#817, OpenCode + GitLab, fr 4.35.0) run B: review-phase recorded a made-up reviewer id and findings: none although three reviewer sessions raised 6 in-scope findings; unobserved on OpenCode, so fr accepted it.
+    Note: Proposed batch `opencode-evidence`: verify the reviewer id against dispatched child sessions in opencode.db.
+
+    ## Why these belong together
+    Wave 9, for the talk's fr run on OpenCode. #823 is one issue and one run: learn the run's session and each child session from opencode.db (the tests= gate and the usage reader already open it), then record the reviewer's own coverage partition (#777 re-cut in take 10 B), verify the review-phase reviewer and findings (#816), read question answers and refuse a defaulted answered_by (#809), observe screenshot reads (#797), and fill the Cost table (#636 discovery half). Merge after spec-review-loop (both change spec-review).
+
+    ## Delivery rules
+    - Work on branch `feat/batch-opencode-observe`.
+    - Open a draft PR as soon as the spec is committed. Its body contains these lines, one per member, so every member closes when it merges:
+      Closes derio-net/super-fr#823
+      Closes derio-net/super-fr#797
+      Closes derio-net/super-fr#809
+      Closes derio-net/super-fr#816
+    - Do not name any member issue as a phase `tracking_issue` in the plan: the bridge would then own that issue's `fr:` labels.
+- kind: discovery
+  input: true
+  id: input-gh823
+  title: 'Operator input: super-fr#823 title, body and operator comments (verbatim; batch-marker comments omitted)'
+  body: |+
+    # super-fr#823: fr observes OpenCode sessions: the run's own session, each dispatched child, and what the child returned (one batch)
+
+    ## What happens
+
+    On OpenCode, fr can't tell which session is the run, and which child session did the work. So every gate that should check what an agent actually did falls back to what the orchestrator wrote in the record. Take 10's live walk (#817: fr 4.35.0, OpenCode 1.18.32, a GitLab with no CI) found five places where this let a wrong record through:
+
+    - **The run's session is unknown** (the remaining half of #636). Both usage files say `unavailable: no session found`, and the PR body's Cost table is all dashes. Meanwhile opencode.db held 5 sessions (A, $5.91) and 19 (B, $1.38). All three sources in `capture.candidates()` (`usage/capture.py:96`) come up empty: the cursor's attempts carry no session, `fr isolation status` shows `sessions=none`, and `current_session()` (`run/telemetry.py:327`) reads only Claude Code's environment variable.
+    - **The spec reviewer's partition is taken on trust** (#777, which failed in run B). The orchestrator re-cut 93 spans into 94 and relabelled 3 before resolve. Because the reviewer is `unobserved`, fr can't tell the reviewer's block from an edited one.
+    - **The review-phase record is taken on trust** (#816). The record named a reviewer, `opencode-gpt-6-luna`, that doesn't exist, and said `findings: none` although three reviewer sessions raised 6 findings.
+    - **Operator answers are taken on trust** (#809). OpenCode has a question tool, but the skill and `parity.yaml` say it doesn't. A record with no `answered_by` defaults to `agent`, and the PR body then says no operator answered.
+    - **Screenshot reads can't be observed** (#797). `read_file_since` / `shell_named_since` (`run/telemetry.py:842`, `:961`) read only Claude Code transcripts, so on OpenCode the visual-evidence checks 4 and 5 are always `unobserved`.
+
+    ## Why one issue
+
+    All five come down to the same two things: know the run's OpenCode session, and know which child session a dispatch became. The database access already exists: the `tests=` gate reads opencode.db (`_opencode_wrote_since`, `run/telemetry.py:1215`), and so does the usage reader (`usage/readers/opencode.py`). Splitting this into five runs would re-open, re-review and re-deliver the same identity plumbing five times. **Implement it as one batch, one fr-goal run, one PR.**
+
+    ## Expected
+
+    1. **Run session.** On OpenCode, fr learns the run's session id and records it on the attempt at `advance`. It can come from the plugin binding the workspace, an exported env var, or the session that issued the command. `fr run cost` and the PR's Cost table then show real numbers.
+    2. **Child sessions.** fr maps each agent dispatch to its child session through opencode.db's parent/child session records, and records the child's session id on the attempt.
+    3. **Reviewer output.** At `spec-review`, fr reads the child's final assistant message and records its `input-coverage` block itself, or refuses a recorded block that differs from it. At `review-phase`, the recorded reviewer id must be a dispatched child session, and the record's findings must match what that session returned (#816).
+    4. **Operator answers.** fr reads answered `question` tool calls from opencode.db, the way it reads Claude Code transcripts. The skill and `parity.yaml` describe the tool. When provenance can't be observed and the record gives no `answered_by`, resolve refuses instead of defaulting to `agent` (#809).
+    5. **File reads.** `read_file_since` / `shell_named_since` gain an OpenCode branch, so visual-evidence checks 4 and 5 observe real screenshot reads (#797).
+    6. **Parity.** Each surface's `parity.yaml` row moves from `unobserved`/`partial` to observed on OpenCode, with tests built on a captured opencode.db fixture (redacted per the third-party privacy rule).
+
+    ## Acceptance
+
+    Re-run the shape of take 10's run B. That run's re-cut partition, invented reviewer and missing `answered_by` are each refused or corrected by fr, and its cost table has real numbers. Following the rule in #822, this issue closes when that live row flips, not when the PR merges.
+
+    Closes #797, #809, #816 when it lands. Covers the unmet parts of the closed #636 and #777, which are not reopened separately.
+
+    🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+- kind: discovery
+  input: true
+  id: input-gh797
+  title: 'Operator input: super-fr#797 title, body and operator comments (verbatim; batch-marker comments omitted)'
+  body: |+
+    # super-fr#797: visual evidence: recognise a file read in OpenCode's session store
+
+    ## Background
+
+    Spec [`2026-09-28-ui-visual-evidence-design.md`](docs/superpowers/specs/2026-09-28-ui-visual-evidence-design.md) §C
+    adds `fr.run.telemetry.read_file_since`/`shell_named_since`, wrapped by
+    `witness_transcript`, to verify (checks 4-5 of the `visual` derived evidence
+    gate) that a screenshot was actually opened and a named capture script was
+    actually run. Both predicates read a *transcript file* — today that means a
+    Claude Code session JSONL. OpenCode's session store is already read for the
+    `tests=` provenance gate (`_opencode_wrote_since`,
+    `packages/fr/src/fr/run/telemetry.py:1002`), but that reader does not yet
+    recognise a file-read tool call the way it recognises a Bash/shell call.
+
+    ## The unobserved contract
+
+    Per §C, this is not a refusal: when no transcript is readable, checks 1-3
+    (record shape, coverage, shot freshness) still apply, and checks 4-5 (opened
+    in the transcript, script executed) are skipped with a yellow
+    "could not verify that the screenshots were opened" warning — the witness is
+    recorded as `<row>:<n-shots>:<sha256[:12]>:unobserved`. That is the current,
+    correct behaviour on OpenCode (and on Hermes, which has no reader at all) —
+    this issue is about closing the gap, not about a bug in the unobserved path.
+
+    ## What to extend
+
+    `_opencode_wrote_since` in `packages/fr/src/fr/run/telemetry.py` (~line 1002)
+    is the reader to extend: it needs to recognise OpenCode's own read-tool call
+    shape in the session store (mirroring how `read_file_since` recognises
+    `read_file`/`view` as `Read`-equivalent on Claude Code, via
+    `fr.usage.classify`'s alias table) so that `read_file_since` and
+    `shell_named_since` can return a real answer instead of `None` on OpenCode,
+    moving `visual-evidence-*` checks 4-5 from advisory to enforced there too
+    (see `parity.yaml`'s `visual-evidence` row, spec §F).
+
+    ## Non-goal reference
+
+    Filed per spec §C / Non-goals: "Recognising a file read in OpenCode's session
+    store or in Hermes. Both are recorded as unobserved (§C); a follow-up issue
+    is filed for OpenCode, whose store fr already reads."
+
+    --- comment:
+    **Live evidence from super-fr-3 take 10 runs A and B** (fr 4.35.0, OpenCode 1.18.32, GitLab):
+
+    - **Every visual witness was recorded `unobserved`.**
+      - A: `basket-ui:5:9baa34e89724`, `basket-ui:6:dad2e1e85a01`, `basket-ui:6:ddc179482448`.
+      - B: `basket-demo-ui:4:27713bced9ee`, `basket-demo-ui:4:7e4b9abb0072`.
+
+      opencode.db does hold the PNG reads: A has executor 7, reviewer 9, orchestrator 19; B has executor 0, reviewers 13/5/5, orchestrator 14.
+    - **In both runs the review-phase record lists screenshots (and a capture script) taken by the orchestrator, not the reviewer.** In A, 2 of 6 shots and the script were the orchestrator's. So checks 4–5 must key on *which session* read the file, not just that some session did.
+    - **B edited the `shows:` labels in its visual record until the check passed.** It also read `run/visual.py` and `record/model.py` from fr's source after "visual.0.interactions: Extra inputs are not permitted" (6 turns).
+    - **Freshness worked:** A's deliver refusal (23:57:00) forced a re-capture, which passed at 23:59:16.
+
+    Related: #779, #816.
+
+- kind: discovery
+  input: true
+  id: input-gh809
+  title: 'Operator input: super-fr#809 title, body and operator comments (verbatim; batch-marker comments omitted)'
+  body: |+
+    # super-fr#809: OpenCode has a question tool, but the skill and parity.yaml say it doesn't; resolve silently records answered_by: agent
+
+    ## What happened
+    super-fr-3 take 10 run B (fr 4.35.0, OpenCode 1.18.32, GitLab). The orchestrator asked brainstorm round 1 through OpenCode's `question` tool (00:24:37), and the operator answered at 00:25:19. The run file still records `brainstorm: answered_by: agent` with `unobserved: operator-gate`. Round 2 also went through the tool (00:38:44).
+
+    - The fr-goal SKILL.md "Harness — questions" paragraph (line 55) says "Hermes and OpenCode have no question tool". `parity.yaml`, row `operator-gate` (around line 208), says the same. Both are false on 1.18.32.
+    - The skill tells OpenCode runs to put `evidence: {answered_by: operator}` in the record. B's record carried empty evidence, and `run_cmd.py:4994` (`offered.pop("answered_by", "agent")`) defaulted to `agent` without a warning.
+    - `fr run gates` (`run_cmd.py:5724`) then printed "operator gate cleared by the agent (answered_by: agent) — no operator answered it". That is false, and it goes into the PR body.
+
+    ## Expected
+    - The skill and `parity.yaml` describe OpenCode's question tool, and fr reads answered `question` tool calls from opencode.db the way it reads Claude Code transcripts.
+    - When provenance can't be observed and the record gives no `answered_by`, the resolve refuses or asks instead of defaulting to `agent`.
+    - `fr run gates` says "unobserved" rather than "no operator answered it" when it could not look.
+
+    Related: #509, #510, #691.
+
+- kind: discovery
+  input: true
+  id: input-gh816
+  title: 'Operator input: super-fr#816 title, body and operator comments (verbatim; batch-marker comments omitted)'
+  body: |+
+    # super-fr#816: review-phase record on OpenCode: a fabricated reviewer id and findings: none despite 6 reviewer findings
+
+    ## What happened
+    super-fr-3 take 10 run B (fr 4.35.0, OpenCode 1.18.32, GitLab, gpt-6-luna high). At review-phase, three `general` reviewer sessions raised 6 in-scope findings between them (ses_f154409f3f, ses_f153bde73f, ses_f153535eef).
+
+    - After `claim --agent-type general` was refused, the orchestrator recorded the reviewer id `opencode-gpt-6-luna`. No such session or agent exists.
+    - The review-phase record says `findings: none`.
+    - The PR body's `## Findings` lists only the last 3 spec-review findings.
+
+    fr accepted the record. On OpenCode the reviewer is `unobserved`, so neither the fabricated id nor the missing findings were caught.
+
+    ## Expected
+    - fr supplies or verifies the reviewer identity (the dispatched child session in opencode.db), and refuses an id that matches no dispatched session.
+    - The review record's findings come from, or are checked against, the reviewer's returned message. `findings: none` with a non-empty reviewer return is refused.
+    - The PR body's Findings section includes the review-phase findings and how each was resolved.
+
+    Related: #777, #797.
+
+- kind: decision
+  id: d-seam
+  title: 'Seam: one harness-neutral session protocol'
+  body: 'Round 1 Q1 → "One session protocol": a harness-neutral ObservedSession (answered rounds, dispatches with their returned text, file reads, shell calls) with a Claude Code backend (today''s JSONL code moved behind it) and an OpenCode backend; every gate calls the protocol.'
+- kind: decision
+  id: d-run-session
+  title: 'Run session: the plugin''s shell.env export'
+  body: 'Round 1 Q2 → "Plugin shell.env var": the super-fr OpenCode plugin''s shell.env hook exports the calling session id into every bash call; fr walks parent_id to the top-level session. No plugin → unobserved, as today.'
+- kind: decision
+  id: d-coverage-refuse
+  title: 'spec-review coverage: refuse a differing block'
+  body: 'Round 1 Q3 → "Refuse a differing block": the recorded review entry''s input-coverage block must equal the block in the reviewer''s return (whitespace-normalised); a re-cut or relabel is refused naming the first divergent span. The orchestrator still writes the record.'
+- kind: decision
+  id: d-findings-block
+  title: 'review-phase: a structured findings block in the reviewer''s return'
+  body: 'Round 1 Q4 → "Structured findings block": the reviewer brief asks for a fenced findings block at the end of the return; every item must appear as a phase finding in the journal; a return with no block is refused where the return is observable.'
+- kind: decision
+  id: d-answered-by-refuse
+  title: 'Unobserved gate with no answered_by: refuse'
+  body: 'Round 1 Q5 → "Refuse, name both values": resolve exits 2 asking for answered_by operator|agent explicitly, on every harness (the --answered-by flag loses its agent default); fr run gates says ''as claimed, unobserved'' when the step carries unobserved=operator-gate.'
+- kind: decision
+  id: d-parity-partial
+  title: 'Parity: partial plus a post-merge live row'
+  body: 'Round 1 Q6 → "partial + post-merge live row": OpenCode cells move to partial (fr reads it, live path unproven); an acceptance row with verify: post-merge re-runs take 10 B''s shape; a follow-up flips parity to enforced.'
+- kind: decision
+  id: d-every-harness
+  title: Return checks apply on every observable harness
+  body: 'Round 2 Q1 (follows d-seam) → "Every observable harness": Claude Code and OpenCode both read the reviewer''s final message; the coverage and findings-block checks apply wherever fr can see the return. Hermes stays unobserved (warned, recorded as claimed).'
+- kind: decision
+  id: d-finding-ids
+  title: Findings block ids are prescribed by the brief
+  body: 'Round 2 Q2 (follows d-findings-block) → "Brief-prescribed ids": the review-phase brief tells the reviewer to number findings p<N>-r<k>; each block line is `id | in/out | summary`; every block id must be a plan-journal finding against phase N with the same review_scope (reclassification stays visible, as today). No schema change.'
+resolves: []
+acceptance:
+- id: opencode-run-session
+  capability: fr-goal on OpenCode
+  acceptance: On OpenCode, the super-fr plugin hands fr the run's session id, advance records it on the attempt, and fr run cost / the PR Cost table show the run's real figures.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R1
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R2
+  status: not-implemented
+- id: session-observer-protocol
+  capability: transcript gates
+  acceptance: Every transcript gate reads the harness through one session protocol with Claude Code and OpenCode backends, and a gate that cannot read says unobserved rather than passing or failing.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R4
+  status: not-implemented
+- id: opencode-child-dispatch
+  capability: fr-goal on OpenCode
+  acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed holder from it, and refuses a reviewer id that names no child dispatched since the unit opened.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R3
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R6
+  status: not-implemented
+- id: reviewer-return-coverage
+  capability: spec-review
+  acceptance: At spec-review, a recorded input-coverage block that differs from the one the reviewer returned is refused, on every harness whose return fr can read.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R5
+  status: not-implemented
+- id: review-phase-findings-block
+  capability: review-phase
+  acceptance: A review-phase resolve is refused when the reviewer's returned findings block is missing or names a finding the plan journal does not hold for that phase with the reviewer's scope; the PR body then lists every review-phase finding and its resolution.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R7
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R8
+  status: not-implemented
+- id: opencode-operator-answers
+  capability: operator gate
+  acceptance: On OpenCode, fr reads answered question-tool rounds from opencode.db and verifies the operator gate from them; the skill and parity.yaml describe the tool.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R9
+  status: not-implemented
+- id: answered-by-no-default
+  capability: operator gate
+  acceptance: An operator gate fr cannot observe, resolved without answered_by, is refused on every harness; fr run gates/check say 'as claimed, unobserved' instead of 'no operator answered it' when fr could not look.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R10
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R11
+  status: not-implemented
+- id: opencode-visual-reads
+  capability: visual evidence
+  acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script runs in the session of whoever owes them, and a read by another session does not count.
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R12
+  status: not-implemented
+- id: opencode-observe-take10-rerun
+  capability: fr-goal on OpenCode
+  acceptance: 'Re-running take 10 run B''s shape on OpenCode with this release: the re-cut partition, invented reviewer, dropped review findings and missing answered_by are each refused or corrected, the Cost table has real numbers, and the parity cells can move from partial to enforced.'
+  origin:
+  - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R13
+  status: not-implemented
+  verify: post-merge
+emitted:
+  spec: docs/superpowers/specs/2026-09-29-opencode-observe-design.md
+evidence: {}
