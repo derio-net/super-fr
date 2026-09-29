@@ -239,7 +239,10 @@ def _note_unobserved(gate: str) -> None:
         found.append(gate)
 
 
-def _why_unobservable() -> str:
+def _why_unobservable(what: str) -> str:
+    """Why a gate could not observe `what` — the thing it reads from the
+    transcript (`questions`, `subagent dispatches`, `commands`), so a gate
+    never borrows another gate's noun (#815)."""
     try:
         harness = detect_harness(os.environ)
     except HarnessError:
@@ -247,7 +250,7 @@ def _why_unobservable() -> str:
     if harness is None:
         return "no harness detected"
     if harness != "claude-code":
-        return f"fr has no transcript reader for {harness}'s questions"
+        return f"fr has no transcript reader for {harness}'s {what}"
     return "no readable transcript for this session"
 
 
@@ -267,7 +270,7 @@ def _why_tests_unobservable() -> str:
         return f"tests= provenance is unsupported on hermes (parity row {TESTS_PROVENANCE_SURFACE})"
     if harness == "opencode":
         return "the OpenCode session database could not be read"
-    return _why_unobservable()
+    return _why_unobservable("commands")
 
 
 def _take_unobserved() -> dict[str, str]:
@@ -1304,7 +1307,7 @@ def _gate_provenance(
             f" The declared `questions: {{rounds: {questions.rounds}}}` is accepted, unverified."
         )
     err_console.print(
-        f"[yellow]{step_id}: could not verify this gate — {_why_unobservable()}, "
+        f"[yellow]{step_id}: could not verify this gate — {_why_unobservable('questions')}, "
         f"so `answered_by: {claimed}` is recorded as claimed, unverified "
         f"(evidence: unobserved=operator-gate).{declared}[/yellow]",
         soft_wrap=True,
@@ -2396,7 +2399,7 @@ def _verify_reviewer(
         _note_unobserved("reviewer")
         err_console.print(
             f"[yellow]{key}: could not verify reviewer {agent_id!r} — "
-            f"{_why_unobservable()}; recorded as claimed, unverified "
+            f"{_why_unobservable('subagent dispatches')}; recorded as claimed, unverified "
             "(evidence: unobserved=reviewer).[/yellow]",
             soft_wrap=True,
         )
@@ -2565,7 +2568,7 @@ def _phase_log_windows(
         return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
     session = _this_session(os.environ)
     if session is None or opened is None:
-        return _why_unobservable() if session is None else "the unit has no opening stamp"
+        return _why_unobservable("commands") if session is None else "the unit has no opening stamp"
     found = witness_transcript(session, holder)
     if found is None:
         return f"the session transcript {session} could not be read"

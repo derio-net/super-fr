@@ -869,7 +869,10 @@ reports it as a finding rather than silently building it or ignoring it. It writ
 without changing that behavior. This test-first cycle is commonly called
 <strong>TDD</strong>, or test-driven development.</p>
 <p>Each phase carries a difficulty <strong>tier</strong>, assigned when the plan was written,
-and that tier is what chooses the model the phase is implemented with. Every
+and that tier is what chooses the model the phase is implemented with. The
+middle tier, <code>standard</code>, is the default. <code>hard</code> sends the whole phase to the
+most expensive model, so the plan has to say why: the plan check refuses a
+<code>hard</code> phase with no reason recorded in the spec's journal. Every
 turn of the loop is the same four moves: dispatch the executor, claim the
 dispatch so the run knows who is holding this phase, wait for it, then resolve
 the phase with how it went. The claim is a single extra command, and it is what
