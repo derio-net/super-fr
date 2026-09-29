@@ -4597,9 +4597,14 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R5
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_record_delegated.py
+      - super-fr:tests/unit/test_deliver_pr_body.py
+      - super-fr:tests/unit/test_journal_model.py
+    status: ci
+    notes: delegated=true on spec decisions, record 4->5 migration and the PR's delegated
+      listing are unit-tested (phase 2)
   - id: spec-fidelity-pr-design-inventory
     capability: fr-goal-methodology
     acceptance: The delivered PR shows the design inventory, so the operator sees every
