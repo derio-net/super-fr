@@ -14,3 +14,8 @@ The member brief and the handoff are now byte-for-byte 4.28.0's code (restored f
 ### no-refactor-p1-t5 · decision · no-refactor-because: P1.T5 (phase 1)
 
 RecordV6 is a deliberate literal freeze (sha-pinned, never edited); record_contract follows run_usage_split's established shape; guard_record now delegates to the frozen reader via record_v6_from_data rather than re-dumping YAML (done during GREEN). The removals in journal/apply/template leave the 4.28.0 structure.
+
+<!-- fr:journal kind=decision scope=plan id=no-refactor-p1-t6 created=2026-09-29T18:01:10+00:00 phase=1 -->
+### no-refactor-p1-t6 · decision · no-refactor-because: P1.T6 (phase 1)
+
+_findings and render_pr_body are 4.28.0's again plus the kept Post-merge and Tests sections; the helpers for the three removed sections are deleted outright.
