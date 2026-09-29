@@ -24,3 +24,8 @@ run/closeout.py branch_closeout_brief prints 'fr isolation up --branch <housekee
 ### rc-826 · root-cause · #826: the committed wrapper execs a Claude Code marketplace path, and fr ships no validator of its own
 
 plan_validator_wrapper.WRAPPER_TEXT (and scripts/install-validator-wrapper.sh) exec $HOME/.claude/plugins/marketplaces/derio-net--super-fr/scripts/validate-plans.sh. Only the Claude Code install creates that path. The fr wheel does not bundle validate-plans.sh, so on an OpenCode- or Hermes-only host nothing can resolve it.
+
+<!-- fr:journal kind=finding scope=debug id=fix-811 created=2026-09-29T11:56:03+00:00 state=fixed -->
+### fix-811 · finding [fixed] · #811 fixed: pickup --run points at the unpulled merge; status flags a behind working tree
+
+pickup_cmd._missing_run_exit fetches (best effort), then prints preserve.explain_missing. Its new _on_default_ref case names <remote>/<default> and the pull. status_cmd._behind_ref returns commits behind only when HEAD is an ancestor of the ref (a diverged branch is not stale); it drives a text warning and json behind_ref. Pinned by test_closeout_run_clean.py (6 tests, 5 red first).
