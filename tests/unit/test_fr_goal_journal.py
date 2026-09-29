@@ -48,11 +48,54 @@ def test_duplicate_report_rule_documented() -> None:
 
 
 def test_ready_checklist_guard_documented() -> None:
-    """The PR body carries a Ready-checklist guard; only the orchestrator
-    flips it to ready, on explicit review ok — never manual, never early."""
+    """The PR body carries a Ready-checklist guard — the operator's checklist,
+    not the orchestrator's (#814)."""
     t = _text()
     assert "Ready-checklist" in t
     assert "review ok" in t
+
+
+def _deliver_section() -> str:
+    """§8 only, whitespace-normalised, so a rewrap never fails a token."""
+    t = _text()
+    start = t.index("### 8. deliver")
+    end = t.index("### Post-merge close-out", start)
+    return " ".join(t[start:end].split())
+
+
+def test_deliver_review_ok_and_ready_transition_are_the_operators() -> None:
+    """#814, take 10 run A: §8 named "explicit review ok" as a ready condition
+    without naming its owner, so the orchestrator took its own dispatched
+    reviewer as the ok, ticked the box and ran `glab mr update --ready`."""
+    s = _deliver_section()
+    low = s.lower()
+    assert "the explicit review ok is the operator's" in low
+    assert "the ready transition is the operator's" in low
+    assert "never tick" in low
+    assert "never mark the pr ready" in low
+    # the old grant of the transition to the orchestrator is gone
+    assert "ONLY when all three hold: mark it ready" not in s
+
+
+def test_deliver_pushes_and_opens_the_draft_pr_before_the_full_suite() -> None:
+    """#799: the local suite ran before the push, so CI and the ~10 min local
+    suite never overlapped. Push + draft PR first, then the suite."""
+    s = _deliver_section()
+    push = s.index("push the branch and open or refresh the draft PR")
+    suite = s.index("run the full suite YOURSELF")
+    assert push < suite
+
+
+def test_deliver_closeout_line_is_the_last_thing_relayed() -> None:
+    """#814, take 10 run B: fr printed the closeout line and the final message
+    dropped it. The relay is the last line of the final message."""
+    s = _deliver_section()
+    assert "the last line of your final message" in s
+
+
+def test_fr_debugging_closeout_line_is_the_last_thing_relayed() -> None:
+    t = " ".join((REPO_ROOT / "plugins/super-fr/skills/fr-debugging/SKILL.md").read_text().split())
+    assert "the last line of your final message" in t
 
 
 # --- methodology restoration: the skill must narrate what the shape enforces ---

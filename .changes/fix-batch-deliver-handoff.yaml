@@ -1,0 +1,2 @@
+bump: patch
+summary: "deliver: the review ok and the ready transition are the operator's, the branch is pushed and the draft PR opened before the local full suite, and fr prints the closeout line last so it is the last thing relayed"

@@ -353,27 +353,31 @@ def _closeout_handoff_lines(repo_root: Path, run_id: str, *, committed: bool) ->
     was refused (default branch, stuck lock, detached HEAD, …), printing that
     sha would be false assurance that the cursor reached the PR — so this
     prints a NOT-committed line instead, never the sha.
+
+    The closeout pair comes LAST (#814): the push line is an instruction the
+    orchestrator acts on, and printed after the closeout it became the last
+    thing acted on while the closeout line went unrelayed.
     """
     from fr.run.closeout import primary_checkout
 
     base = primary_checkout(repo_root)
-    lines = [
+    closeout = [
         f"closeout: after the PR merges, start a NEW session in {base} and run",
         f"  fr pickup --run {run_id}",
     ]
     if not committed:
-        lines.append(
+        return [
             "cursor NOT committed (see the `fr: not committed` line above) — "
-            "commit and push it before merging"
-        )
-        return lines
+            "commit and push it before merging",
+            *closeout,
+        ]
     try:
         sha = git_answer(repo_root, "rev-parse", "--short", "HEAD").stdout.strip()
     except GitUnavailableError:
         sha = None
     if sha:
-        lines.append(f"cursor committed as {sha} — push it (git push) so the PR carries it")
-    return lines
+        return [f"cursor committed as {sha} — push it (git push) so the PR carries it", *closeout]
+    return closeout
 
 
 _Cmd = TypeVar("_Cmd", bound=Callable[..., None])
