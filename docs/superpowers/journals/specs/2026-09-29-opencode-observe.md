@@ -593,3 +593,6 @@ Built: OpenCode sessions bind their workspace through the ambient `current_sessi
 ### s14-resolved · finding [fixed] · resolves s14: The Test Plan misses behaviour the design promises
 
 Test Plan items 2, 4, 5, 6, 8, 9 and 10 now cover the Claude Code return, R5/R7 on Claude Code, the holder fill, the orchestrator-vs-reviewer PNG read, the flag-form refusal, the unobserved-return warning and the R8 PR-body assertion.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-opencode-observe-p2 created=2026-09-29T11:52:25+00:00 -->
+### phase-split-2026-09-29-opencode-observe-p2 · decision · ask: reviewer identity and returns (R3, R5-R8) are independently reviewable from the protocol
