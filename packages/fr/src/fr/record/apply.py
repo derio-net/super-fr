@@ -187,6 +187,12 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
             f"{record.step}: section(s) {', '.join(extra)} not allowed — the step emits "
             f"{emits}, which allows {sorted(allowed)} (spec §5.C.2.1)"
         )
+    if record.shape is not None:
+        # §A (R1): refused before any write, by the same rules resolve applies.
+        try:
+            run_cmd._rebind_shape(state, manifest, record.step, record.shape, repo_root)
+        except RunStateError as e:
+            raise RecordRefusedError(str(e)) from e
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
     scope = journal_scope(owner_emits)
     plan_rel = run_cmd._emitted_plan(state) or record.emitted.get("plan")
@@ -932,6 +938,7 @@ def apply_record(
             also_commit=commit_paths,
             guard=guard,
             visual=record.visual,
+            shape=record.shape,
         )
     except BaseException:
         if not guard.landed:

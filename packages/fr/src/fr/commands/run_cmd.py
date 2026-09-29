@@ -806,6 +806,77 @@ def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
             )
 
 
+def _rebind_shape(
+    state: RunState,
+    manifest: WorkflowManifest,
+    step_id: str,
+    target: str,
+    repo_root: Path,
+) -> WorkflowManifest | None:
+    """The manifest a record's `shape: <target>` rebinds the run onto, `None`
+    for a same-shape no-op — or `RunStateError` naming the rule it broke.
+
+    2026-09-29-fr-goal-light-path §A (R1). A run's cursor is a position in a
+    step list, so moving it onto another list is safe only before it has
+    moved at all, and only onto a list that shares the position it is at:
+
+    1. the step being resolved is the run's first step, and no other step has
+       left `pending`;
+    2. `resolve_workflow(target)` finds the shape, and its first step has the
+       same id as the step being resolved;
+    3. the target is not the run's current shape — that declaration is a
+       no-op, so a re-applied record is idempotent.
+
+    Pure: it validates, and `_rebound` builds the new state. `apply_record`
+    calls it before any write, and `resolve` again where it rewrites.
+    """
+    current = state.workflow.partition("@")[0]
+    if target == current:
+        return None
+    first = manifest.steps[0].id
+    if step_id != first:
+        raise RunStateError(
+            f"shape: {target!r} refused — only the run's first step ({first!r}) may "
+            f"rebind it, and {step_id!r} is not that step. Start a new run with "
+            f"`fr run start {target}` instead."
+        )
+    moved = sorted(
+        sid for sid, rec in state.steps.items() if sid != step_id and rec.state != "pending"
+    )
+    if moved:
+        raise RunStateError(
+            f"shape: {target!r} refused — step(s) {', '.join(moved)} already left "
+            "`pending`, so the run has moved on its current shape. Start a new run "
+            f"with `fr run start {target}` instead."
+        )
+    try:
+        rebound = resolve_workflow(target, repo_root)
+    except WorkflowError as e:
+        raise RunStateError(f"shape: {target!r} refused — {e}") from e
+    if not rebound.steps or rebound.steps[0].id != step_id:
+        begins = rebound.steps[0].id if rebound.steps else "nothing"
+        raise RunStateError(
+            f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
+            "a run rebinds only onto a shape that begins with the step being resolved."
+        )
+    return rebound
+
+
+def _rebound(state: RunState, rebound: WorkflowManifest, step_id: str) -> RunState:
+    """`state` on `rebound`'s step list: `workflow` rewritten, every step
+    fresh and `pending` as `fr run start` builds them, bar `step_id`'s own
+    record, which is carried over. The cursor stays on `step_id`, so the
+    caller's `_complete_step` moves it along the NEW list."""
+    steps = {
+        s.id: StepRecord(state="pending", members=[m.id for m in s.steps] or None)
+        for s in rebound.steps
+    }
+    steps[step_id] = state.steps[step_id]
+    return state.model_copy(
+        update={"workflow": f"{rebound.workflow}@{rebound.schema_version}", "steps": steps}
+    )
+
+
 def _with_step(state: RunState, step_id: str, record: StepRecord) -> RunState:
     new_steps = dict(state.steps)
     new_steps[step_id] = record
@@ -1396,6 +1467,7 @@ _VERIFIABLE_EVIDENCE = (
     "coverage",
     "requirement-rows",
     "visual",
+    "single-phase",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1403,8 +1475,18 @@ _VERIFIABLE_EVIDENCE = (
 # are the requirements-traceability witnesses: all three in all three tables,
 # or resolve refuses the step as unverifiable or demands `--evidence <name>=`.
 _DERIVED_EVIDENCE = frozenset(
-    {"findings", "proportionality", "requirements", "coverage", "requirement-rows", "visual"}
+    {
+        "findings",
+        "proportionality",
+        "requirements",
+        "coverage",
+        "requirement-rows",
+        "visual",
+        "single-phase",
+    }
 )
+# `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
+# `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
 # `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
 # `visual:` section and the witness transcript; the rules live in `fr.run.visual`.
 # Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
@@ -1435,6 +1517,7 @@ _DERIVED_FROM = {
     "visual": "from the step record's `visual:` section — every owed row's screenshots "
     "cover its named states and interactions, and the witness transcript shows each "
     "one opened since the unit opened",
+    "single-phase": "from the plan this step emits: exactly one phase that is not `[manual]`",
 }
 
 
@@ -1729,6 +1812,8 @@ def _verified_evidence(
         verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
     if state_value == "done" and "proportionality" in step.evidence:
         verified["proportionality"] = _proportionality_witness(key, repo_root, state)
+    if state_value == "done" and "single-phase" in step.evidence:
+        verified["single-phase"] = _single_phase_witness(key, repo_root, state, emitted or {})
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
     if "review" in offered or derives:
@@ -1829,6 +1914,45 @@ def _visual_witness(
             soft_wrap=True,
         )
     return derived.witness
+
+
+def _single_phase_witness(
+    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
+) -> str:
+    """`phase <n>` — the light shape's one agentic phase — or exit 2.
+
+    2026-09-29-fr-goal-light-path §A (R2): a structural rule checked when the
+    plan is authored, not a hope that it stays small. `[manual]` phases are
+    allowed (they are not work a subagent runs); anything but exactly one
+    agentic phase is refused, naming the phases and the two ways forward.
+    Fail-closed on a plan fr cannot read.
+    """
+    plan_rel = emitted.get("plan") or _emitted_plan(state)
+    if plan_rel is None:
+        err_console.print(
+            f"[red]{key}: cannot derive single-phase evidence — no plan recorded "
+            "(pass --emitted plan=<plan-dir>)[/red]",
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    try:
+        tags = plan_phase_tags(repo_root, plan_rel)
+    except AdoptError as e:
+        err_console.print(
+            f"[red]{key}: cannot derive single-phase evidence — {e}[/red]", soft_wrap=True
+        )
+        raise typer.Exit(2) from e
+    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
+    if len(agentic) != 1:
+        ids = ", ".join(str(n) for n in agentic) or "none"
+        err_console.print(
+            f"{key}: single-phase: the light shape takes one agentic phase; this plan "
+            f"has {len(agentic)} ({ids}). Merge them, or start a new run on fr-goal.",
+            markup=False,
+            soft_wrap=True,
+        )
+        raise typer.Exit(2)
+    return f"phase {agentic[0]}"
 
 
 def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
@@ -5007,9 +5131,14 @@ def _resolve_body(
     harness: str | None = None,
     model: str | None = None,
     visual: tuple[VisualEvidence, ...] | None = None,
+    shape: str | None = None,
 ) -> None:
     """`fr run resolve`'s body, callable in process — the flag form and the
-    step-record engine (`fr.record.apply`) both run exactly this."""
+    step-record engine (`fr.record.apply`) both run exactly this.
+
+    `shape` is a record's `shape:` (2026-09-29-fr-goal-light-path §A): on a
+    `done` resolve of the run's first step it rebinds the run onto that
+    shape (`_rebind_shape`), riding this resolve's one commit."""
     if state_value not in ("done", "failed"):
         err_console.print(f"[red]--state must be 'done' or 'failed', got {state_value!r}[/red]")
         raise typer.Exit(2)
@@ -5044,6 +5173,9 @@ def _resolve_body(
         # obligation it never declared.
         evidence_map = _parse_evidence(
             evidence, step, phase_unit=parent is not None and parent.for_each == "phase"
+        )
+        rebind = (
+            _rebind_shape(state, manifest, step_id, shape, repo_root) if shape is not None else None
         )
     except (RunStateError, WorkflowError, AdoptError) as e:
         # soft_wrap (review `r1-f2`): `_find_step`'s composite-id message ends
@@ -5264,6 +5396,9 @@ def _resolve_body(
         # `pr`-less resolve exists to fetch, and before the gate's queued
         # journal decision is written — the last refusal before any write.
         _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
+    if rebind is not None and state_value == "done":
+        state, manifest = _rebound(state, rebind, step_id), rebind
+        console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
     new_state = _complete_step(
         state,
         manifest,
@@ -5361,6 +5496,7 @@ def resolve_in_process(
     questions: QuestionRounds | None = None,
     guard: ResolveGuard | None = None,
     visual: tuple[VisualEvidence, ...] = (),
+    shape: str | None = None,
 ) -> InProcessResolve:
     """`fr run resolve` for the step-record engine: the SAME body the flags run
     (every gate included), with the engine's written paths noted into the same
@@ -5403,6 +5539,7 @@ def resolve_in_process(
                 harness=harness,
                 model=model,
                 visual=visual,
+                shape=shape,
             )
             _capture_on_new_host(writes, {"step_id": step_id})
         writes.commit()
