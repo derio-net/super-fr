@@ -4696,8 +4696,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R2
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: failing
+    notes: 'Live run 2026-09-29 (talk demo take 11, fr 4.36.0, OpenCode; repo redacted):
+      spec-review check UNTESTED (no spec draft ever carried the toggle, so invented=0
+      was correct), but the card-click toggle shipped anyway - added at implement under
+      a vague Design sentence and reinforced by review-phase (#846). Also seen: stale
+      PR-body design inventory (#847); a spec-review record the orchestrator stitched
+      from two reviewers, accepted because OpenCode reviewers are unobserved (#823);
+      run cost read a foreign transcript (#848). Failing until #846 closes or the row
+      is reclassified.'
     verify: post-merge
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
