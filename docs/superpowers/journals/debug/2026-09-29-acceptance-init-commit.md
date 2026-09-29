@@ -19,3 +19,8 @@ Rows like basket-delivery, basket-single-phase (level unit = the plan's 01.yaml)
 ### d-scope · decision · Operator: fix both causes in this PR; refuse directives by a structural ref rule
 
 Asked at the more-than-one-root-cause stop. Operator chose: both (A) init commit + created/modified and (B) process-directive rows in this PR; (B) as a structural rule — a level ref into fr's own pipeline artifacts (docs/superpowers/) is refused. Enforced where rows are WRITTEN (the step-record engine every add/set-status/brainstorm record goes through), not where the matrix is loaded, so no existing matrix stops parsing and the matrix kind's current_version does not move.
+
+<!-- fr:journal kind=finding scope=debug id=f-init-commit created=2026-09-29T11:52:21+00:00 state=fixed -->
+### f-init-commit · finding [fixed] · init commits its writes and reports modified; pipeline level refs refused
+
+Source: acceptance_cmd.init_cmd commits outcome.written via commit_records; scaffold.InitOutcome.modified (+ .written); acceptance.model.pipeline_ref_error; record/apply._acceptance_writes refuses item.levels refs under docs/superpowers/. Pinned first (red, commit on the draft PR) by tests/unit/test_acceptance_init_commit.py — 12 tests; full suite 7579 passed. Rows acceptance-init-commits-writes and acceptance-refuses-pipeline-evidence (ci). fr-brainstorming §3 names the refusal.
