@@ -1,0 +1,27 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-09-29-feat-batch-opencode-observe --step implement-phase --item phase/2 --record docs/superpowers/runs/2026-09-29-feat-batch-opencode-observe.records/implement-phase__phase-2.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 4
+run: 2026-09-29-feat-batch-opencode-observe
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2]
+refactor:
+  P2.T1: "Already built by review fix p1-r1 (2aa091c5): all three comparison sites call agent_name and _verify_reviewer reads observed_session(...).dispatches(opened). This phase only added the one missing RED case (a `general` child named as spec reviewer); no code changed, nothing to clean."
+journal:
+  - kind: discovery
+    id: p2-t1-done-by-p1-r1
+    title: P2.T1 was delivered by review fix p1-r1 (2aa091c5); one missing test added
+    body: |
+      2aa091c5 routed `_same_agent` (run_cmd.py and run/visual.py) and the
+      phase-executor refusal through `fr.run.observed.agent_name`, and
+      `_verify_reviewer` already reads `observed_session(...).dispatches(opened)`.
+      Its resolve-level tests covered the tiered spec reviewer (ses_rev), the
+      invented id and the tiered executor, but not P2.T1.S1's `general` child
+      (ses_gen1) named as the spec reviewer. That test was added
+      (`test_a_general_child_is_the_wrong_spec_reviewer_on_opencode`) and is
+      green with no code change. The executor case runs on the grouped shape's
+      `peer-review` step (the review-phase equivalent in that test shape).
+resolves: []
+evidence: {}
