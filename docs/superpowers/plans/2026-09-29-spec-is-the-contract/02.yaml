@@ -117,9 +117,12 @@ state:
       note: 'Deleted in phase 1 (journal p1-rows-deleted-in-phase-1): acceptance check
         could not pass there otherwise. No other row cites the three removed specs.'
     P2.T4.S2:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-29T18:11:34+00:00'
+      note: Only requirements-post-merge-rows named a removed gate; re-pointed and
+        reworded in phase 1. light-path-*, phase-sizing-* and fr-goal-independent-spec-review
+        name only kept behaviour; the 'phase reviewer' mentions elsewhere are historical
+        live-run notes. Reports in sync; check passes.
     P2.T5.S1:
       state: ' '
       ticked_at: null
