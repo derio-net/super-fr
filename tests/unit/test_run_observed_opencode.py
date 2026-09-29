@@ -163,3 +163,17 @@ def test_agent_name_drops_qualifier_and_tier() -> None:
     assert observed.agent_name("super-fr:fr-phase-executor") == "fr-phase-executor"
     assert observed.agent_name("fr-spec-reviewer-mechanical") == "fr-spec-reviewer"
     assert observed.agent_name("general") == "general"
+
+
+# --- the run session: harness-keyed (spec §B, gh#537) ----------------------
+
+
+def test_current_session_reads_the_key_its_harness_owns() -> None:
+    from fr.run.telemetry import current_session
+
+    both = {"FR_OPENCODE_SESSION_ID": "ses_run", "CLAUDE_CODE_SESSION_ID": "stale-claude"}
+    assert current_session({"FR_HARNESS": "opencode", **both}) == "ses_run"
+    assert current_session({"FR_HARNESS": "claude-code", **both}) == "stale-claude"
+    assert current_session({"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": "x"}) is None
+    assert current_session({"FR_HARNESS": "hermes", **both}) is None
+    assert current_session({"FR_HARNESS": "not-a-harness", **both}) is None

@@ -544,8 +544,10 @@ class Round:
 
 def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | None:
     """The ANSWERED question rounds of this session at or after `since`, in
-    order; `None` exactly where `operator_answered_since` is `None` (another
-    harness, no session id, no readable transcript).
+    order; `None` exactly where `operator_answered_since` is `None` (a harness
+    with no backend, no session id, no readable transcript). Read through
+    `fr.run.observed` (spec 2026-09-29-opencode-observe §A): Claude Code's
+    transcript as below, OpenCode's `question` parts by the same round rule.
 
     Only main-thread (non-sidechain) assistant records stamped at or after
     `since` are walked. Consecutive `QUESTION_TOOL` tool_uses form one round —
@@ -555,11 +557,11 @@ def answered_rounds_since(env: Mapping[str, str], since: str) -> list[Round] | N
     calls has a `tool_result` whose `toolUseResult` carries a non-empty
     `answers` map; a round that was only declined is not returned.
     """
+    from fr.run.observed import observed_session
+
     start = parse_timestamp(since)
-    transcript = _this_session(env)
-    if start is None or transcript is None:
-        return None
-    return answered_rounds_in(transcript, start)
+    view = observed_session(env) if start is not None else None
+    return None if start is None or view is None else view.answered_rounds(start)
 
 
 def answered_rounds_in(transcript: Path, start: _dt.datetime) -> list[Round] | None:
@@ -673,8 +675,9 @@ def _answered_ids(records: list[dict[str, Any]]) -> set[str]:
 
 def _this_session(env: Mapping[str, str]) -> Path | None:
     """This process's own Claude Code session transcript, or `None` when there
-    is none to read — another harness included. The shared front half of the
-    three "did X happen in this session?" predicates."""
+    is none to read — another harness included. Private to the Claude Code
+    reading (`subagent_dispatch_since`): every gate goes through
+    `fr.run.observed.observed_session` instead."""
     if detect_harness(env) != ClaudeCodeReader.harness:
         return None
     try:

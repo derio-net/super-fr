@@ -2121,7 +2121,8 @@ def _verify_reviewer(
     `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
     is refused (review p4-f2) — qualified or bare spelling both match.
     """
-    from fr.run.telemetry import subagent_dispatch_since
+    from fr.run.observed import ChildDispatch, observed_session
+    from fr.run.telemetry import parse_timestamp
 
     phase = target.phase
     implementers = (
@@ -2144,7 +2145,16 @@ def _verify_reviewer(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    observed = subagent_dispatch_since(os.environ, agent_id, opened) if opened else None
+    # Through the session protocol (spec 2026-09-29-opencode-observe §A): the
+    # dispatch named by the id, among those since the review opened.
+    start = parse_timestamp(opened)
+    view = observed_session(os.environ) if start is not None else None
+    dispatched = view.dispatches(start) if view is not None and start is not None else None
+    observed: ChildDispatch | Literal[False] | None = (
+        None
+        if dispatched is None
+        else next((d for d in dispatched if d.agent_id == agent_id), False)
+    )
     if observed and observed.agent_type == PHASE_EXECUTOR_AGENT:
         # Review r1-11: a phase executor is an IMPLEMENTER by construction —
         # any phase's — so it is never the separate context a review needs.
@@ -2760,7 +2770,7 @@ def _open_dispatch(
     `blocked`, not `running`, so nothing was dispatched and there is nothing
     to hold.
     """
-    from fr.run.telemetry import ClaudeCodeReader, current_session, orchestrator_model
+    from fr.run.telemetry import current_session, orchestrator_model
 
     record = state.steps[step_id]
     # Detected ONCE and both recorded and used (finding f8): the harness is
@@ -2798,11 +2808,13 @@ def _open_dispatch(
             # and never as zero. No hostname beside it: a missing session
             # directory already says "elsewhere".
             #
-            # Only when the harness fr runs under OWNS the session key
-            # (gh#537): the one key read is Claude Code's, and an OpenCode
-            # started from a Claude Code shell inherits it — recording it
-            # there named a session that never held this unit.
-            session=(current_session(os.environ) if harness == ClaudeCodeReader.harness else None),
+            # `current_session` reads only the key the detected harness OWNS
+            # (gh#537): an OpenCode started from a Claude Code shell inherits
+            # Claude Code's key, which names a session that never held this
+            # unit; OpenCode's own arrives through the super-fr plugin's
+            # `shell.env` export (spec 2026-09-29-opencode-observe §B).
+            # `advance` is the orchestrator's, so this is the run session.
+            session=current_session(os.environ),
         ),
     )
     return _with_step(state, step_id, new_record)

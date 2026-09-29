@@ -2607,12 +2607,43 @@ def test_an_attempt_opened_by_a_harness_with_no_session_records_none(tmp_path: P
         repo,
         shipped,
         ["run", "advance", "r1"],
-        {"FR_HARNESS": "opencode", "CLAUDE_CODE_SESSION_ID": None},
+        {
+            "FR_HARNESS": "opencode",
+            "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
+            "FR_OPENCODE_SESSION_ID": None,
+        },
     )
 
     assert result.exit_code == 0, result.output
     (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
     assert opened.session is None
+
+
+def test_advance_on_opencode_records_the_plugin_exported_session(tmp_path: Path) -> None:
+    """R1 (spec 2026-09-29-opencode-observe §B): the super-fr plugin's
+    `shell.env` hook exports the session into every bash call, so `advance`
+    records OpenCode's own id — and never the Claude Code key an OpenCode
+    started from a Claude Code shell inherits (gh#537)."""
+    repo = _repo(tmp_path)
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "grouped", _GROUPED_SHAPE)
+    _started_grouped_with_plan(repo, shipped)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "advance", "r1"],
+        {
+            "FR_HARNESS": "opencode",
+            "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
+            "FR_OPENCODE_SESSION_ID": "ses_run",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    (opened,) = _dispatch_of(repo, "implement", "phase/1/code")
+    assert opened.session == "ses_run"
+    assert opened.harness == "opencode"
 
 
 _TWO_UNIT_RUN = """\
@@ -5237,6 +5268,37 @@ def test_run_start_binds_the_ambient_session_when_none_is_given(
     state = load_state(repo, "feat/x")
     assert state is not None
     assert [(b.session_id, b.harness) for b in state.sessions] == [("ambient-1", "claude-code")]
+
+
+def test_run_start_binds_the_ambient_opencode_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ambient binding follows `current_session`, so an OpenCode session
+    the plugin exported binds its workspace as Claude Code's does (spec
+    2026-09-29-opencode-observe §B) — never the inherited Claude Code key."""
+    from fr.isolation.types import load_state
+
+    monkeypatch.setenv("FR_SESSIONS_DIR", str(tmp_path / "sessions"))
+    repo = _repo(tmp_path, branch="feat/x")
+    _isolation_state_for(repo, "feat/x")
+    shipped = tmp_path / "shipped"
+    _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
+
+    result = _invoke_as_harness(
+        repo,
+        shipped,
+        ["run", "start", "cli-only", "--branch", "feat/x", "--run-id", "r1"],
+        {
+            "FR_HARNESS": "opencode",
+            "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
+            "FR_OPENCODE_SESSION_ID": "ses_run",
+        },
+    )
+
+    assert result.exit_code == 0, result.output
+    state = load_state(repo, "feat/x")
+    assert state is not None
+    assert [(b.session_id, b.harness) for b in state.sessions] == [("ses_run", "opencode")]
 
 
 def test_run_start_binds_nothing_when_no_session_is_knowable(

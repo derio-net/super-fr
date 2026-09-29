@@ -454,9 +454,11 @@ def _witness_file(
     file `False` for an agent id this session never dispatched, `"unclaimed"`
     for a dispatched holder unit nobody claimed — or, when it cannot be read,
     the reason (a `str`)."""
-    from fr.run.telemetry import _this_session, attribute_dispatches, witness_transcript
+    from fr.run.observed import ClaudeCodeSession, observed_session
+    from fr.run.telemetry import attribute_dispatches, witness_transcript
 
-    session = _this_session(env)
+    view = observed_session(env)
+    session = view.transcript if isinstance(view, ClaudeCodeSession) else None
     if session is None:
         return _unobservable(env)
     if role == "reviewer":

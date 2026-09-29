@@ -255,3 +255,36 @@ def test_recompute_reads_this_hosts_transcripts_and_writes_nothing(
     assert result.exit_code == 0, result.output
     assert "recomputed" in result.output and "1 read" in result.output
     assert not usage_path(tmp_path, RUN).exists()
+
+
+def test_an_opencode_runs_own_session_fills_the_cost_table(tmp_path: Path) -> None:
+    """R2 (spec 2026-09-29-opencode-observe §B): the plugin's `shell.env`
+    export names the run session, so the capture reads it — and its children —
+    from opencode.db, and the Cost table prints real figures, not dashes. The
+    stale Claude Code key an OpenCode started from a Claude Code shell inherits
+    is never read (gh#537)."""
+    from fr.usage.capture import capture
+
+    env = {
+        "FR_HARNESS": "opencode",
+        "FR_OPENCODE_DB": str(FIXTURES / "opencode" / "opencode.db"),
+        "FR_OPENCODE_SESSION_ID": "ses_run",
+        "CLAUDE_CODE_SESSION_ID": "stale-claude-session",
+    }
+    state = RunState(
+        run=RUN,
+        workflow="fr-goal@1",
+        branch="b",
+        started="2026-09-21T11:00:00+00:00",
+        cursor="deliver",
+        steps={"brainstorm": StepRecord(state="done", at="2026-09-21T13:00:00+00:00")},
+    )
+    save_run_state(tmp_path, state)
+
+    assert capture(tmp_path, state, "deliver", env) is not None
+    result = _invoke(tmp_path, RUN)
+
+    assert result.exit_code == 0, result.output
+    # ses_run $0.25 + its children $0.125 + $0.0625 + $0.0625 + $0.50
+    assert "$1.00" in result.output
+    assert "stale-claude-session" not in usage_path(tmp_path, RUN).read_text()
