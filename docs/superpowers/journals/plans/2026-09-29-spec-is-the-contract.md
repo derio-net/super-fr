@@ -49,3 +49,8 @@ A general-purpose subagent that wrote none of it reviewed origin/main...HEAD aga
 ### rv-c1 · finding [open] (reviewer: in scope) · Bulleted R<n> lines read as no Requirements, skipping phase sizing silently (phase 2)
 
 Independent review: '- R1. a' / '* R1. a' made has_requirements False.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c1-resolved created=2026-09-29T18:29:30+00:00 state=fixed resolves=rv-c1 -->
+### rv-c1-resolved · finding [fixed] · resolves rv-c1: Bulleted R<n> lines read as no Requirements, skipping phase sizing silently
+
+The list grammar accepts an optional -/* bullet; test_a_bulleted_list_reads_the_same.
