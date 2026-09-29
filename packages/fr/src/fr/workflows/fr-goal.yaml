@@ -11,9 +11,9 @@
 # 1. `deliver` is `kind: agent`, not `kind: cli` running a nonexistent
 #    `fr run deliver` command — no such subcommand exists (`fr run` is
 #    start/adopt/status/advance/resolve/check/cost). Composing the PR body from
-#    the journal and deciding when to mark it ready is judgment work the
-#    orchestrating agent does itself (a bare `agent` step, no subagent
-#    dispatch).
+#    the journal is judgment work the orchestrating agent does itself (a bare
+#    `agent` step, no subagent dispatch). Marking it ready is not: the review
+#    ok and the ready transition are the operator's (#814).
 # 2. There is NO `isolate` step (spec §4.B, review fix r2-f5). A run is
 #    born in its workspace: `fr run start` ensures isolation itself and
 #    writes the run file inside the worktree. As a step it moved the

@@ -68,10 +68,11 @@ def test_deliver_review_ok_and_ready_transition_are_the_operators() -> None:
     without naming its owner, so the orchestrator took its own dispatched
     reviewer as the ok, ticked the box and ran `glab mr update --ready`."""
     s = _deliver_section()
-    assert "the explicit review ok is the operator's" in s
-    assert "the ready transition is the operator's" in s
-    assert "never tick" in s
-    assert "never mark the PR ready" in s
+    low = s.lower()
+    assert "the explicit review ok is the operator's" in low
+    assert "the ready transition is the operator's" in low
+    assert "never tick" in low
+    assert "never mark the pr ready" in low
     # the old grant of the transition to the orchestrator is gone
     assert "ONLY when all three hold: mark it ready" not in s
 
@@ -93,9 +94,7 @@ def test_deliver_closeout_line_is_the_last_thing_relayed() -> None:
 
 
 def test_fr_debugging_closeout_line_is_the_last_thing_relayed() -> None:
-    t = " ".join(
-        (REPO_ROOT / "plugins/super-fr/skills/fr-debugging/SKILL.md").read_text().split()
-    )
+    t = " ".join((REPO_ROOT / "plugins/super-fr/skills/fr-debugging/SKILL.md").read_text().split())
     assert "the last line of your final message" in t
 
 
