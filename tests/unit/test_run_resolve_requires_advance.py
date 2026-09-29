@@ -96,7 +96,7 @@ def test_the_skill_describes_the_sequence_fr_now_enforces(path: Path) -> None:
     brief `review-phase` in between. Refusing the shortcut while the prose still
     describes it would make every phase trip the refusal once."""
     text = " ".join(path.read_text().split())
-    assert "`fr run advance <run-id>` again to brief `review-phase`" in text
+    assert "that same call advances and prints the brief for `review-phase`" in text
 
 
 @pytest.mark.parametrize("path", SKILLS, ids=lambda p: p.parts[-4])
