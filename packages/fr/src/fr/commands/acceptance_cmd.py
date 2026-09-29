@@ -642,10 +642,44 @@ def init_cmd(
     )
     for rel in outcome.created:
         typer.echo(f"created {rel}")
+    for rel in outcome.modified:
+        typer.echo(f"modified {rel}")
+    for rel in outcome.removed:
+        typer.echo(f"removed {rel} (superseded legacy report)")
     for rel in outcome.skipped:
         typer.echo(f"exists  {rel} (left untouched)")
     for notice in outcome.notices:
         typer.echo(notice)
+    # gh#775: commit every path changed here, as every fr writer does (gh#610).
+    # Left to the next command, only ITS paths were committed, and the rule
+    # file and `.gitignore` sat dirty until close-out stashed them. Never fails
+    # init: a refused commit (the default branch, no repo) is one stderr line.
+    from fr.records_commit import commit_records
+
+    paths = _committable(root, outcome.written, outcome.removed)
+    if paths:
+        commit_records(root, [Path(rel) for rel in paths], "chore(fr): acceptance init")
+
+
+def _committable(root: Path, written: list[str], removed: list[str]) -> list[str]:
+    """The paths of `written` git will take in one `git add`: one it cannot
+    (a gitignored path, a deletion it never tracked) fails the whole add, and
+    so the whole commit (gh#775 review). An ignored path cannot dirty the tree,
+    so leaving it out loses nothing; it is named so nobody assumes otherwise."""
+    from fr.git import GitUnavailableError, git_answer
+
+    if not written:
+        return []
+    try:
+        ignored = set(git_answer(root, "check-ignore", "--", *written).stdout.split())
+        tracked = (
+            set(git_answer(root, "ls-files", "--", *removed).stdout.split()) if removed else set()
+        )
+    except GitUnavailableError:
+        return written  # commit_records reports whatever git then says
+    for rel in sorted(ignored):
+        typer.echo(f"ignored {rel} (gitignored here, so not committed)")
+    return [p for p in written if p not in ignored and (p not in removed or p in tracked)]
 
 
 BACKFILL_PROTOCOL = """\

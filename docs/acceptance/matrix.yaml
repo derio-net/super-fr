@@ -5139,6 +5139,32 @@ rows:
     status: ci
     notes: 'gh#775: pinned per-PR by test_acceptance_init_no_ci.py (scaffold, ci gate
       on add/set-status, byte-exact gitignore)'
+  - id: acceptance-init-commits-writes
+    capability: Acceptance matrix
+    acceptance: fr acceptance init commits every file it writes on a working branch,
+      and reports each as created or modified, so the worktree is clean afterwards
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775 (reopened after take 10): pinned per-PR by test_acceptance_init_commit.py
+      — clean tree after init, .gitignore reported modified, no commit on rerun, default
+      branch writes but says not committed'
+  - id: acceptance-refuses-pipeline-evidence
+    capability: Acceptance matrix
+    acceptance: A row whose level evidence is one of fr's own pipeline artifacts (a
+      spec, plan, run or journal) is refused as a process directive when written; existing
+      rows still move
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775: enforced in the step-record engine (add, set-status --level, brainstorm
+      record); pinned per-PR by test_acceptance_init_commit.py'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
