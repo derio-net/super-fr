@@ -65,6 +65,7 @@ Verified on this host's live OpenCode 1.18.33 database (shapes only, read-only,
 | input | reason |
 |---|---|
 | "B edited the `shows:` labels in its visual record until the check passed." | A record-authoring discipline problem, not an observation gap: R12 makes the reads the check keys on real, but nothing here judges label edits. Left on #797's thread for a follow-up. |
+| "Following the rule in #822, this issue closes when that live row flips, not when the PR merges." | Overridden by the batch brief's delivery rules, which require `Closes derio-net/super-fr#823` in the PR body, so #823 closes at merge. The live claim stays owed and visible as the `verify: post-merge` row `opencode-observe-take10-rerun` (§G), and the follow-up that flips the parity cells (§G) cites it. |
 
 ## Design
 
@@ -102,21 +103,32 @@ what `witness_transcript` returns today.
   existing functions in `run/telemetry.py` (`answered_rounds_since`,
   `attribute_dispatches`, `read_file_since`, `shell_named_since`,
   `orchestrator_wrote_since`'s JSONL half) become its implementation.
-  `ChildDispatch.returned` is new: the last assistant `text` block of
-  `subagents/agent-<id>.jsonl`.
+  `ChildDispatch.returned` is new, and it is what the PARENT received: the
+  text of the `tool_result` answering the dispatching `tool_use` (paired by
+  `toolUseId`, `attribute_dispatches`' existing key) in the orchestrator's
+  transcript, with its text blocks joined. It is not the subagent file's last
+  `text` block, which is a one-line handback stub
+  (`tests/fixtures/transcripts/claude-code-subagent.jsonl:3`; a real
+  subagent's final turn is a handback tool call).
 - **`OpenCodeSession`** reads opencode.db through `fr.usage.readers.opencode.open_ro`
   (read-only), scoped to one session id: its own `part` rows for rounds,
   reads, shells and writes; its `task` parts for dispatches (§C). `child(id)`
   returns an `OpenCodeSession` for the child after checking the child's
   `session.parent_id` equals this session. `_opencode_wrote_since`
   (`telemetry.py:1215`) becomes `wrote_windows`, now scoped to the run session
-  instead of "any top-level session active since" — the weakness its own
-  docstring states (`:1227`) closes.
+  instead of "any top-level session active since", which closes the weakness its
+  own docstring states (`:1227`). **When no session id is present** (plugin not
+  delivered, or older than this change), `wrote_windows` keeps today's reading
+  of every top-level session active since the unit opened. A module-level
+  `opencode_unscoped(env)` view serves only that method. So
+  `deliver-tests-provenance` stays enforced without the plugin, as it is today.
+  Every other method is `None` (unobserved) there.
 
-The gates in `commands/run_cmd.py` (`_verify_operator_gate` `:1147`,
-`_verify_reviewer` `:2096`, `_verify_tests_log`), `journal/operator.py:42` and
+The gates in `commands/run_cmd.py` (`_gate_provenance` `:1113`,
+`_verify_reviewer` `:2096`, `_verify_tests_log` `:2212` and its helper
+`_wrote_before` `:2197`), `journal/operator.py:42` and
 `run/visual.py:_witness_file` call `observed_session` instead of
-`_this_session`. The module-level telemetry functions stay importable (tests
+`_this_session` / `orchestrator_wrote_since`. The module-level telemetry functions stay importable (tests
 and `fr.usage.readers.claude_code` use them) and the protocol is the only new
 surface. Hermes remains `None` — one new backend class, later.
 
@@ -161,10 +173,15 @@ child row's `parent_id` does not match, is skipped: both keys must agree.
 - **Reviewer id (R6).** `_verify_reviewer` asks the protocol for the dispatch
   named by the reviewer id; on OpenCode an id that is no child dispatched since
   the unit opened now refuses (`observed is False`), exactly the Claude Code
-  branch — #816's `opencode-gpt-6-luna` is refused. The implementer and
-  wrong-agent-type refusals apply unchanged; `_same_agent` compares OpenCode's
-  `subagent_type` spellings (`fr-spec-reviewer-<tier>` counts as
-  `fr-spec-reviewer`: a tier suffix is stripped on the OpenCode side).
+  branch, so #816's `opencode-gpt-6-luna` is refused. The implementer and
+  wrong-agent-type refusals apply unchanged, with one change to agent-type
+  comparison. A single normaliser, `fr.run.observed.agent_name(t)`, drops a
+  plugin qualifier (`super-fr:`) and an OpenCode tier suffix (`-mechanical`,
+  `-standard`, `-hard`), so `fr-phase-executor-hard` is `fr-phase-executor`.
+  All three comparison sites call it: `_same_agent` in `commands/run_cmd.py:2188`,
+  `_same_agent` in `run/visual.py:434`, and the phase-executor refusal at
+  `run_cmd.py:2148` (today an exact `== PHASE_EXECUTOR_AGENT`). Without that
+  last one, an OpenCode executor named as reviewer would pass.
 - **Holder (R3).** At resolve, a unit whose last attempt has an `agent_type`
   but no claimed `agent` gets one filled when the protocol shows exactly one
   child of that agent type dispatched since the attempt opened; zero or
@@ -181,7 +198,12 @@ it cannot (`None` from the protocol, Hermes), they are skipped with
 
 - **spec-review coverage (R5).** `_coverage_witness` extracts the fenced
   `input-coverage` block from the recorded review entry (today) AND from the
-  reviewer's return. The two must be equal after normalising line endings and
+  reviewer's return. The reviewer returns its record as YAML
+  (`fr-spec-reviewer.md` "What you return"), with the block inside an indented
+  `body: |` literal. So fr parses the return as YAML and takes the `kind:
+  review` entry's `body`, the same text the journal holds once recorded. If
+  the return does not parse, fr dedents (`textwrap.dedent`) the fenced block
+  it finds. The two blocks must be equal after normalising line endings and
   trailing whitespace; the first differing table row is named in the refusal
   (row number, the recorded line, the returned line), which tells the
   orchestrator to record the return unedited or re-dispatch. A return with no
@@ -206,8 +228,19 @@ it cannot (`None` from the protocol, Hermes), they are skipped with
   hold MORE findings than the block (the orchestrator's own); never fewer.
   Reclassification stays what it is today: resolving the finding
   `out-of-scope` keeps the reviewer's tag and renders "reclassified by the
-  orchestrator" (`commands/journal_cmd.py:490`). #816's run (six returned,
-  none filed) is refused, naming the six ids.
+  orchestrator" (`commands/journal_cmd.py:490`).
+
+  **Several reviewers in one unit.** #816's review-phase dispatched three.
+  Every child dispatched since the unit opened that is not a phase executor
+  (by `agent_name`) counts as a reviewer of that unit. Each one's return owes
+  a block, and fr checks the union of the blocks. The `reviewer` evidence
+  still names one of them, the one the separate-context check verifies.
+  Ids stay brief-prescribed. With one reviewer they are `p<N>-r<k>`. When the
+  orchestrator dispatches several, fr-goal §6 has it give each a distinct
+  letter in its prompt (`p<N>a-r<k>`, `p<N>b-r<k>`, …). An id repeated across
+  two returns is refused as ambiguous. Take 10 B's shape (three reviewers, six
+  findings between them, none filed) is refused, and the refusal names every
+  returned id missing from the journal.
 - **PR body (R8).** `record/pr_body.py:_findings` (`:94`) already renders
   plan-journal findings with their resolution; R7 is what puts them in the
   journal. The Test Plan asserts the rendered sections carry review-phase
@@ -224,11 +257,11 @@ it cannot (`None` from the protocol, Hermes), they are skipped with
   Question texts come from `input.questions[].{question, header}`, so the
   `a 2nd round may follow` announcement check works unchanged.
   `question_rounds_refusal` then applies as on Claude Code.
-- **Refusing a missing claim (R10).** `_resolve_record_in_process`
-  (`run_cmd.py:4994`) stops defaulting (`offered.pop("answered_by", None)`),
+- **Refusing a missing claim (R10).** `resolve_in_process`
+  (`run_cmd.py:4965`; the default is at `:4994`) stops defaulting (`offered.pop("answered_by", None)`),
   and so does the flag form (`run_cmd.py:4524`, `answered_by or "agent"`). On
   a gated step, when the gate is unobserved and no `answered_by` was given,
-  `_verify_operator_gate` exits 2: "could not verify who answered this gate —
+  `_gate_provenance` exits 2: "could not verify who answered this gate —
   pass `answered_by: operator` (the operator answered) or `answered_by: agent`
   (cleared without asking) in the record's evidence". An observed gate still
   derives provenance and ignores the claim, as today; `--no-questions` still
@@ -278,7 +311,10 @@ comment). `_unobservable` (`run/visual.py:418`) stops naming OpenCode.
   so `fr.harness.observe` learns the plugin's new marker comment if it
   derives OpenCode cells from marker comments.
 - **Acceptance rows** are listed in the brainstorm record; the live one is
-  `opencode-observe-take10-rerun` (`verify: post-merge`). Per #822, #823 is
+  `opencode-observe-take10-rerun` (`verify: post-merge`). **Who flips parity
+  to `enforced`** (d-parity-partial): a follow-up issue filed at `deliver`,
+  linked from the PR body, whose one job is Test Plan 13's last step once the
+  live row flips. Per #822, #823 is
   meant to close when that row flips; the PR still carries all four `Closes`
   lines as the batch's delivery rules require, and the post-merge row keeps the
   live claim owed and visible.
@@ -308,26 +344,46 @@ at the pre-ready merge, with every hop of the chain asserted (operator note,
    declined, pending, `todowrite` neutral, a tool closing a round); dispatches
    (parent keys disagreeing are skipped; running child → `returned None`);
    `first_read`/`first_shell_executing` keyed per session; `wrote_windows`
-   scoped to the run session (a sibling top-level session's write refused).
+   scoped to the run session (a sibling top-level session's write refused), and
+   with NO session id falling back to every top-level session (the
+   `deliver-tests-provenance` fallback, §A).
 2. `tests/unit/test_run_observed_claude_code.py`: the Claude Code backend
    returns what the existing functions return on the existing transcript
-   fixtures, plus `returned` from `claude-code-subagent.jsonl`.
-3. Resolve-level tests (`FR_HARNESS=opencode`, `FR_OPENCODE_DB`=fixture,
-   `FR_OPENCODE_SESSION_ID=ses_run`): take 10 B's shape — a re-cut coverage
-   block, an invented reviewer id, a review-phase `findings: none` over a
-   six-finding block, and a record with no `answered_by` on an unobservable
-   gate — each refused; the honest record of the same run resolves.
-4. `current_session` per harness, incl. an OpenCode process carrying a stale
+   fixtures, and `returned` is the dispatch's `tool_result` text in the parent
+   transcript — never the subagent file's handback stub.
+3. Resolve-level tests on OpenCode (`FR_HARNESS=opencode`, `FR_OPENCODE_DB`=fixture,
+   `FR_OPENCODE_SESSION_ID=ses_run`), take 10 B's shape. Refused: a re-cut
+   coverage block, an invented reviewer id, an OpenCode `fr-phase-executor-<tier>`
+   named as reviewer, a review-phase with three reviewers whose six block ids
+   are not in the journal, a duplicate id across two reviewers' blocks, a
+   reviewer return with no block, and a record with no `answered_by` on an
+   unobservable gate. The honest record of the same run resolves, including a
+   YAML-wrapped (indented) coverage block recorded unedited.
+4. The same R5/R7 cases on Claude Code transcript fixtures: a differing
+   coverage block and a missing findings block are refused; the honest ones pass.
+5. Holder fill (R3): exactly one matching child fills the unclaimed attempt's
+   `agent`; zero or two leave it unchanged.
+6. Visual witness on OpenCode: a PNG read by the orchestrator's session does
+   not satisfy the reviewer's check; the same read in the reviewer's child does.
+7. `current_session` per harness, incl. an OpenCode process carrying a stale
    `CLAUDE_CODE_SESSION_ID` (gh#537); `advance` records the OpenCode session;
-   `fr run cost` on the fixture run prints real figures.
-5. `fr run gates` / `check` wording for observed-agent, claimed-agent-unobserved
-   and claimed-operator-unobserved.
-6. `bun test` in `packages/fr-opencode-plugin`: the `shell.env` handler sets the
-   variable, ignores a missing session id, and never throws.
-7. `fr harness parity --check`, the mirror tripwires, `fr acceptance check`.
-8. **Post-merge — operator-driven:** re-run take 10 run B's shape on OpenCode
-   with this release; confirm the four refusals/corrections and a Cost table
-   with real numbers; flip `opencode-observe-take10-rerun`.
+   `fr run cost` on the fixture run prints real figures; the ambient workspace
+   binding (`isolation/sessions.py`) picks up the OpenCode session.
+8. `answered_by`: the record form and the `--answered-by` flag form both refuse
+   an unobservable gate with no value; `fr run gates` / `check` wording for
+   observed-agent, claimed-agent-unobserved and claimed-operator-unobserved.
+9. The unobserved-return path: a reviewer whose return fr cannot read resolves
+   with `unobserved=reviewer-return` and the warning, never silently.
+10. `render_pr_body` on a run whose plan journal holds review-phase findings
+    lists each with its resolution (R8).
+11. `bun test` in `packages/fr-opencode-plugin`: the `shell.env` handler sets
+    the variable, ignores a missing session id, and never throws.
+12. `fr harness parity --check`, the mirror tripwires, `fr acceptance check`.
+13. **Post-merge — operator-driven:** re-run take 10 run B's shape on OpenCode
+    with this release; confirm the refusals/corrections and a Cost table with
+    real numbers; flip `opencode-observe-take10-rerun`; then move the OpenCode
+    parity cells §G set to `partial` to `enforced`, in the follow-up issue
+    filed at `deliver` for exactly that (decision d-parity-partial).
 
 ## Implementation Plans
 
