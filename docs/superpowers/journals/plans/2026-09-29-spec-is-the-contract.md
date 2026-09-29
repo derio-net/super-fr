@@ -24,3 +24,8 @@ _findings and render_pr_body are 4.28.0's again plus the kept Post-merge and Tes
 ### p1-rows-deleted-in-phase-1 · decision · The 17 input-layer matrix rows are deleted in phase 1, not phase 2 (phase 1)
 
 P1.T7.S2 requires fr acceptance check to pass, but phase 1 deletes the test files those rows cite (and spec-fidelity-live-invention-caught is failing), so the check cannot pass until they go. Spec §E already settles their deletion; only the phase moved. The two archived specs left with no citing row (raw-input-relay, spec-fidelity-invention) are folded into spec-contract-no-input-gates' origin. Phase 2 keeps the rewording of the remaining rows.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-rebased-early created=2026-09-29T18:01:24+00:00 phase=1 -->
+### p1-rebased-early · discovery · #828 had already merged at start; rebased onto origin/main before phase 1 (phase 1)
+
+origin/main already carried #828 (deliver-handoff, 6c3c01e8) and v4.40.1 when phase 1 began, and #828 touches the deliver/PR-body code this plan edits, so the branch was rebased then rather than at P2.T5.S3. P2.T5.S3 still rebases onto whatever origin/main is at that point.
