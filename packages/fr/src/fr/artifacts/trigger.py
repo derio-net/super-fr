@@ -67,7 +67,12 @@ from fr.artifacts.commit import (
     lock_path,
     uncommitted_veto,
 )
-from fr.artifacts.runner import MigrationRegistry, MigrationReport
+from fr.artifacts.runner import (
+    FailedAction,
+    MigrationRegistry,
+    MigrationReport,
+    inspection_failures,
+)
 
 # --- what is exempt ------------------------------------------------------
 
@@ -391,6 +396,7 @@ def ensure_artifacts_current(
             emit,
             _will_not_act_here(
                 root,
+                registry,
                 "This context is non-interactive (CI is set, or there is no TTY), so fr "
                 "will not migrate or commit here:",
                 "a daemon checkout is hard-reset every tick, so a commit made in it "
@@ -409,6 +415,7 @@ def ensure_artifacts_current(
             emit,
             _will_not_act_here(
                 root,
+                registry,
                 "fr could not establish this repository's git state, so it will not "
                 "migrate or commit here:",
                 f"{state.reason} Unknown git state is not a clean one.",
@@ -420,6 +427,7 @@ def ensure_artifacts_current(
                 emit,
                 _will_not_act_here(
                     root,
+                    registry,
                     f"{root} is not this repository's root (git says {state.toplevel}), so "
                     "fr will not migrate or commit here:",
                     "the migration would run over a subtree while the commit named paths "
@@ -431,6 +439,7 @@ def ensure_artifacts_current(
                 emit,
                 _will_not_act_here(
                     root,
+                    registry,
                     "HEAD is detached (a rebase, a bisect, or a checked-out commit), so fr "
                     "will not migrate or commit here:",
                     "a commit made now is folded into the operation in progress or "
@@ -442,6 +451,7 @@ def ensure_artifacts_current(
                 emit,
                 _will_not_act_here(
                     root,
+                    registry,
                     f"HEAD is {state.branch!r}, this repository's default branch, so fr will "
                     "not migrate or commit here:",
                     "an automatic commit on a protected branch is work you have to notice "
@@ -464,6 +474,7 @@ def ensure_artifacts_current(
                 emit,
                 _will_not_act_here(
                     root,
+                    registry,
                     "another fr process is migrating this repository right now, so fr "
                     "will not migrate or commit here:",
                     "two migrations of one tree race each other into two commits. "
@@ -570,13 +581,22 @@ def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     return root.resolve() != state.toplevel
 
 
-def _will_not_act_here(root: Path, because: str, detail: str) -> tuple[str, ...]:
+def _will_not_act_here(
+    root: Path, registry: MigrationRegistry | None, because: str, detail: str
+) -> tuple[str, ...]:
     """The refusal shape shared by every "stale, but fr will not touch it here".
 
     One sentence of fact, one clause naming the context, one explaining why it
     is the wrong place to write, then the three commands. Kept in one function
     so a new refusal cannot quietly ship a different vocabulary.
+
+    Unless the tree is not stale but UNREADABLE: then "written for a different
+    fr and must be migrated" is false, and the migration it recommends cannot
+    help — the refusal names each file and its error instead (#812).
     """
+    failures = inspection_failures(root, registry=registry)
+    if failures:
+        return _cannot_read(root, failures)
     return (
         f"fr: artifacts in {root} were written for a different fr and must be "
         "migrated before this command can run.",
@@ -586,6 +606,30 @@ def _will_not_act_here(root: Path, because: str, detail: str) -> tuple[str, ...]
         "  apply:    fr migrate artifacts --yes",
         f"  bypass (recovery only):  {SKIP_ENV_VAR}=1 fr <command>",
     )
+
+
+RECORDS_DIR_SUFFIX: Final = ".records"
+"""The record kind's directory suffix, as its locator in `registry` spells it
+(`fr.record` sits above this layer, so its constant is not imported here)."""
+
+
+def _cannot_read(root: Path, failures: Sequence[FailedAction]) -> tuple[str, ...]:
+    lines = [
+        f"fr: {len(failures)} artifact(s) in {root} cannot be read, so fr cannot tell "
+        "whether they are current — no migration can fix this:",
+        *(f"  {_rel(f.path, root)}: {f.error}" for f in failures),
+    ]
+    if any(f.path.parent.name.endswith(RECORDS_DIR_SUFFIX) for f in failures):
+        lines.append(
+            f"  Every file under docs/superpowers/runs/<run>{RECORDS_DIR_SUFFIX}/ is read "
+            "as one step's record. Scratch inputs (for `fr plan create`, say) belong "
+            "outside the repository — in $TMPDIR."
+        )
+    lines += [
+        "  Fix or move each file, then re-run the command.",
+        f"  bypass (recovery only):  {SKIP_ENV_VAR}=1 fr <command>",
+    ]
+    return tuple(lines)
 
 
 def _adoption_offer(repo_root: Path) -> tuple[str, ...]:

@@ -156,3 +156,25 @@ def phase_asks(
                 others |= asks[q.number]
         out.append(PhaseAsks(number=p.number, asks=asks[p.number], own=asks[p.number] - others))
     return out
+
+
+def tier_id(plan_slug: str, number: int) -> str:
+    """The spec-journal decision that says why phase `number` is above
+    `standard` (#813) — `tier-<plan>-p<N>`, superseded as `…-p<N>-<k>`."""
+    return f"tier-{plan_slug}-p{number}"
+
+
+def tier_reasons(entries: Iterable[JournalEntry], plan_slug: str) -> frozenset[int]:
+    """The phase numbers whose tier has a recorded reason: a
+    `tier-<plan>-p<N>[-<k>]` decision, or a `phase-split-<plan>-p<N>` split
+    whose reason is `tier:` (the phase exists because it needs that tier,
+    which already says why — recording it twice would be ceremony)."""
+    entries = list(entries)
+    id_re = re.compile(rf"^tier-{re.escape(plan_slug)}-p([1-9][0-9]*)(?:-[1-9][0-9]*)?$")
+    reasoned = {
+        int(m.group(1))
+        for e in entries
+        if e.kind == "decision" and e.title.strip() and (m := id_re.match(e.id)) is not None
+    }
+    reasoned |= {n for n, d in split_decisions(entries, plan_slug).items() if d.reason == "tier"}
+    return frozenset(reasoned)

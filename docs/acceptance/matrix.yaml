@@ -576,9 +576,11 @@ rows:
       - super-fr:tests/unit/test_isolation_cmd.py
       - super-fr:tests/integration/test_install_sh.py
       - super-fr:tests/integration/test_install_validator_wrapper.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
-    notes: Scaffold install/refusal, isolation fail-closed behavior, and installer-output
-      cleanup are pinned per-PR.
+    notes: 'Scaffold install/refusal, isolation fail-closed behavior, and installer-output
+      cleanup are pinned per-PR. gh#826: the wrapper runs fr validate plans (bundled
+      validator) on any harness, falling back to the marketplace copy (test_closeout_run_clean.py).'
   - id: migrate-creates-missing-spec-table
     capability: Migrate v1-to-v2
     acceptance: fr migrate v1-to-v2 creates the spec-s Implementation Plans table (canonical
@@ -4759,10 +4761,13 @@ rows:
       - super-fr:tests/unit/test_run_closeout.py
       - super-fr:tests/unit/test_pickup_cmd.py
       - super-fr:tests/unit/test_run_cli.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
     notes: 'gh#610 phase 4: closeout_brief unit-pinned (ordering, Test Plan/out-of-scope
       conditionals, refusal), fr pickup --run''s mode/refusal CLI tests, and the deliver-resolve/finished-advance
-      handoff tests in test_run_cli.py.'
+      handoff tests in test_run_cli.py. gh#811/#825: pickup --run in an unpulled clone
+      names the run on origin/<default>, and the brief downs its housekeeping workspace
+      (test_closeout_run_clean.py).'
   - id: triage-batch-state
     capability: Backlog triage
     acceptance: An operator can group judged issues into a named batch; fr refuses a
@@ -5143,6 +5148,32 @@ rows:
     status: ci
     notes: 'gh#775: pinned per-PR by test_acceptance_init_no_ci.py (scaffold, ci gate
       on add/set-status, byte-exact gitignore)'
+  - id: acceptance-init-commits-writes
+    capability: Acceptance matrix
+    acceptance: fr acceptance init commits every file it writes on a working branch,
+      and reports each as created or modified, so the worktree is clean afterwards
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775 (reopened after take 10): pinned per-PR by test_acceptance_init_commit.py
+      — clean tree after init, .gitignore reported modified, no commit on rerun, default
+      branch writes but says not committed'
+  - id: acceptance-refuses-pipeline-evidence
+    capability: Acceptance matrix
+    acceptance: A row whose level evidence is one of fr's own pipeline artifacts (a
+      spec, plan, run or journal) is refused as a process directive when written; existing
+      rows still move
+    origin:
+    - super-fr:docs/superpowers/journals/debug/2026-09-29-acceptance-init-commit.md
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_init_commit.py
+    status: ci
+    notes: 'gh#775: enforced in the step-record engine (add, set-status --level, brainstorm
+      record); pinned per-PR by test_acceptance_init_commit.py'
   - id: lifecycle-acceptance-drop-level
     capability: Artifact lifecycles
     acceptance: An operator can remove a stale evidence ref from an acceptance row with
@@ -5522,9 +5553,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_pickup_branch.py
       - super-fr:tests/unit/test_run_closeout.py
+      - super-fr:tests/unit/test_closeout_run_clean.py
     status: ci
-    notes: fr pickup --branch and fr pickup --run's delegation to branch_closeout_brief
-      are covered by unit tests
+    notes: 'fr pickup --branch and fr pickup --run''s delegation to branch_closeout_brief
+      are covered by unit tests; gh#825: both modes end by downing the housekeeping
+      workspace (test_closeout_run_clean.py).'
   - id: archive-branch-every-artifact
     capability: Branch-keyed close-out
     acceptance: '`fr archive --branch <b>` archives every live artifact the merged branch

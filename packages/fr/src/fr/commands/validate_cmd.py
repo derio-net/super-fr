@@ -54,3 +54,31 @@ def artifacts_cmd(
         err=True,
     )
     raise typer.Exit(1)
+
+
+@validate_app.command(
+    "plans",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def plans_cmd(ctx: typer.Context) -> None:
+    """Run the plan-file validator bundled with this fr: `[--profile <yaml>] [FILE]...`.
+
+    The same script the super-fr plugin ships as `scripts/validate-plans.sh`,
+    carried inside the fr package so a repo's committed wrapper can reach it on
+    any harness — not only where the Claude Code marketplace put a copy (gh#826).
+    No FILE validates every plan under docs/superpowers/. Exits with the
+    validator's own code: 0 valid, 1 with the problems on stderr.
+    """
+    import importlib.resources
+    import subprocess
+
+    script = importlib.resources.files("fr") / "data" / "validate-plans.sh"
+    with importlib.resources.as_file(script) as path:
+        done = subprocess.run(
+            ["bash", str(path), *ctx.args], check=False, capture_output=True, text=True
+        )
+    if done.stdout:
+        typer.echo(done.stdout, nl=False)
+    if done.stderr:
+        typer.echo(done.stderr, nl=False, err=True)
+    raise typer.Exit(done.returncode)

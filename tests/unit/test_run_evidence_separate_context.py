@@ -764,3 +764,23 @@ def test_p4_f3_the_review_date_is_compared_in_utc_east_and_west(
     assert (result.exit_code == 0) is accepted, result.output
     if not accepted:
         assert "before this step opened" in _squash(result.output)
+
+
+@pytest.mark.parametrize("harness", ["opencode", "hermes"])
+def test_an_unobservable_reviewer_names_dispatches_not_questions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
+) -> None:
+    """#815: the reviewer gate reads subagent dispatches, so its reason must
+    not borrow the operator gate's `questions` wording."""
+    from fr.commands import run_cmd
+
+    for key in ("CLAUDECODE", "CLAUDE_PLUGIN_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("FR_HARNESS", harness)
+
+    assert run_cmd._why_unobservable("subagent dispatches") == (
+        f"fr has no transcript reader for {harness}'s subagent dispatches"
+    )
+    assert run_cmd._why_unobservable("questions") == (
+        f"fr has no transcript reader for {harness}'s questions"
+    )
