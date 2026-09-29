@@ -215,3 +215,8 @@ stay green.
 
 Closed by p1-r3 (commit 6549e2a1): a backgrounded dispatch's launch ack is
 never `returned`; the child's `SubagentHandback` report is. Tests as p1-r3.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-redispatch-plugin-upgrade created=2026-09-29T14:53:32+00:00 phase=2 -->
+### p2-redispatch-plugin-upgrade · discovery · phase 2 re-dispatched as general-purpose + fr-phase-executor.md instructions (phase 2)
+
+The first phase-2 executor stalled when the host slept (watchdog, 600 s) with nothing committed; closed with advance --redispatch. The super-fr plugin was upgraded 4.39.0 -> 4.40.0 mid-session, removing the super-fr:* agent types from this session's registry, so the re-dispatch is a general-purpose agent instructed to follow super-fr/4.40.0/agents/fr-phase-executor.md, committing after every task.
