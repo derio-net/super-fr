@@ -39,3 +39,8 @@ Asked the operator: #762 moved fr-goal's spec-review to tier hard and added acce
 ### no-refactor-p1-t7 · decision · no-refactor-because: P1.T7 (phase 1)
 
 The task is the quality gate and the acceptance moves: it runs checks and moves rows, and writes no code to clean.
+
+<!-- fr:journal kind=review scope=plan id=review-branch created=2026-09-29T18:29:13+00:00 phase=2 -->
+### review-branch · review · Independent adversarial review of the whole branch: 3 findings, all in scope, all fixed (phase 2)
+
+A general-purpose subagent that wrote none of it reviewed origin/main...HEAD against the spec. Q1 (nothing outside the input layer lost): verified intact — workflows (4.28 lists + visual/single-phase), phase sizing, light path incl. the spec reviewer's plan section and tests: reuse, visual evidence, pr_body Post-merge + Tests, question-round prose, services, close-out, #828's deliver changes, the review-unit-holder exclusion. Q2 (no path after brainstorm reads the input): none found across packages/*/src (incl. fr-opencode-plugin), workflows, skills, agents, rules, hooks. Record 6->7 checked against artifact-versioning: compliant. Findings rv-c1..rv-c3 (all low, in scope) fixed.
