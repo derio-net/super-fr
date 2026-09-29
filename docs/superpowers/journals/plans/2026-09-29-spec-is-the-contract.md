@@ -29,3 +29,8 @@ P1.T7.S2 requires fr acceptance check to pass, but phase 1 deletes the test file
 ### p1-rebased-early · discovery · #828 had already merged at start; rebased onto origin/main before phase 1 (phase 1)
 
 origin/main already carried #828 (deliver-handoff, 6c3c01e8) and v4.40.1 when phase 1 began, and #828 touches the deliver/PR-body code this plan edits, so the branch was rebased then rather than at P2.T5.S3. P2.T5.S3 still rebases onto whatever origin/main is at that point.
+
+<!-- fr:journal kind=decision scope=plan id=p1-spec-review-tier-emits created=2026-09-29T18:01:32+00:00 phase=1 -->
+### p1-spec-review-tier-emits · decision · spec-review keeps tier: hard and emits acceptance (operator's answer) (phase 1)
+
+Asked the operator: #762 moved fr-goal's spec-review to tier hard and added acceptance to its emits, justified by traceability alone, and the light path copied both. Operator answer: keep both as-is on both shapes. Only the evidence lists and the comments change; the fr-goal comment now gives a neutral reason for the acceptance emit.
