@@ -171,3 +171,68 @@ tree and after bookkeeping-only commits, refused after a code change). The row
 `acceptance`, so the move (`--status ci --level
 unit=super-fr:tests/unit/test_run_suite_reuse.py`) belongs to a step that does
 (deliver).
+
+<!-- fr:journal kind=finding scope=plan id=r2-1 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-1 · finding [open] (reviewer: in scope) · Phase witness records HEAD's tree even when the suite ran on a dirty working tree (phase 2)
+
+Reviewer (high, in scope): _verify_phase_tests_log / code_tree. Suite run with an uncommitted Δ, resolve records HEAD's tree (without Δ), Δ discarded, deliver reuses a log that never ran on the delivered tree. Fix: refuse a done phase resolve while code is dirty.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-2 · finding [open] (reviewer: in scope) · Freshness cannot see deletions, renames or reverts (phase 2)
+
+Reviewer (high, in scope): newest_code_mtime skipped deleted paths and only compared merge-base-diff paths; git mv / git rm / edit-restored-to-base after the suite escaped. Fix: all tracked code paths plus their directories plus surviving parents of deleted/renamed paths.
+
+<!-- fr:journal kind=finding scope=plan id=r2-3 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-3 · finding [open] (reviewer: in scope) · A witness recorded on a failed resolve stays reusable (phase 2)
+
+Reviewer (medium, in scope): offered evidence stored whatever the state and merged across attempts; _latest_tests_witness ignored unit state. Fix: tree only on done, skip non-done units, drop the prior witness on a retry without tests.
+
+<!-- fr:journal kind=finding scope=plan id=r2-4 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-4 · finding [open] (reviewer: in scope) · An unobserved phase log becomes a verified-looking deliver witness (phase 2)
+
+Reviewer (medium, in scope): reuse of an unobserved=tests witness recorded no unobserved and the PR body claimed a clean reuse. Fix: propagate unobserved and say "unverified".
+
+<!-- fr:journal kind=finding scope=plan id=r2-5 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-5 · finding [open] (reviewer: in scope) · A phase log written inside the worktree blocks reuse on an unchanged tree (phase 2)
+
+Reviewer (low/medium, in scope): the untracked log itself counted as dirty code at deliver. Fix: exclude the witness's own log (path and bytes match).
+
+<!-- fr:journal kind=finding scope=plan id=r2-6 created=2026-09-29T08:54:43+00:00 phase=2 state=open review_scope=in -->
+### r2-6 · finding [open] (reviewer: in scope) · Weak refusal assertion; missing scope tests for offered evidence (phase 2)
+
+Reviewer (low, in scope): the undeclared-evidence test asserted only exit 2; no test for tests on a flat step or deliver without tests.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-09-29T08:54:43+00:00 phase=2 -->
+### review-phase-2 · review · independent code review of phase 2: 6 findings (all in scope), all fixed (phase 2)
+
+Reviewer a393ffe12dcc351f8 (dispatched feature-dev:code-reviewer, opus) reviewed 25a21d36, 3ff99386, 2f94183b against spec §D, plan 02.yaml and the p2-* journal entries, probing forged/stale/foreign logs, dirty/untracked state, deletions/renames, failed resolves and unobserved harnesses. Raised r2-1..r2-6; confirmed _OFFERED_EVIDENCE scope, deliver still mandatory, the plain deliver path unchanged, foreign-session logs refused, no-merge-base fallback, records-dir and outside-repo logs handled. Received: each finding verified against the code and fixed in ce830a94 with red-first tests (15 new failing tests went green; 2 tightening tests already green); spec §D prose updated to the tightened freshness rule, its false-refusal-never-false-pass trade-off stated. Performance note (200-commit walk on the refusal path only) accepted as is.
+
+<!-- fr:journal kind=finding scope=plan id=r2-1-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-1 -->
+### r2-1-resolved · finding [fixed] · resolves r2-1: Phase witness records HEAD's tree even when the suite ran on a dirty working tree (phase 2)
+
+ce830a94: done phase resolve refuses while any code path is uncommitted (log excluded); test_a_dirty_tree_at_phase_resolve_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=r2-2-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-2 -->
+### r2-2-resolved · finding [fixed] · resolves r2-2: Freshness cannot see deletions, renames or reverts (phase 2)
+
+ce830a94: newest_code_mtime over all tracked code paths, their directories and surviving parents of deleted/renamed paths; rename/delete/restore tests plus end-to-end rename refusal.
+
+<!-- fr:journal kind=finding scope=plan id=r2-3-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-3 -->
+### r2-3-resolved · finding [fixed] · resolves r2-3: A witness recorded on a failed resolve stays reusable (phase 2)
+
+ce830a94: tree witness only on done; non-done units skipped; retry without tests drops the witness (units.without_tests_evidence); three tests.
+
+<!-- fr:journal kind=finding scope=plan id=r2-4-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-4 -->
+### r2-4-resolved · finding [fixed] · resolves r2-4: An unobserved phase log becomes a verified-looking deliver witness (phase 2)
+
+ce830a94: reuse of an unobserved witness notes unobserved=tests and the PR body line says unverified; test.
+
+<!-- fr:journal kind=finding scope=plan id=r2-5-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-5 -->
+### r2-5-resolved · finding [fixed] · resolves r2-5: A phase log written inside the worktree blocks reuse on an unchanged tree (phase 2)
+
+ce830a94: _own_log_path excludes the witness's own log (path and bytes) from dirty checks; two tests.
+
+<!-- fr:journal kind=finding scope=plan id=r2-6-resolved created=2026-09-29T08:54:43+00:00 phase=2 state=fixed resolves=r2-6 -->
+### r2-6-resolved · finding [fixed] · resolves r2-6: Weak refusal assertion; missing scope tests for offered evidence (phase 2)
+
+ce830a94: message asserted; tests for tests on a flat step and deliver without tests.
