@@ -73,6 +73,32 @@ def test_install_delivers_four_agents_to_opencode_dir(
     assert actual_names == expected_agents, f"Expected agents {expected_agents}, got {actual_names}"
 
 
+RETIRED_AGENTS = (
+    "fr-phase-reviewer.md",
+    "fr-phase-reviewer-mechanical.md",
+    "fr-phase-reviewer-standard.md",
+    "fr-phase-reviewer-hard.md",
+)
+"""fr-phase-reviewer, shipped 4.29–4.40, removed in 5.0.0 (spec
+2026-09-29-spec-is-the-contract): an upgrade must not leave its copies behind."""
+
+
+@pytest.mark.parametrize("flags", [(), ("--uninstall",)], ids=["install", "uninstall"])
+def test_the_retired_phase_reviewer_agents_are_purged(
+    home_with_opencode_config: Path, flags: tuple[str, ...]
+) -> None:
+    agent_dir = home_with_opencode_config / ".config" / "opencode" / "agent"
+    agent_dir.mkdir(parents=True)
+    for name in RETIRED_AGENTS:
+        (agent_dir / name).write_text("---\nmode: subagent\n---\nstale\n")
+    (agent_dir / "my-own-agent.md").write_text("mine\n")
+
+    _run_install(home_with_opencode_config, *flags)
+
+    assert not any((agent_dir / name).exists() for name in RETIRED_AGENTS)
+    assert (agent_dir / "my-own-agent.md").read_text() == "mine\n"
+
+
 def test_no_model_is_pinned_when_fr_is_not_on_path_at_all(
     home_with_opencode_config: Path,
 ) -> None:

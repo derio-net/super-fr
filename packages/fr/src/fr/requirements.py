@@ -49,7 +49,8 @@ class RequirementsError(Exception):
 _REQUIREMENTS_HEADING = "## Requirements"
 _LEGACY_HEADER = ["id", "requirement", "source"]
 _ID_RE = re.compile(r"^R[1-9][0-9]*$")
-_LIST_ITEM_RE = re.compile(r"^(R[1-9][0-9]*)\.\s+(\S.*)$")
+_LIST_ITEM_RE = re.compile(r"^(?:[-*]\s+)?(R[1-9][0-9]*)\.\s+(\S.*)$")
+"""`R<n>. <text>`, optionally behind a Markdown `-`/`*` bullet."""
 
 
 def _locate_section(text: str) -> tuple[list[str], int] | None:

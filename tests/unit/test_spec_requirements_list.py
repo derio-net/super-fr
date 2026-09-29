@@ -84,3 +84,12 @@ def test_a_non_increasing_id_names_its_line() -> None:
 def test_gaps_in_the_numbering_are_allowed() -> None:
     spec = "## Requirements\n\nR1. One.\nR3. Three.\n"
     assert [r.id for r in parse_requirements(spec).items] == ["R1", "R3"]
+
+
+@pytest.mark.parametrize("bullet", ["- ", "* "])
+def test_a_bulleted_list_reads_the_same(bullet: str) -> None:
+    """Review c1: a Markdown bullet before `R<n>.` is the commonest near-miss;
+    reading it as absent would skip phase sizing silently."""
+    spec = LIST_SPEC.replace("R1.", f"{bullet}R1.").replace("R2.", f"{bullet}R2.")
+    assert has_requirements(spec)
+    assert _pairs(spec) == _pairs(LIST_SPEC)
