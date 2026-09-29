@@ -48,6 +48,7 @@ steps:
   - id: two
     kind: cli
     run: "true"
+    gate: operator
   - id: three
     kind: agent
     skill: fr-execute
@@ -116,7 +117,8 @@ def test_a_dirty_run_survives_a_forced_down_and_comes_back_with_up(tmp_path: Pat
     wt = Path(state.worktree)
     assert _git(wt, "status", "--porcelain", "--", "docs/superpowers/runs") == ""
 
-    # 2. advance from the worktree: `one` runs and the cursor moves to `two`.
+    # 2. advance from the worktree: `one` runs and the cursor moves to `two`,
+    #    whose operator gate stops the chain there (spec 2026-09-29 §B, R5).
     #    fr commits that too now, so un-commit it (mixed reset: the file keeps
     #    its content) to recreate the scenario this test is about — a cursor
     #    whose latest write is NOT committed when the workspace is torn down.

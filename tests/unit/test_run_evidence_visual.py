@@ -449,7 +449,9 @@ def _resolve(repo: Path, shipped: Path, step: str, item: str | None, record: Pat
     argv = ["run", "resolve", "r1", "--step", step]
     if item:
         argv += ["--item", item]
-    return _run(repo, shipped, [*argv, "--record", str(record)], root)
+    # About the evidence gate alone: the test advances itself (`--record`
+    # advances by default, spec 2026-09-29-fr-goal-light-path §B).
+    return _run(repo, shipped, [*argv, "--record", str(record), "--no-advance"], root)
 
 
 def _fresh_shot(tmp_path: Path, name: str = "all.png", data: bytes = b"\x89PNG one") -> Path:
