@@ -135,9 +135,9 @@ state:
       ticked_at: '2026-09-29T18:29:14+00:00'
       note: null
     P2.T5.S3:
-      state: ' '
-      ticked_at: null
-      note: null
+      state: x
+      ticked_at: '2026-09-29T18:36:47+00:00'
+      note: 'Draft PR #851, left as a draft for the operator''s review.'
   completion:
     at: null
     note: null
