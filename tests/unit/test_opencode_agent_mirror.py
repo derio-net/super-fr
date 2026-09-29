@@ -63,7 +63,7 @@ def test_canonical_agents_has_base_plus_one_per_tier(tmp_path: Path) -> None:
     agents = sync_opencode.canonical_agents(models_path=_no_repo_models_path(tmp_path))
     expected = {
         name
-        for stem in ("fr-phase-executor", "fr-phase-reviewer", "fr-spec-reviewer")
+        for stem in ("fr-phase-executor", "fr-spec-reviewer")
         for name in (stem, *(f"{stem}-{tier}" for tier in _phase_tier_names()))
     }
     assert set(agents) == expected

@@ -177,28 +177,3 @@ class TestSpecReviewerGuard:
 
     def test_spec_reviewer_without_flag_allowed(self) -> None:
         assert decision(run_hook(dispatch(SPEC_REVIEWER_QUALIFIED))) is None
-
-
-# --- #778: the fr-phase-reviewer is refused the flag too -----------------------
-#
-# fr-goal §6 dispatches `super-fr:fr-phase-reviewer` to review the phase's code
-# on the feature branch and to fetch the operator input from that branch's
-# journals. A worktree cut from `main` has neither — #420 for a reviewer.
-
-PHASE_REVIEWER_QUALIFIED = "super-fr:fr-phase-reviewer"
-PHASE_REVIEWER_BARE = "fr-phase-reviewer"
-
-
-class TestPhaseReviewerGuard:
-    @pytest.mark.parametrize("subagent_type", [PHASE_REVIEWER_QUALIFIED, PHASE_REVIEWER_BARE])
-    def test_phase_reviewer_with_worktree_denied(self, subagent_type: str) -> None:
-        assert decision(run_hook(dispatch(subagent_type, "worktree"))) == "deny"
-
-    def test_phase_reviewer_deny_reason_is_its_own(self) -> None:
-        why = reason(run_hook(dispatch(PHASE_REVIEWER_QUALIFIED, "worktree")))
-        assert "fr-phase-reviewer" in why
-        assert "invisible" in why and "#420" in why
-        assert "fr-spec-reviewer" not in why
-
-    def test_phase_reviewer_without_flag_allowed(self) -> None:
-        assert decision(run_hook(dispatch(PHASE_REVIEWER_QUALIFIED))) is None

@@ -119,8 +119,8 @@ NEW_CONTRACT_MARKERS = tuple(
 # sat on per-QUESTION tabs, so sessions read it two ways (`1–4 of 6` on every
 # tab, or a sliding `1–4`, `2–4`, … `5–5 of 5`). Each question now carries its
 # own position in the round. And "back-to-back" calls went out in parallel in
-# one message, which Claude Code shows last-first, so the interpretation
-# questions meant to come first arrived last: the calls are sequential, each
+# one message, which Claude Code shows last-first, so the questions meant
+# to come first arrived last: the calls are sequential, each
 # after the previous is answered, and a round is split evenly.
 DIALOG_PART_MARKERS = tuple(
     m.casefold()
@@ -130,7 +130,6 @@ DIALOG_PART_MARKERS = tuple(
         "never more than one question call per message",
         "split evenly",
         "5 questions are 3 + 2",
-        "interpretations of the input come first",
     )
 )
 

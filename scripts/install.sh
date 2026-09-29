@@ -614,13 +614,6 @@ if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
   echo "  WARNING: could not allowlist fr-spec-reviewer in the agent-worktree hook" >&2
   echo "  (see the error above) — fr-goal's spec-review dispatch will be blocked." >&2
 fi
-# And fr-phase-reviewer (super-fr#778): it reviews the phase's code and fetches
-# the operator input from journals that exist only on the feature branch.
-if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
-     "$CLAUDE_DIR/hooks/agent-worktree-required.sh" super-fr:fr-phase-reviewer; then
-  echo "  WARNING: could not allowlist fr-phase-reviewer in the agent-worktree hook" >&2
-  echo "  (see the error above) — fr-goal's review-phase dispatch will be blocked." >&2
-fi
 
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
 # because it now shells out to `fr models apply`.
