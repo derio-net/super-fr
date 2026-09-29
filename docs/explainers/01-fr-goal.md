@@ -240,6 +240,23 @@ a step that quietly never runs
 (`docs/superpowers/specs/2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`,
 section 4.A).
 
+**A second shape ships beside it, for small goals.** Much of what a run costs
+is fixed: it does not shrink when the goal does. On a goal that fits in one
+phase, those fixed costs were most of the bill. `fr-goal-light`
+(`plugins/super-fr/workflows/fr-goal-light.yaml`) is the same pipeline with
+one review stage fewer before any code exists. The plan is written first. Then
+a single reviewer reads the specification and the plan together, where
+`fr-goal` reviews the specification first and the plan in a stage of its own.
+The per-phase code review stays. You can start
+there with `fr run start fr-goal-light`. More often the question round decides
+it: the brainstorm's record says `shape: fr-goal-light`, and the run moves onto
+the lighter shape. That is allowed only at the first step, before anything
+else has moved, and only onto a shape that begins with that same step. The
+light `plan` step then refuses a plan with more than one agentic phase and
+names them. So "this goal is small" is checked when the plan is written; it is
+not a hope carried through the run
+(`docs/superpowers/specs/2026-09-29-fr-goal-light-path-design.md`, section A).
+
 ### The run keeps its place
 
 Starting a run creates `docs/superpowers/runs/<run-id>.yaml` inside the isolated

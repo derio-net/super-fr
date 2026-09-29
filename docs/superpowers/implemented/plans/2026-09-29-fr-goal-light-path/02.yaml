@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 2
+  title: deliver reuses a verified phase suite log on an unchanged code tree (spec
+    §D)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - deliver-suite-reuse
+  tier: hard
+  files:
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/run/telemetry.py
+  - packages/fr/src/fr/run/code_tree.py
+  - packages/fr/src/fr/record/pr_body.py
+  - tests/unit/test_run_suite_reuse.py
+  - tests/unit/test_run_evidence.py
+  - tests/unit/test_run_tests_log_opencode.py
+  estimate_lines: 550
+tasks:
+- number: 1
+  title: Code tree hash and freshness (pure helpers)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_run_suite_reuse.py — in a tmp git repo: `code_tree(repo)`
+      (new module packages/fr/src/fr/run/code_tree.py) is sha256 of `git ls-tree -r HEAD`
+      minus paths under `docs/superpowers/` and `docs/acceptance/`; a commit touching only
+      those prefixes leaves it unchanged, a commit touching `src/x.py` changes it;
+      `dirty_code_paths(repo)` lists uncommitted non-excluded paths;
+      `newest_code_mtime(repo, base)` = max mtime over code paths differing from the
+      merge-base (committed + uncommitted). Confirm failure.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: implement code_tree.py (subprocess git, no new deps); tests pass.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: name the excluded prefixes once (`FR_ARTIFACT_PREFIXES`) with a docstring stating the spec §D limit.
+- number: 2
+  title: Offered `tests` evidence on phase units (writer, freshness, witness)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: add cases: an implement-phase record WITHOUT tests resolves exactly as today;
+      with `evidence: {tests: <log>}` written by a Bash redirect in the claimed agent's
+      subagent transcript (build a fake transcript + subagent file the way
+      tests/unit/test_run_evidence_separate_context.py does) it records
+      `tests=<name>@<sha12>;tree=<hash>` in the unit's evidence; a log no command wrote
+      is refused; a log older than a changed code file is refused (stale); under an
+      OpenCode env the log is recorded with `unobserved=tests`; a log inside
+      `<run>.records/` is refused. Confirm failures.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in run_cmd.py add `_OFFERED_EVIDENCE = {"tests"}`: `_parse_evidence`
+      (run_cmd.py ~1510) accepts an offered name on a `_PHASE_EVIDENCE`-context unit even
+      when undeclared; the missing-evidence rule (~1657) never counts it. Generalise
+      `telemetry.orchestrator_wrote_since` into `wrote_since(transcript, log, since,
+      main_thread=...)` keeping the old name as a thin wrapper; verify the phase log
+      against `witness_transcript(session, claimed_agent)` (main thread when inline);
+      OpenCode/Hermes → unobserved. Compute the tree AFTER the record's commit (store it
+      in the unit evidence as part of the witness). Tests pass.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: share the not-empty / not-in-records checks between `_verify_tests_log` and the phase path (one helper).
+- number: 3
+  title: 'deliver `tests: reuse`'
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: deliver with `evidence: {tests: reuse}`: passes when HEAD's code tree equals
+      the most recently resolved phase unit's recorded tree and no code path is dirty
+      (records `tests=reused:<unit>:<witness>`); passes after a bookkeeping-only commit
+      (docs/superpowers/**); refused after a code commit with the message naming the unit,
+      path count and one example path plus the fresh-run instruction; refused when no
+      unit carries a tests witness; a plain `tests: <log>` still follows today's
+      orchestrator-only rule. PR body (record/pr_body.py) renders the reused unit.
+      Confirm failures.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement the reuse branch in `_verified_evidence`'s tests handling and the PR-body line; tests pass.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + quality gate: ruff format/check, mypy, then
+      `(uv run pytest -q --no-cov -n auto; echo "exit=$?") > "$TMPDIR/p2-suite.log" 2>&1`.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-09-29T08:35:06+00:00'
+      note: null
+  completion:
+    at: '2026-09-29T08:35:06+00:00'
+    note: null
+    observed_prs: []

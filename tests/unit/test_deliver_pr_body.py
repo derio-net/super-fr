@@ -39,8 +39,7 @@ def _at_deliver(tmp_path: Path) -> Path:
     assert (
         fr(root, [*step, "implement-phase", "--item", "phase/1", "--record", str(rec)]).exit_code
         == 0
-    )
-    assert fr(root, ["run", "advance", RUN]).exit_code == 0
+    )  # one call: the resolve also briefs review-phase (R4)
     review = {
         "run": RUN, "step": "review-phase", "item": "phase/1", "outcome": "done",
         "journal": [{"kind": "review", "id": "r-p1", "title": "review", "body": "clean"}],
@@ -49,11 +48,7 @@ def _at_deliver(tmp_path: Path) -> Path:
     rec = write_record(root, review)
     out = fr(root, [*step, "review-phase", "--item", "phase/1", "--record", str(rec)])
     assert out.exit_code == 0, out.output
-    for _ in range(3):  # journal-check executes, then deliver is briefed
-        adv = fr(root, ["run", "advance", RUN])
-        assert adv.exit_code == 0, adv.output
-        if load_run_state(root, RUN).steps["deliver"].state == "running":
-            break
+    # One call (R4): the same resolve runs journal-check and briefs deliver.
     assert load_run_state(root, RUN).steps["deliver"].state == "running"
     commit_all(root, "at deliver")
     (root / "suite.log").write_text("n passed\n")

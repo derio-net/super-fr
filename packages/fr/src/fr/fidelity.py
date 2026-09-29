@@ -214,7 +214,7 @@ def check_fidelity(
     try:
         requirements = parse_requirements(spec_text)
     except RequirementsError as exc:
-        return [f"`## Requirements`: {exc}"], empty
+        return [str(exc)], empty  # names its own section and row shape (#776)
 
     problems: list[str] = []
     by_id = {r.id: r for r in requirements.items}
@@ -362,7 +362,7 @@ def check_inventory(
     try:
         req_ids = {r.id for r in parse_requirements(spec_text).items}
     except RequirementsError as exc:
-        return [f"`## Requirements`: {exc}"], empty
+        return [str(exc)], empty  # names its own section and row shape (#776)
     kinds: dict[str, str | None] = {e.id: getattr(e, "kind", None) for e in entries}
 
     problems: list[str] = []
