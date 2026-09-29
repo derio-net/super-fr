@@ -3,7 +3,13 @@ message (spec 2026-09-29-opencode-observe §D, R5/R7)."""
 
 from __future__ import annotations
 
-from fr.run.review_return import coverage_divergence, returned_coverage
+import pytest
+from fr.run.review_return import (
+    FindingsBlockError,
+    coverage_divergence,
+    parse_findings_block,
+    returned_coverage,
+)
 
 BLOCK = """```input-coverage
 | span | coverage |
@@ -85,3 +91,37 @@ def test_a_re_cut_block_names_the_first_row_it_moved() -> None:
 
     assert why is not None and "line 4" in why
     assert "'| \"fr observes\" | R1 |'" in why
+
+
+# --- parse_findings_block ----------------------------------------------------
+
+
+def test_a_findings_block_parses_to_id_scope_summary() -> None:
+    text = "Reviewed phase 2.\n\n```findings\np2a-r1 | in | x\np2a-r2 | out | y | z\n```\n"
+    assert parse_findings_block(text) == [("p2a-r1", "in", "x"), ("p2a-r2", "out", "y | z")]
+
+
+def test_none_is_an_empty_block_and_no_block_is_none() -> None:
+    assert parse_findings_block("Done.\n\n```findings\nnone\n```") == []
+    assert parse_findings_block("Reviewed phase 2 and found nothing to raise.") is None
+
+
+def test_the_trailing_block_is_the_one_read() -> None:
+    text = "```findings\np1-r1 | in | old\n```\nthen\n```findings\np2-r1 | in | new\n```"
+    assert parse_findings_block(text) == [("p2-r1", "in", "new")]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "p2-r1 | maybe | bad scope",
+        "p2-r1 | in",
+        "p2-r1 in x",
+        "finding-1 | in | not the brief's id",
+        "p2ab-r1 | in | two letters",
+        "p2-r1 | in |",
+    ],
+)
+def test_a_malformed_line_raises_naming_it(line: str) -> None:
+    with pytest.raises(FindingsBlockError, match="findings block"):
+        parse_findings_block(f"```findings\n{line}\n```")

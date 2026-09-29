@@ -1768,6 +1768,10 @@ def _verified_evidence(
         return verified
     assert review_journal is not None and target is not None
     slug, entries = review_journal
+    if target.phase is not None and "reviewer" in offered:
+        # Only where a dispatched reviewer is claimed: a shape without
+        # `reviewer` evidence names no subagent whose return could be owed.
+        _check_returned_findings(key, entries, target.phase, since)
     return {**verified, "findings": _closed_findings_witness(key, slug, entries, target)}
 
 
@@ -2075,7 +2079,7 @@ def _reviewer_dispatches(since: str | None) -> list[ChildDispatch] | None:
 def _return_unobserved(key: str, reviewer: str, why: str) -> None:
     _note_unobserved("reviewer-return")
     err_console.print(
-        f"[yellow]{key}: could not read what reviewer {reviewer} returned — {why}; "
+        f"[yellow]{key}: could not read what {reviewer} returned — {why}; "
         "the record is taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
         soft_wrap=True,
     )
@@ -2096,7 +2100,7 @@ def _check_returned_coverage(key: str, body: str, reviewer: str, since: str | No
     if dispatch is None or dispatch.returned is None:
         _return_unobserved(
             key,
-            reviewer,
+            f"reviewer {reviewer}",
             _why_unobservable() if dispatched is None else "its return is not readable yet",
         )
         return
@@ -2496,6 +2500,81 @@ def _target_finding_states(entries: list[JournalEntry], target: _EvidenceTarget)
         for e in entries
         if e.kind == "finding" and e.resolves is None and e.id in states
     }
+
+
+def _check_returned_findings(
+    key: str, entries: list[JournalEntry], phase: int, since: str | None
+) -> None:
+    """Every finding a phase reviewer RETURNED is a plan-journal finding
+    against `phase` with the reviewer's own scope tag — or exit 2 (spec
+    2026-09-29-opencode-observe §D, R7).
+
+    Every child dispatched since the review opened that is not a phase
+    executor is a reviewer of this unit, and each one's return owes a trailing
+    ```findings block (`none` when it raised nothing). The journal may hold
+    MORE findings than the blocks (the orchestrator's own), never fewer. A
+    session fr cannot read, or reviewers none of whose returns are readable
+    yet, is noted `unobserved=reviewer-return`."""
+    from fr.run.review_return import FindingsBlockError, parse_findings_block
+
+    dispatched = _reviewer_dispatches(since)
+    reviewers = [d for d in dispatched or [] if not _same_agent(d.agent_type, PHASE_EXECUTOR_AGENT)]
+    readable = [d for d in reviewers if d.returned is not None]
+    if dispatched is None or (reviewers and not readable):
+        _return_unobserved(
+            key,
+            "the phase reviewers",
+            _why_unobservable() if dispatched is None else "no return is readable yet",
+        )
+        return
+    problems: list[str] = []
+    returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
+    for d in readable:
+        try:
+            rows = parse_findings_block(d.returned or "")
+        except FindingsBlockError as e:
+            problems.append(f"{d.agent_id}: {e}")
+            continue
+        if rows is None:
+            problems.append(
+                f"{d.agent_id} returned no findings block — its return must end with a "
+                "```findings block (`none` when it raised nothing)"
+            )
+            continue
+        for fid, scope, _summary in rows:
+            if fid in returned:
+                problems.append(
+                    f"{fid} is returned by both {returned[fid][1]} and {d.agent_id} — "
+                    "give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)"
+                )
+                continue
+            returned[fid] = (scope, d.agent_id)
+    journaled = {
+        e.id: e for e in entries if e.kind == "finding" and e.resolves is None and e.phase == phase
+    }
+    missing = [fid for fid in returned if fid not in journaled]
+    if missing:
+        problems.append(
+            f"returned finding(s) not in the plan journal against phase {phase}: "
+            f"{', '.join(missing)} — journal each with its id and the reviewer's tag "
+            "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
+        )
+    for fid, (scope, reviewer) in returned.items():
+        entry = journaled.get(fid)
+        if entry is not None and entry.review_scope != scope:
+            problems.append(
+                f"{fid} is journaled with review_scope {entry.review_scope} but {reviewer} "
+                f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
+                "out-of-scope"
+            )
+    if problems:
+        _requirements_refusal(
+            key,
+            [
+                "refused — the review record does not match what the phase reviewers returned:",
+                *(f"- {p}" for p in problems),
+            ],
+        )
 
 
 def _closed_findings_witness(
@@ -3100,7 +3179,19 @@ def _build_member_brief(
         "for_each": group.for_each,
         "steps": [],
         "record": _record_brief(state, member, group, item),
+        **_findings_block_brief(member, item),
     }
+
+
+def _findings_block_brief(member: Step, item: str) -> dict[str, str]:
+    """`findings_block` for a phase review unit whose reviewer's return fr
+    checks (spec 2026-09-29-opencode-observe §D, R7) — else nothing."""
+    from fr.run.review_return import findings_block_rule
+
+    if not {"findings", "reviewer"} <= set(member.evidence):
+        return {}
+    phase = _item_phase(item)
+    return {} if phase is None else {"findings_block": findings_block_rule(phase)}
 
 
 def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:

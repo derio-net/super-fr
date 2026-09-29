@@ -6,7 +6,9 @@ the orchestrator's record is checked against. Pure text in, text out: no I/O,
 no harness. Two readers:
 
 - `returned_coverage` — the `input-coverage` block of a spec reviewer's
-  return, compared with the recorded review entry's by `coverage_divergence`.
+  return, compared with the recorded review entry's by `coverage_divergence`;
+- `parse_findings_block` — the trailing ```findings block a phase reviewer
+  ends its return with, each line `id | in/out | summary`, or `none`.
 """
 
 from __future__ import annotations
@@ -92,3 +94,57 @@ def coverage_divergence(recorded: str, returned: str) -> str | None:
             shown_b = "(no line)" if b is None else repr(b)
             return f"line {n + 1} of the block: recorded {shown_a}, returned {shown_b}"
     return None
+
+
+FINDING_ID_RE = re.compile(r"^p[1-9][0-9]*[a-z]?-r[1-9][0-9]*$")
+"""The brief-prescribed id: `p<N>-r<k>`, or `p<N><letter>-r<k>` when several
+reviewers share a phase (one letter each, assigned in the dispatch prompt)."""
+_FINDINGS_BLOCK_RE = re.compile(
+    r"^[ \t]*```findings[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
+)
+
+
+class FindingsBlockError(ValueError):
+    """A findings block fr cannot read: a malformed line, or an id that is not
+    the brief's `p<N>(<letter>)?-r<k>`."""
+
+
+def parse_findings_block(text: str) -> list[tuple[str, str, str]] | None:
+    """The `(id, scope, summary)` rows of the LAST ```findings block in `text`
+    — `[]` for the single line `none`, `None` when the text carries no block.
+    Raises `FindingsBlockError` naming the first line it cannot read."""
+    blocks = list(_FINDINGS_BLOCK_RE.finditer(text))
+    if not blocks:
+        return None
+    lines = [line.strip() for line in blocks[-1].group(1).splitlines() if line.strip()]
+    if lines == ["none"]:
+        return []
+    rows: list[tuple[str, str, str]] = []
+    for line in lines:
+        parts = [part.strip() for part in line.split("|", 2)]
+        if len(parts) != 3 or parts[1] not in ("in", "out") or not parts[2]:
+            raise FindingsBlockError(
+                f"findings block line {line!r} is not `<id> | in|out | <summary>`"
+            )
+        if FINDING_ID_RE.match(parts[0]) is None:
+            raise FindingsBlockError(
+                f"findings block id {parts[0]!r} is not the brief's p<N>-r<k> "
+                "(or p<N><letter>-r<k> with several reviewers)"
+            )
+        rows.append((parts[0], parts[1], parts[2]))
+    return rows
+
+
+def findings_block_rule(phase: int) -> str:
+    """What a review-phase brief tells its reviewer to end its return with
+    (spec §D, R7): the block `parse_findings_block` reads, ids prescribed."""
+    return (
+        "End your return with a fenced findings block, one line per finding, "
+        f"`<id> | in|out | <one-line summary>`, ids p{phase}-r<k> (k from 1) — or, "
+        f"when the orchestrator dispatched several reviewers, p{phase}a-r<k>, "
+        f"p{phase}b-r<k>, ... with the letter your dispatch prompt gives you — or the "
+        "single line `none` when you raised nothing:\n"
+        f"```findings\np{phase}-r1 | in | <summary>\n```\n"
+        "fr refuses the review-phase resolve while any returned id is missing from the "
+        "plan journal or carries another scope there."
+    )

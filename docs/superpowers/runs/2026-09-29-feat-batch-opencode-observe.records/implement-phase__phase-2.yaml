@@ -6,7 +6,7 @@ run: 2026-09-29-feat-batch-opencode-observe
 step: implement-phase
 item: phase/2
 outcome: done
-ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2]
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2]
 refactor:
   P2.T1: "Already built by review fix p1-r1 (2aa091c5): all three comparison sites call agent_name and _verify_reviewer reads observed_session(...).dispatches(opened). This phase only added the one missing RED case (a `general` child named as spec reviewer); no code changed, nothing to clean."
   P2.T2: "One 30-line helper (`_observed_holder`) called at the two resolve paths before any check reads the holder; it reuses the protocol, `agent_name` and the claim path, so there was no duplication to fold."
@@ -53,5 +53,30 @@ journal:
       or an unreadable session notes `unobserved=reviewer-return` with a
       yellow warning; the dispatch lookup is shared with `_verify_reviewer`
       (`_reviewer_dispatches`).
+  - kind: decision
+    id: p2-findings-check-needs-reviewer-evidence
+    title: The returned-findings check runs only on a review unit that names a reviewer
+    body: |
+      `_check_returned_findings` runs in the review-phase `done` path beside
+      `_closed_findings_witness`, but only when the unit's evidence carries
+      `reviewer`: a shape without it (the `[review, findings]` shapes in
+      test_run_evidence_findings.py) names no dispatched subagent whose
+      return could be owed, and noting `unobserved=reviewer-return` there
+      changed their recorded evidence for nothing. The shipped fr-goal
+      `review-phase` declares both, so it is always checked. Every
+      non-executor child dispatched since the unit opened is a reviewer
+      (§D); a reviewer whose return is not readable yet is skipped, and when
+      none is readable the unit notes `unobserved=reviewer-return`.
+  - kind: decision
+    id: p2-findings-block-in-the-brief
+    title: The review-phase dispatch brief carries a `findings_block` rule
+    body: |
+      Spec §D names "`fr run advance`'s dispatch brief, and fr-goal §6 prose"
+      as where the reviewer is told to end with the block; the plan's T4.S3
+      lists only the prose. The brief half is one key, `findings_block`
+      (`fr.run.review_return.findings_block_rule(N)`), added only for a
+      member whose evidence carries both `findings` and `reviewer` on a
+      `phase/<N>` item, so no other brief's key set moves (test_run_cli's
+      exact-key assertion is for a flat step and stays green).
 resolves: []
 evidence: {}
