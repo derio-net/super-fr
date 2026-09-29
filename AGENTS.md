@@ -210,7 +210,7 @@ manifests (skills + rules + hooks) built from those packages.
 
 The spec is the contract: nothing after brainstorm reads the raw input, and a
 requirement the spec does not state is a spec defect, fixed in the spec.
-(`docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md`)
+(spec `2026-09-29-spec-is-the-contract-design.md`)
 
 ## Dev commands
 
