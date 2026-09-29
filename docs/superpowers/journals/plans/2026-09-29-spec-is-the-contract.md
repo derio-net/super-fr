@@ -59,3 +59,8 @@ The list grammar accepts an optional -/* bullet; test_a_bulleted_list_reads_the_
 ### rv-c2 · finding [open] (reviewer: in scope) · fr-plan still says 'Requirements table' (phase 2)
 
 Independent review: fr-plan/SKILL.md:69.
+
+<!-- fr:journal kind=finding scope=plan id=rv-c2-resolved created=2026-09-29T18:29:31+00:00 state=fixed resolves=rv-c2 -->
+### rv-c2-resolved · finding [fixed] · resolves rv-c2: fr-plan still says 'Requirements table'
+
+Reworded to 'Requirements list'; mirrors resynced.
