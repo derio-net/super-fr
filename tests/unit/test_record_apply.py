@@ -29,8 +29,19 @@ from tests.unit.record_support import (
 from tests.unit.requirements_support import REVIEW_BLOCKS, seed_requirements
 
 
-def _resolve(root: Path, record: Path, step: str = "implement-phase", item: str | None = "phase/1"):
+def _resolve(
+    root: Path,
+    record: Path,
+    step: str = "implement-phase",
+    item: str | None = "phase/1",
+    *,
+    advance: bool = False,
+):
+    """Resolve `record` — about the apply alone, so `--no-advance` unless asked
+    (spec 2026-09-29-fr-goal-light-path §B: `--record` advances by default)."""
     argv = ["run", "resolve", RUN, "--step", step, "--record", str(record)]
+    if not advance:
+        argv.append("--no-advance")
     if item is not None:
         argv += ["--item", item]
     return fr(root, argv)

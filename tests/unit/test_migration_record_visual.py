@@ -41,7 +41,7 @@ def test_a_three_to_four_migration_is_registered() -> None:
     assert (hop.from_version, hop.to_version) == (3, 4)
 
 
-def test_the_chain_from_one_reaches_four_hop_by_hop() -> None:
+def test_the_chain_from_one_passes_through_four_hop_by_hop() -> None:
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
     assert [(s.from_version, s.to_version) for s in chain][:3] == [(1, 2), (2, 3), (3, 4)]
 
@@ -53,8 +53,10 @@ def test_a_v3_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert path.read_text() == before.replace("schema_version: 3\n", "schema_version: 5\n")
-    assert parse_record(path.read_text()).schema_version >= 4
+    assert path.read_text() == before.replace(
+        "schema_version: 3\n", f"schema_version: {RECORD_SCHEMA_VERSION}\n"
+    )
+    assert parse_record(path.read_text()).schema_version == RECORD_SCHEMA_VERSION
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
@@ -77,7 +79,7 @@ def test_an_unreadable_v3_record_is_refused_byte_identical(tmp_path: Path) -> No
 
     assert [f.path for f in report.failed] == [broken]
     assert broken.read_bytes() == before
-    assert artifact_kind("record").read_version(healthy) >= 4
+    assert artifact_kind("record").read_version(healthy) == RECORD_SCHEMA_VERSION
 
 
 def test_an_empty_v3_record_is_stamped(tmp_path: Path) -> None:
@@ -86,7 +88,7 @@ def test_an_empty_v3_record_is_stamped(tmp_path: Path) -> None:
     report = run_migrations(tmp_path, dry_run=False)
 
     assert report.ok, report.failed
-    assert artifact_kind("record").read_version(path) >= 4
+    assert artifact_kind("record").read_version(path) == RECORD_SCHEMA_VERSION
 
 
 def test_this_repos_own_live_records_are_current(repo_root: Path) -> None:

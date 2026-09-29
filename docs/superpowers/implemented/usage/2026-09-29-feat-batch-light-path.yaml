@@ -1,0 +1,98 @@
+schema_version: 1
+run: 2026-09-29-feat-batch-light-path
+captures:
+- host: h-522d5d33
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-09-29T11:32:54+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  - closeout
+  sessions:
+  - session: 180aad7a-775d-4ce0-85ee-3cb109642dfc
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 1190
+        cache_write: 2214524
+        cache_read: 87856937
+        output: 137039
+        usd: 44.25390099999998
+        usd_source: exact
+      claude-sonnet-5-5:
+        input: 16
+        cache_write: 88371
+        cache_read: 576410
+        output: 916
+        usd: 0.4277708
+        usd_source: exact
+      claude-haiku-4-5-20251001:
+        input: 0
+        cache_write: 0
+        cache_read: 0
+        output: 0
+        usd: 0.001623
+        usd_source: exact
+    activity:
+      implementation:
+        usd: 20.560388933867724
+        turns: 346
+      other:
+        usd: 15.073947106212191
+        turns: 143
+      paperwork:
+        usd: 9.048958759920044
+        turns: 102
+    steps:
+      (outside run):
+        usd: 9.963295103732676
+        turns: 60
+      brainstorm:
+        usd: 3.147806776072898
+        turns: 45
+      spec-review:
+        usd: 2.012453568471185
+        turns: 29
+      plan:
+        usd: 1.1560027603900151
+        turns: 11
+      implement:
+        usd: 27.041442331790165
+        turns: 424
+      deliver:
+        usd: 1.3622942595430267
+        turns: 11
+    briefs:
+      a2b237cceddcd66d8: 2525
+      step/spec-review: 1217
+      phase/1/implement-phase: 7958
+      ae42ae7153a2b5c23: 2664
+      a4ca75791b14195ac: 2589
+      phase/2/implement-phase: 8338
+      a393ffe12dcc351f8: 2826
+      ae14e6f26b49ce967: 3575
+      phase/3/implement-phase: 9545
+      a085d62a1ec8a036a: 3544
+      a9836a9c604d7b62d: 3327
+  - session: e830265d-dd01-4037-b3d3-ef2ae310b51b
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 10
+        cache_write: 74149
+        cache_read: 419379
+        output: 1392
+        usd: null
+        usd_source: none
+    activity:
+      other:
+        usd: null
+        turns: 2
+      paperwork:
+        usd: null
+        turns: 3
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
