@@ -9,3 +9,8 @@ take 10 (#817, OpenCode + GitLab, fr 4.35.0). Run A: orchestrator fixed review f
 ### 9e3febd2bcab · hypothesis · One root cause: §8 never fixes who owns each deliver act, or the order they happen in
 
 Three observed symptoms, one surface: (a) the Ready checklist names 'explicit review ok' but not its owner, and says the orchestrator marks ready 'ONLY when all three hold', so an orchestrator reads its own dispatched reviewer as the ok; (b) §8 orders verify (full suite) before the PR open/push, with no reason to; (c) fr's deliver handoff prints closeout → pickup → 'push it', so the LAST line an orchestrator acts on is the push, and the prose ('git push, relay that line') puts the relay mid-sentence, never as the turn's last message.
+
+<!-- fr:journal kind=root-cause scope=debug id=9596ebaa641f created=2026-09-29T11:13:00+00:00 -->
+### 9596ebaa641f · root-cause · Deliver's handoff contract fixed neither ownership nor order
+
+fr-goal §8 granted the orchestrator the ready transition ('ONLY when all three hold: mark it ready') with an ownerless 'explicit review ok'; ordered the local suite before the push for no reason; and fr's `_closeout_handoff_lines` printed closeout → pickup → push, so the push was the last instruction and the closeout the one dropped. Confirmed by reading SKILL.md §8 and by the existing test pinning closeout < pickup < push.
