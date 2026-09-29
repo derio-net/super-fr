@@ -4579,9 +4579,17 @@ rows:
       without confirmation
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+      - super-fr:tests/unit/test_journal_cmd.py
+      - super-fr:tests/unit/test_record_apply.py
+    status: ci
+    notes: 'The fidelity witness refuses spec-review while a finding a flagged fidelity
+      row or an invented inventory row names is closed other than fixed or refuted (naming
+      its fr journal resolve --state fixed line); fr journal resolve --state unconfirmed
+      and a record state: unconfirmed are refused citing d1-remove-only, while an existing
+      unconfirmed record still folds (Test Plan 3, 4).'
   - id: spec-fidelity-delegated-decisions
     capability: fr-goal-methodology
     acceptance: A "Your call." answer is recorded as a delegated decision, and the PR
