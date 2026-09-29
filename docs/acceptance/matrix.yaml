@@ -4726,6 +4726,16 @@ rows:
     levels: {}
     status: not-implemented
     notes: Added at planning (spec-is-the-contract); moves to ci in phase 1.
+  - id: spec-contract-dry-run
+    capability: fr-goal-methodology
+    acceptance: A super-fr-3 feature-C run on 5.0.0 records the brief and answers at
+      brainstorm, writes a plain R1..Rn list, runs spec review once with no coverage
+      or partition loop, and delivers
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-spec-is-the-contract-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: Operator-driven live check after the 5.0.0 release, before the talk recording.
   - id: closeout-verify-merge-default-branch
     capability: fr-goal-closeout
     acceptance: An operator on a repo whose default branch is master verifies a merged
