@@ -74,8 +74,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_plan_acceptance_links.py
     status: skipped
-    notes: Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
-      post-merge.
+    notes: 'Mechanics unit-pinned per-PR; end-to-end toy walk (Test Plan item 4) owed
+      post-merge. | 2026-09-29 take 10 (super-fr-3; fr 4.35.0, OpenCode 1.18.32, GitLab
+      no CI, devcontainer; run A gpt-6-sol, run B gpt-6-luna high; docs/audits/2026-09-29-take10-opencode-live-walk.md):
+      Walked twice end to end: rows born at brainstorm and linked in the plan, but flipped
+      by the orchestrator at deliver, not at execution.'
   - id: acceptance-added-since
     capability: Acceptance matrix
     acceptance: Mid-flight row additions are diffable against a base ref and defended
