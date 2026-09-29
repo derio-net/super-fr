@@ -29,3 +29,8 @@ plan_validator_wrapper.WRAPPER_TEXT (and scripts/install-validator-wrapper.sh) e
 ### fix-811 · finding [fixed] · #811 fixed: pickup --run points at the unpulled merge; status flags a behind working tree
 
 pickup_cmd._missing_run_exit fetches (best effort), then prints preserve.explain_missing. Its new _on_default_ref case names <remote>/<default> and the pull. status_cmd._behind_ref returns commits behind only when HEAD is an ancestor of the ref (a diverged branch is not stale); it drives a text warning and json behind_ref. Pinned by test_closeout_run_clean.py (6 tests, 5 red first).
+
+<!-- fr:journal kind=finding scope=debug id=fix-824 created=2026-09-29T11:56:04+00:00 state=fixed -->
+### fix-824 · finding [fixed] · #824 fixed: devcontainer-lock.json is git-excluded on up
+
+local._FR_OWNED_EXCLUDES = (.fr-isolation, /.devcontainer/*/devcontainer-lock.json), appended idempotently by _write_isolation_marker. The pattern is anchored so a repo's own lock file elsewhere stays visible. Pinned by 2 tests (red first).
