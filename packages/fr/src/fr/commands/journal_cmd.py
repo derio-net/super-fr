@@ -421,10 +421,10 @@ def resolve(
     if state == "unconfirmed":
         from fr.record.apply import unconfirmed_refusal
 
-        reason = unconfirmed_refusal(entry_id, target, scope)
-        if reason is not None:
-            err_console.print(f"[red]{reason}[/red] — nothing resolved", soft_wrap=True)
-            raise typer.Exit(2)
+        err_console.print(
+            f"[red]{unconfirmed_refusal(entry_id)}[/red] — nothing resolved", soft_wrap=True
+        )
+        raise typer.Exit(2)
     from fr.record.model import Resolution, StepRecord
 
     record_id = _record_id(entry_id, {e.id for e in entries})

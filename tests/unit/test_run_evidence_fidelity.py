@@ -125,6 +125,46 @@ def test_a_departure_closed_other_than_fixed_or_refuted_is_refused(
     assert load_run_state(repo, "r1").steps["spec-review"].state != "done"
 
 
+def _legacy_unconfirmed(repo: Path, fid: str) -> None:
+    """An `unconfirmed` resolution written before d1-remove-only retired the
+    verb: appended directly, as an older fr would have left it."""
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    append_journal_entry(
+        journal_path(repo, "spec", SLUG),
+        SLUG,
+        JournalEntry(
+            kind="finding",
+            scope="spec",
+            id=f"{fid}-r1",
+            created="2026-09-28T00:00:00+00:00",
+            title=f"resolves {fid}",
+            body="built as read",
+            state="open",
+            resolves=fid,
+            unconfirmed=True,
+        ),  # fmt: skip
+    )
+
+
+@pytest.mark.parametrize("body", [_INVENTED, _FLAGGED], ids=["invented", "reinterpreted"])
+@pytest.mark.parametrize("closing", ["never-resolved", "legacy-unconfirmed"])
+def test_a_departure_left_open_or_legacy_unconfirmed_is_refused(
+    tmp_path: Path, body: str, closing: str
+) -> None:
+    repo, shipped = _at_spec_review(tmp_path)
+    _spec_finding(repo, "s7")
+    if closing == "legacy-unconfirmed":
+        _legacy_unconfirmed(repo, "s7")
+    _review_entry(repo, body=body)
+
+    out = _spec_review(repo, shipped)
+
+    assert out.exit_code == 2, out.output
+    assert "s7" in _squash(out.output)
+    assert load_run_state(repo, "r1").steps["spec-review"].state != "done"
+
+
 @pytest.mark.parametrize("body", [_INVENTED, _FLAGGED], ids=["invented", "reinterpreted"])
 @pytest.mark.parametrize("state", ["fixed", "refuted"])
 def test_a_departure_removed_or_refuted_passes(tmp_path: Path, body: str, state: str) -> None:

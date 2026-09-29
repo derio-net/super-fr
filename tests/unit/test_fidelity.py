@@ -156,6 +156,14 @@ def test_whitespace_inside_a_clause_is_insensitive() -> None:
             "R2",
             id="clause-spans-an-elision",
         ),
+        pytest.param(
+            T2_SOUND.replace(
+                '| R2 | "delta" | kept |\n| R2 | "epsilon" | kept |\n',
+                '| R2 | "delta epsilon" | kept |\n',
+            ),
+            "R2",
+            id="clause-spans-two-quotes",
+        ),
         pytest.param(T2_SOUND.replace("| s4 |", "| s77 |"), "s77", id="unknown-finding-id"),
         pytest.param(T2_SOUND.replace("| s4 |", "| d9 |"), "d9", id="label-names-a-decision"),
         pytest.param(
@@ -193,13 +201,30 @@ def test_a_missing_or_duplicated_block_is_refused(body: str) -> None:
     assert problems and "requirement-fidelity" in problems[0]
 
 
+def test_a_clause_holding_an_escaped_quote_parses() -> None:
+    spec = _spec('| R1 | x | input "say "hi" now" |\n', "## Design\n")
+    entries = [_input('say "hi" now')]
+    problems, fc = check_fidelity(_fidelity('| R1 | "say \\"hi\\" now" | kept |\n'), spec, entries)
+    assert problems == []
+    assert fc.clauses == 1
+
+
 def test_the_requirements_grammar_never_imports_fidelity() -> None:
     """§C: fr.fidelity consumes fr.requirements and is not imported by it."""
+    import ast
+    from pathlib import Path
+
     import fr.requirements
 
-    source = open(fr.requirements.__file__).read()
-    assert "fr.fidelity" not in source
-    assert "from fr import fidelity" not in source
+    tree = ast.parse(Path(fr.requirements.__file__).read_text())
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+            imported.update(f"{node.module}.{alias.name}" for alias in node.names)
+    assert not any(name == "fr.fidelity" or name.startswith("fr.fidelity.") for name in imported)
 
 
 # ── Task 3: fence-aware Design sections and the inventory (§B, Test Plan 2) ──
@@ -241,6 +266,27 @@ def test_a_design_with_no_subsection_is_one_section() -> None:
 def test_a_fenced_design_heading_is_not_the_design() -> None:
     text = "```\n## Design\n### Fake\n```\n\n## Design\n\n### Real\n"
     assert parse_design_sections(text) == ["Real"]
+
+
+def test_a_longer_fence_is_not_closed_by_a_shorter_one() -> None:
+    text = (
+        "## Design\n\n### A. One\n\n````markdown\n```\n### Phantom\n```\n"
+        "## Requirements\n````\n\n### B. Two\n"
+    )
+    assert parse_design_sections(text) == ["A. One", "B. Two"]
+
+
+def test_a_backtick_run_with_a_backtick_in_its_info_string_is_not_a_fence() -> None:
+    text = "## Design\n\n### A. One\n\n```inline``` code at line start\n\n### B. Two\n"
+    assert parse_design_sections(text) == ["A. One", "B. Two"]
+
+
+def test_duplicate_design_section_names_are_refused_naming_them() -> None:
+    text = "## Design\n\n### Notes\n\n### Other\n\n### Notes\n"
+    with pytest.raises(FidelityError, match="Notes"):
+        parse_design_sections(text)
+    problems, _ = check_inventory(_inventory("| Notes | none | none |\n"), text, [])
+    assert any("duplicate" in p and "Notes" in p for p in problems), problems
 
 
 def test_no_design_raises_a_clear_error() -> None:

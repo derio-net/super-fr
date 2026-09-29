@@ -568,19 +568,14 @@ def test_a_spec_record_resolving_unconfirmed_is_refused_and_writes_nothing(
     assert snapshot(root) == files
 
 
-def test_unconfirmed_refusal_refuses_even_a_sound_spec_target() -> None:
+def test_unconfirmed_refusal_names_the_finding_and_the_decision() -> None:
     """The one statement of the rule `fr journal resolve` and a record share:
-    even an in-scope spec finding — which #759 let close `unconfirmed` — is
-    refused now."""
-    from fr.journal.model import JournalEntry
+    every new `unconfirmed` write is refused — even an in-scope spec finding,
+    which #759 let close that way."""
     from fr.record.apply import unconfirmed_refusal
 
-    target = JournalEntry(
-        kind="finding", scope="spec", id="f1", created="2026-09-28T00:00:00", title="t",
-        state="open", review_scope="in",
-    )  # fmt: skip
-    reason = unconfirmed_refusal("f1", target, "spec")
-    assert reason is not None and "d1-remove-only" in reason
+    reason = unconfirmed_refusal("f1")
+    assert "'f1'" in reason and "d1-remove-only" in reason
 
 
 def test_a_spec_record_refuses_input_on_a_non_discovery_kind(tmp_path: Path) -> None:

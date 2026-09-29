@@ -83,7 +83,9 @@ def _unfenced(lines: Sequence[str]) -> list[tuple[int, str]]:
     for idx, line in enumerate(lines):
         m = _FENCE_RE.match(line)
         if fence is None:
-            if m is not None:
+            # A backtick fence's info string may not hold a backtick
+            # (CommonMark), so "```inline``` text" is prose, not an opener.
+            if m is not None and not (m.group(1)[0] == "`" and "`" in m.group(2)):
                 fence = m.group(1)
                 continue
             out.append((idx, line))
@@ -112,6 +114,12 @@ def parse_design_sections(spec_text: str) -> list[str]:
             break
         if line.startswith("### "):
             sections.append(line[4:].strip())
+    duplicates = sorted({s for s in sections if sections.count(s) > 1})
+    if duplicates:
+        raise FidelityError(
+            f"duplicate Design section name(s) {duplicates}: the inventory keys rows by "
+            "section name, so rename one of each pair"
+        )
     return sections or ["Design"]
 
 
