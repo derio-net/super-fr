@@ -4546,9 +4546,15 @@ rows:
     origin:
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R1
     - super-fr:docs/superpowers/specs/2026-09-29-spec-fidelity-invention-design.md#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fidelity.py
+      - super-fr:tests/unit/test_run_evidence_fidelity.py
+    status: ci
+    notes: fr.fidelity.check_fidelity verifies the requirement-fidelity block partitions
+      every input-sourced requirement's quotes into clauses (elision-aware, table order,
+      contiguous, labels kept or a spec finding); the fidelity derived evidence on spec-review
+      refuses an unsound block (Test Plan 1, 3).
   - id: spec-fidelity-design-inventory
     capability: fr-goal-methodology
     acceptance: Spec review inventories every user-visible behaviour of every Design
