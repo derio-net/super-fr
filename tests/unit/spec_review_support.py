@@ -15,16 +15,12 @@ from pathlib import Path
 
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, spec_journal_slug
 
-from tests.unit.requirements_support import REVIEW_BLOCKS
-
 REVIEWER_ID = "spec-reviewer-1"
 
 
 def spec_review_evidence(repo: Path, spec_rel: str, *, entry_id: str = "spec-review") -> list[str]:
     """Record the review in `spec_rel`'s spec journal and return the
-    `--evidence` arguments. Call it AFTER `fr run advance` opened the step.
-    The shipped shape's `coverage` also needs `seed_requirements` to have run
-    before `brainstorm` resolved."""
+    `--evidence` arguments. Call it AFTER `fr run advance` opened the step."""
     slug = spec_journal_slug(Path(spec_rel).stem)
     append_journal_entry(
         journal_path(repo, "spec", slug),
@@ -35,9 +31,7 @@ def spec_review_evidence(repo: Path, spec_rel: str, *, entry_id: str = "spec-rev
             id=entry_id,
             created=datetime.now().replace(microsecond=0).isoformat(),
             title="independent spec review",
-            # The blocks `coverage` (2026-09-28 spec §D) and `fidelity` (2026-09-29
-            # spec §A/§B) derive from, over what `seed_requirements` writes.
-            body=f"no findings\n\n{REVIEW_BLOCKS}",
+            body="no findings",
         ),
     )
     return ["--evidence", f"review={entry_id}", "--evidence", f"reviewer={REVIEWER_ID}"]

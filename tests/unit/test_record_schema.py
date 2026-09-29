@@ -198,7 +198,7 @@ def test_the_record_kind_is_registered_and_validated(tmp_path: Path) -> None:
 # --- record 2 -> 3 (spec 2026-09-28 §H) ---------------------------------------
 
 
-def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
+def test_a_record_carrying_input_and_verify_parses() -> None:
     from fr.record.model import parse_record
 
     record = parse_record(
@@ -207,8 +207,6 @@ def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
             schema_version: {RECORD_SCHEMA_VERSION}
             journal:
               - {{kind: discovery, id: input-1, title: input, body: build X, input: true}}
-            resolves:
-              - {{id: f1, state: unconfirmed, body: builds X literally}}
             acceptance:
               - {{id: row-1, capability: c, acceptance: a, status: not-implemented,
                  verify: post-merge}}
@@ -216,18 +214,17 @@ def test_a_record_carrying_input_verify_and_unconfirmed_parses() -> None:
         )
     )
     assert record.journal[0].input is True
-    assert record.resolves[0].state == "unconfirmed"
     assert record.acceptance[0].verify == "post-merge"
 
 
-def test_a_delegated_decision_parses_and_applies_as_the_token(tmp_path) -> None:
-    from fr.record.model import parse_record
+def test_delegated_and_unconfirmed_are_refused_by_the_live_record() -> None:
+    """Removed in record 7 (spec 2026-09-29 §C); `fr.record.legacy` reads them."""
+    from fr.record.model import RecordError, parse_record
 
-    record = parse_record(
-        "journal:\n  - {kind: decision, id: d1, title: t, body: b, delegated: true}\n"
-    )
-    assert record.journal[0].delegated is True
-    assert parse_record("journal: [{kind: decision, title: t}]\n").journal[0].delegated is False
+    with pytest.raises(RecordError, match="delegated"):
+        parse_record("journal:\n  - {kind: decision, id: d1, title: t, body: b, delegated: true}\n")
+    with pytest.raises(RecordError, match="state"):
+        parse_record("resolves:\n  - {id: f1, state: unconfirmed, body: b}\n")
 
 
 def test_verify_accepts_post_merge_only() -> None:

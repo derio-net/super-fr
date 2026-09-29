@@ -37,7 +37,6 @@ from fr.journal.model import (
     serialize_entry,
     unauthorized_fixes,
 )
-from fr.operator_input import OperatorInput
 from fr.run.model import AnsweredBy
 
 console = Console(highlight=False)
@@ -169,14 +168,8 @@ def add(
     is_input: bool = typer.Option(
         False,
         "--input",
-        help="--scope spec --kind discovery only: this entry is the operator's input, "
-        "verbatim after third-party redaction (spec 2026-09-28 §A).",
-    ),
-    delegated: bool = typer.Option(
-        False,
-        "--delegated",
-        help='--scope spec --kind decision only: the operator answered "Your call.", '
-        "so the agent chose (spec 2026-09-29 §E).",
+        help="--scope spec --kind discovery only: this entry is the operator's brief, "
+        "verbatim after third-party redaction, stored for the record at brainstorm.",
     ),
 ) -> None:
     """Append one entry to ``docs/superpowers/journals/<slug>.md``."""
@@ -236,7 +229,6 @@ def add(
             review_scope=review_scope,  # type: ignore[arg-type]
             answered_by=answered_by,  # type: ignore[arg-type]
             input=is_input,
-            delegated=delegated,
         )
     except ValueError as e:
         err_console.print(f"[red]invalid entry:[/red] {e}")
@@ -277,7 +269,6 @@ def add(
             "resolves": resolves,
             "answered_by": answered_by,
             "input": is_input,
-            "delegated": delegated,
         }
     )
     _apply(
@@ -311,7 +302,7 @@ def _apply(root: Path, record: object, *, scope: str, slug: str, path: Path, mes
         err_console.print(notice, markup=False, soft_wrap=True)
 
 
-RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope", "unconfirmed")
+RESOLUTION_STATES = ("fixed", "refuted", "deferred", "out-of-scope")
 """What `resolve` may close a finding to. Re-opening is `add --resolves`:
 `resolve` is the verb for "this is done with", and a re-open is new
 information, which belongs in an entry with a body of its own."""
@@ -328,12 +319,9 @@ def resolve(
     state: str = typer.Option(
         ...,
         "--state",
-        help="fixed | refuted | deferred | out-of-scope | unconfirmed. `deferred` = the "
-        "finding is valid but not this change's to fix; requires --tracked-by. "
-        "`out-of-scope` = true, but not caused by this change (--note says why); no "
-        "issue needed yet. `unconfirmed` is retired (d1-remove-only): an invented or "
-        "reinterpreted spec finding closes `fixed` (removed) or `refuted`; it is "
-        "refused, and still read in an existing journal.",
+        help="fixed | refuted | deferred | out-of-scope. `deferred` = the finding is "
+        "valid but not this change's to fix; requires --tracked-by. `out-of-scope` = "
+        "true, but not caused by this change (--note says why); no issue needed yet.",
     ),
     note: str = typer.Option(
         ...,
@@ -424,13 +412,6 @@ def resolve(
         err_console.print(
             f"[red]entry `{entry_id}` is a `{target.kind}`, not a finding[/red] — only a "
             "finding has a state to resolve"
-        )
-        raise typer.Exit(2)
-    if state == "unconfirmed":
-        from fr.record.apply import unconfirmed_refusal
-
-        err_console.print(
-            f"[red]{unconfirmed_refusal(entry_id)}[/red] — nothing resolved", soft_wrap=True
         )
         raise typer.Exit(2)
     from fr.record.model import Resolution, StepRecord
@@ -620,11 +601,6 @@ def check(
     out_of_scope = [fid for fid, st in states.items() if st == "out-of-scope"]
     if out_of_scope:
         console.print(f"{len(out_of_scope)} out-of-scope finding(s): " + ", ".join(out_of_scope))
-    # And for unconfirmed (spec 2026-09-28 §D): behaviour built without the
-    # operator's answer passes, but is named here as in the PR body.
-    unconfirmed = [fid for fid, st in states.items() if st == "unconfirmed"]
-    if unconfirmed:
-        console.print(f"{len(unconfirmed)} unconfirmed finding(s): " + ", ".join(unconfirmed))
     unauthorized = unauthorized_fixes(entries)
     if unauthorized:
         err_console.print(
@@ -722,19 +698,6 @@ def check(
         raise typer.Exit(1)
 
 
-def _load_operator_input(root: Path, spec_rel: str) -> OperatorInput | None:
-    """The spec journal's operator input (gh#778); an unparseable journal is exit 2."""
-    from rich.markup import escape
-
-    from fr.operator_input import OperatorInputUnreadableError, load
-
-    try:
-        return load(root, spec_rel)
-    except OperatorInputUnreadableError as e:
-        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-
-
 @journal_app.command("handoff")
 def handoff(
     scope: str = typer.Option(..., "--scope", help="plan (only plan journals have phases)."),
@@ -756,7 +719,6 @@ def handoff(
     there is nothing to curate yet.
     """
     from fr.journal.model import compose_handoff
-    from fr.operator_input import to_markdown
     from fr.parser import PlanSchemaError, parse
 
     _validate_scope(scope)
@@ -770,33 +732,22 @@ def handoff(
     # Read-resolve so a handoff still composes after the journal was archived
     # alongside its spec/plan.
     path = resolve_journal_read_path(root, scope, slug)  # type: ignore[arg-type]
-    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
-    # The plan is parsed BEFORE the missing-journal return (gh#778): phase 1 of
-    # a fresh plan has no journal yet and must still get the operator input.
-    plan_error: Exception | None = None
-    plan = None
-    try:
-        plan = parse(plan_path)
-    except (PlanSchemaError, OSError) as e:
-        plan_error = e
     if not path.exists():
-        if plan is None or plan.spec_path is None:
-            return  # fail-open: nothing written yet, nothing to curate
-        oi = _load_operator_input(root, plan.spec_path)
-        if oi is not None:
-            typer.echo(to_markdown(oi) + "\n")
-        return
+        return  # fail-open: nothing written yet, nothing to curate
     try:
         entries = _load(path)
     except JournalParseError as e:
         err_console.print(f"[red]journal parse error:[/red] {e}")
         raise typer.Exit(2) from e
-    if plan is None:
+    plan_path = root / plan_dir if plan_dir else root / "docs" / "superpowers" / "plans" / slug
+    try:
+        plan = parse(plan_path)
+    except (PlanSchemaError, OSError) as e:
         err_console.print(
             f"[red]cannot compose a dependency-scoped handoff: plan {plan_path} "
-            f"is not parseable ({plan_error})[/red]"
+            f"is not parseable ({e})[/red]"
         )
-        raise typer.Exit(2) from plan_error
+        raise typer.Exit(2) from e
     headers = [p.phase for p in plan.phases if p.phase.number == phase]
     if not headers:
         known = sorted(p.phase.number for p in plan.phases)
@@ -808,14 +759,4 @@ def handoff(
     # Emit RAW — this feeds a dispatch brief. A Rich console would treat `[...]`
     # in a title/body (Markdown links, `[PR #12]`) as markup and drop it, same
     # reason `render` echoes raw.
-    oi = _load_operator_input(root, plan.spec_path) if plan.spec_path else None
-    typer.echo(
-        compose_handoff(
-            entries,
-            phase=phase,
-            scope=scope,
-            slug=slug,
-            depends_on=depends_on,
-            operator_input=to_markdown(oi) if oi is not None else None,
-        )
-    )
+    typer.echo(compose_handoff(entries, phase=phase, scope=scope, slug=slug, depends_on=depends_on))

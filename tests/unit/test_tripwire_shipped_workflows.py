@@ -143,68 +143,84 @@ def test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver() -> N
     )
 
 
-# ── requirements traceability (spec 2026-09-28 §C, §D, §F, d8; Test Plan 14) ──
+# ── the spec is the contract (spec 2026-09-29-spec-is-the-contract §A) ──
+#
+# The operator's input feeds brainstorm only. No step after it is gated on the
+# input, so the evidence lists are 4.28.0's plus `visual` (#789) and
+# `single-phase` (#820), which are not input-layer.
+
+PACKAGED_WORKFLOWS_DIR = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "workflows"
+_INPUT_GATES = ("requirements", "coverage", "fidelity", "requirement-rows")
 
 
 def _step(manifest, step_id: str):
     return next(s for s in manifest.steps if s.id == step_id)
 
 
-def test_shipped_fr_goal_declares_the_requirements_gates() -> None:
-    manifest = _shipped_fr_goal()
-
-    assert check_workflow(manifest) == []
-    assert _step(manifest, "brainstorm").evidence == ("requirements",)
-    review = _step(manifest, "spec-review")
-    assert review.tier == "hard"
-    assert review.emits == ("journal:spec", "acceptance")
-    assert review.evidence == (
-        "review",
-        "reviewer",
-        "findings",
-        "requirements",
-        "coverage",
-        "fidelity",
-    )
-    assert _step(manifest, "deliver").evidence == (
-        "tests",
-        "proportionality",
-        "requirement-rows",
-        "visual",
-    )
+def _both_copies(name: str):
+    return [
+        parse_manifest((d / f"{name}.yaml").read_text())
+        for d in (SHIPPED_WORKFLOWS_DIR, PACKAGED_WORKFLOWS_DIR)
+    ]
 
 
-# The additions, undone — the shape an in-flight cursor was started against.
-_BEFORE_THE_GATES = (
-    ("    evidence: [requirements]\n", ""),
-    ("    tier: hard\n", "    tier: standard\n"),
-    ("    emits: [journal:spec, acceptance]\n", "    emits: [journal:spec]\n"),
+def test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual() -> None:
+    for manifest in _both_copies("fr-goal"):
+        assert check_workflow(manifest) == []
+        assert _step(manifest, "brainstorm").evidence == ()
+        assert _step(manifest, "spec-review").evidence == ("review", "reviewer", "findings")
+        assert _step(manifest, "deliver").evidence == ("tests", "proportionality", "visual")
+        members = {m.id: m for m in _step(manifest, "implement").steps}
+        assert members["review-phase"].agent is None
+
+
+def test_shipped_fr_goal_light_evidence_carries_no_input_gate() -> None:
+    for manifest in _both_copies("fr-goal-light"):
+        assert check_workflow(manifest) == []
+        assert _step(manifest, "brainstorm").evidence == ()
+        assert _step(manifest, "plan").evidence == ("single-phase",)
+        assert _step(manifest, "spec-plan-review").evidence == ("review", "reviewer", "findings")
+        assert _step(manifest, "deliver").evidence == ("tests", "proportionality", "visual")
+
+
+def test_run_resolve_knows_no_input_gate() -> None:
+    from fr.commands import run_cmd
+
+    for name in _INPUT_GATES:
+        assert name not in run_cmd._VERIFIABLE_EVIDENCE
+        assert name not in run_cmd._DERIVED_EVIDENCE
+        assert name not in run_cmd._DERIVED_FROM
+
+
+# The removals, undone — the 4.29–4.40 shape an in-flight cursor was started
+# against.
+_WITH_THE_GATES = (
     (
-        "    evidence: [review, reviewer, findings, requirements, coverage, fidelity]\n",
-        "    evidence: [review, reviewer, findings]\n",
+        "    emits: [spec, journal:spec, acceptance]\n",
+        "    emits: [spec, journal:spec, acceptance]\n    evidence: [requirements]\n",
     ),
     (
+        "    evidence: [review, reviewer, findings]\n\n  - id: plan\n",
+        "    evidence: [review, reviewer, findings, requirements, coverage, fidelity]\n"
+        "\n  - id: plan\n",
+    ),
+    (
+        "    evidence: [tests, proportionality, visual]\n",
         "    evidence: [tests, proportionality, requirement-rows, visual]\n",
-        "    evidence: [tests, proportionality]\n",
-    ),
-    ("        evidence: [visual]\n", ""),
-    (
-        "        evidence: [review, reviewer, findings, visual]\n",
-        "        evidence: [review, reviewer, findings]\n",
     ),
 )
 
 
-def test_a_cursor_started_before_the_gates_does_not_drift(tmp_path: Path) -> None:
-    """Drift compares step and member ids only: every addition is a field,
-    so a run started on the old shape keeps advancing on the new one."""
+def test_a_cursor_started_with_the_input_gates_does_not_drift(tmp_path: Path) -> None:
+    """Drift compares step and member ids only: every removal is a field, so a
+    run started on the 4.29–4.40 shape keeps advancing on this one (R8)."""
     from fr.commands.run_cmd import _check_step_drift
     from fr.run.model import load_run_state
 
     from tests.unit.test_run_cli import _invoke, _repo
 
     text = (SHIPPED_WORKFLOWS_DIR / "fr-goal.yaml").read_text()
-    for new, old in _BEFORE_THE_GATES:
+    for new, old in _WITH_THE_GATES:
         assert new in text, new
         text = text.replace(new, old, 1)
     old_shipped = tmp_path / "old"

@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError
 
 from fr.artifacts.runner import MIGRATIONS, ArtifactMigrationError, SchemaMigration
 
@@ -49,11 +48,12 @@ class UnreadableRecordError(ArtifactMigrationError):
 
 
 def guard_record(path: Path) -> None:
-    """Refuse to let the runner stamp a record that does not read as the LIVE
-    `StepRecord`. Every record hop so far is additive, so the live model is a
-    superset of every older body; a hop that removes a field must freeze the
-    old shape instead (artifact-versioning rule) and stop using this."""
-    from fr.record.model import RECORD_SCHEMA_VERSION, StepRecord
+    """Refuse to let the runner stamp a record that does not read as a record
+    of version 1 to 6. Reads through the FROZEN `fr.record.legacy.RecordV6`,
+    never the live `StepRecord`: the 6 -> 7 hop removed fields, so the live
+    model is no longer a superset of the older bodies every earlier hop reads
+    (artifact-versioning rule). Shared by the hops 1 -> 2 through 5 -> 6."""
+    from fr.record.legacy import RecordV6Error, record_v6_from_data
 
     try:
         text = path.read_text()
@@ -64,7 +64,7 @@ def guard_record(path: Path) -> None:
     except yaml.YAMLError as e:
         raise UnreadableRecordError(
             # No version number: this guard is shared by every record hop
-            # (review d3), so naming the live version misreports the 1 -> 2 one.
+            # (review d3), so naming one version misreports the others.
             f"{path}: not valid YAML, so fr will not stamp it ({e})."
         ) from e
     if data is None:
@@ -73,10 +73,9 @@ def guard_record(path: Path) -> None:
         raise UnreadableRecordError(
             f"{path}: top level must be a mapping, got {type(data).__name__}"
         )
-    candidate = {**data, "schema_version": RECORD_SCHEMA_VERSION}
     try:
-        StepRecord.model_validate(candidate)
-    except ValidationError as e:
+        record_v6_from_data({**data, "schema_version": 6})
+    except RecordV6Error as e:
         raise UnreadableRecordError(
             f"{path}: not a readable record, so fr will not stamp it ({e}). "
             "Fix the file by hand — it is left on its "

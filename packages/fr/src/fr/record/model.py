@@ -51,7 +51,7 @@ __all__ = [
     "records_dir",
 ]
 
-RECORD_SCHEMA_VERSION = 6
+RECORD_SCHEMA_VERSION = 7
 """Bumped 1 -> 2 for `questions` (spec
 `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B) — a shape
 change under `.claude/rules/artifact-versioning.md`. Migration:
@@ -65,12 +65,16 @@ change under `.claude/rules/artifact-versioning.md`. Migration:
 `2026-09-29-spec-fidelity-invention-design.md` §E). Migration:
 `fr.artifacts.record_delegated`. Bumped 5 -> 6 for `StepRecord.shape` (spec
 `2026-09-29-fr-goal-light-path-design.md` §A). Migration:
-`fr.artifacts.record_shape`."""
+`fr.artifacts.record_shape`. Bumped 6 -> 7 REMOVING `JournalItem.delegated` and
+the `unconfirmed` resolution state (spec
+`2026-09-29-spec-is-the-contract-design.md` §C). Migration:
+`fr.artifacts.record_contract`; versions 1-6 are read through the frozen
+`fr.record.legacy.RecordV6`."""
 RECORDS_SUFFIX = ".records"
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 
 Outcome = Literal["done", "failed", "blocked"]
-ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope", "unconfirmed"]
+ResolutionState = Literal["fixed", "refuted", "deferred", "out-of-scope"]
 
 _TICK_ID_RE = re.compile(r"^P\d+\.T\d+\.S\d+$")
 _TASK_ID_RE = re.compile(r"^P\d+\.T\d+$")
@@ -126,11 +130,9 @@ class JournalItem(_Strict):
     tracked_by: StrictStr | None = None
     out_of_scope: bool = False
     input: bool = False
-    """A spec-journal `discovery` holding the operator's input (spec
-    2026-09-28 §A); `JournalEntry`'s validator refuses it anywhere else."""
-    delegated: bool = False
-    """A spec-journal `decision` the operator answered "Your call." (spec
-    2026-09-29 §E); `JournalEntry`'s validator refuses it anywhere else."""
+    """A spec-journal `discovery` holding the operator's brief, stored verbatim
+    at brainstorm for the record (spec 2026-09-29 §C, R3); `JournalEntry`'s
+    validator refuses it anywhere else."""
 
 
 class Resolution(_Strict):

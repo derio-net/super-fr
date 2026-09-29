@@ -405,26 +405,6 @@ class TestHandoff:
             ),
         ]
 
-    def test_operator_input_none_is_byte_identical_and_a_string_renders_first(self) -> None:
-        """gh#778: the operator-input section leads the handoff; None changes nothing."""
-        from fr.journal.model import compose_handoff
-
-        base = compose_handoff(self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s")
-        none = compose_handoff(
-            self._entries(), phase=2, depends_on=(1,), scope="plan", slug="s", operator_input=None
-        )
-        assert none == base
-        out = compose_handoff(
-            self._entries(),
-            phase=2,
-            depends_on=(1,),
-            scope="plan",
-            slug="s",
-            operator_input="## Operator input (x)\n\nbody",
-        )
-        assert out.index("## Operator input (x)") < out.index("## Open findings")
-        assert out.index("# Handoff (phase 2)") < out.index("## Operator input (x)")
-
     def test_open_findings_render_in_full(self) -> None:
         from fr.journal.model import compose_handoff
 
@@ -873,7 +853,7 @@ class TestOutOfScope:
             JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", out_of_scope=True)
 
 
-# --- input + unconfirmed (spec 2026-09-28 §A, §D) --------------------------
+# --- input (spec 2026-09-28 §A); unconfirmed retired (2026-09-29 §C) ------
 
 _INPUT_TEXT = (
     "<!-- fr:journal kind=discovery scope=spec id=input-1 created=2026-09-28T00:00:00 "
@@ -924,72 +904,48 @@ class TestInputToken:
                 )
 
 
-class TestDelegatedToken:
-    """`delegated=true` on a spec decision (spec 2026-09-29 §E, d5-delegated-flag)."""
+class TestRetiredTokens:
+    """`delegated=true` and `unconfirmed=true` are retired (spec 2026-09-29
+    §C): journals are unstamped and parse tokens by name, so an old entry
+    still parses — the token is simply ignored, and nothing writes it again."""
 
-    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
+    _DELEGATED_TEXT = (
+        "<!-- fr:journal kind=decision scope=spec id=d1 created=2026-09-28T00:00:00 "
+        "delegated=true -->\n### d1 · decision · layout\n\nYour call.\n"
+    )
+
+    def test_a_delegated_token_is_ignored(self) -> None:
         from fr.journal.model import parse_journal, serialize_entry
 
-        e = _entry(kind="decision", scope="spec", id="d1", phase=None, delegated=True)
-        text = serialize_entry(e)
-        assert "delegated=true" in text.splitlines()[0]
-        assert parse_journal(text)[0].delegated is True
-        plain = serialize_entry(_entry(kind="decision", scope="spec", id="d2", phase=None))
-        assert "delegated" not in plain.splitlines()[0]
-        assert parse_journal(plain)[0].delegated is False
+        (entry,) = parse_journal(self._DELEGATED_TEXT)
+        assert entry.kind == "decision" and entry.id == "d1"
+        assert not hasattr(entry, "delegated")
+        assert "delegated" not in serialize_entry(entry)
 
-    def test_it_is_refused_off_a_spec_decision(self) -> None:
-        from fr.journal.model import JournalEntry
-
-        for kind, scope in (("discovery", "spec"), ("decision", "plan"), ("decision", "debug")):
-            with pytest.raises(ValueError, match="`delegated` is only valid"):
-                JournalEntry(kind=kind, scope=scope, id="d", created="t", title="x", delegated=True)
-
-
-class TestUnconfirmed:
-    def test_the_fold_reads_it_as_unconfirmed_and_the_gates_stop_counting_it(self) -> None:
+    def test_an_unconfirmed_record_reads_as_open_fail_closed(self) -> None:
         from fr.journal.model import effective_finding_states, open_finding_ids, parse_journal
 
         entries = parse_journal(_UNCONFIRMED_TEXT)
-        assert entries[1].state == "open" and entries[1].unconfirmed is True
-        assert effective_finding_states(entries) == {"f1": "unconfirmed"}
-        assert open_finding_ids(entries) == []
+        assert not hasattr(entries[1], "unconfirmed")
+        assert effective_finding_states(entries) == {"f1": "open"}
+        assert open_finding_ids(entries) == ["f1"]
 
-    def test_a_reader_that_ignores_the_token_reads_it_open(self) -> None:
-        from fr.journal.model import open_finding_ids, parse_journal
-
-        older = _UNCONFIRMED_TEXT.replace(" unconfirmed=true", "")
-        assert open_finding_ids(parse_journal(older)) == ["f1"]
-
-    def test_it_round_trips_and_is_serialized_only_when_true(self) -> None:
-        from fr.journal.model import parse_journal, serialize_entry
-
-        record = _entry(
-            kind="finding", scope="spec", id="r1", state="open", resolves="f1", unconfirmed=True
-        )
-        text = serialize_entry(record)
-        assert "unconfirmed=true" in text.splitlines()[0]
-        assert "[unconfirmed]" in text.splitlines()[1]
-        assert parse_journal(text)[0].unconfirmed is True
-        plain = serialize_entry(_entry(kind="finding", scope="spec", id="f2", state="open"))
-        assert "unconfirmed" not in plain
-
-    def test_only_an_open_spec_resolution_record_may_carry_it(self) -> None:
+    def test_the_model_no_longer_accepts_either_field(self) -> None:
         from fr.journal.model import JournalEntry
+        from pydantic import ValidationError
 
-        base = dict(kind="finding", scope="spec", id="r", created="t", title="x", body="")
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**base, state="open", unconfirmed=True)  # no `resolves`
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**base, state="fixed", resolves="f1", unconfirmed=True)
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**base, state="open", resolves="f1", tracked_by="#1", unconfirmed=True)
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**base, state="open", resolves="f1", out_of_scope=True, unconfirmed=True)
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**{**base, "scope": "plan"}, state="open", resolves="f1", unconfirmed=True)
-        with pytest.raises(ValueError, match="`unconfirmed` is only valid"):
-            JournalEntry(**{**base, "kind": "discovery"}, unconfirmed=True)
+        base = dict(scope="spec", id="d", created="t", title="x")
+        with pytest.raises(ValidationError, match="delegated"):
+            JournalEntry(kind="decision", **base, delegated=True)
+        with pytest.raises(ValidationError, match="unconfirmed"):
+            JournalEntry(kind="finding", **base, state="open", resolves="f1", unconfirmed=True)
+
+    def test_unconfirmed_is_not_an_effective_state(self) -> None:
+        from typing import get_args
+
+        from fr.journal.model import EffectiveFindingState
+
+        assert "unconfirmed" not in get_args(EffectiveFindingState)
 
 
 def test_a_review_scope_value_this_fr_does_not_know_is_dropped_not_fatal() -> None:

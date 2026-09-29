@@ -60,16 +60,6 @@ steps:
     skill: super-fr:fr-brainstorming
     gate: operator
     emits: [spec, journal:spec, acceptance]
-    # `requirements` (2026-09-28 requirements-traceability spec §C) is DERIVED,
-    # never passed: resolve runs `fr spec requirements`' own check on the spec
-    # this resolve emits — every Requirements quote matches an `input` entry
-    # of the spec journal, every `decision` source names a decision, and every
-    # requirement is cited by an acceptance row (`<repo>:<spec>#R<n>`), counting
-    # rows this step's own record stages. #759 shipped a spec that had silently
-    # dropped half of what was asked; the capture is now checked, not trusted.
-    # A run whose brainstorm resolved before this line records `predates the
-    # requirements gate` on the three derived names below (§G), never a refusal.
-    evidence: [requirements]
 
   - id: spec-review
     kind: agent
@@ -84,28 +74,16 @@ steps:
     # DERIVED — refused while any spec finding is effectively open, or was
     # fixed out of `out-of-scope` without the operator.
     #
-    # Traceability to the input runs FIRST (2026-09-28 spec §D, d10), and two
-    # more derived names check what it returned. `requirements` is re-derived
-    # here because the review's fixes edit the spec (§C); `coverage` reads the
-    # `input-coverage` block of the review entry `review` names and refuses
-    # unless its spans partition the input exactly (§D, d9). A `missing <id>`
-    # span is held by `findings` until that finding closes. `acceptance` joins
-    # `emits` because fixing a dropped statement adds a requirement AND its
-    # row, and they must ride one record or the re-derived gate refuses the fix
-    # it asked for. `tier: hard` (d8): traceability is the judgement #759's
-    # standard-tier review missed. Neither a tier nor an emit is a step id, so
-    # no cursor in flight drifts.
-    #
-    # `fidelity` (2026-09-29 spec §C, §D) reads the same review entry's
-    # `requirement-fidelity` block (each requirement's quotes partitioned into
-    # clauses, `kept` or a finding) and `design-inventory` block (every `###`
-    # of `## Design`, each behaviour backed), and refuses while a finding
-    # either flags is closed other than fixed (removed) or refuted.
+    # The spec is the contract (2026-09-29 spec-is-the-contract): the review
+    # checks it against the operator's recorded decisions, the codebase, and
+    # itself — never against the raw input, which only brainstorm reads.
+    # `acceptance` is emitted because a fix to the spec may add or reword the
+    # rows citing it, and they ride the same record.
     agent: super-fr:fr-spec-reviewer
     tier: hard
     needs: [spec]
     emits: [journal:spec, acceptance]
-    evidence: [review, reviewer, findings, requirements, coverage, fidelity]
+    evidence: [review, reviewer, findings]
 
   - id: plan
     kind: agent
@@ -140,13 +118,6 @@ steps:
         evidence: [visual]
       - id: review-phase
         kind: agent
-        # The reviewer is a SHIPPED agent (#778, take 10): its own definition
-        # fetches the operator input with `fr journal handoff` on every
-        # dispatch, so the input no longer rides only on the orchestrator's
-        # relay into a generic reviewer's prompt. `agent:` is not a member id,
-        # so no cursor in flight drifts; the reviewer-type check stays on flat
-        # steps only (`_verify_reviewer`'s `expected_agent`).
-        agent: super-fr:fr-phase-reviewer
         # Two disciplines, in order — a review is REQUESTED and then RECEIVED.
         # Naming only the first left what happens to a review's findings
         # (verify each; fix it with a test or refute it with reasoning; never
@@ -219,13 +190,7 @@ steps:
     # runs `fr plan proportionality` and stores `<merge-base>:<sha256>` of the
     # report the orchestrator pastes into the PR body. Report-first — it gates
     # nothing but its own witness.
-    # `requirement-rows` (2026-09-28 spec §F) is DERIVED: refused while any
-    # acceptance row citing the run's spec is still `not-implemented`, naming
-    # the `fr acceptance set-status` line that moves it — counting rows this
-    # step's own record moves. A row declaring `verify: post-merge` (d11) is
-    # counted and skipped: only a live run after merge can prove it, and the
-    # PR body lists it under `## Post-merge verification owed`.
     # `visual` (spec 2026-09-28-ui-visual-evidence §C): for the rows citing the
     # run's spec, screenshots captured and opened by the orchestrator itself
     # during delivery, on the delivered branch.
-    evidence: [tests, proportionality, requirement-rows, visual]
+    evidence: [tests, proportionality, visual]

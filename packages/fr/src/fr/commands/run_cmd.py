@@ -58,7 +58,6 @@ from fr.journal.model import (
     unauthorized_fixes,
 )
 from fr.records_commit import commit_records
-from fr.requirements import REQUIREMENTS_PREDATES
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, adopt_run, plan_phase_tags
@@ -1473,27 +1472,15 @@ _VERIFIABLE_EVIDENCE = (
     "findings",
     "tests",
     "proportionality",
-    "requirements",
-    "coverage",
-    "fidelity",
-    "requirement-rows",
     "visual",
     "single-phase",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
-# `requirements`, `coverage` and `requirement-rows` (2026-09-28 spec §C, §D, §F)
-# are the requirements-traceability witnesses: all three in all three tables,
-# or resolve refuses the step as unverifiable or demands `--evidence <name>=`.
-# `fidelity` (2026-09-29 spec §C) joins them, in all four tables.
 _DERIVED_EVIDENCE = frozenset(
     {
         "findings",
         "proportionality",
-        "requirements",
-        "coverage",
-        "fidelity",
-        "requirement-rows",
         "visual",
         "single-phase",
     }
@@ -1521,16 +1508,6 @@ _DERIVED_FROM = {
     "out of scope",
     "proportionality": "by running `fr plan proportionality` on the run's plan and "
     "hashing the report at its merge-base",
-    "requirements": "by running `fr spec requirements`' own check on the run's spec, "
-    "its spec journal and the acceptance matrix",
-    "coverage": "from the `input-coverage` block of the review entry named by "
-    "`review`, checked as an exact partition of the spec journal's input",
-    "fidelity": "from the `requirement-fidelity` and `design-inventory` blocks of the "
-    "review entry named by `review`: every requirement's quotes partitioned into clauses, "
-    "every Design section inventoried, and every departure they flag closed fixed or "
-    "refuted",
-    "requirement-rows": "from the acceptance rows citing the run's spec: none may be "
-    "`not-implemented` unless it declares `verify: post-merge`",
     "visual": "from the step record's `visual:` section — every owed row's screenshots "
     "cover its named states and interactions, and the witness transcript shows each "
     "one opened since the unit opened",
@@ -1711,9 +1688,9 @@ def _verified_evidence(
     resolve's `agent`, else the last attempt's); both feed the derived `visual`
     witness (2026-09-28-ui-visual-evidence §C).
 
-    `emitted` is THIS resolve's emitted map: on `brainstorm`'s own resolve it
-    is the only place the run's spec is named (the cursor holds none yet), and
-    the `requirements` witness reads it (2026-09-28 spec §C).
+    `emitted` is THIS resolve's emitted map: on the resolve of the step that
+    emits the plan it is the only place that plan is named (the cursor holds
+    none yet), and the `single-phase` witness reads it.
 
     Three rules, in this order:
 
@@ -1841,9 +1818,6 @@ def _verified_evidence(
             err_console.print(f"[red]{key}: {e}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
     if "review" in offered:
-        # Before the derived witnesses (e4): `coverage` reads the entry
-        # `review` names, so a stale id must be named by the review gate
-        # rather than reported as a coverage gap.
         assert review_journal is not None and target is not None
         slug, entries = review_journal
         _verify_review_entry(
@@ -1861,17 +1835,6 @@ def _verified_evidence(
             reviewer=offered.get("reviewer"),
             since=since or (state.steps[step.id].at if step.id in state.steps else None),
             dispatched_as=attempt.agent_type if attempt is not None else None,
-        )
-    if state_value == "done":
-        verified.update(
-            _requirements_witnesses(
-                key,
-                repo_root,
-                state,
-                step,
-                emitted=emitted or {},
-                review_id=offered.get("review"),
-            )
         )
     if not derives:
         return verified
@@ -1921,7 +1884,7 @@ def _visual_witness(
             ),
         )
     except VisualRefusedError as e:
-        _requirements_refusal(key, e.lines)
+        _derived_refusal(key, e.lines)
     if derived.unobserved:
         _note_unobserved("visual")
         err_console.print(
@@ -2018,303 +1981,13 @@ def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
     return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
 
 
-# ------------------------------------------------ requirements traceability
-#
-# Spec 2026-09-28-requirements-traceability §C, §D, §F, §G. Three derived
-# witnesses over one capture — the run's spec, its spec journal and the
-# acceptance matrix as they stand at this resolve (for a record, as the record
-# leaves them: `apply_record` writes before it runs this resolve in process).
-
-_REQUIREMENTS_EVIDENCE = ("requirements", "coverage", "fidelity", "requirement-rows")
-
-
-@dataclass(frozen=True)
-class _RequirementsCapture:
-    spec_rel: str
-    spec_text: str
-    entries: list[JournalEntry]
-    matrix: Any  # fr.acceptance.model.Matrix, imported lazily
-    spec_ref: str
-
-
-def _requirements_refusal(key: str, lines: list[str]) -> NoReturn:
+def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
+    """A derived witness's refusal: its first line after the unit key, the
+    rest indented beneath it."""
     err_console.print(f"{key}: {lines[0]}", markup=False, soft_wrap=True)
     for line in lines[1:]:
         err_console.print(f"  {line}", markup=False, soft_wrap=True)
     raise typer.Exit(2)
-
-
-def _predates_requirements(state: RunState, step: Step) -> bool:
-    """§G, decided by the step. The step that emits `spec` is the gate itself
-    and never predates it. Any other step predates the gate when no step
-    recorded the run's spec (a brainstorm resolved before emits were enforced,
-    or a cursor rebuilt by `fr run adopt`) or when the step that did carries no
-    `requirements` evidence. Such a run records the predates line instead of
-    refusing: an obligation is never enforced backwards in time."""
-    from fr.requirements import spec_emitter
-
-    if "spec" in step.emits:
-        return False
-    found = spec_emitter(state)
-    if found is None:
-        return True
-    sid, record = found
-    return "requirements" not in units.evidence_of(record, f"step/{sid}")
-
-
-def _requirements_capture(
-    key: str, repo_root: Path, state: RunState, step: Step, emitted: Mapping[str, str]
-) -> _RequirementsCapture:
-    """Load the spec, spec journal and matrix once, for all three witnesses —
-    or exit 2. Fail-closed: a gate that cannot read its source does not know
-    whether it passed."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.requirements import load_spec_matrix, run_spec
-
-    spec_rel = emitted.get("spec") or run_spec(state)
-    why = "cannot derive requirements evidence"
-    if spec_rel is None:
-        # Reached only by the step that emits `spec` (any other predates the
-        # gate, §G): the amend form records it whether or not it is done yet.
-        _requirements_refusal(
-            key,
-            [
-                f"{why} — no spec recorded yet (record it with `fr run resolve "
-                f"{state.run} --step {step.id} --state done --emitted spec=<path>`)"
-            ],
-        )
-    try:
-        spec_text = (repo_root / spec_rel).read_text()
-    except OSError as e:
-        _requirements_refusal(key, [f"{why} — spec {spec_rel} is unreadable: {e}"])
-    slug = spec_journal_slug(Path(spec_rel).stem)
-    jpath = resolve_journal_read_path(repo_root, "spec", slug)
-    try:
-        entries = parse_journal(jpath.read_text()) if jpath.exists() else []
-    except (JournalParseError, OSError) as e:
-        _requirements_refusal(key, [f"{why} — spec journal {jpath} is unreadable: {e}"])
-    try:
-        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-    except AcceptanceError as e:
-        _requirements_refusal(key, [f"{why} — {e}"])
-    return _RequirementsCapture(
-        spec_rel=spec_rel,
-        spec_text=spec_text,
-        entries=entries,
-        matrix=matrix,
-        spec_ref=spec_ref,
-    )
-
-
-def _requirements_witnesses(
-    key: str,
-    repo_root: Path,
-    state: RunState,
-    step: Step,
-    *,
-    emitted: Mapping[str, str],
-    review_id: str | None,
-) -> dict[str, str]:
-    """Every requirements-traceability witness `step` declares — or exit 2."""
-    wanted = [n for n in _REQUIREMENTS_EVIDENCE if n in step.evidence]
-    if not wanted:
-        return {}
-    if _predates_requirements(state, step):
-        return dict.fromkeys(wanted, REQUIREMENTS_PREDATES)
-    capture = _requirements_capture(key, repo_root, state, step, emitted)
-    out: dict[str, str] = {}
-    if "requirements" in wanted:
-        out["requirements"] = _requirements_witness(key, capture)
-    if "coverage" in wanted:
-        out["coverage"] = _coverage_witness(key, capture, review_id)
-    if "fidelity" in wanted:
-        out["fidelity"] = _fidelity_witness(key, capture, review_id)
-    if "requirement-rows" in wanted:
-        out["requirement-rows"] = _requirement_rows_witness(key, capture)
-    return out
-
-
-def _requirements_witness(key: str, capture: _RequirementsCapture) -> str:
-    """`<n> requirements:<sha256>` — or exit 2 listing every §C problem."""
-    from fr.requirements import check_requirements, parse_requirements, requirements_digest
-
-    problems = check_requirements(
-        capture.spec_text, capture.entries, capture.matrix, capture.spec_ref
-    )
-    if problems:
-        _requirements_refusal(
-            key,
-            [
-                f"refused — the requirements capture of {capture.spec_rel} is unsound "
-                f"(`fr spec requirements {capture.spec_rel}` reports the same):",
-                *(f"- {p}" for p in problems),
-            ],
-        )
-    n = len(parse_requirements(capture.spec_text).items)
-    return f"{n} requirements:{requirements_digest(capture.spec_text)}"
-
-
-def _coverage_witness(key: str, capture: _RequirementsCapture, review_id: str | None) -> str:
-    """`<n> spans: R=… deferred=… context=… missing=…` from the `input-coverage`
-    block of the review entry `review` names (§D) — or exit 2. A `missing <id>`
-    span is well-formed here; the `findings` gate holds it while it is open."""
-    from fr.requirements import (
-        RequirementsError,
-        check_coverage,
-        is_input_entry,
-        parse_requirements,
-    )
-
-    why = "cannot derive coverage evidence"
-    review = next((e for e in capture.entries if e.id == review_id and e.kind == "review"), None)
-    if review is None:
-        _requirements_refusal(
-            key,
-            [
-                f"{why} — no `kind=review` spec-journal entry named by `review` "
-                f"({review_id!r}) carries the input-coverage block"
-            ],
-        )
-    try:
-        requirements = parse_requirements(capture.spec_text)
-    except RequirementsError as e:
-        _requirements_refusal(key, [f"{why} — {capture.spec_rel}: {e}"])
-    inputs = [e for e in capture.entries if is_input_entry(e)]
-    problems, counts = check_coverage(review.body, inputs, requirements, capture.entries)
-    if problems:
-        _requirements_refusal(
-            key,
-            [
-                f"refused — the input-coverage block of review {review.id!r} is unsound:",
-                *(f"- {p}" for p in problems),
-            ],
-        )
-    return (
-        f"{counts.spans} spans: R={counts.requirement} deferred={counts.deferred} "
-        f"context={counts.context} missing={counts.missing}"
-    )
-
-
-def _fidelity_witness(key: str, capture: _RequirementsCapture, review_id: str | None) -> str:
-    """`<c> clauses over <r> requirements (kept=… flagged=…); <s> sections, <b>
-    behaviours (invented=…)` from the `requirement-fidelity` and
-    `design-inventory` blocks of the review entry `review` names (2026-09-29
-    spec §C) — or exit 2. §D: every finding a flagged fidelity row or an
-    `invented` inventory row names must close `fixed` (the departure removed)
-    or `refuted`; the spec journal is read as this resolve leaves it, so a
-    record's own staged resolves count."""
-    from fr.fidelity import check_fidelity, check_inventory, fidelity_summary
-    from fr.requirements import _REDISPATCH
-
-    why = "cannot derive fidelity evidence"
-    review = next((e for e in capture.entries if e.id == review_id and e.kind == "review"), None)
-    if review is None:
-        _requirements_refusal(
-            key,
-            [
-                f"{why} — no `kind=review` spec-journal entry named by `review` "
-                f"({review_id!r}) carries the requirement-fidelity and design-inventory blocks"
-            ],
-        )
-    fproblems, fc = check_fidelity(review.body, capture.spec_text, capture.entries)
-    iproblems, ic = check_inventory(review.body, capture.spec_text, capture.entries)
-    problems = fproblems + iproblems
-    if problems:
-        _requirements_refusal(
-            key,
-            [
-                f"refused — the fidelity blocks of review {review.id!r} are unsound "
-                f"({_REDISPATCH}):",
-                *(f"- {p}" for p in problems),
-            ],
-        )
-    states = effective_finding_states(capture.entries)
-    slug = spec_journal_slug(Path(capture.spec_rel).stem)
-    departures = list(dict.fromkeys((*fc.finding_ids, *ic.finding_ids)))
-    held = [(fid, states.get(fid, "open")) for fid in departures]
-    held = [(fid, st) for fid, st in held if st not in ("fixed", "refuted")]
-    if held:
-        _requirements_refusal(
-            key,
-            [
-                "refused — an invented or reinterpreted finding closes only by removing the "
-                "departure (fixed) or refuting it (d1-remove-only):",
-                *(
-                    f"- {fid} is {st}: remove it from the spec, then `fr journal resolve "
-                    f"--scope spec --slug {slug} --id {fid} --state fixed "
-                    '--note "<what was removed>"` '
-                    "(or --state refuted with the reasoning)"
-                    for fid, st in held
-                ),
-            ],
-        )
-    return fidelity_summary(fc, ic)
-
-
-def _requirement_rows_witness(key: str, capture: _RequirementsCapture) -> str:
-    """`<n> rows: <status>=<count>,…; post-merge=<m>` over every matrix row
-    citing the run's spec (any fragment or none) — or exit 2 while one is
-    `not-implemented` (§F). A `verify: post-merge` row is counted, never gated:
-    only a live run after merge can move it."""
-    from collections import Counter
-
-    from fr.requirements import (
-        RequirementsError,
-        is_cited,
-        parse_requirements,
-        rows_citing,
-        uncited_problem,
-    )
-
-    rows = rows_citing(capture.matrix, capture.spec_ref)
-    # Re-apply §C's citation rule: a row deleted after spec-review, or a spec
-    # amended to another, must not pass on whatever rows happen to remain.
-    try:
-        requirements = parse_requirements(capture.spec_text)
-    except RequirementsError as e:
-        _requirements_refusal(
-            key, [f"cannot derive requirement-rows evidence — {capture.spec_rel}: {e}"]
-        )
-    uncited = [
-        q.id for q in requirements.items if not is_cited(q.id, capture.matrix, capture.spec_ref)
-    ]
-    if not rows or uncited:
-        head = (
-            f"refused — no acceptance row cites {capture.spec_rel}"
-            if not rows
-            else f"refused — {len(uncited)} requirement(s) of {capture.spec_rel} have no "
-            "citing acceptance row"
-        )
-        _requirements_refusal(
-            key,
-            [
-                f"{head} (add one with `fr acceptance add --origin {capture.spec_ref}#R<n> …`):",
-                *(f"- {uncited_problem(rid, capture.spec_ref)}" for rid in uncited),
-            ],
-        )
-    gated = [r for r in rows if r.verify != "post-merge"]
-    owed = [r for r in gated if r.status == "not-implemented"]
-    if owed:
-        _requirement_rows_refusal(key, capture.spec_rel, [r.id for r in owed])
-    counts = Counter(r.status for r in gated)
-    summary = ",".join(f"{status}={n}" for status, n in sorted(counts.items())) or "none"
-    return f"{len(rows)} rows: {summary}; post-merge={len(rows) - len(gated)}"
-
-
-def _requirement_rows_refusal(key: str, spec_rel: str, ids: list[str]) -> NoReturn:
-    _requirements_refusal(
-        key,
-        [
-            f"refused — {len(ids)} acceptance row(s) citing {spec_rel} are still "
-            "`not-implemented`. Move each once its verification exists:",
-            *(
-                f"fr acceptance set-status --id {rid} --status <ci|scheduled|skipped> "
-                '--notes "<why it moved>"'
-                for rid in ids
-            ),
-            "(a row only a live run after merge can prove declares `verify: post-merge`)",
-        ],
-    )
 
 
 def _verify_reviewer(
@@ -2348,10 +2021,9 @@ def _verify_reviewer(
     from fr.run.telemetry import subagent_dispatch_since
 
     phase = target.phase
-    # The review unit's own holders are reviewers by construction: once the
-    # review member names its agent (#778, `fr-phase-reviewer`), that agent's
-    # session claims the unit, and counting it here refused the very reviewer
-    # the step dispatched.
+    # The review unit's own holders are reviewers by construction: a reviewer
+    # that claims the unit it reviews is not an implementer, and counting it
+    # here would refuse the very reviewer the step dispatched.
     implementers = (
         {
             a.agent
@@ -3015,12 +2687,7 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
                 if not matches or unit_state != "done":
                     continue
                 held = units.evidence_of(record, key)
-                # A §G predates witness is recorded, not met: it reads as debt.
-                lacking = tuple(
-                    name
-                    for name in member.evidence
-                    if held.get(name, REQUIREMENTS_PREDATES) == REQUIREMENTS_PREDATES
-                )
+                lacking = tuple(name for name in member.evidence if name not in held)
                 if lacking:
                     out[(step_id, key)] = lacking
     return out
@@ -3438,7 +3105,6 @@ def _build_member_brief(
     state: RunState,
     resolved_tier: str | None,
     harness: str | None = None,
-    operator_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The dispatch brief for one `(phase, member)` unit of a grouped step.
 
@@ -3463,12 +3129,6 @@ def _build_member_brief(
     because the executor reads its task prompt when it acts, and the same
     rule in its agent file alone did not stop OpenCode killing a full suite
     at 120 s. fr-goal §5 relays it verbatim.
-
-    `operator_input` (gh#778, spec 2026-09-28 §B) is the spec journal's raw
-    input, recorded answers and the spec-governs rule, or None. It is loaded
-    by `_advance_group` BEFORE the unit is claimed (this builder stays pure)
-    and rides every member brief so the executor and the reviewer can catch
-    what the requirement relay lost.
     """
     return {
         "run": state.run,
@@ -3476,7 +3136,6 @@ def _build_member_brief(
         "step": member.id,
         "group": group.id,
         "long_commands": long_command_rule(harness),
-        "operator_input": operator_input,
         "item": item,
         "kind": member.kind,
         "skill": _brief_skill(member),
@@ -3697,7 +3356,6 @@ def _print_member_dispatch(
     item: str,
     state: RunState,
     resolved_tier: str | None,
-    operator_input: dict[str, Any] | None = None,
 ) -> None:
     """The three stdout lines a dispatched grouped unit produces, in the one
     order that is safe to print them.
@@ -3740,34 +3398,11 @@ def _print_member_dispatch(
                 state,
                 resolved_tier,
                 harness=detect_harness(os.environ),
-                operator_input=operator_input,
             ),
             sort_keys=True,
         ),
         soft_wrap=True,
     )
-
-
-def _load_operator_input(repo_root: Path, state: RunState) -> dict[str, Any] | None:
-    """The run spec's operator-input brief payload (gh#778), or None.
-
-    An unparseable spec journal is a refusal (exit 2, naming it): silently
-    dropping the input is the defect the relay exists to close.
-    """
-    from fr import operator_input
-    from fr.requirements import run_spec
-
-    spec_rel = run_spec(state)
-    if spec_rel is None:
-        return None
-    from rich.markup import escape
-
-    try:
-        oi = operator_input.load(repo_root, spec_rel)
-    except operator_input.OperatorInputUnreadableError as e:
-        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-    return operator_input.to_brief(oi) if oi is not None else None
 
 
 AdvanceStop = Literal["brief", "gate", "cli-done", "cli-failed", "refused", "complete"]
@@ -3873,10 +3508,6 @@ def _advance_group(
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
     dispatched_at = _now()
-    # gh#778: the operator's raw input, loaded BEFORE the write-claim so an
-    # unparseable spec journal refuses with nothing claimed (never a brief-less
-    # `running` unit that only `--redispatch` clears).
-    operator_input = _load_operator_input(repo_root, state)
     # The write-claim: this unit is now outstanding. A resolve for any OTHER
     # unit while it is running is a second writer — refused in `_resolve_member`.
     # Unconditional (not setdefault): a retried failed unit is running again,
@@ -3912,7 +3543,7 @@ def _advance_group(
         )
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
-    _print_member_dispatch(step, member, item, state, resolved_tier, operator_input)
+    _print_member_dispatch(step, member, item, state, resolved_tier)
     return "brief"
 
 

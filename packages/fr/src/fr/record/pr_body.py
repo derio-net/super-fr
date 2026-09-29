@@ -42,22 +42,15 @@ PR_BODY_NAME = "pr-body.md"
 REQUIRED_SECTIONS = (
     "## Findings",
     "## Out-of-scope findings",
-    "## Built without operator confirmation",
-    "## Input coverage",
-    "## Design inventory",
     "## Post-merge verification owed",
     "## Proportionality",
     "## Cost",
 )
-"""The headings a delivered PR's body must carry, in order. The middle four
-are spec 2026-09-28 §D (d12) and §F, and 2026-09-29 §F: what was built without
-the operator's confirmation, the spec review's input partition, its design
-inventory, and the acceptance rows only a live run after merge can move."""
+"""The headings a delivered PR's body must carry, in order. `Post-merge
+verification owed` (spec 2026-09-28 §F) lists the acceptance rows only a live
+run after merge can move."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
-_UNCONFIRMED = "unconfirmed"
-PREDATES_LINE = "Not recorded (predates the requirements gate)."
-DESIGN_PREDATES_LINE = "Not recorded (predates the fidelity gate)."
 
 
 def missing_sections(body: str) -> list[str]:
@@ -93,162 +86,23 @@ def _finding_line(scope: str, entry: JournalEntry, state: str, where: str | None
     return f"- `{entry.id}` ({scope}{phase}) — {entry.title} — **{state}**{tail}"
 
 
-def _findings(repo_root: Path, state: RunState) -> tuple[list[str], list[str], list[str]]:
-    """`(in scope, out of scope, unconfirmed)` — three disjoint buckets, so an
-    unconfirmed spec finding renders under its own section only (§D)."""
+def _findings(repo_root: Path, state: RunState) -> tuple[list[str], list[str]]:
     inside: list[str] = []
     outside: list[str] = []
-    unconfirmed: list[str] = []
     for scope, entries in _journals(repo_root, state):
         states = effective_finding_states(entries)
         tracked = {e.resolves: e.tracked_by for e in entries if e.resolves and e.tracked_by}
-        # The note is the body of the LAST unconfirmed resolution record: what
-        # gets built, in the orchestrator's words — not the finding's own body.
-        notes = {e.resolves: e.body for e in entries if e.resolves and e.unconfirmed}
         for e in entries:
             if e.kind != "finding" or e.resolves is not None:
                 continue
             verdict = states.get(e.id, e.state or "open")
-            if verdict == _UNCONFIRMED:
-                unconfirmed.append(
-                    f"{_finding_line(scope, e, verdict, None)}: {notes.get(e.id, '')}"
-                )
-                continue
             line = _finding_line(scope, e, verdict, tracked.get(e.id))
             (outside if verdict in _CLOSED_OUT else inside).append(line)
-    return inside, outside, unconfirmed
+    return inside, outside
 
 
 def render_out_of_scope(lines: Sequence[str]) -> str:
     return "\n".join(lines) if lines else "None."
-
-
-def _predates_gate(state: RunState) -> bool:
-    """§G, as the run records it: no step recorded the run's spec, the one
-    that did carries no `requirements` evidence, or a unit stored the
-    predates line for `requirements`/`coverage`/`fidelity`."""
-    from fr.requirements import REQUIREMENTS_PREDATES, spec_emitter
-    from fr.run import units
-
-    emitter = spec_emitter(state)
-    if emitter is None:
-        return True
-    sid, record = emitter
-    if "requirements" not in units.evidence_of(record, f"step/{sid}"):
-        return True
-    return any(
-        units.evidence_of(r, f"step/{step_id}").get(name) == REQUIREMENTS_PREDATES
-        for step_id, r in state.steps.items()
-        for name in ("requirements", "coverage", "fidelity")
-    )
-
-
-def _input_coverage(repo_root: Path, state: RunState) -> str:
-    """The spec review's `input-coverage` block inside `<details>` (it can be
-    long), read from the review entry the unit that recorded `coverage` names.
-    The predates line only for a run §G covers; any other miss says why it is
-    `Not available` — a lookup failure is not a run from before the gate."""
-    from fr.requirements import coverage_block, run_spec
-    from fr.run import units
-
-    if _predates_gate(state):
-        return PREDATES_LINE
-    spec_rel = run_spec(state)
-    assert spec_rel is not None  # _predates_gate is True without one
-    recorded = next(
-        (
-            ev
-            for step_id, r in state.steps.items()
-            if "coverage" in (ev := units.evidence_of(r, f"step/{step_id}"))
-        ),
-        None,
-    )
-    if recorded is None:
-        return "Not available: no step of this run recorded `coverage` evidence."
-    if "review" not in recorded:
-        return "Not available: the step that recorded `coverage` names no `review` entry."
-    slug = spec_journal_slug(Path(spec_rel).stem)
-    path = resolve_journal_read_path(repo_root, "spec", slug)
-    try:
-        entries = parse_journal(path.read_text())
-    except (JournalParseError, OSError) as e:
-        return f"Not available: spec journal {path.name} is unreadable: {e}"
-    review = next((e for e in entries if e.id == recorded["review"]), None)
-    if review is None:
-        return f"Not available: review entry `{recorded['review']}` is not in the spec journal."
-    block = coverage_block(review.body)
-    if block is None:
-        return f"Not available: review entry `{review.id}` carries no input-coverage block."
-    summary = f"{recorded['coverage']} (review `{review.id}`)"
-    return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
-
-
-def _design_inventory(repo_root: Path, state: RunState) -> str:
-    """The spec review's `design-inventory` block inside `<details>` (spec
-    2026-09-29 §F, d6), read from the review entry the unit that recorded
-    `fidelity` names. A run with no `fidelity` evidence — or one §G covers —
-    predates the fidelity gate; any other miss says why it is `Not available`."""
-    from fr.fidelity import inventory_block
-    from fr.requirements import run_spec
-    from fr.run import units
-
-    if _predates_gate(state):
-        return DESIGN_PREDATES_LINE
-    recorded = next(
-        (
-            ev
-            for step_id, r in state.steps.items()
-            if "fidelity" in (ev := units.evidence_of(r, f"step/{step_id}"))
-        ),
-        None,
-    )
-    if recorded is None:
-        return DESIGN_PREDATES_LINE
-    spec_rel = run_spec(state)
-    assert spec_rel is not None  # _predates_gate is True without one
-    if "review" not in recorded:
-        return "Not available: the step that recorded `fidelity` names no `review` entry."
-    slug = spec_journal_slug(Path(spec_rel).stem)
-    path = resolve_journal_read_path(repo_root, "spec", slug)
-    try:
-        entries = parse_journal(path.read_text())
-    except (JournalParseError, OSError) as e:
-        return f"Not available: spec journal {path.name} is unreadable: {e}"
-    review = next((e for e in entries if e.id == recorded["review"]), None)
-    if review is None:
-        return f"Not available: review entry `{recorded['review']}` is not in the spec journal."
-    block = inventory_block(review.body)
-    if block is None:
-        return f"Not available: review entry `{review.id}` carries no design-inventory block."
-    summary = f"{recorded['fidelity']} (review `{review.id}`)"
-    return f"<details>\n<summary>{summary}</summary>\n\n{block}\n</details>"
-
-
-def _delegated(repo_root: Path, state: RunState) -> list[str]:
-    """Every `delegated=true` spec decision (spec 2026-09-29 §E): id, title and
-    the requirement ids whose source cites it."""
-    from fr.requirements import RequirementsError, parse_requirements, run_spec
-
-    spec_rel = run_spec(state)
-    citing: dict[str, list[str]] = {}
-    if spec_rel is not None:
-        try:
-            reqs = parse_requirements((repo_root / spec_rel).read_text())
-        except (OSError, RequirementsError):
-            reqs = None
-        for req in reqs.items if reqs is not None else ():
-            for src in req.sources:
-                if src.kind == "decision":
-                    citing.setdefault(src.value, []).append(req.id)
-    lines: list[str] = []
-    for scope, entries in _journals(repo_root, state):
-        if scope != "spec":
-            continue
-        for e in entries:
-            if e.kind == "decision" and e.delegated:
-                ids = ", ".join(citing.get(e.id, ())) or "none"
-                lines.append(f"- `{e.id}` — {e.title} — cited by: {ids}")
-    return lines
 
 
 def _post_merge_owed(repo_root: Path, state: RunState) -> str:
@@ -353,20 +207,13 @@ def _cost(repo_root: Path, state: RunState) -> str:
 def render_pr_body(repo_root: Path, state: RunState) -> str:
     """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order.
     The agent may add a summary above it; it may not drop a section."""
-    inside, outside, unconfirmed = _findings(repo_root, state)
-    delegated = _delegated(repo_root, state)
+    inside, outside = _findings(repo_root, state)
     parts = [
         f"<!-- rendered by fr for run {state.run}; edit above this line only -->",
         "## Findings",
         "\n".join(inside) if inside else "None.",
         "## Out-of-scope findings",
         render_out_of_scope(outside),
-        "## Built without operator confirmation",
-        "\n".join([*delegated, *unconfirmed]) if delegated or unconfirmed else "None.",
-        "## Input coverage",
-        _input_coverage(repo_root, state),
-        "## Design inventory",
-        _design_inventory(repo_root, state),
         "## Post-merge verification owed",
         _post_merge_owed(repo_root, state),
     ]

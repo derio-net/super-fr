@@ -447,8 +447,12 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # `fr.artifacts.record_delegated`; 5 -> 6 for `StepRecord.shape`
             # (spec `2026-09-29-fr-goal-light-path-design` §A, the brainstorm
             # record's rebind onto `fr-goal-light`), migration
-            # `fr.artifacts.record_shape`.
-            current_version=6,
+            # `fr.artifacts.record_shape`; 6 -> 7 REMOVES `JournalItem.delegated`
+            # and the `unconfirmed` resolution (spec
+            # `2026-09-29-spec-is-the-contract-design` §C), migration
+            # `fr.artifacts.record_contract`, every hop reading through the
+            # frozen `fr.record.legacy.RecordV6`.
+            current_version=7,
             locator="docs/superpowers/runs/*.records/*.yaml",
             stamp="`schema_version` in the record yaml",
             read_stamp=_read_yaml_stamp,
