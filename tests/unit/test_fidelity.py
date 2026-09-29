@@ -7,6 +7,7 @@ Test Plan items 1-2. Journal entries are real `JournalEntry` objects.
 
 from __future__ import annotations
 
+import pytest
 from fr.fidelity import (
     FidelityCounts,
     InventoryCounts,
@@ -78,3 +79,122 @@ def test_a_sound_review_yields_the_fidelity_summary() -> None:
     assert fidelity_summary(fc, ic) == (
         "1 clauses over 1 requirements (kept=1 flagged=0); 1 sections, 0 behaviours (invented=0)"
     )
+
+
+# ── Task 2: the requirement-fidelity clause partition (§A, Test Plan 1) ─────
+
+T2_SPEC = _spec(
+    '| R1 | x | input "alpha beta" |\n'
+    '| R2 | y | input "gamma … delta"<br>input "epsilon" |\n'
+    "| R3 | z | decision d1 |\n",
+    "## Design\n\n### A. One\n",
+)
+T2_ENTRIES = [
+    _input("alpha beta gamma x delta epsilon"),
+    _spec_entry(kind="decision", id="d1"),
+    _spec_entry(kind="decision", id="d9"),
+    _spec_entry(kind="finding", id="s4", state="open"),
+]
+T2_SOUND = (
+    '| R1 | "alpha" | kept |\n'
+    '| R1 | "beta" | kept |\n'
+    '| R2 | "gamma" | s4 |\n'
+    '| R2 | "delta" | kept |\n'
+    '| R2 | "epsilon" | kept |\n'
+)
+
+
+def test_a_sound_clause_partition_passes_and_counts() -> None:
+    problems, fc = check_fidelity(_fidelity(T2_SOUND), T2_SPEC, T2_ENTRIES)
+    assert problems == []
+    assert (fc.clauses, fc.requirements, fc.kept, fc.flagged) == (5, 2, 4, 1)
+    assert fc.finding_ids == ("s4",)
+
+
+def test_whitespace_inside_a_clause_is_insensitive() -> None:
+    rows = '| R1 | "alpha  beta" | kept |\n' + T2_SOUND.split("\n", 2)[2]
+    problems, _ = check_fidelity(_fidelity(rows), T2_SPEC, T2_ENTRIES)
+    assert problems == []
+
+
+@pytest.mark.parametrize(
+    ("rows", "needle"),
+    [
+        pytest.param(
+            T2_SOUND.replace('| R1 | "alpha" | kept |\n| R1 | "beta" | kept |\n', ""),
+            "R1",
+            id="requirement-with-no-rows",
+        ),
+        pytest.param(T2_SOUND.replace('| R1 | "alpha" | kept |\n', ""), "R1", id="skipped-clause"),
+        pytest.param(
+            T2_SOUND.replace(
+                '| R1 | "alpha" | kept |\n| R1 | "beta" | kept |\n',
+                '| R1 | "beta" | kept |\n| R1 | "alpha" | kept |\n',
+            ),
+            "R1",
+            id="reordered-clauses",
+        ),
+        pytest.param(
+            '| R2 | "gamma" | s4 |\n| R2 | "delta" | kept |\n| R2 | "epsilon" | kept |\n'
+            '| R1 | "alpha beta" | kept |\n',
+            "order",
+            id="requirements-out-of-order",
+        ),
+        pytest.param(
+            '| R1 | "alpha" | kept |\n| R2 | "gamma" | s4 |\n| R1 | "beta" | kept |\n'
+            '| R2 | "delta" | kept |\n| R2 | "epsilon" | kept |\n',
+            "contiguous",
+            id="non-contiguous",
+        ),
+        pytest.param(
+            T2_SOUND.replace(
+                '| R2 | "gamma" | s4 |\n| R2 | "delta" | kept |\n',
+                '| R2 | "gamma delta" | kept |\n',
+            ),
+            "R2",
+            id="clause-spans-an-elision",
+        ),
+        pytest.param(T2_SOUND.replace("| s4 |", "| s77 |"), "s77", id="unknown-finding-id"),
+        pytest.param(T2_SOUND.replace("| s4 |", "| d9 |"), "d9", id="label-names-a-decision"),
+        pytest.param(
+            T2_SOUND + '| R3 | "whatever" | kept |\n', "R3", id="decision-only-given-rows"
+        ),
+        pytest.param(T2_SOUND + '| R9 | "alpha" | kept |\n', "R9", id="unknown-requirement"),
+        pytest.param(
+            T2_SOUND.replace('"epsilon" | kept', '"epsilon" | '), "line", id="empty-label"
+        ),
+    ],
+)
+def test_an_unsound_clause_partition_is_refused_naming_it(rows: str, needle: str) -> None:
+    problems, _ = check_fidelity(_fidelity(rows), T2_SPEC, T2_ENTRIES)
+    assert problems, rows
+    assert any(needle in p for p in problems), problems
+
+
+def test_a_requirement_added_after_the_review_is_refused() -> None:
+    spec = T2_SPEC.replace("| R3 | z |", '| R4 | w | input "epsilon" |\n| R3 | z |')
+    problems, _ = check_fidelity(_fidelity(T2_SOUND), spec, T2_ENTRIES)
+    assert any("R4" in p for p in problems), problems
+
+
+def test_a_clause_holding_a_raw_pipe_parses() -> None:
+    spec = _spec('| R1 | x | input "a \\| b" |\n', "## Design\n")
+    entries = [_input("a | b")]
+    problems, fc = check_fidelity(_fidelity('| R1 | "a | b" | kept |\n'), spec, entries)
+    assert problems == []
+    assert fc.clauses == 1
+
+
+@pytest.mark.parametrize("body", ["no block here", _fidelity(T2_SOUND) * 2])
+def test_a_missing_or_duplicated_block_is_refused(body: str) -> None:
+    problems, _ = check_fidelity(body, T2_SPEC, T2_ENTRIES)
+    assert problems and "requirement-fidelity" in problems[0]
+
+
+def test_the_requirements_grammar_never_imports_fidelity() -> None:
+    """§C: fr.fidelity consumes fr.requirements and is not imported by it."""
+    import fr.requirements
+
+    source = open(fr.requirements.__file__).read()
+    assert "fr.fidelity" not in source
+    assert "from fr import fidelity" not in source
