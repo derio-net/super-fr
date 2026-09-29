@@ -3,11 +3,18 @@ run: 2026-09-29-feat-batch-opencode-observe
 workflow: fr-goal@1
 branch: feat/batch-opencode-observe
 started: '2026-09-29T11:06:30+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-09-29T11:06:38+00:00'
+    state: done
+    at: '2026-09-29T11:38:43+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-09-29-opencode-observe-design.md
+    units:
+      step/brainstorm:
+        evidence:
+          requirements: 13 requirements:a22cb990e552604237fc6326754f26d678fd63e11d36f6d611f42361c59d7076
   spec-review:
     state: pending
   plan:

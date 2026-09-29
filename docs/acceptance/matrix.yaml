@@ -5553,3 +5553,99 @@ rows:
     status: ci
     notes: Implemented by plan 2026-09-28-fr-profiles-services (#774 step 1); unit tests
       run in CI.
+  - id: opencode-run-session
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, the super-fr plugin hands fr the run's session id, advance
+      records it on the attempt, and fr run cost / the PR Cost table show the run's
+      real figures.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R1
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: opencode-child-dispatch
+    capability: fr-goal on OpenCode
+    acceptance: On OpenCode, fr maps each dispatch to its child session, fills an unclaimed
+      holder from it, and refuses a reviewer id that names no child dispatched since
+      the unit opened.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R3
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: opencode-observe-take10-rerun
+    capability: fr-goal on OpenCode
+    acceptance: 'Re-running take 10 run B''s shape on OpenCode with this release: the
+      re-cut partition, invented reviewer, dropped review findings and missing answered_by
+      are each refused or corrected, the Cost table has real numbers, and the parity
+      cells can move from partial to enforced.'
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: post-merge
+  - id: session-observer-protocol
+    capability: transcript gates
+    acceptance: Every transcript gate reads the harness through one session protocol
+      with Claude Code and OpenCode backends, and a gate that cannot read says unobserved
+      rather than passing or failing.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: reviewer-return-coverage
+    capability: spec-review
+    acceptance: At spec-review, a recorded input-coverage block that differs from the
+      one the reviewer returned is refused, on every harness whose return fr can read.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: review-phase-findings-block
+    capability: review-phase
+    acceptance: A review-phase resolve is refused when the reviewer's returned findings
+      block is missing or names a finding the plan journal does not hold for that phase
+      with the reviewer's scope; the PR body then lists every review-phase finding and
+      its resolution.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R7
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: opencode-operator-answers
+    capability: operator gate
+    acceptance: On OpenCode, fr reads answered question-tool rounds from opencode.db
+      and verifies the operator gate from them; the skill and parity.yaml describe the
+      tool.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: answered-by-no-default
+    capability: operator gate
+    acceptance: An operator gate fr cannot observe, resolved without answered_by, is
+      refused on every harness; fr run gates/check say 'as claimed, unobserved' instead
+      of 'no operator answered it' when fr could not look.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R10
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: opencode-visual-reads
+    capability: visual evidence
+    acceptance: On OpenCode, the visual witness observes screenshot reads and capture-script
+      runs in the session of whoever owes them, and a read by another session does not
+      count.
+    origin:
+    - super-fr:docs/superpowers/specs/2026-09-29-opencode-observe-design.md#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
