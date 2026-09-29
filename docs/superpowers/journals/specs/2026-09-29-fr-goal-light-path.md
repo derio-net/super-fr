@@ -226,3 +226,8 @@ Built as written: the benchmark passes only when cost ≤ 2× and time ≤ 2.5×
 ### s7-resolved · finding [fixed] · resolves s7: Observing an executor's log on OpenCode assumes a child-session lookup fr does not have
 
 §D/§E: OpenCode phase logs are recorded unobserved=tests like Hermes (its reader is top-level only); freshness and tree checks still apply; child-session reader left for later.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-09-29-fr-goal-light-path-p2 created=2026-09-29T07:26:54+00:00 -->
+### phase-split-2026-09-29-fr-goal-light-path-p2 · decision · ask: deliver reuses a verified phase suite log (R6)
+
+Its own ask in the input; a separate review surface (telemetry/evidence gates).
