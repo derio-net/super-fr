@@ -6317,7 +6317,11 @@ def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path
     sha named in the "push it" line must be THIS invocation's own commit
     (p3-m4): the wrapping decorator commits in `finally`, after this
     function's own prints, so the sha must come from an explicit early
-    commit, not a read before one exists."""
+    commit, not a read before one exists.
+
+    #814: the closeout pair is the LAST thing printed. The "push it" line is
+    an instruction the orchestrator acts on; printed after the closeout, it
+    became the last thing acted on, and the closeout line was never relayed."""
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "closeout", _CLOSEOUT_SHAPE)
@@ -6330,7 +6334,8 @@ def test_resolving_deliver_prints_the_pickup_run_closeout_handoff(tmp_path: Path
     idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
     idx_pickup = stdout.index("fr pickup --run r1")
     idx_push = stdout.index("push it (git push)")
-    assert idx_closeout < idx_pickup < idx_push
+    assert idx_push < idx_closeout < idx_pickup
+    assert stdout.rstrip().splitlines()[-1].strip() == "fr pickup --run r1"
 
     # Outcome, not cadence (operator steer): fr's own run path is clean,
     # whatever number of commits it took to get there — never "exactly one".
@@ -6365,6 +6370,7 @@ def test_advance_on_a_finished_run_prints_the_same_closeout_handoff(tmp_path: Pa
     idx_closeout = stdout.index("closeout: after the PR merges, start a NEW session in")
     idx_pickup = stdout.index("fr pickup --run r1")
     assert idx_complete < idx_closeout < idx_pickup
+    assert stdout.rstrip().splitlines()[-1].strip() == "fr pickup --run r1"
 
 
 @pytest.mark.usefixtures("complete_live_pr")
@@ -6393,6 +6399,8 @@ def test_resolving_deliver_on_the_default_branch_never_claims_the_cursor_was_pus
     assert "cursor committed as" not in result.stdout
     assert "push it (git push)" not in result.stdout
     assert "cursor NOT committed" in result.stdout
+    # #814: the refusal line, too, comes before the closeout pair, never after.
+    assert result.stdout.rstrip().splitlines()[-1].strip() == "fr pickup --run r1"
     assert "fr: not committed (" in result.stderr and "default branch" in result.stderr
 
 
